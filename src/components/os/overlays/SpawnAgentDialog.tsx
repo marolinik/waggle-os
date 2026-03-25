@@ -34,22 +34,29 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
     newWorkspaceName: '',
   });
 
-  // Fetch models from backend and default to active workspace when dialog opens
+  // Fetch models from backend and default model to active workspace's model
   useEffect(() => {
     if (open) {
       if (activeWorkspaceId) {
         setForm(f => ({ ...f, workspaceId: f.workspaceId || activeWorkspaceId }));
       }
+
+      // Find the active workspace's model to use as default
+      const activeWs = workspaces.find(w => w.id === activeWorkspaceId);
+      const wsModel = activeWs?.model;
+
       setLoadingModels(true);
       adapter.getModels()
         .then(m => {
           setModels(m);
-          setForm(f => ({ ...f, model: f.model || m[0] || '' }));
+          // Prefer workspace model if available and in the list, otherwise first model
+          const defaultModel = wsModel && m.includes(wsModel) ? wsModel : m[0] || '';
+          setForm(f => ({ ...f, model: f.model || defaultModel }));
         })
         .catch(() => {})
         .finally(() => setLoadingModels(false));
     }
-  }, [open, activeWorkspaceId]);
+  }, [open, activeWorkspaceId, workspaces]);
 
   const handleSpawn = async () => {
     if (!form.task.trim()) return;
