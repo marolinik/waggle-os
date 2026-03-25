@@ -65,9 +65,6 @@ const ChatWindowInstance = ({ workspaceId, workspaceName, initialPersona, templa
     // Persist to backend
     adapter.patchWorkspace(workspaceId, { persona: personaId }).catch(() => {});
   };
-  const [currentModel, setCurrentModel] = useState<string>('');
-  const [availableModels, setAvailableModels] = useState<string[]>([]);
-  const [teamPresence, setTeamPresence] = useState<TeamMember[]>([]);
 
   useEffect(() => {
     // Try fetching models from the backend (litellm models filtered by vault keys)
