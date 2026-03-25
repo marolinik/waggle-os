@@ -39,7 +39,7 @@ export const useWorkspaces = () => {
 
   useEffect(() => { fetchWorkspaces(); }, []);
 
-  const createWorkspace = useCallback(async (data: { name: string; group: string; persona?: string }) => {
+  const createWorkspace = useCallback(async (data: { name: string; group: string; persona?: string; shared?: boolean }) => {
     try {
       const ws = await adapter.createWorkspace(data);
       setWorkspaces(prev => [...prev.filter(w => w.id !== DEFAULT_WORKSPACE.id), ws]);
@@ -52,6 +52,7 @@ export const useWorkspaces = () => {
         name: data.name,
         group: data.group,
         persona: data.persona,
+        shared: data.shared,
         health: 'healthy',
         memoryCount: 0,
         sessionCount: 0,

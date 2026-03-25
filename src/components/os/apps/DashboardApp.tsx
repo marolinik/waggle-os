@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Activity, Clock, Brain, ChevronRight } from 'lucide-react';
+import { Plus, Activity, Clock, Brain, ChevronRight, Users } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getPersonaById } from '@/lib/personas';
 import type { Workspace } from '@/lib/types';
@@ -85,6 +85,11 @@ const DashboardApp = ({ workspaces, activeWorkspaceId, onSelectWorkspace, onCrea
                       <div className="flex items-center gap-1.5">
                         <span className="text-sm font-display font-medium text-foreground truncate">{ws.name}</span>
                         <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${healthColors[ws.health || 'healthy']}`} />
+                        {ws.shared && (
+                          <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-sky-500/15 text-sky-400 text-[9px] font-display shrink-0">
+                            <Users className="w-2.5 h-2.5" /> Team
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center gap-3 mt-1 text-[10px] text-muted-foreground">
                         {ws.memoryCount !== undefined && (
