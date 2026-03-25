@@ -167,10 +167,10 @@ const Desktop = () => {
     onToggleKeyboardHelp: () => setShowKeyboardHelp(p => !p),
   });
 
-  /* ── Alt+Tab handler ── */
+  /* ── Ctrl+` (backtick): cycle focus among windows ── */
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.altKey && e.key === 'Tab') {
+      if ((e.ctrlKey || e.metaKey) && e.key === '`') {
         e.preventDefault();
         cycleWindowFocus();
       }
