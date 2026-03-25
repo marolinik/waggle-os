@@ -227,8 +227,11 @@ const Desktop = () => {
   }, [selectWorkspace, openApp]);
 
   const getWindowTitle = (win: WindowState) => {
-    if (win.appId === 'chat' && win.workspaceName) {
-      return `Chat — ${win.workspaceName}`;
+    if (win.appId === 'chat') {
+      const parts = [win.workspaceName || 'Chat'];
+      if (win.templateLabel) parts.push(win.templateLabel);
+      if (win.personaLabel) parts.push(win.personaLabel);
+      return parts.join(' · ');
     }
     return appConfig[win.appId]?.title || win.appId;
   };
