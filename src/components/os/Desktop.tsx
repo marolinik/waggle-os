@@ -302,14 +302,8 @@ const Desktop = () => {
           </motion.p>
         </div>
       )}
-            transition={{ delay: 1.3, duration: 4, repeat: Infinity, ease: "easeInOut" }}
-            className="text-xs font-mono mt-3 tracking-wide"
-            style={{ color: "hsl(30, 10%, 55%)", textShadow: "0 1px 2px hsl(0 0% 0% / 0.5)" }}
-          >
-            Click an app in the dock to get started
-          </motion.p>
-        </div>
-      )}
+
+
 
       <StatusBar
         workspaceName={activeWorkspace?.name}
