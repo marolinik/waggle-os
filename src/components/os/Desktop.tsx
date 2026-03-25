@@ -255,20 +255,23 @@ const Desktop = () => {
             style={{ background: "linear-gradient(90deg, transparent, hsl(var(--primary) / 0.3), transparent)" }}
           />
 
-          {/* Hint */}
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: [0, 0.5, 0.35, 0.5] }}
-            transition={{ delay: 1.2, duration: 5, repeat: Infinity, ease: "easeInOut" }}
-            className="text-sm font-mono mt-3 tracking-wide"
-            style={{
-              color: "hsl(30, 8%, 50%)",
-              textShadow: "0 1px 3px hsl(0 0% 0% / 0.7)",
-            }}
-          >
-            Click an app in the dock to get started
-          </motion.p>
         </div>
+      )}
+
+      {/* Hint — positioned just above the dock */}
+      {windows.length === 0 && (
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: [0, 0.5, 0.35, 0.5] }}
+          transition={{ delay: 1.2, duration: 5, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute bottom-20 left-0 right-0 text-center text-sm font-mono tracking-wide pointer-events-none z-[1]"
+          style={{
+            color: "hsl(30, 8%, 50%)",
+            textShadow: "0 1px 3px hsl(0 0% 0% / 0.7)",
+          }}
+        >
+          Click an app in the dock to get started
+        </motion.p>
       )}
 
 
