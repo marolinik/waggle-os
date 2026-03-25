@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { AnimatePresence } from "framer-motion";
 import {
   MessageSquare, LayoutDashboard, Settings, Brain,
@@ -16,11 +16,24 @@ import EventsApp from "./apps/EventsApp";
 import CockpitApp from "./apps/CockpitApp";
 import MissionControlApp from "./apps/MissionControlApp";
 import CapabilitiesApp from "./apps/CapabilitiesApp";
+import GlobalSearch from "./overlays/GlobalSearch";
+import CreateWorkspaceDialog from "./overlays/CreateWorkspaceDialog";
+import PersonaSwitcher from "./overlays/PersonaSwitcher";
+import WorkspaceSwitcher from "./overlays/WorkspaceSwitcher";
+import NotificationInbox from "./overlays/NotificationInbox";
+import KeyboardShortcutsHelp from "./overlays/KeyboardShortcutsHelp";
+import OnboardingWizard from "./overlays/OnboardingWizard";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { useChat } from "@/hooks/useChat";
 import { useSessions } from "@/hooks/useSessions";
 import { useMemory } from "@/hooks/useMemory";
 import { useEvents } from "@/hooks/useEvents";
+import { useAgentStatus } from "@/hooks/useAgentStatus";
+import { useNotifications } from "@/hooks/useNotifications";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import { useOnboarding } from "@/hooks/useOnboarding";
+import { useOfflineStatus } from "@/hooks/useOfflineStatus";
+import { useKnowledgeGraph } from "@/hooks/useKnowledgeGraph";
 
 interface WindowState {
   id: AppId;
@@ -30,17 +43,25 @@ interface WindowState {
 const appConfig: Record<string, { title: string; icon: React.ReactNode; pos: { x: number; y: number }; size: { w: string; h: string } }> = {
   "chat": { title: "Waggle Chat", icon: <MessageSquare className="w-3.5 h-3.5 text-primary" />, pos: { x: 180, y: 40 }, size: { w: "520px", h: "520px" } },
   "dashboard": { title: "Dashboard", icon: <LayoutDashboard className="w-3.5 h-3.5 text-sky-400" />, pos: { x: 100, y: 60 }, size: { w: "560px", h: "440px" } },
-  "settings": { title: "Settings", icon: <Settings className="w-3.5 h-3.5 text-muted-foreground" />, pos: { x: 250, y: 80 }, size: { w: "520px", h: "420px" } },
-  "memory": { title: "Memory", icon: <Brain className="w-3.5 h-3.5 text-amber-300" />, pos: { x: 120, y: 50 }, size: { w: "600px", h: "440px" } },
-  "events": { title: "Events", icon: <Activity className="w-3.5 h-3.5 text-cyan-400" />, pos: { x: 200, y: 70 }, size: { w: "560px", h: "400px" } },
-  "cockpit": { title: "Cockpit", icon: <Activity className="w-3.5 h-3.5 text-emerald-400" />, pos: { x: 300, y: 60 }, size: { w: "480px", h: "500px" } },
-  "mission-control": { title: "Mission Control", icon: <Radio className="w-3.5 h-3.5 text-rose-400" />, pos: { x: 220, y: 90 }, size: { w: "500px", h: "400px" } },
-  "capabilities": { title: "Skills & Apps", icon: <Package className="w-3.5 h-3.5 text-violet-400" />, pos: { x: 150, y: 80 }, size: { w: "520px", h: "460px" } },
+  "settings": { title: "Settings", icon: <Settings className="w-3.5 h-3.5 text-muted-foreground" />, pos: { x: 250, y: 80 }, size: { w: "560px", h: "460px" } },
+  "memory": { title: "Memory", icon: <Brain className="w-3.5 h-3.5 text-amber-300" />, pos: { x: 120, y: 50 }, size: { w: "640px", h: "460px" } },
+  "events": { title: "Events", icon: <Activity className="w-3.5 h-3.5 text-cyan-400" />, pos: { x: 200, y: 70 }, size: { w: "580px", h: "420px" } },
+  "cockpit": { title: "Cockpit", icon: <Activity className="w-3.5 h-3.5 text-emerald-400" />, pos: { x: 300, y: 60 }, size: { w: "520px", h: "520px" } },
+  "mission-control": { title: "Mission Control", icon: <Radio className="w-3.5 h-3.5 text-rose-400" />, pos: { x: 220, y: 90 }, size: { w: "520px", h: "440px" } },
+  "capabilities": { title: "Skills & Apps", icon: <Package className="w-3.5 h-3.5 text-violet-400" />, pos: { x: 150, y: 80 }, size: { w: "560px", h: "480px" } },
 };
 
 const Desktop = () => {
   const [windows, setWindows] = useState<WindowState[]>([]);
   const [topZ, setTopZ] = useState(10);
+
+  // Overlay states
+  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
+  const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
+  const [showPersonaSwitcher, setShowPersonaSwitcher] = useState(false);
+  const [showWorkspaceSwitcher, setShowWorkspaceSwitcher] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
 
   // Core hooks
   const { workspaces, activeWorkspace, activeWorkspaceId, selectWorkspace, createWorkspace } = useWorkspaces();
@@ -51,24 +72,53 @@ const Desktop = () => {
   });
   const memory = useMemory(activeWorkspaceId);
   const events = useEvents(activeWorkspaceId);
+  const agentStatus = useAgentStatus();
+  const { notifications, unreadCount, markRead, markAllRead } = useNotifications();
+  const { completed: onboardingComplete, completeOnboarding } = useOnboarding();
+  const offline = useOfflineStatus();
+  const kg = useKnowledgeGraph(activeWorkspaceId);
 
-  const openApp = (id: AppId) => {
-    if (windows.find((w) => w.id === id)) {
-      focusWindow(id);
-      return;
-    }
-    setTopZ((z) => z + 1);
-    setWindows((prev) => [...prev, { id, zIndex: topZ + 1 }]);
-  };
+  const openApp = useCallback((id: AppId) => {
+    setWindows(prev => {
+      if (prev.find(w => w.id === id)) {
+        setTopZ(z => z + 1);
+        return prev.map(w => w.id === id ? { ...w, zIndex: topZ + 1 } : w);
+      }
+      setTopZ(z => z + 1);
+      return [...prev, { id, zIndex: topZ + 1 }];
+    });
+  }, [topZ]);
 
-  const closeApp = (id: AppId) => {
-    setWindows((prev) => prev.filter((w) => w.id !== id));
-  };
+  const closeApp = useCallback((id: AppId) => {
+    setWindows(prev => prev.filter(w => w.id !== id));
+  }, []);
 
-  const focusWindow = (id: AppId) => {
-    setTopZ((z) => z + 1);
-    setWindows((prev) => prev.map((w) => (w.id === id ? { ...w, zIndex: topZ + 1 } : w)));
-  };
+  const focusWindow = useCallback((id: AppId) => {
+    setTopZ(z => z + 1);
+    setWindows(prev => prev.map(w => w.id === id ? { ...w, zIndex: topZ + 1 } : w));
+  }, [topZ]);
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts({
+    onOpenApp: openApp,
+    onToggleGlobalSearch: () => setShowGlobalSearch(p => !p),
+    onTogglePersonaSwitcher: () => setShowPersonaSwitcher(p => !p),
+    onToggleWorkspaceSwitcher: () => setShowWorkspaceSwitcher(p => !p),
+    onToggleKeyboardHelp: () => setShowKeyboardHelp(p => !p),
+  });
+
+  const handleSearchNavigate = useCallback((type: string, id: string) => {
+    if (type === 'command') openApp(id as AppId);
+    else if (type === 'workspace') { selectWorkspace(id); openApp('chat'); }
+    else if (type === 'memory') openApp('memory');
+  }, [openApp, selectWorkspace]);
+
+  const handleOnboardingComplete = useCallback(async (data: { name: string; apiKey: string; provider: string; workspace: { name: string; group: string; persona?: string } }) => {
+    try {
+      await createWorkspace(data.workspace);
+    } catch { /* ignore */ }
+    completeOnboarding();
+  }, [createWorkspace, completeOnboarding]);
 
   const renderAppContent = (appId: AppId) => {
     switch (appId) {
@@ -86,6 +136,7 @@ const Desktop = () => {
             activeSessionId={activeSessionId}
             onSelectSession={setActiveSessionId}
             onNewSession={createSession}
+            workspaceId={activeWorkspaceId}
           />
         );
       case 'dashboard':
@@ -93,11 +144,8 @@ const Desktop = () => {
           <DashboardApp
             workspaces={workspaces}
             activeWorkspaceId={activeWorkspaceId}
-            onSelectWorkspace={(id) => {
-              selectWorkspace(id);
-              openApp('chat');
-            }}
-            onCreateWorkspace={() => createWorkspace({ name: 'New Workspace', group: 'Personal' })}
+            onSelectWorkspace={(id) => { selectWorkspace(id); openApp('chat'); }}
+            onCreateWorkspace={() => setShowCreateWorkspace(true)}
           />
         );
       case 'settings':
@@ -113,6 +161,12 @@ const Desktop = () => {
             onDeleteFrame={memory.deleteFrame}
             loading={memory.loading}
             stats={memory.stats}
+            typeFilters={memory.filters.types}
+            onTypeFiltersChange={(types) => memory.setFilters({ ...memory.filters, types })}
+            minImportance={memory.filters.minImportance}
+            onMinImportanceChange={(val) => memory.setFilters({ ...memory.filters, minImportance: val })}
+            knowledgeGraph={{ nodes: kg.nodes, edges: kg.edges }}
+            onRefreshKG={kg.refresh}
           />
         );
       case 'events':
@@ -143,7 +197,13 @@ const Desktop = () => {
 
       <StatusBar
         workspaceName={activeWorkspace?.name}
-        model={activeWorkspace?.model}
+        model={agentStatus.model !== 'unknown' ? agentStatus.model : activeWorkspace?.model}
+        tokensUsed={agentStatus.tokensUsed}
+        costUsd={agentStatus.costUsd}
+        offline={offline}
+        unreadNotifications={unreadCount}
+        onSearchClick={() => setShowGlobalSearch(true)}
+        onNotificationClick={() => setShowNotifications(p => !p)}
       />
 
       <AnimatePresence>
@@ -167,7 +227,16 @@ const Desktop = () => {
         })}
       </AnimatePresence>
 
-      <Dock onOpenApp={openApp} openApps={windows.map((w) => w.id)} />
+      <Dock onOpenApp={openApp} openApps={windows.map(w => w.id)} />
+
+      {/* Overlays */}
+      <GlobalSearch open={showGlobalSearch} onClose={() => setShowGlobalSearch(false)} onNavigate={handleSearchNavigate} />
+      <CreateWorkspaceDialog open={showCreateWorkspace} onClose={() => setShowCreateWorkspace(false)} onCreate={createWorkspace} />
+      <PersonaSwitcher open={showPersonaSwitcher} onClose={() => setShowPersonaSwitcher(false)} currentPersona={activeWorkspace?.persona} onSelect={() => {}} />
+      <WorkspaceSwitcher open={showWorkspaceSwitcher} onClose={() => setShowWorkspaceSwitcher(false)} workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} onSelect={(id) => { selectWorkspace(id); openApp('chat'); }} />
+      <NotificationInbox open={showNotifications} onClose={() => setShowNotifications(false)} notifications={notifications} onMarkRead={markRead} onMarkAllRead={markAllRead} />
+      <KeyboardShortcutsHelp open={showKeyboardHelp} onClose={() => setShowKeyboardHelp(false)} />
+      <OnboardingWizard open={!onboardingComplete} onComplete={handleOnboardingComplete} />
     </div>
   );
 };
