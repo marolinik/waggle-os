@@ -48,13 +48,23 @@ interface ChatWindowInstanceProps {
 }
 
 const ChatWindowInstance = ({ workspaceId, workspaceName, initialPersona, templateId }: ChatWindowInstanceProps) => {
+  const [currentPersona, setCurrentPersona] = useState(initialPersona || 'analytics');
   const { sessions, activeSessionId, setActiveSessionId, createSession } = useSessions(workspaceId);
   const { messages, isLoading, sendMessage, clearHistory, pendingApproval, approveAction } = useChat({
     workspaceId,
     sessionId: activeSessionId,
+    persona: currentPersona,
   });
 
-  const [currentPersona, setCurrentPersona] = useState(initialPersona || 'analytics');
+  const [currentModel, setCurrentModel] = useState<string>('');
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [teamPresence, setTeamPresence] = useState<TeamMember[]>([]);
+
+  const handlePersonaChange = (personaId: string) => {
+    setCurrentPersona(personaId);
+    // Persist to backend
+    adapter.patchWorkspace(workspaceId, { persona: personaId }).catch(() => {});
+  };
   const [currentModel, setCurrentModel] = useState<string>('');
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [teamPresence, setTeamPresence] = useState<TeamMember[]>([]);
