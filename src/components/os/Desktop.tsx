@@ -20,6 +20,7 @@ import CapabilitiesApp from "./apps/CapabilitiesApp";
 import GlobalSearch from "./overlays/GlobalSearch";
 import CreateWorkspaceDialog from "./overlays/CreateWorkspaceDialog";
 import PersonaSwitcher from "./overlays/PersonaSwitcher";
+import SpawnAgentDialog from "./overlays/SpawnAgentDialog";
 import WorkspaceSwitcher from "./overlays/WorkspaceSwitcher";
 import NotificationInbox from "./overlays/NotificationInbox";
 import KeyboardShortcutsHelp from "./overlays/KeyboardShortcutsHelp";
