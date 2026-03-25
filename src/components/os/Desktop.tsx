@@ -211,12 +211,19 @@ const Desktop = () => {
         <div className="absolute inset-0 flex flex-col items-center pointer-events-none z-[1]" style={{ paddingTop: "3vh" }}>
 
           {/* Logo — no glow, bigger */}
-          <img
-            src={waggleLogo}
-            alt="Waggle AI"
-            className="w-40 h-40 mix-blend-screen opacity-80"
-            style={{ borderRadius: 0, background: "transparent" }}
-          />
+          <div className="relative w-40 h-40">
+            <img
+              src={waggleLogo}
+              alt="Waggle AI"
+              className="w-40 h-40 mix-blend-screen"
+              style={{
+                borderRadius: 0,
+                background: "transparent",
+                maskImage: "radial-gradient(circle, rgba(0,0,0,0.8) 30%, rgba(0,0,0,0.3) 60%, transparent 80%)",
+                WebkitMaskImage: "radial-gradient(circle, rgba(0,0,0,0.8) 30%, rgba(0,0,0,0.3) 60%, transparent 80%)",
+              }}
+            />
+          </div>
 
           {/* Title */}
           <motion.h1
