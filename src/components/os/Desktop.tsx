@@ -5,7 +5,7 @@ import {
   Activity, Package, Radio,
 } from "lucide-react";
 import wallpaper from "@/assets/wallpaper.jpg";
-import waggleLogo from "@/assets/waggle-logo.jpeg";
+import waggleLogo from "@/assets/waggle-logo-animated.gif";
 import StatusBar from "./StatusBar";
 import Dock, { type AppId } from "./Dock";
 import AppWindow from "./AppWindow";
