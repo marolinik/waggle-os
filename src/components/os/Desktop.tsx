@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { AnimatePresence } from "framer-motion";
 import {
   MessageSquare, LayoutDashboard, Settings, Brain,
@@ -39,6 +39,7 @@ interface WindowState {
   id: AppId;
   zIndex: number;
   minimized: boolean;
+  cascadeOffset: number;
 }
 
 const appConfig: Record<string, { title: string; icon: React.ReactNode; pos: { x: number; y: number }; size: { w: string; h: string } }> = {
@@ -55,6 +56,7 @@ const appConfig: Record<string, { title: string; icon: React.ReactNode; pos: { x
 const Desktop = () => {
   const [windows, setWindows] = useState<WindowState[]>([]);
   const [topZ, setTopZ] = useState(10);
+  const cascadeCounter = useRef(0);
 
   // Overlay states
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
@@ -86,8 +88,10 @@ const Desktop = () => {
         setTopZ(z => z + 1);
         return prev.map(w => w.id === id ? { ...w, zIndex: topZ + 1, minimized: false } : w);
       }
+      const offset = cascadeCounter.current;
+      cascadeCounter.current = (cascadeCounter.current + 1) % 10;
       setTopZ(z => z + 1);
-      return [...prev, { id, zIndex: topZ + 1, minimized: false }];
+      return [...prev, { id, zIndex: topZ + 1, minimized: false, cascadeOffset: offset }];
     });
   }, [topZ]);
 
@@ -216,6 +220,10 @@ const Desktop = () => {
         {windows.map((win) => {
           const config = appConfig[win.id];
           if (!config) return null;
+          const cascadedPos = {
+            x: config.pos.x + win.cascadeOffset * 30,
+            y: config.pos.y + win.cascadeOffset * 30,
+          };
           return (
             <AppWindow
               key={win.id}
@@ -224,7 +232,7 @@ const Desktop = () => {
               onClose={() => closeApp(win.id)}
               onMinimize={() => minimizeApp(win.id)}
               isMinimized={win.minimized}
-              defaultPosition={config.pos}
+              defaultPosition={cascadedPos}
               defaultSize={config.size}
               zIndex={win.zIndex}
               onFocus={() => focusWindow(win.id)}
