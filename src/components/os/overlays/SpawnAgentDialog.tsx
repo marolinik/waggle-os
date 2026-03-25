@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface SpawnAgentDialogProps {
   open: boolean;
@@ -207,9 +208,18 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
             <div className="flex items-center gap-2">
               <Label className="text-foreground">Model</Label>
               {workspaces.find(w => w.id === activeWorkspaceId)?.model && (
-                <span className="text-[10px] text-muted-foreground">
-                  inherited from {workspaces.find(w => w.id === activeWorkspaceId)?.name}
-                </span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="text-[10px] text-muted-foreground cursor-help border-b border-dotted border-muted-foreground/50">
+                        inherited from {workspaces.find(w => w.id === activeWorkspaceId)?.name}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-[200px] text-xs">
+                      Changing the model here only affects this spawned agent, not the parent workspace.
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               )}
             </div>
             {loadingModels ? (
