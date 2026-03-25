@@ -116,14 +116,10 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
     onUpdate({ step: n });
   }, [onUpdate]);
 
-  // Auto-advance for step 0 (3s) and step 1 (8s)
+  // Auto-advance for step 0 only (3s); step 1 is manual
   useEffect(() => {
     if (step === 0) {
       autoTimer.current = setTimeout(() => goToStep(1), 3000);
-      return () => clearTimeout(autoTimer.current);
-    }
-    if (step === 1) {
-      autoTimer.current = setTimeout(() => goToStep(2), 8000);
       return () => clearTimeout(autoTimer.current);
     }
   }, [step, goToStep]);
@@ -451,7 +447,13 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
                   </div>
                 )}
 
-                <div className="text-center">
+                <div className="flex items-center justify-center gap-4">
+                  <button
+                    onClick={() => goToStep(1)}
+                    className="text-sm text-muted-foreground hover:text-foreground transition-colors font-display"
+                  >
+                    Back
+                  </button>
                   <button
                     onClick={() => goToStep(3)}
                     className="text-xs text-muted-foreground hover:text-foreground transition-colors"
