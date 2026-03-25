@@ -5,6 +5,7 @@ import type {
   Notification, AgentStatus, Persona, SystemHealth,
   Connector, Settings, StreamEvent, KGNode, KGEdge,
   ModelPricing,
+  WaggleSignal,
 } from './types';
 
 const DEFAULT_SERVER = 'http://127.0.0.1:3333';
