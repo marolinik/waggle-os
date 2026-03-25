@@ -1,8 +1,13 @@
 import { useState, useEffect } from "react";
 import { Wifi, Battery, Volume2, Search } from "lucide-react";
-import waggleLogo from "@/assets/waggle-logo.png";
+import waggleLogo from "@/assets/waggle-logo.jpeg";
 
-const StatusBar = () => {
+interface StatusBarProps {
+  workspaceName?: string;
+  model?: string;
+}
+
+const StatusBar = ({ workspaceName, model }: StatusBarProps) => {
   const [time, setTime] = useState(new Date());
 
   useEffect(() => {
