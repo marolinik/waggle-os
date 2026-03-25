@@ -22,19 +22,32 @@ interface SpawnAgentDialogProps {
 
 const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWorkspaceCreated, onSpawned }: SpawnAgentDialogProps) => {
   const [spawning, setSpawning] = useState(false);
+  const [models, setModels] = useState<string[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [showPersona, setShowPersona] = useState(false);
   const [form, setForm] = useState({
     task: '',
     persona: '',
-    model: MODELS[0],
+    model: '',
     workspaceMode: 'existing' as 'existing' | 'new',
     workspaceId: '',
     newWorkspaceName: '',
   });
 
-  // Default to active workspace when dialog opens
+  // Fetch models from backend and default to active workspace when dialog opens
   useEffect(() => {
-    if (open && activeWorkspaceId) {
-      setForm(f => ({ ...f, workspaceId: f.workspaceId || activeWorkspaceId }));
+    if (open) {
+      if (activeWorkspaceId) {
+        setForm(f => ({ ...f, workspaceId: f.workspaceId || activeWorkspaceId }));
+      }
+      setLoadingModels(true);
+      adapter.getModels()
+        .then(m => {
+          setModels(m);
+          setForm(f => ({ ...f, model: f.model || m[0] || '' }));
+        })
+        .catch(() => {})
+        .finally(() => setLoadingModels(false));
     }
   }, [open, activeWorkspaceId]);
 
