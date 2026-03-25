@@ -22,6 +22,7 @@ export interface Workspace {
   health?: 'healthy' | 'degraded' | 'error';
   budget?: { used: number; limit: number };
   model?: string;
+  shared?: boolean;
 }
 
 export interface WorkspaceContext {
