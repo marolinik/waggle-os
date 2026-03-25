@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import {
   MessageSquare, Terminal, LayoutDashboard, Settings,
-  Brain, Activity, Package, Radio,
+  Brain, Activity, Package, Radio, Rocket,
 } from "lucide-react";
 
 export type AppId = "chat" | "dashboard" | "memory" | "events" | "capabilities" | "cockpit" | "mission-control" | "settings" | "terminal" | "calculator" | "notes";
@@ -10,6 +10,7 @@ interface DockProps {
   onOpenApp: (id: AppId) => void;
   openApps: AppId[];
   minimizedApps?: AppId[];
+  onSpawnAgent?: () => void;
 }
 
 const apps: { id: AppId; icon: React.ElementType; label: string; color: string }[] = [
@@ -23,7 +24,7 @@ const apps: { id: AppId; icon: React.ElementType; label: string; color: string }
   { id: "settings", icon: Settings, label: "Settings", color: "text-muted-foreground" },
 ];
 
-const Dock = ({ onOpenApp, openApps, minimizedApps = [] }: DockProps) => {
+const Dock = ({ onOpenApp, openApps, minimizedApps = [], onSpawnAgent }: DockProps) => {
   return (
     <div className="fixed bottom-3 left-1/2 -translate-x-1/2 z-50">
       <div className="glass-strong rounded-2xl px-3 py-2 flex items-center gap-1">
@@ -39,7 +40,6 @@ const Dock = ({ onOpenApp, openApps, minimizedApps = [] }: DockProps) => {
               whileHover={{ scale: 1.2, y: -8 }}
               whileTap={{ scale: 0.95 }}
               transition={{ type: "spring", stiffness: 400, damping: 17 }}
-              // Bounce animation when app is minimized to dock
               animate={
                 isMinimized
                   ? { y: [0, -12, 0, -6, 0], transition: { duration: 0.5, ease: "easeOut" } }
@@ -56,6 +56,25 @@ const Dock = ({ onOpenApp, openApps, minimizedApps = [] }: DockProps) => {
             </motion.button>
           );
         })}
+
+        {/* Separator + Spawn shortcut */}
+        {onSpawnAgent && (
+          <>
+            <div className="w-px h-6 bg-border/30 mx-1" />
+            <motion.button
+              onClick={onSpawnAgent}
+              className="relative flex flex-col items-center group p-2 rounded-xl hover:bg-muted/50 transition-colors"
+              whileHover={{ scale: 1.2, y: -8 }}
+              whileTap={{ scale: 0.95 }}
+              transition={{ type: "spring", stiffness: 400, damping: 17 }}
+            >
+              <Rocket className="w-6 h-6 text-primary" />
+              <span className="absolute -top-7 text-[10px] text-foreground bg-card px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap font-display">
+                Spawn Agent
+              </span>
+            </motion.button>
+          </>
+        )}
       </div>
     </div>
   );

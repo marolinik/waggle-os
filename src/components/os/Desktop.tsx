@@ -459,6 +459,7 @@ const Desktop = () => {
         }}
         openApps={openAppIds}
         minimizedApps={minimizedAppIds}
+        onSpawnAgent={() => setShowSpawnAgent(true)}
       />
 
       {/* Overlays */}
