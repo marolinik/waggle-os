@@ -171,8 +171,24 @@ const ChatApp = ({
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const personaPickerRef = useRef<HTMLDivElement>(null);
+  const modelPickerRef = useRef<HTMLDivElement>(null);
 
   const persona = currentPersona ? getPersonaById(currentPersona) : PERSONAS[0];
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (showPersonaPicker && personaPickerRef.current && !personaPickerRef.current.contains(e.target as Node)) {
+        setShowPersonaPicker(false);
+      }
+      if (showModelPicker && modelPickerRef.current && !modelPickerRef.current.contains(e.target as Node)) {
+        setShowModelPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showPersonaPicker, showModelPicker]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -300,7 +316,7 @@ const ChatApp = ({
           )}
 
           {/* Persona picker */}
-          <div className="relative">
+          <div className="relative" ref={personaPickerRef}>
             <button
               onClick={() => { setShowPersonaPicker(p => !p); setShowModelPicker(false); }}
               className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-muted/50 transition-colors"
@@ -369,7 +385,7 @@ const ChatApp = ({
           )}
 
           {/* Model picker */}
-          <div className="relative ml-auto">
+          <div className="relative ml-auto" ref={modelPickerRef}>
             <button
               onClick={() => { setShowModelPicker(p => !p); setShowPersonaPicker(false); }}
               className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-muted/50 transition-colors"
