@@ -68,6 +68,8 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
   const [newName, setNewName] = useState('');
   const [loading, setLoading] = useState(false);
   const [clipboard, setClipboard] = useState<{ files: FileEntry[]; operation: 'copy' | 'cut' } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounter = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const storageMeta = STORAGE_LABELS[storageType];
