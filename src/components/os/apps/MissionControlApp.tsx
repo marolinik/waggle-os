@@ -1,16 +1,25 @@
 import { useState, useEffect } from 'react';
-import { Play, Pause, Square, Loader2, Radio, Clock, Zap, RefreshCw } from 'lucide-react';
+import { Play, Pause, Square, Loader2, Radio, Clock, Zap, RefreshCw, Users } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import type { FleetSession } from '@/lib/types';
 
 const MissionControlApp = () => {
   const [sessions, setSessions] = useState<FleetSession[]>([]);
   const [loading, setLoading] = useState(true);
+  const [teamMembers, setTeamMembers] = useState<{ id: string; name: string; status: string }[]>([]);
+  const [activity, setActivity] = useState<{ id: string; user: string; action: string; timestamp: string }[]>([]);
+  const [tab, setTab] = useState<'fleet' | 'team' | 'activity'>('fleet');
 
   const refresh = async () => {
     try {
-      const data = await adapter.getFleet();
-      setSessions(data);
+      const [fleet, members, act] = await Promise.allSettled([
+        adapter.getFleet(),
+        adapter.getTeamMembers(),
+        adapter.getTeamActivity(),
+      ]);
+      if (fleet.status === 'fulfilled') setSessions(fleet.value);
+      if (members.status === 'fulfilled') setTeamMembers(members.value);
+      if (act.status === 'fulfilled') setActivity(act.value);
     } catch { /* ignore */ }
     finally { setLoading(false); }
   };
@@ -43,47 +52,101 @@ const MissionControlApp = () => {
         </button>
       </div>
 
-      {sessions.length === 0 && !loading && (
-        <div className="flex flex-col items-center justify-center py-12 text-center">
-          <Radio className="w-10 h-10 text-muted-foreground/20 mb-3" />
-          <p className="text-sm text-muted-foreground">No active fleet sessions</p>
+      {/* Tabs */}
+      <div className="flex gap-1 mb-4 p-0.5 rounded-lg bg-muted/50 w-fit">
+        {(['fleet', 'team', 'activity'] as const).map(t => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`px-3 py-1.5 text-xs rounded-md font-display transition-colors capitalize ${
+              tab === t ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'fleet' && (
+        <>
+          {sessions.length === 0 && !loading && (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <Radio className="w-10 h-10 text-muted-foreground/20 mb-3" />
+              <p className="text-sm text-muted-foreground">No active fleet sessions</p>
+            </div>
+          )}
+          <div className="space-y-2">
+            {sessions.map(s => (
+              <div key={s.workspaceId} className="p-3 rounded-xl bg-secondary/30 border border-border/30">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${s.status === 'active' ? 'bg-emerald-400 animate-pulse' : s.status === 'paused' ? 'bg-amber-400' : 'bg-muted-foreground'}`} />
+                    <span className="text-sm font-display font-medium text-foreground">{s.workspaceName}</span>
+                    <span className={`text-[10px] capitalize ${statusColors[s.status]}`}>{s.status}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {s.status === 'active' && (
+                      <button onClick={() => handleAction(s.workspaceId, 'pause')} className="p-1 rounded text-muted-foreground hover:text-amber-400 transition-colors">
+                        <Pause className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {s.status === 'paused' && (
+                      <button onClick={() => handleAction(s.workspaceId, 'resume')} className="p-1 rounded text-muted-foreground hover:text-emerald-400 transition-colors">
+                        <Play className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    <button onClick={() => handleAction(s.workspaceId, 'stop')} className="p-1 rounded text-muted-foreground hover:text-destructive transition-colors">
+                      <Square className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4 text-[10px] text-muted-foreground">
+                  <span className="flex items-center gap-0.5"><Clock className="w-2.5 h-2.5" />{Math.round(s.duration / 60)}m</span>
+                  <span className="flex items-center gap-0.5"><Zap className="w-2.5 h-2.5" />{s.toolCount} tools</span>
+                  <span>{s.model}</span>
+                  <span>{s.tokenUsage.toLocaleString()} tokens</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {tab === 'team' && (
+        <div className="space-y-2">
+          {teamMembers.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <Users className="w-10 h-10 text-muted-foreground/20 mb-3" />
+              <p className="text-sm text-muted-foreground">No team members</p>
+              <p className="text-xs text-muted-foreground/60">Connect to a team server in Settings</p>
+            </div>
+          )}
+          {teamMembers.map(m => (
+            <div key={m.id} className="flex items-center gap-3 p-3 rounded-xl bg-secondary/30 border border-border/30">
+              <div className={`w-2 h-2 rounded-full ${m.status === 'online' ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
+              <span className="text-sm text-foreground flex-1">{m.name}</span>
+              <span className="text-[10px] text-muted-foreground capitalize">{m.status}</span>
+            </div>
+          ))}
         </div>
       )}
 
-      <div className="space-y-2">
-        {sessions.map(s => (
-          <div key={s.workspaceId} className="p-3 rounded-xl bg-secondary/30 border border-border/30">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${s.status === 'active' ? 'bg-emerald-400 animate-pulse' : s.status === 'paused' ? 'bg-amber-400' : 'bg-muted-foreground'}`} />
-                <span className="text-sm font-display font-medium text-foreground">{s.workspaceName}</span>
-                <span className={`text-[10px] capitalize ${statusColors[s.status]}`}>{s.status}</span>
-              </div>
-              <div className="flex items-center gap-1">
-                {s.status === 'active' && (
-                  <button onClick={() => handleAction(s.workspaceId, 'pause')} className="p-1 rounded text-muted-foreground hover:text-amber-400 transition-colors">
-                    <Pause className="w-3.5 h-3.5" />
-                  </button>
-                )}
-                {s.status === 'paused' && (
-                  <button onClick={() => handleAction(s.workspaceId, 'resume')} className="p-1 rounded text-muted-foreground hover:text-emerald-400 transition-colors">
-                    <Play className="w-3.5 h-3.5" />
-                  </button>
-                )}
-                <button onClick={() => handleAction(s.workspaceId, 'stop')} className="p-1 rounded text-muted-foreground hover:text-destructive transition-colors">
-                  <Square className="w-3.5 h-3.5" />
-                </button>
-              </div>
+      {tab === 'activity' && (
+        <div className="space-y-1.5">
+          {activity.length === 0 && (
+            <div className="text-center py-12">
+              <p className="text-sm text-muted-foreground">No activity</p>
             </div>
-            <div className="flex items-center gap-4 text-[10px] text-muted-foreground">
-              <span className="flex items-center gap-0.5"><Clock className="w-2.5 h-2.5" />{Math.round(s.duration / 60)}m</span>
-              <span className="flex items-center gap-0.5"><Zap className="w-2.5 h-2.5" />{s.toolCount} tools</span>
-              <span>{s.model}</span>
-              <span>{s.tokenUsage.toLocaleString()} tokens</span>
+          )}
+          {activity.map(a => (
+            <div key={a.id} className="flex items-center gap-3 p-2 rounded-lg bg-secondary/20 border border-border/20">
+              <span className="text-xs text-foreground font-display">{a.user}</span>
+              <span className="text-xs text-muted-foreground flex-1">{a.action}</span>
+              <span className="text-[10px] text-muted-foreground">{new Date(a.timestamp).toLocaleTimeString()}</span>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

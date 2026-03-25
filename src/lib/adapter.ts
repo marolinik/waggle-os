@@ -71,6 +71,11 @@ class LocalAdapter {
     return res.json();
   }
 
+  async getWorkspaceFiles(workspaceId: string): Promise<unknown[]> {
+    const res = await this.fetch(`/api/workspaces/${workspaceId}/files`);
+    return res.json();
+  }
+
   // --- Chat ---
   async *sendMessage(workspaceId: string, message: string, sessionId?: string): AsyncGenerator<StreamEvent> {
     const res = await this.fetch('/api/chat', {
@@ -134,6 +139,11 @@ class LocalAdapter {
     return res.json();
   }
 
+  async exportSession(workspaceId: string, sessionId: string): Promise<string> {
+    const res = await this.fetch(`/api/workspaces/${workspaceId}/sessions/${sessionId}/export`);
+    return res.text();
+  }
+
   // --- Memory ---
   async getMemoryFrames(workspaceId: string, limit = 50): Promise<MemoryFrame[]> {
     const res = await this.fetch(`/api/memory/frames?limit=${limit}&workspace=${workspaceId}`);
@@ -189,10 +199,19 @@ class LocalAdapter {
     await this.fetch('/api/agent/model', { method: 'PUT', body: JSON.stringify({ model }) });
   }
 
+  async getModel(): Promise<string> {
+    const res = await this.fetch('/api/agent/model');
+    return res.json();
+  }
+
   // --- Skills ---
   async getSkills(): Promise<SkillPack[]> {
     const res = await this.fetch('/api/skills');
     return res.json();
+  }
+
+  async createSkill(data: { name: string; description: string }): Promise<void> {
+    await this.fetch('/api/skills/create', { method: 'POST', body: JSON.stringify(data) });
   }
 
   async getStarterPacks(): Promise<SkillPack[]> {
@@ -200,8 +219,32 @@ class LocalAdapter {
     return res.json();
   }
 
+  async getCapabilityPacks(): Promise<SkillPack[]> {
+    const res = await this.fetch('/api/skills/capability-packs/catalog');
+    return res.json();
+  }
+
   async installPack(skillId: string): Promise<void> {
     await this.fetch(`/api/skills/starter-pack/${skillId}`, { method: 'POST' });
+  }
+
+  async getCapabilitiesStatus(): Promise<unknown> {
+    const res = await this.fetch('/api/capabilities/status');
+    return res.json();
+  }
+
+  // --- Marketplace ---
+  async getMarketplacePacks(): Promise<SkillPack[]> {
+    const res = await this.fetch('/api/marketplace/packs');
+    return res.json();
+  }
+
+  async installMarketplacePack(packId: string): Promise<void> {
+    await this.fetch('/api/marketplace/install', { method: 'POST', body: JSON.stringify({ packId }) });
+  }
+
+  async uninstallMarketplacePack(packId: string): Promise<void> {
+    await this.fetch('/api/marketplace/uninstall', { method: 'POST', body: JSON.stringify({ packId }) });
   }
 
   // --- Fleet ---
@@ -220,6 +263,24 @@ class LocalAdapter {
     return res.json();
   }
 
+  async createCronJob(data: Omit<CronJob, 'id'>): Promise<CronJob> {
+    const res = await this.fetch('/api/cron', { method: 'POST', body: JSON.stringify(data) });
+    return res.json();
+  }
+
+  async updateCronJob(id: string, data: Partial<CronJob>): Promise<CronJob> {
+    const res = await this.fetch(`/api/cron/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    return res.json();
+  }
+
+  async deleteCronJob(id: string): Promise<void> {
+    await this.fetch(`/api/cron/${id}`, { method: 'DELETE' });
+  }
+
+  async triggerCronJob(id: string): Promise<void> {
+    await this.fetch(`/api/cron/${id}/trigger`, { method: 'POST' });
+  }
+
   // --- Notifications ---
   subscribeNotifications(onNotification: (n: Notification) => void): () => void {
     return this.subscribeSSE('/api/notifications/stream', (data) => onNotification(data as Notification));
@@ -232,6 +293,10 @@ class LocalAdapter {
 
   async markNotificationRead(id: string): Promise<void> {
     await this.fetch(`/api/notifications/${id}/read`, { method: 'PATCH' });
+  }
+
+  async markAllNotificationsRead(): Promise<void> {
+    await this.fetch('/api/notifications/read-all', { method: 'POST' });
   }
 
   // --- Approval ---
@@ -259,8 +324,18 @@ class LocalAdapter {
     return res.json();
   }
 
+  async getConfig(): Promise<unknown> {
+    const res = await this.fetch('/api/config');
+    return res.json();
+  }
+
   async getModels(): Promise<string[]> {
     const res = await this.fetch('/api/litellm/models');
+    return res.json();
+  }
+
+  async getLiteLLMStatus(): Promise<unknown> {
+    const res = await this.fetch('/api/litellm/status');
     return res.json();
   }
 
@@ -282,9 +357,92 @@ class LocalAdapter {
     return res.json();
   }
 
+  async getConnectorHealth(id: string): Promise<unknown> {
+    const res = await this.fetch(`/api/connectors/${id}/health`);
+    return res.json();
+  }
+
+  async connectConnector(id: string): Promise<void> {
+    await this.fetch(`/api/connectors/${id}/connect`, { method: 'POST' });
+  }
+
+  async disconnectConnector(id: string): Promise<void> {
+    await this.fetch(`/api/connectors/${id}/disconnect`, { method: 'POST' });
+  }
+
   // --- Vault ---
   async getVault(): Promise<unknown> {
     const res = await this.fetch('/api/vault');
+    return res.json();
+  }
+
+  async addVaultSecret(data: { key: string; value: string }): Promise<void> {
+    await this.fetch('/api/vault', { method: 'POST', body: JSON.stringify(data) });
+  }
+
+  async deleteVaultSecret(id: string): Promise<void> {
+    await this.fetch(`/api/vault/${id}`, { method: 'DELETE' });
+  }
+
+  // --- Mind ---
+  async getMindIdentity(): Promise<unknown> {
+    const res = await this.fetch('/api/mind/identity');
+    return res.json();
+  }
+
+  async getMindAwareness(): Promise<unknown> {
+    const res = await this.fetch('/api/mind/awareness');
+    return res.json();
+  }
+
+  async getMindSkills(): Promise<unknown> {
+    const res = await this.fetch('/api/mind/skills');
+    return res.json();
+  }
+
+  // --- Team ---
+  async teamConnect(serverUrl: string, token: string): Promise<void> {
+    await this.fetch('/api/team/connect', { method: 'POST', body: JSON.stringify({ serverUrl, token }) });
+  }
+
+  async teamDisconnect(): Promise<void> {
+    await this.fetch('/api/team/disconnect', { method: 'POST' });
+  }
+
+  async getTeamStatus(): Promise<{ connected: boolean; teamName?: string }> {
+    const res = await this.fetch('/api/team/status');
+    return res.json();
+  }
+
+  async getTeamMembers(): Promise<{ id: string; name: string; status: string; avatar?: string }[]> {
+    const res = await this.fetch('/api/team/members');
+    return res.json();
+  }
+
+  async getTeamActivity(): Promise<{ id: string; user: string; action: string; timestamp: string }[]> {
+    const res = await this.fetch('/api/team/activity');
+    return res.json();
+  }
+
+  async getTeamMessages(workspaceId: string): Promise<unknown[]> {
+    const res = await this.fetch(`/api/team/messages?workspaceId=${workspaceId}`);
+    return res.json();
+  }
+
+  // --- Costs ---
+  async getCosts(): Promise<unknown> {
+    const res = await this.fetch('/api/costs');
+    return res.json();
+  }
+
+  async getCostByWorkspace(): Promise<unknown> {
+    const res = await this.fetch('/api/cost/by-workspace');
+    return res.json();
+  }
+
+  // --- Audit ---
+  async getAuditInstalls(): Promise<unknown[]> {
+    const res = await this.fetch('/api/audit/installs');
     return res.json();
   }
 
