@@ -129,6 +129,10 @@ class LocalAdapter {
     }
   }
 
+  async abortAgent(workspaceId: string): Promise<void> {
+    await this.fetch(`/api/agent/abort`, { method: 'POST', body: JSON.stringify({ workspaceId }) });
+  }
+
   async clearHistory(sessionId: string): Promise<void> {
     await this.fetch(`/api/chat/history?session=${sessionId}`, { method: 'DELETE' });
   }
