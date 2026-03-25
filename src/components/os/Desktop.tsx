@@ -97,6 +97,7 @@ const Desktop = () => {
   const [showWorkspaceSwitcher, setShowWorkspaceSwitcher] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
+  const [showSpawnAgent, setShowSpawnAgent] = useState(false);
 
   // Core hooks
   const { workspaces, activeWorkspace, activeWorkspaceId, selectWorkspace, createWorkspace } = useWorkspaces();
