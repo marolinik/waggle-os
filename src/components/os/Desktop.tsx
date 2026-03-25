@@ -20,6 +20,7 @@ import CapabilitiesApp from "./apps/CapabilitiesApp";
 import GlobalSearch from "./overlays/GlobalSearch";
 import CreateWorkspaceDialog from "./overlays/CreateWorkspaceDialog";
 import PersonaSwitcher from "./overlays/PersonaSwitcher";
+import SpawnAgentDialog from "./overlays/SpawnAgentDialog";
 import WorkspaceSwitcher from "./overlays/WorkspaceSwitcher";
 import NotificationInbox from "./overlays/NotificationInbox";
 import KeyboardShortcutsHelp from "./overlays/KeyboardShortcutsHelp";
@@ -96,6 +97,7 @@ const Desktop = () => {
   const [showWorkspaceSwitcher, setShowWorkspaceSwitcher] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
+  const [showSpawnAgent, setShowSpawnAgent] = useState(false);
 
   // Core hooks
   const { workspaces, activeWorkspace, activeWorkspaceId, selectWorkspace, createWorkspace } = useWorkspaces();
@@ -295,7 +297,7 @@ const Desktop = () => {
       case 'cockpit':
         return <CockpitApp />;
       case 'mission-control':
-        return <MissionControlApp />;
+        return <MissionControlApp onSpawnOpen={() => setShowSpawnAgent(true)} />;
       case 'capabilities':
         return <CapabilitiesApp />;
       default:
@@ -476,6 +478,15 @@ const Desktop = () => {
       />
       <NotificationInbox open={showNotifications} onClose={() => setShowNotifications(false)} notifications={notifications} onMarkRead={markRead} onMarkAllRead={markAllRead} />
       <KeyboardShortcutsHelp open={showKeyboardHelp} onClose={() => setShowKeyboardHelp(false)} />
+      <SpawnAgentDialog
+        open={showSpawnAgent}
+        onClose={() => setShowSpawnAgent(false)}
+        workspaces={workspaces}
+        activeWorkspaceId={activeWorkspaceId}
+        onWorkspaceCreated={(ws) => {
+          selectWorkspace(ws.id);
+        }}
+      />
       {!onboardingState.completed && (
         <OnboardingWizard
           serverBaseUrl={adapter.getServerUrl()}

@@ -1,27 +1,19 @@
 import { useState, useEffect } from 'react';
 import { Play, Pause, Square, Radio, Clock, Zap, RefreshCw, Users, Plus, Rocket } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
-import { PERSONAS } from '@/lib/personas';
-import type { FleetSession } from '@/lib/types';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
-} from '@/components/ui/dialog';
+import type { FleetSession, Workspace } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
 
-const MODELS = ['gpt-4o', 'gpt-4o-mini', 'claude-sonnet-4-20250514', 'claude-3-haiku', 'gemini-pro'];
+interface MissionControlAppProps {
+  onSpawnOpen?: () => void;
+}
 
-const MissionControlApp = () => {
+const MissionControlApp = ({ onSpawnOpen }: MissionControlAppProps) => {
   const [sessions, setSessions] = useState<FleetSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [teamMembers, setTeamMembers] = useState<{ id: string; name: string; status: string }[]>([]);
   const [activity, setActivity] = useState<{ id: string; user: string; action: string; timestamp: string }[]>([]);
   const [tab, setTab] = useState<'fleet' | 'team' | 'activity'>('fleet');
-  const [spawnOpen, setSpawnOpen] = useState(false);
-  const [spawning, setSpawning] = useState(false);
-  const [spawnForm, setSpawnForm] = useState({ task: '', persona: '', model: MODELS[0] });
 
   const refresh = async () => {
     try {
@@ -48,22 +40,6 @@ const MissionControlApp = () => {
     refresh();
   };
 
-  const handleSpawn = async () => {
-    if (!spawnForm.task.trim()) return;
-    setSpawning(true);
-    try {
-      await adapter.spawnAgent({
-        task: spawnForm.task,
-        persona: spawnForm.persona || undefined,
-        model: spawnForm.model,
-      });
-      setSpawnOpen(false);
-      setSpawnForm({ task: '', persona: '', model: MODELS[0] });
-      refresh();
-    } catch { /* ignore */ }
-    finally { setSpawning(false); }
-  };
-
   const statusColors: Record<string, string> = {
     active: 'text-emerald-400',
     paused: 'text-amber-400',
@@ -81,7 +57,7 @@ const MissionControlApp = () => {
             size="sm"
             variant="default"
             className="gap-1.5 text-xs h-8"
-            onClick={() => setSpawnOpen(true)}
+            onClick={onSpawnOpen}
           >
             <Plus className="w-3.5 h-3.5" /> Spawn Agent
           </Button>
@@ -116,7 +92,7 @@ const MissionControlApp = () => {
                 variant="outline"
                 size="sm"
                 className="mt-3 gap-1.5 text-xs"
-                onClick={() => setSpawnOpen(true)}
+                onClick={onSpawnOpen}
               >
                 <Rocket className="w-3.5 h-3.5" /> Spawn your first agent
               </Button>
@@ -194,96 +170,6 @@ const MissionControlApp = () => {
           ))}
         </div>
       )}
-
-      {/* Spawn Agent Dialog */}
-      <Dialog open={spawnOpen} onOpenChange={setSpawnOpen}>
-        <DialogContent className="sm:max-w-md bg-background border-border">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-foreground">
-              <Rocket className="w-5 h-5 text-primary" /> Spawn Agent
-            </DialogTitle>
-            <DialogDescription>
-              Configure and launch a sub-agent to handle a specific task autonomously.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2">
-            {/* Task */}
-            <div className="space-y-2">
-              <Label htmlFor="spawn-task" className="text-foreground">Task</Label>
-              <Textarea
-                id="spawn-task"
-                placeholder="Describe what this agent should do..."
-                value={spawnForm.task}
-                onChange={e => setSpawnForm(f => ({ ...f, task: e.target.value }))}
-                className="min-h-[80px] bg-secondary/30 border-border/50 text-foreground placeholder:text-muted-foreground"
-              />
-            </div>
-
-            {/* Persona */}
-            <div className="space-y-2">
-              <Label className="text-foreground">Persona</Label>
-              <div className="grid grid-cols-4 gap-1.5">
-                {PERSONAS.map(p => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => setSpawnForm(f => ({ ...f, persona: f.persona === p.id ? '' : p.id }))}
-                    className={`flex flex-col items-center gap-1 p-2 rounded-lg border text-center transition-all ${
-                      spawnForm.persona === p.id
-                        ? 'border-primary bg-primary/10 ring-1 ring-primary/30'
-                        : 'border-border/30 bg-secondary/20 hover:bg-secondary/40'
-                    }`}
-                  >
-                    <img src={p.avatar} alt={p.name} className="w-8 h-8 rounded-full object-cover" />
-                    <span className="text-[10px] text-foreground font-medium leading-tight truncate w-full">{p.name}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Model */}
-            <div className="space-y-2">
-              <Label htmlFor="spawn-model" className="text-foreground">Model</Label>
-              <div className="flex flex-wrap gap-1.5">
-                {MODELS.map(m => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => setSpawnForm(f => ({ ...f, model: m }))}
-                    className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
-                      spawnForm.model === m
-                        ? 'border-primary bg-primary/10 text-primary'
-                        : 'border-border/30 bg-secondary/20 text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    {m}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="ghost" size="sm" onClick={() => setSpawnOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              disabled={!spawnForm.task.trim() || spawning}
-              onClick={handleSpawn}
-              className="gap-1.5"
-            >
-              {spawning ? (
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Rocket className="w-3.5 h-3.5" />
-              )}
-              {spawning ? 'Spawning…' : 'Launch'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
