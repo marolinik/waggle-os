@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ThumbsUp, ThumbsDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Upload, Code, FileText, Users, X, Bot, Cpu } from 'lucide-react';
+import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ChevronUp, ThumbsUp, ThumbsDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Upload, Code, FileText, Users, X, Bot, Cpu, Layers } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getPersonaById, PERSONAS } from '@/lib/personas';
@@ -31,7 +31,19 @@ interface ChatAppProps {
   onSelectSession?: (id: string) => void;
   onNewSession?: () => void;
   workspaceId?: string | null;
+  templateId?: string;
 }
+
+const TEMPLATE_DISPLAY: Record<string, { label: string; desc: string }> = {
+  'sales-pipeline': { label: 'Sales Pipeline', desc: 'Deal tracking & prospecting' },
+  'research-project': { label: 'Research Project', desc: 'Deep investigation & synthesis' },
+  'code-review': { label: 'Code Review', desc: 'Analyze and review code' },
+  'marketing-campaign': { label: 'Marketing Campaign', desc: 'Campaigns & content creation' },
+  'product-launch': { label: 'Product Launch', desc: 'Ship products faster' },
+  'legal-review': { label: 'Legal Review', desc: 'Contracts & documentation' },
+  'agency-consulting': { label: 'Agency Consulting', desc: 'Client workspace management' },
+  'blank': { label: 'Custom', desc: 'General-purpose workspace' },
+};
 
 const SLASH_COMMANDS = [
   { cmd: '/model', desc: 'Switch model' },
