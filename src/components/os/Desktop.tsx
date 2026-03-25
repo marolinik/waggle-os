@@ -78,7 +78,7 @@ const Desktop = () => {
   const events = useEvents(activeWorkspaceId);
   const agentStatus = useAgentStatus();
   const { notifications, unreadCount, markRead, markAllRead } = useNotifications();
-  const { completed: onboardingComplete, completeOnboarding } = useOnboarding();
+  const { state: onboardingState, update: updateOnboarding, complete: completeOnboarding } = useOnboarding();
   const offline = useOfflineStatus();
   const kg = useKnowledgeGraph(activeWorkspaceId);
 
@@ -124,12 +124,14 @@ const Desktop = () => {
     else if (type === 'memory') openApp('memory');
   }, [openApp, selectWorkspace]);
 
-  const handleOnboardingComplete = useCallback(async (data: { name: string; apiKey: string; provider: string; workspace: { name: string; group: string; persona?: string } }) => {
-    try {
-      await createWorkspace(data.workspace);
-    } catch { /* ignore */ }
+  const handleOnboardingComplete = useCallback((serverBaseUrl: string) => {
     completeOnboarding();
-  }, [createWorkspace, completeOnboarding]);
+  }, [completeOnboarding]);
+
+  const handleOnboardingFinish = useCallback((workspaceId: string, _firstMessage: string) => {
+    selectWorkspace(workspaceId);
+    openApp('dashboard');
+  }, [selectWorkspace, openApp]);
 
   const renderAppContent = (appId: AppId) => {
     switch (appId) {
@@ -330,7 +332,17 @@ const Desktop = () => {
       <WorkspaceSwitcher open={showWorkspaceSwitcher} onClose={() => setShowWorkspaceSwitcher(false)} workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} onSelect={(id) => { selectWorkspace(id); openApp('chat'); }} />
       <NotificationInbox open={showNotifications} onClose={() => setShowNotifications(false)} notifications={notifications} onMarkRead={markRead} onMarkAllRead={markAllRead} />
       <KeyboardShortcutsHelp open={showKeyboardHelp} onClose={() => setShowKeyboardHelp(false)} />
-      <OnboardingWizard open={!onboardingComplete} onComplete={handleOnboardingComplete} />
+      {!onboardingState.completed && (
+        <OnboardingWizard
+          serverBaseUrl={adapter.getServerUrl()}
+          state={onboardingState}
+          onUpdate={updateOnboarding}
+          onComplete={handleOnboardingComplete}
+          onDismiss={completeOnboarding}
+          onFinish={handleOnboardingFinish}
+        />
+      )}
+      {onboardingState.completed && <OnboardingTooltips />}
     </div>
   );
 };
