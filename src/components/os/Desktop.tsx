@@ -91,22 +91,20 @@ const Desktop = () => {
       if (id !== 'chat') {
         const existing = prev.find(w => w.appId === id);
         if (existing) {
-          const newZ = topZ + 1;
-          setTopZ(newZ);
+          const z = nextZ();
           setFocusedInstanceId(existing.instanceId);
-          return prev.map(w => w.instanceId === existing.instanceId ? { ...w, zIndex: newZ, minimized: false } : w);
+          return prev.map(w => w.instanceId === existing.instanceId ? { ...w, zIndex: z, minimized: false } : w);
         }
       }
 
       const offset = cascadeCounter.current;
       cascadeCounter.current = (cascadeCounter.current + 1) % 10;
-      const newZ = topZ + 1;
-      setTopZ(newZ);
+      const z = nextZ();
       const instanceId = `${id}-${Date.now()}`;
       setFocusedInstanceId(instanceId);
-      return [...prev, { instanceId, appId: id, zIndex: newZ, minimized: false, cascadeOffset: offset }];
+      return [...prev, { instanceId, appId: id, zIndex: z, minimized: false, cascadeOffset: offset }];
     });
-  }, [topZ]);
+  }, []);
 
   /* ── Open a chat window for a specific workspace ── */
   const openChatForWorkspace = useCallback((workspaceId: string, workspaceName?: string) => {
@@ -114,25 +112,23 @@ const Desktop = () => {
       // Check if a chat window for this workspace already exists
       const existing = prev.find(w => w.appId === 'chat' && w.workspaceId === workspaceId);
       if (existing) {
-        const newZ = topZ + 1;
-        setTopZ(newZ);
+        const z = nextZ();
         setFocusedInstanceId(existing.instanceId);
-        return prev.map(w => w.instanceId === existing.instanceId ? { ...w, zIndex: newZ, minimized: false } : w);
+        return prev.map(w => w.instanceId === existing.instanceId ? { ...w, zIndex: z, minimized: false } : w);
       }
 
       const offset = cascadeCounter.current;
       cascadeCounter.current = (cascadeCounter.current + 1) % 10;
-      const newZ = topZ + 1;
-      setTopZ(newZ);
+      const z = nextZ();
       const instanceId = `chat-${workspaceId}-${Date.now()}`;
       setFocusedInstanceId(instanceId);
       return [...prev, {
         instanceId, appId: 'chat' as AppId,
         workspaceId, workspaceName,
-        zIndex: newZ, minimized: false, cascadeOffset: offset,
+        zIndex: z, minimized: false, cascadeOffset: offset,
       }];
     });
-  }, [topZ]);
+  }, []);
 
   const closeApp = useCallback((instanceId: string) => {
     setWindows(prev => prev.filter(w => w.instanceId !== instanceId));
@@ -143,11 +139,10 @@ const Desktop = () => {
   }, []);
 
   const focusWindow = useCallback((instanceId: string) => {
-    const newZ = topZ + 1;
-    setTopZ(newZ);
+    const z = nextZ();
     setFocusedInstanceId(instanceId);
-    setWindows(prev => prev.map(w => w.instanceId === instanceId ? { ...w, zIndex: newZ, minimized: false } : w));
-  }, [topZ]);
+    setWindows(prev => prev.map(w => w.instanceId === instanceId ? { ...w, zIndex: z, minimized: false } : w));
+  }, []);
 
   /* ── Alt+Tab: cycle focus among non-minimized windows ── */
   const cycleWindowFocus = useCallback(() => {
@@ -155,16 +150,13 @@ const Desktop = () => {
       const visible = prev.filter(w => !w.minimized);
       if (visible.length <= 1) return prev;
 
-      // Sort by zIndex descending to get current focus order
       const sorted = [...visible].sort((a, b) => b.zIndex - a.zIndex);
-      // The current top window goes to the bottom, next one gets focus
-      const nextWindow = sorted[1]; // second-highest z becomes focused
-      const newZ = topZ + 1;
-      setTopZ(newZ);
+      const nextWindow = sorted[1];
+      const z = nextZ();
       setFocusedInstanceId(nextWindow.instanceId);
-      return prev.map(w => w.instanceId === nextWindow.instanceId ? { ...w, zIndex: newZ } : w);
+      return prev.map(w => w.instanceId === nextWindow.instanceId ? { ...w, zIndex: z } : w);
     });
-  }, [topZ]);
+  }, []);
 
   // Keyboard shortcuts
   useKeyboardShortcuts({
