@@ -39,6 +39,7 @@ interface WindowState {
   id: AppId;
   zIndex: number;
   minimized: boolean;
+  cascadeOffset: number;
 }
 
 const appConfig: Record<string, { title: string; icon: React.ReactNode; pos: { x: number; y: number }; size: { w: string; h: string } }> = {
@@ -87,8 +88,10 @@ const Desktop = () => {
         setTopZ(z => z + 1);
         return prev.map(w => w.id === id ? { ...w, zIndex: topZ + 1, minimized: false } : w);
       }
+      const offset = cascadeCounter.current;
+      cascadeCounter.current = (cascadeCounter.current + 1) % 10;
       setTopZ(z => z + 1);
-      return [...prev, { id, zIndex: topZ + 1, minimized: false }];
+      return [...prev, { id, zIndex: topZ + 1, minimized: false, cascadeOffset: offset }];
     });
   }, [topZ]);
 
