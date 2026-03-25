@@ -1,19 +1,60 @@
 import { useState, useCallback } from 'react';
 
+export interface OnboardingState {
+  completed: boolean;
+  step: number;
+  workspaceId?: string;
+  apiKeySet?: boolean;
+  templateId?: string;
+  personaId?: string;
+}
+
+const STORAGE_KEY = 'waggle:onboarding';
+
+const defaultState: OnboardingState = {
+  completed: false,
+  step: 0,
+};
+
+function loadState(): OnboardingState {
+  try {
+    // Migrate from old key
+    if (localStorage.getItem('waggle_onboarding_complete') === 'true') {
+      localStorage.removeItem('waggle_onboarding_complete');
+      const done: OnboardingState = { ...defaultState, completed: true, step: 6 };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(done));
+      return done;
+    }
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return { ...defaultState, ...JSON.parse(raw) };
+  } catch { /* ignore */ }
+  return defaultState;
+}
+
+function saveState(state: OnboardingState) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
 export const useOnboarding = () => {
-  const [completed, setCompleted] = useState(() => {
-    return localStorage.getItem('waggle_onboarding_complete') === 'true';
-  });
+  const [state, setState] = useState<OnboardingState>(loadState);
 
-  const completeOnboarding = useCallback(() => {
-    localStorage.setItem('waggle_onboarding_complete', 'true');
-    setCompleted(true);
+  const update = useCallback((updates: Partial<OnboardingState>) => {
+    setState(prev => {
+      const next = { ...prev, ...updates };
+      saveState(next);
+      return next;
+    });
   }, []);
 
-  const resetOnboarding = useCallback(() => {
-    localStorage.removeItem('waggle_onboarding_complete');
-    setCompleted(false);
+  const complete = useCallback(() => {
+    update({ completed: true, step: 6 });
+  }, [update]);
+
+  const reset = useCallback(() => {
+    const fresh = { ...defaultState };
+    saveState(fresh);
+    setState(fresh);
   }, []);
 
-  return { completed, completeOnboarding, resetOnboarding };
+  return { state, update, complete, reset };
 };
