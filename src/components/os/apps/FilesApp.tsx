@@ -212,8 +212,66 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
     handleNavigate(parent);
   };
 
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current++;
+    if (e.dataTransfer.types.includes('Files')) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current--;
+    if (dragCounter.current === 0) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounter.current = 0;
+    if (e.dataTransfer.files?.length) {
+      handleUpload(e.dataTransfer.files);
+    }
+  };
+
   return (
-    <div className="flex h-full bg-background/50" onClick={() => setContextMenu(null)}>
+    <div
+      className="flex h-full bg-background/50 relative"
+      onClick={() => setContextMenu(null)}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {/* Drag overlay */}
+      <AnimatePresence>
+        {isDragging && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-[50] flex items-center justify-center bg-primary/5 backdrop-blur-sm border-2 border-dashed border-primary/40 rounded-xl pointer-events-none"
+          >
+            <div className="flex flex-col items-center gap-2">
+              <Upload className="w-10 h-10 text-primary animate-bounce" />
+              <p className="text-sm font-display text-primary">Drop files to upload</p>
+              <p className="text-[10px] text-muted-foreground">Files will be added to <span className="font-mono text-foreground">{currentPath}</span></p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Tree sidebar */}
       <div className="w-48 border-r border-border/30 flex flex-col">
         <div className="p-2 border-b border-border/20">
