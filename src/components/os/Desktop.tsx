@@ -42,10 +42,33 @@ interface WindowState {
   appId: AppId;              // which app type
   workspaceId?: string;      // for chat windows — which workspace
   workspaceName?: string;
+  personaLabel?: string;     // persona display name for title bar
+  templateLabel?: string;    // template display name for title bar
   zIndex: number;
   minimized: boolean;
   cascadeOffset: number;
 }
+
+const TEMPLATE_SHORT: Record<string, string> = {
+  'sales-pipeline': 'Sales',
+  'research-project': 'Research',
+  'code-review': 'Code',
+  'marketing-campaign': 'Marketing',
+  'product-launch': 'Launch',
+  'legal-review': 'Legal',
+  'agency-consulting': 'Consulting',
+};
+
+const PERSONA_SHORT: Record<string, string> = {
+  'researcher': 'Researcher',
+  'writer': 'Writer',
+  'analyst': 'Analyst',
+  'coder': 'Coder',
+  'project-manager': 'PM',
+  'executive-assistant': 'EA',
+  'sales-rep': 'Sales',
+  'marketer': 'Marketer',
+};
 
 const appConfig: Record<string, { title: string; icon: React.ReactNode; pos: { x: number; y: number }; size: { w: string; h: string } }> = {
   "chat": { title: "Waggle Chat", icon: <MessageSquare className="w-3.5 h-3.5 text-primary" />, pos: { x: 180, y: 40 }, size: { w: "520px", h: "520px" } },
