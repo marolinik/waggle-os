@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import { adapter } from '@/lib/adapter';
-import type LocalAdapter from '@/lib/adapter';
+import type { LocalAdapter } from '@/lib/adapter';
 
 interface ServiceContextValue {
   adapter: LocalAdapter;
