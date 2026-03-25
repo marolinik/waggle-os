@@ -24,6 +24,8 @@ import WorkspaceSwitcher from "./overlays/WorkspaceSwitcher";
 import NotificationInbox from "./overlays/NotificationInbox";
 import KeyboardShortcutsHelp from "./overlays/KeyboardShortcutsHelp";
 import OnboardingWizard from "./overlays/OnboardingWizard";
+import OnboardingTooltips from "./overlays/OnboardingTooltips";
+import { adapter } from "@/lib/adapter";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { useChat } from "@/hooks/useChat";
 import { useSessions } from "@/hooks/useSessions";
