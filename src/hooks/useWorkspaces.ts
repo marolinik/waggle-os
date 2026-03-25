@@ -2,9 +2,20 @@ import { useState, useCallback, useEffect } from 'react';
 import { adapter } from '@/lib/adapter';
 import type { Workspace } from '@/lib/types';
 
+const DEFAULT_WORKSPACE: Workspace = {
+  id: 'local-default',
+  name: 'Default Workspace',
+  group: 'Personal',
+  persona: 'researcher',
+  health: 'healthy',
+  memoryCount: 0,
+  sessionCount: 0,
+  lastActive: new Date().toISOString(),
+};
+
 export const useWorkspaces = () => {
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([DEFAULT_WORKSPACE]);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(DEFAULT_WORKSPACE.id);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -12,12 +23,15 @@ export const useWorkspaces = () => {
     setLoading(true);
     try {
       const data = await adapter.getWorkspaces();
-      setWorkspaces(data);
-      if (!activeWorkspaceId && data.length > 0) {
-        setActiveWorkspaceId(data[0].id);
+      if (data.length > 0) {
+        setWorkspaces(data);
+        if (!activeWorkspaceId || activeWorkspaceId === DEFAULT_WORKSPACE.id) {
+          setActiveWorkspaceId(data[0].id);
+        }
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load workspaces');
+      setError(null);
+    } catch {
+      // Keep default workspace — don't set error for offline state
     } finally {
       setLoading(false);
     }
@@ -26,14 +40,31 @@ export const useWorkspaces = () => {
   useEffect(() => { fetchWorkspaces(); }, []);
 
   const createWorkspace = useCallback(async (data: { name: string; group: string; persona?: string }) => {
-    const ws = await adapter.createWorkspace(data);
-    setWorkspaces(prev => [...prev, ws]);
-    setActiveWorkspaceId(ws.id);
-    return ws;
+    try {
+      const ws = await adapter.createWorkspace(data);
+      setWorkspaces(prev => [...prev.filter(w => w.id !== DEFAULT_WORKSPACE.id), ws]);
+      setActiveWorkspaceId(ws.id);
+      return ws;
+    } catch {
+      // Create locally if backend is offline
+      const localWs: Workspace = {
+        id: `local-${Date.now()}`,
+        name: data.name,
+        group: data.group,
+        persona: data.persona,
+        health: 'healthy',
+        memoryCount: 0,
+        sessionCount: 0,
+        lastActive: new Date().toISOString(),
+      };
+      setWorkspaces(prev => [...prev.filter(w => w.id !== DEFAULT_WORKSPACE.id), localWs]);
+      setActiveWorkspaceId(localWs.id);
+      return localWs;
+    }
   }, []);
 
   const deleteWorkspace = useCallback(async (id: string) => {
-    await adapter.deleteWorkspace(id);
+    try { await adapter.deleteWorkspace(id); } catch { /* local delete */ }
     setWorkspaces(prev => prev.filter(w => w.id !== id));
     if (activeWorkspaceId === id) {
       setActiveWorkspaceId(workspaces.find(w => w.id !== id)?.id || null);

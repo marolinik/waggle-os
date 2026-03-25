@@ -101,7 +101,7 @@ export const useChat = ({ workspaceId, sessionId }: UseChatOptions) => {
         const msgs = [...prev];
         const last = msgs[msgs.length - 1];
         if (last.role === 'assistant') {
-          last.content = `⚠️ Connection error: ${e instanceof Error ? e.message : 'Unknown error'}`;
+          last.content = '⚠️ Backend is offline. Connect to a Waggle server to start chatting.';
         }
         return msgs;
       });
@@ -114,13 +114,13 @@ export const useChat = ({ workspaceId, sessionId }: UseChatOptions) => {
     if (sessionId) {
       try {
         await adapter.clearHistory(sessionId);
-        setMessages([]);
-      } catch { /* ignore */ }
+      } catch { /* local clear */ }
+      setMessages([]);
     }
   }, [sessionId]);
 
   const approveAction = useCallback(async (requestId: string, approved: boolean) => {
-    await adapter.respondApproval(requestId, approved);
+    try { await adapter.respondApproval(requestId, approved); } catch { /* ignore */ }
     setPendingApproval(null);
   }, []);
 

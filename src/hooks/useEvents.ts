@@ -8,8 +8,7 @@ export const useEvents = (workspaceId: string | null) => {
   const [filter, setFilter] = useState<string | null>(null);
 
   useEffect(() => {
-    adapter.getEvents().then(setSteps).catch(() => {});
-    // Only subscribe if workspace is set
+    adapter.getEvents().then(setSteps).catch(() => setSteps([]));
     if (!workspaceId) return;
     try {
       const unsub = adapter.subscribeEvents((step) => {
