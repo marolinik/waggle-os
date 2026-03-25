@@ -204,7 +204,14 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
 
           {/* Model */}
           <div className="space-y-2">
-            <Label className="text-foreground">Model</Label>
+            <div className="flex items-center gap-2">
+              <Label className="text-foreground">Model</Label>
+              {workspaces.find(w => w.id === activeWorkspaceId)?.model && (
+                <span className="text-[10px] text-muted-foreground">
+                  inherited from {workspaces.find(w => w.id === activeWorkspaceId)?.name}
+                </span>
+              )}
+            </div>
             {loadingModels ? (
               <p className="text-xs text-muted-foreground">Loading models…</p>
             ) : models.length === 0 ? (
