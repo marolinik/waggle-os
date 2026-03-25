@@ -170,7 +170,7 @@ const ChatApp = ({
   onPersonaChange, currentModel, onModelChange, availableModels,
   teamPresence,
   sessions, activeSessionId, onSelectSession, onNewSession,
-  workspaceId,
+  workspaceId, templateId,
 }: ChatAppProps) => {
   const [input, setInput] = useState('');
   const [showSlash, setShowSlash] = useState(false);
@@ -178,6 +178,7 @@ const ChatApp = ({
   const [slashIndex, setSlashIndex] = useState(0);
   const [showSessions, setShowSessions] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [showAgentProfile, setShowAgentProfile] = useState(false);
   const [showPersonaPicker, setShowPersonaPicker] = useState(false);
   const [showModelPicker, setShowModelPicker] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
