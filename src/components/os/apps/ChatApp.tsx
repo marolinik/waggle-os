@@ -316,7 +316,7 @@ const ChatApp = ({
           )}
 
           {/* Persona picker */}
-          <div className="relative">
+          <div className="relative" ref={personaPickerRef}>
             <button
               onClick={() => { setShowPersonaPicker(p => !p); setShowModelPicker(false); }}
               className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-muted/50 transition-colors"
