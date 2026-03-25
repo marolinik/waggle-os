@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Activity, Loader2, CheckCircle2, XCircle, Zap, MessageSquare, ChevronDown, Clock, ChevronRight } from 'lucide-react';
+import { Activity, Loader2, CheckCircle2, XCircle, Zap, MessageSquare, ChevronDown, Clock, ChevronRight, StopCircle } from 'lucide-react';
 import type { AgentStep } from '@/lib/types';
 
 const stepIcons: Record<string, React.ElementType> = {
@@ -23,6 +23,7 @@ interface EventsAppProps {
   onToggleAutoScroll: () => void;
   filter: string | null;
   onFilterChange: (f: string | null) => void;
+  onAbort?: () => void;
 }
 
 const StepCard = ({ step }: { step: AgentStep }) => {
