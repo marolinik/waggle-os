@@ -1,30 +1,45 @@
 import { useState } from 'react';
-import { X, Plus, Users } from 'lucide-react';
+import { X, Plus, Users, Cloud, HardDrive, Server } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { PERSONAS } from '@/lib/personas';
 import { motion, AnimatePresence } from 'framer-motion';
+import type { StorageType } from '@/lib/types';
 
 interface CreateWorkspaceDialogProps {
   open: boolean;
   onClose: () => void;
-  onCreate: (data: { name: string; group: string; persona?: string; shared?: boolean }) => void;
+  onCreate: (data: { name: string; group: string; persona?: string; shared?: boolean; storageType?: StorageType; storagePath?: string }) => void;
 }
 
 const GROUPS = ['Personal', 'Work', 'Research', 'Team'];
+
+const STORAGE_OPTIONS: { type: StorageType; label: string; desc: string; icon: React.ElementType; color: string }[] = [
+  { type: 'virtual', label: 'Virtual', desc: 'Server-managed storage', icon: Cloud, color: 'text-violet-400' },
+  { type: 'local', label: 'Local', desc: 'Local disk directory', icon: HardDrive, color: 'text-emerald-400' },
+  { type: 'team', label: 'Team', desc: 'Remote S3/MinIO storage', icon: Server, color: 'text-sky-400' },
+];
 
 const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialogProps) => {
   const [name, setName] = useState('');
   const [group, setGroup] = useState('Personal');
   const [selectedPersona, setSelectedPersona] = useState<string | undefined>();
   const [shared, setShared] = useState(false);
+  const [storageType, setStorageType] = useState<StorageType>('virtual');
+  const [storagePath, setStoragePath] = useState('');
 
   const handleCreate = () => {
     if (!name.trim()) return;
-    onCreate({ name: name.trim(), group, persona: selectedPersona, shared });
+    onCreate({
+      name: name.trim(), group, persona: selectedPersona, shared,
+      storageType,
+      storagePath: storagePath.trim() || undefined,
+    });
     setName('');
     setGroup('Personal');
     setSelectedPersona(undefined);
     setShared(false);
+    setStorageType('virtual');
+    setStoragePath('');
     onClose();
   };
 
@@ -44,7 +59,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
-          className="relative w-full max-w-md glass-strong rounded-2xl shadow-2xl p-6"
+          className="relative w-full max-w-md glass-strong rounded-2xl shadow-2xl p-6 max-h-[85vh] overflow-y-auto"
           onClick={e => e.stopPropagation()}
         >
           <div className="flex items-center justify-between mb-5">
@@ -83,6 +98,43 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                 ))}
               </div>
             </div>
+
+            {/* Storage Type */}
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1.5">Storage Type</label>
+              <div className="grid grid-cols-3 gap-2">
+                {STORAGE_OPTIONS.map(opt => (
+                  <button
+                    key={opt.type}
+                    onClick={() => setStorageType(opt.type)}
+                    className={`flex flex-col items-center gap-1 p-3 rounded-xl transition-all ${
+                      storageType === opt.type
+                        ? 'bg-primary/20 border border-primary/50'
+                        : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
+                    }`}
+                  >
+                    <opt.icon className={`w-5 h-5 ${opt.color}`} />
+                    <span className="text-[10px] font-display text-foreground">{opt.label}</span>
+                    <span className="text-[8px] text-muted-foreground">{opt.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Storage Path (for local/team) */}
+            {storageType !== 'virtual' && (
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1.5">
+                  {storageType === 'local' ? 'Local Directory Path' : 'Bucket / Prefix'}
+                </label>
+                <input
+                  value={storagePath}
+                  onChange={e => setStoragePath(e.target.value)}
+                  placeholder={storageType === 'local' ? '/home/user/projects/my-workspace' : 'my-bucket/workspace-prefix'}
+                  className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50 font-mono text-[11px]"
+                />
+              </div>
+            )}
 
             <div>
               <label className="text-xs text-muted-foreground block mb-1.5">Persona (optional)</label>
