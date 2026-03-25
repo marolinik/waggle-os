@@ -44,9 +44,10 @@ interface ChatWindowInstanceProps {
   workspaceId: string;
   workspaceName?: string;
   initialPersona?: string;
+  templateId?: string;
 }
 
-const ChatWindowInstance = ({ workspaceId, workspaceName, initialPersona }: ChatWindowInstanceProps) => {
+const ChatWindowInstance = ({ workspaceId, workspaceName, initialPersona, templateId }: ChatWindowInstanceProps) => {
   const { sessions, activeSessionId, setActiveSessionId, createSession } = useSessions(workspaceId);
   const { messages, isLoading, sendMessage, clearHistory, pendingApproval, approveAction } = useChat({
     workspaceId,
@@ -130,6 +131,7 @@ const ChatWindowInstance = ({ workspaceId, workspaceName, initialPersona }: Chat
       onSelectSession={setActiveSessionId}
       onNewSession={createSession}
       workspaceId={workspaceId}
+      templateId={templateId}
     />
   );
 };
