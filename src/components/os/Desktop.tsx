@@ -208,7 +208,7 @@ const Desktop = () => {
 
       {/* Desktop logo hero — naturally blended into the hexagonal wallpaper */}
       {windows.length === 0 && (
-        <div className="absolute inset-0 flex flex-col items-center pointer-events-none z-[1]" style={{ paddingTop: "18vh" }}>
+        <div className="absolute inset-0 flex flex-col items-center pointer-events-none z-[1]" style={{ paddingTop: "8vh" }}>
           {/* Very subtle warm radial glow — feels like a light source behind the grid */}
           <motion.div
             initial={{ opacity: 0, scale: 0.6 }}
@@ -216,7 +216,7 @@ const Desktop = () => {
             transition={{ opacity: { duration: 6, repeat: Infinity, ease: "easeInOut" }, scale: { duration: 2, ease: "easeOut" } }}
             className="absolute rounded-full"
             style={{
-              top: "12vh",
+              top: "4vh",
               width: "700px",
               height: "500px",
               background: "radial-gradient(ellipse, hsl(var(--primary) / 0.08) 0%, hsl(var(--primary) / 0.03) 45%, transparent 75%)",
@@ -228,7 +228,7 @@ const Desktop = () => {
               <img
                 src={waggleLogo}
                 alt="Waggle AI"
-                className="w-20 h-20 mix-blend-screen opacity-80"
+                className="w-32 h-32 mix-blend-screen opacity-80"
                 style={{ borderRadius: 0, background: "transparent" }}
               />
             </div>
@@ -238,7 +238,7 @@ const Desktop = () => {
             initial={{ opacity: 0, y: 14, letterSpacing: "0.35em" }}
             animate={{ opacity: 1, y: 0, letterSpacing: "0.15em" }}
             transition={{ delay: 0.4, duration: 0.9, ease: "easeOut" }}
-            className="mt-4 text-3xl font-display font-semibold tracking-widest"
+            className="mt-5 text-5xl font-display font-bold tracking-widest"
             style={{
               color: "hsl(40, 15%, 92%)",
               textShadow: "0 0 40px hsl(var(--primary) / 0.2), 0 1px 3px hsl(0 0% 0% / 0.7)",
