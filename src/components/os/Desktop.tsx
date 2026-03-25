@@ -208,7 +208,7 @@ const Desktop = () => {
 
       {/* Desktop logo hero — blended into the wallpaper */}
       {windows.length === 0 && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-[1] -mt-10">
+        <div className="absolute top-16 left-0 right-0 flex flex-col items-center pointer-events-none z-[1]">
           {/* Radial ambient glow behind logo */}
           <motion.div
             initial={{ opacity: 0, scale: 0.5 }}
