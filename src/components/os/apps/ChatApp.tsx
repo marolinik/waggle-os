@@ -365,11 +365,11 @@ const ChatApp = ({
         <div className="p-3 border-t border-border/30 relative">
           {showSlash && filteredCommands.length > 0 && (
             <div className="absolute bottom-full left-3 right-3 mb-1 bg-card border border-border rounded-xl shadow-xl overflow-hidden z-10 max-h-48 overflow-y-auto">
-              {filteredCommands.map(c => (
+              {filteredCommands.map((c, idx) => (
                 <button
                   key={c.cmd}
-                  onClick={() => { setInput(c.cmd + ' '); setShowSlash(false); inputRef.current?.focus(); }}
-                  className="w-full text-left px-3 py-2 text-xs hover:bg-muted/50 flex items-center gap-2 transition-colors"
+                  onClick={() => { setInput(c.cmd + ' '); setShowSlash(false); setSlashIndex(0); inputRef.current?.focus(); }}
+                  className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors ${idx === slashIndex ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/50'}`}
                 >
                   <Slash className="w-3 h-3 text-primary" />
                   <span className="font-display text-foreground">{c.cmd}</span>
