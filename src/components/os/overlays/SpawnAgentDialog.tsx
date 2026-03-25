@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Rocket, RefreshCw, Plus } from 'lucide-react';
+import { Rocket, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { PERSONAS } from '@/lib/personas';
 import type { Workspace } from '@/lib/types';
@@ -10,8 +10,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-
-const MODELS = ['gpt-4o', 'gpt-4o-mini', 'claude-sonnet-4-20250514', 'claude-3-haiku', 'gemini-pro'];
 
 interface SpawnAgentDialogProps {
   open: boolean;
