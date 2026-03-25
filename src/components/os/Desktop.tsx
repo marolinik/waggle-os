@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   MessageSquare, LayoutDashboard, Settings, Brain,
-  Activity, Package, Radio,
+  Activity, Package, Radio, Zap,
 } from "lucide-react";
 import wallpaper from "@/assets/wallpaper.jpg";
 import waggleLogo from "@/assets/waggle-logo.jpeg";
@@ -17,6 +17,7 @@ import EventsApp from "./apps/EventsApp";
 import CockpitApp from "./apps/CockpitApp";
 import MissionControlApp from "./apps/MissionControlApp";
 import CapabilitiesApp from "./apps/CapabilitiesApp";
+import WaggleDanceApp from "./apps/WaggleDanceApp";
 import GlobalSearch from "./overlays/GlobalSearch";
 import CreateWorkspaceDialog from "./overlays/CreateWorkspaceDialog";
 import PersonaSwitcher from "./overlays/PersonaSwitcher";
@@ -80,6 +81,7 @@ const appConfig: Record<string, { title: string; icon: React.ReactNode; pos: { x
   "cockpit": { title: "Cockpit", icon: <Activity className="w-3.5 h-3.5 text-emerald-400" />, pos: { x: 300, y: 60 }, size: { w: "520px", h: "520px" } },
   "mission-control": { title: "Mission Control", icon: <Radio className="w-3.5 h-3.5 text-rose-400" />, pos: { x: 220, y: 90 }, size: { w: "520px", h: "440px" } },
   "capabilities": { title: "Skills & Apps", icon: <Package className="w-3.5 h-3.5 text-violet-400" />, pos: { x: 150, y: 80 }, size: { w: "560px", h: "480px" } },
+  "waggle-dance": { title: "Waggle Dance", icon: <Zap className="w-3.5 h-3.5 text-amber-400" />, pos: { x: 160, y: 50 }, size: { w: "580px", h: "460px" } },
 };
 
 const Desktop = () => {
@@ -300,6 +302,8 @@ const Desktop = () => {
         return <MissionControlApp onSpawnOpen={() => setShowSpawnAgent(true)} />;
       case 'capabilities':
         return <CapabilitiesApp />;
+      case 'waggle-dance':
+        return <WaggleDanceApp />;
       default:
         return <div className="p-4 text-sm text-muted-foreground">Coming soon...</div>;
     }
