@@ -42,10 +42,33 @@ interface WindowState {
   appId: AppId;              // which app type
   workspaceId?: string;      // for chat windows — which workspace
   workspaceName?: string;
+  personaLabel?: string;     // persona display name for title bar
+  templateLabel?: string;    // template display name for title bar
   zIndex: number;
   minimized: boolean;
   cascadeOffset: number;
 }
+
+const TEMPLATE_SHORT: Record<string, string> = {
+  'sales-pipeline': 'Sales',
+  'research-project': 'Research',
+  'code-review': 'Code',
+  'marketing-campaign': 'Marketing',
+  'product-launch': 'Launch',
+  'legal-review': 'Legal',
+  'agency-consulting': 'Consulting',
+};
+
+const PERSONA_SHORT: Record<string, string> = {
+  'researcher': 'Researcher',
+  'writer': 'Writer',
+  'analyst': 'Analyst',
+  'coder': 'Coder',
+  'project-manager': 'PM',
+  'executive-assistant': 'EA',
+  'sales-rep': 'Sales',
+  'marketer': 'Marketer',
+};
 
 const appConfig: Record<string, { title: string; icon: React.ReactNode; pos: { x: number; y: number }; size: { w: string; h: string } }> = {
   "chat": { title: "Waggle Chat", icon: <MessageSquare className="w-3.5 h-3.5 text-primary" />, pos: { x: 180, y: 40 }, size: { w: "520px", h: "520px" } },
@@ -108,6 +131,10 @@ const Desktop = () => {
 
   /* ── Open a chat window for a specific workspace ── */
   const openChatForWorkspace = useCallback((workspaceId: string, workspaceName?: string) => {
+    const ws = workspaces.find(w => w.id === workspaceId);
+    const personaLabel = ws?.persona ? (PERSONA_SHORT[ws.persona] || ws.persona) : undefined;
+    const templateLabel = ws?.templateId && ws.templateId !== 'blank' ? (TEMPLATE_SHORT[ws.templateId] || ws.templateId) : undefined;
+
     setWindows(prev => {
       // Check if a chat window for this workspace already exists
       const existing = prev.find(w => w.appId === 'chat' && w.workspaceId === workspaceId);
@@ -125,10 +152,11 @@ const Desktop = () => {
       return [...prev, {
         instanceId, appId: 'chat' as AppId,
         workspaceId, workspaceName,
+        personaLabel, templateLabel,
         zIndex: z, minimized: false, cascadeOffset: offset,
       }];
     });
-  }, []);
+  }, [workspaces]);
 
   const closeApp = useCallback((instanceId: string) => {
     setWindows(prev => prev.filter(w => w.instanceId !== instanceId));
@@ -199,8 +227,11 @@ const Desktop = () => {
   }, [selectWorkspace, openApp]);
 
   const getWindowTitle = (win: WindowState) => {
-    if (win.appId === 'chat' && win.workspaceName) {
-      return `Chat — ${win.workspaceName}`;
+    if (win.appId === 'chat') {
+      const parts = [win.workspaceName || 'Chat'];
+      if (win.templateLabel) parts.push(win.templateLabel);
+      if (win.personaLabel) parts.push(win.personaLabel);
+      return parts.join(' · ');
     }
     return appConfig[win.appId]?.title || win.appId;
   };
