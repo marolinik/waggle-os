@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ThumbsUp, ThumbsDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Upload, Code, FileText, Users, X } from 'lucide-react';
+import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ThumbsUp, ThumbsDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Upload, Code, FileText, Users, X, Bot, Cpu } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getPersonaById, PERSONAS } from '@/lib/personas';
@@ -14,6 +14,10 @@ interface ChatAppProps {
   pendingApproval: ApprovalRequest | null;
   onApprove: (id: string, approved: boolean) => void;
   currentPersona?: string;
+  onPersonaChange?: (personaId: string) => void;
+  currentModel?: string;
+  onModelChange?: (model: string) => void;
+  availableModels?: string[];
   sessions?: { id: string; title: string }[];
   activeSessionId?: string | null;
   onSelectSession?: (id: string) => void;
@@ -143,6 +147,7 @@ const FileDropZone = ({ onDrop, active }: { onDrop: (files: File[]) => void; act
 const ChatApp = ({
   messages, isLoading, onSendMessage, onClearHistory,
   pendingApproval, onApprove, currentPersona,
+  onPersonaChange, currentModel, onModelChange, availableModels,
   sessions, activeSessionId, onSelectSession, onNewSession,
   workspaceId,
 }: ChatAppProps) => {
@@ -152,6 +157,8 @@ const ChatApp = ({
   const [slashIndex, setSlashIndex] = useState(0);
   const [showSessions, setShowSessions] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [showPersonaPicker, setShowPersonaPicker] = useState(false);
+  const [showModelPicker, setShowModelPicker] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -282,15 +289,82 @@ const ChatApp = ({
               <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showSessions ? 'rotate-0' : '-rotate-90'}`} />
             </button>
           )}
-          {persona && (
-            <div className="flex items-center gap-1.5">
-              <Avatar className="w-5 h-5">
-                <AvatarImage src={persona.avatar} />
-                <AvatarFallback className="text-[8px] bg-primary/20">{persona.name[0]}</AvatarFallback>
-              </Avatar>
-              <span className="text-[10px] font-display text-muted-foreground">{persona.name}</span>
-            </div>
-          )}
+
+          {/* Persona picker */}
+          <div className="relative">
+            <button
+              onClick={() => { setShowPersonaPicker(p => !p); setShowModelPicker(false); }}
+              className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-muted/50 transition-colors"
+            >
+              {persona ? (
+                <>
+                  <Avatar className="w-5 h-5">
+                    <AvatarImage src={persona.avatar} />
+                    <AvatarFallback className="text-[8px] bg-primary/20">{persona.name[0]}</AvatarFallback>
+                  </Avatar>
+                  <span className="text-[10px] font-display text-muted-foreground">{persona.name}</span>
+                </>
+              ) : (
+                <>
+                  <Bot className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="text-[10px] text-muted-foreground">Persona</span>
+                </>
+              )}
+              <ChevronDown className="w-3 h-3 text-muted-foreground" />
+            </button>
+            {showPersonaPicker && (
+              <div className="absolute top-full left-0 mt-1 w-56 bg-card border border-border rounded-xl shadow-xl z-20 overflow-hidden max-h-64 overflow-y-auto">
+                {PERSONAS.map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => { onPersonaChange?.(p.id); setShowPersonaPicker(false); }}
+                    className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors ${
+                      currentPersona === p.id ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/50'
+                    }`}
+                  >
+                    <Avatar className="w-5 h-5 shrink-0">
+                      <AvatarImage src={p.avatar} />
+                      <AvatarFallback className="text-[8px] bg-primary/20">{p.name[0]}</AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <div className="font-display text-foreground truncate">{p.name}</div>
+                      <div className="text-[10px] text-muted-foreground truncate">{p.description}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Model picker */}
+          <div className="relative ml-auto">
+            <button
+              onClick={() => { setShowModelPicker(p => !p); setShowPersonaPicker(false); }}
+              className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-muted/50 transition-colors"
+            >
+              <Cpu className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-[10px] font-display text-muted-foreground truncate max-w-[120px]">
+                {currentModel || 'Model'}
+              </span>
+              <ChevronDown className="w-3 h-3 text-muted-foreground" />
+            </button>
+            {showModelPicker && availableModels && availableModels.length > 0 && (
+              <div className="absolute top-full right-0 mt-1 w-64 bg-card border border-border rounded-xl shadow-xl z-20 overflow-hidden max-h-64 overflow-y-auto">
+                {availableModels.map(m => (
+                  <button
+                    key={m}
+                    onClick={() => { onModelChange?.(m); setShowModelPicker(false); }}
+                    className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors ${
+                      currentModel === m ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/50'
+                    }`}
+                  >
+                    <Cpu className="w-3 h-3 text-primary shrink-0" />
+                    <span className="font-display text-foreground truncate">{m}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Messages */}
