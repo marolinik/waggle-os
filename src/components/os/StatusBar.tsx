@@ -28,6 +28,18 @@ const StatusBar = ({ workspaceName, model }: StatusBarProps) => {
         <span className="text-xs font-display font-semibold text-foreground">
           Waggle AI
         </span>
+        {workspaceName && (
+          <>
+            <span className="text-muted-foreground text-[10px]">·</span>
+            <span className="text-[10px] text-muted-foreground">{workspaceName}</span>
+          </>
+        )}
+        {model && (
+          <>
+            <span className="text-muted-foreground text-[10px]">·</span>
+            <span className="text-[10px] text-primary/80 font-display">{model}</span>
+          </>
+        )}
       </div>
 
       <div className="flex items-center gap-4">
