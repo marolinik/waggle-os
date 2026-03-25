@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ThumbsUp, ThumbsDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Upload, Code, FileText, Users, X, Bot, Cpu } from 'lucide-react';
+import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ChevronUp, ThumbsUp, ThumbsDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Upload, Code, FileText, Users, X, Bot, Cpu, Layers } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getPersonaById, PERSONAS } from '@/lib/personas';
@@ -31,7 +31,19 @@ interface ChatAppProps {
   onSelectSession?: (id: string) => void;
   onNewSession?: () => void;
   workspaceId?: string | null;
+  templateId?: string;
 }
+
+const TEMPLATE_DISPLAY: Record<string, { label: string; desc: string }> = {
+  'sales-pipeline': { label: 'Sales Pipeline', desc: 'Deal tracking & prospecting' },
+  'research-project': { label: 'Research Project', desc: 'Deep investigation & synthesis' },
+  'code-review': { label: 'Code Review', desc: 'Analyze and review code' },
+  'marketing-campaign': { label: 'Marketing Campaign', desc: 'Campaigns & content creation' },
+  'product-launch': { label: 'Product Launch', desc: 'Ship products faster' },
+  'legal-review': { label: 'Legal Review', desc: 'Contracts & documentation' },
+  'agency-consulting': { label: 'Agency Consulting', desc: 'Client workspace management' },
+  'blank': { label: 'Custom', desc: 'General-purpose workspace' },
+};
 
 const SLASH_COMMANDS = [
   { cmd: '/model', desc: 'Switch model' },
@@ -158,7 +170,7 @@ const ChatApp = ({
   onPersonaChange, currentModel, onModelChange, availableModels,
   teamPresence,
   sessions, activeSessionId, onSelectSession, onNewSession,
-  workspaceId,
+  workspaceId, templateId,
 }: ChatAppProps) => {
   const [input, setInput] = useState('');
   const [showSlash, setShowSlash] = useState(false);
@@ -166,6 +178,7 @@ const ChatApp = ({
   const [slashIndex, setSlashIndex] = useState(0);
   const [showSessions, setShowSessions] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [showAgentProfile, setShowAgentProfile] = useState(false);
   const [showPersonaPicker, setShowPersonaPicker] = useState(false);
   const [showModelPicker, setShowModelPicker] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -416,6 +429,60 @@ const ChatApp = ({
               </div>
             )}
           </div>
+        </div>
+
+        {/* Agent Profile Panel — collapsible */}
+        <div className="shrink-0">
+          <button
+            onClick={() => setShowAgentProfile(p => !p)}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors border-b border-border/20"
+          >
+            <Layers className="w-3 h-3 text-primary" />
+            <span className="font-display font-medium">Agent Profile</span>
+            {showAgentProfile ? <ChevronUp className="w-3 h-3 ml-auto" /> : <ChevronDown className="w-3 h-3 ml-auto" />}
+          </button>
+          {showAgentProfile && (
+            <div className="px-3 py-2.5 border-b border-border/20 bg-muted/20 space-y-2">
+              <div className="flex items-center gap-3">
+                {persona && (
+                  <Avatar className="w-9 h-9 shrink-0">
+                    <AvatarImage src={persona.avatar} />
+                    <AvatarFallback className="text-[10px] bg-primary/20">{persona.name[0]}</AvatarFallback>
+                  </Avatar>
+                )}
+                <div className="min-w-0">
+                  <p className="text-xs font-display font-semibold text-foreground">{persona?.name || 'Default Agent'}</p>
+                  <p className="text-[10px] text-muted-foreground">{persona?.description || 'General-purpose assistant'}</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {templateId && templateId !== 'blank' && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-display">
+                    <Sparkles className="w-2.5 h-2.5" />
+                    {TEMPLATE_DISPLAY[templateId]?.label || templateId}
+                  </span>
+                )}
+                {currentPersona && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-accent/50 text-accent-foreground text-[10px] font-display">
+                    <Bot className="w-2.5 h-2.5" />
+                    {persona?.name || currentPersona}
+                  </span>
+                )}
+                {currentModel && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-secondary text-secondary-foreground text-[10px] font-display">
+                    <Cpu className="w-2.5 h-2.5" />
+                    {currentModel.split('/').pop()}
+                  </span>
+                )}
+              </div>
+              {templateId && TEMPLATE_DISPLAY[templateId] && (
+                <p className="text-[10px] text-muted-foreground/70 leading-relaxed">
+                  <span className="text-muted-foreground font-medium">Domain:</span> {TEMPLATE_DISPLAY[templateId].desc} · 
+                  <span className="text-muted-foreground font-medium"> Style:</span> {persona?.description || 'General'}
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Messages */}
