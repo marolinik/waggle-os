@@ -1,8 +1,30 @@
 import { useState } from 'react';
-import { Plus, Activity, Clock, Brain, ChevronRight, Users } from 'lucide-react';
+import { Plus, Activity, Clock, Brain, ChevronRight, Users, Sparkles } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getPersonaById } from '@/lib/personas';
 import type { Workspace } from '@/lib/types';
+
+const TEMPLATE_LABELS: Record<string, string> = {
+  'sales-pipeline': 'Sales',
+  'research-project': 'Research',
+  'code-review': 'Code Review',
+  'marketing-campaign': 'Marketing',
+  'product-launch': 'Product Launch',
+  'legal-review': 'Legal',
+  'agency-consulting': 'Consulting',
+  'blank': 'Custom',
+};
+
+const PERSONA_LABELS: Record<string, string> = {
+  'researcher': 'Researcher',
+  'writer': 'Writer',
+  'analyst': 'Analyst',
+  'coder': 'Coder',
+  'project-manager': 'PM',
+  'executive-assistant': 'EA',
+  'sales-rep': 'Sales Rep',
+  'marketer': 'Marketer',
+};
 
 interface DashboardAppProps {
   workspaces: Workspace[];
