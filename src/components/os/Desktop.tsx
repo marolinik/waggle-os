@@ -49,7 +49,7 @@ const appConfig: Record<string, { title: string; icon: React.ReactNode; pos: { x
   "settings": { title: "Settings", icon: <Settings className="w-3.5 h-3.5 text-muted-foreground" />, pos: { x: 250, y: 80 }, size: { w: "560px", h: "460px" } },
   "memory": { title: "Memory", icon: <Brain className="w-3.5 h-3.5 text-amber-300" />, pos: { x: 120, y: 50 }, size: { w: "640px", h: "460px" } },
   "events": { title: "Events", icon: <Activity className="w-3.5 h-3.5 text-cyan-400" />, pos: { x: 200, y: 70 }, size: { w: "580px", h: "420px" } },
-  "cockpit": { title: "Cockpit", icon: <Activity className="w-3.5 h-3.5 text-emerald-400" />, pos: { x: 300, y: 60 }, size: { w: "520px", h: "520px" } },
+  "cockpit": { title: "Menu", icon: <Activity className="w-3.5 h-3.5 text-emerald-400" />, pos: { x: 300, y: 60 }, size: { w: "520px", h: "520px" } },
   "mission-control": { title: "Mission Control", icon: <Radio className="w-3.5 h-3.5 text-rose-400" />, pos: { x: 220, y: 90 }, size: { w: "520px", h: "440px" } },
   "capabilities": { title: "Skills & Apps", icon: <Package className="w-3.5 h-3.5 text-violet-400" />, pos: { x: 150, y: 80 }, size: { w: "560px", h: "480px" } },
 };
@@ -206,53 +206,76 @@ const Desktop = () => {
       <img src={wallpaper} alt="" className="absolute inset-0 w-full h-full object-cover" width={1920} height={1080} />
       <div className="absolute inset-0 bg-background/20" />
 
-      {/* Desktop logo hero */}
+      {/* Desktop logo hero — blended into the wallpaper */}
       {windows.length === 0 && (
-        <div className="absolute top-12 left-0 right-0 flex flex-col items-center pointer-events-none z-[1] pt-16">
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-[1] -mt-10">
+          {/* Radial ambient glow behind logo */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.6, y: 30 }}
+            initial={{ opacity: 0, scale: 0.5 }}
+            animate={{ opacity: [0.15, 0.3, 0.15], scale: 1 }}
+            transition={{ opacity: { duration: 4, repeat: Infinity, ease: "easeInOut" }, scale: { duration: 1.2, ease: "easeOut" } }}
+            className="absolute w-[500px] h-[500px] rounded-full"
+            style={{ background: "radial-gradient(circle, hsl(var(--primary) / 0.15) 0%, transparent 70%)" }}
+          />
+
+          <motion.div
+            initial={{ opacity: 0, scale: 0.5, y: 40 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            transition={{ type: "spring", stiffness: 120, damping: 18, delay: 0.1 }}
+            transition={{ type: "spring", stiffness: 100, damping: 16, delay: 0.15 }}
           >
             <motion.div
               animate={{
                 boxShadow: [
-                  "0 0 0px hsl(var(--primary) / 0)",
-                  "0 0 80px hsl(var(--primary) / 0.25)",
-                  "0 0 0px hsl(var(--primary) / 0)",
+                  "0 0 0px hsl(var(--primary) / 0), 0 0 0px hsl(var(--primary) / 0)",
+                  "0 0 60px hsl(var(--primary) / 0.3), 0 0 120px hsl(var(--primary) / 0.1)",
+                  "0 0 0px hsl(var(--primary) / 0), 0 0 0px hsl(var(--primary) / 0)",
                 ],
               }}
-              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+              transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
               className="rounded-[2.5rem]"
             >
-              <img
+              <motion.img
                 src={waggleLogo}
                 alt="Waggle AI"
-                className="w-44 h-44 rounded-[2.5rem] shadow-2xl"
+                className="w-36 h-36 rounded-[2.5rem] shadow-2xl"
+                animate={{ rotate: [0, 1, -1, 0] }}
+                transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
               />
             </motion.div>
           </motion.div>
+
           <motion.h1
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 0.8, y: 0 }}
-            transition={{ delay: 0.4, duration: 0.6 }}
-            className="mt-6 text-4xl font-display font-bold text-foreground tracking-tight"
+            initial={{ opacity: 0, y: 16, letterSpacing: "0.3em" }}
+            animate={{ opacity: 1, y: 0, letterSpacing: "0.15em" }}
+            transition={{ delay: 0.5, duration: 0.8, ease: "easeOut" }}
+            className="mt-6 text-5xl font-display font-bold tracking-widest"
+            style={{ color: "hsl(var(--primary))" }}
           >
             Waggle AI
           </motion.h1>
+
           <motion.p
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 0.5, y: 0 }}
-            transition={{ delay: 0.6, duration: 0.6 }}
-            className="text-lg font-display text-muted-foreground mt-2"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 0.6, y: 0 }}
+            transition={{ delay: 0.8, duration: 0.7 }}
+            className="text-base font-display text-muted-foreground mt-2 tracking-[0.25em] uppercase"
           >
             Autonomous Agent OS
           </motion.p>
+
+          <motion.div
+            initial={{ scaleX: 0 }}
+            animate={{ scaleX: 1 }}
+            transition={{ delay: 1.1, duration: 0.8, ease: "easeOut" }}
+            className="w-24 h-px mt-4"
+            style={{ background: "linear-gradient(90deg, transparent, hsl(var(--primary) / 0.5), transparent)" }}
+          />
+
           <motion.p
             initial={{ opacity: 0 }}
-            animate={{ opacity: [0, 0.4, 0.2, 0.4] }}
-            transition={{ delay: 1, duration: 4, repeat: Infinity, ease: "easeInOut" }}
-            className="text-sm font-mono text-muted-foreground mt-4"
+            animate={{ opacity: [0, 0.5, 0.3, 0.5] }}
+            transition={{ delay: 1.4, duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            className="text-sm font-mono text-muted-foreground mt-4 tracking-wide"
           >
             Click an app in the dock to get started
           </motion.p>
