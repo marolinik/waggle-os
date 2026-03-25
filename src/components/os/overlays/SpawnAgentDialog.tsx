@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Rocket, RefreshCw, Plus } from 'lucide-react';
+import { Rocket, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { PERSONAS } from '@/lib/personas';
 import type { Workspace } from '@/lib/types';
@@ -10,8 +10,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-
-const MODELS = ['gpt-4o', 'gpt-4o-mini', 'claude-sonnet-4-20250514', 'claude-3-haiku', 'gemini-pro'];
 
 interface SpawnAgentDialogProps {
   open: boolean;
@@ -24,19 +22,32 @@ interface SpawnAgentDialogProps {
 
 const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWorkspaceCreated, onSpawned }: SpawnAgentDialogProps) => {
   const [spawning, setSpawning] = useState(false);
+  const [models, setModels] = useState<string[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [showPersona, setShowPersona] = useState(false);
   const [form, setForm] = useState({
     task: '',
     persona: '',
-    model: MODELS[0],
+    model: '',
     workspaceMode: 'existing' as 'existing' | 'new',
     workspaceId: '',
     newWorkspaceName: '',
   });
 
-  // Default to active workspace when dialog opens
+  // Fetch models from backend and default to active workspace when dialog opens
   useEffect(() => {
-    if (open && activeWorkspaceId) {
-      setForm(f => ({ ...f, workspaceId: f.workspaceId || activeWorkspaceId }));
+    if (open) {
+      if (activeWorkspaceId) {
+        setForm(f => ({ ...f, workspaceId: f.workspaceId || activeWorkspaceId }));
+      }
+      setLoadingModels(true);
+      adapter.getModels()
+        .then(m => {
+          setModels(m);
+          setForm(f => ({ ...f, model: f.model || m[0] || '' }));
+        })
+        .catch(() => {})
+        .finally(() => setLoadingModels(false));
     }
   }, [open, activeWorkspaceId]);
 
@@ -65,7 +76,7 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
       });
 
       onClose();
-      setForm({ task: '', persona: '', model: MODELS[0], workspaceMode: 'existing', workspaceId: activeWorkspaceId || '', newWorkspaceName: '' });
+      setForm({ task: '', persona: '', model: models[0] || '', workspaceMode: 'existing', workspaceId: activeWorkspaceId || '', newWorkspaceName: '' });
       onSpawned?.();
     } catch { /* ignore */ }
     finally { setSpawning(false); }
@@ -150,47 +161,65 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
             />
           </div>
 
-          {/* Persona */}
+          {/* Persona (collapsible override) */}
           <div className="space-y-2">
-            <Label className="text-foreground">Persona <span className="text-muted-foreground font-normal">(optional)</span></Label>
-            <div className="grid grid-cols-4 gap-1.5">
-              {PERSONAS.map(p => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setForm(f => ({ ...f, persona: f.persona === p.id ? '' : p.id }))}
-                  className={`flex flex-col items-center gap-1 p-2 rounded-lg border text-center transition-all ${
-                    form.persona === p.id
-                      ? 'border-primary bg-primary/10 ring-1 ring-primary/30'
-                      : 'border-border/30 bg-secondary/20 hover:bg-secondary/40'
-                  }`}
-                >
-                  <img src={p.avatar} alt={p.name} className="w-8 h-8 rounded-full object-cover" />
-                  <span className="text-[10px] text-foreground font-medium leading-tight truncate w-full">{p.name}</span>
-                </button>
-              ))}
-            </div>
+            <button
+              type="button"
+              onClick={() => setShowPersona(v => !v)}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {showPersona ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+              <span>Persona override</span>
+              {form.persona && (
+                <span className="text-[10px] text-primary ml-1">({PERSONAS.find(p => p.id === form.persona)?.name})</span>
+              )}
+            </button>
+            {showPersona && (
+              <div className="grid grid-cols-4 gap-1.5">
+                {PERSONAS.map(p => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, persona: f.persona === p.id ? '' : p.id }))}
+                    className={`flex flex-col items-center gap-1 p-2 rounded-lg border text-center transition-all ${
+                      form.persona === p.id
+                        ? 'border-primary bg-primary/10 ring-1 ring-primary/30'
+                        : 'border-border/30 bg-secondary/20 hover:bg-secondary/40'
+                    }`}
+                  >
+                    <img src={p.avatar} alt={p.name} className="w-8 h-8 rounded-full object-cover" />
+                    <span className="text-[10px] text-foreground font-medium leading-tight truncate w-full">{p.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Model */}
           <div className="space-y-2">
             <Label className="text-foreground">Model</Label>
-            <div className="flex flex-wrap gap-1.5">
-              {MODELS.map(m => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setForm(f => ({ ...f, model: m }))}
-                  className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
-                    form.model === m
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-border/30 bg-secondary/20 text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
+            {loadingModels ? (
+              <p className="text-xs text-muted-foreground">Loading models…</p>
+            ) : models.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No models available — check backend config</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {models.map(m => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, model: m }))}
+                    className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
+                      form.model === m
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border/30 bg-secondary/20 text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
