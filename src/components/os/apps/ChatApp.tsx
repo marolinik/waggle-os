@@ -178,12 +178,32 @@ const ChatApp = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (showSlash && filteredCommands.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSlashIndex(i => (i + 1) % filteredCommands.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSlashIndex(i => (i - 1 + filteredCommands.length) % filteredCommands.length);
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const cmd = filteredCommands[slashIndex];
+        setInput(cmd.cmd + ' ');
+        setShowSlash(false);
+        setSlashIndex(0);
+        return;
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
     if (e.key === '/' && input === '') setShowSlash(true);
-    if (e.key === 'Escape') setShowSlash(false);
+    if (e.key === 'Escape') { setShowSlash(false); setSlashIndex(0); }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
