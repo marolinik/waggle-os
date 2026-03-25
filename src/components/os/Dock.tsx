@@ -1,10 +1,10 @@
 import { motion } from "framer-motion";
 import {
   MessageSquare, Terminal, LayoutDashboard, Settings,
-  Brain, Activity, Package, Radio, Rocket, Zap,
+  Brain, Activity, Package, Radio, Rocket, Zap, FolderOpen,
 } from "lucide-react";
 
-export type AppId = "chat" | "dashboard" | "memory" | "events" | "capabilities" | "cockpit" | "mission-control" | "settings" | "terminal" | "calculator" | "notes" | "waggle-dance";
+export type AppId = "chat" | "dashboard" | "memory" | "events" | "capabilities" | "cockpit" | "mission-control" | "settings" | "terminal" | "calculator" | "notes" | "waggle-dance" | "files";
 
 interface DockProps {
   onOpenApp: (id: AppId) => void;
@@ -23,6 +23,7 @@ const apps: { id: AppId; icon: React.ElementType; label: string; color: string }
   { id: "memory", icon: Brain, label: "Memory", color: "text-amber-300" },
   { id: "events", icon: Activity, label: "Events", color: "text-cyan-400" },
   { id: "waggle-dance", icon: Zap, label: "Waggle Dance", color: "text-amber-400" },
+  { id: "files", icon: FolderOpen, label: "Files", color: "text-amber-300" },
   { id: "settings", icon: Settings, label: "Settings", color: "text-muted-foreground" },
 ];
 
