@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Rocket, RefreshCw, ChevronDown, ChevronRight, ArrowLeft } from 'lucide-react';
+import { Rocket, RefreshCw, ChevronDown, ChevronRight, ArrowLeft, Zap } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { PERSONAS } from '@/lib/personas';
 import type { Workspace } from '@/lib/types';
@@ -299,6 +299,33 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
                     </div>
                   </div>
                 )}
+
+                {/* Estimated cost */}
+                <div className="border-t border-border/20 pt-3 mt-3">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">Estimated Budget</p>
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-1.5">
+                      <Zap className="w-3.5 h-3.5 text-amber-400" />
+                      <span className="text-sm text-foreground font-mono">
+                        ~{(() => {
+                          const m = form.model.toLowerCase();
+                          if (m.includes('gpt-4o-mini') || m.includes('haiku') || m.includes('flash')) return '2k–8k';
+                          if (m.includes('gpt-4o') || m.includes('sonnet') || m.includes('pro')) return '8k–32k';
+                          return '4k–16k';
+                        })()} tokens
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">
+                      ≈ ${(() => {
+                        const m = form.model.toLowerCase();
+                        if (m.includes('gpt-4o-mini') || m.includes('haiku') || m.includes('flash')) return '0.01–0.04';
+                        if (m.includes('gpt-4o') || m.includes('sonnet') || m.includes('pro')) return '0.08–0.30';
+                        return '0.03–0.12';
+                      })()}
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/60 mt-1">Estimates vary based on task complexity and tool usage</p>
+                </div>
               </div>
             </div>
 
