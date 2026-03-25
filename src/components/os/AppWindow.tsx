@@ -1,11 +1,22 @@
-import { motion, useDragControls, useMotionValue, PanInfo } from "framer-motion";
-import { useState, useCallback, useEffect } from "react";
+import { motion, useDragControls, PanInfo } from "framer-motion";
+import { useState, useCallback, useRef, useEffect } from "react";
 
 type SnapZone = "left" | "right" | "top" | null;
 
 const SNAP_THRESHOLD = 16;
 const STATUS_BAR_H = 32;
 const DOCK_H = 72;
+const MIN_W = 320;
+const MIN_H = 240;
+
+type ResizeEdge = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw" | null;
+
+const edgeCursors: Record<string, string> = {
+  n: "cursor-n-resize", s: "cursor-s-resize",
+  e: "cursor-e-resize", w: "cursor-w-resize",
+  ne: "cursor-ne-resize", nw: "cursor-nw-resize",
+  se: "cursor-se-resize", sw: "cursor-sw-resize",
+};
 
 interface AppWindowProps {
   title: string;
@@ -19,6 +30,8 @@ interface AppWindowProps {
   zIndex: number;
   onFocus: () => void;
 }
+
+const parsePx = (v: string) => parseInt(v, 10) || 400;
 
 const AppWindow = ({
   title,
@@ -36,11 +49,20 @@ const AppWindow = ({
   const [isDragging, setIsDragging] = useState(false);
   const [snapZone, setSnapZone] = useState<SnapZone>(null);
   const [snapPreview, setSnapPreview] = useState<SnapZone>(null);
+  const [size, setSize] = useState({ w: parsePx(defaultSize.w), h: parsePx(defaultSize.h) });
+  const [isResizing, setIsResizing] = useState(false);
   const dragControls = useDragControls();
-  const mx = useMotionValue(defaultPosition.x);
-  const my = useMotionValue(defaultPosition.y);
 
-  // Detect snap zone from pointer position during drag
+  // Resize state refs (avoid re-renders during mousemove)
+  const resizeRef = useRef<{
+    edge: ResizeEdge;
+    startX: number; startY: number;
+    startW: number; startH: number;
+    startPosX: number; startPosY: number;
+    el: HTMLDivElement | null;
+  } | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
   const detectSnap = useCallback((info: PanInfo): SnapZone => {
     const px = info.point.x;
     const py = info.point.y;
@@ -58,21 +80,79 @@ const AppWindow = ({
     setIsDragging(false);
     const zone = detectSnap(info);
     setSnapPreview(null);
-    if (zone) {
-      setSnapZone(zone);
-    }
+    if (zone) setSnapZone(zone);
   }, [detectSnap]);
 
   const unsnap = useCallback(() => {
     if (snapZone) setSnapZone(null);
   }, [snapZone]);
 
-  // Compute animated position/size based on snap state
+  // --- Resize logic ---
+  const startResize = useCallback((edge: ResizeEdge, e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    resizeRef.current = {
+      edge,
+      startX: e.clientX,
+      startY: e.clientY,
+      startW: rect.width,
+      startH: rect.height,
+      startPosX: rect.left,
+      startPosY: rect.top,
+      el: containerRef.current,
+    };
+    setIsResizing(true);
+
+    const onMove = (ev: PointerEvent) => {
+      const r = resizeRef.current;
+      if (!r || !r.el) return;
+      const dx = ev.clientX - r.startX;
+      const dy = ev.clientY - r.startY;
+
+      let newW = r.startW;
+      let newH = r.startH;
+
+      if (edge?.includes("e")) newW = Math.max(MIN_W, r.startW + dx);
+      if (edge?.includes("w")) newW = Math.max(MIN_W, r.startW - dx);
+      if (edge?.includes("s")) newH = Math.max(MIN_H, r.startH + dy);
+      if (edge?.includes("n")) newH = Math.max(MIN_H, r.startH - dy);
+
+      // Apply size directly for smooth resizing
+      r.el.style.width = `${newW}px`;
+      r.el.style.height = `${newH}px`;
+
+      // For north/west edges, also shift position
+      if (edge?.includes("w")) {
+        const actualDx = r.startW - newW;
+        r.el.style.transform = r.el.style.transform.replace(
+          /translateX\([^)]+\)/,
+          `translateX(${r.startPosX + (r.startW - newW)}px)`
+        );
+      }
+    };
+
+    const onUp = () => {
+      const r = resizeRef.current;
+      if (r?.el) {
+        const rect = r.el.getBoundingClientRect();
+        setSize({ w: rect.width, h: rect.height });
+      }
+      resizeRef.current = null;
+      setIsResizing(false);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }, []);
+
   const getAnimateProps = () => {
     if (isMinimized) {
       return { opacity: 0, scale: 0.3, y: window.innerHeight, x: window.innerWidth / 2 - 100 };
     }
-
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const usableH = vh - STATUS_BAR_H - DOCK_H;
@@ -87,16 +167,16 @@ const AppWindow = ({
       return { opacity: 1, scale: 1, x: vw / 2, y: STATUS_BAR_H, width: vw / 2, height: usableH };
     }
 
-    return { opacity: 1, scale: 1, width: defaultSize.w, height: defaultSize.h };
+    return { opacity: 1, scale: 1, width: size.w, height: size.h };
   };
 
-  // Double-click title bar to maximize/restore
   const handleDoubleClick = useCallback(() => {
     if (snapZone) { setSnapZone(null); return; }
     setIsMaximized(m => !m);
   }, [snapZone]);
 
   const isSnappedOrMax = isMaximized || snapZone !== null;
+  const showResizeHandles = !isSnappedOrMax && !isMinimized;
 
   return (
     <>
@@ -114,7 +194,8 @@ const AppWindow = ({
       )}
 
       <motion.div
-        drag={!isSnappedOrMax}
+        ref={containerRef}
+        drag={!isSnappedOrMax && !isResizing}
         dragControls={dragControls}
         dragListener={false}
         dragMomentum={false}
@@ -123,20 +204,36 @@ const AppWindow = ({
         onDrag={handleDrag}
         onDragEnd={handleDragEnd}
         initial={{ opacity: 0, scale: 0.9, x: defaultPosition.x, y: defaultPosition.y }}
-        animate={getAnimateProps()}
+        animate={isResizing ? undefined : getAnimateProps()}
         exit={{ opacity: 0, scale: 0.9 }}
         transition={{ type: "spring", stiffness: 300, damping: 25 }}
-        className={`absolute top-0 left-0 glass-strong overflow-hidden flex flex-col shadow-2xl ${
+        className={`absolute top-0 left-0 glass-strong overflow-visible flex flex-col shadow-2xl ${
           isSnappedOrMax ? "rounded-none" : "rounded-xl"
         }`}
         style={{ zIndex, pointerEvents: isMinimized ? "none" : "auto" }}
         onMouseDown={onFocus}
       >
+        {/* Resize Handles */}
+        {showResizeHandles && (
+          <>
+            {/* Edges */}
+            <div onPointerDown={(e) => startResize("n", e)} className="absolute -top-1 left-2 right-2 h-2 cursor-n-resize z-10" />
+            <div onPointerDown={(e) => startResize("s", e)} className="absolute -bottom-1 left-2 right-2 h-2 cursor-s-resize z-10" />
+            <div onPointerDown={(e) => startResize("w", e)} className="absolute top-2 -left-1 bottom-2 w-2 cursor-w-resize z-10" />
+            <div onPointerDown={(e) => startResize("e", e)} className="absolute top-2 -right-1 bottom-2 w-2 cursor-e-resize z-10" />
+            {/* Corners */}
+            <div onPointerDown={(e) => startResize("nw", e)} className="absolute -top-1 -left-1 w-4 h-4 cursor-nw-resize z-20" />
+            <div onPointerDown={(e) => startResize("ne", e)} className="absolute -top-1 -right-1 w-4 h-4 cursor-ne-resize z-20" />
+            <div onPointerDown={(e) => startResize("sw", e)} className="absolute -bottom-1 -left-1 w-4 h-4 cursor-sw-resize z-20" />
+            <div onPointerDown={(e) => startResize("se", e)} className="absolute -bottom-1 -right-1 w-4 h-4 cursor-se-resize z-20" />
+          </>
+        )}
+
         {/* Title Bar - Drag Handle */}
         <div
           onPointerDown={(e) => {
             if (snapZone) { unsnap(); }
-            if (!isMaximized) dragControls.start(e);
+            if (!isMaximized && !isResizing) dragControls.start(e);
           }}
           onDoubleClick={handleDoubleClick}
           className={`flex items-center justify-between px-4 py-2.5 border-b border-border/50 select-none shrink-0 ${
@@ -167,7 +264,7 @@ const AppWindow = ({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-auto">{children}</div>
+        <div className="flex-1 overflow-auto rounded-b-xl">{children}</div>
       </motion.div>
     </>
   );
