@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import {
   MessageSquare, Terminal, LayoutDashboard, Settings,
-  Brain, Activity, Package, Radio,
+  Brain, Activity, Package, Radio, Rocket,
 } from "lucide-react";
 
 export type AppId = "chat" | "dashboard" | "memory" | "events" | "capabilities" | "cockpit" | "mission-control" | "settings" | "terminal" | "calculator" | "notes";
@@ -10,6 +10,7 @@ interface DockProps {
   onOpenApp: (id: AppId) => void;
   openApps: AppId[];
   minimizedApps?: AppId[];
+  onSpawnAgent?: () => void;
 }
 
 const apps: { id: AppId; icon: React.ElementType; label: string; color: string }[] = [
