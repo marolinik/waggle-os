@@ -132,6 +132,16 @@ const EventsApp = ({ steps, autoScroll, onToggleAutoScroll, filter, onFilterChan
             }`}
           >Auto-scroll {autoScroll ? 'ON' : 'OFF'}</button>
         </div>
+        {onAbort && steps.some(s => s.status === 'running') && (
+          <div className="pt-2 mt-2 border-t border-border/30">
+            <button
+              onClick={onAbort}
+              className="w-full flex items-center justify-center gap-1.5 text-xs px-2 py-2 rounded-lg bg-destructive/20 text-destructive hover:bg-destructive/30 transition-colors font-display"
+            >
+              <StopCircle className="w-3.5 h-3.5" /> Abort Agent
+            </button>
+          </div>
+        )}
         <div className="pt-2 mt-2 border-t border-border/30">
           <p className="text-[10px] text-muted-foreground">{steps.length} events</p>
         </div>
@@ -148,7 +158,7 @@ const EventsApp = ({ steps, autoScroll, onToggleAutoScroll, filter, onFilterChan
         )}
 
         {tab === 'live' ? (
-          steps.map(step => <StepCard key={step.id} step={step} />)
+          steps.map(step => <StepCard key={step.id} step={step} onAbort={onAbort} />)
         ) : (
           Object.entries(stepsByTime).map(([date, dateSteps]) => (
             <div key={date}>
