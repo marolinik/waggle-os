@@ -76,7 +76,7 @@ const StepCard = ({ step, onAbort }: { step: AgentStep; onAbort?: () => void }) 
   );
 };
 
-const EventsApp = ({ steps, autoScroll, onToggleAutoScroll, filter, onFilterChange }: EventsAppProps) => {
+const EventsApp = ({ steps, autoScroll, onToggleAutoScroll, filter, onFilterChange, onAbort }: EventsAppProps) => {
   const [tab, setTab] = useState<'live' | 'replay'>('live');
   const types = ['think', 'tool_call', 'tool_result', 'response', 'error', 'spawn'];
 
