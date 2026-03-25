@@ -26,7 +26,7 @@ const apps: { id: AppId; icon: React.ElementType; label: string; color: string }
   { id: "settings", icon: Settings, label: "Settings", color: "text-muted-foreground" },
 ];
 
-const Dock = ({ onOpenApp, openApps, minimizedApps = [], onSpawnAgent }: DockProps) => {
+const Dock = ({ onOpenApp, openApps, minimizedApps = [], onSpawnAgent, waggleBadgeCount = 0 }: DockProps) => {
   return (
     <div className="fixed bottom-3 left-1/2 -translate-x-1/2 z-50">
       <div className="glass-strong rounded-2xl px-3 py-2 flex items-center gap-1">
@@ -49,6 +49,11 @@ const Dock = ({ onOpenApp, openApps, minimizedApps = [], onSpawnAgent }: DockPro
               }
             >
               <app.icon className={`w-6 h-6 ${app.color}`} />
+              {app.id === 'waggle-dance' && waggleBadgeCount > 0 && (
+                <span className="absolute -top-1 -right-0.5 min-w-[16px] h-4 flex items-center justify-center text-[9px] font-bold bg-destructive text-destructive-foreground rounded-full px-1">
+                  {waggleBadgeCount > 99 ? '99+' : waggleBadgeCount}
+                </span>
+              )}
               <span className="absolute -top-7 text-[10px] text-foreground bg-card px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap font-display">
                 {app.label}
               </span>
