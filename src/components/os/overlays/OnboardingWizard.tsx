@@ -223,6 +223,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
           name: wsName,
           group: 'Personal',
           persona: selectedPersona || undefined,
+          templateId: selectedTemplate || undefined,
         });
         wsId = ws.id;
       } catch {
@@ -489,6 +490,18 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
                   </p>
                 </div>
 
+                {/* Agent explainer tip */}
+                <div className="mb-5 flex items-start gap-3 px-4 py-3 rounded-xl bg-primary/5 border border-primary/20">
+                  <Sparkles className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-display font-medium text-foreground mb-0.5">Template = What your agent knows</p>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      This sets the <span className="text-foreground font-medium">domain, tools, and goals</span> for your workspace. 
+                      In the next step, you'll choose <span className="text-foreground font-medium">how</span> the agent works — its personality and style. Together, they define your agent.
+                    </p>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-4 gap-3 mb-5">
                   {TEMPLATES.map((t) => {
                     const Icon = t.icon;
@@ -555,6 +568,18 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
                   <p className="text-sm text-muted-foreground">
                     Choose a working style for your agent
                   </p>
+                </div>
+
+                {/* Agent explainer tip */}
+                <div className="mb-4 flex items-start gap-3 px-4 py-3 rounded-xl bg-primary/5 border border-primary/20">
+                  <Brain className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-display font-medium text-foreground mb-0.5">Persona = How your agent thinks</p>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      This sets the agent's <span className="text-foreground font-medium">tone, reasoning style, and specialization</span>. 
+                      Combined with the template you chose ({selectedTemplate ? TEMPLATES.find(t => t.id === selectedTemplate)?.name : 'Blank'}), this creates your unique agent.
+                    </p>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-4 gap-3 mb-4">
