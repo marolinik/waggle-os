@@ -16,7 +16,7 @@ const apps: { id: AppId; icon: React.ElementType; label: string; color: string }
   { id: "dashboard", icon: LayoutDashboard, label: "Dashboard", color: "text-sky-400" },
   { id: "chat", icon: MessageSquare, label: "Chat", color: "text-primary" },
   { id: "capabilities", icon: Package, label: "Skills", color: "text-violet-400" },
-  { id: "cockpit", icon: Activity, label: "Menu", color: "text-emerald-400" },
+  { id: "cockpit", icon: Activity, label: "Cockpit", color: "text-emerald-400" },
   { id: "mission-control", icon: Radio, label: "Mission Control", color: "text-rose-400" },
   { id: "memory", icon: Brain, label: "Memory", color: "text-amber-300" },
   { id: "events", icon: Activity, label: "Events", color: "text-cyan-400" },
