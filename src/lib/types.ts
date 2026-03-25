@@ -10,6 +10,15 @@ export type AppView =
   | 'mission-control'
   | 'settings';
 
+export type StorageType = 'virtual' | 'local' | 'team';
+
+export interface StorageConfig {
+  endpoint?: string;
+  bucket?: string;
+  region?: string;
+  prefix?: string;
+}
+
 export interface Workspace {
   id: string;
   name: string;
@@ -24,6 +33,19 @@ export interface Workspace {
   budget?: { used: number; limit: number };
   model?: string;
   shared?: boolean;
+  storageType?: StorageType;
+  storagePath?: string;
+  storageConfig?: StorageConfig;
+}
+
+export interface FileEntry {
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
+  size?: number;
+  mimeType?: string;
+  modifiedAt?: string;
+  createdAt?: string;
 }
 
 export interface WorkspaceContext {

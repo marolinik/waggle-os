@@ -4,8 +4,7 @@ import type {
   AgentStep, Session, SkillPack, FleetSession, CronJob,
   Notification, AgentStatus, Persona, SystemHealth,
   Connector, Settings, StreamEvent, KGNode, KGEdge,
-  ModelPricing,
-  WaggleSignal,
+  ModelPricing, WaggleSignal, FileEntry,
 } from './types';
 
 const DEFAULT_SERVER = 'http://127.0.0.1:3333';
@@ -100,6 +99,48 @@ class LocalAdapter {
 
   async getWorkspaceFiles(workspaceId: string): Promise<unknown[]> {
     const res = await this.fetch(`/api/workspaces/${workspaceId}/files`);
+    return res.json();
+  }
+
+  // --- File Management ---
+  async listFiles(workspaceId: string, path = '/'): Promise<FileEntry[]> {
+    const res = await this.fetch(`/api/workspaces/${workspaceId}/files/list?path=${encodeURIComponent(path)}`);
+    return res.json();
+  }
+
+  async uploadFile(workspaceId: string, dirPath: string, file: File): Promise<FileEntry> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('path', dirPath);
+    const res = await fetch(`${this.baseUrl}/api/workspaces/${workspaceId}/files/upload`, {
+      method: 'POST',
+      headers: this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {},
+      body: formData,
+    });
+    return res.json();
+  }
+
+  async downloadFile(workspaceId: string, filePath: string): Promise<Blob> {
+    const res = await this.fetch(`/api/workspaces/${workspaceId}/files/download?path=${encodeURIComponent(filePath)}`);
+    return res.blob();
+  }
+
+  async createDirectory(workspaceId: string, path: string): Promise<FileEntry> {
+    const res = await this.fetch(`/api/workspaces/${workspaceId}/files/mkdir`, { method: 'POST', body: JSON.stringify({ path }) });
+    return res.json();
+  }
+
+  async deleteFile(workspaceId: string, path: string): Promise<void> {
+    await this.fetch(`/api/workspaces/${workspaceId}/files/delete`, { method: 'POST', body: JSON.stringify({ path }) });
+  }
+
+  async moveFile(workspaceId: string, from: string, to: string): Promise<FileEntry> {
+    const res = await this.fetch(`/api/workspaces/${workspaceId}/files/move`, { method: 'POST', body: JSON.stringify({ from, to }) });
+    return res.json();
+  }
+
+  async copyFile(workspaceId: string, from: string, to: string): Promise<FileEntry> {
+    const res = await this.fetch(`/api/workspaces/${workspaceId}/files/copy`, { method: 'POST', body: JSON.stringify({ from, to }) });
     return res.json();
   }
 
