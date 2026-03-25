@@ -297,7 +297,7 @@ const Desktop = () => {
       case 'cockpit':
         return <CockpitApp />;
       case 'mission-control':
-        return <MissionControlApp />;
+        return <MissionControlApp onSpawnOpen={() => setShowSpawnAgent(true)} />;
       case 'capabilities':
         return <CapabilitiesApp />;
       default:
