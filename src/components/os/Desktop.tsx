@@ -1,10 +1,11 @@
 import { useState, useMemo, useCallback, useRef } from "react";
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   MessageSquare, LayoutDashboard, Settings, Brain,
   Activity, Package, Radio,
 } from "lucide-react";
 import wallpaper from "@/assets/wallpaper.jpg";
+import waggleLogo from "@/assets/waggle-logo.jpeg";
 import StatusBar from "./StatusBar";
 import Dock, { type AppId } from "./Dock";
 import AppWindow from "./AppWindow";
@@ -204,6 +205,51 @@ const Desktop = () => {
     <div className="relative w-screen h-screen overflow-hidden select-none">
       <img src={wallpaper} alt="" className="absolute inset-0 w-full h-full object-cover" width={1920} height={1080} />
       <div className="absolute inset-0 bg-background/20" />
+
+      {/* Centered desktop logo watermark */}
+      {windows.length === 0 && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-[1]">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: "spring", stiffness: 150, damping: 20 }}
+          >
+            <motion.div
+              animate={{
+                boxShadow: [
+                  "0 0 0px hsl(var(--primary) / 0)",
+                  "0 0 60px hsl(var(--primary) / 0.2)",
+                  "0 0 0px hsl(var(--primary) / 0)",
+                ],
+              }}
+              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+              className="rounded-[2rem]"
+            >
+              <img
+                src={waggleLogo}
+                alt="Waggle AI"
+                className="w-32 h-32 rounded-[2rem] shadow-2xl"
+              />
+            </motion.div>
+          </motion.div>
+          <motion.p
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 0.5, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="mt-4 text-sm font-display text-muted-foreground"
+          >
+            Waggle AI
+          </motion.p>
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.3 }}
+            transition={{ delay: 0.5 }}
+            className="text-xs font-mono text-muted-foreground mt-1"
+          >
+            Autonomous Agent OS
+          </motion.p>
+        </div>
+      )}
 
       <StatusBar
         workspaceName={activeWorkspace?.name}
