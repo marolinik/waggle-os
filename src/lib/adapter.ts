@@ -287,6 +287,11 @@ class LocalAdapter {
     await this.fetch(`/api/fleet/${workspaceId}/${action}`, { method: 'POST' });
   }
 
+  async spawnAgent(data: { task: string; persona?: string; model?: string; parentWorkspaceId?: string }): Promise<FleetSession> {
+    const res = await this.fetch('/api/fleet/spawn', { method: 'POST', body: JSON.stringify(data) });
+    return res.json();
+  }
+
   // --- Cron ---
   async getCronJobs(): Promise<CronJob[]> {
     const res = await this.fetch('/api/cron');
