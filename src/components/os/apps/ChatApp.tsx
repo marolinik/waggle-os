@@ -212,6 +212,7 @@ const ChatApp = ({
     if (val.startsWith('/')) {
       setShowSlash(true);
       setSlashFilter(val.slice(1));
+      setSlashIndex(0);
     } else {
       setShowSlash(false);
     }
