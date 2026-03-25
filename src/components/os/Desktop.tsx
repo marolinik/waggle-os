@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { AnimatePresence } from "framer-motion";
 import {
   MessageSquare, LayoutDashboard, Settings, Brain,
@@ -55,6 +55,7 @@ const appConfig: Record<string, { title: string; icon: React.ReactNode; pos: { x
 const Desktop = () => {
   const [windows, setWindows] = useState<WindowState[]>([]);
   const [topZ, setTopZ] = useState(10);
+  const cascadeCounter = useRef(0);
 
   // Overlay states
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
