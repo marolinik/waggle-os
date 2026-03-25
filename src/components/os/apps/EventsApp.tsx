@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Activity, Loader2, CheckCircle2, XCircle, Zap, MessageSquare, ChevronDown, Clock, ChevronRight } from 'lucide-react';
+import { Activity, Loader2, CheckCircle2, XCircle, Zap, MessageSquare, ChevronDown, Clock, ChevronRight, StopCircle } from 'lucide-react';
 import type { AgentStep } from '@/lib/types';
 
 const stepIcons: Record<string, React.ElementType> = {
@@ -23,9 +23,10 @@ interface EventsAppProps {
   onToggleAutoScroll: () => void;
   filter: string | null;
   onFilterChange: (f: string | null) => void;
+  onAbort?: () => void;
 }
 
-const StepCard = ({ step }: { step: AgentStep }) => {
+const StepCard = ({ step, onAbort }: { step: AgentStep; onAbort?: () => void }) => {
   const [expanded, setExpanded] = useState(false);
   const Icon = stepIcons[step.type] || Activity;
   const color = stepColors[step.status] || 'text-muted-foreground border-border/30';
@@ -51,6 +52,15 @@ const StepCard = ({ step }: { step: AgentStep }) => {
             <span>{new Date(step.timestamp).toLocaleTimeString()}</span>
           </div>
         </div>
+        {step.status === 'running' && onAbort && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onAbort(); }}
+            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-destructive/20 text-destructive text-[10px] font-display hover:bg-destructive/30 transition-colors shrink-0"
+            title="Cancel execution"
+          >
+            <StopCircle className="w-3 h-3" /> Cancel
+          </button>
+        )}
         {step.details && (
           <ChevronRight className={`w-3 h-3 text-muted-foreground transition-transform ${expanded ? 'rotate-90' : ''}`} />
         )}
@@ -66,7 +76,7 @@ const StepCard = ({ step }: { step: AgentStep }) => {
   );
 };
 
-const EventsApp = ({ steps, autoScroll, onToggleAutoScroll, filter, onFilterChange }: EventsAppProps) => {
+const EventsApp = ({ steps, autoScroll, onToggleAutoScroll, filter, onFilterChange, onAbort }: EventsAppProps) => {
   const [tab, setTab] = useState<'live' | 'replay'>('live');
   const types = ['think', 'tool_call', 'tool_result', 'response', 'error', 'spawn'];
 
@@ -122,6 +132,16 @@ const EventsApp = ({ steps, autoScroll, onToggleAutoScroll, filter, onFilterChan
             }`}
           >Auto-scroll {autoScroll ? 'ON' : 'OFF'}</button>
         </div>
+        {onAbort && steps.some(s => s.status === 'running') && (
+          <div className="pt-2 mt-2 border-t border-border/30">
+            <button
+              onClick={onAbort}
+              className="w-full flex items-center justify-center gap-1.5 text-xs px-2 py-2 rounded-lg bg-destructive/20 text-destructive hover:bg-destructive/30 transition-colors font-display"
+            >
+              <StopCircle className="w-3.5 h-3.5" /> Abort Agent
+            </button>
+          </div>
+        )}
         <div className="pt-2 mt-2 border-t border-border/30">
           <p className="text-[10px] text-muted-foreground">{steps.length} events</p>
         </div>
@@ -138,7 +158,7 @@ const EventsApp = ({ steps, autoScroll, onToggleAutoScroll, filter, onFilterChan
         )}
 
         {tab === 'live' ? (
-          steps.map(step => <StepCard key={step.id} step={step} />)
+          steps.map(step => <StepCard key={step.id} step={step} onAbort={onAbort} />)
         ) : (
           Object.entries(stepsByTime).map(([date, dateSteps]) => (
             <div key={date}>
