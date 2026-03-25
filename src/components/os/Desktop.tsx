@@ -131,6 +131,10 @@ const Desktop = () => {
 
   /* ── Open a chat window for a specific workspace ── */
   const openChatForWorkspace = useCallback((workspaceId: string, workspaceName?: string) => {
+    const ws = workspaces.find(w => w.id === workspaceId);
+    const personaLabel = ws?.persona ? (PERSONA_SHORT[ws.persona] || ws.persona) : undefined;
+    const templateLabel = ws?.templateId && ws.templateId !== 'blank' ? (TEMPLATE_SHORT[ws.templateId] || ws.templateId) : undefined;
+
     setWindows(prev => {
       // Check if a chat window for this workspace already exists
       const existing = prev.find(w => w.appId === 'chat' && w.workspaceId === workspaceId);
@@ -148,10 +152,11 @@ const Desktop = () => {
       return [...prev, {
         instanceId, appId: 'chat' as AppId,
         workspaceId, workspaceName,
+        personaLabel, templateLabel,
         zIndex: z, minimized: false, cascadeOffset: offset,
       }];
     });
-  }, []);
+  }, [workspaces]);
 
   const closeApp = useCallback((instanceId: string) => {
     setWindows(prev => prev.filter(w => w.instanceId !== instanceId));
