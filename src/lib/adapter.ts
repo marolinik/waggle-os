@@ -5,6 +5,7 @@ import type {
   Notification, AgentStatus, Persona, SystemHealth,
   Connector, Settings, StreamEvent, KGNode, KGEdge,
   ModelPricing,
+  WaggleSignal,
 } from './types';
 
 const DEFAULT_SERVER = 'http://127.0.0.1:3333';
@@ -508,7 +509,26 @@ class LocalAdapter {
     return res.json();
   }
 
-  // --- SSE helper ---
+  // --- Waggle Dance ---
+  async getWaggleSignals(): Promise<WaggleSignal[]> {
+    const res = await this.fetch('/api/waggle/signals');
+    return res.json();
+  }
+
+  async publishWaggleSignal(data: Omit<WaggleSignal, 'id' | 'timestamp'>): Promise<WaggleSignal> {
+    const res = await this.fetch('/api/waggle/signals', { method: 'POST', body: JSON.stringify(data) });
+    return res.json();
+  }
+
+  async acknowledgeWaggleSignal(id: string): Promise<void> {
+    await this.fetch(`/api/waggle/signals/${id}/ack`, { method: 'PATCH' });
+  }
+
+  subscribeWaggleDance(onSignal: (signal: WaggleSignal) => void): () => void {
+    if (!this._connected) return () => {};
+    return this.subscribeSSE('/api/waggle/stream', (data) => onSignal(data as WaggleSignal));
+  }
+
   private subscribeSSE(path: string, onData: (data: unknown) => void): () => void {
     const url = `${this.baseUrl}${path}`;
     if (this.sseConnections.has(path)) {

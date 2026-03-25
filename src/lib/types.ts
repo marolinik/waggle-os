@@ -195,3 +195,19 @@ export interface ModelPricing {
   estimatedTokens?: { min: number; max: number };
   estimatedCost?: { min: number; max: number };
 }
+
+export interface WaggleSignal {
+  id: string;
+  type: 'discovery' | 'handoff' | 'insight' | 'alert' | 'coordination';
+  sourceWorkspaceId: string;
+  sourceWorkspaceName?: string;
+  sourceAgentId?: string;
+  sourceUser?: string;
+  targetWorkspaceId?: string;
+  title: string;
+  content: string;
+  metadata?: Record<string, unknown>;
+  timestamp: string;
+  acknowledged?: boolean;
+  priority?: 'low' | 'normal' | 'high' | 'critical';
+}
