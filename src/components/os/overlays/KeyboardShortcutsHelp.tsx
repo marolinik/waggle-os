@@ -11,7 +11,7 @@ const shortcuts = [
     { keys: ['⌘', '⇧', '0'], action: 'Dashboard' },
     { keys: ['⌘', '⇧', '1'], action: 'Chat' },
     { keys: ['⌘', '⇧', '2'], action: 'Capabilities' },
-    { keys: ['⌘', '⇧', '3'], action: 'Cockpit' },
+    { keys: ['⌘', '⇧', '3'], action: 'Menu' },
     { keys: ['⌘', '⇧', '4'], action: 'Mission Control' },
     { keys: ['⌘', '⇧', '5'], action: 'Memory' },
     { keys: ['⌘', '⇧', '6'], action: 'Events' },
