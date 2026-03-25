@@ -37,6 +37,7 @@ import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { useOfflineStatus } from "@/hooks/useOfflineStatus";
 import { useKnowledgeGraph } from "@/hooks/useKnowledgeGraph";
+import { useWaggleDance } from "@/hooks/useWaggleDance";
 
 /* ── Window instance with unique ID ── */
 interface WindowState {
@@ -110,6 +111,8 @@ const Desktop = () => {
   const { state: onboardingState, update: updateOnboarding, complete: completeOnboarding } = useOnboarding();
   const offline = useOfflineStatus();
   const kg = useKnowledgeGraph(activeWorkspaceId);
+  const { allSignals: waggleSignals } = useWaggleDance();
+  const waggleUnacknowledged = waggleSignals.filter(s => !s.acknowledged).length;
 
   /* ── Open app: singleton for non-chat, per-workspace for chat ── */
   const openApp = useCallback((id: AppId) => {
@@ -464,6 +467,7 @@ const Desktop = () => {
         openApps={openAppIds}
         minimizedApps={minimizedAppIds}
         onSpawnAgent={() => setShowSpawnAgent(true)}
+        waggleBadgeCount={waggleUnacknowledged}
       />
 
       {/* Overlays */}
