@@ -348,9 +348,9 @@ const ChatApp = ({
               </span>
               <ChevronDown className="w-3 h-3 text-muted-foreground" />
             </button>
-            {showModelPicker && availableModels && availableModels.length > 0 && (
+            {showModelPicker && (
               <div className="absolute top-full right-0 mt-1 w-64 bg-card border border-border rounded-xl shadow-xl z-20 overflow-hidden max-h-64 overflow-y-auto">
-                {availableModels.map(m => (
+                {(availableModels && availableModels.length > 0 ? availableModels : (currentModel ? [currentModel] : [])).map(m => (
                   <button
                     key={m}
                     onClick={() => { onModelChange?.(m); setShowModelPicker(false); }}
@@ -362,6 +362,9 @@ const ChatApp = ({
                     <span className="font-display text-foreground truncate">{m}</span>
                   </button>
                 ))}
+                {(!availableModels || availableModels.length === 0) && !currentModel && (
+                  <div className="px-3 py-2 text-xs text-muted-foreground">No models available</div>
+                )}
               </div>
             )}
           </div>
