@@ -206,47 +206,55 @@ const Desktop = () => {
       <img src={wallpaper} alt="" className="absolute inset-0 w-full h-full object-cover" width={1920} height={1080} />
       <div className="absolute inset-0 bg-background/20" />
 
-      {/* Centered desktop logo watermark */}
+      {/* Desktop logo hero */}
       {windows.length === 0 && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-[1]">
+        <div className="absolute top-12 left-0 right-0 flex flex-col items-center pointer-events-none z-[1] pt-16">
           <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ type: "spring", stiffness: 150, damping: 20 }}
+            initial={{ opacity: 0, scale: 0.6, y: 30 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 120, damping: 18, delay: 0.1 }}
           >
             <motion.div
               animate={{
                 boxShadow: [
                   "0 0 0px hsl(var(--primary) / 0)",
-                  "0 0 60px hsl(var(--primary) / 0.2)",
+                  "0 0 80px hsl(var(--primary) / 0.25)",
                   "0 0 0px hsl(var(--primary) / 0)",
                 ],
               }}
               transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-              className="rounded-[2rem]"
+              className="rounded-[2.5rem]"
             >
               <img
                 src={waggleLogo}
                 alt="Waggle AI"
-                className="w-32 h-32 rounded-[2rem] shadow-2xl"
+                className="w-44 h-44 rounded-[2.5rem] shadow-2xl"
               />
             </motion.div>
           </motion.div>
+          <motion.h1
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 0.8, y: 0 }}
+            transition={{ delay: 0.4, duration: 0.6 }}
+            className="mt-6 text-4xl font-display font-bold text-foreground tracking-tight"
+          >
+            Waggle AI
+          </motion.h1>
           <motion.p
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 0.5, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="mt-4 text-sm font-display text-muted-foreground"
+            transition={{ delay: 0.6, duration: 0.6 }}
+            className="text-lg font-display text-muted-foreground mt-2"
           >
-            Waggle AI
+            Autonomous Agent OS
           </motion.p>
           <motion.p
             initial={{ opacity: 0 }}
-            animate={{ opacity: 0.3 }}
-            transition={{ delay: 0.5 }}
-            className="text-xs font-mono text-muted-foreground mt-1"
+            animate={{ opacity: [0, 0.4, 0.2, 0.4] }}
+            transition={{ delay: 1, duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            className="text-sm font-mono text-muted-foreground mt-4"
           >
-            Autonomous Agent OS
+            Click an app in the dock to get started
           </motion.p>
         </div>
       )}
