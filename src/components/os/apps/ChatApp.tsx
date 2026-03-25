@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ThumbsUp, ThumbsDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Upload, Code, FileText, Users, X } from 'lucide-react';
+import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ThumbsUp, ThumbsDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Upload, Code, FileText, Users, X, Bot, Cpu } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getPersonaById, PERSONAS } from '@/lib/personas';
@@ -14,6 +14,10 @@ interface ChatAppProps {
   pendingApproval: ApprovalRequest | null;
   onApprove: (id: string, approved: boolean) => void;
   currentPersona?: string;
+  onPersonaChange?: (personaId: string) => void;
+  currentModel?: string;
+  onModelChange?: (model: string) => void;
+  availableModels?: string[];
   sessions?: { id: string; title: string }[];
   activeSessionId?: string | null;
   onSelectSession?: (id: string) => void;
