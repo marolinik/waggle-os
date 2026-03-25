@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   MessageSquare, LayoutDashboard, Settings, Brain,
@@ -9,7 +9,7 @@ import waggleLogo from "@/assets/waggle-logo.jpeg";
 import StatusBar from "./StatusBar";
 import Dock, { type AppId } from "./Dock";
 import AppWindow from "./AppWindow";
-import ChatApp from "./apps/ChatApp";
+import ChatWindowInstance from "./apps/ChatWindowInstance";
 import DashboardApp from "./apps/DashboardApp";
 import SettingsApp from "./apps/SettingsApp";
 import MemoryApp from "./apps/MemoryApp";
@@ -27,8 +27,6 @@ import OnboardingWizard from "./overlays/OnboardingWizard";
 import OnboardingTooltips from "./overlays/OnboardingTooltips";
 import { adapter } from "@/lib/adapter";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
-import { useChat } from "@/hooks/useChat";
-import { useSessions } from "@/hooks/useSessions";
 import { useMemory } from "@/hooks/useMemory";
 import { useEvents } from "@/hooks/useEvents";
 import { useAgentStatus } from "@/hooks/useAgentStatus";
@@ -38,8 +36,12 @@ import { useOnboarding } from "@/hooks/useOnboarding";
 import { useOfflineStatus } from "@/hooks/useOfflineStatus";
 import { useKnowledgeGraph } from "@/hooks/useKnowledgeGraph";
 
+/* ── Window instance with unique ID ── */
 interface WindowState {
-  id: AppId;
+  instanceId: string;        // unique per window instance
+  appId: AppId;              // which app type
+  workspaceId?: string;      // for chat windows — which workspace
+  workspaceName?: string;
   zIndex: number;
   minimized: boolean;
   cascadeOffset: number;
@@ -60,6 +62,7 @@ const Desktop = () => {
   const [windows, setWindows] = useState<WindowState[]>([]);
   const [topZ, setTopZ] = useState(10);
   const cascadeCounter = useRef(0);
+  const [focusedInstanceId, setFocusedInstanceId] = useState<string | null>(null);
 
   // Overlay states
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
@@ -71,11 +74,6 @@ const Desktop = () => {
 
   // Core hooks
   const { workspaces, activeWorkspace, activeWorkspaceId, selectWorkspace, createWorkspace } = useWorkspaces();
-  const { sessions, activeSessionId, setActiveSessionId, createSession } = useSessions(activeWorkspaceId);
-  const { messages, isLoading, sendMessage, clearHistory, pendingApproval, approveAction } = useChat({
-    workspaceId: activeWorkspaceId,
-    sessionId: activeSessionId,
-  });
   const memory = useMemory(activeWorkspaceId);
   const events = useEvents(activeWorkspaceId);
   const agentStatus = useAgentStatus();
@@ -84,34 +82,86 @@ const Desktop = () => {
   const offline = useOfflineStatus();
   const kg = useKnowledgeGraph(activeWorkspaceId);
 
+  /* ── Open app: singleton for non-chat, per-workspace for chat ── */
   const openApp = useCallback((id: AppId) => {
     setWindows(prev => {
-      const existing = prev.find(w => w.id === id);
-      if (existing) {
-        const newZ = topZ + 1;
-        setTopZ(newZ);
-        return prev.map(w => w.id === id ? { ...w, zIndex: newZ, minimized: false } : w);
+      // Non-chat apps: singleton behavior
+      if (id !== 'chat') {
+        const existing = prev.find(w => w.appId === id);
+        if (existing) {
+          const newZ = topZ + 1;
+          setTopZ(newZ);
+          setFocusedInstanceId(existing.instanceId);
+          return prev.map(w => w.instanceId === existing.instanceId ? { ...w, zIndex: newZ, minimized: false } : w);
+        }
       }
+
       const offset = cascadeCounter.current;
       cascadeCounter.current = (cascadeCounter.current + 1) % 10;
       const newZ = topZ + 1;
       setTopZ(newZ);
-      return [...prev, { id, zIndex: newZ, minimized: false, cascadeOffset: offset }];
+      const instanceId = `${id}-${Date.now()}`;
+      setFocusedInstanceId(instanceId);
+      return [...prev, { instanceId, appId: id, zIndex: newZ, minimized: false, cascadeOffset: offset }];
     });
   }, [topZ]);
 
-  const closeApp = useCallback((id: AppId) => {
-    setWindows(prev => prev.filter(w => w.id !== id));
+  /* ── Open a chat window for a specific workspace ── */
+  const openChatForWorkspace = useCallback((workspaceId: string, workspaceName?: string) => {
+    setWindows(prev => {
+      // Check if a chat window for this workspace already exists
+      const existing = prev.find(w => w.appId === 'chat' && w.workspaceId === workspaceId);
+      if (existing) {
+        const newZ = topZ + 1;
+        setTopZ(newZ);
+        setFocusedInstanceId(existing.instanceId);
+        return prev.map(w => w.instanceId === existing.instanceId ? { ...w, zIndex: newZ, minimized: false } : w);
+      }
+
+      const offset = cascadeCounter.current;
+      cascadeCounter.current = (cascadeCounter.current + 1) % 10;
+      const newZ = topZ + 1;
+      setTopZ(newZ);
+      const instanceId = `chat-${workspaceId}-${Date.now()}`;
+      setFocusedInstanceId(instanceId);
+      return [...prev, {
+        instanceId, appId: 'chat' as AppId,
+        workspaceId, workspaceName,
+        zIndex: newZ, minimized: false, cascadeOffset: offset,
+      }];
+    });
+  }, [topZ]);
+
+  const closeApp = useCallback((instanceId: string) => {
+    setWindows(prev => prev.filter(w => w.instanceId !== instanceId));
   }, []);
 
-  const minimizeApp = useCallback((id: AppId) => {
-    setWindows(prev => prev.map(w => w.id === id ? { ...w, minimized: true } : w));
+  const minimizeApp = useCallback((instanceId: string) => {
+    setWindows(prev => prev.map(w => w.instanceId === instanceId ? { ...w, minimized: true } : w));
   }, []);
 
-  const focusWindow = useCallback((id: AppId) => {
+  const focusWindow = useCallback((instanceId: string) => {
     const newZ = topZ + 1;
     setTopZ(newZ);
-    setWindows(prev => prev.map(w => w.id === id ? { ...w, zIndex: newZ } : w));
+    setFocusedInstanceId(instanceId);
+    setWindows(prev => prev.map(w => w.instanceId === instanceId ? { ...w, zIndex: newZ, minimized: false } : w));
+  }, [topZ]);
+
+  /* ── Alt+Tab: cycle focus among non-minimized windows ── */
+  const cycleWindowFocus = useCallback(() => {
+    setWindows(prev => {
+      const visible = prev.filter(w => !w.minimized);
+      if (visible.length <= 1) return prev;
+
+      // Sort by zIndex descending to get current focus order
+      const sorted = [...visible].sort((a, b) => b.zIndex - a.zIndex);
+      // The current top window goes to the bottom, next one gets focus
+      const nextWindow = sorted[1]; // second-highest z becomes focused
+      const newZ = topZ + 1;
+      setTopZ(newZ);
+      setFocusedInstanceId(nextWindow.instanceId);
+      return prev.map(w => w.instanceId === nextWindow.instanceId ? { ...w, zIndex: newZ } : w);
+    });
   }, [topZ]);
 
   // Keyboard shortcuts
@@ -123,11 +173,27 @@ const Desktop = () => {
     onToggleKeyboardHelp: () => setShowKeyboardHelp(p => !p),
   });
 
+  /* ── Alt+Tab handler ── */
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.altKey && e.key === 'Tab') {
+        e.preventDefault();
+        cycleWindowFocus();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [cycleWindowFocus]);
+
   const handleSearchNavigate = useCallback((type: string, id: string) => {
     if (type === 'command') openApp(id as AppId);
-    else if (type === 'workspace') { selectWorkspace(id); openApp('chat'); }
+    else if (type === 'workspace') {
+      selectWorkspace(id);
+      const ws = workspaces.find(w => w.id === id);
+      openChatForWorkspace(id, ws?.name);
+    }
     else if (type === 'memory') openApp('memory');
-  }, [openApp, selectWorkspace]);
+  }, [openApp, selectWorkspace, openChatForWorkspace, workspaces]);
 
   const handleOnboardingComplete = useCallback((serverBaseUrl: string) => {
     completeOnboarding();
@@ -138,31 +204,29 @@ const Desktop = () => {
     openApp('dashboard');
   }, [selectWorkspace, openApp]);
 
-  const renderAppContent = (appId: AppId) => {
-    switch (appId) {
-      case 'chat':
-        return (
-          <ChatApp
-            messages={messages}
-            isLoading={isLoading}
-            onSendMessage={sendMessage}
-            onClearHistory={clearHistory}
-            pendingApproval={pendingApproval}
-            onApprove={approveAction}
-            currentPersona={activeWorkspace?.persona}
-            sessions={sessions}
-            activeSessionId={activeSessionId}
-            onSelectSession={setActiveSessionId}
-            onNewSession={createSession}
-            workspaceId={activeWorkspaceId}
-          />
-        );
+  const getWindowTitle = (win: WindowState) => {
+    if (win.appId === 'chat' && win.workspaceName) {
+      return `Chat — ${win.workspaceName}`;
+    }
+    return appConfig[win.appId]?.title || win.appId;
+  };
+
+  const renderAppContent = (win: WindowState) => {
+    switch (win.appId) {
+      case 'chat': {
+        const wsId = win.workspaceId || activeWorkspaceId || 'local-default';
+        return <ChatWindowInstance workspaceId={wsId} workspaceName={win.workspaceName} />;
+      }
       case 'dashboard':
         return (
           <DashboardApp
             workspaces={workspaces}
             activeWorkspaceId={activeWorkspaceId}
-            onSelectWorkspace={(id) => { selectWorkspace(id); openApp('chat'); }}
+            onSelectWorkspace={(id) => {
+              selectWorkspace(id);
+              const ws = workspaces.find(w => w.id === id);
+              openChatForWorkspace(id, ws?.name);
+            }}
             onCreateWorkspace={() => setShowCreateWorkspace(true)}
           />
         );
@@ -207,6 +271,23 @@ const Desktop = () => {
         return <div className="p-4 text-sm text-muted-foreground">Coming soon...</div>;
     }
   };
+
+  // Compute which appIds are open (for dock indicators)
+  const openAppIds = useMemo(() => [...new Set(windows.map(w => w.appId))], [windows]);
+  const minimizedAppIds = useMemo(() => {
+    // An appId is "minimized" if ALL its instances are minimized
+    const grouped = new Map<AppId, boolean[]>();
+    windows.forEach(w => {
+      const list = grouped.get(w.appId) || [];
+      list.push(w.minimized);
+      grouped.set(w.appId, list);
+    });
+    const result: AppId[] = [];
+    grouped.forEach((statuses, appId) => {
+      if (statuses.every(m => m)) result.push(appId);
+    });
+    return result;
+  }, [windows]);
 
   return (
     <div className="relative w-screen h-screen overflow-hidden select-none">
@@ -264,7 +345,6 @@ const Desktop = () => {
             style={{ background: "linear-gradient(90deg, transparent, hsl(var(--primary) / 0.3), transparent)" }}
           />
 
-          {/* Connection status indicator */}
           {offline && (
             <motion.div
               initial={{ opacity: 0 }}
@@ -281,7 +361,7 @@ const Desktop = () => {
         </div>
       )}
 
-      {/* Hint — positioned just above the dock */}
+      {/* Hint */}
       {windows.length === 0 && (
         <motion.p
           initial={{ opacity: 0 }}
@@ -293,7 +373,7 @@ const Desktop = () => {
             textShadow: "0 1px 3px hsl(0 0% 0% / 0.7)",
           }}
         >
-          Click an app in the dock to get started
+          Click an app in the dock · Alt+Tab to switch windows
         </motion.p>
       )}
 
@@ -310,7 +390,7 @@ const Desktop = () => {
 
       <AnimatePresence>
         {windows.map((win) => {
-          const config = appConfig[win.id];
+          const config = appConfig[win.appId];
           if (!config) return null;
           const cascadedPos = {
             x: config.pos.x + win.cascadeOffset * 30,
@@ -318,30 +398,51 @@ const Desktop = () => {
           };
           return (
             <AppWindow
-              key={win.id}
-              title={config.title}
+              key={win.instanceId}
+              title={getWindowTitle(win)}
               icon={config.icon}
-              onClose={() => closeApp(win.id)}
-              onMinimize={() => minimizeApp(win.id)}
+              onClose={() => closeApp(win.instanceId)}
+              onMinimize={() => minimizeApp(win.instanceId)}
               isMinimized={win.minimized}
               defaultPosition={cascadedPos}
               defaultSize={config.size}
               zIndex={win.zIndex}
-              onFocus={() => focusWindow(win.id)}
+              onFocus={() => focusWindow(win.instanceId)}
             >
-              {renderAppContent(win.id)}
+              {renderAppContent(win)}
             </AppWindow>
           );
         })}
       </AnimatePresence>
 
-      <Dock onOpenApp={openApp} openApps={windows.map(w => w.id)} minimizedApps={windows.filter(w => w.minimized).map(w => w.id)} />
+      <Dock
+        onOpenApp={(id) => {
+          if (id === 'chat') {
+            // Opening chat from dock uses active workspace
+            openChatForWorkspace(activeWorkspaceId || 'local-default', activeWorkspace?.name);
+          } else {
+            openApp(id);
+          }
+        }}
+        openApps={openAppIds}
+        minimizedApps={minimizedAppIds}
+      />
 
       {/* Overlays */}
       <GlobalSearch open={showGlobalSearch} onClose={() => setShowGlobalSearch(false)} onNavigate={handleSearchNavigate} />
       <CreateWorkspaceDialog open={showCreateWorkspace} onClose={() => setShowCreateWorkspace(false)} onCreate={createWorkspace} />
       <PersonaSwitcher open={showPersonaSwitcher} onClose={() => setShowPersonaSwitcher(false)} currentPersona={activeWorkspace?.persona} onSelect={() => {}} />
-      <WorkspaceSwitcher open={showWorkspaceSwitcher} onClose={() => setShowWorkspaceSwitcher(false)} workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} onSelect={(id) => { selectWorkspace(id); openApp('chat'); }} />
+      <WorkspaceSwitcher
+        open={showWorkspaceSwitcher}
+        onClose={() => setShowWorkspaceSwitcher(false)}
+        workspaces={workspaces}
+        activeWorkspaceId={activeWorkspaceId}
+        onSelect={(id) => {
+          selectWorkspace(id);
+          const ws = workspaces.find(w => w.id === id);
+          openChatForWorkspace(id, ws?.name);
+        }}
+      />
       <NotificationInbox open={showNotifications} onClose={() => setShowNotifications(false)} notifications={notifications} onMarkRead={markRead} onMarkAllRead={markAllRead} />
       <KeyboardShortcutsHelp open={showKeyboardHelp} onClose={() => setShowKeyboardHelp(false)} />
       {!onboardingState.completed && (
