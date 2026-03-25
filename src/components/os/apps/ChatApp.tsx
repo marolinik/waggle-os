@@ -6,6 +6,13 @@ import { getPersonaById, PERSONAS } from '@/lib/personas';
 import { adapter } from '@/lib/adapter';
 import type { ChatMessage, ToolExecution, ApprovalRequest } from '@/lib/types';
 
+export interface TeamMember {
+  id: string;
+  name: string;
+  status: string;
+  avatar?: string;
+}
+
 interface ChatAppProps {
   messages: ChatMessage[];
   isLoading: boolean;
@@ -18,6 +25,7 @@ interface ChatAppProps {
   currentModel?: string;
   onModelChange?: (model: string) => void;
   availableModels?: string[];
+  teamPresence?: TeamMember[];
   sessions?: { id: string; title: string }[];
   activeSessionId?: string | null;
   onSelectSession?: (id: string) => void;
@@ -148,6 +156,7 @@ const ChatApp = ({
   messages, isLoading, onSendMessage, onClearHistory,
   pendingApproval, onApprove, currentPersona,
   onPersonaChange, currentModel, onModelChange, availableModels,
+  teamPresence,
   sessions, activeSessionId, onSelectSession, onNewSession,
   workspaceId,
 }: ChatAppProps) => {
