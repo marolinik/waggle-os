@@ -8,11 +8,15 @@ export const useEvents = (workspaceId: string | null) => {
   const [filter, setFilter] = useState<string | null>(null);
 
   useEffect(() => {
-    adapter.getEvents().then(setSteps).catch(() => setSteps([]));
-    const unsub = adapter.subscribeEvents((step) => {
-      setSteps(prev => [...prev, step]);
-    });
-    return unsub;
+    adapter.getEvents().then(setSteps).catch(() => {});
+    // Only subscribe if workspace is set
+    if (!workspaceId) return;
+    try {
+      const unsub = adapter.subscribeEvents((step) => {
+        setSteps(prev => [...prev, step]);
+      });
+      return unsub;
+    } catch { /* ignore SSE errors */ }
   }, [workspaceId]);
 
   const filteredSteps = filter ? steps.filter(s => s.type === filter) : steps;
