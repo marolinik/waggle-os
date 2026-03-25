@@ -4,20 +4,39 @@ import { useSessions } from '@/hooks/useSessions';
 import { adapter } from '@/lib/adapter';
 import ChatApp from './ChatApp';
 
-// Fallback models shown when backend is offline
+// Fallback models shown when backend is offline — latest flagships from top providers
 const FALLBACK_MODELS = [
-  'gpt-4o',
-  'gpt-4o-mini',
-  'gpt-4-turbo',
-  'gpt-3.5-turbo',
-  'claude-3-5-sonnet-20241022',
-  'claude-3-haiku-20240307',
-  'gemini-1.5-pro',
-  'gemini-1.5-flash',
-  'llama-3.1-70b',
-  'llama-3.1-8b',
-  'deepseek-chat',
-  'mistral-large-latest',
+  // Anthropic
+  'anthropic/claude-opus-4.6',
+  'anthropic/claude-sonnet-4.6',
+  'anthropic/claude-haiku-4.6',
+  // OpenAI
+  'openai/gpt-5.4',
+  'openai/gpt-5.4-mini',
+  'openai/o3-pro',
+  'openai/o4-mini',
+  // Google
+  'google/gemini-3.1-pro',
+  'google/gemini-3.1-flash',
+  'google/gemini-2.5-pro',
+  // Meta
+  'meta/llama-4-maverick',
+  'meta/llama-4-scout',
+  // Mistral
+  'mistral/mistral-large-3',
+  'mistral/codestral-2',
+  // DeepSeek
+  'deepseek/deepseek-r2',
+  'deepseek/deepseek-v4',
+  // Alibaba
+  'alibaba/qwen-3-235b',
+  'alibaba/qwen-3-72b',
+  // Zhipu
+  'zhipu/glm-5',
+  // Baidu
+  'baidu/ernie-5.0',
+  // xAI
+  'xai/grok-3',
 ];
 
 interface ChatWindowInstanceProps {
