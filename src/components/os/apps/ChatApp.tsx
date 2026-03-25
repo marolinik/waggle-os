@@ -147,6 +147,7 @@ const FileDropZone = ({ onDrop, active }: { onDrop: (files: File[]) => void; act
 const ChatApp = ({
   messages, isLoading, onSendMessage, onClearHistory,
   pendingApproval, onApprove, currentPersona,
+  onPersonaChange, currentModel, onModelChange, availableModels,
   sessions, activeSessionId, onSelectSession, onNewSession,
   workspaceId,
 }: ChatAppProps) => {
@@ -156,6 +157,8 @@ const ChatApp = ({
   const [slashIndex, setSlashIndex] = useState(0);
   const [showSessions, setShowSessions] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [showPersonaPicker, setShowPersonaPicker] = useState(false);
+  const [showModelPicker, setShowModelPicker] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
