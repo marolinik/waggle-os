@@ -561,9 +561,7 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
                   </p>
                 </div>
               ) : previewContent ? (
-                <pre className="text-[10px] font-mono text-foreground/90 whitespace-pre-wrap break-words leading-relaxed">
-                  {previewContent}
-                </pre>
+                <SyntaxPreview content={previewContent} fileName={previewFile.name} />
               ) : (
                 <p className="text-xs text-muted-foreground text-center mt-8">No preview available</p>
               )}
