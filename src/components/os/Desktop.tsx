@@ -225,19 +225,19 @@ const Desktop = () => {
           >
             <motion.div
               animate={{
-                boxShadow: [
-                  "0 0 0px hsl(var(--primary) / 0), 0 0 0px hsl(var(--primary) / 0)",
-                  "0 0 60px hsl(var(--primary) / 0.3), 0 0 120px hsl(var(--primary) / 0.1)",
-                  "0 0 0px hsl(var(--primary) / 0), 0 0 0px hsl(var(--primary) / 0)",
+                filter: [
+                  "drop-shadow(0 0 8px hsl(var(--primary) / 0.2))",
+                  "drop-shadow(0 0 40px hsl(var(--primary) / 0.6)) drop-shadow(0 0 80px hsl(var(--primary) / 0.3))",
+                  "drop-shadow(0 0 8px hsl(var(--primary) / 0.2))",
                 ],
               }}
-              transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-              className="rounded-[2.5rem]"
+              transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut" }}
             >
               <motion.img
                 src={waggleLogo}
                 alt="Waggle AI"
-                className="w-36 h-36 rounded-[2.5rem] shadow-2xl"
+                className="w-28 h-28"
+                style={{ borderRadius: 0, background: "transparent" }}
                 animate={{ rotate: [0, 1, -1, 0] }}
                 transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
               />
@@ -248,17 +248,16 @@ const Desktop = () => {
             initial={{ opacity: 0, y: 16, letterSpacing: "0.3em" }}
             animate={{ opacity: 1, y: 0, letterSpacing: "0.15em" }}
             transition={{ delay: 0.5, duration: 0.8, ease: "easeOut" }}
-            className="mt-6 text-5xl font-display font-bold tracking-widest"
-            style={{ color: "hsl(var(--primary))" }}
+            className="mt-6 text-5xl font-display font-bold tracking-widest text-foreground"
           >
             Waggle AI
           </motion.h1>
 
           <motion.p
             initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 0.6, y: 0 }}
+            animate={{ opacity: 0.8, y: 0 }}
             transition={{ delay: 0.8, duration: 0.7 }}
-            className="text-base font-display text-muted-foreground mt-2 tracking-[0.25em] uppercase"
+            className="text-base font-display text-foreground/70 mt-2 tracking-[0.25em] uppercase"
           >
             Autonomous Agent OS
           </motion.p>
