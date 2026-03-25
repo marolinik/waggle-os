@@ -6,6 +6,8 @@ interface AppWindowProps {
   icon: React.ReactNode;
   children: React.ReactNode;
   onClose: () => void;
+  onMinimize: () => void;
+  isMinimized?: boolean;
   defaultPosition?: { x: number; y: number };
   defaultSize?: { w: string; h: string };
   zIndex: number;
@@ -17,6 +19,8 @@ const AppWindow = ({
   icon,
   children,
   onClose,
+  onMinimize,
+  isMinimized = false,
   defaultPosition = { x: 100, y: 60 },
   defaultSize = { w: "500px", h: "400px" },
   zIndex,
@@ -36,17 +40,26 @@ const AppWindow = ({
       onDragStart={() => setIsDragging(true)}
       onDragEnd={() => setIsDragging(false)}
       initial={{ opacity: 0, scale: 0.9, x: defaultPosition.x, y: defaultPosition.y }}
-      animate={{
-        opacity: 1,
-        scale: 1,
-        ...(isMaximized
-          ? { x: 0, y: 32, width: "100vw", height: "calc(100vh - 6rem)" }
-          : { width: defaultSize.w, height: defaultSize.h }),
-      }}
+      animate={
+        isMinimized
+          ? {
+              opacity: 0,
+              scale: 0.3,
+              y: window.innerHeight,
+              x: window.innerWidth / 2 - 100,
+            }
+          : {
+              opacity: 1,
+              scale: 1,
+              ...(isMaximized
+                ? { x: 0, y: 32, width: "100vw", height: "calc(100vh - 6rem)" }
+                : { width: defaultSize.w, height: defaultSize.h }),
+            }
+      }
       exit={{ opacity: 0, scale: 0.9 }}
       transition={{ type: "spring", stiffness: 300, damping: 25 }}
       className="absolute top-0 left-0 glass-strong rounded-xl overflow-hidden flex flex-col shadow-2xl"
-      style={{ zIndex }}
+      style={{ zIndex, pointerEvents: isMinimized ? "none" : "auto" }}
       onMouseDown={onFocus}
     >
       {/* Title Bar - Drag Handle */}
@@ -64,16 +77,19 @@ const AppWindow = ({
         </div>
         <div className="flex items-center gap-1.5">
           <button
-            onClick={() => {}}
+            onClick={onMinimize}
             className="w-3 h-3 rounded-full bg-primary/40 hover:bg-primary/60 transition-colors"
+            title="Minimize"
           />
           <button
             onClick={() => setIsMaximized(!isMaximized)}
             className="w-3 h-3 rounded-full bg-primary/40 hover:bg-primary/60 transition-colors"
+            title="Maximize"
           />
           <button
             onClick={onClose}
             className="w-3 h-3 rounded-full bg-destructive/60 hover:bg-destructive transition-colors"
+            title="Close"
           />
         </div>
       </div>
