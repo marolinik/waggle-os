@@ -285,6 +285,11 @@ const Desktop = () => {
             onToggleAutoScroll={events.toggleAutoScroll}
             filter={events.filter}
             onFilterChange={events.setFilter}
+            onAbort={() => {
+              if (activeWorkspaceId) {
+                adapter.abortAgent(activeWorkspaceId).catch(() => {});
+              }
+            }}
           />
         );
       case 'cockpit':
