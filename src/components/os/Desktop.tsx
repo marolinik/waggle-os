@@ -367,7 +367,7 @@ const Desktop = () => {
             textShadow: "0 1px 3px hsl(0 0% 0% / 0.7)",
           }}
         >
-          Click an app in the dock · Alt+Tab to switch windows
+          Click an app in the dock · Ctrl+` to switch windows
         </motion.p>
       )}
 
