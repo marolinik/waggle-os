@@ -224,31 +224,14 @@ const Desktop = () => {
           />
 
           {/* Logo — transparent blended with glow */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.4, y: 20 }}
-            animate={{ opacity: 0.85, scale: 1, y: 0 }}
-            transition={{ type: "spring", stiffness: 80, damping: 16, delay: 0.1 }}
-          >
-            <motion.div
-              animate={{
-                filter: [
-                  "drop-shadow(0 0 4px hsl(var(--primary) / 0.1))",
-                  "drop-shadow(0 0 24px hsl(var(--primary) / 0.35)) drop-shadow(0 0 50px hsl(var(--primary) / 0.15))",
-                  "drop-shadow(0 0 4px hsl(var(--primary) / 0.1))",
-                ],
-              }}
-              transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
-            >
-              <motion.img
+          <div style={{ filter: "drop-shadow(0 0 20px hsl(var(--primary) / 0.25))" }}>
+              <img
                 src={waggleLogo}
                 alt="Waggle AI"
                 className="w-20 h-20 mix-blend-screen opacity-80"
                 style={{ borderRadius: 0, background: "transparent" }}
-                animate={{ rotate: [0, 1, -1, 0], scale: [1, 1.015, 1] }}
-                transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
               />
-            </motion.div>
-          </motion.div>
+            </div>
 
           {/* Title — bright white with warm glow for readability */}
           <motion.h1
