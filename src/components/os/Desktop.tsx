@@ -240,7 +240,8 @@ const Desktop = () => {
     switch (win.appId) {
       case 'chat': {
         const wsId = win.workspaceId || activeWorkspaceId || 'local-default';
-        return <ChatWindowInstance workspaceId={wsId} workspaceName={win.workspaceName} />;
+        const ws = workspaces.find(w => w.id === wsId);
+        return <ChatWindowInstance workspaceId={wsId} workspaceName={win.workspaceName} templateId={ws?.templateId} />;
       }
       case 'dashboard':
         return (
