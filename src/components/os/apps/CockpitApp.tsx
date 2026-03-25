@@ -1,30 +1,44 @@
 import { useState, useEffect } from 'react';
-import { Activity, Server, DollarSign, Clock, Database, Shield, Plug, Loader2, RefreshCw, ChevronDown } from 'lucide-react';
+import { Activity, Server, DollarSign, Clock, Plug, RefreshCw, Timer, Brain, Shield, Network, FileText, ChevronDown } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import type { CronJob } from '@/lib/types';
 
-interface CardData {
+interface CockpitData {
   health?: { status: string; uptime: number; services: { name: string; status: string }[] };
   cost?: { totalCost: number; totalTokens: number };
   connectors?: { id: string; name: string; status: string }[];
+  crons?: CronJob[];
+  memoryStats?: { total: number };
+  vault?: unknown;
+  capStatus?: unknown;
+  auditTrail?: unknown[];
 }
 
 const CockpitApp = () => {
-  const [data, setData] = useState<CardData>({});
+  const [data, setData] = useState<CockpitData>({});
   const [loading, setLoading] = useState(true);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const refresh = async () => {
     setLoading(true);
     try {
-      const [health, cost, connectors] = await Promise.allSettled([
+      const [health, cost, connectors, crons, vault, capStatus, audit] = await Promise.allSettled([
         adapter.getSystemHealth(),
         adapter.getAgentCost(),
         adapter.getConnectors(),
+        adapter.getCronJobs(),
+        adapter.getVault(),
+        adapter.getCapabilitiesStatus(),
+        adapter.getAuditInstalls(),
       ]);
       setData({
         health: health.status === 'fulfilled' ? health.value : undefined,
         cost: cost.status === 'fulfilled' ? cost.value : undefined,
         connectors: connectors.status === 'fulfilled' ? connectors.value : undefined,
+        crons: crons.status === 'fulfilled' ? crons.value : undefined,
+        vault: vault.status === 'fulfilled' ? vault.value : undefined,
+        capStatus: capStatus.status === 'fulfilled' ? capStatus.value : undefined,
+        auditTrail: audit.status === 'fulfilled' ? audit.value : undefined,
       });
     } finally {
       setLoading(false);
@@ -49,7 +63,7 @@ const CockpitApp = () => {
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        {/* System Health */}
+        {/* 1. System Health */}
         <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
           <div className="flex items-center gap-2 mb-2">
             <Server className="w-4 h-4 text-muted-foreground" />
@@ -63,7 +77,7 @@ const CockpitApp = () => {
           )}
         </div>
 
-        {/* Cost */}
+        {/* 2. Cost Dashboard */}
         <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
           <div className="flex items-center gap-2 mb-2">
             <DollarSign className="w-4 h-4 text-muted-foreground" />
@@ -77,8 +91,29 @@ const CockpitApp = () => {
           </p>
         </div>
 
-        {/* Connectors */}
-        <div className="p-3 rounded-xl bg-secondary/30 border border-border/30 col-span-2">
+        {/* 3. Cron Schedules */}
+        <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
+          <div className="flex items-center gap-2 mb-2">
+            <Timer className="w-4 h-4 text-muted-foreground" />
+            <span className="text-xs font-display font-medium text-foreground">Scheduled Routines</span>
+          </div>
+          {data.crons && data.crons.length > 0 ? (
+            <div className="space-y-1">
+              {data.crons.slice(0, 3).map(c => (
+                <div key={c.id} className="flex items-center justify-between text-xs">
+                  <span className="text-foreground truncate">{c.name}</span>
+                  <span className={c.enabled ? 'text-emerald-400' : 'text-muted-foreground'}>{c.schedule}</span>
+                </div>
+              ))}
+              {data.crons.length > 3 && <p className="text-[10px] text-muted-foreground">+{data.crons.length - 3} more</p>}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">No routines</p>
+          )}
+        </div>
+
+        {/* 4. Connectors */}
+        <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
           <div className="flex items-center gap-2 mb-2">
             <Plug className="w-4 h-4 text-muted-foreground" />
             <span className="text-xs font-display font-medium text-foreground">Connectors</span>
@@ -93,28 +128,94 @@ const CockpitApp = () => {
               ))}
             </div>
           ) : (
-            <p className="text-xs text-muted-foreground">No connectors configured</p>
+            <p className="text-xs text-muted-foreground">No connectors</p>
           )}
         </div>
 
-        {/* Services */}
-        {data.health?.services && (
-          <div className="p-3 rounded-xl bg-secondary/30 border border-border/30 col-span-2">
+        {/* 5. Memory Stats */}
+        <div className="p-3 rounded-xl bg-secondary/30 border border-border/30 col-span-2">
+          <div className="flex items-center gap-2 mb-2">
+            <Brain className="w-4 h-4 text-muted-foreground" />
+            <span className="text-xs font-display font-medium text-foreground">Memory</span>
+          </div>
+          <p className="text-xs text-muted-foreground">Frame storage active</p>
+        </div>
+      </div>
+
+      {/* Advanced toggle */}
+      <button
+        onClick={() => setShowAdvanced(!showAdvanced)}
+        className="flex items-center gap-2 mt-4 mb-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showAdvanced ? 'rotate-0' : '-rotate-90'}`} />
+        <span className="font-display">Advanced</span>
+      </button>
+
+      {showAdvanced && (
+        <div className="grid grid-cols-2 gap-3">
+          {/* 6. Services */}
+          {data.health?.services && (
+            <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
+              <div className="flex items-center gap-2 mb-2">
+                <Activity className="w-4 h-4 text-muted-foreground" />
+                <span className="text-xs font-display font-medium text-foreground">Services</span>
+              </div>
+              <div className="space-y-1">
+                {data.health.services.map(s => (
+                  <div key={s.name} className="flex items-center justify-between text-xs">
+                    <span className="text-foreground">{s.name}</span>
+                    <span className={s.status === 'running' ? 'text-emerald-400' : 'text-destructive'}>{s.status}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 7. Vault Summary */}
+          <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
+            <div className="flex items-center gap-2 mb-2">
+              <Shield className="w-4 h-4 text-muted-foreground" />
+              <span className="text-xs font-display font-medium text-foreground">Vault</span>
+            </div>
+            <p className="text-xs text-muted-foreground">{data.vault ? 'Active' : 'Not configured'}</p>
+          </div>
+
+          {/* 8. Capabilities Overview */}
+          <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
             <div className="flex items-center gap-2 mb-2">
               <Activity className="w-4 h-4 text-muted-foreground" />
-              <span className="text-xs font-display font-medium text-foreground">Services</span>
+              <span className="text-xs font-display font-medium text-foreground">Capabilities</span>
             </div>
-            <div className="space-y-1">
-              {data.health.services.map(s => (
-                <div key={s.name} className="flex items-center justify-between text-xs">
-                  <span className="text-foreground">{s.name}</span>
-                  <span className={s.status === 'running' ? 'text-emerald-400' : 'text-destructive'}>{s.status}</span>
-                </div>
-              ))}
-            </div>
+            <p className="text-xs text-muted-foreground">{data.capStatus ? 'Loaded' : 'No data'}</p>
           </div>
-        )}
-      </div>
+
+          {/* 9. Agent Topology */}
+          <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
+            <div className="flex items-center gap-2 mb-2">
+              <Network className="w-4 h-4 text-muted-foreground" />
+              <span className="text-xs font-display font-medium text-foreground">Agent Topology</span>
+            </div>
+            <p className="text-xs text-muted-foreground">Swarm view</p>
+          </div>
+
+          {/* 10. Audit Trail */}
+          <div className="p-3 rounded-xl bg-secondary/30 border border-border/30 col-span-2">
+            <div className="flex items-center gap-2 mb-2">
+              <FileText className="w-4 h-4 text-muted-foreground" />
+              <span className="text-xs font-display font-medium text-foreground">Audit Trail</span>
+            </div>
+            {data.auditTrail && Array.isArray(data.auditTrail) && data.auditTrail.length > 0 ? (
+              <div className="space-y-1">
+                {data.auditTrail.slice(0, 5).map((item, i) => (
+                  <p key={i} className="text-xs text-muted-foreground truncate">{JSON.stringify(item)}</p>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">No audit entries</p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

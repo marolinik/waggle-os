@@ -1,4 +1,5 @@
-import { Activity, Loader2, CheckCircle2, XCircle, Zap, MessageSquare, AlertTriangle } from 'lucide-react';
+import { useState } from 'react';
+import { Activity, Loader2, CheckCircle2, XCircle, Zap, MessageSquare, ChevronDown, Clock, ChevronRight } from 'lucide-react';
 import type { AgentStep } from '@/lib/types';
 
 const stepIcons: Record<string, React.ElementType> = {
@@ -24,13 +25,79 @@ interface EventsAppProps {
   onFilterChange: (f: string | null) => void;
 }
 
+const StepCard = ({ step }: { step: AgentStep }) => {
+  const [expanded, setExpanded] = useState(false);
+  const Icon = stepIcons[step.type] || Activity;
+  const color = stepColors[step.status] || 'text-muted-foreground border-border/30';
+
+  return (
+    <div className={`rounded-lg border ${color} bg-secondary/20 overflow-hidden`}>
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-start gap-2 p-2 text-left"
+      >
+        <div className="mt-0.5">
+          {step.status === 'running' ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Icon className="w-3.5 h-3.5" />
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs text-foreground">{step.description}</p>
+          <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground">
+            <span className="capitalize">{step.type.replace('_', ' ')}</span>
+            {step.duration && <span>{step.duration}ms</span>}
+            <span>{new Date(step.timestamp).toLocaleTimeString()}</span>
+          </div>
+        </div>
+        {step.details && (
+          <ChevronRight className={`w-3 h-3 text-muted-foreground transition-transform ${expanded ? 'rotate-90' : ''}`} />
+        )}
+      </button>
+      {expanded && step.details && (
+        <div className="px-3 pb-2 pt-0">
+          <pre className="text-[10px] text-muted-foreground bg-background/50 rounded p-2 overflow-x-auto max-h-32">
+            {JSON.stringify(step.details, null, 2)}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const EventsApp = ({ steps, autoScroll, onToggleAutoScroll, filter, onFilterChange }: EventsAppProps) => {
+  const [tab, setTab] = useState<'live' | 'replay'>('live');
   const types = ['think', 'tool_call', 'tool_result', 'response', 'error', 'spawn'];
+
+  // Group steps by session/time for replay
+  const stepsByTime = steps.reduce<Record<string, AgentStep[]>>((acc, step) => {
+    const timeKey = new Date(step.timestamp).toLocaleDateString();
+    if (!acc[timeKey]) acc[timeKey] = [];
+    acc[timeKey].push(step);
+    return acc;
+  }, {});
 
   return (
     <div className="flex h-full">
       {/* Filters */}
       <div className="w-36 border-r border-border/50 p-2 space-y-1 shrink-0">
+        {/* Live/Replay tabs */}
+        <div className="flex gap-1 mb-3 p-0.5 rounded-lg bg-muted/50">
+          <button
+            onClick={() => setTab('live')}
+            className={`flex-1 text-[10px] py-1 rounded font-display transition-colors ${
+              tab === 'live' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'
+            }`}
+          >Live</button>
+          <button
+            onClick={() => setTab('replay')}
+            className={`flex-1 text-[10px] py-1 rounded font-display transition-colors ${
+              tab === 'replay' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'
+            }`}
+          >Replay</button>
+        </div>
+
         <p className="text-[10px] font-display text-muted-foreground uppercase mb-2">Filter by type</p>
         <button
           onClick={() => onFilterChange(null)}
@@ -55,6 +122,9 @@ const EventsApp = ({ steps, autoScroll, onToggleAutoScroll, filter, onFilterChan
             }`}
           >Auto-scroll {autoScroll ? 'ON' : 'OFF'}</button>
         </div>
+        <div className="pt-2 mt-2 border-t border-border/30">
+          <p className="text-[10px] text-muted-foreground">{steps.length} events</p>
+        </div>
       </div>
 
       {/* Step feed */}
@@ -66,29 +136,21 @@ const EventsApp = ({ steps, autoScroll, onToggleAutoScroll, filter, onFilterChan
             <p className="text-xs text-muted-foreground/60">Events will appear here as the agent executes</p>
           </div>
         )}
-        {steps.map(step => {
-          const Icon = stepIcons[step.type] || Activity;
-          const color = stepColors[step.status] || 'text-muted-foreground border-border/30';
-          return (
-            <div key={step.id} className={`flex items-start gap-2 p-2 rounded-lg border ${color} bg-secondary/20`}>
-              <div className="mt-0.5">
-                {step.status === 'running' ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Icon className="w-3.5 h-3.5" />
-                )}
+
+        {tab === 'live' ? (
+          steps.map(step => <StepCard key={step.id} step={step} />)
+        ) : (
+          Object.entries(stepsByTime).map(([date, dateSteps]) => (
+            <div key={date}>
+              <div className="flex items-center gap-2 mb-2 mt-3 first:mt-0">
+                <Clock className="w-3 h-3 text-muted-foreground" />
+                <span className="text-[10px] font-display text-muted-foreground">{date}</span>
+                <div className="flex-1 h-px bg-border/30" />
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-foreground">{step.description}</p>
-                <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground">
-                  <span className="capitalize">{step.type.replace('_', ' ')}</span>
-                  {step.duration && <span>{step.duration}ms</span>}
-                  <span>{new Date(step.timestamp).toLocaleTimeString()}</span>
-                </div>
-              </div>
+              {dateSteps.map(step => <StepCard key={step.id} step={step} />)}
             </div>
-          );
-        })}
+          ))
+        )}
       </div>
     </div>
   );
