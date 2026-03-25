@@ -226,7 +226,7 @@ const SyntaxPreview = ({ content, fileName }: { content: string; fileName: strin
   );
 };
 
-
+const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: FilesAppProps) => {
   const [currentPath, setCurrentPath] = useState('/');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
   const [files, setFiles] = useState<FileEntry[]>(MOCK_FILES);
