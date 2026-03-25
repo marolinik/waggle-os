@@ -385,7 +385,7 @@ const ChatApp = ({
           )}
 
           {/* Model picker */}
-          <div className="relative ml-auto">
+          <div className="relative ml-auto" ref={modelPickerRef}>
             <button
               onClick={() => { setShowModelPicker(p => !p); setShowPersonaPicker(false); }}
               className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-muted/50 transition-colors"
