@@ -149,6 +149,7 @@ const ChatApp = ({
   const [input, setInput] = useState('');
   const [showSlash, setShowSlash] = useState(false);
   const [slashFilter, setSlashFilter] = useState('');
+  const [slashIndex, setSlashIndex] = useState(0);
   const [showSessions, setShowSessions] = useState(false);
   const [dragging, setDragging] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
