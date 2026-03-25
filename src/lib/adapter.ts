@@ -13,14 +13,21 @@ class LocalAdapter {
   private authToken: string | null = null;
   private ws: WebSocket | null = null;
   private sseConnections = new Map<string, EventSource>();
+  private _connected = false;
+  private _connectAttempted = false;
 
   constructor(serverUrl?: string) {
     this.baseUrl = serverUrl || localStorage.getItem('waggle_server_url') || DEFAULT_SERVER;
   }
 
+  get isConnected() { return this._connected; }
+  get hasAttemptedConnect() { return this._connectAttempted; }
+
   setServerUrl(url: string) {
     this.baseUrl = url;
     localStorage.setItem('waggle_server_url', url);
+    this._connected = false;
+    this._connectAttempted = false;
   }
 
   getServerUrl() {
@@ -29,10 +36,17 @@ class LocalAdapter {
 
   // --- Auth ---
   async connect(): Promise<{ wsToken: string }> {
-    const res = await this.fetch('/health');
-    const data = await res.json();
-    this.authToken = data.wsToken;
-    return data;
+    this._connectAttempted = true;
+    try {
+      const res = await this.fetch('/health');
+      const data = await res.json();
+      this.authToken = data.wsToken;
+      this._connected = true;
+      return data;
+    } catch (e) {
+      this._connected = false;
+      throw e;
+    }
   }
 
   private async fetch(path: string, init?: RequestInit): Promise<Response> {
@@ -43,7 +57,13 @@ class LocalAdapter {
     if (this.authToken) {
       headers['Authorization'] = `Bearer ${this.authToken}`;
     }
-    return fetch(`${this.baseUrl}${path}`, { ...init, headers });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      return await fetch(`${this.baseUrl}${path}`, { ...init, headers, signal: controller.signal });
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   // --- Workspaces ---
@@ -181,6 +201,7 @@ class LocalAdapter {
   }
 
   subscribeEvents(onEvent: (step: AgentStep) => void): () => void {
+    if (!this._connected) return () => {};
     return this.subscribeSSE('/api/events/stream', (data) => onEvent(data as AgentStep));
   }
 
@@ -283,6 +304,7 @@ class LocalAdapter {
 
   // --- Notifications ---
   subscribeNotifications(onNotification: (n: Notification) => void): () => void {
+    if (!this._connected) return () => {};
     return this.subscribeSSE('/api/notifications/stream', (data) => onNotification(data as Notification));
   }
 
@@ -477,6 +499,10 @@ class LocalAdapter {
     es.onmessage = (e) => {
       try { onData(JSON.parse(e.data)); } catch { /* skip */ }
     };
+    es.onerror = () => {
+      es.close();
+      this.sseConnections.delete(path);
+    };
     return () => {
       es.close();
       this.sseConnections.delete(path);
@@ -497,5 +523,6 @@ class LocalAdapter {
   }
 }
 
+export type { LocalAdapter };
 export const adapter = new LocalAdapter();
 export default LocalAdapter;

@@ -88,13 +88,15 @@ const Desktop = () => {
     setWindows(prev => {
       const existing = prev.find(w => w.id === id);
       if (existing) {
-        setTopZ(z => z + 1);
-        return prev.map(w => w.id === id ? { ...w, zIndex: topZ + 1, minimized: false } : w);
+        const newZ = topZ + 1;
+        setTopZ(newZ);
+        return prev.map(w => w.id === id ? { ...w, zIndex: newZ, minimized: false } : w);
       }
       const offset = cascadeCounter.current;
       cascadeCounter.current = (cascadeCounter.current + 1) % 10;
-      setTopZ(z => z + 1);
-      return [...prev, { id, zIndex: topZ + 1, minimized: false, cascadeOffset: offset }];
+      const newZ = topZ + 1;
+      setTopZ(newZ);
+      return [...prev, { id, zIndex: newZ, minimized: false, cascadeOffset: offset }];
     });
   }, [topZ]);
 
@@ -107,8 +109,9 @@ const Desktop = () => {
   }, []);
 
   const focusWindow = useCallback((id: AppId) => {
-    setTopZ(z => z + 1);
-    setWindows(prev => prev.map(w => w.id === id ? { ...w, zIndex: topZ + 1 } : w));
+    const newZ = topZ + 1;
+    setTopZ(newZ);
+    setWindows(prev => prev.map(w => w.id === id ? { ...w, zIndex: newZ } : w));
   }, [topZ]);
 
   // Keyboard shortcuts
@@ -210,11 +213,9 @@ const Desktop = () => {
       <img src={wallpaper} alt="" className="absolute inset-0 w-full h-full object-cover" width={1920} height={1080} />
       <div className="absolute inset-0 bg-background/20" />
 
-      {/* Desktop logo hero — naturally blended into the hexagonal wallpaper */}
+      {/* Desktop logo hero */}
       {windows.length === 0 && (
         <div className="absolute inset-0 flex flex-col items-center pointer-events-none z-[1]" style={{ paddingTop: "3vh" }}>
-
-          {/* Logo — no glow, bigger */}
           <div className="relative w-40 h-40">
             <img
               src={waggleLogo}
@@ -229,7 +230,6 @@ const Desktop = () => {
             />
           </div>
 
-          {/* Title */}
           <motion.h1
             initial={{ opacity: 0, y: 14, letterSpacing: "0.35em" }}
             animate={{ opacity: 1, y: 0, letterSpacing: "0.15em" }}
@@ -243,7 +243,6 @@ const Desktop = () => {
             Waggle AI
           </motion.h1>
 
-          {/* Subtitle */}
           <motion.p
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 0.9, y: 0 }}
@@ -257,7 +256,6 @@ const Desktop = () => {
             Autonomous Agent OS
           </motion.p>
 
-          {/* Divider */}
           <motion.div
             initial={{ scaleX: 0 }}
             animate={{ scaleX: 1 }}
@@ -266,6 +264,20 @@ const Desktop = () => {
             style={{ background: "linear-gradient(90deg, transparent, hsl(var(--primary) / 0.3), transparent)" }}
           />
 
+          {/* Connection status indicator */}
+          {offline && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 1.5 }}
+              className="mt-6 px-4 py-2 rounded-xl glass-strong"
+            >
+              <p className="text-xs text-muted-foreground">
+                <span className="inline-block w-2 h-2 rounded-full bg-amber-400 mr-2" />
+                Running in offline mode — connect a backend server in Settings
+              </p>
+            </motion.div>
+          )}
         </div>
       )}
 
@@ -284,8 +296,6 @@ const Desktop = () => {
           Click an app in the dock to get started
         </motion.p>
       )}
-
-
 
       <StatusBar
         workspaceName={activeWorkspace?.name}
