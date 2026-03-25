@@ -11,6 +11,7 @@ interface DockProps {
   openApps: AppId[];
   minimizedApps?: AppId[];
   onSpawnAgent?: () => void;
+  waggleBadgeCount?: number;
 }
 
 const apps: { id: AppId; icon: React.ElementType; label: string; color: string }[] = [

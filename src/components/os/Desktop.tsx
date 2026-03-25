@@ -37,6 +37,7 @@ import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { useOfflineStatus } from "@/hooks/useOfflineStatus";
 import { useKnowledgeGraph } from "@/hooks/useKnowledgeGraph";
+import { useWaggleDance } from "@/hooks/useWaggleDance";
 
 /* ── Window instance with unique ID ── */
 interface WindowState {
