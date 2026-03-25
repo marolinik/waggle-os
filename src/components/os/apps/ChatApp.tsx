@@ -149,6 +149,7 @@ const ChatApp = ({
   const [input, setInput] = useState('');
   const [showSlash, setShowSlash] = useState(false);
   const [slashFilter, setSlashFilter] = useState('');
+  const [slashIndex, setSlashIndex] = useState(0);
   const [showSessions, setShowSessions] = useState(false);
   const [dragging, setDragging] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -177,12 +178,32 @@ const ChatApp = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (showSlash && filteredCommands.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSlashIndex(i => (i + 1) % filteredCommands.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSlashIndex(i => (i - 1 + filteredCommands.length) % filteredCommands.length);
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const cmd = filteredCommands[slashIndex];
+        setInput(cmd.cmd + ' ');
+        setShowSlash(false);
+        setSlashIndex(0);
+        return;
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
     if (e.key === '/' && input === '') setShowSlash(true);
-    if (e.key === 'Escape') setShowSlash(false);
+    if (e.key === 'Escape') { setShowSlash(false); setSlashIndex(0); }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -191,6 +212,7 @@ const ChatApp = ({
     if (val.startsWith('/')) {
       setShowSlash(true);
       setSlashFilter(val.slice(1));
+      setSlashIndex(0);
     } else {
       setShowSlash(false);
     }
@@ -343,11 +365,11 @@ const ChatApp = ({
         <div className="p-3 border-t border-border/30 relative">
           {showSlash && filteredCommands.length > 0 && (
             <div className="absolute bottom-full left-3 right-3 mb-1 bg-card border border-border rounded-xl shadow-xl overflow-hidden z-10 max-h-48 overflow-y-auto">
-              {filteredCommands.map(c => (
+              {filteredCommands.map((c, idx) => (
                 <button
                   key={c.cmd}
-                  onClick={() => { setInput(c.cmd + ' '); setShowSlash(false); inputRef.current?.focus(); }}
-                  className="w-full text-left px-3 py-2 text-xs hover:bg-muted/50 flex items-center gap-2 transition-colors"
+                  onClick={() => { setInput(c.cmd + ' '); setShowSlash(false); setSlashIndex(0); inputRef.current?.focus(); }}
+                  className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors ${idx === slashIndex ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/50'}`}
                 >
                   <Slash className="w-3 h-3 text-primary" />
                   <span className="font-display text-foreground">{c.cmd}</span>
