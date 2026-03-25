@@ -359,7 +359,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
                 </div>
 
                 <button
-                  onClick={() => { clearTimeout(autoTimer.current); goToStep(2); }}
+                  onClick={() => goToStep(2)}
                   className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-primary text-primary-foreground font-display text-sm font-semibold hover:bg-primary/80 transition-colors"
                 >
                   Continue <ChevronRight className="w-4 h-4" />
