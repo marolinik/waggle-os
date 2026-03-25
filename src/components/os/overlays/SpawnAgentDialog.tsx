@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Rocket, RefreshCw, ChevronDown, ChevronRight, ArrowLeft, Zap } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { PERSONAS } from '@/lib/personas';
-import type { Workspace } from '@/lib/types';
+import type { Workspace, ModelPricing } from '@/lib/types';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
@@ -26,6 +26,7 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
   const [step, setStep] = useState<'config' | 'confirm'>('config');
   const [models, setModels] = useState<string[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
+  const [pricing, setPricing] = useState<ModelPricing[]>([]);
   const [showPersona, setShowPersona] = useState(false);
   const [form, setForm] = useState({
     task: '',
@@ -48,10 +49,13 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
       const wsModel = activeWs?.model;
 
       setLoadingModels(true);
-      adapter.getModels()
-        .then(m => {
+      Promise.all([
+        adapter.getModels(),
+        adapter.getModelPricing().catch(() => [] as ModelPricing[]),
+      ])
+        .then(([m, p]) => {
           setModels(m);
-          // Prefer workspace model if available and in the list, otherwise first model
+          setPricing(p);
           const defaultModel = wsModel && m.includes(wsModel) ? wsModel : m[0] || '';
           setForm(f => ({ ...f, model: f.model || defaultModel }));
         })
@@ -303,27 +307,35 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
                 {/* Estimated cost */}
                 <div className="border-t border-border/20 pt-3 mt-3">
                   <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">Estimated Budget</p>
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-1.5">
-                      <Zap className="w-3.5 h-3.5 text-amber-400" />
-                      <span className="text-sm text-foreground font-mono">
-                        ~{(() => {
-                          const m = form.model.toLowerCase();
-                          if (m.includes('gpt-4o-mini') || m.includes('haiku') || m.includes('flash')) return '2k–8k';
-                          if (m.includes('gpt-4o') || m.includes('sonnet') || m.includes('pro')) return '8k–32k';
-                          return '4k–16k';
-                        })()} tokens
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-muted-foreground">
-                      ≈ ${(() => {
-                        const m = form.model.toLowerCase();
-                        if (m.includes('gpt-4o-mini') || m.includes('haiku') || m.includes('flash')) return '0.01–0.04';
-                        if (m.includes('gpt-4o') || m.includes('sonnet') || m.includes('pro')) return '0.08–0.30';
-                        return '0.03–0.12';
-                      })()}
-                    </div>
-                  </div>
+                  {(() => {
+                    const mp = pricing.find(p => p.model === form.model);
+                    if (!mp) {
+                      return <p className="text-xs text-muted-foreground">Pricing unavailable for this model</p>;
+                    }
+                    const tokensMin = mp.estimatedTokens?.min ?? 4000;
+                    const tokensMax = mp.estimatedTokens?.max ?? 16000;
+                    const costMin = mp.estimatedCost?.min ?? (tokensMin / 1000 * mp.inputCostPer1k);
+                    const costMax = mp.estimatedCost?.max ?? (tokensMax / 1000 * mp.outputCostPer1k);
+                    return (
+                      <>
+                        <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-1.5">
+                            <Zap className="w-3.5 h-3.5 text-amber-400" />
+                            <span className="text-sm text-foreground font-mono">
+                              ~{(tokensMin / 1000).toFixed(0)}k–{(tokensMax / 1000).toFixed(0)}k tokens
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-muted-foreground">
+                            ≈ ${costMin.toFixed(2)}–${costMax.toFixed(2)}
+                          </div>
+                        </div>
+                        <div className="flex gap-3 mt-1.5 text-[10px] text-muted-foreground/80">
+                          <span>Input: ${mp.inputCostPer1k.toFixed(4)}/1k</span>
+                          <span>Output: ${mp.outputCostPer1k.toFixed(4)}/1k</span>
+                        </div>
+                      </>
+                    );
+                  })()}
                   <p className="text-[10px] text-muted-foreground/60 mt-1">Estimates vary based on task complexity and tool usage</p>
                 </div>
               </div>
