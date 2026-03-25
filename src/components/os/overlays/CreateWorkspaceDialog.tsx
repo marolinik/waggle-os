@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Plus } from 'lucide-react';
+import { X, Plus, Users } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { PERSONAS } from '@/lib/personas';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 interface CreateWorkspaceDialogProps {
   open: boolean;
   onClose: () => void;
-  onCreate: (data: { name: string; group: string; persona?: string }) => void;
+  onCreate: (data: { name: string; group: string; persona?: string; shared?: boolean }) => void;
 }
 
 const GROUPS = ['Personal', 'Work', 'Research', 'Team'];
@@ -16,13 +16,15 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
   const [name, setName] = useState('');
   const [group, setGroup] = useState('Personal');
   const [selectedPersona, setSelectedPersona] = useState<string | undefined>();
+  const [shared, setShared] = useState(false);
 
   const handleCreate = () => {
     if (!name.trim()) return;
-    onCreate({ name: name.trim(), group, persona: selectedPersona });
+    onCreate({ name: name.trim(), group, persona: selectedPersona, shared });
     setName('');
     setGroup('Personal');
     setSelectedPersona(undefined);
+    setShared(false);
     onClose();
   };
 
@@ -104,7 +106,24 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                 ))}
               </div>
             </div>
-          </div>
+            </div>
+
+            {/* Share with team toggle */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-secondary/30 border border-border/30">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-sky-400" />
+                <div>
+                  <p className="text-xs font-display text-foreground">Share with team</p>
+                  <p className="text-[10px] text-muted-foreground">Make visible to all team members</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShared(!shared)}
+                className={`w-10 h-5 rounded-full transition-colors ${shared ? 'bg-sky-500' : 'bg-muted'}`}
+              >
+                <div className={`w-4 h-4 rounded-full bg-foreground transition-transform mx-0.5 ${shared ? 'translate-x-5' : ''}`} />
+              </button>
+            </div>
 
           <div className="flex justify-end gap-2 mt-6">
             <button onClick={onClose} className="px-4 py-2 text-xs font-display rounded-lg text-muted-foreground hover:text-foreground transition-colors">
