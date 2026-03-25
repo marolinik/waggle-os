@@ -4,6 +4,7 @@ import type {
   AgentStep, Session, SkillPack, FleetSession, CronJob,
   Notification, AgentStatus, Persona, SystemHealth,
   Connector, Settings, StreamEvent, KGNode, KGEdge,
+  ModelPricing,
 } from './types';
 
 const DEFAULT_SERVER = 'http://127.0.0.1:3333';
@@ -372,6 +373,11 @@ class LocalAdapter {
 
   async getLiteLLMStatus(): Promise<unknown> {
     const res = await this.fetch('/api/litellm/status');
+    return res.json();
+  }
+
+  async getModelPricing(): Promise<ModelPricing[]> {
+    const res = await this.fetch('/api/litellm/pricing');
     return res.json();
   }
 
