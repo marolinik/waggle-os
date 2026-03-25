@@ -478,6 +478,15 @@ const Desktop = () => {
       />
       <NotificationInbox open={showNotifications} onClose={() => setShowNotifications(false)} notifications={notifications} onMarkRead={markRead} onMarkAllRead={markAllRead} />
       <KeyboardShortcutsHelp open={showKeyboardHelp} onClose={() => setShowKeyboardHelp(false)} />
+      <SpawnAgentDialog
+        open={showSpawnAgent}
+        onClose={() => setShowSpawnAgent(false)}
+        workspaces={workspaces}
+        activeWorkspaceId={activeWorkspaceId}
+        onWorkspaceCreated={(ws) => {
+          selectWorkspace(ws.id);
+        }}
+      />
       {!onboardingState.completed && (
         <OnboardingWizard
           serverBaseUrl={adapter.getServerUrl()}
