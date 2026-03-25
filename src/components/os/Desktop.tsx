@@ -220,6 +220,10 @@ const Desktop = () => {
         {windows.map((win) => {
           const config = appConfig[win.id];
           if (!config) return null;
+          const cascadedPos = {
+            x: config.pos.x + win.cascadeOffset * 30,
+            y: config.pos.y + win.cascadeOffset * 30,
+          };
           return (
             <AppWindow
               key={win.id}
@@ -228,7 +232,7 @@ const Desktop = () => {
               onClose={() => closeApp(win.id)}
               onMinimize={() => minimizeApp(win.id)}
               isMinimized={win.minimized}
-              defaultPosition={config.pos}
+              defaultPosition={cascadedPos}
               defaultSize={config.size}
               zIndex={win.zIndex}
               onFocus={() => focusWindow(win.id)}
