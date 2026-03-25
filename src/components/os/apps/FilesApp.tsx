@@ -1,8 +1,8 @@
 import { useState, useCallback, useRef, useMemo } from 'react';
 import {
   Folder, File, ChevronRight, ChevronDown, Upload, Plus,
-  Grid3X3, List, ArrowLeft, Home, MoreHorizontal, Download,
-  Trash2, Copy, Scissors, ClipboardPaste, Edit, FolderPlus,
+  Grid3X3, List, ArrowLeft, Home, MoreHorizontal, Download, Eye,
+  Trash2, Copy, Scissors, ClipboardPaste, Edit, FolderPlus, X as XIcon,
   RefreshCw, HardDrive, Cloud, Server, Search, X, FileText,
   Image, FileCode, FileSpreadsheet, Archive, Music, Video,
 } from 'lucide-react';
@@ -69,6 +69,9 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
   const [loading, setLoading] = useState(false);
   const [clipboard, setClipboard] = useState<{ files: FileEntry[]; operation: 'copy' | 'cut' } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [previewFile, setPreviewFile] = useState<FileEntry | null>(null);
+  const [previewContent, setPreviewContent] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const dragCounter = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -123,11 +126,48 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
     setContextMenu(null);
   };
 
+  // Check if a file is previewable
+  const isPreviewable = (name: string) => {
+    const ext = name.split('.').pop()?.toLowerCase() || '';
+    return ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 'bmp',
+            'md', 'txt', 'log', 'csv', 'json', 'yaml', 'toml', 'xml',
+            'js', 'ts', 'py', 'rb', 'go', 'rs', 'java', 'c', 'cpp', 'h',
+            'html', 'css', 'sh', 'bash', 'env', 'ini', 'cfg'].includes(ext);
+  };
+
+  const isImageFile = (name: string) => {
+    const ext = name.split('.').pop()?.toLowerCase() || '';
+    return ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 'bmp'].includes(ext);
+  };
+
+  const openPreview = async (file: FileEntry) => {
+    setPreviewFile(file);
+    if (isImageFile(file.name)) {
+      // For images, we'll construct a URL — in offline mode show placeholder
+      setPreviewContent(null);
+    } else {
+      // For text files, fetch content
+      setPreviewLoading(true);
+      try {
+        const blob = await adapter.downloadFile(workspaceId, file.path);
+        const text = await blob.text();
+        setPreviewContent(text);
+      } catch {
+        // Offline mock
+        setPreviewContent(`// Preview of ${file.name}\n// Content would load from backend\n\n# ${file.name}\n\nThis is a preview placeholder.\nConnect to the backend to see actual file contents.`);
+      } finally {
+        setPreviewLoading(false);
+      }
+    }
+  };
+
   const handleFileClick = (file: FileEntry) => {
     if (file.type === 'directory') {
       handleNavigate(file.path);
+    } else if (isPreviewable(file.name)) {
+      openPreview(file);
+      setSelectedFiles(new Set([file.path]));
     } else {
-      // Select file
       setSelectedFiles(new Set([file.path]));
     }
   };
