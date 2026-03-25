@@ -113,6 +113,22 @@ const DashboardApp = ({ workspaces, activeWorkspaceId, onSelectWorkspace, onCrea
                           </span>
                         )}
                       </div>
+                      {/* Agent identity: template + persona */}
+                      {(ws.templateId || ws.persona) && (
+                        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                          {ws.templateId && ws.templateId !== 'blank' && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-primary/10 text-primary text-[9px] font-display">
+                              <Sparkles className="w-2.5 h-2.5" />
+                              {TEMPLATE_LABELS[ws.templateId] || ws.templateId}
+                            </span>
+                          )}
+                          {ws.persona && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-accent/50 text-accent-foreground text-[9px] font-display">
+                              {PERSONA_LABELS[ws.persona] || persona?.name || ws.persona}
+                            </span>
+                          )}
+                        </div>
+                      )}
                       <div className="flex items-center gap-3 mt-1 text-[10px] text-muted-foreground">
                         {ws.memoryCount !== undefined && (
                           <span className="flex items-center gap-0.5"><Brain className="w-2.5 h-2.5" />{ws.memoryCount}</span>
