@@ -187,3 +187,11 @@ export interface KGEdge {
   target: string;
   relationship: string;
 }
+
+export interface ModelPricing {
+  model: string;
+  inputCostPer1k: number;
+  outputCostPer1k: number;
+  estimatedTokens?: { min: number; max: number };
+  estimatedCost?: { min: number; max: number };
+}
