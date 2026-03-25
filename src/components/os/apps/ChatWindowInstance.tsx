@@ -4,6 +4,22 @@ import { useSessions } from '@/hooks/useSessions';
 import { adapter } from '@/lib/adapter';
 import ChatApp from './ChatApp';
 
+// Fallback models shown when backend is offline
+const FALLBACK_MODELS = [
+  'gpt-4o',
+  'gpt-4o-mini',
+  'gpt-4-turbo',
+  'gpt-3.5-turbo',
+  'claude-3-5-sonnet-20241022',
+  'claude-3-haiku-20240307',
+  'gemini-1.5-pro',
+  'gemini-1.5-flash',
+  'llama-3.1-70b',
+  'llama-3.1-8b',
+  'deepseek-chat',
+  'mistral-large-latest',
+];
+
 interface ChatWindowInstanceProps {
   workspaceId: string;
   workspaceName?: string;
@@ -22,8 +38,38 @@ const ChatWindowInstance = ({ workspaceId, workspaceName, initialPersona }: Chat
   const [availableModels, setAvailableModels] = useState<string[]>([]);
 
   useEffect(() => {
-    adapter.getModels().then(setAvailableModels).catch(() => setAvailableModels([]));
-    adapter.getModel().then(setCurrentModel).catch(() => setCurrentModel(''));
+    // Try fetching models from the backend (litellm models filtered by vault keys)
+    const fetchModels = async () => {
+      try {
+        const models = await adapter.getModels();
+        if (models && models.length > 0) {
+          setAvailableModels(models);
+        } else {
+          setAvailableModels(FALLBACK_MODELS);
+        }
+      } catch {
+        setAvailableModels(FALLBACK_MODELS);
+      }
+    };
+
+    // Try fetching current active model from settings/agent
+    const fetchCurrentModel = async () => {
+      try {
+        const model = await adapter.getModel();
+        if (typeof model === 'string' && model) {
+          setCurrentModel(model);
+        } else {
+          // Try from settings
+          const settings = await adapter.getSettings();
+          setCurrentModel(settings.model || FALLBACK_MODELS[0]);
+        }
+      } catch {
+        setCurrentModel(FALLBACK_MODELS[0]);
+      }
+    };
+
+    fetchModels();
+    fetchCurrentModel();
   }, []);
 
   const handleModelChange = (model: string) => {
