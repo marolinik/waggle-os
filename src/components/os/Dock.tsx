@@ -1,16 +1,10 @@
 import { motion } from "framer-motion";
 import {
-  MessageSquare,
-  Terminal,
-  FileText,
-  Settings,
-  FolderOpen,
-  Globe,
-  Music,
-  Calculator,
+  MessageSquare, Terminal, LayoutDashboard, Settings,
+  Brain, Activity, Package, Radio,
 } from "lucide-react";
 
-export type AppId = "ai-chat" | "terminal" | "notes" | "settings" | "files" | "browser" | "music" | "calculator";
+export type AppId = "chat" | "dashboard" | "memory" | "events" | "capabilities" | "cockpit" | "mission-control" | "settings" | "terminal" | "calculator" | "notes";
 
 interface DockProps {
   onOpenApp: (id: AppId) => void;
@@ -18,13 +12,13 @@ interface DockProps {
 }
 
 const apps: { id: AppId; icon: React.ElementType; label: string; color: string }[] = [
-  { id: "ai-chat", icon: MessageSquare, label: "Waggle AI", color: "text-primary" },
-  { id: "terminal", icon: Terminal, label: "Terminal", color: "text-emerald-400" },
-  { id: "notes", icon: FileText, label: "Notes", color: "text-amber-300" },
-  { id: "files", icon: FolderOpen, label: "Files", color: "text-blue-400" },
-  { id: "browser", icon: Globe, label: "Browser", color: "text-sky-400" },
-  { id: "calculator", icon: Calculator, label: "Calculator", color: "text-orange-400" },
-  { id: "music", icon: Music, label: "Music", color: "text-pink-400" },
+  { id: "dashboard", icon: LayoutDashboard, label: "Dashboard", color: "text-sky-400" },
+  { id: "chat", icon: MessageSquare, label: "Chat", color: "text-primary" },
+  { id: "capabilities", icon: Package, label: "Skills", color: "text-violet-400" },
+  { id: "cockpit", icon: Activity, label: "Cockpit", color: "text-emerald-400" },
+  { id: "mission-control", icon: Radio, label: "Mission Control", color: "text-rose-400" },
+  { id: "memory", icon: Brain, label: "Memory", color: "text-amber-300" },
+  { id: "events", icon: Activity, label: "Events", color: "text-cyan-400" },
   { id: "settings", icon: Settings, label: "Settings", color: "text-muted-foreground" },
 ];
 
