@@ -208,77 +208,62 @@ const Desktop = () => {
 
       {/* Desktop logo hero — naturally blended into the hexagonal wallpaper */}
       {windows.length === 0 && (
-        <div className="absolute inset-0 flex flex-col items-center pointer-events-none z-[1]" style={{ paddingTop: "8vh" }}>
-          {/* Very subtle warm radial glow — feels like a light source behind the grid */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.6 }}
-            animate={{ opacity: [0.08, 0.18, 0.08], scale: 1 }}
-            transition={{ opacity: { duration: 6, repeat: Infinity, ease: "easeInOut" }, scale: { duration: 2, ease: "easeOut" } }}
-            className="absolute rounded-full"
-            style={{
-              top: "4vh",
-              width: "700px",
-              height: "500px",
-              background: "radial-gradient(ellipse, hsl(var(--primary) / 0.08) 0%, hsl(var(--primary) / 0.03) 45%, transparent 75%)",
-            }}
+        <div className="absolute inset-0 flex flex-col items-center pointer-events-none z-[1]" style={{ paddingTop: "3vh" }}>
+
+          {/* Logo — no glow, bigger */}
+          <img
+            src={waggleLogo}
+            alt="Waggle AI"
+            className="w-40 h-40 mix-blend-screen opacity-80"
+            style={{ borderRadius: 0, background: "transparent" }}
           />
 
-          {/* Logo — transparent blended with glow */}
-          <div style={{ filter: "drop-shadow(0 0 20px hsl(var(--primary) / 0.25))" }}>
-              <img
-                src={waggleLogo}
-                alt="Waggle AI"
-                className="w-32 h-32 mix-blend-screen opacity-80"
-                style={{ borderRadius: 0, background: "transparent" }}
-              />
-            </div>
-
-          {/* Title — bright white with warm glow for readability */}
+          {/* Title */}
           <motion.h1
             initial={{ opacity: 0, y: 14, letterSpacing: "0.35em" }}
             animate={{ opacity: 1, y: 0, letterSpacing: "0.15em" }}
             transition={{ delay: 0.4, duration: 0.9, ease: "easeOut" }}
-            className="mt-5 text-5xl font-display font-bold tracking-widest"
+            className="mt-4 text-6xl font-display font-bold tracking-widest"
             style={{
               color: "hsl(40, 15%, 92%)",
-              textShadow: "0 0 40px hsl(var(--primary) / 0.2), 0 1px 3px hsl(0 0% 0% / 0.7)",
+              textShadow: "0 0 40px hsl(var(--primary) / 0.2), 0 2px 4px hsl(0 0% 0% / 0.8)",
             }}
           >
             Waggle AI
           </motion.h1>
 
-          {/* Subtitle — warm amber, readable */}
+          {/* Subtitle */}
           <motion.p
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 0.9, y: 0 }}
             transition={{ delay: 0.7, duration: 0.7 }}
-            className="text-xs font-display mt-1.5 tracking-[0.3em] uppercase"
+            className="text-sm font-display mt-2 tracking-[0.3em] uppercase"
             style={{
               color: "hsl(38, 50%, 65%)",
-              textShadow: "0 1px 4px hsl(0 0% 0% / 0.7)",
+              textShadow: "0 1px 4px hsl(0 0% 0% / 0.8)",
             }}
           >
             Autonomous Agent OS
           </motion.p>
 
-          {/* Thin divider line */}
+          {/* Divider */}
           <motion.div
             initial={{ scaleX: 0 }}
             animate={{ scaleX: 1 }}
             transition={{ delay: 0.95, duration: 0.8, ease: "easeOut" }}
-            className="w-16 h-px mt-2.5"
+            className="w-20 h-px mt-3"
             style={{ background: "linear-gradient(90deg, transparent, hsl(var(--primary) / 0.3), transparent)" }}
           />
 
-          {/* Hint — subtle, blends into background */}
+          {/* Hint */}
           <motion.p
             initial={{ opacity: 0 }}
-            animate={{ opacity: [0, 0.45, 0.3, 0.45] }}
+            animate={{ opacity: [0, 0.5, 0.35, 0.5] }}
             transition={{ delay: 1.2, duration: 5, repeat: Infinity, ease: "easeInOut" }}
-            className="text-xs font-mono mt-2.5 tracking-wide"
+            className="text-sm font-mono mt-3 tracking-wide"
             style={{
               color: "hsl(30, 8%, 50%)",
-              textShadow: "0 1px 2px hsl(0 0% 0% / 0.6)",
+              textShadow: "0 1px 3px hsl(0 0% 0% / 0.7)",
             }}
           >
             Click an app in the dock to get started
