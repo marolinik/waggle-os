@@ -3,6 +3,7 @@ import { useChat } from '@/hooks/useChat';
 import { useSessions } from '@/hooks/useSessions';
 import { adapter } from '@/lib/adapter';
 import ChatApp from './ChatApp';
+import type { TeamMember } from './ChatApp';
 
 // Fallback models shown when backend is offline — latest flagships from top providers
 const FALLBACK_MODELS = [
@@ -55,6 +56,7 @@ const ChatWindowInstance = ({ workspaceId, workspaceName, initialPersona }: Chat
   const [currentPersona, setCurrentPersona] = useState(initialPersona || 'analytics');
   const [currentModel, setCurrentModel] = useState<string>('');
   const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [teamPresence, setTeamPresence] = useState<TeamMember[]>([]);
 
   useEffect(() => {
     // Try fetching models from the backend (litellm models filtered by vault keys)
@@ -89,6 +91,19 @@ const ChatWindowInstance = ({ workspaceId, workspaceName, initialPersona }: Chat
 
     fetchModels();
     fetchCurrentModel();
+
+    // Fetch team members for presence display
+    const fetchTeam = async () => {
+      try {
+        const members = await adapter.getTeamMembers();
+        setTeamPresence(members.filter(m => m.status === 'online'));
+      } catch {
+        setTeamPresence([]);
+      }
+    };
+    fetchTeam();
+    const teamInterval = setInterval(fetchTeam, 10000);
+    return () => clearInterval(teamInterval);
   }, []);
 
   const handleModelChange = (model: string) => {
@@ -109,6 +124,7 @@ const ChatWindowInstance = ({ workspaceId, workspaceName, initialPersona }: Chat
       currentModel={currentModel}
       onModelChange={handleModelChange}
       availableModels={availableModels}
+      teamPresence={teamPresence}
       sessions={sessions}
       activeSessionId={activeSessionId}
       onSelectSession={setActiveSessionId}

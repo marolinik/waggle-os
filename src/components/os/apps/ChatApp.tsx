@@ -6,6 +6,13 @@ import { getPersonaById, PERSONAS } from '@/lib/personas';
 import { adapter } from '@/lib/adapter';
 import type { ChatMessage, ToolExecution, ApprovalRequest } from '@/lib/types';
 
+export interface TeamMember {
+  id: string;
+  name: string;
+  status: string;
+  avatar?: string;
+}
+
 interface ChatAppProps {
   messages: ChatMessage[];
   isLoading: boolean;
@@ -18,6 +25,7 @@ interface ChatAppProps {
   currentModel?: string;
   onModelChange?: (model: string) => void;
   availableModels?: string[];
+  teamPresence?: TeamMember[];
   sessions?: { id: string; title: string }[];
   activeSessionId?: string | null;
   onSelectSession?: (id: string) => void;
@@ -148,6 +156,7 @@ const ChatApp = ({
   messages, isLoading, onSendMessage, onClearHistory,
   pendingApproval, onApprove, currentPersona,
   onPersonaChange, currentModel, onModelChange, availableModels,
+  teamPresence,
   sessions, activeSessionId, onSelectSession, onNewSession,
   workspaceId,
 }: ChatAppProps) => {
@@ -335,6 +344,29 @@ const ChatApp = ({
               </div>
             )}
           </div>
+
+          {/* Team presence */}
+          {teamPresence && teamPresence.length > 0 && (
+            <div className="flex items-center gap-1 mx-1">
+              <div className="flex -space-x-1.5">
+                {teamPresence.slice(0, 4).map(m => (
+                  <div key={m.id} className="relative group">
+                    <Avatar className="w-5 h-5 border-2 border-card">
+                      {m.avatar ? <AvatarImage src={m.avatar} /> : null}
+                      <AvatarFallback className="text-[7px] bg-sky-500/20 text-sky-400">{m.name[0]}</AvatarFallback>
+                    </Avatar>
+                    <div className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-card ${m.status === 'online' ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
+                    <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[9px] text-foreground bg-card px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-30 shadow-lg">
+                      {m.name}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {teamPresence.length > 4 && (
+                <span className="text-[9px] text-muted-foreground ml-1">+{teamPresence.length - 4}</span>
+              )}
+            </div>
+          )}
 
           {/* Model picker */}
           <div className="relative ml-auto">
