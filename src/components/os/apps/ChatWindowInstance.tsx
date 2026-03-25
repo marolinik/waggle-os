@@ -117,6 +117,7 @@ const ChatWindowInstance = ({ workspaceId, workspaceName, initialPersona, templa
   const handleModelChange = (model: string) => {
     setCurrentModel(model);
     adapter.setModel(model).catch(() => {});
+    adapter.patchWorkspace(workspaceId, { model }).catch(() => {});
   };
 
   return (
