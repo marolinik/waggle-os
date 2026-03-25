@@ -38,6 +38,7 @@ import { useKnowledgeGraph } from "@/hooks/useKnowledgeGraph";
 interface WindowState {
   id: AppId;
   zIndex: number;
+  minimized: boolean;
 }
 
 const appConfig: Record<string, { title: string; icon: React.ReactNode; pos: { x: number; y: number }; size: { w: string; h: string } }> = {
@@ -80,17 +81,22 @@ const Desktop = () => {
 
   const openApp = useCallback((id: AppId) => {
     setWindows(prev => {
-      if (prev.find(w => w.id === id)) {
+      const existing = prev.find(w => w.id === id);
+      if (existing) {
         setTopZ(z => z + 1);
-        return prev.map(w => w.id === id ? { ...w, zIndex: topZ + 1 } : w);
+        return prev.map(w => w.id === id ? { ...w, zIndex: topZ + 1, minimized: false } : w);
       }
       setTopZ(z => z + 1);
-      return [...prev, { id, zIndex: topZ + 1 }];
+      return [...prev, { id, zIndex: topZ + 1, minimized: false }];
     });
   }, [topZ]);
 
   const closeApp = useCallback((id: AppId) => {
     setWindows(prev => prev.filter(w => w.id !== id));
+  }, []);
+
+  const minimizeApp = useCallback((id: AppId) => {
+    setWindows(prev => prev.map(w => w.id === id ? { ...w, minimized: true } : w));
   }, []);
 
   const focusWindow = useCallback((id: AppId) => {
@@ -216,6 +222,8 @@ const Desktop = () => {
               title={config.title}
               icon={config.icon}
               onClose={() => closeApp(win.id)}
+              onMinimize={() => minimizeApp(win.id)}
+              isMinimized={win.minimized}
               defaultPosition={config.pos}
               defaultSize={config.size}
               zIndex={win.zIndex}
@@ -227,7 +235,7 @@ const Desktop = () => {
         })}
       </AnimatePresence>
 
-      <Dock onOpenApp={openApp} openApps={windows.map(w => w.id)} />
+      <Dock onOpenApp={openApp} openApps={windows.map(w => w.id)} minimizedApps={windows.filter(w => w.minimized).map(w => w.id)} />
 
       {/* Overlays */}
       <GlobalSearch open={showGlobalSearch} onClose={() => setShowGlobalSearch(false)} onNavigate={handleSearchNavigate} />
