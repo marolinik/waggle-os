@@ -206,88 +206,104 @@ const Desktop = () => {
       <img src={wallpaper} alt="" className="absolute inset-0 w-full h-full object-cover" width={1920} height={1080} />
       <div className="absolute inset-0 bg-background/20" />
 
-      {/* Desktop logo hero — blended into the wallpaper */}
+      {/* Desktop logo hero — naturally blended into the hexagonal wallpaper */}
       {windows.length === 0 && (
-        <div className="absolute inset-0 flex flex-col items-center pointer-events-none z-[1] pt-[12vh]">
-          {/* Large soft radial glow that blends into hexagonal grid */}
+        <div className="absolute inset-0 flex flex-col items-center pointer-events-none z-[1]" style={{ paddingTop: "18vh" }}>
+          {/* Very subtle warm radial glow — feels like a light source behind the grid */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.4 }}
-            animate={{ opacity: [0.12, 0.25, 0.12], scale: 1 }}
-            transition={{ opacity: { duration: 5, repeat: Infinity, ease: "easeInOut" }, scale: { duration: 1.5, ease: "easeOut" } }}
-            className="absolute top-[8vh] w-[600px] h-[600px] rounded-full"
-            style={{ background: "radial-gradient(circle, hsl(var(--primary) / 0.12) 0%, hsl(var(--primary) / 0.04) 40%, transparent 70%)" }}
+            initial={{ opacity: 0, scale: 0.6 }}
+            animate={{ opacity: [0.08, 0.18, 0.08], scale: 1 }}
+            transition={{ opacity: { duration: 6, repeat: Infinity, ease: "easeInOut" }, scale: { duration: 2, ease: "easeOut" } }}
+            className="absolute rounded-full"
+            style={{
+              top: "12vh",
+              width: "700px",
+              height: "500px",
+              background: "radial-gradient(ellipse, hsl(var(--primary) / 0.08) 0%, hsl(var(--primary) / 0.03) 45%, transparent 75%)",
+            }}
           />
 
-          {/* Logo with glow */}
+          {/* Logo — transparent blended with glow */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.5, y: 30 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            transition={{ type: "spring", stiffness: 90, damping: 14, delay: 0.1 }}
+            initial={{ opacity: 0, scale: 0.4, y: 20 }}
+            animate={{ opacity: 0.85, scale: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 80, damping: 16, delay: 0.1 }}
           >
             <motion.div
               animate={{
                 filter: [
-                  "drop-shadow(0 0 6px hsl(var(--primary) / 0.15))",
-                  "drop-shadow(0 0 30px hsl(var(--primary) / 0.5)) drop-shadow(0 0 60px hsl(var(--primary) / 0.2))",
-                  "drop-shadow(0 0 6px hsl(var(--primary) / 0.15))",
+                  "drop-shadow(0 0 4px hsl(var(--primary) / 0.1))",
+                  "drop-shadow(0 0 24px hsl(var(--primary) / 0.35)) drop-shadow(0 0 50px hsl(var(--primary) / 0.15))",
+                  "drop-shadow(0 0 4px hsl(var(--primary) / 0.1))",
                 ],
               }}
-              transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+              transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
             >
               <motion.img
                 src={waggleLogo}
                 alt="Waggle AI"
-                className="w-24 h-24 mix-blend-screen"
+                className="w-20 h-20 mix-blend-screen opacity-80"
                 style={{ borderRadius: 0, background: "transparent" }}
-                animate={{ rotate: [0, 1.5, -1.5, 0], scale: [1, 1.02, 1] }}
-                transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+                animate={{ rotate: [0, 1, -1, 0], scale: [1, 1.015, 1] }}
+                transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
               />
             </motion.div>
           </motion.div>
 
-          {/* Title — high contrast readable text */}
+          {/* Title — bright white with warm glow for readability */}
           <motion.h1
-            initial={{ opacity: 0, y: 16, letterSpacing: "0.4em" }}
-            animate={{ opacity: 1, y: 0, letterSpacing: "0.18em" }}
-            transition={{ delay: 0.45, duration: 0.9, ease: "easeOut" }}
-            className="mt-5 text-4xl font-display font-bold tracking-widest"
-            style={{ color: "hsl(40, 20%, 95%)", textShadow: "0 0 30px hsl(var(--primary) / 0.3), 0 2px 4px hsl(0 0% 0% / 0.5)" }}
+            initial={{ opacity: 0, y: 14, letterSpacing: "0.35em" }}
+            animate={{ opacity: 1, y: 0, letterSpacing: "0.15em" }}
+            transition={{ delay: 0.4, duration: 0.9, ease: "easeOut" }}
+            className="mt-4 text-3xl font-display font-semibold tracking-widest"
+            style={{
+              color: "hsl(40, 15%, 92%)",
+              textShadow: "0 0 40px hsl(var(--primary) / 0.2), 0 1px 3px hsl(0 0% 0% / 0.7)",
+            }}
           >
             Waggle AI
           </motion.h1>
 
-          {/* Subtitle */}
+          {/* Subtitle — warm amber, readable */}
           <motion.p
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.75, duration: 0.7 }}
-            className="text-sm font-display mt-2 tracking-[0.3em] uppercase"
-            style={{ color: "hsl(38, 60%, 70%)", textShadow: "0 1px 3px hsl(0 0% 0% / 0.6)" }}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 0.9, y: 0 }}
+            transition={{ delay: 0.7, duration: 0.7 }}
+            className="text-xs font-display mt-1.5 tracking-[0.3em] uppercase"
+            style={{
+              color: "hsl(38, 50%, 65%)",
+              textShadow: "0 1px 4px hsl(0 0% 0% / 0.7)",
+            }}
           >
             Autonomous Agent OS
           </motion.p>
 
-          {/* Decorative divider */}
+          {/* Thin divider line */}
           <motion.div
             initial={{ scaleX: 0 }}
             animate={{ scaleX: 1 }}
-            transition={{ delay: 1.0, duration: 0.8, ease: "easeOut" }}
-            className="w-20 h-px mt-3"
-            style={{ background: "linear-gradient(90deg, transparent, hsl(var(--primary) / 0.4), transparent)" }}
+            transition={{ delay: 0.95, duration: 0.8, ease: "easeOut" }}
+            className="w-16 h-px mt-2.5"
+            style={{ background: "linear-gradient(90deg, transparent, hsl(var(--primary) / 0.3), transparent)" }}
           />
 
-          {/* Hint text */}
+          {/* Hint — subtle, blends into background */}
           <motion.p
             initial={{ opacity: 0 }}
-            animate={{ opacity: [0, 0.6, 0.4, 0.6] }}
-            transition={{ delay: 1.3, duration: 4, repeat: Infinity, ease: "easeInOut" }}
-            className="text-xs font-mono mt-3 tracking-wide"
-            style={{ color: "hsl(30, 10%, 55%)", textShadow: "0 1px 2px hsl(0 0% 0% / 0.5)" }}
+            animate={{ opacity: [0, 0.45, 0.3, 0.45] }}
+            transition={{ delay: 1.2, duration: 5, repeat: Infinity, ease: "easeInOut" }}
+            className="text-xs font-mono mt-2.5 tracking-wide"
+            style={{
+              color: "hsl(30, 8%, 50%)",
+              textShadow: "0 1px 2px hsl(0 0% 0% / 0.6)",
+            }}
           >
             Click an app in the dock to get started
           </motion.p>
         </div>
       )}
+
+
 
       <StatusBar
         workspaceName={activeWorkspace?.name}
