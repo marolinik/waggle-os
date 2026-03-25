@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useChat } from '@/hooks/useChat';
 import { useSessions } from '@/hooks/useSessions';
+import { useToast } from '@/hooks/use-toast';
 import { adapter } from '@/lib/adapter';
 import ChatApp from './ChatApp';
 import type { TeamMember } from './ChatApp';
@@ -60,10 +61,13 @@ const ChatWindowInstance = ({ workspaceId, workspaceName, initialPersona, templa
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [teamPresence, setTeamPresence] = useState<TeamMember[]>([]);
 
+  const { toast } = useToast();
+
   const handlePersonaChange = (personaId: string) => {
     setCurrentPersona(personaId);
-    // Persist to backend
-    adapter.patchWorkspace(workspaceId, { persona: personaId }).catch(() => {});
+    adapter.patchWorkspace(workspaceId, { persona: personaId })
+      .then(() => toast({ title: 'Persona updated', description: `Switched to ${personaId}` }))
+      .catch(() => toast({ title: 'Persona updated locally', description: 'Backend offline — will sync when connected', variant: 'destructive' }));
   };
 
   useEffect(() => {
@@ -117,7 +121,9 @@ const ChatWindowInstance = ({ workspaceId, workspaceName, initialPersona, templa
   const handleModelChange = (model: string) => {
     setCurrentModel(model);
     adapter.setModel(model).catch(() => {});
-    adapter.patchWorkspace(workspaceId, { model }).catch(() => {});
+    adapter.patchWorkspace(workspaceId, { model })
+      .then(() => toast({ title: 'Model updated', description: `Now using ${model.split('/').pop()}` }))
+      .catch(() => toast({ title: 'Model updated locally', description: 'Backend offline — will sync when connected', variant: 'destructive' }));
   };
 
   return (
