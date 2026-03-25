@@ -1,5 +1,4 @@
-import { motion } from "framer-motion";
-import { X, Minus, Maximize2 } from "lucide-react";
+import { motion, useDragControls } from "framer-motion";
 import { useState } from "react";
 
 interface AppWindowProps {
@@ -24,28 +23,41 @@ const AppWindow = ({
   onFocus,
 }: AppWindowProps) => {
   const [isMaximized, setIsMaximized] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragControls = useDragControls();
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.9, y: 20 }}
+      drag={!isMaximized}
+      dragControls={dragControls}
+      dragListener={false}
+      dragMomentum={false}
+      dragConstraints={{ top: 32, left: 0, right: window.innerWidth - 200, bottom: window.innerHeight - 100 }}
+      onDragStart={() => setIsDragging(true)}
+      onDragEnd={() => setIsDragging(false)}
+      initial={{ opacity: 0, scale: 0.9, x: defaultPosition.x, y: defaultPosition.y }}
       animate={{
         opacity: 1,
         scale: 1,
-        y: 0,
-        x: isMaximized ? 0 : defaultPosition.x,
-        width: isMaximized ? "100%" : defaultSize.w,
-        height: isMaximized ? "calc(100vh - 6rem)" : defaultSize.h,
-        top: isMaximized ? "2rem" : defaultPosition.y,
-        left: isMaximized ? 0 : undefined,
+        ...(isMaximized
+          ? { x: 0, y: 32, width: "100vw", height: "calc(100vh - 6rem)" }
+          : { width: defaultSize.w, height: defaultSize.h }),
       }}
-      exit={{ opacity: 0, scale: 0.9, y: 20 }}
+      exit={{ opacity: 0, scale: 0.9 }}
       transition={{ type: "spring", stiffness: 300, damping: 25 }}
-      className="absolute glass-strong rounded-xl overflow-hidden flex flex-col shadow-2xl"
+      className="absolute top-0 left-0 glass-strong rounded-xl overflow-hidden flex flex-col shadow-2xl"
       style={{ zIndex }}
       onMouseDown={onFocus}
     >
-      {/* Title Bar */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/50 cursor-default select-none shrink-0">
+      {/* Title Bar - Drag Handle */}
+      <div
+        onPointerDown={(e) => {
+          if (!isMaximized) dragControls.start(e);
+        }}
+        className={`flex items-center justify-between px-4 py-2.5 border-b border-border/50 select-none shrink-0 ${
+          isMaximized ? "cursor-default" : isDragging ? "cursor-grabbing" : "cursor-grab"
+        }`}
+      >
         <div className="flex items-center gap-2">
           {icon}
           <span className="text-xs font-display font-medium text-foreground">{title}</span>
