@@ -5,6 +5,7 @@ import {
   Trash2, Copy, Scissors, ClipboardPaste, Edit, FolderPlus, X as XIcon,
   RefreshCw, HardDrive, Cloud, Server, Search, X, FileText,
   Image, FileCode, FileSpreadsheet, Archive, Music, Video,
+  Info, Shield, MapPin, Clock, Hash, Lock, Unlock,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { FileEntry, StorageType } from '@/lib/types';
@@ -244,6 +245,7 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
   const [previewFile, setPreviewFile] = useState<FileEntry | null>(null);
   const [previewContent, setPreviewContent] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [propertiesFile, setPropertiesFile] = useState<FileEntry | null>(null);
   const dragCounter = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -791,6 +793,9 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
                 </button>
                 <button onClick={() => { setClipboard({ files: [contextMenu.file!], operation: 'cut' }); setContextMenu(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors">
                   <Scissors className="w-3.5 h-3.5" /> Cut
+                </button>
+                <button onClick={() => { setPropertiesFile(contextMenu.file!); setContextMenu(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors">
+                  <Info className="w-3.5 h-3.5" /> Properties
                 </button>
                 <div className="h-px bg-border/30 my-0.5" />
                 <button onClick={() => handleDelete(contextMenu.file!)} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10 transition-colors">
