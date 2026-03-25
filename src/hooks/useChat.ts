@@ -5,9 +5,10 @@ import type { ChatMessage, StreamEvent, ToolExecution, ApprovalRequest } from '@
 interface UseChatOptions {
   workspaceId: string | null;
   sessionId: string | null;
+  persona?: string;
 }
 
-export const useChat = ({ workspaceId, sessionId }: UseChatOptions) => {
+export const useChat = ({ workspaceId, sessionId, persona }: UseChatOptions) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [pendingApproval, setPendingApproval] = useState<ApprovalRequest | null>(null);
@@ -46,7 +47,7 @@ export const useChat = ({ workspaceId, sessionId }: UseChatOptions) => {
     setMessages(prev => [...prev, assistantMsg]);
 
     try {
-      for await (const event of adapter.sendMessage(workspaceId, content, sessionId || undefined)) {
+      for await (const event of adapter.sendMessage(workspaceId, content, sessionId || undefined, persona)) {
         const evt = event as StreamEvent;
         switch (evt.type) {
           case 'token':
@@ -108,7 +109,7 @@ export const useChat = ({ workspaceId, sessionId }: UseChatOptions) => {
     } finally {
       setIsLoading(false);
     }
-  }, [workspaceId, sessionId]);
+  }, [workspaceId, sessionId, persona]);
 
   const clearHistory = useCallback(async () => {
     if (sessionId) {

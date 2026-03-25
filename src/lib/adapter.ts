@@ -82,6 +82,11 @@ class LocalAdapter {
     return res.json();
   }
 
+  async patchWorkspace(id: string, data: Partial<Pick<Workspace, 'persona' | 'templateId' | 'name' | 'group' | 'model'>>): Promise<Workspace> {
+    const res = await this.fetch(`/api/workspaces/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+    return res.json();
+  }
+
   async deleteWorkspace(id: string): Promise<void> {
     await this.fetch(`/api/workspaces/${id}`, { method: 'DELETE' });
   }
@@ -97,10 +102,10 @@ class LocalAdapter {
   }
 
   // --- Chat ---
-  async *sendMessage(workspaceId: string, message: string, sessionId?: string): AsyncGenerator<StreamEvent> {
+  async *sendMessage(workspaceId: string, message: string, sessionId?: string, persona?: string): AsyncGenerator<StreamEvent> {
     const res = await this.fetch('/api/chat', {
       method: 'POST',
-      body: JSON.stringify({ workspaceId, message, sessionId }),
+      body: JSON.stringify({ workspaceId, message, sessionId, persona }),
     });
 
     if (!res.body) return;
