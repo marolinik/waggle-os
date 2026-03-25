@@ -26,7 +26,7 @@ interface EventsAppProps {
   onAbort?: () => void;
 }
 
-const StepCard = ({ step }: { step: AgentStep }) => {
+const StepCard = ({ step, onAbort }: { step: AgentStep; onAbort?: () => void }) => {
   const [expanded, setExpanded] = useState(false);
   const Icon = stepIcons[step.type] || Activity;
   const color = stepColors[step.status] || 'text-muted-foreground border-border/30';
@@ -52,6 +52,15 @@ const StepCard = ({ step }: { step: AgentStep }) => {
             <span>{new Date(step.timestamp).toLocaleTimeString()}</span>
           </div>
         </div>
+        {step.status === 'running' && onAbort && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onAbort(); }}
+            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-destructive/20 text-destructive text-[10px] font-display hover:bg-destructive/30 transition-colors shrink-0"
+            title="Cancel execution"
+          >
+            <StopCircle className="w-3 h-3" /> Cancel
+          </button>
+        )}
         {step.details && (
           <ChevronRight className={`w-3 h-3 text-muted-foreground transition-transform ${expanded ? 'rotate-90' : ''}`} />
         )}
