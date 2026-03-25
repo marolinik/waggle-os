@@ -60,9 +60,11 @@ const appConfig: Record<string, { title: string; icon: React.ReactNode; pos: { x
 
 const Desktop = () => {
   const [windows, setWindows] = useState<WindowState[]>([]);
-  const [topZ, setTopZ] = useState(10);
+  const topZRef = useRef(10);
   const cascadeCounter = useRef(0);
   const [focusedInstanceId, setFocusedInstanceId] = useState<string | null>(null);
+
+  const nextZ = () => { topZRef.current += 1; return topZRef.current; };
 
   // Overlay states
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
