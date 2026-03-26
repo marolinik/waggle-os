@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { X, Plus, Users, Cloud, HardDrive, Server, FolderOpen, Folder, ChevronRight, Home, Check } from 'lucide-react';
+import { X, Plus, Users, Cloud, HardDrive, Server, FolderOpen, Folder, FolderPlus, ChevronRight, Home, Check } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { PERSONAS } from '@/lib/personas';
 import { motion, AnimatePresence } from 'framer-motion';
