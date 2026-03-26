@@ -377,6 +377,37 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
     // Orchestrator's built prompt (identity + self-awareness + preloaded context)
     prompt += orchestrator.buildSystemPrompt();
 
+    // Inject user profile context
+    try {
+      const profilePath = path.join(server.localConfig.dataDir, 'profile.json');
+      if (fs.existsSync(profilePath)) {
+        const profileData = JSON.parse(fs.readFileSync(profilePath, 'utf-8'));
+        if (profileData.name || profileData.role || profileData.company) {
+          prompt += `\n\n# About the User\n`;
+          if (profileData.name) prompt += `- Name: ${profileData.name}\n`;
+          if (profileData.role) prompt += `- Role: ${profileData.role}\n`;
+          if (profileData.company) prompt += `- Company: ${profileData.company}\n`;
+          if (profileData.industry) prompt += `- Industry: ${profileData.industry}\n`;
+          if (profileData.communicationStyle) prompt += `- Prefers ${profileData.communicationStyle} responses\n`;
+          if (profileData.interests?.length) prompt += `- Interests: ${profileData.interests.join(', ')}\n`;
+          if (profileData.writingStyle?.analyzed) {
+            const ws = profileData.writingStyle;
+            prompt += `- Writing style: ${ws.tone} tone, ${ws.sentenceLength} sentences, ${ws.vocabulary} vocabulary, ${ws.structure} structure\n`;
+            prompt += `- When drafting content for this user, match their writing style.\n`;
+          }
+          if (profileData.brand?.analyzed || profileData.brand?.primaryColor !== '#D4A84B') {
+            const b = profileData.brand;
+            prompt += `- Brand colors: primary ${b.primaryColor}, secondary ${b.secondaryColor}, accent ${b.accentColor}\n`;
+            if (b.fontHeading) prompt += `- Brand fonts: ${b.fontHeading} (headings), ${b.fontBody} (body)\n`;
+            prompt += `- When generating documents (docx, pptx, pdf, xlsx), apply these brand styles.\n`;
+          }
+          if (profileData.language && profileData.language !== 'en') {
+            prompt += `- Preferred language: ${profileData.language}\n`;
+          }
+        }
+      }
+    } catch { /* profile not available — continue without */ }
+
     prompt += `
 
 # Who You Are

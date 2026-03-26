@@ -636,6 +636,32 @@ class LocalAdapter {
     return res.json();
   }
 
+  // --- Profile ---
+  async getProfile(): Promise<any> {
+    const res = await this.fetch('/api/profile');
+    return res.json();
+  }
+
+  async updateProfile(data: Record<string, unknown>): Promise<any> {
+    const res = await this.fetch('/api/profile', { method: 'PUT', body: JSON.stringify(data) });
+    return res.json();
+  }
+
+  async analyzeWritingStyle(text: string): Promise<any> {
+    const res = await this.fetch('/api/profile/analyze-style', { method: 'POST', body: JSON.stringify({ text }) });
+    return res.json();
+  }
+
+  async analyzeBrand(description: string): Promise<any> {
+    const res = await this.fetch('/api/profile/analyze-brand', { method: 'POST', body: JSON.stringify({ description }) });
+    return res.json();
+  }
+
+  async researchProfile(): Promise<any> {
+    const res = await this.fetch('/api/profile/research', { method: 'POST', body: JSON.stringify({}) });
+    return res.json();
+  }
+
   async addVaultSecret(data: { key: string; value: string; type?: string }): Promise<void> {
     await this.fetch('/api/vault', { method: 'POST', body: JSON.stringify({ name: data.key, value: data.value, type: data.type }) });
   }
