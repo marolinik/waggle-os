@@ -988,8 +988,22 @@ const AgentsApp = () => {
           ) : (
             showCreateGroup ? (
               <CreateGroupForm agents={agents} onSave={handleCreateGroup} onCancel={() => setShowCreateGroup(false)} />
+            ) : editingGroup ? (
+              <CreateGroupForm
+                key={`edit-group-${editingGroup.id}`}
+                agents={agents}
+                onSave={handleUpdateGroup}
+                onCancel={() => setEditingGroup(null)}
+                editMode
+                initialData={{
+                  name: editingGroup.name,
+                  description: editingGroup.description ?? '',
+                  strategy: editingGroup.strategy,
+                  members: editingGroup.members,
+                }}
+              />
             ) : selectedGroup ? (
-              <GroupDetail group={selectedGroup} agents={agents} onRun={(task) => handleRunGroup(selectedGroup.id, task)} />
+              <GroupDetail group={selectedGroup} agents={agents} onRun={(task) => handleRunGroup(selectedGroup.id, task)} onEdit={() => setEditingGroup(selectedGroup)} />
             ) : (
               <div className="flex-1 flex items-center justify-center text-muted-foreground">
                 <div className="text-center">
