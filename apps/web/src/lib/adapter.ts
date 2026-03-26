@@ -129,6 +129,7 @@ class LocalAdapter {
     return res.json();
   }
 
+  async createWorkspace(data: { name: string; group: string; persona?: string; templateId?: string; shared?: boolean }): Promise<Workspace> {
     const res = await this.fetch('/api/workspaces', { method: 'POST', body: JSON.stringify(data) });
     return res.json();
   }
