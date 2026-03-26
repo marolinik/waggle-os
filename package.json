@@ -12,15 +12,14 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "cd apps/web && npx vite",
-    "dev:web": "cd apps/web && npx vite",
-    "dev:server": "cd packages/server && npx tsx src/index.ts",
-    "build": "cd apps/web && npx vite build",
-    "build:dev": "cd apps/web && npx vite build --mode development",
-    "build:web": "cd apps/web && npx vite build",
+    "dev": "vite",
+    "dev:web": "vite",
+    "build": "vite build",
+    "build:dev": "vite build --mode development",
+    "build:web": "vite build",
+    "preview": "vite preview",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:web": "cd apps/web && npx vitest run",
     "test:watch": "vitest"
   },
   "author": "Marko Markovic",
