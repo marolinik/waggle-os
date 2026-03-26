@@ -511,6 +511,25 @@ class LocalAdapter {
     return unwrapArray(await res.json());
   }
 
+  async createPersona(data: { name: string; description: string; icon?: string; systemPrompt: string; tools?: string[] }): Promise<Persona> {
+    const res = await this.fetch('/api/personas', { method: 'POST', body: JSON.stringify(data) });
+    return res.json();
+  }
+
+  async deletePersona(id: string): Promise<void> {
+    await this.fetch(`/api/personas/${id}`, { method: 'DELETE' });
+  }
+
+  async generatePersona(prompt: string): Promise<{ name: string; description: string; systemPrompt: string; tools: string[] }> {
+    const res = await this.fetch('/api/personas/generate', { method: 'POST', body: JSON.stringify({ prompt }) });
+    return res.json();
+  }
+
+  async getCapabilityStatus(): Promise<unknown> {
+    const res = await this.fetch('/api/capabilities/status');
+    return res.json();
+  }
+
   // --- Health ---
   async getSystemHealth(): Promise<SystemHealth> {
     const res = await this.fetch('/health');
