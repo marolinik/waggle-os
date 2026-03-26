@@ -77,6 +77,7 @@ const TEMPLATE_CATEGORIES: { id: TemplateCategory | 'all'; label: string }[] = [
   { id: 'custom', label: 'Custom' },
 ];
 
+function defaultVirtualPath(workspaceName: string): string {
   const slug = workspaceName.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || 'untitled';
   return `/workspaces/${slug}`;
 }
