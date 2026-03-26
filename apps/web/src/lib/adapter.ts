@@ -4,7 +4,7 @@ import type {
   AgentStep, Session, SkillPack, FleetSession, CronJob,
   Notification, AgentStatus, Persona, SystemHealth,
   Connector, Settings, StreamEvent, KGNode, KGEdge,
-  ModelPricing, WaggleSignal, FileEntry,
+  ModelPricing, WaggleSignal, FileEntry, WorkspaceTemplate,
 } from './types';
 
 const DEFAULT_SERVER = 'http://127.0.0.1:3333';
