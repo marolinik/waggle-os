@@ -564,6 +564,8 @@ const GroupExecutionPanel = ({
         <div className="px-3 py-2 border-t border-border/20 flex items-center gap-2">
           {exec.status === 'completed' ? (
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+          ) : exec.status === 'cancelled' ? (
+            <StopCircle className="w-4 h-4 text-amber-400" />
           ) : (
             <XCircle className="w-4 h-4 text-destructive" />
           )}
@@ -613,7 +615,7 @@ const GroupDetail = ({
 
   // Poll job status when running
   useEffect(() => {
-    if (!execState || execState.status === 'completed' || execState.status === 'failed') {
+    if (!execState || execState.status === 'completed' || execState.status === 'failed' || execState.status === 'cancelled') {
       if (pollRef.current) clearInterval(pollRef.current);
       return;
     }
@@ -712,6 +714,21 @@ const GroupDetail = ({
             agents={agents}
             strategy={group.strategy}
             onDismiss={() => setExecState(null)}
+            onCancel={async () => {
+              try {
+                await adapter.cancelJob(execState.jobId);
+              } catch { /* best-effort */ }
+              setExecState(prev => prev ? {
+                ...prev,
+                status: 'cancelled',
+                completedAt: Date.now(),
+                members: prev.members.map(m =>
+                  m.status === 'running' || m.status === 'pending'
+                    ? { ...m, status: 'failed' as const, completedAt: Date.now(), error: 'Cancelled' }
+                    : m
+                ),
+              } : null);
+            }}
           />
         )}
       </AnimatePresence>
