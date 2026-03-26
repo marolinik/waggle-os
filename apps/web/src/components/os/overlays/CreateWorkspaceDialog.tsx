@@ -656,18 +656,44 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                     const Icon = TEMPLATE_ICONS[tmpl.id] || LayoutTemplate;
                     const isSelected = selectedTemplate === tmpl.id;
                     return (
-                      <Tooltip key={tmpl.id} text={tmpl.description}>
-                        <button onClick={() => setSelectedTemplate(isSelected ? null : tmpl.id)}
-                          className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all w-full ${
-                            isSelected ? 'bg-primary/20 border border-primary/50' : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
-                          }`}>
-                          <Icon className={`w-4 h-4 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
-                          <span className="text-[8px] text-muted-foreground text-center leading-tight truncate w-full">
-                            {tmpl.name.length > 12 ? tmpl.name.split(' ')[0] : tmpl.name}
-                          </span>
-                          {!tmpl.builtIn && <span className="text-[7px] text-primary/60">custom</span>}
-                        </button>
-                      </Tooltip>
+                      <div key={tmpl.id} className="relative group">
+                        <Tooltip text={tmpl.description}>
+                          <button onClick={() => setSelectedTemplate(isSelected ? null : tmpl.id)}
+                            className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all w-full ${
+                              isSelected ? 'bg-primary/20 border border-primary/50' : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
+                            }`}>
+                            <Icon className={`w-4 h-4 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
+                            <span className="text-[8px] text-muted-foreground text-center leading-tight truncate w-full">
+                              {tmpl.name.length > 12 ? tmpl.name.split(' ')[0] : tmpl.name}
+                            </span>
+                            {!tmpl.builtIn && <span className="text-[7px] text-primary/60">custom</span>}
+                          </button>
+                        </Tooltip>
+                        {!tmpl.builtIn && (
+                          <div className="absolute top-0.5 right-0.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setEditingTemplate(tmpl); setShowTemplateCreator(true); }}
+                              className="p-0.5 rounded bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              <Pencil className="w-2.5 h-2.5" />
+                            </button>
+                            <button
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                if (!confirm(`Delete template "${tmpl.name}"?`)) return;
+                                try {
+                                  await adapter.deleteWorkspaceTemplate(tmpl.id);
+                                  setTemplates(prev => prev.filter(t => t.id !== tmpl.id));
+                                  if (selectedTemplate === tmpl.id) setSelectedTemplate(null);
+                                } catch { /* ignore */ }
+                              }}
+                              className="p-0.5 rounded bg-muted/80 text-muted-foreground hover:text-destructive transition-colors"
+                            >
+                              <Trash2 className="w-2.5 h-2.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
