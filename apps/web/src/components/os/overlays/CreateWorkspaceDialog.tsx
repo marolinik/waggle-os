@@ -25,51 +25,15 @@ function defaultVirtualPath(workspaceName: string): string {
   return `/workspaces/${slug}`;
 }
 
-/* ── Mock folder tree for browsing ────────────────────────────────── */
+/* ── Types ─────────────────────────────────────────────────────────── */
 
-interface FolderNode {
+interface BrowseEntry {
   name: string;
   path: string;
-  children?: FolderNode[];
+  type: string;
 }
 
-const MOCK_LOCAL_TREE: FolderNode[] = [
-  { name: 'home', path: '/home', children: [
-    { name: 'user', path: '/home/user', children: [
-      { name: 'projects', path: '/home/user/projects', children: [
-        { name: 'my-workspace', path: '/home/user/projects/my-workspace' },
-        { name: 'research', path: '/home/user/projects/research' },
-        { name: 'client-work', path: '/home/user/projects/client-work' },
-      ]},
-      { name: 'documents', path: '/home/user/documents', children: [
-        { name: 'notes', path: '/home/user/documents/notes' },
-        { name: 'reports', path: '/home/user/documents/reports' },
-      ]},
-      { name: 'desktop', path: '/home/user/desktop' },
-    ]},
-  ]},
-  { name: 'tmp', path: '/tmp' },
-  { name: 'var', path: '/var', children: [
-    { name: 'data', path: '/var/data' },
-    { name: 'log', path: '/var/log' },
-  ]},
-];
-
-const MOCK_TEAM_TREE: FolderNode[] = [
-  { name: 'waggle-prod', path: 'waggle-prod', children: [
-    { name: 'workspaces', path: 'waggle-prod/workspaces', children: [
-      { name: 'team-alpha', path: 'waggle-prod/workspaces/team-alpha' },
-      { name: 'research', path: 'waggle-prod/workspaces/research' },
-    ]},
-    { name: 'shared', path: 'waggle-prod/shared' },
-  ]},
-  { name: 'waggle-staging', path: 'waggle-staging', children: [
-    { name: 'workspaces', path: 'waggle-staging/workspaces' },
-    { name: 'sandbox', path: 'waggle-staging/sandbox' },
-  ]},
-];
-
-/* ── Folder Picker Modal ──────────────────────────────────────────── */
+/* ── Folder Picker Modal (live API) ───────────────────────────────── */
 
 interface FolderPickerProps {
   open: boolean;
@@ -80,123 +44,72 @@ interface FolderPickerProps {
 }
 
 function FolderPickerModal({ open, storageType, currentPath, onSelect, onClose }: FolderPickerProps) {
-  const [folderTree, setFolderTree] = useState<FolderNode[]>(() =>
-    storageType === 'local' ? structuredClone(MOCK_LOCAL_TREE) : structuredClone(MOCK_TEAM_TREE)
-  );
   const rootLabel = storageType === 'local' ? '/' : 'Buckets';
 
-  const [browsePath, setBrowsePath] = useState(currentPath || '');
+  const [browsePath, setBrowsePath] = useState(currentPath || '/');
+  const [entries, setEntries] = useState<BrowseEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [newFolderName, setNewFolderName] = useState('');
   const [showNewFolder, setShowNewFolder] = useState(false);
-  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => {
-    // Auto-expand ancestors of current path
-    const expanded = new Set<string>();
-    if (currentPath) {
-      const parts = currentPath.split('/').filter(Boolean);
-      let acc = storageType === 'local' ? '' : '';
-      parts.forEach(part => {
-        acc = acc ? `${acc}/${part}` : (storageType === 'local' ? `/${part}` : part);
-        expanded.add(acc);
-      });
-    }
-    return expanded;
-  });
+  const [creatingFolder, setCreatingFolder] = useState(false);
 
-  const toggleExpand = useCallback((path: string) => {
-    setExpandedPaths(prev => {
-      const next = new Set(prev);
-      if (next.has(path)) next.delete(path);
-      else next.add(path);
-      return next;
-    });
+  const fetchEntries = useCallback(async (dirPath: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      if (storageType === 'local') {
+        const result = await adapter.browseLocal(dirPath);
+        setEntries(result.entries);
+      } else {
+        setEntries([]);
+        setError('Team storage browsing is not yet available');
+      }
+    } catch (err: any) {
+      setError(err.message ?? 'Failed to browse');
+      setEntries([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [storageType]);
+
+  useEffect(() => {
+    if (open) fetchEntries(browsePath);
+  }, [open, browsePath, fetchEntries]);
+
+  const handleNavigate = useCallback((dirPath: string) => {
+    setBrowsePath(dirPath);
   }, []);
 
-  /** Insert a new folder node into the tree under browsePath */
-  const handleCreateFolder = useCallback(() => {
+  const handleCreateFolder = useCallback(async () => {
     const folderName = newFolderName.trim();
     if (!folderName) return;
-
-    const parentPath = browsePath;
-    const newPath = parentPath ? `${parentPath}/${folderName}` : (storageType === 'local' ? `/${folderName}` : folderName);
-
-    const insertInto = (nodes: FolderNode[]): boolean => {
-      for (const node of nodes) {
-        if (node.path === parentPath) {
-          if (!node.children) node.children = [];
-          if (node.children.some(c => c.name === folderName)) return true; // already exists
-          node.children.push({ name: folderName, path: newPath });
-          return true;
-        }
-        if (node.children && insertInto(node.children)) return true;
-      }
-      return false;
-    };
-
-    if (!parentPath) {
-      // Add to root
-      if (!folderTree.some(c => c.name === folderName)) {
-        setFolderTree(prev => [...prev, { name: folderName, path: newPath }]);
-      }
-    } else {
-      const copy = structuredClone(folderTree);
-      insertInto(copy);
-      setFolderTree(copy);
+    const newPath = browsePath.endsWith('/') ? `${browsePath}${folderName}` : `${browsePath}/${folderName}`;
+    setCreatingFolder(true);
+    try {
+      if (storageType === 'local') await adapter.browseLocalMkdir(newPath);
+      await fetchEntries(browsePath);
+      setBrowsePath(newPath);
+      setNewFolderName('');
+      setShowNewFolder(false);
+    } catch (err: any) {
+      setError(err.message ?? 'Failed to create folder');
+    } finally {
+      setCreatingFolder(false);
     }
-
-    // Expand parent and select new folder
-    setExpandedPaths(prev => { const n = new Set(prev); if (parentPath) n.add(parentPath); return n; });
-    setBrowsePath(newPath);
-    setNewFolderName('');
-    setShowNewFolder(false);
-  }, [browsePath, newFolderName, storageType, folderTree]);
+  }, [browsePath, newFolderName, storageType, fetchEntries]);
 
   const breadcrumbs = (() => {
-    if (!browsePath) return [{ label: rootLabel, path: '' }];
+    if (browsePath === '/') return [{ label: rootLabel, path: '/' }];
     const parts = browsePath.split('/').filter(Boolean);
-    const crumbs = [{ label: rootLabel, path: '' }];
-    let acc = storageType === 'local' ? '' : '';
+    const crumbs = [{ label: rootLabel, path: '/' }];
+    let acc = '';
     parts.forEach(part => {
-      acc = acc ? `${acc}/${part}` : (storageType === 'local' ? `/${part}` : part);
+      acc = storageType === 'local' ? `${acc}/${part}` : (acc ? `${acc}/${part}` : part);
       crumbs.push({ label: part, path: acc });
     });
     return crumbs;
   })();
-
-  const renderNode = (node: FolderNode, depth: number = 0) => {
-    const isExpanded = expandedPaths.has(node.path);
-    const isSelected = browsePath === node.path;
-    const hasChildren = node.children && node.children.length > 0;
-
-    return (
-      <div key={node.path}>
-        <button
-          onClick={() => {
-            setBrowsePath(node.path);
-            if (hasChildren) toggleExpand(node.path);
-          }}
-          className={`w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-left transition-colors ${
-            isSelected
-              ? 'bg-primary/20 text-foreground'
-              : 'hover:bg-muted/50 text-muted-foreground hover:text-foreground'
-          }`}
-          style={{ paddingLeft: `${depth * 16 + 8}px` }}
-        >
-          {hasChildren ? (
-            <ChevronRight className={`w-3 h-3 shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-          ) : (
-            <span className="w-3" />
-          )}
-          <Folder className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-primary' : 'text-amber-400/70'}`} />
-          <span className="text-[11px] truncate">{node.name}</span>
-        </button>
-        {isExpanded && hasChildren && (
-          <div>
-            {node.children!.map(child => renderNode(child, depth + 1))}
-          </div>
-        )}
-      </div>
-    );
-  };
 
   if (!open) return null;
 
@@ -235,7 +148,7 @@ function FolderPickerModal({ open, storageType, currentPath, onSelect, onClose }
             <span key={crumb.path} className="flex items-center gap-0.5 shrink-0">
               {i > 0 && <ChevronRight className="w-3 h-3 text-muted-foreground/50" />}
               <button
-                onClick={() => setBrowsePath(crumb.path)}
+                onClick={() => handleNavigate(crumb.path)}
                 className={`text-[10px] px-1.5 py-0.5 rounded transition-colors ${
                   browsePath === crumb.path ? 'text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'
                 }`}
@@ -246,14 +159,37 @@ function FolderPickerModal({ open, storageType, currentPath, onSelect, onClose }
           ))}
         </div>
 
-        {/* Tree */}
-        <div className="px-2 py-2 max-h-[280px] overflow-y-auto space-y-0.5">
-          {folderTree.map(node => renderNode(node, 0))}
+        {/* Directory listing */}
+        <div className="px-2 py-2 max-h-[280px] min-h-[120px] overflow-y-auto space-y-0.5">
+          {loading ? (
+            <div className="flex items-center justify-center py-8 text-muted-foreground">
+              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              <span className="text-[11px]">Loading…</span>
+            </div>
+          ) : error ? (
+            <div className="flex items-center justify-center py-8">
+              <span className="text-[11px] text-destructive">{error}</span>
+            </div>
+          ) : entries.length === 0 ? (
+            <div className="flex items-center justify-center py-8">
+              <span className="text-[11px] text-muted-foreground">No subdirectories</span>
+            </div>
+          ) : (
+            entries.map(entry => (
+              <button
+                key={entry.path}
+                onClick={() => handleNavigate(entry.path)}
+                className="w-full flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-left transition-colors hover:bg-muted/50 text-muted-foreground hover:text-foreground"
+              >
+                <Folder className="w-3.5 h-3.5 shrink-0 text-amber-400/70" />
+                <span className="text-[11px] truncate">{entry.name}</span>
+              </button>
+            ))
+          )}
         </div>
 
-        {/* Selected path preview + actions */}
+        {/* Footer */}
         <div className="px-4 py-3 border-t border-border/30 space-y-2">
-          {/* New folder inline input */}
           <AnimatePresence>
             {showNewFolder && (
               <motion.div
@@ -276,10 +212,10 @@ function FolderPickerModal({ open, storageType, currentPath, onSelect, onClose }
                 />
                 <button
                   onClick={handleCreateFolder}
-                  disabled={!newFolderName.trim()}
+                  disabled={!newFolderName.trim() || creatingFolder}
                   className="px-2 py-1 text-[10px] rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-40 transition-colors"
                 >
-                  Create
+                  {creatingFolder ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Create'}
                 </button>
                 <button
                   onClick={() => { setShowNewFolder(false); setNewFolderName(''); }}
@@ -293,9 +229,7 @@ function FolderPickerModal({ open, storageType, currentPath, onSelect, onClose }
 
           <div className="flex items-center gap-2 bg-muted/30 rounded-lg px-3 py-1.5">
             <span className="text-[9px] text-muted-foreground shrink-0">Path:</span>
-            <span className="text-[11px] font-mono text-foreground truncate">
-              {browsePath || rootLabel}
-            </span>
+            <span className="text-[11px] font-mono text-foreground truncate">{browsePath}</span>
           </div>
           <div className="flex justify-between">
             <button
@@ -310,7 +244,7 @@ function FolderPickerModal({ open, storageType, currentPath, onSelect, onClose }
               </button>
               <button
                 onClick={() => { onSelect(browsePath); onClose(); }}
-                disabled={!browsePath}
+                disabled={!browsePath || browsePath === '/'}
                 className="flex items-center gap-1 px-3 py-1.5 text-[11px] rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-40 transition-colors"
               >
                 <Check className="w-3 h-3" /> Select
