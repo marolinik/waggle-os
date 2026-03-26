@@ -24,6 +24,7 @@ export interface Workspace {
   name: string;
   group: string;
   persona?: string;
+  agentGroupId?: string;
   templateId?: string;
   hue?: number;
   memoryCount?: number;
