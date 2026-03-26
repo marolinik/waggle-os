@@ -333,6 +333,7 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [persona, setPersona] = useState('');
+  const [category, setCategory] = useState<TemplateCategory>('custom');
   const [selectedConnectors, setSelectedConnectors] = useState<string[]>([]);
   const [selectedCommands, setSelectedCommands] = useState<string[]>([]);
   const [starterMemory, setStarterMemory] = useState('');
