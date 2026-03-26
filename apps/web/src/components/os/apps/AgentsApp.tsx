@@ -1299,8 +1299,21 @@ const AgentsApp = () => {
                   members: editingGroup.members,
                 }}
               />
+            ) : duplicatingGroup ? (
+              <CreateGroupForm
+                key={`dup-group-${duplicatingGroup.id}`}
+                agents={agents}
+                onSave={(data) => { handleCreateGroup(data); setDuplicatingGroup(null); }}
+                onCancel={() => setDuplicatingGroup(null)}
+                initialData={{
+                  name: `${duplicatingGroup.name} (Copy)`,
+                  description: duplicatingGroup.description ?? '',
+                  strategy: duplicatingGroup.strategy,
+                  members: duplicatingGroup.members,
+                }}
+              />
             ) : selectedGroup ? (
-              <GroupDetail group={selectedGroup} agents={agents} onRun={(task) => handleRunGroup(selectedGroup.id, task)} onEdit={() => setEditingGroup(selectedGroup)} />
+              <GroupDetail group={selectedGroup} agents={agents} onRun={(task) => handleRunGroup(selectedGroup.id, task)} onEdit={() => setEditingGroup(selectedGroup)} onDuplicate={() => setDuplicatingGroup(selectedGroup)} />
             ) : (
               <div className="flex-1 flex items-center justify-center text-muted-foreground">
                 <div className="text-center">
