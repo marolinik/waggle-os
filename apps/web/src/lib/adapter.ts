@@ -567,6 +567,10 @@ class LocalAdapter {
     } catch { return null; }
   }
 
+  async cancelJob(jobId: string): Promise<void> {
+    await this.fetch(`/api/jobs/${jobId}/cancel`, { method: 'POST' });
+  }
+
   // --- Health ---
   async getSystemHealth(): Promise<SystemHealth> {
     const res = await this.fetch('/health');
