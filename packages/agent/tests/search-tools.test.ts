@@ -27,9 +27,10 @@ describe('Search Tools', () => {
 
   // ── Tool registration ─────────────────────────────────────────────────
 
-  it('creates 2 search tools', () => {
-    expect(tools).toHaveLength(2);
+  it('creates 3 search tools', () => {
+    expect(tools).toHaveLength(3);
     const names = tools.map(t => t.name);
+    expect(names).toContain('perplexity_search');
     expect(names).toContain('tavily_search');
     expect(names).toContain('brave_search');
   });

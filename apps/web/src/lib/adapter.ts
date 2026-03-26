@@ -495,6 +495,19 @@ class LocalAdapter {
     return unwrapArray(await res.json());
   }
 
+  async getProviders(): Promise<{
+    providers: Array<{
+      id: string; name: string; hasKey: boolean; badge: string | null;
+      keyUrl: string | null; requiresKey: boolean;
+      models: Array<{ id: string; name: string; cost: string; speed: string }>;
+    }>;
+    search: Array<{ id: string; name: string; hasKey: boolean; priority: number }>;
+    activeSearch: string;
+  }> {
+    const res = await this.fetch('/api/providers');
+    return res.json();
+  }
+
   async getLiteLLMStatus(): Promise<unknown> {
     const res = await this.fetch('/api/litellm/status');
     return res.json();

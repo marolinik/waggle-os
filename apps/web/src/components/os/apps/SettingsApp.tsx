@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import {
-  Cpu, Shield, Palette, Save, TestTube, Loader2, Users, Database,
-  Download, Upload, Link2, Building, Wrench, DollarSign, ExternalLink,
+  Cpu, Shield, Palette, Save, Loader2, Users, Database,
+  Download, Upload, Link2, Building, Wrench, DollarSign, Key, Lock,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
-import { getProviders, getAllModels, getCostTier, getSpeedTier, maskApiKey, type ProviderConfig } from '@/lib/providers';
+import { useProviders } from '@/hooks/useProviders';
+import ModelSelector from '@/components/os/ModelSelector';
 
 type SettingsTab = 'general' | 'models' | 'permissions' | 'team' | 'backup' | 'enterprise' | 'advanced';
 
@@ -21,18 +22,13 @@ const tabs: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
 const SettingsApp = () => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [defaultModel, setDefaultModel] = useState('');
-  const [liveModels, setLiveModels] = useState<string[]>([]);
   const [dailyBudget, setDailyBudget] = useState<string>('');
-  const [savedProviders, setSavedProviders] = useState<Record<string, { apiKey: string; models?: string[] }>>({});
   const [tier, setTier] = useState('solo');
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
 
-  // Provider key entry state
-  const [selectedProvider, setSelectedProvider] = useState('anthropic');
-  const [keyInput, setKeyInput] = useState('');
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<boolean | null>(null);
+  // Provider data from single source of truth
+  const { providers, search, activeSearch, loading: providersLoading } = useProviders();
 
   // Permissions state
   const [yoloMode, setYoloMode] = useState(false);
@@ -55,28 +51,11 @@ const SettingsApp = () => {
       setDefaultModel(s.defaultModel ?? s.model ?? '');
       setDailyBudget(s.dailyBudget != null ? String(s.dailyBudget) : '');
       setTier(s.tier ?? 'solo');
-      if (s.providers) setSavedProviders(s.providers);
-    }).catch(() => {});
-
-    adapter.getModels().then(setLiveModels).catch(() => {});
-    adapter.getTeamStatus().then(s => setTeamConnected(s.connected)).catch(() => {});
-
-    // Load permissions
-    adapter.getSettings().then((s: any) => {
       setYoloMode(s.yoloMode ?? false);
     }).catch(() => {});
+
+    adapter.getTeamStatus().then(s => setTeamConnected(s.connected)).catch(() => {});
   }, []);
-
-  // All models: live from LiteLLM + static from provider registry
-  const allModelOptions = (() => {
-    const set = new Set<string>();
-    liveModels.forEach(m => set.add(m));
-    getAllModels().forEach(m => set.add(m.id));
-    if (defaultModel && !set.has(defaultModel)) set.add(defaultModel);
-    return Array.from(set).sort();
-  })();
-
-  const providers = getProviders().filter(p => p.requiresKey);
 
   const handleSaveModel = async () => {
     setSaving(true);
@@ -87,28 +66,6 @@ const SettingsApp = () => {
       setSaveMsg('Saved');
       setTimeout(() => setSaveMsg(''), 2000);
     } catch { setSaveMsg('Failed'); }
-    finally { setSaving(false); }
-  };
-
-  const handleTestKey = async () => {
-    setTesting(true);
-    try {
-      const result = await adapter.testApiKey(selectedProvider, keyInput);
-      setTestResult(result.valid);
-    } catch { setTestResult(false); }
-    finally { setTesting(false); }
-  };
-
-  const handleSaveKey = async () => {
-    setSaving(true);
-    try {
-      await adapter.saveSettings({ providers: { [selectedProvider]: { apiKey: keyInput } } });
-      setSavedProviders(prev => ({ ...prev, [selectedProvider]: { apiKey: maskApiKey(keyInput) } }));
-      setKeyInput('');
-      setTestResult(null);
-      setSaveMsg('Key saved to vault');
-      setTimeout(() => setSaveMsg(''), 2000);
-    } catch { setSaveMsg('Failed to save key'); }
     finally { setSaving(false); }
   };
 
@@ -185,17 +142,10 @@ const SettingsApp = () => {
           <div className="space-y-5">
             <h3 className="text-sm font-display font-semibold text-foreground">Model Configuration</h3>
 
-            {/* Default model selector */}
+            {/* Default model selector — from /api/providers */}
             <div>
-              <label className="text-xs text-muted-foreground block mb-1">Default Model</label>
-              <select value={defaultModel} onChange={e => setDefaultModel(e.target.value)}
-                className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none focus:border-primary/50">
-                {allModelOptions.map(m => {
-                  const cost = getCostTier(m);
-                  const speed = getSpeedTier(m);
-                  return <option key={m} value={m}>{m} ({cost} · {speed})</option>;
-                })}
-              </select>
+              <label className="text-xs text-muted-foreground block mb-1.5">Default Model</label>
+              <ModelSelector value={defaultModel} onChange={setDefaultModel} providers={providers} variant="dropdown" />
             </div>
 
             {/* Daily budget */}
@@ -213,61 +163,51 @@ const SettingsApp = () => {
               {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Save Model Settings
             </button>
 
-            {/* Divider */}
+            {/* Provider key status */}
             <div className="border-t border-border/30 pt-4">
               <h4 className="text-xs font-display font-semibold text-foreground mb-3">Provider API Keys</h4>
-              <p className="text-[10px] text-muted-foreground mb-3">Keys are encrypted and stored in the Vault. Manage all secrets in the Vault app.</p>
+              <p className="text-[10px] text-muted-foreground mb-3">Keys are encrypted in the Vault. Click <Lock className="w-3 h-3 inline" /> to manage keys.</p>
 
-              {/* Provider selector */}
-              <div className="flex flex-wrap gap-1.5 mb-3">
-                {providers.map(p => (
-                  <button key={p.id} onClick={() => { setSelectedProvider(p.id); setKeyInput(''); setTestResult(null); }}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-display transition-colors ${
-                      selectedProvider === p.id ? 'bg-primary text-primary-foreground' : 'bg-secondary/50 text-muted-foreground hover:text-foreground'
-                    }`}>
-                    {p.name}
-                    {p.badge && <span className="ml-1 text-[9px] opacity-70">({p.badge})</span>}
-                  </button>
+              <div className="space-y-1.5">
+                {providers.filter(p => p.requiresKey).map(p => (
+                  <div key={p.id} className="flex items-center justify-between p-2 rounded-lg bg-secondary/30 border border-border/30">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${p.hasKey ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
+                      <span className="text-xs text-foreground">{p.name}</span>
+                      {p.badge && <span className="text-[9px] text-primary/60">({p.badge})</span>}
+                      <span className="text-[10px] text-muted-foreground">{p.models.length} models</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {p.hasKey ? (
+                        <span className="text-[10px] text-emerald-400">✓ Key configured</span>
+                      ) : (
+                        <span className="text-[10px] text-amber-400">No key</span>
+                      )}
+                    </div>
+                  </div>
                 ))}
               </div>
 
-              {/* Saved key display */}
-              {savedProviders[selectedProvider]?.apiKey && (
-                <div className="flex items-center gap-2 mb-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                  <span className="text-[10px] text-emerald-400 font-mono">{savedProviders[selectedProvider].apiKey}</span>
-                  <span className="text-[10px] text-emerald-400">Saved</span>
-                </div>
-              )}
+              <p className="text-[10px] text-muted-foreground mt-3">
+                <Key className="w-3 h-3 inline mr-1" />
+                To add or update API keys, open the <strong>Vault</strong> app from the dock.
+              </p>
+            </div>
 
-              {/* Key input */}
-              <div className="space-y-2">
-                <input type="password" value={keyInput} onChange={e => { setKeyInput(e.target.value); setTestResult(null); }}
-                  placeholder={providers.find(p => p.id === selectedProvider)?.keyPrefix ? `${providers.find(p => p.id === selectedProvider)?.keyPrefix}...` : 'Paste API key'}
-                  className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none focus:border-primary/50 font-mono" />
-
-                <div className="flex items-center gap-2">
-                  <button onClick={handleTestKey} disabled={!keyInput || testing}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-secondary text-foreground hover:bg-secondary/70 disabled:opacity-50 transition-colors">
-                    {testing ? <Loader2 className="w-3 h-3 animate-spin" /> : <TestTube className="w-3 h-3" />} Test
-                  </button>
-                  <button onClick={handleSaveKey} disabled={!keyInput || saving}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-50 transition-colors">
-                    {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Save to Vault
-                  </button>
-                  {testResult !== null && (
-                    <span className={`text-[10px] ${testResult ? 'text-emerald-400' : 'text-destructive'}`}>
-                      {testResult ? '✓ Valid' : '✗ Invalid format'}
-                    </span>
-                  )}
-                </div>
-
-                {/* Link to provider key page */}
-                {providers.find(p => p.id === selectedProvider)?.keyUrl && (
-                  <a href={providers.find(p => p.id === selectedProvider)!.keyUrl!} target="_blank" rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
-                    <ExternalLink className="w-3 h-3" /> Get a {providers.find(p => p.id === selectedProvider)?.name} API key
-                  </a>
-                )}
+            {/* Search provider status */}
+            <div className="border-t border-border/30 pt-4">
+              <h4 className="text-xs font-display font-semibold text-foreground mb-2">Search Providers</h4>
+              <p className="text-[10px] text-muted-foreground mb-2">Active: <strong>{activeSearch}</strong> (highest priority with a key)</p>
+              <div className="space-y-1">
+                {search.map(s => (
+                  <div key={s.id} className="flex items-center gap-2 text-xs">
+                    <span className="text-[10px] text-muted-foreground w-4">#{s.priority}</span>
+                    <div className={`w-1.5 h-1.5 rounded-full ${s.hasKey ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
+                    <span className={s.hasKey ? 'text-foreground' : 'text-muted-foreground'}>{s.name}</span>
+                    {!s.hasKey && s.id !== 'duckduckgo' && <span className="text-[9px] text-amber-400">No key</span>}
+                    {s.id === 'duckduckgo' && <span className="text-[9px] text-muted-foreground">(free, always available)</span>}
+                  </div>
+                ))}
               </div>
             </div>
           </div>

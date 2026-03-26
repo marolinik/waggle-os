@@ -11,27 +11,11 @@ import { buildTimeAwareGreeting, buildUpcomingSchedules } from './workspace-cont
 import { emitAuditEvent } from './events.js';
 
 // BUG-R3-03: Known model IDs for validation
-const KNOWN_MODELS = new Set([
-  // Anthropic
-  'claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5-20251001',
-  'claude-sonnet-4-20250514', 'claude-3-5-sonnet-20241022',
-  'claude-3-5-haiku-20241022', 'claude-haiku-3-5',
-  // OpenAI
-  'gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo', 'gpt-5.4',
-  'o1', 'o1-mini', 'o1-preview', 'o3', 'o3-mini',
-  // Google
-  'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-3.1-flash-image-preview',
-  // Others
-  'deepseek-chat', 'deepseek-reasoner', 'mistral-large-latest', 'mistral-small-latest',
-]);
-
+/** Accept any reasonable model string — provider registry is the authority, not a hardcoded set */
 function isValidModelId(model: string): boolean {
-  if (KNOWN_MODELS.has(model)) return true;
-  // Allow provider-prefixed models (e.g., "anthropic/claude-sonnet-4-6")
-  if (model.includes('/') && model.length > 3) return true;
-  // Allow any model that follows naming conventions (lowercase, hyphens, digits)
-  if (/^[a-z0-9][\w./-]*$/.test(model) && model.length >= 3) return true;
-  return false;
+  if (!model || model.length < 2) return false;
+  // Accept any model that follows naming conventions (alphanumeric, hyphens, dots, slashes)
+  return /^[a-zA-Z0-9][\w./-]*$/.test(model);
 }
 
 /**
@@ -174,7 +158,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
     if (model && !isValidModelId(model)) {
       return reply.status(400).send({
         error: `Invalid model ID "${model}". Examples: claude-sonnet-4-6, gpt-4o, gemini-2.0-flash`,
-        knownModels: Array.from(KNOWN_MODELS).slice(0, 10),
+
       });
     }
     // Resolve templateId from either templateId or template body field
@@ -622,7 +606,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
     if (request.body.model && !isValidModelId(request.body.model)) {
       return reply.status(400).send({
         error: `Invalid model ID "${request.body.model}". Examples: claude-sonnet-4-6, gpt-4o, gemini-2.0-flash`,
-        knownModels: Array.from(KNOWN_MODELS).slice(0, 10),
+
       });
     }
     const { personaId, agentGroupId, ...rest } = request.body;

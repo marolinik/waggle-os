@@ -32,6 +32,8 @@ const SUGGESTED_SECRETS: { category: string; items: { name: string; type: string
   {
     category: 'Search & Tools',
     items: [
+      { name: 'perplexity', type: 'api_key', label: 'Perplexity API Key (Search + LLM)' },
+      { name: 'moonshot', type: 'api_key', label: 'Kimi / Moonshot API Key' },
       { name: 'TAVILY_API_KEY', type: 'api_key', label: 'Tavily Search API Key' },
       { name: 'BRAVE_API_KEY', type: 'api_key', label: 'Brave Search API Key' },
       { name: 'COMPOSIO_API_KEY', type: 'api_key', label: 'Composio API Key (250+ integrations)' },

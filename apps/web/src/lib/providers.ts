@@ -140,6 +140,30 @@ const BUILT_IN_PROVIDERS: ProviderConfig[] = [
     ],
   },
   {
+    id: 'moonshot',
+    name: 'Kimi / Moonshot',
+    keyPrefix: null,
+    keyUrl: 'https://platform.moonshot.cn/console/api-keys',
+    badge: null,
+    requiresKey: true,
+    models: [
+      { id: 'kimi-2.5', name: 'Kimi 2.5', cost: '$$', speed: 'medium' },
+      { id: 'kimi-2.5-thinking', name: 'Kimi 2.5 Thinking', cost: '$$', speed: 'slow' },
+    ],
+  },
+  {
+    id: 'perplexity',
+    name: 'Perplexity',
+    keyPrefix: 'pplx-',
+    keyUrl: 'https://www.perplexity.ai/settings/api',
+    badge: 'Search + LLM',
+    requiresKey: true,
+    models: [
+      { id: 'sonar-pro', name: 'Sonar Pro', cost: '$$', speed: 'medium' },
+      { id: 'sonar', name: 'Sonar', cost: '$', speed: 'fast' },
+    ],
+  },
+  {
     id: 'openrouter',
     name: 'OpenRouter',
     keyPrefix: 'sk-or-',

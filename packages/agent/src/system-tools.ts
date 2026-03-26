@@ -548,10 +548,11 @@ export function createSystemTools(workspace: string): ToolDefinition[] {
       },
     },
 
-    // 7. web_search — Search the web via DuckDuckGo HTML
+    // 7. web_search — Search the web (auto-routes to best available provider)
+    // Priority: Perplexity → Tavily → Brave → DuckDuckGo (free fallback)
     {
       name: 'web_search',
-      description: 'Search the web for current information. Use for recent events, news, product updates, documentation, or anything requiring up-to-date info.',
+      description: 'Search the web via DuckDuckGo (free fallback). PREFER using perplexity_search, tavily_search, or brave_search if available — they provide higher quality results. Only use this tool if no premium search tools are available.',
       parameters: {
         type: 'object',
         properties: {

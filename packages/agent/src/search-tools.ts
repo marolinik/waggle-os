@@ -41,6 +41,7 @@ class DailyRateLimiter {
 }
 
 // Module-level rate limiters — shared across tool invocations
+const perplexityLimiter = new DailyRateLimiter(100);
 const tavilyLimiter = new DailyRateLimiter(50);
 const braveLimiter = new DailyRateLimiter(100);
 
@@ -48,6 +49,73 @@ export function createSearchTools(
   vaultFetch: (key: string) => Promise<string | null>,
 ): ToolDefinition[] {
   return [
+    // 0. perplexity_search — AI-native search (highest priority)
+    {
+      name: 'perplexity_search',
+      description:
+        'Search the web using Perplexity AI. Returns AI-synthesized answers with citations. PREFERRED search tool — use this first if available.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Search query' },
+          model: {
+            type: 'string',
+            enum: ['sonar', 'sonar-pro'],
+            description: 'Model to use — "sonar" (fast) or "sonar-pro" (thorough). Default: sonar.',
+          },
+        },
+        required: ['query'],
+      },
+      execute: async (args) => {
+        try {
+          const query = args.query as string;
+          const model = (args.model as string) ?? 'sonar';
+
+          const apiKey = await vaultFetch('perplexity');
+          if (!apiKey) {
+            return 'Perplexity API key not configured. Add perplexity key in Vault app. Falling back to tavily_search or web_search.';
+          }
+
+          if (!perplexityLimiter.canProceed()) {
+            return 'Perplexity daily quota reached (100/day). Use tavily_search or web_search instead.';
+          }
+
+          const response = await fetch('https://api.perplexity.ai/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+              model,
+              messages: [{ role: 'user', content: query }],
+            }),
+          });
+
+          if (!response.ok) {
+            const errText = await response.text().catch(() => response.statusText);
+            return `Perplexity search failed (${response.status}): ${errText}`;
+          }
+
+          const data = await response.json() as {
+            choices?: Array<{ message?: { content?: string } }>;
+            citations?: string[];
+          };
+
+          const content = data.choices?.[0]?.message?.content ?? 'No results';
+          const citations = data.citations ?? [];
+
+          let result = content;
+          if (citations.length > 0) {
+            result += '\n\nSources:\n' + citations.map((c, i) => `[${i + 1}] ${c}`).join('\n');
+          }
+          return result;
+        } catch (err: any) {
+          return `Perplexity search error: ${err.message}`;
+        }
+      },
+    },
+
     // 1. tavily_search — AI-optimized web search
     {
       name: 'tavily_search',
@@ -216,4 +284,4 @@ export function createSearchTools(
 }
 
 /** Expose rate limiters for testing */
-export { tavilyLimiter, braveLimiter };
+export { perplexityLimiter, tavilyLimiter, braveLimiter };
