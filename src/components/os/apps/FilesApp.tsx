@@ -247,8 +247,10 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
   const [previewLoading, setPreviewLoading] = useState(false);
   const [propertiesFile, setPropertiesFile] = useState<FileEntry | null>(null);
   const [showMoveDialog, setShowMoveDialog] = useState(false);
+  const [breadcrumbDropTarget, setBreadcrumbDropTarget] = useState<string | null>(null);
   const dragCounter = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const internalDragPaths = useRef<string[]>([]);
 
   const storageMeta = STORAGE_LABELS[storageType];
 
