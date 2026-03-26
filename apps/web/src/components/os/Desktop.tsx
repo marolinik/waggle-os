@@ -107,7 +107,7 @@ const Desktop = () => {
   const [showSpawnAgent, setShowSpawnAgent] = useState(false);
 
   // Core hooks
-  const { workspaces, activeWorkspace, activeWorkspaceId, selectWorkspace, createWorkspace } = useWorkspaces();
+  const { workspaces, activeWorkspace, activeWorkspaceId, selectWorkspace, createWorkspace, patchWorkspace } = useWorkspaces();
   const memory = useMemory(activeWorkspaceId);
   const events = useEvents(activeWorkspaceId);
   const agentStatus = useAgentStatus();
@@ -484,7 +484,22 @@ const Desktop = () => {
       {/* Overlays */}
       <GlobalSearch open={showGlobalSearch} onClose={() => setShowGlobalSearch(false)} onNavigate={handleSearchNavigate} />
       <CreateWorkspaceDialog open={showCreateWorkspace} onClose={() => setShowCreateWorkspace(false)} onCreate={createWorkspace} />
-      <PersonaSwitcher open={showPersonaSwitcher} onClose={() => setShowPersonaSwitcher(false)} currentPersona={activeWorkspace?.persona} onSelect={() => {}} />
+      <PersonaSwitcher
+        open={showPersonaSwitcher}
+        onClose={() => setShowPersonaSwitcher(false)}
+        currentPersona={activeWorkspace?.persona}
+        currentGroupId={activeWorkspace?.agentGroupId}
+        onSelect={(personaId) => {
+          if (activeWorkspaceId) {
+            patchWorkspace(activeWorkspaceId, { persona: personaId, agentGroupId: undefined });
+          }
+        }}
+        onSelectGroup={(groupId) => {
+          if (activeWorkspaceId) {
+            patchWorkspace(activeWorkspaceId, { agentGroupId: groupId, persona: undefined });
+          }
+        }}
+      />
       <WorkspaceSwitcher
         open={showWorkspaceSwitcher}
         onClose={() => setShowWorkspaceSwitcher(false)}
