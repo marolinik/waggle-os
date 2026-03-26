@@ -4,7 +4,7 @@ import type {
   AgentStep, Session, SkillPack, FleetSession, CronJob,
   Notification, AgentStatus, Persona, SystemHealth,
   Connector, Settings, StreamEvent, KGNode, KGEdge,
-  ModelPricing, WaggleSignal, FileEntry,
+  ModelPricing, WaggleSignal, FileEntry, WorkspaceTemplate,
 } from './types';
 
 const DEFAULT_SERVER = 'http://127.0.0.1:3333';
@@ -104,6 +104,17 @@ class LocalAdapter {
   // --- Workspaces ---
   async getWorkspaces(): Promise<Workspace[]> {
     const res = await this.fetch('/api/workspaces');
+    return res.json();
+  }
+
+  // --- Workspace Templates ---
+  async getWorkspaceTemplates(): Promise<{ templates: WorkspaceTemplate[]; count: number }> {
+    const res = await this.fetch('/api/workspace-templates');
+    return res.json();
+  }
+
+  async createWorkspaceTemplate(data: Omit<WorkspaceTemplate, 'id' | 'builtIn'>): Promise<WorkspaceTemplate> {
+    const res = await this.fetch('/api/workspace-templates', { method: 'POST', body: JSON.stringify(data) });
     return res.json();
   }
 

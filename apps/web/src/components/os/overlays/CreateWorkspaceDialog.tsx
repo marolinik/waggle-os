@@ -1,15 +1,23 @@
 import { useState, useCallback, useEffect } from 'react';
-import { X, Plus, Users, Cloud, HardDrive, Server, FolderOpen, Folder, FolderPlus, ChevronRight, Home, Check, Loader2 } from 'lucide-react';
+import {
+  X, Plus, Users, Cloud, HardDrive, Server, FolderOpen, Folder,
+  FolderPlus, ChevronRight, Home, Check, Loader2, LayoutTemplate,
+  Sparkles, Info, Wand2, Target, Microscope, Code, Megaphone,
+  Rocket, Scale, Building, FileText,
+} from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { PERSONAS } from '@/lib/personas';
 import { motion, AnimatePresence } from 'framer-motion';
 import { adapter } from '@/lib/adapter';
-import type { StorageType } from '@/lib/types';
+import type { StorageType, WorkspaceTemplate } from '@/lib/types';
 
 interface CreateWorkspaceDialogProps {
   open: boolean;
   onClose: () => void;
-  onCreate: (data: { name: string; group: string; persona?: string; shared?: boolean; storageType?: StorageType; storagePath?: string }) => void;
+  onCreate: (data: {
+    name: string; group: string; persona?: string; shared?: boolean;
+    storageType?: StorageType; storagePath?: string; templateId?: string;
+  }) => void;
 }
 
 const GROUPS = ['Personal', 'Work', 'Research', 'Team'];
@@ -20,9 +28,42 @@ const STORAGE_OPTIONS: { type: StorageType; label: string; desc: string; icon: R
   { type: 'team', label: 'Team', desc: 'Remote S3/MinIO storage', icon: Server, color: 'text-sky-400' },
 ];
 
+const TEMPLATE_ICONS: Record<string, React.ElementType> = {
+  'sales-pipeline': Target,
+  'research-project': Microscope,
+  'code-review': Code,
+  'marketing-campaign': Megaphone,
+  'product-launch': Rocket,
+  'legal-review': Scale,
+  'agency-consulting': Building,
+};
+
 function defaultVirtualPath(workspaceName: string): string {
   const slug = workspaceName.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || 'untitled';
   return `/workspaces/${slug}`;
+}
+
+/* ── Tooltip ──────────────────────────────────────────────────────── */
+
+function Tooltip({ text, children }: { text: string; children: React.ReactNode }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span className="relative inline-flex" onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
+      {children}
+      <AnimatePresence>
+        {show && (
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 4 }}
+            className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2.5 py-1.5 rounded-lg bg-popover border border-border text-[10px] text-popover-foreground whitespace-nowrap z-50 shadow-lg"
+          >
+            {text}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </span>
+  );
 }
 
 /* ── Types ─────────────────────────────────────────────────────────── */
@@ -129,7 +170,6 @@ function FolderPickerModal({ open, storageType, currentPath, onSelect, onClose }
         className="relative w-full max-w-sm glass-strong rounded-2xl shadow-2xl overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
-        {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border/30">
           <div className="flex items-center gap-2">
             <FolderOpen className={`w-4 h-4 ${storageType === 'local' ? 'text-emerald-400' : 'text-sky-400'}`} />
@@ -142,7 +182,6 @@ function FolderPickerModal({ open, storageType, currentPath, onSelect, onClose }
           </button>
         </div>
 
-        {/* Breadcrumbs */}
         <div className="flex items-center gap-0.5 px-4 py-2 border-b border-border/20 overflow-x-auto">
           {breadcrumbs.map((crumb, i) => (
             <span key={crumb.path} className="flex items-center gap-0.5 shrink-0">
@@ -159,7 +198,6 @@ function FolderPickerModal({ open, storageType, currentPath, onSelect, onClose }
           ))}
         </div>
 
-        {/* Directory listing */}
         <div className="px-2 py-2 max-h-[280px] min-h-[120px] overflow-y-auto space-y-0.5">
           {loading ? (
             <div className="flex items-center justify-center py-8 text-muted-foreground">
@@ -188,7 +226,6 @@ function FolderPickerModal({ open, storageType, currentPath, onSelect, onClose }
           )}
         </div>
 
-        {/* Footer */}
         <div className="px-4 py-3 border-t border-border/30 space-y-2">
           <AnimatePresence>
             {showNewFolder && (
@@ -257,6 +294,175 @@ function FolderPickerModal({ open, storageType, currentPath, onSelect, onClose }
   );
 }
 
+/* ── Template Creator Modal ───────────────────────────────────────── */
+
+interface TemplateCreatorProps {
+  open: boolean;
+  onClose: () => void;
+  onCreated: (t: WorkspaceTemplate) => void;
+}
+
+function TemplateCreatorModal({ open, onClose, onCreated }: TemplateCreatorProps) {
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [persona, setPersona] = useState('');
+  const [connectors, setConnectors] = useState('');
+  const [commands, setCommands] = useState('');
+  const [starterMemory, setStarterMemory] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    if (!name.trim() || !description.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const template = await adapter.createWorkspaceTemplate({
+        name: name.trim(),
+        description: description.trim(),
+        persona: persona.trim() || 'analyst',
+        connectors: connectors.split(',').map(s => s.trim()).filter(Boolean),
+        suggestedCommands: commands.split(',').map(s => s.trim()).filter(Boolean),
+        starterMemory: starterMemory.split('\n').map(s => s.trim()).filter(Boolean),
+      });
+      onCreated(template);
+      onClose();
+      // Reset
+      setName(''); setDescription(''); setPersona(''); setConnectors(''); setCommands(''); setStarterMemory('');
+    } catch (err: any) {
+      setError(err.message ?? 'Failed to create template');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) return null;
+
+  const fields: { label: string; tooltip: string; value: string; onChange: (v: string) => void; placeholder: string; multiline?: boolean }[] = [
+    {
+      label: 'Template Name',
+      tooltip: 'A short, descriptive name for this template (e.g. "Customer Support", "Data Analysis")',
+      value: name, onChange: setName, placeholder: 'e.g. Customer Support Hub',
+    },
+    {
+      label: 'Description',
+      tooltip: 'Describe the purpose and use case. AI uses this to understand the workspace domain.',
+      value: description, onChange: setDescription, placeholder: 'e.g. Handle customer tickets, track satisfaction metrics…',
+    },
+    {
+      label: 'Default Persona',
+      tooltip: 'The AI persona to use (e.g. "analyst", "researcher", "coder"). Sets the agent\'s behavior style.',
+      value: persona, onChange: setPersona, placeholder: 'e.g. analyst',
+    },
+    {
+      label: 'Connectors',
+      tooltip: 'Comma-separated list of integrations (e.g. "github, slack, email"). These tools will be pre-configured.',
+      value: connectors, onChange: setConnectors, placeholder: 'e.g. github, slack, email',
+    },
+    {
+      label: 'Suggested Commands',
+      tooltip: 'Comma-separated slash commands the agent can run (e.g. "/research, /draft, /status").',
+      value: commands, onChange: setCommands, placeholder: 'e.g. /research, /draft, /status',
+    },
+    {
+      label: 'Starter Memory',
+      tooltip: 'One instruction per line. These seed the agent\'s memory so it knows the workspace context from the start.',
+      value: starterMemory, onChange: setStarterMemory,
+      placeholder: 'e.g. This workspace tracks customer support tickets.\nKey workflow: triage → investigate → respond → close.',
+      multiline: true,
+    },
+  ];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[110] flex items-center justify-center"
+      onClick={onClose}
+    >
+      <div className="absolute inset-0 bg-background/40 backdrop-blur-sm" />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+        className="relative w-full max-w-md glass-strong rounded-2xl shadow-2xl overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-border/30">
+          <div className="flex items-center gap-2">
+            <Wand2 className="w-4 h-4 text-primary" />
+            <h3 className="text-sm font-display font-semibold text-foreground">Create Template</h3>
+          </div>
+          <button onClick={onClose} className="p-1 rounded-lg text-muted-foreground hover:text-foreground">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {/* Hint banner */}
+        <div className="mx-5 mt-3 flex items-start gap-2 bg-primary/10 border border-primary/20 rounded-xl px-3 py-2">
+          <Sparkles className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+          <p className="text-[10px] text-muted-foreground leading-relaxed">
+            Fill in the fields below to create a reusable workspace template. 
+            Hover the <Info className="w-3 h-3 inline text-primary" /> icon for guidance on each field.
+          </p>
+        </div>
+
+        {/* Fields */}
+        <div className="px-5 py-3 space-y-3 max-h-[50vh] overflow-y-auto">
+          {fields.map(field => (
+            <div key={field.label}>
+              <div className="flex items-center gap-1 mb-1">
+                <label className="text-[11px] text-muted-foreground font-medium">{field.label}</label>
+                <Tooltip text={field.tooltip}>
+                  <Info className="w-3 h-3 text-primary/60 cursor-help" />
+                </Tooltip>
+              </div>
+              {field.multiline ? (
+                <textarea
+                  value={field.value}
+                  onChange={e => field.onChange(e.target.value)}
+                  placeholder={field.placeholder}
+                  rows={3}
+                  className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2 text-[11px] text-foreground outline-none focus:border-primary/50 resize-none"
+                />
+              ) : (
+                <input
+                  value={field.value}
+                  onChange={e => field.onChange(e.target.value)}
+                  placeholder={field.placeholder}
+                  className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2 text-[11px] text-foreground outline-none focus:border-primary/50"
+                />
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Error */}
+        {error && (
+          <div className="mx-5 mb-2 text-[10px] text-destructive">{error}</div>
+        )}
+
+        {/* Footer */}
+        <div className="flex justify-end gap-2 px-5 py-3 border-t border-border/30">
+          <button onClick={onClose} className="px-3 py-1.5 text-[11px] rounded-lg text-muted-foreground hover:text-foreground transition-colors">
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!name.trim() || !description.trim() || saving}
+            className="flex items-center gap-1 px-3 py-1.5 text-[11px] rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-40 transition-colors"
+          >
+            {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+            Create Template
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 /* ── Main Dialog ──────────────────────────────────────────────────── */
 
 const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialogProps) => {
@@ -268,12 +474,39 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
   const [storagePath, setStoragePath] = useState('');
   const [showFolderPicker, setShowFolderPicker] = useState(false);
 
+  // Templates
+  const [templates, setTemplates] = useState<WorkspaceTemplate[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  const [showTemplateCreator, setShowTemplateCreator] = useState(false);
+
+  // Fetch templates when dialog opens
+  useEffect(() => {
+    if (!open) return;
+    setLoadingTemplates(true);
+    adapter.getWorkspaceTemplates()
+      .then(data => setTemplates(data.templates))
+      .catch(() => setTemplates([]))
+      .finally(() => setLoadingTemplates(false));
+  }, [open]);
+
+  // When a template is selected, auto-fill persona
+  useEffect(() => {
+    if (!selectedTemplate) return;
+    const tmpl = templates.find(t => t.id === selectedTemplate);
+    if (tmpl?.persona) {
+      const matchedPersona = PERSONAS.find(p => p.role === tmpl.persona || p.id === tmpl.persona);
+      if (matchedPersona) setSelectedPersona(matchedPersona.id);
+    }
+  }, [selectedTemplate, templates]);
+
   const handleCreate = () => {
     if (!name.trim()) return;
     onCreate({
       name: name.trim(), group, persona: selectedPersona, shared,
       storageType,
       storagePath: storagePath.trim() || undefined,
+      templateId: selectedTemplate || undefined,
     });
     setName('');
     setGroup('Personal');
@@ -281,6 +514,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
     setShared(false);
     setStorageType('virtual');
     setStoragePath('');
+    setSelectedTemplate(null);
     onClose();
   };
 
@@ -313,6 +547,93 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
           </div>
 
           <div className="space-y-4">
+            {/* Template Selection */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-1">
+                  <label className="text-xs text-muted-foreground">Template</label>
+                  <Tooltip text="Start from a pre-configured template with persona, tools, and starter memory already set up">
+                    <Info className="w-3 h-3 text-primary/60 cursor-help" />
+                  </Tooltip>
+                </div>
+                <button
+                  onClick={() => setShowTemplateCreator(true)}
+                  className="flex items-center gap-1 text-[10px] text-primary hover:text-primary/80 transition-colors"
+                >
+                  <Plus className="w-3 h-3" /> New Template
+                </button>
+              </div>
+
+              {loadingTemplates ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <div className="grid grid-cols-4 gap-1.5 max-h-[140px] overflow-y-auto pr-1">
+                  {/* Blank option */}
+                  <button
+                    onClick={() => setSelectedTemplate(null)}
+                    className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all ${
+                      selectedTemplate === null
+                        ? 'bg-primary/20 border border-primary/50'
+                        : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
+                    }`}
+                  >
+                    <FileText className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-[8px] text-muted-foreground text-center leading-tight">Blank</span>
+                  </button>
+                  {templates.map(tmpl => {
+                    const Icon = TEMPLATE_ICONS[tmpl.id] || LayoutTemplate;
+                    const isSelected = selectedTemplate === tmpl.id;
+                    return (
+                      <Tooltip key={tmpl.id} text={tmpl.description}>
+                        <button
+                          onClick={() => setSelectedTemplate(isSelected ? null : tmpl.id)}
+                          className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all w-full ${
+                            isSelected
+                              ? 'bg-primary/20 border border-primary/50'
+                              : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
+                          }`}
+                        >
+                          <Icon className={`w-4 h-4 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
+                          <span className="text-[8px] text-muted-foreground text-center leading-tight truncate w-full">
+                            {tmpl.name.split(' ')[0]}
+                          </span>
+                          {!tmpl.builtIn && (
+                            <span className="text-[7px] text-primary/60">custom</span>
+                          )}
+                        </button>
+                      </Tooltip>
+                    );
+                  })}
+                </div>
+              )}
+
+              {selectedTemplate && (() => {
+                const tmpl = templates.find(t => t.id === selectedTemplate);
+                if (!tmpl) return null;
+                return (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="mt-2 p-2.5 bg-primary/5 border border-primary/20 rounded-xl"
+                  >
+                    <p className="text-[10px] text-foreground font-medium mb-1">{tmpl.name}</p>
+                    <p className="text-[9px] text-muted-foreground mb-1.5">{tmpl.description}</p>
+                    <div className="flex flex-wrap gap-1">
+                      {tmpl.connectors.map(c => (
+                        <span key={c} className="px-1.5 py-0.5 rounded bg-secondary/50 text-[8px] text-muted-foreground">{c}</span>
+                      ))}
+                      {tmpl.suggestedCommands.slice(0, 3).map(cmd => (
+                        <span key={cmd} className="px-1.5 py-0.5 rounded bg-primary/10 text-[8px] text-primary font-mono">{cmd}</span>
+                      ))}
+                    </div>
+                  </motion.div>
+                );
+              })()}
+            </div>
+
+            {/* Workspace Name */}
             <div>
               <label className="text-xs text-muted-foreground block mb-1.5">Workspace Name</label>
               <input
@@ -480,6 +801,16 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
         currentPath={storagePath}
         onSelect={(path) => setStoragePath(path)}
         onClose={() => setShowFolderPicker(false)}
+      />
+
+      {/* Template Creator overlay */}
+      <TemplateCreatorModal
+        open={showTemplateCreator}
+        onClose={() => setShowTemplateCreator(false)}
+        onCreated={(t) => {
+          setTemplates(prev => [...prev, t]);
+          setSelectedTemplate(t.id);
+        }}
       />
     </AnimatePresence>
   );
