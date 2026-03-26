@@ -552,6 +552,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
   const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [showTemplateCreator, setShowTemplateCreator] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<WorkspaceTemplate | null>(null);
 
   // Connectors from backend
   const [connectors, setConnectors] = useState<Connector[]>([]);
