@@ -670,7 +670,37 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
                 {i > 0 && <ChevronRight className="w-3 h-3 text-muted-foreground/50" />}
                 <button
                   onClick={() => handleNavigate(crumb.path)}
-                  className="text-[11px] text-muted-foreground hover:text-foreground transition-colors truncate max-w-[100px]"
+                  onDragOver={e => {
+                    if (internalDragPaths.current.length > 0) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      e.dataTransfer.dropEffect = 'move';
+                      setBreadcrumbDropTarget(crumb.path);
+                    }
+                  }}
+                  onDragLeave={() => setBreadcrumbDropTarget(null)}
+                  onDrop={e => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setBreadcrumbDropTarget(null);
+                    const paths = internalDragPaths.current;
+                    if (paths.length === 0) return;
+                    const filesToMove = files.filter(f => paths.includes(f.path));
+                    filesToMove.forEach(f => {
+                      const newPath = `${crumb.path === '/' ? '' : crumb.path}/${f.name}`;
+                      if (newPath !== f.path) {
+                        adapter.moveFile(workspaceId, f.path, newPath).catch(() => {});
+                        setFiles(prev => prev.map(pf => pf.path === f.path ? { ...pf, path: newPath } : pf));
+                      }
+                    });
+                    setSelectedFiles(new Set());
+                    internalDragPaths.current = [];
+                  }}
+                  className={`text-[11px] transition-colors truncate max-w-[100px] px-1.5 py-0.5 rounded-md ${
+                    breadcrumbDropTarget === crumb.path
+                      ? 'bg-primary/20 text-primary ring-1 ring-primary/40'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
                 >
                   {crumb.label}
                 </button>
@@ -763,6 +793,15 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
                   return (
                     <tr
                       key={file.path}
+                      draggable
+                      onDragStart={e => {
+                        const paths = selectedFiles.has(file.path) && selectedFiles.size > 1
+                          ? Array.from(selectedFiles) : [file.path];
+                        internalDragPaths.current = paths;
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setData('text/plain', paths.join(','));
+                      }}
+                      onDragEnd={() => { internalDragPaths.current = []; }}
                       onClick={e => { e.ctrlKey || e.metaKey ? handleFileSelect(file, true) : handleFileClick(file); }}
                       onDoubleClick={() => file.type === 'directory' && handleNavigate(file.path)}
                       onContextMenu={e => handleContextMenu(e, file)}
@@ -803,6 +842,15 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
                 return (
                   <button
                     key={file.path}
+                    draggable
+                    onDragStart={e => {
+                      const paths = selectedFiles.has(file.path) && selectedFiles.size > 1
+                        ? Array.from(selectedFiles) : [file.path];
+                      internalDragPaths.current = paths;
+                      e.dataTransfer.effectAllowed = 'move';
+                      e.dataTransfer.setData('text/plain', paths.join(','));
+                    }}
+                    onDragEnd={() => { internalDragPaths.current = []; }}
                     onClick={e => { e.ctrlKey || e.metaKey ? handleFileSelect(file, true) : handleFileClick(file); }}
                     onDoubleClick={() => file.type === 'directory' && handleNavigate(file.path)}
                     onContextMenu={e => handleContextMenu(e, file)}
