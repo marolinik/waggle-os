@@ -315,6 +315,8 @@ interface TemplateCreatorProps {
   onCreated: (t: WorkspaceTemplate) => void;
   availableConnectors: ChipOption[];
   editingTemplate?: WorkspaceTemplate | null;
+  /** Pre-fill data for duplication (creates new, does not update) */
+  initialData?: WorkspaceTemplate | null;
 }
 
 function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, editingTemplate }: TemplateCreatorProps) {
