@@ -406,10 +406,12 @@ const GroupDetail = ({
   group,
   agents,
   onRun,
+  onEdit,
 }: {
   group: AgentGroup;
   agents: BackendPersona[];
   onRun: (task: string) => void;
+  onEdit: () => void;
 }) => {
   const [task, setTask] = useState('');
   const strat = STRATEGY_CONFIG[group.strategy];
@@ -422,9 +424,15 @@ const GroupDetail = ({
       className="flex-1 flex flex-col gap-4 overflow-y-auto scrollbar-thin"
     >
       <div>
-        <div className="flex items-center gap-2 mb-1">
+      <div className="flex items-center gap-2 mb-1">
           <Users className="w-5 h-5 text-primary" />
-          <h3 className="text-sm font-display font-bold text-foreground">{group.name}</h3>
+          <h3 className="text-sm font-display font-bold text-foreground flex-1">{group.name}</h3>
+          <button
+            onClick={onEdit}
+            className="flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-medium rounded-lg bg-secondary/50 hover:bg-secondary/70 text-foreground transition-colors"
+          >
+            <Pencil className="w-3 h-3" /> Edit
+          </button>
         </div>
         {group.description && <p className="text-xs text-muted-foreground">{group.description}</p>}
         <div className="mt-2 flex items-center gap-2">
@@ -505,15 +513,19 @@ const CreateGroupForm = ({
   agents,
   onSave,
   onCancel,
+  initialData,
+  editMode,
 }: {
   agents: BackendPersona[];
   onSave: (data: { name: string; description: string; strategy: 'parallel' | 'sequential' | 'coordinator'; members: AgentGroupMember[] }) => void;
   onCancel: () => void;
+  initialData?: { name: string; description: string; strategy: 'parallel' | 'sequential' | 'coordinator'; members: AgentGroupMember[] };
+  editMode?: boolean;
 }) => {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [strategy, setStrategy] = useState<'parallel' | 'sequential' | 'coordinator'>('parallel');
-  const [members, setMembers] = useState<AgentGroupMember[]>([]);
+  const [name, setName] = useState(initialData?.name ?? '');
+  const [description, setDescription] = useState(initialData?.description ?? '');
+  const [strategy, setStrategy] = useState<'parallel' | 'sequential' | 'coordinator'>(initialData?.strategy ?? 'parallel');
+  const [members, setMembers] = useState<AgentGroupMember[]>(initialData?.members ?? []);
   const dragItem = useRef<number | null>(null);
   const dragOverItem = useRef<number | null>(null);
 
@@ -668,7 +680,7 @@ const CreateGroupForm = ({
           disabled={!name.trim() || members.length < 2}
           className="px-4 py-1.5 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1"
         >
-          <Users className="w-3 h-3" /> Create Group
+          <Users className="w-3 h-3" /> {editMode ? 'Save Changes' : 'Create Group'}
         </button>
       </div>
     </motion.div>
