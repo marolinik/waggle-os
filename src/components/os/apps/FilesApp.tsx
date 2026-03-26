@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useMemo } from 'react';
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import {
   Folder, File, ChevronRight, ChevronDown, Upload, Plus,
   Grid3X3, List, ArrowLeft, Home, MoreHorizontal, Download, Eye,
@@ -473,6 +473,88 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
     const parent = currentPath.substring(0, currentPath.lastIndexOf('/')) || '/';
     handleNavigate(parent);
   };
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Skip if user is typing in an input
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+      const mod = e.ctrlKey || e.metaKey;
+
+      // Ctrl+A — select all
+      if (mod && e.key === 'a') {
+        e.preventDefault();
+        handleSelectAll();
+        return;
+      }
+
+      // Delete / Backspace — delete selected
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedFiles.size > 0) {
+        e.preventDefault();
+        handleBulkDelete();
+        return;
+      }
+
+      // Ctrl+C — copy
+      if (mod && e.key === 'c' && selectedFiles.size > 0) {
+        e.preventDefault();
+        handleBulkCopy();
+        return;
+      }
+
+      // Ctrl+X — cut
+      if (mod && e.key === 'x' && selectedFiles.size > 0) {
+        e.preventDefault();
+        handleBulkCut();
+        return;
+      }
+
+      // Ctrl+V — paste
+      if (mod && e.key === 'v' && clipboard) {
+        e.preventDefault();
+        handlePaste();
+        return;
+      }
+
+      // Ctrl+D — download selected
+      if (mod && e.key === 'd' && selectedFiles.size > 0) {
+        e.preventDefault();
+        handleBulkDownload();
+        return;
+      }
+
+      // Escape — clear selection / close preview
+      if (e.key === 'Escape') {
+        if (previewFile) { setPreviewFile(null); setPreviewContent(null); }
+        else if (propertiesFile) setPropertiesFile(null);
+        else if (showMoveDialog) setShowMoveDialog(false);
+        else if (selectedFiles.size > 0) setSelectedFiles(new Set());
+        return;
+      }
+
+      // F2 — rename (single selection)
+      if (e.key === 'F2' && selectedFiles.size === 1) {
+        e.preventDefault();
+        const path = Array.from(selectedFiles)[0];
+        const file = files.find(f => f.path === path);
+        if (file) { setRenaming(file.path); setRenameValue(file.name); }
+        return;
+      }
+
+      // Enter — open selected file/folder
+      if (e.key === 'Enter' && selectedFiles.size === 1) {
+        const path = Array.from(selectedFiles)[0];
+        const file = files.find(f => f.path === path);
+        if (file) handleFileClick(file);
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [selectedFiles, clipboard, files, previewFile, propertiesFile, showMoveDialog, visibleFiles]);
 
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
