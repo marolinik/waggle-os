@@ -421,11 +421,11 @@ class LocalAdapter {
   }
 
   async installMarketplacePack(packId: string): Promise<void> {
-    await this.fetch('/api/marketplace/install', { method: 'POST', body: JSON.stringify({ packId }) });
+    await this.fetch('/api/marketplace/install', { method: 'POST', body: JSON.stringify({ packageId: packId }) });
   }
 
   async uninstallMarketplacePack(packId: string): Promise<void> {
-    await this.fetch('/api/marketplace/uninstall', { method: 'POST', body: JSON.stringify({ packId }) });
+    await this.fetch('/api/marketplace/uninstall', { method: 'POST', body: JSON.stringify({ packageId: packId }) });
   }
 
   // --- Fleet ---
