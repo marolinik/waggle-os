@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Lock, Plus, Trash2, Eye, EyeOff, Loader2, Key, Plug, ExternalLink,
-  Shield, ChevronDown, ChevronRight, RefreshCw, CheckCircle2, User,
+  Shield, ChevronDown, ChevronRight, RefreshCw, CheckCircle2, User, Pencil,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 
@@ -256,6 +256,9 @@ const VaultApp = () => {
                       {revealedSecret === s.name && (
                         <span className="text-[10px] text-foreground font-mono mr-2 max-w-[180px] truncate">{revealedValue}</span>
                       )}
+                      <button onClick={() => { setNewName(s.name); setNewType(s.type ?? 'api_key'); setNewValue(''); }} className="p-1 rounded hover:bg-muted/50" title="Update value">
+                        <Pencil className="w-3 h-3 text-muted-foreground" />
+                      </button>
                       <button onClick={() => handleReveal(s.name)} className="p-1 rounded hover:bg-muted/50" title={revealedSecret === s.name ? 'Hide' : 'Reveal (10s)'}>
                         {revealedSecret === s.name ? <EyeOff className="w-3 h-3 text-muted-foreground" /> : <Eye className="w-3 h-3 text-muted-foreground" />}
                       </button>
@@ -332,7 +335,8 @@ const VaultApp = () => {
 
               <button onClick={handleAddSecret} disabled={!newName.trim() || !newValue.trim() || adding}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-50 transition-colors">
-                {adding ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />} Add to Vault
+                {adding ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                {secrets.some(s => s.name === newName) ? 'Update in Vault' : 'Add to Vault'}
               </button>
             </div>
           </div>

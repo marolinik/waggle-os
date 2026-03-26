@@ -32,15 +32,20 @@ interface ChatCompletionBody {
   temperature?: number;
 }
 
-/** Map OpenAI model names to Anthropic model IDs */
+/** Map model names (from various formats) to Anthropic model IDs */
 function mapModel(model: string): string {
+  // Strip provider prefix (e.g., "anthropic/claude-sonnet-4.6" → "claude-sonnet-4.6")
+  let clean = model.includes('/') ? model.split('/').pop()! : model;
+  // Normalize dots to dashes in version (e.g., "claude-sonnet-4.6" → "claude-sonnet-4-6")
+  clean = clean.replace(/(\d)\.(\d)/g, '$1-$2');
+
   const mapping: Record<string, string> = {
     'claude-sonnet-4-6': 'claude-sonnet-4-20250514',
     'claude-opus-4-6': 'claude-opus-4-20250514',
     'claude-haiku-4-5': 'claude-haiku-4-5-20251001',
     'claude-haiku-4-5-20251001': 'claude-haiku-4-5-20251001',
   };
-  return mapping[model] ?? model;
+  return mapping[clean] ?? clean;
 }
 
 export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
