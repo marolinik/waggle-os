@@ -1089,10 +1089,25 @@ const AgentsApp = () => {
     } catch { setError('Failed to delete group'); }
   };
 
-  const handleRunGroup = async (groupId: string, task: string) => {
+  const handleRunGroup = async (groupId: string, task: string): Promise<GroupExecState | null> => {
     try {
-      await adapter.runAgentGroup(groupId, task);
-    } catch { setError('Failed to run group task'); }
+      const group = groups.find(g => g.id === groupId);
+      const result = await adapter.runAgentGroup(groupId, task) as { jobId?: string; id?: string };
+      const jobId = result?.jobId ?? result?.id ?? `job-${Date.now()}`;
+      const members: MemberExecState[] = (group?.members ?? [])
+        .sort((a, b) => a.executionOrder - b.executionOrder)
+        .map(m => ({ agentId: m.agentId, status: 'pending' as const }));
+      return {
+        jobId,
+        status: 'queued',
+        task,
+        startedAt: Date.now(),
+        members,
+      };
+    } catch {
+      setError('Failed to run group task');
+      return null;
+    }
   };
 
   const handleAiGenerate = async (prompt: string) => {
