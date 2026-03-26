@@ -48,6 +48,17 @@ export interface FileEntry {
   createdAt?: string;
 }
 
+export interface WorkspaceTemplate {
+  id: string;
+  name: string;
+  description: string;
+  persona: string;
+  connectors: string[];
+  suggestedCommands: string[];
+  starterMemory: string[];
+  builtIn: boolean;
+}
+
 export interface WorkspaceContext {
   workspace: Workspace;
   memoryCount: number;
