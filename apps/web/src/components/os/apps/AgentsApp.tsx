@@ -672,6 +672,12 @@ const GroupDetail = ({
           <Users className="w-5 h-5 text-primary" />
           <h3 className="text-sm font-display font-bold text-foreground flex-1">{group.name}</h3>
           <button
+            onClick={onDuplicate}
+            className="flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-medium rounded-lg bg-secondary/50 hover:bg-secondary/70 text-foreground transition-colors"
+          >
+            <Copy className="w-3 h-3" /> Duplicate
+          </button>
+          <button
             onClick={onEdit}
             className="flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-medium rounded-lg bg-secondary/50 hover:bg-secondary/70 text-foreground transition-colors"
           >
