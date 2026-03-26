@@ -5,6 +5,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getPersonaById, PERSONAS } from '@/lib/personas';
 import { adapter } from '@/lib/adapter';
 import type { ChatMessage, ToolExecution, ApprovalRequest } from '@/lib/types';
+import WorkspaceBriefing from '@/components/os/WorkspaceBriefing';
 
 export interface TeamMember {
   id: string;
@@ -487,27 +488,17 @@ const ChatApp = ({
 
         {/* Messages */}
         <div ref={scrollRef} className="flex-1 overflow-auto p-4 space-y-3">
-          {messages.length === 0 && (
+          {messages.length === 0 && workspaceId && (
+            <WorkspaceBriefing
+              workspaceId={workspaceId}
+              onSendMessage={(msg) => { setInput(msg); inputRef.current?.focus(); }}
+              onSelectSession={onSelectSession}
+            />
+          )}
+          {messages.length === 0 && !workspaceId && (
             <div className="flex flex-col items-center justify-center h-full text-center">
-              {persona && (
-                <Avatar className="w-16 h-16 mb-3">
-                  <AvatarImage src={persona.avatar} />
-                  <AvatarFallback className="bg-primary/20 text-lg">{persona.name[0]}</AvatarFallback>
-                </Avatar>
-              )}
               <p className="text-sm font-display text-foreground mb-1">Ready to assist</p>
-              <p className="text-xs text-muted-foreground mb-4">Type a message or use / for commands</p>
-              <div className="flex flex-wrap gap-2 max-w-sm justify-center">
-                {['/research a topic', '/draft a blog post', '/plan a project', '/review my code'].map(suggestion => (
-                  <button
-                    key={suggestion}
-                    onClick={() => { setInput(suggestion); inputRef.current?.focus(); }}
-                    className="px-3 py-1.5 text-[10px] rounded-lg bg-secondary/50 text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-colors font-display"
-                  >
-                    {suggestion}
-                  </button>
-                ))}
-              </div>
+              <p className="text-xs text-muted-foreground">Select a workspace to get started</p>
             </div>
           )}
           {messages.map((msg) => (

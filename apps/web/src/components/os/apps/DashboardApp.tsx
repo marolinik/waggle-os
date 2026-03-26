@@ -47,9 +47,18 @@ const groupColors: Record<string, string> = {
 
 const DashboardApp = ({ workspaces, activeWorkspaceId, onSelectWorkspace, onCreateWorkspace }: DashboardAppProps) => {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<string>('All');
 
-  // Group workspaces
-  const groups = workspaces.reduce<Record<string, Workspace[]>>((acc, ws) => {
+  // Get unique group names
+  const groupNames = ['All', ...new Set(workspaces.map(ws => ws.group || 'Personal'))];
+
+  // Filter workspaces
+  const filtered = activeFilter === 'All'
+    ? workspaces
+    : workspaces.filter(ws => (ws.group || 'Personal') === activeFilter);
+
+  // Group filtered workspaces
+  const groups = filtered.reduce<Record<string, Workspace[]>>((acc, ws) => {
     const group = ws.group || 'Personal';
     if (!acc[group]) acc[group] = [];
     acc[group].push(ws);
@@ -67,6 +76,21 @@ const DashboardApp = ({ workspaces, activeWorkspaceId, onSelectWorkspace, onCrea
           <Plus className="w-3.5 h-3.5" /> New
         </button>
       </div>
+
+      {/* Group filter tabs */}
+      {groupNames.length > 2 && (
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          {groupNames.map(g => (
+            <button key={g} onClick={() => setActiveFilter(g)}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-display transition-colors ${
+                activeFilter === g ? 'bg-primary text-primary-foreground' : 'bg-secondary/50 text-muted-foreground hover:text-foreground'
+              }`}>
+              {g}
+              {g !== 'All' && <span className="ml-1 text-[9px] opacity-70">({workspaces.filter(ws => (ws.group || 'Personal') === g).length})</span>}
+            </button>
+          ))}
+        </div>
+      )}
 
       {Object.entries(groups).map(([group, wsList]) => (
         <div key={group} className="mb-4">

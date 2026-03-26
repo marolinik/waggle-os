@@ -30,6 +30,7 @@ import NotificationInbox from "./overlays/NotificationInbox";
 import KeyboardShortcutsHelp from "./overlays/KeyboardShortcutsHelp";
 import OnboardingWizard from "./overlays/OnboardingWizard";
 import OnboardingTooltips from "./overlays/OnboardingTooltips";
+import LoginBriefing from "./overlays/LoginBriefing";
 import { adapter } from "@/lib/adapter";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { useMemory } from "@/hooks/useMemory";
@@ -107,6 +108,7 @@ const Desktop = () => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
   const [showSpawnAgent, setShowSpawnAgent] = useState(false);
+  const [showLoginBriefing, setShowLoginBriefing] = useState(true);
 
   // Core hooks
   const { workspaces, activeWorkspace, activeWorkspaceId, selectWorkspace, createWorkspace, patchWorkspace } = useWorkspaces();
@@ -537,6 +539,16 @@ const Desktop = () => {
         />
       )}
       {onboardingState.completed && <OnboardingTooltips />}
+      {onboardingState.completed && showLoginBriefing && (
+        <LoginBriefing
+          onDismiss={() => setShowLoginBriefing(false)}
+          onOpenWorkspace={(wsId) => {
+            selectWorkspace(wsId);
+            openChatForWorkspace(wsId);
+            setShowLoginBriefing(false);
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -65,11 +65,23 @@ export interface WorkspaceTemplate {
 
 export interface WorkspaceContext {
   workspace: Workspace;
-  memoryCount: number;
-  sessionCount: number;
-  model: string;
-  lastActive: string;
-  agentActive: boolean;
+  summary?: string;
+  memoryCount?: number;
+  sessionCount?: number;
+  model?: string;
+  lastActive?: string;
+  agentActive?: boolean;
+  greeting?: string;
+  recentThreads?: Array<{ id: string; title: string; lastActive: string }>;
+  recentDecisions?: Array<{ content: string; date: string }>;
+  recentMemories?: Array<{ content: string; importance: string; date: string }>;
+  suggestedPrompts?: string[];
+  pendingTasks?: string[];
+  upcomingSchedules?: string[];
+  progressItems?: Array<{ type: string; content: string; date: string }>;
+  welcomeMessage?: string;
+  crossWorkspaceHints?: string[];
+  stats?: { memoryCount: number; sessionCount: number; fileCount: number };
 }
 
 export interface ChatMessage {
