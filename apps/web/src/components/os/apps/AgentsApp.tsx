@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Bot, Plus, Search, Loader2, Wrench, ChevronRight, Sparkles,
-  Trash2, X, Check, AlertCircle,
+  Trash2, X, Check, AlertCircle, Pencil, Save,
 } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { adapter } from '@/lib/adapter';
@@ -76,10 +76,12 @@ const AgentDetail = ({
   agent,
   localPersona,
   allTools,
+  onEdit,
 }: {
   agent: BackendPersona;
   localPersona?: PersonaConfig;
   allTools: ToolDef[];
+  onEdit?: () => void;
 }) => {
   const agentTools = (agent.tools ?? []).map(t => allTools.find(at => at.name === t) ?? { name: t });
 
@@ -97,13 +99,21 @@ const AgentDetail = ({
             <AvatarFallback className="text-xl bg-primary/20">{agent.icon || agent.name[0]}</AvatarFallback>
           )}
         </Avatar>
-        <div>
+        <div className="flex-1">
           <h3 className="text-sm font-display font-bold text-foreground">{agent.name}</h3>
           <p className="text-xs text-muted-foreground">{agent.description}</p>
           {agent.custom && (
             <span className="inline-block mt-1 text-[9px] px-1.5 py-0.5 rounded-full bg-primary/20 text-primary font-medium">Custom</span>
           )}
         </div>
+        {agent.custom && onEdit && (
+          <button
+            onClick={onEdit}
+            className="flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-medium rounded-lg bg-secondary/50 hover:bg-secondary/70 text-foreground transition-colors"
+          >
+            <Pencil className="w-3 h-3" /> Edit
+          </button>
+        )}
       </div>
 
       {/* Tools */}
@@ -157,22 +167,29 @@ const AgentDetail = ({
   );
 };
 
-/* ── Create Agent Form ── */
+/* ── Create/Edit Agent Form ── */
 const CreateAgentForm = ({
   allTools,
   onSave,
   onCancel,
   generating,
   onGenerate,
+  initialData,
+  editMode,
 }: {
   allTools: ToolDef[];
   onSave: (data: { name: string; description: string; icon: string; tools: string[]; systemPrompt: string }) => void;
   onCancel: () => void;
   generating: boolean;
   onGenerate: (prompt: string) => Promise<{ name: string; description: string; systemPrompt: string; tools: string[] } | null>;
+  initialData?: { name: string; description: string; icon: string; tools: string[]; systemPrompt: string };
+  editMode?: boolean;
 }) => {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
+  const [name, setName] = useState(initialData?.name ?? '');
+  const [description, setDescription] = useState(initialData?.description ?? '');
+  const [icon, setIcon] = useState(initialData?.icon ?? '🤖');
+  const [systemPrompt, setSystemPrompt] = useState(initialData?.systemPrompt ?? '');
+  const [selectedTools, setSelectedTools] = useState<string[]>(initialData?.tools ?? []);
   const [icon, setIcon] = useState('🤖');
   const [systemPrompt, setSystemPrompt] = useState('');
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
@@ -310,7 +327,8 @@ const CreateAgentForm = ({
           disabled={!name.trim() || !systemPrompt.trim()}
           className="px-4 py-1.5 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1"
         >
-          <Plus className="w-3 h-3" /> Create Agent
+          {editMode ? <Save className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
+          {editMode ? 'Save Changes' : 'Create Agent'}
         </button>
       </div>
     </motion.div>
