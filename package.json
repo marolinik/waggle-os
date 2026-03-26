@@ -13,8 +13,8 @@
   ],
   "scripts": {
     "dev": "cd apps/web && npx vite",
-    "build": "cd apps/web && npx vite build",
-    "build:dev": "cd apps/web && npx vite build --mode development",
+    "build": "cd apps/web && npx vite build --outDir ../../dist --emptyOutDir",
+    "build:dev": "cd apps/web && npx vite build --mode development --outDir ../../dist --emptyOutDir",
     "preview": "cd apps/web && npx vite preview",
     "lint": "eslint .",
     "test": "vitest run",
