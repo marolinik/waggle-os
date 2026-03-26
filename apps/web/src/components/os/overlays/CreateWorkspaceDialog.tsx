@@ -408,7 +408,7 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-border/30">
           <div className="flex items-center gap-2">
             <Wand2 className="w-4 h-4 text-primary" />
-            <h3 className="text-sm font-display font-semibold text-foreground">Create Template</h3>
+            <h3 className="text-sm font-display font-semibold text-foreground">{editingTemplate ? 'Edit Template' : 'Create Template'}</h3>
           </div>
           <button onClick={onClose} className="p-1 rounded-lg text-muted-foreground hover:text-foreground"><X className="w-3.5 h-3.5" /></button>
         </div>
@@ -527,7 +527,8 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
           <button onClick={onClose} className="px-3 py-1.5 text-[11px] rounded-lg text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
           <button onClick={handleSave} disabled={!name.trim() || !description.trim() || saving}
             className="flex items-center gap-1 px-3 py-1.5 text-[11px] rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-40 transition-colors">
-            {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />} Create Template
+            {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : editingTemplate ? <Check className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
+            {editingTemplate ? 'Save Changes' : 'Create Template'}
           </button>
         </div>
       </motion.div>
