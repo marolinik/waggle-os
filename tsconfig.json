@@ -7,8 +7,15 @@
     "strict": false,
     "esModuleInterop": true,
     "resolveJsonModule": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    "composite": true,
+    "declaration": true,
+    "jsx": "react-jsx",
+    "noEmit": false
   },
-  "include": [],
+  "references": [
+    { "path": "apps/web" }
+  ],
+  "files": ["apps/web/src/vite-env.d.ts"],
   "exclude": ["node_modules"]
 }
