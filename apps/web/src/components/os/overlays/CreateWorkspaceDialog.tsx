@@ -640,12 +640,16 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
   const handleCreate = () => {
     if (!name.trim()) return;
     onCreate({
-      name: name.trim(), group, persona: selectedPersona, shared,
+      name: name.trim(), group,
+      persona: agentMode === 'single' ? selectedPersona : undefined,
+      agentGroupId: agentMode === 'group' ? selectedGroupId : undefined,
+      shared,
       storageType, storagePath: storagePath.trim() || undefined,
       templateId: selectedTemplate || undefined,
     });
     setName(''); setGroup('Personal'); setSelectedPersona(undefined); setShared(false);
     setStorageType('virtual'); setStoragePath(''); setSelectedTemplate(null);
+    setAgentMode('single'); setSelectedGroupId(undefined);
     onClose();
   };
 
