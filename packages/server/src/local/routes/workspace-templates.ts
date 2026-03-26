@@ -44,6 +44,7 @@ export const BUILT_IN_TEMPLATES: WorkspaceTemplate[] = [
       'Use /research to investigate companies, /draft to create outreach emails.',
     ],
     builtIn: true,
+    category: 'sales',
   },
   {
     id: 'research-project',
