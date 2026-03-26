@@ -736,6 +736,83 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
           )}
         </div>
 
+        {/* Bulk actions toolbar */}
+        <AnimatePresence>
+          {selectedFileCount > 1 && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              className="overflow-hidden border-t border-primary/20"
+            >
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/5">
+                <div className="flex items-center gap-1.5 mr-2">
+                  <CheckSquare className="w-3.5 h-3.5 text-primary" />
+                  <span className="text-[11px] font-medium text-primary">{selectedFileCount} selected</span>
+                  <span className="text-[10px] text-muted-foreground">({formatSize(selectedTotalSize)})</span>
+                </div>
+
+                <div className="h-4 w-px bg-border/30" />
+
+                <button
+                  onClick={handleBulkDownload}
+                  className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] text-foreground hover:bg-muted/50 transition-colors"
+                  title="Download selected files"
+                >
+                  <Download className="w-3 h-3" /> Download
+                </button>
+                <button
+                  onClick={handleBulkCopy}
+                  className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] text-foreground hover:bg-muted/50 transition-colors"
+                  title="Copy selected"
+                >
+                  <Copy className="w-3 h-3" /> Copy
+                </button>
+                <button
+                  onClick={handleBulkCut}
+                  className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] text-foreground hover:bg-muted/50 transition-colors"
+                  title="Cut selected"
+                >
+                  <Scissors className="w-3 h-3" /> Cut
+                </button>
+                <button
+                  onClick={() => setShowMoveDialog(true)}
+                  className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] text-foreground hover:bg-muted/50 transition-colors"
+                  title="Move selected to folder"
+                >
+                  <FolderInput className="w-3 h-3" /> Move
+                </button>
+
+                <div className="h-4 w-px bg-border/30" />
+
+                <button
+                  onClick={handleBulkDelete}
+                  className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] text-destructive hover:bg-destructive/10 transition-colors"
+                  title="Delete selected"
+                >
+                  <Trash2 className="w-3 h-3" /> Delete
+                </button>
+
+                <div className="flex-1" />
+
+                <button
+                  onClick={handleSelectAll}
+                  className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Select all
+                </button>
+                <button
+                  onClick={() => setSelectedFiles(new Set())}
+                  className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <XSquare className="w-3 h-3" /> Clear
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Status bar */}
         <div className="flex items-center justify-between px-3 py-1 border-t border-border/20 text-[10px] text-muted-foreground">
           <span>{visibleFiles.length} items{selectedFiles.size > 0 && ` · ${selectedFiles.size} selected`}</span>
@@ -745,6 +822,60 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
           </span>
         </div>
       </div>
+
+      {/* Move dialog */}
+      <AnimatePresence>
+        {showMoveDialog && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowMoveDialog(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              className="w-[300px] bg-background border border-border/40 rounded-2xl shadow-2xl overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="px-4 py-3 border-b border-border/20 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-foreground">Move {selectedFileCount} items to…</h3>
+                <button onClick={() => setShowMoveDialog(false)} className="p-0.5 rounded hover:bg-muted/50">
+                  <XIcon className="w-4 h-4 text-muted-foreground" />
+                </button>
+              </div>
+              <div className="p-2 max-h-[250px] overflow-auto space-y-0.5">
+                <button
+                  onClick={() => handleBulkMove('/')}
+                  className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs hover:bg-muted/50 transition-colors ${currentPath === '/' ? 'opacity-40 pointer-events-none' : ''}`}
+                >
+                  <Home className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span>Root</span>
+                </button>
+                {treeDirs
+                  .filter(d => !selectedFiles.has(d.path))
+                  .map(dir => (
+                    <button
+                      key={dir.path}
+                      onClick={() => handleBulkMove(dir.path)}
+                      className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs hover:bg-muted/50 transition-colors ${dir.path === currentPath ? 'opacity-40 pointer-events-none' : ''}`}
+                    >
+                      <Folder className="w-3.5 h-3.5 text-amber-400" />
+                      <span>{dir.name}</span>
+                      <span className="text-[10px] text-muted-foreground ml-auto font-mono">{dir.path}</span>
+                    </button>
+                  ))}
+                {treeDirs.length === 0 && (
+                  <p className="text-xs text-muted-foreground text-center py-4">No folders available</p>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Preview panel */}
       <AnimatePresence>
