@@ -1,8 +1,9 @@
-import { useState, useCallback } from 'react';
-import { X, Plus, Users, Cloud, HardDrive, Server, FolderOpen, Folder, FolderPlus, ChevronRight, Home, Check } from 'lucide-react';
+import { useState, useCallback, useEffect } from 'react';
+import { X, Plus, Users, Cloud, HardDrive, Server, FolderOpen, Folder, FolderPlus, ChevronRight, Home, Check, Loader2 } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { PERSONAS } from '@/lib/personas';
 import { motion, AnimatePresence } from 'framer-motion';
+import { adapter } from '@/lib/adapter';
 import type { StorageType } from '@/lib/types';
 
 interface CreateWorkspaceDialogProps {
