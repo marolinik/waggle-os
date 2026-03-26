@@ -246,10 +246,21 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
   const [previewContent, setPreviewContent] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [propertiesFile, setPropertiesFile] = useState<FileEntry | null>(null);
+  const [showMoveDialog, setShowMoveDialog] = useState(false);
   const dragCounter = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const storageMeta = STORAGE_LABELS[storageType];
+
+  // Get selected file objects
+  const selectedFileObjects = useMemo(() => {
+    return files.filter(f => selectedFiles.has(f.path));
+  }, [files, selectedFiles]);
+
+  const selectedFileCount = selectedFiles.size;
+  const selectedTotalSize = useMemo(() => {
+    return selectedFileObjects.reduce((sum, f) => sum + (f.size || 0), 0);
+  }, [selectedFileObjects]);
 
   // Breadcrumbs from path
   const breadcrumbs = useMemo(() => {
