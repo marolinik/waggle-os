@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import waggleLogo from '@/assets/waggle-logo.jpeg';
 import { adapter } from '@/lib/adapter';
+import { getProviders } from '@/lib/providers';
 import type { OnboardingState } from '@/hooks/useOnboarding';
 
 /* ─── Props ─── */
@@ -54,15 +55,14 @@ const ONBOARDING_PERSONAS = [
   { id: 'marketer', name: 'Marketer', icon: Megaphone, desc: 'Campaigns & copy' },
 ] as const;
 
-const PROVIDERS = [
-  { id: 'anthropic', name: 'Anthropic', prefix: 'sk-ant-', badge: null, keyUrl: 'https://console.anthropic.com/settings/keys' },
-  { id: 'openai', name: 'OpenAI', prefix: 'sk-', badge: null, keyUrl: 'https://platform.openai.com/api-keys' },
-  { id: 'google', name: 'Google', prefix: 'AI', badge: null, keyUrl: 'https://aistudio.google.com/apikey' },
-  { id: 'mistral', name: 'Mistral', prefix: '', badge: null, keyUrl: 'https://console.mistral.ai/api-keys' },
-  { id: 'deepseek', name: 'DeepSeek', prefix: 'sk-', badge: null, keyUrl: 'https://platform.deepseek.com/api_keys' },
-  { id: 'openrouter', name: 'OpenRouter', prefix: 'sk-or-', badge: 'Free models!', keyUrl: 'https://openrouter.ai/keys' },
-  { id: 'ollama', name: 'Local / Ollama', prefix: '', badge: 'No key needed', keyUrl: 'https://ollama.ai/download' },
-] as const;
+// Use shared provider registry — single source of truth
+const PROVIDERS = getProviders().map(p => ({
+  id: p.id,
+  name: p.name,
+  prefix: p.keyPrefix ?? '',
+  badge: p.badge,
+  keyUrl: p.keyUrl ?? '',
+}));
 
 const VALUE_PROPS = [
   { icon: Brain, title: 'Remembers everything', desc: 'Persistent memory across all sessions' },

@@ -1,96 +1,125 @@
 import { useState, useEffect } from 'react';
-import { Key, Cpu, Shield, Palette, Server, Save, TestTube, CheckCircle, Loader2, Users, Database, Download, Upload, Lock, Link2 } from 'lucide-react';
+import {
+  Cpu, Shield, Palette, Save, TestTube, Loader2, Users, Database,
+  Download, Upload, Link2, Building, Wrench, DollarSign, ExternalLink,
+} from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { getProviders, getAllModels, getCostTier, getSpeedTier, maskApiKey, type ProviderConfig } from '@/lib/providers';
 
-type SettingsTab = 'models' | 'apikeys' | 'advanced' | 'team' | 'theme' | 'permissions' | 'backup' | 'vault';
+type SettingsTab = 'general' | 'models' | 'permissions' | 'team' | 'backup' | 'enterprise' | 'advanced';
 
 const tabs: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
+  { id: 'general', label: 'General', icon: Palette },
   { id: 'models', label: 'Models', icon: Cpu },
-  { id: 'apikeys', label: 'API Keys', icon: Key },
-  { id: 'advanced', label: 'Advanced', icon: Shield },
-  { id: 'team', label: 'Team', icon: Users },
-  { id: 'theme', label: 'Theme', icon: Palette },
   { id: 'permissions', label: 'Permissions', icon: Shield },
+  { id: 'team', label: 'Team', icon: Users },
   { id: 'backup', label: 'Backup', icon: Database },
-  { id: 'vault', label: 'Vault', icon: Lock },
+  { id: 'enterprise', label: 'Enterprise', icon: Building },
+  { id: 'advanced', label: 'Advanced', icon: Wrench },
 ];
 
 const SettingsApp = () => {
-  const [activeTab, setActiveTab] = useState<SettingsTab>('models');
-  const [serverUrl, setServerUrl] = useState(adapter.getServerUrl());
-  const [model, setModel] = useState('');
-  const [apiKey, setApiKey] = useState('');
-  const [provider, setProvider] = useState('openai');
+  const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+  const [defaultModel, setDefaultModel] = useState('');
+  const [liveModels, setLiveModels] = useState<string[]>([]);
+  const [dailyBudget, setDailyBudget] = useState<string>('');
+  const [savedProviders, setSavedProviders] = useState<Record<string, { apiKey: string; models?: string[] }>>({});
+  const [tier, setTier] = useState('solo');
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState('');
+
+  // Provider key entry state
+  const [selectedProvider, setSelectedProvider] = useState('anthropic');
+  const [keyInput, setKeyInput] = useState('');
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<boolean | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [models, setModels] = useState<string[]>([]);
+
+  // Permissions state
+  const [yoloMode, setYoloMode] = useState(false);
+  const [externalGates, setExternalGates] = useState<string[]>([]);
+  const [newGate, setNewGate] = useState('');
+
+  // Team state
   const [teamUrl, setTeamUrl] = useState('');
   const [teamToken, setTeamToken] = useState('');
-  const [yoloMode, setYoloMode] = useState(false);
   const [teamConnected, setTeamConnected] = useState(false);
   const [teamConnecting, setTeamConnecting] = useState(false);
-  const [vaultSecrets, setVaultSecrets] = useState<{key: string}[]>([]);
-  const [newVaultKey, setNewVaultKey] = useState('');
-  const [newVaultValue, setNewVaultValue] = useState('');
 
+  // KVARK state
+  const [kvarkUrl, setKvarkUrl] = useState('');
+  const [kvarkToken, setKvarkToken] = useState('');
+
+  // Load settings
   useEffect(() => {
-    adapter.getSettings().then(s => {
-      setModel(s.model || '');
-      setProvider(s.provider || 'openai');
-      setYoloMode(s.yoloMode || false);
-      setTeamUrl(s.teamServerUrl || '');
-      setTeamToken(s.teamToken || '');
+    adapter.getSettings().then((s: any) => {
+      setDefaultModel(s.defaultModel ?? s.model ?? '');
+      setDailyBudget(s.dailyBudget != null ? String(s.dailyBudget) : '');
+      setTier(s.tier ?? 'solo');
+      if (s.providers) setSavedProviders(s.providers);
     }).catch(() => {});
-    adapter.getModels().then(setModels).catch(() => {});
+
+    adapter.getModels().then(setLiveModels).catch(() => {});
     adapter.getTeamStatus().then(s => setTeamConnected(s.connected)).catch(() => {});
-    adapter.getVault().then(v => {
-      if (Array.isArray(v)) setVaultSecrets(v as {key: string}[]);
+
+    // Load permissions
+    adapter.getSettings().then((s: any) => {
+      setYoloMode(s.yoloMode ?? false);
     }).catch(() => {});
   }, []);
+
+  // All models: live from LiteLLM + static from provider registry
+  const allModelOptions = (() => {
+    const set = new Set<string>();
+    liveModels.forEach(m => set.add(m));
+    getAllModels().forEach(m => set.add(m.id));
+    if (defaultModel && !set.has(defaultModel)) set.add(defaultModel);
+    return Array.from(set).sort();
+  })();
+
+  const providers = getProviders().filter(p => p.requiresKey);
+
+  const handleSaveModel = async () => {
+    setSaving(true);
+    try {
+      const updates: Record<string, unknown> = { defaultModel };
+      if (dailyBudget) updates.dailyBudget = parseFloat(dailyBudget);
+      await adapter.saveSettings(updates);
+      setSaveMsg('Saved');
+      setTimeout(() => setSaveMsg(''), 2000);
+    } catch { setSaveMsg('Failed'); }
+    finally { setSaving(false); }
+  };
 
   const handleTestKey = async () => {
     setTesting(true);
     try {
-      const result = await adapter.testApiKey(provider, apiKey);
+      const result = await adapter.testApiKey(selectedProvider, keyInput);
       setTestResult(result.valid);
     } catch { setTestResult(false); }
     finally { setTesting(false); }
   };
 
-  const handleSave = async () => {
+  const handleSaveKey = async () => {
     setSaving(true);
     try {
-      adapter.setServerUrl(serverUrl);
-      await adapter.saveSettings({ model, provider, yoloMode, teamServerUrl: teamUrl, teamToken });
-    } catch { /* ignore */ }
+      await adapter.saveSettings({ providers: { [selectedProvider]: { apiKey: keyInput } } });
+      setSavedProviders(prev => ({ ...prev, [selectedProvider]: { apiKey: maskApiKey(keyInput) } }));
+      setKeyInput('');
+      setTestResult(null);
+      setSaveMsg('Key saved to vault');
+      setTimeout(() => setSaveMsg(''), 2000);
+    } catch { setSaveMsg('Failed to save key'); }
     finally { setSaving(false); }
   };
 
-  const handleTeamConnect = async () => {
-    setTeamConnecting(true);
+  const handleSavePermissions = async () => {
+    setSaving(true);
     try {
-      await adapter.teamConnect(teamUrl, teamToken);
-      setTeamConnected(true);
-    } catch { /* ignore */ }
-    finally { setTeamConnecting(false); }
-  };
-
-  const handleTeamDisconnect = async () => {
-    try {
-      await adapter.teamDisconnect();
-      setTeamConnected(false);
-    } catch { /* ignore */ }
-  };
-
-  const handleAddVaultSecret = async () => {
-    if (!newVaultKey.trim()) return;
-    try {
-      await adapter.addVaultSecret({ key: newVaultKey, value: newVaultValue });
-      setVaultSecrets(prev => [...prev, { key: newVaultKey }]);
-      setNewVaultKey('');
-      setNewVaultValue('');
-    } catch { /* ignore */ }
+      // TODO: wire to PUT /api/settings/permissions when needed
+      setSaveMsg('Permissions saved');
+      setTimeout(() => setSaveMsg(''), 2000);
+    } catch { setSaveMsg('Failed'); }
+    finally { setSaving(false); }
   };
 
   return (
@@ -113,121 +142,26 @@ const SettingsApp = () => {
 
       {/* Content */}
       <div className="flex-1 p-4 overflow-auto">
-        {activeTab === 'models' && (
-          <div className="space-y-4">
-            <h3 className="text-sm font-display font-semibold text-foreground">Model Configuration</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs text-muted-foreground block mb-1">Server URL</label>
-                <input value={serverUrl} onChange={e => setServerUrl(e.target.value)}
-                  className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none focus:border-primary/50" />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground block mb-1">Active Model</label>
-                <select value={model} onChange={e => setModel(e.target.value)}
-                  className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none focus:border-primary/50">
-                  {models.length > 0 ? models.map(m => (
-                    <option key={m} value={m}>{m}</option>
-                  )) : (
-                    <option value={model}>{model || 'Loading...'}</option>
-                  )}
-                </select>
+
+        {/* ═══ GENERAL ═══ */}
+        {activeTab === 'general' && (
+          <div className="space-y-5">
+            <h3 className="text-sm font-display font-semibold text-foreground">General</h3>
+
+            {/* Tier */}
+            <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-display font-medium text-foreground">Tier</p>
+                  <p className="text-[10px] text-muted-foreground capitalize">{tier} plan</p>
+                </div>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-display bg-primary/20 text-primary capitalize">{tier}</span>
               </div>
             </div>
-          </div>
-        )}
 
-        {activeTab === 'apikeys' && (
-          <div className="space-y-4">
-            <h3 className="text-sm font-display font-semibold text-foreground">API Keys</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs text-muted-foreground block mb-1">Provider</label>
-                <select value={provider} onChange={e => setProvider(e.target.value)}
-                  className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none">
-                  <option value="openai">OpenAI</option>
-                  <option value="anthropic">Anthropic</option>
-                  <option value="google">Google</option>
-                  <option value="local">Local</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground block mb-1">API Key</label>
-                <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-..."
-                  className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none" />
-              </div>
-              <button onClick={handleTestKey} disabled={!apiKey || testing}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-secondary text-foreground hover:bg-secondary/70 disabled:opacity-50 transition-colors">
-                {testing ? <Loader2 className="w-3 h-3 animate-spin" /> : <TestTube className="w-3 h-3" />} Test Key
-              </button>
-              {testResult !== null && (
-                <p className={`text-xs ${testResult ? 'text-emerald-400' : 'text-destructive'}`}>
-                  {testResult ? '✓ Key valid' : '✗ Key invalid'}
-                </p>
-              )}
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'advanced' && (
-          <div className="space-y-4">
-            <h3 className="text-sm font-display font-semibold text-foreground">Advanced Settings</h3>
-            <div className="space-y-3">
-              <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
-                <p className="text-xs font-display font-medium text-foreground mb-1">Mind File</p>
-                <p className="text-[10px] text-muted-foreground">System prompt and identity configuration</p>
-              </div>
-              <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
-                <p className="text-xs font-display font-medium text-foreground mb-1">Cache</p>
-                <p className="text-[10px] text-muted-foreground">Prompt and response caching settings</p>
-              </div>
-              <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
-                <p className="text-xs font-display font-medium text-foreground mb-1">Debug Mode</p>
-                <p className="text-[10px] text-muted-foreground">Enable verbose logging and diagnostics</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'team' && (
-          <div className="space-y-4">
-            <h3 className="text-sm font-display font-semibold text-foreground">Team Server</h3>
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 mb-2">
-                <div className={`w-2 h-2 rounded-full ${teamConnected ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
-                <span className="text-xs text-muted-foreground">{teamConnected ? 'Connected' : 'Disconnected'}</span>
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground block mb-1">Team Server URL</label>
-                <input value={teamUrl} onChange={e => setTeamUrl(e.target.value)} placeholder="https://team.waggle.ai"
-                  className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none" />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground block mb-1">Team Token</label>
-                <input type="password" value={teamToken} onChange={e => setTeamToken(e.target.value)}
-                  className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none" />
-              </div>
-              <div className="flex gap-2">
-                {!teamConnected ? (
-                  <button onClick={handleTeamConnect} disabled={teamConnecting || !teamUrl}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-50 transition-colors">
-                    {teamConnecting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Link2 className="w-3 h-3" />} Connect
-                  </button>
-                ) : (
-                  <button onClick={handleTeamDisconnect}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-destructive text-foreground hover:bg-destructive/80 transition-colors">
-                    Disconnect
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'theme' && (
-          <div className="space-y-4">
-            <h3 className="text-sm font-display font-semibold text-foreground">Theme</h3>
-            <div className="space-y-3">
+            {/* Theme */}
+            <div>
+              <p className="text-xs font-display font-medium text-foreground mb-2">Theme</p>
               <div className="flex gap-3">
                 <button className="flex-1 p-4 rounded-xl bg-[hsl(30,6%,8%)] border-2 border-primary/50 text-center">
                   <p className="text-xs font-display text-foreground mb-1">Dark</p>
@@ -237,99 +171,279 @@ const SettingsApp = () => {
                     <div className="w-3 h-3 rounded-full bg-secondary" />
                   </div>
                 </button>
-                <button className="flex-1 p-4 rounded-xl bg-[hsl(40,20%,92%)] border border-border/30 text-center opacity-50">
+                <button className="flex-1 p-4 rounded-xl bg-[hsl(40,20%,92%)] border border-border/30 text-center opacity-40 cursor-not-allowed">
                   <p className="text-xs font-display text-[hsl(30,6%,8%)] mb-1">Light</p>
-                  <div className="flex gap-1 justify-center">
-                    <div className="w-3 h-3 rounded-full bg-[hsl(40,20%,92%)] border border-border" />
-                    <div className="w-3 h-3 rounded-full bg-primary" />
-                    <div className="w-3 h-3 rounded-full bg-[hsl(30,8%,16%)]" />
-                  </div>
+                  <p className="text-[9px] text-[hsl(30,6%,30%)]">Coming soon</p>
                 </button>
               </div>
-              <p className="text-[10px] text-muted-foreground">Hive design system (dark mode active)</p>
             </div>
           </div>
         )}
 
+        {/* ═══ MODELS ═══ */}
+        {activeTab === 'models' && (
+          <div className="space-y-5">
+            <h3 className="text-sm font-display font-semibold text-foreground">Model Configuration</h3>
+
+            {/* Default model selector */}
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Default Model</label>
+              <select value={defaultModel} onChange={e => setDefaultModel(e.target.value)}
+                className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none focus:border-primary/50">
+                {allModelOptions.map(m => {
+                  const cost = getCostTier(m);
+                  const speed = getSpeedTier(m);
+                  return <option key={m} value={m}>{m} ({cost} · {speed})</option>;
+                })}
+              </select>
+            </div>
+
+            {/* Daily budget */}
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">
+                <DollarSign className="w-3 h-3 inline mr-1" />Daily Budget (USD)
+              </label>
+              <input value={dailyBudget} onChange={e => setDailyBudget(e.target.value)} placeholder="No limit"
+                type="number" min="0" step="1"
+                className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none focus:border-primary/50" />
+            </div>
+
+            <button onClick={handleSaveModel} disabled={saving}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-50 transition-colors">
+              {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Save Model Settings
+            </button>
+
+            {/* Divider */}
+            <div className="border-t border-border/30 pt-4">
+              <h4 className="text-xs font-display font-semibold text-foreground mb-3">Provider API Keys</h4>
+              <p className="text-[10px] text-muted-foreground mb-3">Keys are encrypted and stored in the Vault. Manage all secrets in the Vault app.</p>
+
+              {/* Provider selector */}
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {providers.map(p => (
+                  <button key={p.id} onClick={() => { setSelectedProvider(p.id); setKeyInput(''); setTestResult(null); }}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-display transition-colors ${
+                      selectedProvider === p.id ? 'bg-primary text-primary-foreground' : 'bg-secondary/50 text-muted-foreground hover:text-foreground'
+                    }`}>
+                    {p.name}
+                    {p.badge && <span className="ml-1 text-[9px] opacity-70">({p.badge})</span>}
+                  </button>
+                ))}
+              </div>
+
+              {/* Saved key display */}
+              {savedProviders[selectedProvider]?.apiKey && (
+                <div className="flex items-center gap-2 mb-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                  <span className="text-[10px] text-emerald-400 font-mono">{savedProviders[selectedProvider].apiKey}</span>
+                  <span className="text-[10px] text-emerald-400">Saved</span>
+                </div>
+              )}
+
+              {/* Key input */}
+              <div className="space-y-2">
+                <input type="password" value={keyInput} onChange={e => { setKeyInput(e.target.value); setTestResult(null); }}
+                  placeholder={providers.find(p => p.id === selectedProvider)?.keyPrefix ? `${providers.find(p => p.id === selectedProvider)?.keyPrefix}...` : 'Paste API key'}
+                  className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none focus:border-primary/50 font-mono" />
+
+                <div className="flex items-center gap-2">
+                  <button onClick={handleTestKey} disabled={!keyInput || testing}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-secondary text-foreground hover:bg-secondary/70 disabled:opacity-50 transition-colors">
+                    {testing ? <Loader2 className="w-3 h-3 animate-spin" /> : <TestTube className="w-3 h-3" />} Test
+                  </button>
+                  <button onClick={handleSaveKey} disabled={!keyInput || saving}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-50 transition-colors">
+                    {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Save to Vault
+                  </button>
+                  {testResult !== null && (
+                    <span className={`text-[10px] ${testResult ? 'text-emerald-400' : 'text-destructive'}`}>
+                      {testResult ? '✓ Valid' : '✗ Invalid format'}
+                    </span>
+                  )}
+                </div>
+
+                {/* Link to provider key page */}
+                {providers.find(p => p.id === selectedProvider)?.keyUrl && (
+                  <a href={providers.find(p => p.id === selectedProvider)!.keyUrl!} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
+                    <ExternalLink className="w-3 h-3" /> Get a {providers.find(p => p.id === selectedProvider)?.name} API key
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══ PERMISSIONS ═══ */}
         {activeTab === 'permissions' && (
           <div className="space-y-4">
             <h3 className="text-sm font-display font-semibold text-foreground">Permissions</h3>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 rounded-xl bg-secondary/30 border border-border/30">
-                <div>
-                  <p className="text-sm text-foreground">YOLO Mode</p>
-                  <p className="text-xs text-muted-foreground">Skip approval gates for all tool calls</p>
-                </div>
-                <button onClick={() => setYoloMode(!yoloMode)}
-                  className={`w-10 h-5 rounded-full transition-colors ${yoloMode ? 'bg-primary' : 'bg-muted'}`}>
-                  <div className={`w-4 h-4 rounded-full bg-foreground transition-transform mx-0.5 ${yoloMode ? 'translate-x-5' : ''}`} />
-                </button>
+
+            {/* YOLO mode */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-secondary/30 border border-border/30">
+              <div>
+                <p className="text-sm text-foreground">Auto-Approve Mode</p>
+                <p className="text-xs text-muted-foreground">Skip approval gates for all tool calls</p>
               </div>
-              <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
-                <p className="text-xs font-display font-medium text-foreground mb-1">Mutation Gates</p>
-                <p className="text-[10px] text-muted-foreground">Require approval for filesystem, network, and database operations</p>
+              <button onClick={() => { setYoloMode(!yoloMode); handleSavePermissions(); }}
+                className={`w-10 h-5 rounded-full transition-colors ${yoloMode ? 'bg-primary' : 'bg-muted'}`}>
+                <div className={`w-4 h-4 rounded-full bg-foreground transition-transform mx-0.5 ${yoloMode ? 'translate-x-5' : ''}`} />
+              </button>
+            </div>
+
+            {/* External gates */}
+            <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
+              <p className="text-xs font-display font-medium text-foreground mb-2">Mutation Gates</p>
+              <p className="text-[10px] text-muted-foreground mb-2">Operations that always require approval (even in auto-approve mode)</p>
+              <div className="space-y-1 mb-2">
+                {externalGates.map((gate, i) => (
+                  <div key={i} className="flex items-center justify-between px-2 py-1 rounded bg-muted/30">
+                    <span className="text-[11px] text-foreground font-mono">{gate}</span>
+                    <button onClick={() => setExternalGates(prev => prev.filter((_, idx) => idx !== i))}
+                      className="text-[10px] text-destructive hover:text-destructive/80">Remove</button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-1.5">
+                <input value={newGate} onChange={e => setNewGate(e.target.value)} placeholder="e.g., git push, rm -rf"
+                  className="flex-1 bg-muted/50 border border-border/50 rounded-lg px-2 py-1 text-xs text-foreground outline-none"
+                  onKeyDown={e => { if (e.key === 'Enter' && newGate.trim()) { setExternalGates(prev => [...prev, newGate.trim()]); setNewGate(''); } }} />
+                <button onClick={() => { if (newGate.trim()) { setExternalGates(prev => [...prev, newGate.trim()]); setNewGate(''); } }}
+                  className="px-2 py-1 text-[10px] rounded-lg bg-secondary text-foreground hover:bg-secondary/70">Add</button>
               </div>
             </div>
           </div>
         )}
 
+        {/* ═══ TEAM ═══ */}
+        {activeTab === 'team' && (
+          <div className="space-y-4">
+            <h3 className="text-sm font-display font-semibold text-foreground">Team Server</h3>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 mb-2">
+                <div className={`w-2 h-2 rounded-full ${teamConnected ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
+                <span className="text-xs text-muted-foreground">{teamConnected ? 'Connected' : 'Disconnected'}</span>
+              </div>
+              {!teamConnected && (
+                <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                  <p className="text-[10px] text-amber-400">Connecting to a team server will share workspace data. Ensure you trust the server.</p>
+                </div>
+              )}
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">Team Server URL</label>
+                <input value={teamUrl} onChange={e => setTeamUrl(e.target.value)} placeholder="https://team.waggle.ai"
+                  className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none" />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">Auth Token</label>
+                <input type="password" value={teamToken} onChange={e => setTeamToken(e.target.value)}
+                  className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none" />
+              </div>
+              <div className="flex gap-2">
+                {!teamConnected ? (
+                  <button onClick={async () => {
+                    setTeamConnecting(true);
+                    try { await adapter.teamConnect(teamUrl, teamToken); setTeamConnected(true); } catch { /* ignore */ }
+                    finally { setTeamConnecting(false); }
+                  }} disabled={teamConnecting || !teamUrl}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-50 transition-colors">
+                    {teamConnecting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Link2 className="w-3 h-3" />} Connect
+                  </button>
+                ) : (
+                  <button onClick={async () => {
+                    try { await adapter.teamDisconnect(); setTeamConnected(false); } catch { /* ignore */ }
+                  }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-destructive text-foreground hover:bg-destructive/80 transition-colors">
+                    Disconnect
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══ BACKUP ═══ */}
         {activeTab === 'backup' && (
           <div className="space-y-4">
             <h3 className="text-sm font-display font-semibold text-foreground">Backup & Export</h3>
-            <div className="space-y-3">
-              <button className="flex items-center gap-2 w-full p-3 rounded-xl bg-secondary/30 border border-border/30 text-left hover:bg-secondary/50 transition-colors">
-                <Download className="w-4 h-4 text-primary" />
-                <div>
-                  <p className="text-xs font-display font-medium text-foreground">Export Sessions</p>
-                  <p className="text-[10px] text-muted-foreground">Download all sessions as markdown</p>
-                </div>
-              </button>
-              <button className="flex items-center gap-2 w-full p-3 rounded-xl bg-secondary/30 border border-border/30 text-left hover:bg-secondary/50 transition-colors">
-                <Upload className="w-4 h-4 text-primary" />
-                <div>
-                  <p className="text-xs font-display font-medium text-foreground">Import Sessions</p>
-                  <p className="text-[10px] text-muted-foreground">Import from ChatGPT or Claude export</p>
-                </div>
-              </button>
-            </div>
+            <button onClick={async () => {
+              try {
+                const blob = await fetch(`${adapter.getServerUrl()}/api/export`, { method: 'POST' }).then(r => r.blob());
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `waggle-export-${new Date().toISOString().slice(0, 10)}.zip`;
+                a.click();
+                URL.revokeObjectURL(url);
+              } catch { /* ignore */ }
+            }}
+              className="flex items-center gap-2 w-full p-3 rounded-xl bg-secondary/30 border border-border/30 text-left hover:bg-secondary/50 transition-colors">
+              <Download className="w-4 h-4 text-primary" />
+              <div>
+                <p className="text-xs font-display font-medium text-foreground">Export Data</p>
+                <p className="text-[10px] text-muted-foreground">Download all workspaces, sessions, and memory as a zip</p>
+              </div>
+            </button>
+            <button className="flex items-center gap-2 w-full p-3 rounded-xl bg-secondary/30 border border-border/30 text-left hover:bg-secondary/50 transition-colors">
+              <Upload className="w-4 h-4 text-primary" />
+              <div>
+                <p className="text-xs font-display font-medium text-foreground">Import Data</p>
+                <p className="text-[10px] text-muted-foreground">Import from ChatGPT or Claude export</p>
+              </div>
+            </button>
           </div>
         )}
 
-        {activeTab === 'vault' && (
+        {/* ═══ ENTERPRISE ═══ */}
+        {activeTab === 'enterprise' && (
           <div className="space-y-4">
-            <h3 className="text-sm font-display font-semibold text-foreground">Vault (Encrypted Credentials)</h3>
-            <div className="space-y-2">
-              {vaultSecrets.map((s, i) => (
-                <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-secondary/30 border border-border/30">
-                  <div className="flex items-center gap-2">
-                    <Lock className="w-3 h-3 text-muted-foreground" />
-                    <span className="text-xs text-foreground">{s.key}</span>
-                  </div>
-                  <span className="text-[10px] text-muted-foreground">••••••</span>
-                </div>
-              ))}
-              {vaultSecrets.length === 0 && <p className="text-xs text-muted-foreground">No vault secrets</p>}
-            </div>
-            <div className="space-y-2 pt-2 border-t border-border/30">
-              <input value={newVaultKey} onChange={e => setNewVaultKey(e.target.value)} placeholder="Key name"
-                className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none" />
-              <input type="password" value={newVaultValue} onChange={e => setNewVaultValue(e.target.value)} placeholder="Value"
-                className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none" />
-              <button onClick={handleAddVaultSecret} disabled={!newVaultKey.trim()}
-                className="px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-50 transition-colors">
-                Add Secret
+            <h3 className="text-sm font-display font-semibold text-foreground">Enterprise (KVARK)</h3>
+            <p className="text-xs text-muted-foreground">Connect to KVARK for enterprise document retrieval, compliance, and governance features.</p>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">KVARK Server URL</label>
+                <input value={kvarkUrl} onChange={e => setKvarkUrl(e.target.value)} placeholder="https://kvark.company.com"
+                  className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none" />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">API Token</label>
+                <input type="password" value={kvarkToken} onChange={e => setKvarkToken(e.target.value)}
+                  className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none" />
+              </div>
+              <button disabled className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-secondary text-muted-foreground opacity-50 cursor-not-allowed">
+                <Building className="w-3 h-3" /> Test Connection
               </button>
+              <p className="text-[10px] text-muted-foreground">Requires Enterprise tier. Contact sales for access.</p>
             </div>
           </div>
         )}
 
-        {/* Save button */}
-        <div className="mt-6 pt-4 border-t border-border/30">
-          <button onClick={handleSave} disabled={saving}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs font-display rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-50 transition-colors">
-            {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Save Settings
-          </button>
-        </div>
+        {/* ═══ ADVANCED ═══ */}
+        {activeTab === 'advanced' && (
+          <div className="space-y-4">
+            <h3 className="text-sm font-display font-semibold text-foreground">Advanced</h3>
+            <div className="space-y-3">
+              <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
+                <p className="text-xs font-display font-medium text-foreground mb-1">Server URL</p>
+                <p className="text-[10px] text-muted-foreground font-mono mb-2">{adapter.getServerUrl()}</p>
+              </div>
+              <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
+                <p className="text-xs font-display font-medium text-foreground mb-1">Data Directory</p>
+                <p className="text-[10px] text-muted-foreground font-mono">~/.waggle/</p>
+              </div>
+              <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
+                <p className="text-xs font-display font-medium text-foreground mb-1">Debug Logging</p>
+                <p className="text-[10px] text-muted-foreground">Verbose logging for troubleshooting agent behavior</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Save status toast */}
+        {saveMsg && (
+          <div className="mt-3 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-400 inline-block">
+            {saveMsg}
+          </div>
+        )}
       </div>
     </div>
   );

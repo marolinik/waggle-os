@@ -117,6 +117,7 @@ import { documentRoutes } from './routes/documents.js';
 import { fileRoutes } from './routes/files.js';
 import { browseRoutes } from './routes/browse.js';
 import { oauthRoutes } from './routes/oauth.js';
+import { waggleSignalRoutes } from './routes/waggle-signals.js';
 import { OfflineManager } from './offline-manager.js';
 import { securityMiddleware } from './security-middleware.js';
 import { LocalScheduler } from './cron.js';
@@ -1392,6 +1393,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(pinRoutes);
   await server.register(documentRoutes);
   await server.register(fileRoutes);
+  await server.register(waggleSignalRoutes);
   await server.register(oauthRoutes);
   await server.register(browseRoutes);
 

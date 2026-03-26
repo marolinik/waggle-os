@@ -281,6 +281,25 @@ export async function teamRoutes(fastify: FastifyInstance) {
   });
 
   /**
+   * GET /api/team/members
+   * List team members. Proxies to team server or returns local user when disconnected.
+   */
+  fastify.get('/api/team/members', async () => {
+    const waggleConfig = new WaggleConfig(dataDir);
+    const teamServer = waggleConfig.getTeamServer();
+    if (teamServer) {
+      try {
+        const res = await fetch(`${teamServer.url}/api/team/members`, {
+          headers: { Authorization: `Bearer ${teamServer.token}` },
+          signal: AbortSignal.timeout(3000),
+        });
+        if (res.ok) return res.json();
+      } catch { /* fall through */ }
+    }
+    return { members: [{ id: 'local', name: 'You', status: 'online' }] };
+  });
+
+  /**
    * GET /api/team/activity?workspaceId=X&limit=N
    * Get recent team activity for a workspace.
    * Proxies to team server or returns empty when disconnected.

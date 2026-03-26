@@ -35,8 +35,10 @@
     "waggle"
   ],
   "devDependencies": {
+    "@swc/core-win32-x64-msvc": "^1.15.21",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
+    "esbuild": "^0.27.4",
     "jsdom": "^20.0.3",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

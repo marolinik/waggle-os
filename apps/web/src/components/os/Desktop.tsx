@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   MessageSquare, LayoutDashboard, Settings, Brain,
-  Activity, Package, Radio, Zap, FolderOpen, Bot,
+  Activity, Package, Radio, Zap, FolderOpen, Bot, Lock,
 } from "lucide-react";
 import wallpaper from "@/assets/wallpaper.jpg";
 import waggleLogo from "@/assets/waggle-logo.jpeg";
@@ -12,6 +12,7 @@ import AppWindow from "./AppWindow";
 import ChatWindowInstance from "./apps/ChatWindowInstance";
 import DashboardApp from "./apps/DashboardApp";
 import SettingsApp from "./apps/SettingsApp";
+import VaultApp from "./apps/VaultApp";
 import MemoryApp from "./apps/MemoryApp";
 import EventsApp from "./apps/EventsApp";
 import CockpitApp from "./apps/CockpitApp";
@@ -87,6 +88,7 @@ const appConfig: Record<string, { title: string; icon: React.ReactNode; pos: { x
   "waggle-dance": { title: "Waggle Dance", icon: <Zap className="w-3.5 h-3.5 text-amber-400" />, pos: { x: 160, y: 50 }, size: { w: "580px", h: "460px" } },
   "files": { title: "Files", icon: <FolderOpen className="w-3.5 h-3.5 text-amber-300" />, pos: { x: 140, y: 55 }, size: { w: "620px", h: "440px" } },
   "agents": { title: "Agents", icon: <Bot className="w-3.5 h-3.5 text-orange-400" />, pos: { x: 170, y: 65 }, size: { w: "640px", h: "480px" } },
+  "vault": { title: "Vault", icon: <Lock className="w-3.5 h-3.5 text-amber-400" />, pos: { x: 240, y: 70 }, size: { w: "560px", h: "480px" } },
 };
 
 const Desktop = () => {
@@ -269,6 +271,8 @@ const Desktop = () => {
         );
       case 'settings':
         return <SettingsApp />;
+      case 'vault':
+        return <VaultApp />;
       case 'memory':
         return (
           <MemoryApp

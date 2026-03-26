@@ -6,8 +6,6 @@ export default defineConfig({
     alias: {
       // Marketplace uses ESM .js extensions — alias to source for Vitest
       '@waggle/marketplace': path.resolve(__dirname, 'packages/marketplace/src/index.ts'),
-      // drizzle-orm lives in server's node_modules (can't hoist due to peer dep conflicts)
-      'drizzle-orm': path.resolve(__dirname, 'packages/server/node_modules/drizzle-orm'),
     },
   },
   test: {

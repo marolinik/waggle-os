@@ -79,29 +79,34 @@ describe('Vault Routes', () => {
       const anthropic = body.secrets.find((s: any) => s.name === 'ANTHROPIC_API_KEY');
       const custom = body.secrets.find((s: any) => s.name === 'MY_PRIVATE_KEY');
 
-      expect(anthropic.isCommon).toBe(true);
+      // ANTHROPIC_API_KEY is not in the new COMMON_KEYS (now uses 'anthropic' as provider ID)
+      expect(anthropic.isCommon).toBe(false);
       expect(custom.isCommon).toBe(false);
     });
 
     it('suggestedKeys excludes keys already in vault', async () => {
-      vault.set('ANTHROPIC_API_KEY', 'sk-ant-test');
+      vault.set('anthropic', 'sk-ant-test');
 
       const res = await server.inject({ method: 'GET', url: '/api/vault' });
       const body = res.json();
 
-      expect(body.suggestedKeys).not.toContain('ANTHROPIC_API_KEY');
-      expect(body.suggestedKeys).toContain('OPENAI_API_KEY');
+      expect(body.suggestedKeys).not.toContain('anthropic');
+      expect(body.suggestedKeys).toContain('openai');
       expect(body.suggestedKeys).toContain('TAVILY_API_KEY');
     });
 
-    it('suggestedKeys contains all common keys when vault is empty', async () => {
+    it('suggestedKeys contains common keys when vault is empty', async () => {
       const res = await server.inject({ method: 'GET', url: '/api/vault' });
       const body = res.json();
 
-      expect(body.suggestedKeys).toContain('ANTHROPIC_API_KEY');
-      expect(body.suggestedKeys).toContain('OPENAI_API_KEY');
+      expect(body.suggestedKeys).toContain('anthropic');
+      expect(body.suggestedKeys).toContain('openai');
       expect(body.suggestedKeys).toContain('GITHUB_TOKEN');
-      expect(body.suggestedKeys.length).toBe(10);
+      expect(body.suggestedKeys.length).toBeGreaterThan(20);
+      // Also has categorized suggestions
+      expect(body.suggestedSecrets).toBeDefined();
+      expect(body.suggestedSecrets.length).toBeGreaterThan(0);
+      expect(body.suggestedSecrets[0].category).toBe('LLM Providers');
     });
   });
 

@@ -258,7 +258,7 @@ class LocalAdapter {
 
   async getHistory(workspaceId: string, sessionId: string): Promise<ChatMessage[]> {
     const res = await this.fetch(`/api/history?workspace=${workspaceId}&session=${sessionId}`);
-    return res.json();
+    return unwrapArray(await res.json());
   }
 
   // --- Sessions ---
@@ -481,7 +481,7 @@ class LocalAdapter {
   }
 
   async testApiKey(provider: string, key: string): Promise<{ valid: boolean }> {
-    const res = await this.fetch('/api/settings/test-key', { method: 'POST', body: JSON.stringify({ provider, key }) });
+    const res = await this.fetch('/api/settings/test-key', { method: 'POST', body: JSON.stringify({ provider, apiKey: key }) });
     return res.json();
   }
 
@@ -492,7 +492,7 @@ class LocalAdapter {
 
   async getModels(): Promise<string[]> {
     const res = await this.fetch('/api/litellm/models');
-    return res.json();
+    return unwrapArray(await res.json());
   }
 
   async getLiteLLMStatus(): Promise<unknown> {
@@ -602,8 +602,8 @@ class LocalAdapter {
     return res.json();
   }
 
-  async addVaultSecret(data: { key: string; value: string }): Promise<void> {
-    await this.fetch('/api/vault', { method: 'POST', body: JSON.stringify(data) });
+  async addVaultSecret(data: { key: string; value: string; type?: string }): Promise<void> {
+    await this.fetch('/api/vault', { method: 'POST', body: JSON.stringify({ name: data.key, value: data.value, type: data.type }) });
   }
 
   async deleteVaultSecret(id: string): Promise<void> {
@@ -641,18 +641,27 @@ class LocalAdapter {
   }
 
   async getTeamMembers(): Promise<{ id: string; name: string; status: string; avatar?: string }[]> {
-    const res = await this.fetch('/api/team/members');
-    return res.json();
+    try {
+      const res = await this.fetch('/api/team/members');
+      if (!res.ok) return [];
+      return unwrapArray(await res.json());
+    } catch { return []; }
   }
 
   async getTeamActivity(): Promise<{ id: string; user: string; action: string; timestamp: string }[]> {
-    const res = await this.fetch('/api/team/activity');
-    return res.json();
+    try {
+      const res = await this.fetch('/api/team/activity');
+      if (!res.ok) return [];
+      return unwrapArray(await res.json());
+    } catch { return []; }
   }
 
   async getTeamMessages(workspaceId: string): Promise<unknown[]> {
-    const res = await this.fetch(`/api/team/messages?workspaceId=${workspaceId}`);
-    return res.json();
+    try {
+      const res = await this.fetch(`/api/team/messages?workspaceId=${workspaceId}`);
+      if (!res.ok) return [];
+      return unwrapArray(await res.json());
+    } catch { return []; }
   }
 
   // --- Costs ---
@@ -694,8 +703,11 @@ class LocalAdapter {
 
   // --- Waggle Dance ---
   async getWaggleSignals(): Promise<WaggleSignal[]> {
-    const res = await this.fetch('/api/waggle/signals');
-    return res.json();
+    try {
+      const res = await this.fetch('/api/waggle/signals');
+      if (!res.ok) return [];
+      return unwrapArray(await res.json());
+    } catch { return []; }
   }
 
   async publishWaggleSignal(data: Omit<WaggleSignal, 'id' | 'timestamp'>): Promise<WaggleSignal> {
