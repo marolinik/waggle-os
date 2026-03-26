@@ -4,7 +4,7 @@ import {
   FolderPlus, ChevronRight, Home, Check, Loader2, LayoutTemplate,
   Sparkles, Info, Wand2, Target, Microscope, Code, Megaphone,
   Rocket, Scale, Building, FileText, Laptop, PenLine, BarChart3,
-  ClipboardList, Mail, Plug, Terminal,
+  ClipboardList, Mail, Plug, Terminal, Pencil, Trash2,
 } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { PERSONAS } from '@/lib/personas';
@@ -314,9 +314,10 @@ interface TemplateCreatorProps {
   onClose: () => void;
   onCreated: (t: WorkspaceTemplate) => void;
   availableConnectors: ChipOption[];
+  editingTemplate?: WorkspaceTemplate | null;
 }
 
-function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors }: TemplateCreatorProps) {
+function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, editingTemplate }: TemplateCreatorProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [persona, setPersona] = useState('');
@@ -325,6 +326,20 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors }:
   const [starterMemory, setStarterMemory] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Populate fields when editing
+  useEffect(() => {
+    if (editingTemplate) {
+      setName(editingTemplate.name);
+      setDescription(editingTemplate.description);
+      setPersona(editingTemplate.persona);
+      setSelectedConnectors(editingTemplate.connectors);
+      setSelectedCommands(editingTemplate.suggestedCommands);
+      setStarterMemory(editingTemplate.starterMemory.join('\n'));
+    } else {
+      setName(''); setDescription(''); setPersona(''); setSelectedConnectors([]); setSelectedCommands([]); setStarterMemory('');
+    }
+  }, [editingTemplate, open]);
 
   // AI generation state
   const [aiPrompt, setAiPrompt] = useState('');
