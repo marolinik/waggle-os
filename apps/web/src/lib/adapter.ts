@@ -136,6 +136,17 @@ class LocalAdapter {
     return res.json();
   }
 
+  // --- Browse (system-level, not workspace-scoped) ---
+  async browseLocal(dirPath = '/'): Promise<{ entries: { name: string; path: string; type: string }[]; current: string }> {
+    const res = await this.fetch(`/api/browse/local?path=${encodeURIComponent(dirPath)}`);
+    return res.json();
+  }
+
+  async browseLocalMkdir(dirPath: string): Promise<{ name: string; path: string; type: string }> {
+    const res = await this.fetch('/api/browse/local/mkdir', { method: 'POST', body: JSON.stringify({ path: dirPath }) });
+    return res.json();
+  }
+
   // --- File Management ---
   async listFiles(workspaceId: string, path = '/'): Promise<FileEntry[]> {
     const res = await this.fetch(`/api/workspaces/${workspaceId}/files/list?path=${encodeURIComponent(path)}`);
