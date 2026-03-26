@@ -1,10 +1,10 @@
 import { motion } from "framer-motion";
 import {
   MessageSquare, Terminal, LayoutDashboard, Settings,
-  Brain, Activity, Package, Radio, Rocket, Zap, FolderOpen,
+  Brain, Activity, Package, Radio, Rocket, Zap, FolderOpen, Bot,
 } from "lucide-react";
 
-export type AppId = "chat" | "dashboard" | "memory" | "events" | "capabilities" | "cockpit" | "mission-control" | "settings" | "terminal" | "calculator" | "notes" | "waggle-dance" | "files";
+export type AppId = "chat" | "dashboard" | "memory" | "events" | "capabilities" | "cockpit" | "mission-control" | "settings" | "terminal" | "calculator" | "notes" | "waggle-dance" | "files" | "agents";
 
 interface DockProps {
   onOpenApp: (id: AppId) => void;
@@ -17,6 +17,7 @@ interface DockProps {
 const apps: { id: AppId; icon: React.ElementType; label: string; color: string }[] = [
   { id: "dashboard", icon: LayoutDashboard, label: "Dashboard", color: "text-sky-400" },
   { id: "chat", icon: MessageSquare, label: "Chat", color: "text-primary" },
+  { id: "agents", icon: Bot, label: "Agents", color: "text-orange-400" },
   { id: "capabilities", icon: Package, label: "Skills", color: "text-violet-400" },
   { id: "cockpit", icon: Activity, label: "Cockpit", color: "text-emerald-400" },
   { id: "mission-control", icon: Radio, label: "Mission Control", color: "text-rose-400" },
