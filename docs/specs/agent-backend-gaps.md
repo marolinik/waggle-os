@@ -1,6 +1,6 @@
 # Agent System — Backend Gaps Spec
 
-## Status: Draft
+## Status: ✅ Complete (all endpoints implemented 2026-03-26)
 ## Date: 2026-03-26
 
 ---
