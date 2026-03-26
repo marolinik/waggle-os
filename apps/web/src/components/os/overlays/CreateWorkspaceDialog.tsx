@@ -373,19 +373,21 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
     setSaving(true);
     setError(null);
     try {
-      const template = await adapter.createWorkspaceTemplate({
+      const payload = {
         name: name.trim(),
         description: description.trim(),
         persona: persona || 'analyst',
         connectors: selectedConnectors,
         suggestedCommands: selectedCommands,
         starterMemory: starterMemory.split('\n').map(s => s.trim()).filter(Boolean),
-      });
+      };
+      const template = editingTemplate
+        ? await adapter.updateWorkspaceTemplate(editingTemplate.id, payload)
+        : await adapter.createWorkspaceTemplate(payload);
       onCreated(template);
       onClose();
-      setName(''); setDescription(''); setPersona(''); setSelectedConnectors([]); setSelectedCommands([]); setStarterMemory('');
     } catch (err: any) {
-      setError(err.message ?? 'Failed to create template');
+      setError(err.message ?? `Failed to ${editingTemplate ? 'update' : 'create'} template`);
     } finally {
       setSaving(false);
     }
