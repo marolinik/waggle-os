@@ -59,9 +59,7 @@ export const BUILT_IN_TEMPLATES: WorkspaceTemplate[] = [
       'Always cite sources and cross-reference with saved memory for prior findings.',
     ],
     builtIn: true,
-  },
-  {
-    id: 'code-review',
+    category: 'research',
     name: 'Code Review',
     description: 'Review pull requests, analyze code quality, track technical debt, and suggest improvements.',
     persona: 'coder',
