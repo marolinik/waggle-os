@@ -384,7 +384,11 @@ class LocalAdapter {
   // --- Skills ---
   async getSkills(): Promise<SkillPack[]> {
     const res = await this.fetch('/api/skills');
-    return unwrapArray(await res.json());
+    return unwrapArray(await res.json()).map((s: any) => ({
+      ...s,
+      id: s.id || s.name || s.slug,
+      installed: true, // Skills from GET /api/skills are always installed
+    }));
   }
 
   async createSkill(data: { name: string; description: string }): Promise<void> {
@@ -402,7 +406,7 @@ class LocalAdapter {
   }
 
   async installPack(skillId: string): Promise<void> {
-    await this.fetch(`/api/skills/starter-pack/${skillId}`, { method: 'POST' });
+    await this.fetch(`/api/skills/starter-pack/${skillId}`, { method: 'POST', body: '{}' });
   }
 
   async getCapabilitiesStatus(): Promise<unknown> {

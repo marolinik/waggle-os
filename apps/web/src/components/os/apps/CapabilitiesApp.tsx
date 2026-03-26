@@ -34,10 +34,29 @@ const CapabilitiesApp = () => {
       adapter.getCapabilityPacks(),
     ])
       .then(([skills, starters, marketplace, caps]) => {
+        // Build set of installed skill names
+        const installedNames = new Set<string>();
+        if (skills.status === 'fulfilled') {
+          skills.value.forEach(s => installedNames.add(s.id || s.name));
+        }
+
+        // Mark starters and caps as installed if they match
         const all: SkillPack[] = [];
         if (skills.status === 'fulfilled') all.push(...skills.value);
-        if (starters.status === 'fulfilled') all.push(...starters.value);
-        if (caps.status === 'fulfilled') all.push(...caps.value);
+        if (starters.status === 'fulfilled') {
+          all.push(...starters.value.map(s => ({
+            ...s,
+            id: s.id || s.name,
+            installed: installedNames.has(s.id || s.name),
+          })));
+        }
+        if (caps.status === 'fulfilled') {
+          all.push(...caps.value.map(s => ({
+            ...s,
+            id: s.id || s.name,
+            installed: installedNames.has(s.id || s.name),
+          })));
+        }
         setPacks(all);
         if (marketplace.status === 'fulfilled') setMarketplacePacks(marketplace.value);
       })
@@ -48,7 +67,7 @@ const CapabilitiesApp = () => {
     setInstalling(packId);
     try {
       await adapter.installPack(packId);
-      setPacks(prev => prev.map(p => p.id === packId ? { ...p, installed: true } : p));
+      setPacks(prev => prev.map(p => (p.id || p.name) === packId ? { ...p, installed: true } : p));
     } finally { setInstalling(null); }
   };
 
@@ -62,8 +81,8 @@ const CapabilitiesApp = () => {
 
   const displayPacks = tab === 'marketplace' ? marketplacePacks : tab === 'installed' ? packs.filter(p => p.installed) : packs;
   const filtered = displayPacks.filter(p =>
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    p.description.toLowerCase().includes(search.toLowerCase())
+    (p.name ?? '').toLowerCase().includes(search.toLowerCase()) ||
+    (p.description ?? '').toLowerCase().includes(search.toLowerCase())
   );
 
   const PackCard = ({ pack, onInstall }: { pack: SkillPack; onInstall: (id: string) => void }) => {
@@ -95,8 +114,8 @@ const CapabilitiesApp = () => {
             <span className="text-[10px] text-emerald-400 flex items-center gap-0.5"><CheckCircle2 className="w-3 h-3" /> Installed</span>
           ) : (
             <button
-              onClick={() => onInstall(pack.id)}
-              disabled={installing === pack.id}
+              onClick={() => onInstall(pack.id || pack.name)}
+              disabled={installing === (pack.id || pack.name)}
               className="flex items-center gap-1 px-2 py-1 text-[10px] rounded-lg bg-primary/20 text-primary hover:bg-primary/30 disabled:opacity-50 transition-colors"
             >
               {installing === pack.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
