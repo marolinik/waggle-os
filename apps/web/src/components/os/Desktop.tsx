@@ -479,15 +479,7 @@ const Desktop = () => {
 
       {/* Overlays */}
       <GlobalSearch open={showGlobalSearch} onClose={() => setShowGlobalSearch(false)} onNavigate={handleSearchNavigate} />
-      <CreateWorkspaceDialog
-        open={showCreateWorkspace}
-        onClose={() => setShowCreateWorkspace(false)}
-        onCreate={createWorkspace}
-        onBrowsePath={(storageType, _currentPath) => {
-          // Open the Files app so user can browse and pick a folder
-          openApp('files');
-        }}
-      />
+      <CreateWorkspaceDialog open={showCreateWorkspace} onClose={() => setShowCreateWorkspace(false)} onCreate={createWorkspace} />
       <PersonaSwitcher open={showPersonaSwitcher} onClose={() => setShowPersonaSwitcher(false)} currentPersona={activeWorkspace?.persona} onSelect={() => {}} />
       <WorkspaceSwitcher
         open={showWorkspaceSwitcher}
