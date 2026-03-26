@@ -723,25 +723,31 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                     className="mt-2 p-2.5 bg-primary/5 border border-primary/20 rounded-xl">
                     <div className="flex items-start justify-between mb-1">
                       <p className="text-[10px] text-foreground font-medium">{tmpl.name}</p>
-                      {!tmpl.builtIn && (
-                        <div className="flex gap-1">
-                          <button onClick={() => { setEditingTemplate(tmpl); setShowTemplateCreator(true); }}
-                            className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors">
-                            <Pencil className="w-3 h-3" />
-                          </button>
-                          <button onClick={async () => {
-                            if (!confirm(`Delete "${tmpl.name}"?`)) return;
-                            try {
-                              await adapter.deleteWorkspaceTemplate(tmpl.id);
-                              setTemplates(prev => prev.filter(t => t.id !== tmpl.id));
-                              setSelectedTemplate(null);
-                            } catch { /* ignore */ }
-                          }}
-                            className="p-0.5 rounded text-muted-foreground hover:text-destructive transition-colors">
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      )}
+                      <div className="flex gap-1">
+                        <button onClick={() => { setDuplicatingTemplate(tmpl); setEditingTemplate(null); setShowTemplateCreator(true); }}
+                          className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors" title="Duplicate">
+                          <Copy className="w-3 h-3" />
+                        </button>
+                        {!tmpl.builtIn && (
+                          <>
+                            <button onClick={() => { setEditingTemplate(tmpl); setDuplicatingTemplate(null); setShowTemplateCreator(true); }}
+                              className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors" title="Edit">
+                              <Pencil className="w-3 h-3" />
+                            </button>
+                            <button onClick={async () => {
+                              if (!confirm(`Delete "${tmpl.name}"?`)) return;
+                              try {
+                                await adapter.deleteWorkspaceTemplate(tmpl.id);
+                                setTemplates(prev => prev.filter(t => t.id !== tmpl.id));
+                                setSelectedTemplate(null);
+                              } catch { /* ignore */ }
+                            }}
+                              className="p-0.5 rounded text-muted-foreground hover:text-destructive transition-colors" title="Delete">
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
                     <p className="text-[9px] text-muted-foreground mb-1.5">{tmpl.description}</p>
                     <div className="flex flex-wrap gap-1">
@@ -875,9 +881,10 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
 
       <TemplateCreatorModal
         open={showTemplateCreator}
-        onClose={() => { setShowTemplateCreator(false); setEditingTemplate(null); }}
+        onClose={() => { setShowTemplateCreator(false); setEditingTemplate(null); setDuplicatingTemplate(null); }}
         availableConnectors={connectorChipOptions}
         editingTemplate={editingTemplate}
+        initialData={duplicatingTemplate}
         onCreated={(t) => {
           if (editingTemplate) {
             setTemplates(prev => prev.map(x => x.id === t.id ? t : x));
@@ -886,6 +893,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
           }
           setSelectedTemplate(t.id);
           setEditingTemplate(null);
+          setDuplicatingTemplate(null);
         }}
       />
     </AnimatePresence>
