@@ -5,7 +5,7 @@ import {
   Trash2, Copy, Scissors, ClipboardPaste, Edit, FolderPlus, X as XIcon,
   RefreshCw, HardDrive, Cloud, Server, Search, X, FileText,
   Image, FileCode, FileSpreadsheet, Archive, Music, Video,
-  Info, Shield, MapPin, Clock, Hash, Lock, Unlock,
+  Info, Shield, MapPin, Clock, Hash, Lock, Unlock, CheckSquare, XSquare, FolderInput,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { FileEntry, StorageType } from '@/lib/types';
