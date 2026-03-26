@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Bot, Plus, Search, Loader2, Wrench, ChevronRight, Sparkles,
-  Trash2, X, Check, AlertCircle, Pencil, Save,
+  Trash2, X, Check, AlertCircle, Pencil, Save, Users, Play,
+  ArrowRight, Crown, Cog,
 } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { adapter } from '@/lib/adapter';
@@ -17,9 +18,22 @@ interface BackendPersona {
   workspaceAffinity?: string[];
   suggestedCommands?: string[];
   tools?: string[];
-  tools?: string[];
   systemPrompt?: string;
   custom?: boolean;
+}
+
+interface AgentGroup {
+  id: string;
+  name: string;
+  description?: string;
+  strategy: 'parallel' | 'sequential' | 'coordinator';
+  members: AgentGroupMember[];
+}
+
+interface AgentGroupMember {
+  agentId: string;
+  roleInGroup: 'lead' | 'worker';
+  executionOrder: number;
 }
 
 interface ToolDef {
