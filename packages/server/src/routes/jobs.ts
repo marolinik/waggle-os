@@ -42,6 +42,22 @@ export async function jobRoutes(fastify: FastifyInstance) {
     return reply.code(202).send({ jobId: job.id, status: job.status });
   });
 
+  // POST /api/jobs/:id/cancel - cancel a running or queued job
+  fastify.post('/api/jobs/:id/cancel', {
+    preHandler: [fastify.authenticate],
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const job = await fastify.jobService.getJob(id);
+    if (!job) return reply.code(404).send({ error: 'Job not found' });
+
+    if (job.status !== 'queued' && job.status !== 'running') {
+      return reply.code(409).send({ error: `Cannot cancel job with status "${job.status}"` });
+    }
+
+    const updated = await fastify.jobService.cancelJob(id);
+    return { cancelled: true, jobId: updated?.id ?? id };
+  });
+
   // GET /api/jobs/:id - get job status
   fastify.get('/api/jobs/:id', {
     preHandler: [fastify.authenticate],

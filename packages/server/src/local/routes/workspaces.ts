@@ -611,7 +611,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
   // PUT /api/workspaces/:id — update workspace
   server.put<{
     Params: { id: string };
-    Body: { name?: string; group?: string; icon?: string; model?: string; personaId?: string | null; directory?: string; tone?: 'professional' | 'casual' | 'technical' | 'legal' | 'marketing'; budget?: number | null };
+    Body: { name?: string; group?: string; icon?: string; model?: string; personaId?: string | null; agentGroupId?: string | null; directory?: string; tone?: 'professional' | 'casual' | 'technical' | 'legal' | 'marketing'; budget?: number | null };
   }>('/api/workspaces/:id', async (request, reply) => {
     assertSafeSegment(request.params.id, 'id');
     const existing = server.workspaceManager.get(request.params.id);
@@ -625,9 +625,35 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
         knownModels: Array.from(KNOWN_MODELS).slice(0, 10),
       });
     }
-    const { personaId, ...rest } = request.body;
-    server.workspaceManager.update(request.params.id, { ...rest, ...(personaId !== null ? { personaId } : {}) });
+    const { personaId, agentGroupId, ...rest } = request.body;
+    server.workspaceManager.update(request.params.id, {
+      ...rest,
+      ...(personaId !== null ? { personaId } : {}),
+      ...(agentGroupId !== undefined ? { agentGroupId: agentGroupId ?? undefined } : {}),
+    });
     emitAuditEvent(server, { workspaceId: request.params.id, eventType: 'workspace_update', input: JSON.stringify(request.body) });
+    return server.workspaceManager.get(request.params.id);
+  });
+
+  // PATCH /api/workspaces/:id — partial update (same as PUT but PATCH method)
+  server.patch<{
+    Params: { id: string };
+    Body: { name?: string; group?: string; icon?: string; model?: string; personaId?: string | null; agentGroupId?: string | null; directory?: string; tone?: string; budget?: number | null };
+  }>('/api/workspaces/:id', async (request, reply) => {
+    assertSafeSegment(request.params.id, 'id');
+    const existing = server.workspaceManager.get(request.params.id);
+    if (!existing) {
+      return reply.status(404).send({ error: 'Workspace not found' });
+    }
+    if (request.body.model && !isValidModelId(request.body.model)) {
+      return reply.status(400).send({ error: `Invalid model ID "${request.body.model}"` });
+    }
+    const { personaId, agentGroupId, ...rest } = request.body;
+    server.workspaceManager.update(request.params.id, {
+      ...rest,
+      ...(personaId !== undefined ? { personaId: personaId ?? undefined } : {}),
+      ...(agentGroupId !== undefined ? { agentGroupId: agentGroupId ?? undefined } : {}),
+    });
     return server.workspaceManager.get(request.params.id);
   });
 

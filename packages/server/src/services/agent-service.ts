@@ -140,6 +140,61 @@ export class AgentService {
     return { ...group, members };
   }
 
+  async updateGroup(groupId: string, userId: string, data: {
+    name?: string;
+    description?: string;
+    strategy?: string;
+    members?: Array<{ agentId: string; roleInGroup?: string; executionOrder?: number }>;
+  }) {
+    // Verify ownership
+    const existing = await this.getGroup(groupId, userId);
+    if (!existing) return null;
+
+    return this.db.transaction(async (tx) => {
+      // Update group fields if any provided
+      const updates: Record<string, unknown> = {};
+      if (data.name != null) updates.name = data.name;
+      if (data.description != null) updates.description = data.description;
+      if (data.strategy != null) updates.strategy = data.strategy;
+
+      if (Object.keys(updates).length > 0) {
+        updates.updatedAt = new Date();
+        await tx.update(agentGroups).set(updates).where(eq(agentGroups.id, groupId));
+      }
+
+      // Replace members if provided
+      if (data.members) {
+        await tx.delete(agentGroupMembers).where(eq(agentGroupMembers.groupId, groupId));
+        if (data.members.length > 0) {
+          await tx.insert(agentGroupMembers).values(
+            data.members.map(m => ({
+              groupId,
+              agentId: m.agentId,
+              roleInGroup: m.roleInGroup ?? 'worker',
+              executionOrder: m.executionOrder ?? 0,
+            })),
+          );
+        }
+      }
+
+      // Return updated group with members
+      const [group] = await tx.select().from(agentGroups).where(eq(agentGroups.id, groupId));
+      const members = await tx.select().from(agentGroupMembers).where(eq(agentGroupMembers.groupId, groupId));
+      return { ...group, members };
+    });
+  }
+
+  async deleteGroup(groupId: string, userId: string): Promise<boolean> {
+    const existing = await this.getGroup(groupId, userId);
+    if (!existing) return false;
+
+    await this.db.transaction(async (tx) => {
+      await tx.delete(agentGroupMembers).where(eq(agentGroupMembers.groupId, groupId));
+      await tx.delete(agentGroups).where(eq(agentGroups.id, groupId));
+    });
+    return true;
+  }
+
   async createJob(userId: string, data: {
     teamId: string;
     jobType: string;

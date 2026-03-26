@@ -85,6 +85,34 @@ export async function agentRoutes(fastify: FastifyInstance) {
     return group;
   });
 
+  // PATCH /api/agent-groups/:id — update group name, description, strategy, or members
+  fastify.patch('/api/agent-groups/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = request.body as {
+      name?: string;
+      description?: string;
+      strategy?: string;
+      members?: Array<{ agentId: string; roleInGroup?: string; executionOrder?: number }>;
+    };
+
+    const updated = await agentService.updateGroup(id, request.userId, body);
+    if (!updated) {
+      return reply.code(404).send({ error: 'Agent group not found' });
+    }
+    return updated;
+  });
+
+  // DELETE /api/agent-groups/:id — delete group and its members
+  fastify.delete('/api/agent-groups/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    const deleted = await agentService.deleteGroup(id, request.userId);
+    if (!deleted) {
+      return reply.code(404).send({ error: 'Agent group not found' });
+    }
+    return reply.code(204).send();
+  });
+
   // POST /api/agent-groups/:id/run — execute group on a task (queues job)
   fastify.post('/api/agent-groups/:id/run', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { id } = request.params as { id: string };

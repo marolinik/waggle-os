@@ -62,6 +62,28 @@ export class JobService {
     return updated;
   }
 
+  async cancelJob(jobId: string) {
+    // Update DB status
+    const updated = await this.updateJobStatus(jobId, 'cancelled');
+
+    // Try to remove from BullMQ queue
+    try {
+      const bullJob = await this.queue.getJob(jobId);
+      if (bullJob) {
+        const state = await bullJob.getState();
+        if (state === 'waiting' || state === 'delayed') {
+          await bullJob.remove();
+        } else if (state === 'active') {
+          await bullJob.moveToFailed(new Error('Cancelled by user'), 'cancelled', true);
+        }
+      }
+    } catch {
+      // Queue removal failed — DB status is still updated
+    }
+
+    return updated;
+  }
+
   async close() {
     await this.queue.close();
   }
