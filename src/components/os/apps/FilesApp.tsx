@@ -432,6 +432,43 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
     refreshFiles();
   };
 
+  // Bulk actions
+  const handleBulkDelete = () => {
+    setFiles(prev => prev.filter(f => !selectedFiles.has(f.path) && !Array.from(selectedFiles).some(s => f.path.startsWith(s + '/'))));
+    selectedFiles.forEach(path => adapter.deleteFile(workspaceId, path).catch(() => {}));
+    setSelectedFiles(new Set());
+  };
+
+  const handleBulkCopy = () => {
+    setClipboard({ files: selectedFileObjects, operation: 'copy' });
+    setSelectedFiles(new Set());
+  };
+
+  const handleBulkCut = () => {
+    setClipboard({ files: selectedFileObjects, operation: 'cut' });
+    setSelectedFiles(new Set());
+  };
+
+  const handleBulkDownload = () => {
+    selectedFileObjects.filter(f => f.type === 'file').forEach(f => {
+      adapter.downloadFile(workspaceId, f.path).catch(() => {});
+    });
+  };
+
+  const handleBulkMove = (destPath: string) => {
+    selectedFileObjects.forEach(f => {
+      const newPath = `${destPath === '/' ? '' : destPath}/${f.name}`;
+      adapter.moveFile(workspaceId, f.path, newPath).catch(() => {});
+      setFiles(prev => prev.map(pf => pf.path === f.path ? { ...pf, path: newPath } : pf));
+    });
+    setSelectedFiles(new Set());
+    setShowMoveDialog(false);
+  };
+
+  const handleSelectAll = () => {
+    setSelectedFiles(new Set(visibleFiles.map(f => f.path)));
+  };
+
   const goUp = () => {
     const parent = currentPath.substring(0, currentPath.lastIndexOf('/')) || '/';
     handleNavigate(parent);
