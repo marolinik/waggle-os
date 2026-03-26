@@ -115,6 +115,7 @@ import { closeTeamsDb } from './routes/team.js';
 import { pinRoutes } from './routes/pins.js';
 import { documentRoutes } from './routes/documents.js';
 import { fileRoutes } from './routes/files.js';
+import { browseRoutes } from './routes/browse.js';
 import { oauthRoutes } from './routes/oauth.js';
 import { OfflineManager } from './offline-manager.js';
 import { securityMiddleware } from './security-middleware.js';
@@ -1392,6 +1393,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(documentRoutes);
   await server.register(fileRoutes);
   await server.register(oauthRoutes);
+  await server.register(browseRoutes);
 
   // ── Static file serving for web mode ──────────────────────────
   // When WAGGLE_FRONTEND_DIR is set (or app/dist exists), serve the React frontend
