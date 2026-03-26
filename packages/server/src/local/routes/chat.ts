@@ -8,6 +8,7 @@ import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
 import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
 import { formatWorkspaceStatePrompt } from '../workspace-state.js';
 import { emitNotification } from './notifications.js';
+import { emitWaggleSignal } from './waggle-signals.js';
 import { emitAuditEvent } from './events.js';
 import { validateOrigin } from '../cors-config.js';
 import { getPersona, composePersonaPrompt } from '@waggle/agent';
@@ -399,6 +400,7 @@ ${workspacePath
 ${process.platform === 'win32' ? '- Windows note: use `date /t` and `time /t` (not bare `date` which prompts for input). Use `dir` instead of `ls`.' : ''}
 ${sessionId ? `- Session: ${sessionId}` : ''}
 ${historyLength && historyLength > 0 ? `- This is a continuing conversation (${historyLength} previous messages in context). You can see the full conversation history above.` : '- This is a new conversation. Search memory (search_memory) to recall what happened in previous sessions.'}
+${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailor responses to this domain.` : ''}
 
 # HOW YOU THINK — Your Core Loop
 
@@ -960,6 +962,9 @@ When approaching any task:
         // Use rerouted message if from a slash command, otherwise use original
         const agentMessage = reroutedMessage ?? message;
 
+        // Waggle Dance: emit agent start signal
+        emitWaggleSignal({ type: 'agent:started', workspaceId: effectiveWorkspace, content: agentMessage.slice(0, 200) });
+
         // ── Budget check — warn if workspace is over budget ──
         if (!hasCustomRunner && effectiveWorkspace !== 'default') {
           const wsBudgetConfig = server.workspaceManager?.get(effectiveWorkspace);
@@ -1012,9 +1017,26 @@ When approaching any task:
         const isFirstUserMessage = priorUserMessages <= 1; // history already includes current message
         const shouldCheckAmbiguity = isFirstUserMessage;
         const ambiguityPrefix = (!hasCustomRunner && shouldCheckAmbiguity && isAmbiguousMessage(agentMessage)) ? AMBIGUITY_PROMPT : '';
+
+        // Template welcome context — inject on first message in a workspace with a template
+        let templateContext = '';
+        if (!hasCustomRunner && isFirstUserMessage) {
+          const wsTemplateId = server.workspaceManager?.get(effectiveWorkspace)?.templateId;
+          if (wsTemplateId) {
+            const { BUILT_IN_TEMPLATES } = await import('./workspace-templates.js');
+            const tpl = BUILT_IN_TEMPLATES?.find?.((t: any) => t.id === wsTemplateId);
+            if (tpl) {
+              templateContext = `\n\n# Workspace Template: ${tpl.name}\nThis workspace uses the "${tpl.name}" template. ${tpl.description ?? ''}\nGreet the user with a warm, template-appropriate welcome that shows you understand their domain.\n`;
+              if (tpl.starterMemory?.length) {
+                templateContext += '\nStarter context:\n' + tpl.starterMemory.map((m: string) => `- ${m}`).join('\n') + '\n';
+              }
+            }
+          }
+        }
+
         const systemPrompt = hasCustomRunner
           ? 'You are a helpful AI assistant.'
-          : ambiguityPrefix + buildSystemPrompt(workspacePath, sessionId, history.length, effectiveWorkspace) + recalledContext;
+          : ambiguityPrefix + buildSystemPrompt(workspacePath, sessionId, history.length, effectiveWorkspace) + templateContext + recalledContext;
 
         // Register a per-request pre:tool hook for confirmation gates
         // This fires during the agent loop and pauses until user approves/denies
@@ -1199,6 +1221,8 @@ When approaching any task:
             const stepText = describeToolUse(name, input);
             sendEvent('step', { content: stepText });
             sendEvent('tool', { name, input });
+            // Waggle Dance: emit tool call signal
+            emitWaggleSignal({ type: 'tool:called', workspaceId: effectiveWorkspace, content: `${name}(${JSON.stringify(input).slice(0, 100)})` });
             // Track start time for duration calculation
             toolStartTimes.set(name + ':' + toolStartCounter++, Date.now());
             // F2: Audit trail — log tool call
@@ -1394,6 +1418,14 @@ When approaching any task:
             cost: Math.round(messageCost * 1_000_000) / 1_000_000,
             tokens: { input: result.usage.inputTokens, output: result.usage.outputTokens },
           }),
+        });
+
+        // Waggle Dance: emit agent completion signal
+        emitWaggleSignal({
+          type: 'agent:completed',
+          workspaceId: effectiveWorkspace,
+          content: `Completed: ${(result.toolsUsed ?? []).length} tools used, ${result.usage?.outputTokens ?? 0} tokens`,
+          metadata: { model: resolvedModel, toolsUsed: result.toolsUsed, cost: messageCost },
         });
 
         emitNotification(server, {

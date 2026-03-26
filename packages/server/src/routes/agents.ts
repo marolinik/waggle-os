@@ -113,7 +113,7 @@ export async function agentRoutes(fastify: FastifyInstance) {
     return reply.code(204).send();
   });
 
-  // POST /api/agent-groups/:id/run — execute group on a task (queues job)
+  // POST /api/agent-groups/:id/run — execute group on a task
   fastify.post('/api/agent-groups/:id/run', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
@@ -124,23 +124,37 @@ export async function agentRoutes(fastify: FastifyInstance) {
     }
 
     const body = request.body as { task?: string; teamId?: string } | undefined;
-
-    // teamId is required for the job record
-    if (!body?.teamId) {
-      return reply.code(400).send({ error: 'teamId is required' });
+    const task = body?.task ?? '';
+    if (!task.trim()) {
+      return reply.code(400).send({ error: 'task is required' });
     }
 
-    const job = await agentService.createJob(request.userId, {
-      teamId: body.teamId,
-      jobType: 'task',
-      input: {
-        groupId: id,
-        task: body?.task ?? '',
-        strategy: group.strategy,
-        members: group.members,
-      },
-    });
+    // Build workflow template from group definition
+    const { buildWorkflowFromGroup } = await import('../services/agent-group-executor.js');
+    const workflow = buildWorkflowFromGroup(group, task);
 
-    return reply.code(202).send({ jobId: job.id });
+    // If teamId provided, also create a job record for tracking
+    let jobId: string | undefined;
+    if (body?.teamId) {
+      try {
+        const job = await agentService.createJob(request.userId, {
+          teamId: body.teamId,
+          jobType: 'group_execution',
+          input: { groupId: id, task, strategy: group.strategy, memberCount: group.members.length },
+        });
+        jobId = job.id;
+      } catch { /* non-blocking — job tracking is optional */ }
+    }
+
+    return reply.code(202).send({
+      jobId,
+      workflow: {
+        name: workflow.name,
+        steps: workflow.steps.length,
+        strategy: group.strategy,
+        aggregation: workflow.aggregation,
+      },
+      message: `Group "${group.name}" execution started with ${workflow.steps.length} agents using ${group.strategy} strategy.`,
+    });
   });
 }
