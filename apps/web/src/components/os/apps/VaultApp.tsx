@@ -212,12 +212,9 @@ const VaultApp = () => {
           <Key className="w-3.5 h-3.5" /> Secrets
           <span className="ml-auto text-[9px] text-muted-foreground">{secrets.length}</span>
         </button>
-        <button onClick={() => setTab('connectors')}
-          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors ${
-            tab === 'connectors' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-          }`}>
-          <Plug className="w-3.5 h-3.5" /> Connectors
-        </button>
+        <div className="mt-3 pt-3 border-t border-border/30 px-2">
+          <p className="text-[9px] text-muted-foreground">Service connections moved to the <strong>Connectors</strong> app on the dock.</p>
+        </div>
       </div>
 
       {/* Content */}
@@ -342,88 +339,7 @@ const VaultApp = () => {
           </div>
         )}
 
-        {/* ═══ CONNECTORS ═══ */}
-        {tab === 'connectors' && (
-          <div className="space-y-4">
-            <h3 className="text-sm font-display font-semibold text-foreground">
-              <Plug className="w-4 h-4 inline mr-1.5 text-primary" />Connectors
-            </h3>
-            <p className="text-[10px] text-muted-foreground">Connect external services to unlock agent capabilities. Credentials are encrypted in the vault.</p>
-
-            <div className="space-y-2">
-              {connectors.map(conn => {
-                const guide = CONNECTOR_GUIDES[conn.id];
-                const isExpanded = expandedConnector === conn.id;
-                const isConnected = conn.status === 'connected';
-                const needsEmail = conn.id === 'jira';
-
-                return (
-                  <div key={conn.id} className="rounded-xl border border-border/30 overflow-hidden">
-                    <button onClick={() => setExpandedConnector(isExpanded ? null : conn.id)}
-                      className="w-full flex items-center justify-between p-3 hover:bg-secondary/20 transition-colors">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
-                        <span className="text-xs font-display font-medium text-foreground">{conn.name}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {isConnected && <CheckCircle2 className="w-3 h-3 text-emerald-400" />}
-                        {isExpanded ? <ChevronDown className="w-3 h-3 text-muted-foreground" /> : <ChevronRight className="w-3 h-3 text-muted-foreground" />}
-                      </div>
-                    </button>
-
-                    {isExpanded && (
-                      <div className="px-3 pb-3 border-t border-border/20 pt-2 space-y-2">
-                        {guide && (
-                          <>
-                            <p className="text-[10px] text-primary">{guide.unlocks}</p>
-                            <ol className="space-y-1">
-                              {guide.steps.map((step, i) => (
-                                <li key={i} className="text-[10px] text-muted-foreground flex gap-1.5">
-                                  <span className="text-primary font-medium shrink-0">{i + 1}.</span> {step}
-                                </li>
-                              ))}
-                            </ol>
-                            {guide.setupUrl && (
-                              <a href={guide.setupUrl} target="_blank" rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-[10px] text-primary hover:text-primary/80 transition-colors">
-                                <ExternalLink className="w-3 h-3" /> Open {conn.name} settings
-                              </a>
-                            )}
-                          </>
-                        )}
-
-                        {isConnected ? (
-                          <button onClick={() => handleConnectorDisconnect(conn.id)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-destructive/20 text-destructive hover:bg-destructive/30 transition-colors">
-                            <Trash2 className="w-3 h-3" /> Disconnect
-                          </button>
-                        ) : (
-                          <div className="space-y-2">
-                            {needsEmail && (
-                              <input value={connectorEmail} onChange={e => setConnectorEmail(e.target.value)}
-                                placeholder="Your Atlassian email"
-                                className="w-full bg-muted/50 border border-border/50 rounded-lg px-2 py-1 text-xs text-foreground outline-none" />
-                            )}
-                            <div className="flex gap-2">
-                              <input type="password" value={connectorToken} onChange={e => setConnectorToken(e.target.value)}
-                                placeholder={guide?.tokenPlaceholder ?? 'Paste token or API key'}
-                                className="flex-1 bg-muted/50 border border-border/50 rounded-lg px-2 py-1 text-xs text-foreground outline-none" />
-                              <button onClick={() => handleConnectorConnect(conn.id)} disabled={!connectorToken.trim() || connecting}
-                                className="flex items-center gap-1 px-3 py-1 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-50 transition-colors">
-                                {connecting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plug className="w-3 h-3" />} Connect
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              {connectors.length === 0 && <p className="text-xs text-muted-foreground py-4 text-center">No connectors available</p>}
-            </div>
-          </div>
-        )}
+        {/* Connectors moved to dedicated Connectors app */}
       </div>
     </div>
   );

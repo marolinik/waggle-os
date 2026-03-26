@@ -23,7 +23,7 @@ const CapabilitiesApp = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [installing, setInstalling] = useState<string | null>(null);
-  const [tab, setTab] = useState<'installed' | 'marketplace' | 'starter'>('installed');
+  const [tab, setTab] = useState<'installed' | 'marketplace' | 'starter' | 'tools'>('installed');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   useEffect(() => {
@@ -130,7 +130,7 @@ const CapabilitiesApp = () => {
 
       {/* Tabs */}
       <div className="flex gap-1 mb-4 p-0.5 rounded-lg bg-muted/50 w-fit">
-        {(['installed', 'starter', 'marketplace'] as const).map(t => (
+        {(['installed', 'starter', 'marketplace', 'tools'] as const).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -170,10 +170,44 @@ const CapabilitiesApp = () => {
         ))}
       </div>
 
-      {!loading && filtered.length === 0 && (
+      {!loading && filtered.length === 0 && tab !== 'tools' && (
         <div className="text-center py-8">
           <Package className="w-8 h-8 text-muted-foreground/20 mx-auto mb-2" />
           <p className="text-xs text-muted-foreground">No {tab} packs found</p>
+        </div>
+      )}
+
+      {/* Tools tab — read-only overview of all agent capabilities */}
+      {tab === 'tools' && (
+        <div className="space-y-3">
+          <p className="text-[10px] text-muted-foreground mb-3">These are the built-in tools the agent can use. They work automatically — no setup needed.</p>
+          {[
+            { category: 'File Operations', tools: ['read_file', 'write_file', 'edit_file', 'list_directory', 'find_files', 'delete_path'], desc: 'Read, write, search, and manage files in workspace' },
+            { category: 'Code & Shell', tools: ['bash', 'search_content', 'create_directory'], desc: 'Execute commands, search code, manage directories' },
+            { category: 'Web & Search', tools: ['web_search', 'web_fetch', 'perplexity_search', 'tavily_search', 'brave_search'], desc: 'Search the web, fetch pages, get real-time information' },
+            { category: 'Memory', tools: ['save_memory', 'search_memory', 'get_awareness'], desc: 'Remember facts, search past conversations, track context' },
+            { category: 'Documents', tools: ['generate_docx', 'read_docx', 'summarize_document'], desc: 'Create Word docs, read documents, generate reports' },
+            { category: 'Git', tools: ['git_status', 'git_commit', 'git_push', 'git_diff', 'git_log'], desc: 'Version control — commit, push, diff, branch management' },
+            { category: 'Planning', tools: ['create_plan', 'update_plan', 'execute_plan'], desc: 'Break down tasks, track progress, execute step by step' },
+            { category: 'Skills', tools: ['create_skill', 'list_skills', 'suggest_skill'], desc: 'Create, manage, and discover reusable skills' },
+            { category: 'Agents', tools: ['spawn_agent'], desc: 'Launch specialist sub-agents for parallel work' },
+            { category: 'Scheduling', tools: ['schedule_cron', 'list_crons', 'trigger_cron'], desc: 'Set up recurring tasks and automated runs' },
+            { category: 'Browser', tools: ['open_page', 'screenshot', 'click', 'fill'], desc: 'Browse websites, fill forms, take screenshots' },
+            { category: 'Connectors', tools: ['29 services'], desc: 'GitHub, Slack, Notion, Jira, and more — connect in the Connectors app' },
+          ].map(group => (
+            <div key={group.category} className="p-2.5 rounded-lg bg-secondary/30 border border-border/30">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-display font-medium text-foreground">{group.category}</span>
+                <span className="text-[9px] text-muted-foreground">{group.tools.length} tool{group.tools.length > 1 ? 's' : ''}</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground mb-1.5">{group.desc}</p>
+              <div className="flex flex-wrap gap-1">
+                {group.tools.map(t => (
+                  <span key={t} className="px-1.5 py-0.5 text-[8px] rounded bg-muted/50 text-muted-foreground font-mono">{t}</span>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
