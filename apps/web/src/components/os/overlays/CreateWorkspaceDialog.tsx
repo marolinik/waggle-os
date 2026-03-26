@@ -247,7 +247,7 @@ function FolderPickerModal({ open, storageType, currentPath, onSelect, onClose }
 
         {/* Tree */}
         <div className="px-2 py-2 max-h-[280px] overflow-y-auto space-y-0.5">
-          {tree.map(node => renderNode(node, 0))}
+          {folderTree.map(node => renderNode(node, 0))}
         </div>
 
         {/* Selected path preview + actions */}
