@@ -714,7 +714,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                 return (
                 <div className="grid grid-cols-4 gap-1.5 max-h-[160px] overflow-y-auto pr-1">
                   {/* Blank option */}
-                  {categoryFilter === 'all' && (
+                  {categoryFilter === 'all' && !searchLower && (
                   <button onClick={() => setSelectedTemplate(null)}
                     className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all ${
                       selectedTemplate === null ? 'bg-primary/20 border border-primary/50' : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
