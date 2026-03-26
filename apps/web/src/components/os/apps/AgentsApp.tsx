@@ -586,11 +586,13 @@ const GroupDetail = ({
   agents,
   onRun,
   onEdit,
+  onDuplicate,
 }: {
   group: AgentGroup;
   agents: BackendPersona[];
   onRun: (task: string) => Promise<GroupExecState | null>;
   onEdit: () => void;
+  onDuplicate: () => void;
 }) => {
   const [task, setTask] = useState('');
   const [execState, setExecState] = useState<GroupExecState | null>(null);
