@@ -345,7 +345,15 @@ class LocalAdapter {
   // --- Events ---
   async getEvents(): Promise<AgentStep[]> {
     const res = await this.fetch('/api/events');
-    return unwrapArray(await res.json());
+    return unwrapArray(await res.json()).map((e: any) => ({
+      id: String(e.id),
+      type: e.type ?? e.eventType ?? 'response',
+      description: e.description ?? e.output?.slice(0, 100) ?? e.toolName ?? '',
+      status: e.status ?? 'complete',
+      duration: e.duration,
+      timestamp: e.timestamp ?? '',
+      details: e.details ?? (e.output ? { output: e.output } : undefined),
+    }));
   }
 
   subscribeEvents(onEvent: (step: AgentStep) => void): () => void {
