@@ -4,7 +4,7 @@ import {
   Bot, Plus, Search, Loader2, Wrench, ChevronRight, Sparkles,
   Trash2, X, Check, AlertCircle, Pencil, Save, Users, Play,
   ArrowRight, Crown, Cog, GripVertical, ChevronUp, ChevronDown,
-  CheckCircle2, XCircle, Clock, Activity,
+  CheckCircle2, XCircle, Clock, Activity, Copy,
 } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { adapter } from '@/lib/adapter';
@@ -586,11 +586,13 @@ const GroupDetail = ({
   agents,
   onRun,
   onEdit,
+  onDuplicate,
 }: {
   group: AgentGroup;
   agents: BackendPersona[];
   onRun: (task: string) => Promise<GroupExecState | null>;
   onEdit: () => void;
+  onDuplicate: () => void;
 }) => {
   const [task, setTask] = useState('');
   const [execState, setExecState] = useState<GroupExecState | null>(null);
@@ -671,6 +673,12 @@ const GroupDetail = ({
         <div className="flex items-center gap-2 mb-1">
           <Users className="w-5 h-5 text-primary" />
           <h3 className="text-sm font-display font-bold text-foreground flex-1">{group.name}</h3>
+          <button
+            onClick={onDuplicate}
+            className="flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-medium rounded-lg bg-secondary/50 hover:bg-secondary/70 text-foreground transition-colors"
+          >
+            <Copy className="w-3 h-3" /> Duplicate
+          </button>
           <button
             onClick={onEdit}
             className="flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-medium rounded-lg bg-secondary/50 hover:bg-secondary/70 text-foreground transition-colors"
@@ -972,6 +980,7 @@ const AgentsApp = () => {
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [editingAgent, setEditingAgent] = useState<BackendPersona | null>(null);
   const [editingGroup, setEditingGroup] = useState<AgentGroup | null>(null);
+  const [duplicatingGroup, setDuplicatingGroup] = useState<AgentGroup | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
@@ -1127,6 +1136,7 @@ const AgentsApp = () => {
     setShowCreateGroup(false);
     setEditingAgent(null);
     setEditingGroup(null);
+    setDuplicatingGroup(null);
     setSearch('');
   };
 
@@ -1289,8 +1299,21 @@ const AgentsApp = () => {
                   members: editingGroup.members,
                 }}
               />
+            ) : duplicatingGroup ? (
+              <CreateGroupForm
+                key={`dup-group-${duplicatingGroup.id}`}
+                agents={agents}
+                onSave={(data) => { handleCreateGroup(data); setDuplicatingGroup(null); }}
+                onCancel={() => setDuplicatingGroup(null)}
+                initialData={{
+                  name: `${duplicatingGroup.name} (Copy)`,
+                  description: duplicatingGroup.description ?? '',
+                  strategy: duplicatingGroup.strategy,
+                  members: duplicatingGroup.members,
+                }}
+              />
             ) : selectedGroup ? (
-              <GroupDetail group={selectedGroup} agents={agents} onRun={(task) => handleRunGroup(selectedGroup.id, task)} onEdit={() => setEditingGroup(selectedGroup)} />
+              <GroupDetail group={selectedGroup} agents={agents} onRun={(task) => handleRunGroup(selectedGroup.id, task)} onEdit={() => setEditingGroup(selectedGroup)} onDuplicate={() => setDuplicatingGroup(selectedGroup)} />
             ) : (
               <div className="flex-1 flex items-center justify-center text-muted-foreground">
                 <div className="text-center">
