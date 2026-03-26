@@ -550,6 +550,11 @@ class LocalAdapter {
     await this.fetch(`/api/agent-groups/${id}`, { method: 'DELETE' });
   }
 
+  async updateAgentGroup(id: string, data: { name?: string; description?: string; strategy?: string; members?: { agentId: string; roleInGroup: string; executionOrder: number }[] }): Promise<unknown> {
+    const res = await this.fetch(`/api/agent-groups/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+    return res.json();
+  }
+
   async runAgentGroup(groupId: string, task: string): Promise<unknown> {
     const res = await this.fetch(`/api/agent-groups/${groupId}/run`, { method: 'POST', body: JSON.stringify({ task, teamId: 'default' }) });
     return res.json();
