@@ -535,6 +535,26 @@ class LocalAdapter {
     return res.json();
   }
 
+  // --- Agent Groups ---
+  async getAgentGroups(): Promise<unknown[]> {
+    const res = await this.fetch('/api/agent-groups');
+    return unwrapArray(await res.json());
+  }
+
+  async createAgentGroup(data: { name: string; description: string; strategy: string; members: { agentId: string; roleInGroup: string; executionOrder: number }[] }): Promise<unknown> {
+    const res = await this.fetch('/api/agent-groups', { method: 'POST', body: JSON.stringify(data) });
+    return res.json();
+  }
+
+  async deleteAgentGroup(id: string): Promise<void> {
+    await this.fetch(`/api/agent-groups/${id}`, { method: 'DELETE' });
+  }
+
+  async runAgentGroup(groupId: string, task: string): Promise<unknown> {
+    const res = await this.fetch(`/api/agent-groups/${groupId}/run`, { method: 'POST', body: JSON.stringify({ task, teamId: 'default' }) });
+    return res.json();
+  }
+
   // --- Health ---
   async getSystemHealth(): Promise<SystemHealth> {
     const res = await this.fetch('/health');
