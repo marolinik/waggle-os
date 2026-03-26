@@ -706,7 +706,28 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                 return (
                   <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
                     className="mt-2 p-2.5 bg-primary/5 border border-primary/20 rounded-xl">
-                    <p className="text-[10px] text-foreground font-medium mb-1">{tmpl.name}</p>
+                    <div className="flex items-start justify-between mb-1">
+                      <p className="text-[10px] text-foreground font-medium">{tmpl.name}</p>
+                      {!tmpl.builtIn && (
+                        <div className="flex gap-1">
+                          <button onClick={() => { setEditingTemplate(tmpl); setShowTemplateCreator(true); }}
+                            className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors">
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                          <button onClick={async () => {
+                            if (!confirm(`Delete "${tmpl.name}"?`)) return;
+                            try {
+                              await adapter.deleteWorkspaceTemplate(tmpl.id);
+                              setTemplates(prev => prev.filter(t => t.id !== tmpl.id));
+                              setSelectedTemplate(null);
+                            } catch { /* ignore */ }
+                          }}
+                            className="p-0.5 rounded text-muted-foreground hover:text-destructive transition-colors">
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
                     <p className="text-[9px] text-muted-foreground mb-1.5">{tmpl.description}</p>
                     <div className="flex flex-wrap gap-1">
                       {tmpl.connectors.map(c => (
