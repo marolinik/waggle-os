@@ -13,6 +13,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
 
+export type TemplateCategory = 'sales' | 'research' | 'engineering' | 'marketing' | 'operations' | 'legal' | 'custom';
+
 /** Shape of a workspace template. */
 export interface WorkspaceTemplate {
   id: string;
@@ -24,6 +26,7 @@ export interface WorkspaceTemplate {
   starterMemory: string[];
   /** Whether this template is built-in (true) or user-created (false). */
   builtIn: boolean;
+  category?: TemplateCategory;
 }
 
 /** The 6 built-in workspace templates. */
@@ -41,6 +44,7 @@ export const BUILT_IN_TEMPLATES: WorkspaceTemplate[] = [
       'Use /research to investigate companies, /draft to create outreach emails.',
     ],
     builtIn: true,
+    category: 'sales',
   },
   {
     id: 'research-project',
@@ -69,6 +73,7 @@ export const BUILT_IN_TEMPLATES: WorkspaceTemplate[] = [
       'Use /review for structured code analysis, /plan for multi-step refactoring.',
     ],
     builtIn: true,
+    category: 'engineering',
   },
   {
     id: 'marketing-campaign',
@@ -83,6 +88,7 @@ export const BUILT_IN_TEMPLATES: WorkspaceTemplate[] = [
       'Use /draft for content creation, /research for competitor and audience analysis.',
     ],
     builtIn: true,
+    category: 'marketing',
   },
   {
     id: 'product-launch',
@@ -97,6 +103,7 @@ export const BUILT_IN_TEMPLATES: WorkspaceTemplate[] = [
       'Use /plan for launch checklists, /status for progress reports, /spawn for parallel work.',
     ],
     builtIn: true,
+    category: 'operations',
   },
   {
     id: 'legal-review',
@@ -111,8 +118,8 @@ export const BUILT_IN_TEMPLATES: WorkspaceTemplate[] = [
       'Use /review for document analysis, /research for legal precedent, /memory for prior findings.',
     ],
     builtIn: true,
+    category: 'legal',
   },
-  // F6: Agency / Consulting template for multi-client workspace management
   {
     id: 'agency-consulting',
     name: 'Agency / Consulting',
@@ -126,6 +133,7 @@ export const BUILT_IN_TEMPLATES: WorkspaceTemplate[] = [
       'Use /status for project metrics, /draft for deliverables, /catchup for quick briefings.',
     ],
     builtIn: true,
+    category: 'operations',
   },
 ];
 

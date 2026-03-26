@@ -4,13 +4,13 @@ import {
   FolderPlus, ChevronRight, Home, Check, Loader2, LayoutTemplate,
   Sparkles, Info, Wand2, Target, Microscope, Code, Megaphone,
   Rocket, Scale, Building, FileText, Laptop, PenLine, BarChart3,
-  ClipboardList, Mail, Plug, Terminal, Pencil, Trash2, Copy,
+  ClipboardList, Mail, Plug, Terminal, Pencil, Trash2, Copy, Filter,
 } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { PERSONAS } from '@/lib/personas';
 import { motion, AnimatePresence } from 'framer-motion';
 import { adapter } from '@/lib/adapter';
-import type { StorageType, WorkspaceTemplate, Connector } from '@/lib/types';
+import type { StorageType, WorkspaceTemplate, Connector, TemplateCategory } from '@/lib/types';
 
 /* ── Shared constants ─────────────────────────────────────────────── */
 
@@ -64,6 +64,17 @@ const TEMPLATE_PERSONAS = [
   { id: 'executive-assistant', name: 'Executive Assistant', icon: Mail },
   { id: 'sales-rep', name: 'Sales Rep', icon: Target },
   { id: 'marketer', name: 'Marketer', icon: Megaphone },
+];
+
+const TEMPLATE_CATEGORIES: { id: TemplateCategory | 'all'; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'sales', label: 'Sales' },
+  { id: 'research', label: 'Research' },
+  { id: 'engineering', label: 'Engineering' },
+  { id: 'marketing', label: 'Marketing' },
+  { id: 'operations', label: 'Operations' },
+  { id: 'legal', label: 'Legal' },
+  { id: 'custom', label: 'Custom' },
 ];
 
 function defaultVirtualPath(workspaceName: string): string {
@@ -323,6 +334,7 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [persona, setPersona] = useState('');
+  const [category, setCategory] = useState<TemplateCategory>('custom');
   const [selectedConnectors, setSelectedConnectors] = useState<string[]>([]);
   const [selectedCommands, setSelectedCommands] = useState<string[]>([]);
   const [starterMemory, setStarterMemory] = useState('');
@@ -336,11 +348,12 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
       setName(editingTemplate ? source.name : `${source.name} (Copy)`);
       setDescription(source.description);
       setPersona(source.persona);
+      setCategory(source.category || 'custom');
       setSelectedConnectors([...source.connectors]);
       setSelectedCommands([...source.suggestedCommands]);
       setStarterMemory(source.starterMemory.join('\n'));
     } else {
-      setName(''); setDescription(''); setPersona(''); setSelectedConnectors([]); setSelectedCommands([]); setStarterMemory('');
+      setName(''); setDescription(''); setPersona(''); setCategory('custom'); setSelectedConnectors([]); setSelectedCommands([]); setStarterMemory('');
     }
   }, [editingTemplate, initialData, open]);
 
@@ -383,6 +396,7 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
         connectors: selectedConnectors,
         suggestedCommands: selectedCommands,
         starterMemory: starterMemory.split('\n').map(s => s.trim()).filter(Boolean),
+        category,
       };
       const template = editingTemplate
         ? await adapter.updateWorkspaceTemplate(editingTemplate.id, payload)
@@ -468,7 +482,26 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
               className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2 text-[11px] text-foreground outline-none focus:border-primary/50 resize-none" />
           </div>
 
-          {/* Persona picker */}
+          {/* Category */}
+          <div>
+            <div className="flex items-center gap-1 mb-1.5">
+              <label className="text-[11px] text-muted-foreground font-medium">Category</label>
+              <Tooltip text="Categorize this template so it's easy to find via filters."><Info className="w-3 h-3 text-primary/60 cursor-help" /></Tooltip>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {TEMPLATE_CATEGORIES.filter(c => c.id !== 'all').map(cat => (
+                <button key={cat.id} onClick={() => setCategory(cat.id as TemplateCategory)}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-medium transition-all border ${
+                    category === cat.id
+                      ? 'bg-primary/20 border-primary/50 text-foreground'
+                      : 'bg-secondary/30 border-transparent text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
+                  }`}>
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div>
             <div className="flex items-center gap-1 mb-1.5">
               <label className="text-[11px] text-muted-foreground font-medium">Default Persona</label>
@@ -557,6 +590,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
   const [showTemplateCreator, setShowTemplateCreator] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<WorkspaceTemplate | null>(null);
   const [duplicatingTemplate, setDuplicatingTemplate] = useState<WorkspaceTemplate | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<TemplateCategory | 'all'>('all');
 
   // Connectors from backend
   const [connectors, setConnectors] = useState<Connector[]>([]);
@@ -644,11 +678,32 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                 </button>
               </div>
 
+              {/* Category filter chips */}
+              <div className="flex flex-wrap gap-1 mb-1.5">
+                {TEMPLATE_CATEGORIES.map(cat => (
+                  <button key={cat.id} onClick={() => setCategoryFilter(cat.id)}
+                    className={`px-2 py-0.5 rounded-lg text-[9px] font-medium transition-all border ${
+                      categoryFilter === cat.id
+                        ? 'bg-primary/20 border-primary/50 text-foreground'
+                        : 'bg-secondary/30 border-transparent text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
+                    }`}>
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+
               {loadingTemplates ? (
                 <div className="flex items-center justify-center py-4"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
-              ) : (
+              ) : (() => {
+                const filtered = categoryFilter === 'all'
+                  ? templates
+                  : categoryFilter === 'custom'
+                    ? templates.filter(t => !t.builtIn)
+                    : templates.filter(t => t.category === categoryFilter);
+                return (
                 <div className="grid grid-cols-4 gap-1.5 max-h-[160px] overflow-y-auto pr-1">
                   {/* Blank option */}
+                  {categoryFilter === 'all' && (
                   <button onClick={() => setSelectedTemplate(null)}
                     className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all ${
                       selectedTemplate === null ? 'bg-primary/20 border border-primary/50' : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
@@ -656,7 +711,11 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                     <FileText className="w-4 h-4 text-muted-foreground" />
                     <span className="text-[8px] text-muted-foreground text-center leading-tight">Blank</span>
                   </button>
-                  {templates.map(tmpl => {
+                  )}
+                  {filtered.length === 0 && (
+                    <div className="col-span-4 py-3 text-center text-[10px] text-muted-foreground">No templates in this category</div>
+                  )}
+                  {filtered.map(tmpl => {
                     const Icon = TEMPLATE_ICONS[tmpl.id] || LayoutTemplate;
                     const isSelected = selectedTemplate === tmpl.id;
                     return (
@@ -712,7 +771,8 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                     );
                   })}
                 </div>
-              )}
+                );
+              })()}
 
               {/* Template detail card */}
               {selectedTemplate && (() => {
