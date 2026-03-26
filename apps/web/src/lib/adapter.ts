@@ -129,6 +129,15 @@ class LocalAdapter {
     return res.json();
   }
 
+  async updateWorkspaceTemplate(id: string, data: Omit<WorkspaceTemplate, 'id' | 'builtIn'>): Promise<WorkspaceTemplate> {
+    const res = await this.fetch(`/api/workspace-templates/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    return res.json();
+  }
+
+  async deleteWorkspaceTemplate(id: string): Promise<void> {
+    await this.fetch(`/api/workspace-templates/${id}`, { method: 'DELETE' });
+  }
+
   async createWorkspace(data: { name: string; group: string; persona?: string; templateId?: string; shared?: boolean }): Promise<Workspace> {
     const res = await this.fetch('/api/workspaces', { method: 'POST', body: JSON.stringify(data) });
     return res.json();
