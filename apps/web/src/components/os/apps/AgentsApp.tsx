@@ -972,6 +972,7 @@ const AgentsApp = () => {
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [editingAgent, setEditingAgent] = useState<BackendPersona | null>(null);
   const [editingGroup, setEditingGroup] = useState<AgentGroup | null>(null);
+  const [duplicatingGroup, setDuplicatingGroup] = useState<AgentGroup | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
