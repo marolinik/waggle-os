@@ -13,6 +13,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
 
+export type TemplateCategory = 'sales' | 'research' | 'engineering' | 'marketing' | 'operations' | 'legal' | 'custom';
+
 /** Shape of a workspace template. */
 export interface WorkspaceTemplate {
   id: string;
@@ -24,6 +26,7 @@ export interface WorkspaceTemplate {
   starterMemory: string[];
   /** Whether this template is built-in (true) or user-created (false). */
   builtIn: boolean;
+  category?: TemplateCategory;
 }
 
 /** The 6 built-in workspace templates. */

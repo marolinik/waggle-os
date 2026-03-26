@@ -48,6 +48,8 @@ export interface FileEntry {
   createdAt?: string;
 }
 
+export type TemplateCategory = 'sales' | 'research' | 'engineering' | 'marketing' | 'operations' | 'legal' | 'custom';
+
 export interface WorkspaceTemplate {
   id: string;
   name: string;
@@ -57,6 +59,7 @@ export interface WorkspaceTemplate {
   suggestedCommands: string[];
   starterMemory: string[];
   builtIn: boolean;
+  category?: TemplateCategory;
 }
 
 export interface WorkspaceContext {
