@@ -823,6 +823,163 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
           </motion.div>
         )}
       </AnimatePresence>
+      {/* Properties dialog */}
+      <AnimatePresence>
+        {propertiesFile && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            onClick={() => setPropertiesFile(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              className="w-[360px] max-h-[80vh] bg-background border border-border/40 rounded-2xl shadow-2xl overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center gap-3 px-5 py-4 border-b border-border/20 bg-muted/20">
+                {(() => {
+                  const Icon = propertiesFile.type === 'directory' ? Folder : getFileIcon(propertiesFile.name);
+                  return <Icon className={`w-8 h-8 ${propertiesFile.type === 'directory' ? 'text-amber-400' : 'text-primary'}`} />;
+                })()}
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-sm font-semibold text-foreground truncate">{propertiesFile.name}</h3>
+                  <p className="text-[10px] text-muted-foreground font-mono truncate">{propertiesFile.path}</p>
+                </div>
+                <button onClick={() => setPropertiesFile(null)} className="p-1 rounded-lg hover:bg-muted/50 transition-colors">
+                  <XIcon className="w-4 h-4 text-muted-foreground" />
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="px-5 py-4 space-y-4 overflow-auto max-h-[60vh]">
+                {/* General section */}
+                <div>
+                  <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">General</h4>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-xs">
+                      <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                      <span className="text-muted-foreground w-20">Name</span>
+                      <span className="text-foreground truncate flex-1">{propertiesFile.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      <Hash className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                      <span className="text-muted-foreground w-20">Type</span>
+                      <span className="text-foreground">
+                        {propertiesFile.type === 'directory' ? 'Directory' : (propertiesFile.mimeType || propertiesFile.name.split('.').pop()?.toUpperCase() + ' File' || 'File')}
+                      </span>
+                    </div>
+                    {propertiesFile.type === 'file' && (
+                      <div className="flex items-center gap-2 text-xs">
+                        <HardDrive className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                        <span className="text-muted-foreground w-20">Size</span>
+                        <span className="text-foreground">{formatSize(propertiesFile.size)}{propertiesFile.size ? ` (${propertiesFile.size.toLocaleString()} bytes)` : ''}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="h-px bg-border/20" />
+
+                {/* Dates section */}
+                <div>
+                  <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Dates</h4>
+                  <div className="space-y-2">
+                    {propertiesFile.modifiedAt && (
+                      <div className="flex items-center gap-2 text-xs">
+                        <Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                        <span className="text-muted-foreground w-20">Modified</span>
+                        <span className="text-foreground">{new Date(propertiesFile.modifiedAt).toLocaleString()}</span>
+                      </div>
+                    )}
+                    {propertiesFile.createdAt && (
+                      <div className="flex items-center gap-2 text-xs">
+                        <Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                        <span className="text-muted-foreground w-20">Created</span>
+                        <span className="text-foreground">{new Date(propertiesFile.createdAt).toLocaleString()}</span>
+                      </div>
+                    )}
+                    {!propertiesFile.modifiedAt && !propertiesFile.createdAt && (
+                      <p className="text-[10px] text-muted-foreground/60 italic">No date information available</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="h-px bg-border/20" />
+
+                {/* Storage location */}
+                <div>
+                  <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Storage</h4>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-xs">
+                      <storageMeta.icon className={`w-3.5 h-3.5 ${storageMeta.color} shrink-0`} />
+                      <span className="text-muted-foreground w-20">Provider</span>
+                      <span className="text-foreground">{storageMeta.label} Storage</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      <MapPin className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                      <span className="text-muted-foreground w-20">Path</span>
+                      <span className="text-foreground font-mono text-[10px] truncate flex-1">{propertiesFile.path}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      <Folder className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                      <span className="text-muted-foreground w-20">Workspace</span>
+                      <span className="text-foreground">{workspaceName || workspaceId}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="h-px bg-border/20" />
+
+                {/* Permissions section */}
+                <div>
+                  <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Permissions</h4>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-xs">
+                      <Shield className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                      <span className="text-muted-foreground w-20">Access</span>
+                      <span className="text-foreground">
+                        {storageType === 'team' ? 'Team (shared)' : storageType === 'local' ? 'Local (private)' : 'Virtual (session)'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      {storageType === 'team' ? (
+                        <Unlock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      ) : (
+                        <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      )}
+                      <span className="text-muted-foreground w-20">Visibility</span>
+                      <span className="text-foreground">{storageType === 'team' ? 'Shared with team' : 'Only you'}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      <Edit className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                      <span className="text-muted-foreground w-20">Writable</span>
+                      <span className="inline-flex items-center gap-1 text-emerald-400 text-[10px]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Yes
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border/20 bg-muted/10">
+                <button
+                  onClick={() => setPropertiesFile(null)}
+                  className="text-xs px-4 py-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
