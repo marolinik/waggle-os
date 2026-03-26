@@ -326,6 +326,33 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors }:
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // AI generation state
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [generating, setGenerating] = useState(false);
+
+  const handleAiGenerate = async () => {
+    if (!aiPrompt.trim()) return;
+    setGenerating(true);
+    setError(null);
+    try {
+      const result = await adapter.generateTemplateFromPrompt(aiPrompt.trim(), {
+        availableConnectors: availableConnectors.map(c => c.id),
+        availableCommands: AVAILABLE_COMMANDS.map(c => c.id),
+        availablePersonas: TEMPLATE_PERSONAS.map(p => p.id),
+      });
+      if (result.name) setName(result.name);
+      if (result.description) setDescription(result.description);
+      if (result.persona) setPersona(result.persona);
+      if (result.connectors) setSelectedConnectors(result.connectors);
+      if (result.suggestedCommands) setSelectedCommands(result.suggestedCommands);
+      if (result.starterMemory) setStarterMemory(result.starterMemory.join('\n'));
+    } catch (err: any) {
+      setError(err.message ?? 'AI generation failed — fill fields manually.');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!name.trim() || !description.trim()) return;
     setSaving(true);
@@ -369,13 +396,32 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors }:
           <button onClick={onClose} className="p-1 rounded-lg text-muted-foreground hover:text-foreground"><X className="w-3.5 h-3.5" /></button>
         </div>
 
-        {/* Hint */}
-        <div className="mx-5 mt-3 flex items-start gap-2 bg-primary/10 border border-primary/20 rounded-xl px-3 py-2">
-          <Sparkles className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
-          <p className="text-[10px] text-muted-foreground leading-relaxed">
-            Define what your workspace template includes — the domain, connectors, commands, and initial context.
-            Hover <Info className="w-3 h-3 inline text-primary" /> icons for guidance.
-          </p>
+        {/* AI Generation */}
+        <div className="mx-5 mt-3 space-y-2">
+          <div className="flex items-start gap-2 bg-primary/10 border border-primary/20 rounded-xl px-3 py-2">
+            <Sparkles className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+            <p className="text-[10px] text-muted-foreground leading-relaxed">
+              Describe your use case and AI will auto-fill all fields, or fill them manually below.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <input
+              value={aiPrompt}
+              onChange={e => setAiPrompt(e.target.value)}
+              placeholder="e.g. I need a workspace for managing customer support tickets via Slack and email"
+              className="flex-1 bg-muted/50 border border-border/50 rounded-xl px-3 py-2 text-[11px] text-foreground outline-none focus:border-primary/50"
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAiGenerate(); } }}
+              disabled={generating}
+            />
+            <button
+              onClick={handleAiGenerate}
+              disabled={!aiPrompt.trim() || generating}
+              className="flex items-center gap-1.5 px-3 py-2 text-[11px] rounded-xl bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-40 transition-colors whitespace-nowrap"
+            >
+              {generating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+              {generating ? 'Generating…' : 'AI Fill'}
+            </button>
+          </div>
         </div>
 
         {/* Fields */}
