@@ -1128,6 +1128,7 @@ const AgentsApp = () => {
     setShowCreateGroup(false);
     setEditingAgent(null);
     setEditingGroup(null);
+    setDuplicatingGroup(null);
     setSearch('');
   };
 
