@@ -14,11 +14,19 @@ import type { StorageType, WorkspaceTemplate, Connector, TemplateCategory } from
 
 /* ── Shared constants ─────────────────────────────────────────────── */
 
+interface AgentGroupOption {
+  id: string;
+  name: string;
+  description?: string;
+  strategy: string;
+  memberCount: number;
+}
+
 interface CreateWorkspaceDialogProps {
   open: boolean;
   onClose: () => void;
   onCreate: (data: {
-    name: string; group: string; persona?: string; shared?: boolean;
+    name: string; group: string; persona?: string; agentGroupId?: string; shared?: boolean;
     storageType?: StorageType; storagePath?: string; templateId?: string;
   }) => void;
 }
