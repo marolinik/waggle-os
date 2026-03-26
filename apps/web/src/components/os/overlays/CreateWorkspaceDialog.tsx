@@ -4,7 +4,7 @@ import {
   FolderPlus, ChevronRight, Home, Check, Loader2, LayoutTemplate,
   Sparkles, Info, Wand2, Target, Microscope, Code, Megaphone,
   Rocket, Scale, Building, FileText, Laptop, PenLine, BarChart3,
-  ClipboardList, Mail, Plug, Terminal, Pencil, Trash2,
+  ClipboardList, Mail, Plug, Terminal, Pencil, Trash2, Copy,
 } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { PERSONAS } from '@/lib/personas';
@@ -315,9 +315,11 @@ interface TemplateCreatorProps {
   onCreated: (t: WorkspaceTemplate) => void;
   availableConnectors: ChipOption[];
   editingTemplate?: WorkspaceTemplate | null;
+  /** Pre-fill data for duplication (creates new, does not update) */
+  initialData?: WorkspaceTemplate | null;
 }
 
-function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, editingTemplate }: TemplateCreatorProps) {
+function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, editingTemplate, initialData }: TemplateCreatorProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [persona, setPersona] = useState('');
@@ -327,19 +329,20 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Populate fields when editing
+  // Populate fields when editing or duplicating
   useEffect(() => {
-    if (editingTemplate) {
-      setName(editingTemplate.name);
-      setDescription(editingTemplate.description);
-      setPersona(editingTemplate.persona);
-      setSelectedConnectors(editingTemplate.connectors);
-      setSelectedCommands(editingTemplate.suggestedCommands);
-      setStarterMemory(editingTemplate.starterMemory.join('\n'));
+    const source = editingTemplate || initialData;
+    if (source) {
+      setName(editingTemplate ? source.name : `${source.name} (Copy)`);
+      setDescription(source.description);
+      setPersona(source.persona);
+      setSelectedConnectors([...source.connectors]);
+      setSelectedCommands([...source.suggestedCommands]);
+      setStarterMemory(source.starterMemory.join('\n'));
     } else {
       setName(''); setDescription(''); setPersona(''); setSelectedConnectors([]); setSelectedCommands([]); setStarterMemory('');
     }
-  }, [editingTemplate, open]);
+  }, [editingTemplate, initialData, open]);
 
   // AI generation state
   const [aiPrompt, setAiPrompt] = useState('');
@@ -553,6 +556,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [showTemplateCreator, setShowTemplateCreator] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<WorkspaceTemplate | null>(null);
+  const [duplicatingTemplate, setDuplicatingTemplate] = useState<WorkspaceTemplate | null>(null);
 
   // Connectors from backend
   const [connectors, setConnectors] = useState<Connector[]>([]);
@@ -669,30 +673,41 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                             {!tmpl.builtIn && <span className="text-[7px] text-primary/60">custom</span>}
                           </button>
                         </Tooltip>
-                        {!tmpl.builtIn && (
-                          <div className="absolute top-0.5 right-0.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setEditingTemplate(tmpl); setShowTemplateCreator(true); }}
-                              className="p-0.5 rounded bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
-                            >
-                              <Pencil className="w-2.5 h-2.5" />
-                            </button>
-                            <button
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                if (!confirm(`Delete template "${tmpl.name}"?`)) return;
-                                try {
-                                  await adapter.deleteWorkspaceTemplate(tmpl.id);
-                                  setTemplates(prev => prev.filter(t => t.id !== tmpl.id));
-                                  if (selectedTemplate === tmpl.id) setSelectedTemplate(null);
-                                } catch { /* ignore */ }
-                              }}
-                              className="p-0.5 rounded bg-muted/80 text-muted-foreground hover:text-destructive transition-colors"
-                            >
-                              <Trash2 className="w-2.5 h-2.5" />
-                            </button>
-                          </div>
-                        )}
+                        <div className="absolute top-0.5 right-0.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setDuplicatingTemplate(tmpl); setEditingTemplate(null); setShowTemplateCreator(true); }}
+                            className="p-0.5 rounded bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
+                            title="Duplicate"
+                          >
+                            <Copy className="w-2.5 h-2.5" />
+                          </button>
+                          {!tmpl.builtIn && (
+                            <>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setEditingTemplate(tmpl); setDuplicatingTemplate(null); setShowTemplateCreator(true); }}
+                                className="p-0.5 rounded bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
+                                title="Edit"
+                              >
+                                <Pencil className="w-2.5 h-2.5" />
+                              </button>
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  if (!confirm(`Delete template "${tmpl.name}"?`)) return;
+                                  try {
+                                    await adapter.deleteWorkspaceTemplate(tmpl.id);
+                                    setTemplates(prev => prev.filter(t => t.id !== tmpl.id));
+                                    if (selectedTemplate === tmpl.id) setSelectedTemplate(null);
+                                  } catch { /* ignore */ }
+                                }}
+                                className="p-0.5 rounded bg-muted/80 text-muted-foreground hover:text-destructive transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-2.5 h-2.5" />
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -708,25 +723,31 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                     className="mt-2 p-2.5 bg-primary/5 border border-primary/20 rounded-xl">
                     <div className="flex items-start justify-between mb-1">
                       <p className="text-[10px] text-foreground font-medium">{tmpl.name}</p>
-                      {!tmpl.builtIn && (
-                        <div className="flex gap-1">
-                          <button onClick={() => { setEditingTemplate(tmpl); setShowTemplateCreator(true); }}
-                            className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors">
-                            <Pencil className="w-3 h-3" />
-                          </button>
-                          <button onClick={async () => {
-                            if (!confirm(`Delete "${tmpl.name}"?`)) return;
-                            try {
-                              await adapter.deleteWorkspaceTemplate(tmpl.id);
-                              setTemplates(prev => prev.filter(t => t.id !== tmpl.id));
-                              setSelectedTemplate(null);
-                            } catch { /* ignore */ }
-                          }}
-                            className="p-0.5 rounded text-muted-foreground hover:text-destructive transition-colors">
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      )}
+                      <div className="flex gap-1">
+                        <button onClick={() => { setDuplicatingTemplate(tmpl); setEditingTemplate(null); setShowTemplateCreator(true); }}
+                          className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors" title="Duplicate">
+                          <Copy className="w-3 h-3" />
+                        </button>
+                        {!tmpl.builtIn && (
+                          <>
+                            <button onClick={() => { setEditingTemplate(tmpl); setDuplicatingTemplate(null); setShowTemplateCreator(true); }}
+                              className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors" title="Edit">
+                              <Pencil className="w-3 h-3" />
+                            </button>
+                            <button onClick={async () => {
+                              if (!confirm(`Delete "${tmpl.name}"?`)) return;
+                              try {
+                                await adapter.deleteWorkspaceTemplate(tmpl.id);
+                                setTemplates(prev => prev.filter(t => t.id !== tmpl.id));
+                                setSelectedTemplate(null);
+                              } catch { /* ignore */ }
+                            }}
+                              className="p-0.5 rounded text-muted-foreground hover:text-destructive transition-colors" title="Delete">
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
                     <p className="text-[9px] text-muted-foreground mb-1.5">{tmpl.description}</p>
                     <div className="flex flex-wrap gap-1">
@@ -860,9 +881,10 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
 
       <TemplateCreatorModal
         open={showTemplateCreator}
-        onClose={() => { setShowTemplateCreator(false); setEditingTemplate(null); }}
+        onClose={() => { setShowTemplateCreator(false); setEditingTemplate(null); setDuplicatingTemplate(null); }}
         availableConnectors={connectorChipOptions}
         editingTemplate={editingTemplate}
+        initialData={duplicatingTemplate}
         onCreated={(t) => {
           if (editingTemplate) {
             setTemplates(prev => prev.map(x => x.id === t.id ? t : x));
@@ -871,6 +893,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
           }
           setSelectedTemplate(t.id);
           setEditingTemplate(null);
+          setDuplicatingTemplate(null);
         }}
       />
     </AnimatePresence>
