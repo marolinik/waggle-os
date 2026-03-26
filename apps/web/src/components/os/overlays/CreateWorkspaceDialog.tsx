@@ -711,8 +711,6 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                 const filtered = templates
                   .filter(t => categoryFilter === 'all' ? true : categoryFilter === 'custom' ? !t.builtIn : t.category === categoryFilter)
                   .filter(t => !searchLower || t.name.toLowerCase().includes(searchLower) || t.description.toLowerCase().includes(searchLower));
-                    ? templates.filter(t => !t.builtIn)
-                    : templates.filter(t => t.category === categoryFilter);
                 return (
                 <div className="grid grid-cols-4 gap-1.5 max-h-[160px] overflow-y-auto pr-1">
                   {/* Blank option */}
