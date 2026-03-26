@@ -49,52 +49,86 @@ export const useChat = ({ workspaceId, sessionId, persona }: UseChatOptions) => 
     try {
       for await (const event of adapter.sendMessage(workspaceId, content, sessionId || undefined, persona)) {
         const evt = event as StreamEvent;
+        const data = evt.data as Record<string, unknown>;
+
         switch (evt.type) {
-          case 'token':
+          case 'token': {
+            const tokenContent = typeof data === 'string' ? data : (data?.content as string ?? '');
             setMessages(prev => {
               const msgs = [...prev];
               const last = msgs[msgs.length - 1];
               if (last.role === 'assistant') {
-                last.content += evt.data as string;
-              }
-              return msgs;
-            });
-            break;
-          case 'tool_start':
-            setMessages(prev => {
-              const msgs = [...prev];
-              const last = msgs[msgs.length - 1];
-              if (last.tools) {
-                last.tools.push(evt.data as ToolExecution);
+                last.content += tokenContent;
               }
               return [...msgs];
             });
             break;
-          case 'tool_end':
+          }
+          case 'step': {
+            // Step events are progress indicators (e.g., "Recalling memories...")
+            // Optionally show them as tool activity
+            break;
+          }
+          case 'tool_start': {
+            const toolExec: ToolExecution = {
+              id: (data?.name as string) ?? crypto.randomUUID(),
+              name: (data?.name as string) ?? 'unknown',
+              status: 'running',
+              input: data?.input as Record<string, unknown>,
+            };
             setMessages(prev => {
               const msgs = [...prev];
               const last = msgs[msgs.length - 1];
-              const toolData = evt.data as ToolExecution;
-              if (last.tools) {
-                const idx = last.tools.findIndex(t => t.id === toolData.id);
-                if (idx >= 0) last.tools[idx] = toolData;
+              if (last.tools) last.tools.push(toolExec);
+              return [...msgs];
+            });
+            break;
+          }
+          case 'tool_end': {
+            const toolName = data?.name as string;
+            setMessages(prev => {
+              const msgs = [...prev];
+              const last = msgs[msgs.length - 1];
+              if (last.tools && toolName) {
+                const idx = last.tools.findIndex(t => t.name === toolName && t.status === 'running');
+                if (idx >= 0) {
+                  last.tools[idx] = { ...last.tools[idx], status: 'done', result: data?.result as string };
+                }
               }
               return [...msgs];
             });
             break;
+          }
+          case 'done': {
+            // Final event — update assistant message with complete content if provided
+            const doneContent = data?.content as string;
+            if (doneContent) {
+              setMessages(prev => {
+                const msgs = [...prev];
+                const last = msgs[msgs.length - 1];
+                if (last.role === 'assistant' && !last.content) {
+                  last.content = doneContent;
+                }
+                return [...msgs];
+              });
+            }
+            break;
+          }
           case 'approval_request':
-            setPendingApproval(evt.data as ApprovalRequest);
+            setPendingApproval(data as unknown as ApprovalRequest);
             break;
-          case 'error':
+          case 'error': {
+            const errorMsg = typeof data === 'string' ? data : (data?.message as string ?? 'Unknown error');
             setMessages(prev => {
               const msgs = [...prev];
               const last = msgs[msgs.length - 1];
               if (last.role === 'assistant') {
-                last.content += `\n\n⚠️ Error: ${evt.data}`;
+                last.content += `\n\n⚠️ ${errorMsg}`;
               }
-              return msgs;
+              return [...msgs];
             });
             break;
+          }
         }
       }
     } catch (e) {

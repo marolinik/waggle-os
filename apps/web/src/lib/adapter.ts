@@ -231,6 +231,7 @@ class LocalAdapter {
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    let currentEventType = '';
 
     while (true) {
       const { done, value } = await reader.read();
@@ -239,9 +240,23 @@ class LocalAdapter {
       const lines = buffer.split('\n');
       buffer = lines.pop() || '';
       for (const line of lines) {
-        if (line.startsWith('data: ')) {
+        if (line.startsWith('event: ')) {
+          currentEventType = line.slice(7).trim();
+        } else if (line.startsWith('data: ')) {
           try {
-            yield JSON.parse(line.slice(6));
+            const data = JSON.parse(line.slice(6));
+            // Map SSE event types to StreamEvent types expected by useChat
+            let type = currentEventType;
+            if (type === 'token') type = 'token';
+            else if (type === 'tool') type = 'tool_start';
+            else if (type === 'tool_result') type = 'tool_end';
+            else if (type === 'done') type = 'done';
+            else if (type === 'error') type = 'error';
+            else if (type === 'step') type = 'step';
+            else if (type === 'approval_request') type = 'approval_request';
+
+            yield { type, data } as StreamEvent;
+            currentEventType = '';
           } catch { /* skip malformed */ }
         }
       }
@@ -449,7 +464,13 @@ class LocalAdapter {
 
   async getNotificationHistory(): Promise<Notification[]> {
     const res = await this.fetch('/api/notifications/history');
-    return unwrapArray(await res.json());
+    return unwrapArray(await res.json()).map((n: any) => ({
+      ...n,
+      id: String(n.id),
+      type: n.category ?? n.type ?? 'agent',
+      read: !!n.read,
+      timestamp: n.timestamp ?? n.created_at ?? '',
+    }));
   }
 
   async markNotificationRead(id: string): Promise<void> {
