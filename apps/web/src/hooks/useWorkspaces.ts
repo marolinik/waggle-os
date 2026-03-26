@@ -39,7 +39,7 @@ export const useWorkspaces = () => {
 
   useEffect(() => { fetchWorkspaces(); }, []);
 
-  const createWorkspace = useCallback(async (data: { name: string; group: string; persona?: string; shared?: boolean; templateId?: string }) => {
+  const createWorkspace = useCallback(async (data: { name: string; group: string; persona?: string; agentGroupId?: string; shared?: boolean; templateId?: string }) => {
     try {
       const ws = await adapter.createWorkspace(data);
       setWorkspaces(prev => [...prev.filter(w => w.id !== DEFAULT_WORKSPACE.id), ws]);

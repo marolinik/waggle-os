@@ -14,11 +14,19 @@ import type { StorageType, WorkspaceTemplate, Connector, TemplateCategory } from
 
 /* ── Shared constants ─────────────────────────────────────────────── */
 
+interface AgentGroupOption {
+  id: string;
+  name: string;
+  description?: string;
+  strategy: string;
+  memberCount: number;
+}
+
 interface CreateWorkspaceDialogProps {
   open: boolean;
   onClose: () => void;
   onCreate: (data: {
-    name: string; group: string; persona?: string; shared?: boolean;
+    name: string; group: string; persona?: string; agentGroupId?: string; shared?: boolean;
     storageType?: StorageType; storagePath?: string; templateId?: string;
   }) => void;
 }
@@ -596,16 +604,26 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
   // Connectors from backend
   const [connectors, setConnectors] = useState<Connector[]>([]);
 
-  // Fetch templates + connectors when dialog opens
+  // Agent groups
+  const [agentGroups, setAgentGroups] = useState<AgentGroupOption[]>([]);
+  const [agentMode, setAgentMode] = useState<'single' | 'group'>('single');
+  const [selectedGroupId, setSelectedGroupId] = useState<string | undefined>();
+
+  // Fetch templates + connectors + agent groups when dialog opens
   useEffect(() => {
     if (!open) return;
     setLoadingTemplates(true);
     Promise.all([
       adapter.getWorkspaceTemplates().catch(() => ({ templates: [] as WorkspaceTemplate[] })),
       adapter.getConnectors().catch(() => [] as Connector[]),
-    ]).then(([tmplData, connData]) => {
+      adapter.getAgentGroups().catch(() => [] as unknown[]),
+    ]).then(([tmplData, connData, groupsData]) => {
       setTemplates(tmplData.templates);
       setConnectors(connData);
+      setAgentGroups((groupsData as AgentGroupOption[]).map(g => ({
+        id: g.id, name: g.name, description: g.description,
+        strategy: g.strategy, memberCount: (g as any).members?.length ?? 0,
+      })));
     }).finally(() => setLoadingTemplates(false));
   }, [open]);
 
@@ -622,12 +640,16 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
   const handleCreate = () => {
     if (!name.trim()) return;
     onCreate({
-      name: name.trim(), group, persona: selectedPersona, shared,
+      name: name.trim(), group,
+      persona: agentMode === 'single' ? selectedPersona : undefined,
+      agentGroupId: agentMode === 'group' ? selectedGroupId : undefined,
+      shared,
       storageType, storagePath: storagePath.trim() || undefined,
       templateId: selectedTemplate || undefined,
     });
     setName(''); setGroup('Personal'); setSelectedPersona(undefined); setShared(false);
     setStorageType('virtual'); setStoragePath(''); setSelectedTemplate(null);
+    setAgentMode('single'); setSelectedGroupId(undefined);
     onClose();
   };
 
@@ -902,23 +924,74 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
               </p>
             </div>
 
-            {/* ── Persona ── */}
+            {/* ── Agent Assignment ── */}
             <div>
-              <label className="text-xs text-muted-foreground block mb-1.5">Persona (optional)</label>
-              <div className="grid grid-cols-4 gap-2">
-                {PERSONAS.map(p => (
-                  <button key={p.id} onClick={() => setSelectedPersona(selectedPersona === p.id ? undefined : p.id)}
-                    className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all ${
-                      selectedPersona === p.id ? 'bg-primary/20 border border-primary/50 scale-105' : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
-                    }`}>
-                    <Avatar className="w-8 h-8">
-                      <AvatarImage src={p.avatar} />
-                      <AvatarFallback className="text-[8px] bg-primary/20">{p.name[0]}</AvatarFallback>
-                    </Avatar>
-                    <span className="text-[9px] text-muted-foreground truncate w-full text-center">{p.name.split(' ')[0]}</span>
-                  </button>
-                ))}
+              <label className="text-xs text-muted-foreground block mb-1.5">Agent (optional)</label>
+              {/* Mode toggle */}
+              <div className="flex gap-1 mb-2 p-0.5 rounded-lg bg-secondary/30">
+                <button
+                  onClick={() => { setAgentMode('single'); setSelectedGroupId(undefined); }}
+                  className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-md text-[10px] font-medium transition-colors ${
+                    agentMode === 'single' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Single Agent
+                </button>
+                <button
+                  onClick={() => { setAgentMode('group'); setSelectedPersona(undefined); }}
+                  className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-md text-[10px] font-medium transition-colors ${
+                    agentMode === 'group' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Users className="w-3 h-3" /> Agent Group
+                </button>
               </div>
+
+              {agentMode === 'single' ? (
+                <div className="grid grid-cols-4 gap-2">
+                  {PERSONAS.map(p => (
+                    <button key={p.id} onClick={() => setSelectedPersona(selectedPersona === p.id ? undefined : p.id)}
+                      className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all ${
+                        selectedPersona === p.id ? 'bg-primary/20 border border-primary/50 scale-105' : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
+                      }`}>
+                      <Avatar className="w-8 h-8">
+                        <AvatarImage src={p.avatar} />
+                        <AvatarFallback className="text-[8px] bg-primary/20">{p.name[0]}</AvatarFallback>
+                      </Avatar>
+                      <span className="text-[9px] text-muted-foreground truncate w-full text-center">{p.name.split(' ')[0]}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {agentGroups.length === 0 ? (
+                    <p className="text-[10px] text-muted-foreground text-center py-4">No agent groups created yet. Create one in the Agents app.</p>
+                  ) : (
+                    agentGroups.map(g => (
+                      <button
+                        key={g.id}
+                        onClick={() => setSelectedGroupId(selectedGroupId === g.id ? undefined : g.id)}
+                        className={`w-full flex items-center gap-2.5 p-2.5 rounded-xl text-left transition-all ${
+                          selectedGroupId === g.id
+                            ? 'bg-primary/20 border border-primary/50'
+                            : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
+                        }`}
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                          <Users className="w-4 h-4 text-primary" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[11px] font-medium text-foreground truncate">{g.name}</p>
+                          <p className="text-[9px] text-muted-foreground">
+                            {g.strategy} · {g.memberCount} agent{g.memberCount !== 1 ? 's' : ''}
+                          </p>
+                        </div>
+                        {selectedGroupId === g.id && <Check className="w-3.5 h-3.5 text-primary shrink-0" />}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
