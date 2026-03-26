@@ -12,12 +12,10 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "vite",
-    "dev:web": "vite",
-    "build": "vite build",
-    "build:dev": "vite build --mode development",
-    "build:web": "vite build",
-    "preview": "vite preview",
+    "dev": "cd apps/web && npx vite",
+    "build": "cd apps/web && npx vite build",
+    "build:dev": "cd apps/web && npx vite build --mode development",
+    "preview": "cd apps/web && npx vite preview",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest"
