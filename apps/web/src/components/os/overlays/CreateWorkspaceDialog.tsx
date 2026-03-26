@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { X, Plus, Users, Cloud, HardDrive, Server, FolderOpen } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { X, Plus, Users, Cloud, HardDrive, Server, FolderOpen, Folder, ChevronRight, Home, Check } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { PERSONAS } from '@/lib/personas';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -9,7 +9,6 @@ interface CreateWorkspaceDialogProps {
   open: boolean;
   onClose: () => void;
   onCreate: (data: { name: string; group: string; persona?: string; shared?: boolean; storageType?: StorageType; storagePath?: string }) => void;
-  onBrowsePath?: (storageType: StorageType, currentPath: string) => void;
 }
 
 const GROUPS = ['Personal', 'Work', 'Research', 'Team'];
@@ -20,19 +19,230 @@ const STORAGE_OPTIONS: { type: StorageType; label: string; desc: string; icon: R
   { type: 'team', label: 'Team', desc: 'Remote S3/MinIO storage', icon: Server, color: 'text-sky-400' },
 ];
 
-/** Generate a default virtual storage path based on workspace name */
 function defaultVirtualPath(workspaceName: string): string {
   const slug = workspaceName.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || 'untitled';
   return `/workspaces/${slug}`;
 }
 
-const CreateWorkspaceDialog = ({ open, onClose, onCreate, onBrowsePath }: CreateWorkspaceDialogProps) => {
+/* ── Mock folder tree for browsing ────────────────────────────────── */
+
+interface FolderNode {
+  name: string;
+  path: string;
+  children?: FolderNode[];
+}
+
+const MOCK_LOCAL_TREE: FolderNode[] = [
+  { name: 'home', path: '/home', children: [
+    { name: 'user', path: '/home/user', children: [
+      { name: 'projects', path: '/home/user/projects', children: [
+        { name: 'my-workspace', path: '/home/user/projects/my-workspace' },
+        { name: 'research', path: '/home/user/projects/research' },
+        { name: 'client-work', path: '/home/user/projects/client-work' },
+      ]},
+      { name: 'documents', path: '/home/user/documents', children: [
+        { name: 'notes', path: '/home/user/documents/notes' },
+        { name: 'reports', path: '/home/user/documents/reports' },
+      ]},
+      { name: 'desktop', path: '/home/user/desktop' },
+    ]},
+  ]},
+  { name: 'tmp', path: '/tmp' },
+  { name: 'var', path: '/var', children: [
+    { name: 'data', path: '/var/data' },
+    { name: 'log', path: '/var/log' },
+  ]},
+];
+
+const MOCK_TEAM_TREE: FolderNode[] = [
+  { name: 'waggle-prod', path: 'waggle-prod', children: [
+    { name: 'workspaces', path: 'waggle-prod/workspaces', children: [
+      { name: 'team-alpha', path: 'waggle-prod/workspaces/team-alpha' },
+      { name: 'research', path: 'waggle-prod/workspaces/research' },
+    ]},
+    { name: 'shared', path: 'waggle-prod/shared' },
+  ]},
+  { name: 'waggle-staging', path: 'waggle-staging', children: [
+    { name: 'workspaces', path: 'waggle-staging/workspaces' },
+    { name: 'sandbox', path: 'waggle-staging/sandbox' },
+  ]},
+];
+
+/* ── Folder Picker Modal ──────────────────────────────────────────── */
+
+interface FolderPickerProps {
+  open: boolean;
+  storageType: StorageType;
+  currentPath: string;
+  onSelect: (path: string) => void;
+  onClose: () => void;
+}
+
+function FolderPickerModal({ open, storageType, currentPath, onSelect, onClose }: FolderPickerProps) {
+  const tree = storageType === 'local' ? MOCK_LOCAL_TREE : MOCK_TEAM_TREE;
+  const rootLabel = storageType === 'local' ? '/' : 'Buckets';
+
+  const [browsePath, setBrowsePath] = useState(currentPath || '');
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => {
+    // Auto-expand ancestors of current path
+    const expanded = new Set<string>();
+    if (currentPath) {
+      const parts = currentPath.split('/').filter(Boolean);
+      let acc = storageType === 'local' ? '' : '';
+      parts.forEach(part => {
+        acc = acc ? `${acc}/${part}` : (storageType === 'local' ? `/${part}` : part);
+        expanded.add(acc);
+      });
+    }
+    return expanded;
+  });
+
+  const toggleExpand = useCallback((path: string) => {
+    setExpandedPaths(prev => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }, []);
+
+  const breadcrumbs = (() => {
+    if (!browsePath) return [{ label: rootLabel, path: '' }];
+    const parts = browsePath.split('/').filter(Boolean);
+    const crumbs = [{ label: rootLabel, path: '' }];
+    let acc = storageType === 'local' ? '' : '';
+    parts.forEach(part => {
+      acc = acc ? `${acc}/${part}` : (storageType === 'local' ? `/${part}` : part);
+      crumbs.push({ label: part, path: acc });
+    });
+    return crumbs;
+  })();
+
+  const renderNode = (node: FolderNode, depth: number = 0) => {
+    const isExpanded = expandedPaths.has(node.path);
+    const isSelected = browsePath === node.path;
+    const hasChildren = node.children && node.children.length > 0;
+
+    return (
+      <div key={node.path}>
+        <button
+          onClick={() => {
+            setBrowsePath(node.path);
+            if (hasChildren) toggleExpand(node.path);
+          }}
+          className={`w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-left transition-colors ${
+            isSelected
+              ? 'bg-primary/20 text-foreground'
+              : 'hover:bg-muted/50 text-muted-foreground hover:text-foreground'
+          }`}
+          style={{ paddingLeft: `${depth * 16 + 8}px` }}
+        >
+          {hasChildren ? (
+            <ChevronRight className={`w-3 h-3 shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+          ) : (
+            <span className="w-3" />
+          )}
+          <Folder className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-primary' : 'text-amber-400/70'}`} />
+          <span className="text-[11px] truncate">{node.name}</span>
+        </button>
+        {isExpanded && hasChildren && (
+          <div>
+            {node.children!.map(child => renderNode(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  if (!open) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[110] flex items-center justify-center"
+      onClick={onClose}
+    >
+      <div className="absolute inset-0 bg-background/40 backdrop-blur-sm" />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+        className="relative w-full max-w-sm glass-strong rounded-2xl shadow-2xl overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border/30">
+          <div className="flex items-center gap-2">
+            <FolderOpen className={`w-4 h-4 ${storageType === 'local' ? 'text-emerald-400' : 'text-sky-400'}`} />
+            <h3 className="text-sm font-display font-semibold text-foreground">
+              {storageType === 'local' ? 'Browse Folders' : 'Browse Buckets'}
+            </h3>
+          </div>
+          <button onClick={onClose} className="p-1 rounded-lg text-muted-foreground hover:text-foreground">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {/* Breadcrumbs */}
+        <div className="flex items-center gap-0.5 px-4 py-2 border-b border-border/20 overflow-x-auto">
+          {breadcrumbs.map((crumb, i) => (
+            <span key={crumb.path} className="flex items-center gap-0.5 shrink-0">
+              {i > 0 && <ChevronRight className="w-3 h-3 text-muted-foreground/50" />}
+              <button
+                onClick={() => setBrowsePath(crumb.path)}
+                className={`text-[10px] px-1.5 py-0.5 rounded transition-colors ${
+                  browsePath === crumb.path ? 'text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {i === 0 ? <Home className="w-3 h-3" /> : crumb.label}
+              </button>
+            </span>
+          ))}
+        </div>
+
+        {/* Tree */}
+        <div className="px-2 py-2 max-h-[280px] overflow-y-auto space-y-0.5">
+          {tree.map(node => renderNode(node, 0))}
+        </div>
+
+        {/* Selected path preview + actions */}
+        <div className="px-4 py-3 border-t border-border/30 space-y-2">
+          <div className="flex items-center gap-2 bg-muted/30 rounded-lg px-3 py-1.5">
+            <span className="text-[9px] text-muted-foreground shrink-0">Path:</span>
+            <span className="text-[11px] font-mono text-foreground truncate">
+              {browsePath || rootLabel}
+            </span>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button onClick={onClose} className="px-3 py-1.5 text-[11px] rounded-lg text-muted-foreground hover:text-foreground transition-colors">
+              Cancel
+            </button>
+            <button
+              onClick={() => { onSelect(browsePath); onClose(); }}
+              disabled={!browsePath}
+              className="flex items-center gap-1 px-3 py-1.5 text-[11px] rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-40 transition-colors"
+            >
+              <Check className="w-3 h-3" /> Select
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+/* ── Main Dialog ──────────────────────────────────────────────────── */
+
+const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialogProps) => {
   const [name, setName] = useState('');
   const [group, setGroup] = useState('Personal');
   const [selectedPersona, setSelectedPersona] = useState<string | undefined>();
   const [shared, setShared] = useState(false);
   const [storageType, setStorageType] = useState<StorageType>('virtual');
   const [storagePath, setStoragePath] = useState('');
+  const [showFolderPicker, setShowFolderPicker] = useState(false);
 
   const handleCreate = () => {
     if (!name.trim()) return;
@@ -141,7 +351,6 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate, onBrowsePath }: Create
               </label>
 
               {storageType === 'virtual' ? (
-                /* Virtual: read-only computed path */
                 <div className="flex items-center gap-2 w-full bg-muted/30 border border-border/30 rounded-xl px-3 py-2">
                   <Cloud className="w-3.5 h-3.5 text-violet-400 shrink-0" />
                   <span className="text-[11px] font-mono text-muted-foreground truncate">
@@ -149,7 +358,6 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate, onBrowsePath }: Create
                   </span>
                 </div>
               ) : (
-                /* Local / Team: editable path with browse button */
                 <div className="flex items-center gap-1.5">
                   <input
                     value={storagePath}
@@ -158,7 +366,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate, onBrowsePath }: Create
                     className="flex-1 bg-muted/50 border border-border/50 rounded-xl px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50 font-mono text-[11px]"
                   />
                   <button
-                    onClick={() => onBrowsePath?.(storageType, storagePath)}
+                    onClick={() => setShowFolderPicker(true)}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-secondary/50 border border-border/40 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/70 transition-colors shrink-0"
                     title={storageType === 'local' ? 'Browse local folders' : 'Browse remote storage'}
                   >
@@ -207,24 +415,24 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate, onBrowsePath }: Create
                 ))}
               </div>
             </div>
-            </div>
+          </div>
 
-            {/* Share with team toggle */}
-            <div className="flex items-center justify-between p-3 rounded-xl bg-secondary/30 border border-border/30">
-              <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-sky-400" />
-                <div>
-                  <p className="text-xs font-display text-foreground">Share with team</p>
-                  <p className="text-[10px] text-muted-foreground">Make visible to all team members</p>
-                </div>
+          {/* Share with team toggle */}
+          <div className="flex items-center justify-between p-3 mt-4 rounded-xl bg-secondary/30 border border-border/30">
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-sky-400" />
+              <div>
+                <p className="text-xs font-display text-foreground">Share with team</p>
+                <p className="text-[10px] text-muted-foreground">Make visible to all team members</p>
               </div>
-              <button
-                onClick={() => setShared(!shared)}
-                className={`w-10 h-5 rounded-full transition-colors ${shared ? 'bg-sky-500' : 'bg-muted'}`}
-              >
-                <div className={`w-4 h-4 rounded-full bg-foreground transition-transform mx-0.5 ${shared ? 'translate-x-5' : ''}`} />
-              </button>
             </div>
+            <button
+              onClick={() => setShared(!shared)}
+              className={`w-10 h-5 rounded-full transition-colors ${shared ? 'bg-sky-500' : 'bg-muted'}`}
+            >
+              <div className={`w-4 h-4 rounded-full bg-foreground transition-transform mx-0.5 ${shared ? 'translate-x-5' : ''}`} />
+            </button>
+          </div>
 
           <div className="flex justify-end gap-2 mt-6">
             <button onClick={onClose} className="px-4 py-2 text-xs font-display rounded-lg text-muted-foreground hover:text-foreground transition-colors">
@@ -240,6 +448,15 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate, onBrowsePath }: Create
           </div>
         </motion.div>
       </motion.div>
+
+      {/* Folder Picker overlay */}
+      <FolderPickerModal
+        open={showFolderPicker}
+        storageType={storageType}
+        currentPath={storagePath}
+        onSelect={(path) => setStoragePath(path)}
+        onClose={() => setShowFolderPicker(false)}
+      />
     </AnimatePresence>
   );
 };
