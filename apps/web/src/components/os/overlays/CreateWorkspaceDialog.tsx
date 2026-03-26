@@ -4,13 +4,13 @@ import {
   FolderPlus, ChevronRight, Home, Check, Loader2, LayoutTemplate,
   Sparkles, Info, Wand2, Target, Microscope, Code, Megaphone,
   Rocket, Scale, Building, FileText, Laptop, PenLine, BarChart3,
-  ClipboardList, Mail, Plug, Terminal, Pencil, Trash2, Copy,
+  ClipboardList, Mail, Plug, Terminal, Pencil, Trash2, Copy, Filter,
 } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { PERSONAS } from '@/lib/personas';
 import { motion, AnimatePresence } from 'framer-motion';
 import { adapter } from '@/lib/adapter';
-import type { StorageType, WorkspaceTemplate, Connector } from '@/lib/types';
+import type { StorageType, WorkspaceTemplate, Connector, TemplateCategory } from '@/lib/types';
 
 /* ── Shared constants ─────────────────────────────────────────────── */
 
