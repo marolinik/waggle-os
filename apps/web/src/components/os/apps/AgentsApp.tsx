@@ -4,7 +4,7 @@ import {
   Bot, Plus, Search, Loader2, Wrench, ChevronRight, Sparkles,
   Trash2, X, Check, AlertCircle, Pencil, Save, Users, Play,
   ArrowRight, Crown, Cog, GripVertical, ChevronUp, ChevronDown,
-  CheckCircle2, XCircle, Clock, Activity,
+  CheckCircle2, XCircle, Clock, Activity, Copy,
 } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { adapter } from '@/lib/adapter';
