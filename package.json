@@ -8,19 +8,19 @@
     "node": ">=20.0.0"
   },
   "workspaces": [
-    "app",
     "apps/*",
-    "packages/*",
-    "sidecar"
+    "packages/*"
   ],
   "scripts": {
-    "dev:web": "npm run --workspace=@waggle/web dev",
-    "dev:server": "npm run --workspace=@waggle/server dev",
-    "build": "npm run build --workspaces --if-present",
-    "build:web": "npm run --workspace=@waggle/web build",
-    "lint": "npm run lint --workspaces --if-present",
+    "dev": "cd apps/web && npx vite",
+    "dev:web": "cd apps/web && npx vite",
+    "dev:server": "cd packages/server && npx tsx src/index.ts",
+    "build": "cd apps/web && npx vite build",
+    "build:dev": "cd apps/web && npx vite build --mode development",
+    "build:web": "cd apps/web && npx vite build",
+    "lint": "eslint .",
     "test": "vitest run",
-    "test:web": "npm run --workspace=@waggle/web test",
+    "test:web": "cd apps/web && npx vitest run",
     "test:watch": "vitest"
   },
   "author": "Marko Markovic",
