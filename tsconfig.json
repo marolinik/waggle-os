@@ -9,8 +9,5 @@
     "resolveJsonModule": true,
     "isolatedModules": true
   },
-  "references": [
-    { "path": "apps/web" }
-  ],
   "exclude": ["node_modules"]
 }
