@@ -655,11 +655,32 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                 </button>
               </div>
 
+              {/* Category filter chips */}
+              <div className="flex flex-wrap gap-1 mb-1.5">
+                {TEMPLATE_CATEGORIES.map(cat => (
+                  <button key={cat.id} onClick={() => setCategoryFilter(cat.id)}
+                    className={`px-2 py-0.5 rounded-lg text-[9px] font-medium transition-all border ${
+                      categoryFilter === cat.id
+                        ? 'bg-primary/20 border-primary/50 text-foreground'
+                        : 'bg-secondary/30 border-transparent text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
+                    }`}>
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+
               {loadingTemplates ? (
                 <div className="flex items-center justify-center py-4"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
-              ) : (
+              ) : (() => {
+                const filtered = categoryFilter === 'all'
+                  ? templates
+                  : categoryFilter === 'custom'
+                    ? templates.filter(t => !t.builtIn)
+                    : templates.filter(t => t.category === categoryFilter);
+                return (
                 <div className="grid grid-cols-4 gap-1.5 max-h-[160px] overflow-y-auto pr-1">
                   {/* Blank option */}
+                  {categoryFilter === 'all' && (
                   <button onClick={() => setSelectedTemplate(null)}
                     className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all ${
                       selectedTemplate === null ? 'bg-primary/20 border border-primary/50' : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
@@ -667,7 +688,11 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                     <FileText className="w-4 h-4 text-muted-foreground" />
                     <span className="text-[8px] text-muted-foreground text-center leading-tight">Blank</span>
                   </button>
-                  {templates.map(tmpl => {
+                  )}
+                  {filtered.length === 0 && (
+                    <div className="col-span-4 py-3 text-center text-[10px] text-muted-foreground">No templates in this category</div>
+                  )}
+                  {filtered.map(tmpl => {
                     const Icon = TEMPLATE_ICONS[tmpl.id] || LayoutTemplate;
                     const isSelected = selectedTemplate === tmpl.id;
                     return (
