@@ -110,6 +110,45 @@ function FolderPickerModal({ open, storageType, currentPath, onSelect, onClose }
     });
   }, []);
 
+  /** Insert a new folder node into the tree under browsePath */
+  const handleCreateFolder = useCallback(() => {
+    const folderName = newFolderName.trim();
+    if (!folderName) return;
+
+    const parentPath = browsePath;
+    const newPath = parentPath ? `${parentPath}/${folderName}` : (storageType === 'local' ? `/${folderName}` : folderName);
+
+    const insertInto = (nodes: FolderNode[]): boolean => {
+      for (const node of nodes) {
+        if (node.path === parentPath) {
+          if (!node.children) node.children = [];
+          if (node.children.some(c => c.name === folderName)) return true; // already exists
+          node.children.push({ name: folderName, path: newPath });
+          return true;
+        }
+        if (node.children && insertInto(node.children)) return true;
+      }
+      return false;
+    };
+
+    if (!parentPath) {
+      // Add to root
+      if (!folderTree.some(c => c.name === folderName)) {
+        setFolderTree(prev => [...prev, { name: folderName, path: newPath }]);
+      }
+    } else {
+      const copy = structuredClone(folderTree);
+      insertInto(copy);
+      setFolderTree(copy);
+    }
+
+    // Expand parent and select new folder
+    setExpandedPaths(prev => { const n = new Set(prev); if (parentPath) n.add(parentPath); return n; });
+    setBrowsePath(newPath);
+    setNewFolderName('');
+    setShowNewFolder(false);
+  }, [browsePath, newFolderName, storageType, folderTree]);
+
   const breadcrumbs = (() => {
     if (!browsePath) return [{ label: rootLabel, path: '' }];
     const parts = browsePath.split('/').filter(Boolean);
