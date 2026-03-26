@@ -66,7 +66,17 @@ const TEMPLATE_PERSONAS = [
   { id: 'marketer', name: 'Marketer', icon: Megaphone },
 ];
 
-function defaultVirtualPath(workspaceName: string): string {
+const TEMPLATE_CATEGORIES: { id: TemplateCategory | 'all'; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'sales', label: 'Sales' },
+  { id: 'research', label: 'Research' },
+  { id: 'engineering', label: 'Engineering' },
+  { id: 'marketing', label: 'Marketing' },
+  { id: 'operations', label: 'Operations' },
+  { id: 'legal', label: 'Legal' },
+  { id: 'custom', label: 'Custom' },
+];
+
   const slug = workspaceName.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || 'untitled';
   return `/workspaces/${slug}`;
 }
