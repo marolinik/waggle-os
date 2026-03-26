@@ -1484,15 +1484,8 @@ When approaching any task:
       } else {
         errorMessage = 'Something went wrong. Try sending your message again.';
       }
-      // P1-4: When auto_recall succeeded but LLM failed, surface recalled memories
-      // P1-4: recalledContext is now declared at outer scope
-      const recalled = recalledContext;
-      if (recalled && recalled.trim().length > 0) {
-        const memoryFallback = `${errorMessage}\n\n---\n\n**However, I found relevant context in memory:**\n${recalled}`;
-        sendEvent('error', { message: memoryFallback });
-      } else {
-        sendEvent('error', { message: errorMessage });
-      }
+      // Send clean error to user — don't leak raw recalled context (contains system prompt instructions)
+      sendEvent('error', { message: errorMessage });
     }
 
     // End the SSE stream

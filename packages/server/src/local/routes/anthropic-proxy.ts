@@ -44,6 +44,10 @@ function mapModel(model: string): string {
     'claude-opus-4-6': 'claude-opus-4-20250514',
     'claude-haiku-4-5': 'claude-haiku-4-5-20251001',
     'claude-haiku-4-5-20251001': 'claude-haiku-4-5-20251001',
+    // Common misnames — Haiku 4.6 doesn't exist, map to actual latest Haiku
+    'claude-haiku-4-6': 'claude-haiku-4-5-20251001',
+    'claude-haiku-4.6': 'claude-haiku-4-5-20251001',
+    'claude-haiku-4.5': 'claude-haiku-4-5-20251001',
   };
   return mapping[clean] ?? clean;
 }

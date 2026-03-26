@@ -510,7 +510,7 @@ const ChatApp = ({
                 </Avatar>
               )}
               <div className={`max-w-[80%]`}>
-                <div className={`px-3 py-2 rounded-xl text-sm ${
+                <div className={`px-3 py-2 rounded-xl text-sm select-text cursor-text group/msg relative ${
                   msg.role === 'user'
                     ? 'bg-primary text-primary-foreground'
                     : msg.role === 'system'
@@ -519,6 +519,16 @@ const ChatApp = ({
                 }`}>
                   {msg.role === 'assistant' && <Sparkles className="w-3 h-3 text-primary inline mr-1.5 -mt-0.5" />}
                   <span className="whitespace-pre-wrap">{msg.content}</span>
+                  {/* Copy button */}
+                  {msg.content && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(msg.content); }}
+                      className="absolute top-1 right-1 p-1 rounded opacity-0 group-hover/msg:opacity-60 hover:!opacity-100 transition-opacity bg-background/50"
+                      title="Copy message"
+                    >
+                      <Code className="w-3 h-3" />
+                    </button>
+                  )}
                   {isLoading && msg === messages[messages.length - 1] && msg.role === 'assistant' && !msg.content && (
                     <span className="inline-flex gap-1 ml-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: '0ms' }} />
