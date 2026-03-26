@@ -673,30 +673,41 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                             {!tmpl.builtIn && <span className="text-[7px] text-primary/60">custom</span>}
                           </button>
                         </Tooltip>
-                        {!tmpl.builtIn && (
-                          <div className="absolute top-0.5 right-0.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setEditingTemplate(tmpl); setShowTemplateCreator(true); }}
-                              className="p-0.5 rounded bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
-                            >
-                              <Pencil className="w-2.5 h-2.5" />
-                            </button>
-                            <button
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                if (!confirm(`Delete template "${tmpl.name}"?`)) return;
-                                try {
-                                  await adapter.deleteWorkspaceTemplate(tmpl.id);
-                                  setTemplates(prev => prev.filter(t => t.id !== tmpl.id));
-                                  if (selectedTemplate === tmpl.id) setSelectedTemplate(null);
-                                } catch { /* ignore */ }
-                              }}
-                              className="p-0.5 rounded bg-muted/80 text-muted-foreground hover:text-destructive transition-colors"
-                            >
-                              <Trash2 className="w-2.5 h-2.5" />
-                            </button>
-                          </div>
-                        )}
+                        <div className="absolute top-0.5 right-0.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setDuplicatingTemplate(tmpl); setEditingTemplate(null); setShowTemplateCreator(true); }}
+                            className="p-0.5 rounded bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
+                            title="Duplicate"
+                          >
+                            <Copy className="w-2.5 h-2.5" />
+                          </button>
+                          {!tmpl.builtIn && (
+                            <>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setEditingTemplate(tmpl); setDuplicatingTemplate(null); setShowTemplateCreator(true); }}
+                                className="p-0.5 rounded bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
+                                title="Edit"
+                              >
+                                <Pencil className="w-2.5 h-2.5" />
+                              </button>
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  if (!confirm(`Delete template "${tmpl.name}"?`)) return;
+                                  try {
+                                    await adapter.deleteWorkspaceTemplate(tmpl.id);
+                                    setTemplates(prev => prev.filter(t => t.id !== tmpl.id));
+                                    if (selectedTemplate === tmpl.id) setSelectedTemplate(null);
+                                  } catch { /* ignore */ }
+                                }}
+                                className="p-0.5 rounded bg-muted/80 text-muted-foreground hover:text-destructive transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-2.5 h-2.5" />
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
