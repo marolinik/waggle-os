@@ -9,5 +9,6 @@
     "resolveJsonModule": true,
     "isolatedModules": true
   },
-  "exclude": ["node_modules", "app", "apps", "packages"]
+  "files": [],
+  "exclude": ["node_modules"]
 }
