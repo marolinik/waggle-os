@@ -17,6 +17,8 @@ interface BackendPersona {
   workspaceAffinity?: string[];
   suggestedCommands?: string[];
   tools?: string[];
+  tools?: string[];
+  systemPrompt?: string;
   custom?: boolean;
 }
 
@@ -526,7 +528,7 @@ const AgentsApp = () => {
           </div>
         </div>
 
-        {/* Right: Detail or Create */}
+        {/* Right: Detail, Edit, or Create */}
         <div className="flex-1 min-w-0 flex flex-col">
           {showCreate ? (
             <CreateAgentForm
@@ -536,8 +538,30 @@ const AgentsApp = () => {
               generating={false}
               onGenerate={handleAiGenerate}
             />
+          ) : editingAgent ? (
+            <CreateAgentForm
+              key={`edit-${editingAgent.id}`}
+              allTools={allTools}
+              onSave={handleUpdate}
+              onCancel={() => setEditingAgent(null)}
+              generating={false}
+              onGenerate={handleAiGenerate}
+              editMode
+              initialData={{
+                name: editingAgent.name,
+                description: editingAgent.description,
+                icon: editingAgent.icon ?? '🤖',
+                tools: editingAgent.tools ?? [],
+                systemPrompt: editingAgent.systemPrompt ?? '',
+              }}
+            />
           ) : selectedAgent ? (
-            <AgentDetail agent={selectedAgent} localPersona={localPersona} allTools={allTools} />
+            <AgentDetail
+              agent={selectedAgent}
+              localPersona={localPersona}
+              allTools={allTools}
+              onEdit={selectedAgent.custom ? () => setEditingAgent(selectedAgent) : undefined}
+            />
           ) : (
             <div className="flex-1 flex items-center justify-center text-muted-foreground">
               <div className="text-center">
