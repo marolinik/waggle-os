@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { X, Plus, Users, Cloud, HardDrive, Server, FolderOpen, Folder, ChevronRight, Home, Check } from 'lucide-react';
+import { X, Plus, Users, Cloud, HardDrive, Server, FolderOpen, Folder, FolderPlus, ChevronRight, Home, Check } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { PERSONAS } from '@/lib/personas';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -79,10 +79,14 @@ interface FolderPickerProps {
 }
 
 function FolderPickerModal({ open, storageType, currentPath, onSelect, onClose }: FolderPickerProps) {
-  const tree = storageType === 'local' ? MOCK_LOCAL_TREE : MOCK_TEAM_TREE;
+  const [folderTree, setFolderTree] = useState<FolderNode[]>(() =>
+    storageType === 'local' ? structuredClone(MOCK_LOCAL_TREE) : structuredClone(MOCK_TEAM_TREE)
+  );
   const rootLabel = storageType === 'local' ? '/' : 'Buckets';
 
   const [browsePath, setBrowsePath] = useState(currentPath || '');
+  const [newFolderName, setNewFolderName] = useState('');
+  const [showNewFolder, setShowNewFolder] = useState(false);
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => {
     // Auto-expand ancestors of current path
     const expanded = new Set<string>();
@@ -105,6 +109,45 @@ function FolderPickerModal({ open, storageType, currentPath, onSelect, onClose }
       return next;
     });
   }, []);
+
+  /** Insert a new folder node into the tree under browsePath */
+  const handleCreateFolder = useCallback(() => {
+    const folderName = newFolderName.trim();
+    if (!folderName) return;
+
+    const parentPath = browsePath;
+    const newPath = parentPath ? `${parentPath}/${folderName}` : (storageType === 'local' ? `/${folderName}` : folderName);
+
+    const insertInto = (nodes: FolderNode[]): boolean => {
+      for (const node of nodes) {
+        if (node.path === parentPath) {
+          if (!node.children) node.children = [];
+          if (node.children.some(c => c.name === folderName)) return true; // already exists
+          node.children.push({ name: folderName, path: newPath });
+          return true;
+        }
+        if (node.children && insertInto(node.children)) return true;
+      }
+      return false;
+    };
+
+    if (!parentPath) {
+      // Add to root
+      if (!folderTree.some(c => c.name === folderName)) {
+        setFolderTree(prev => [...prev, { name: folderName, path: newPath }]);
+      }
+    } else {
+      const copy = structuredClone(folderTree);
+      insertInto(copy);
+      setFolderTree(copy);
+    }
+
+    // Expand parent and select new folder
+    setExpandedPaths(prev => { const n = new Set(prev); if (parentPath) n.add(parentPath); return n; });
+    setBrowsePath(newPath);
+    setNewFolderName('');
+    setShowNewFolder(false);
+  }, [browsePath, newFolderName, storageType, folderTree]);
 
   const breadcrumbs = (() => {
     if (!browsePath) return [{ label: rootLabel, path: '' }];
@@ -204,28 +247,74 @@ function FolderPickerModal({ open, storageType, currentPath, onSelect, onClose }
 
         {/* Tree */}
         <div className="px-2 py-2 max-h-[280px] overflow-y-auto space-y-0.5">
-          {tree.map(node => renderNode(node, 0))}
+          {folderTree.map(node => renderNode(node, 0))}
         </div>
 
         {/* Selected path preview + actions */}
         <div className="px-4 py-3 border-t border-border/30 space-y-2">
+          {/* New folder inline input */}
+          <AnimatePresence>
+            {showNewFolder && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="flex items-center gap-1.5 overflow-hidden"
+              >
+                <FolderPlus className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <input
+                  value={newFolderName}
+                  onChange={e => setNewFolderName(e.target.value)}
+                  placeholder="New folder name…"
+                  className="flex-1 bg-muted/50 border border-border/50 rounded-lg px-2 py-1 text-[11px] text-foreground outline-none focus:border-primary/50"
+                  autoFocus
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') handleCreateFolder();
+                    if (e.key === 'Escape') { setShowNewFolder(false); setNewFolderName(''); }
+                  }}
+                />
+                <button
+                  onClick={handleCreateFolder}
+                  disabled={!newFolderName.trim()}
+                  className="px-2 py-1 text-[10px] rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-40 transition-colors"
+                >
+                  Create
+                </button>
+                <button
+                  onClick={() => { setShowNewFolder(false); setNewFolderName(''); }}
+                  className="px-1.5 py-1 text-[10px] rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <div className="flex items-center gap-2 bg-muted/30 rounded-lg px-3 py-1.5">
             <span className="text-[9px] text-muted-foreground shrink-0">Path:</span>
             <span className="text-[11px] font-mono text-foreground truncate">
               {browsePath || rootLabel}
             </span>
           </div>
-          <div className="flex justify-end gap-2">
-            <button onClick={onClose} className="px-3 py-1.5 text-[11px] rounded-lg text-muted-foreground hover:text-foreground transition-colors">
-              Cancel
-            </button>
+          <div className="flex justify-between">
             <button
-              onClick={() => { onSelect(browsePath); onClose(); }}
-              disabled={!browsePath}
-              className="flex items-center gap-1 px-3 py-1.5 text-[11px] rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-40 transition-colors"
+              onClick={() => setShowNewFolder(true)}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] rounded-lg bg-secondary/50 text-muted-foreground hover:text-foreground hover:bg-secondary/70 transition-colors"
             >
-              <Check className="w-3 h-3" /> Select
+              <FolderPlus className="w-3 h-3" /> New Folder
             </button>
+            <div className="flex gap-2">
+              <button onClick={onClose} className="px-3 py-1.5 text-[11px] rounded-lg text-muted-foreground hover:text-foreground transition-colors">
+                Cancel
+              </button>
+              <button
+                onClick={() => { onSelect(browsePath); onClose(); }}
+                disabled={!browsePath}
+                className="flex items-center gap-1 px-3 py-1.5 text-[11px] rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-40 transition-colors"
+              >
+                <Check className="w-3 h-3" /> Select
+              </button>
+            </div>
           </div>
         </div>
       </motion.div>
