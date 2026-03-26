@@ -748,7 +748,8 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                     );
                   })}
                 </div>
-              )}
+                );
+              })()}
 
               {/* Template detail card */}
               {selectedTemplate && (() => {
