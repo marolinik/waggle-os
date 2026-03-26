@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Bot, Plus, Search, Loader2, Wrench, ChevronRight, Sparkles,
   Trash2, X, Check, AlertCircle, Pencil, Save, Users, Play,
-  ArrowRight, Crown, Cog,
+  ArrowRight, Crown, Cog, GripVertical, ChevronUp, ChevronDown,
 } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { adapter } from '@/lib/adapter';
@@ -514,6 +514,8 @@ const CreateGroupForm = ({
   const [description, setDescription] = useState('');
   const [strategy, setStrategy] = useState<'parallel' | 'sequential' | 'coordinator'>('parallel');
   const [members, setMembers] = useState<AgentGroupMember[]>([]);
+  const dragItem = useRef<number | null>(null);
+  const dragOverItem = useRef<number | null>(null);
 
   const addMember = (agentId: string) => {
     if (members.some(m => m.agentId === agentId)) return;
@@ -526,6 +528,26 @@ const CreateGroupForm = ({
 
   const toggleRole = (agentId: string) => {
     setMembers(prev => prev.map(m => m.agentId === agentId ? { ...m, roleInGroup: m.roleInGroup === 'lead' ? 'worker' : 'lead' } : m));
+  };
+
+  const moveMember = (fromIdx: number, toIdx: number) => {
+    if (toIdx < 0 || toIdx >= members.length) return;
+    setMembers(prev => {
+      const updated = [...prev];
+      const [moved] = updated.splice(fromIdx, 1);
+      updated.splice(toIdx, 0, moved);
+      return updated.map((m, i) => ({ ...m, executionOrder: i }));
+    });
+  };
+
+  const handleDragStart = (idx: number) => { dragItem.current = idx; };
+  const handleDragEnter = (idx: number) => { dragOverItem.current = idx; };
+  const handleDragEnd = () => {
+    if (dragItem.current !== null && dragOverItem.current !== null && dragItem.current !== dragOverItem.current) {
+      moveMember(dragItem.current, dragOverItem.current);
+    }
+    dragItem.current = null;
+    dragOverItem.current = null;
   };
 
   const availableAgents = agents.filter(a => !members.some(m => m.agentId === a.id));
@@ -572,12 +594,39 @@ const CreateGroupForm = ({
         </h4>
         {members.length > 0 && (
           <div className="space-y-1.5 mb-3">
-            {members.map((m) => {
+            {members.map((m, idx) => {
               const agent = agents.find(a => a.id === m.agentId);
               return (
-                <div key={m.agentId} className="flex items-center gap-2 p-2 rounded-lg bg-secondary/20 border border-border/20">
+                <div
+                  key={m.agentId}
+                  draggable
+                  onDragStart={() => handleDragStart(idx)}
+                  onDragEnter={() => handleDragEnter(idx)}
+                  onDragEnd={handleDragEnd}
+                  onDragOver={(e) => e.preventDefault()}
+                  className="flex items-center gap-2 p-2 rounded-lg bg-secondary/20 border border-border/20 cursor-grab active:cursor-grabbing hover:bg-secondary/30 transition-colors"
+                >
+                  <GripVertical className="w-3 h-3 text-muted-foreground/50 shrink-0" />
                   <span className="text-[10px] font-mono text-muted-foreground w-4 text-center">{m.executionOrder + 1}</span>
                   <span className="text-[10px] font-medium text-foreground flex-1 truncate">{agent?.name ?? m.agentId}</span>
+                  <div className="flex items-center gap-0.5">
+                    <button
+                      onClick={() => moveMember(idx, idx - 1)}
+                      disabled={idx === 0}
+                      className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-20 transition-opacity"
+                      title="Move up"
+                    >
+                      <ChevronUp className="w-3 h-3" />
+                    </button>
+                    <button
+                      onClick={() => moveMember(idx, idx + 1)}
+                      disabled={idx === members.length - 1}
+                      className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-20 transition-opacity"
+                      title="Move down"
+                    >
+                      <ChevronDown className="w-3 h-3" />
+                    </button>
+                  </div>
                   <button
                     onClick={() => toggleRole(m.agentId)}
                     className={`text-[9px] px-1.5 py-0.5 rounded-full transition-colors ${
