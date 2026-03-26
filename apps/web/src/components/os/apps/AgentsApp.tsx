@@ -630,12 +630,16 @@ const CreateGroupForm = ({
 };
 
 const AgentsApp = () => {
+  const [tab, setTab] = useState<'agents' | 'groups'>('agents');
   const [agents, setAgents] = useState<BackendPersona[]>([]);
+  const [groups, setGroups] = useState<AgentGroup[]>([]);
   const [allTools, setAllTools] = useState<ToolDef[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [editingAgent, setEditingAgent] = useState<BackendPersona | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -643,27 +647,28 @@ const AgentsApp = () => {
     setLoading(true);
     setError(null);
     try {
-      const [personasRes, capsRes] = await Promise.allSettled([
+      const [personasRes, capsRes, groupsRes] = await Promise.allSettled([
         adapter.getPersonas(),
         adapter.getCapabilityStatus(),
+        adapter.getAgentGroups(),
       ]);
 
-      // Merge backend personas with local fallback personas
       const backendPersonas: BackendPersona[] =
         personasRes.status === 'fulfilled'
           ? (personasRes.value as any[]).map(p => ({ ...p, custom: false }))
           : PERSONAS.map(p => ({ id: p.id, name: p.name, description: p.description, icon: undefined, custom: false }));
-
       setAgents(backendPersonas);
+
+      if (groupsRes.status === 'fulfilled') {
+        setGroups(groupsRes.value as AgentGroup[]);
+      }
 
       if (capsRes.status === 'fulfilled') {
         const caps = capsRes.value as any;
-        // Extract tool names from capabilities
         const tools: ToolDef[] = [];
         if (caps.commands) {
           caps.commands.forEach((c: any) => tools.push({ name: c.name, description: c.description }));
         }
-        // Add native/plugin/mcp tool count info
         if (caps.plugins) {
           caps.plugins.forEach((p: any) => {
             for (let i = 0; i < (p.tools ?? 0); i++) {
@@ -681,7 +686,7 @@ const AgentsApp = () => {
         setAllTools(tools);
       }
     } catch {
-      setError('Failed to load agents');
+      setError('Failed to load data');
     } finally {
       setLoading(false);
     }
@@ -691,43 +696,33 @@ const AgentsApp = () => {
 
   const selectedAgent = agents.find(a => a.id === selectedId);
   const localPersona = selectedAgent ? PERSONAS.find(p => p.id === selectedAgent.id) : undefined;
+  const selectedGroup = groups.find(g => g.id === selectedGroupId);
 
   const filtered = agents.filter(a =>
     a.name.toLowerCase().includes(search.toLowerCase()) ||
     a.description.toLowerCase().includes(search.toLowerCase())
   );
 
+  const filteredGroups = groups.filter(g =>
+    g.name.toLowerCase().includes(search.toLowerCase()) ||
+    (g.description ?? '').toLowerCase().includes(search.toLowerCase())
+  );
+
   const handleCreate = async (data: { name: string; description: string; icon: string; tools: string[]; systemPrompt: string }) => {
     try {
-      await adapter.createPersona({
-        name: data.name,
-        description: data.description,
-        icon: data.icon,
-        systemPrompt: data.systemPrompt,
-        tools: data.tools,
-      });
+      await adapter.createPersona({ name: data.name, description: data.description, icon: data.icon, systemPrompt: data.systemPrompt, tools: data.tools });
       setShowCreate(false);
       await loadData();
-    } catch {
-      setError('Failed to create agent');
-    }
+    } catch { setError('Failed to create agent'); }
   };
 
   const handleUpdate = async (data: { name: string; description: string; icon: string; tools: string[]; systemPrompt: string }) => {
     if (!editingAgent) return;
     try {
-      await adapter.updatePersona(editingAgent.id, {
-        name: data.name,
-        description: data.description,
-        icon: data.icon,
-        systemPrompt: data.systemPrompt,
-        tools: data.tools,
-      });
+      await adapter.updatePersona(editingAgent.id, { name: data.name, description: data.description, icon: data.icon, systemPrompt: data.systemPrompt, tools: data.tools });
       setEditingAgent(null);
       await loadData();
-    } catch {
-      setError('Failed to update agent');
-    }
+    } catch { setError('Failed to update agent'); }
   };
 
   const handleDelete = async (id: string) => {
@@ -735,19 +730,48 @@ const AgentsApp = () => {
       await adapter.deletePersona(id);
       if (selectedId === id) setSelectedId(null);
       await loadData();
-    } catch {
-      setError('Failed to delete agent');
-    }
+    } catch { setError('Failed to delete agent'); }
+  };
+
+  const handleCreateGroup = async (data: { name: string; description: string; strategy: 'parallel' | 'sequential' | 'coordinator'; members: AgentGroupMember[] }) => {
+    try {
+      await adapter.createAgentGroup(data);
+      setShowCreateGroup(false);
+      await loadData();
+    } catch { setError('Failed to create group'); }
+  };
+
+  const handleDeleteGroup = async (id: string) => {
+    try {
+      await adapter.deleteAgentGroup(id);
+      if (selectedGroupId === id) setSelectedGroupId(null);
+      await loadData();
+    } catch { setError('Failed to delete group'); }
+  };
+
+  const handleRunGroup = async (groupId: string, task: string) => {
+    try {
+      await adapter.runAgentGroup(groupId, task);
+    } catch { setError('Failed to run group task'); }
   };
 
   const handleAiGenerate = async (prompt: string) => {
     try {
-      const res = await adapter.generatePersona(prompt);
-      return res;
+      return await adapter.generatePersona(prompt);
     } catch {
       setError('AI generation failed');
       return null;
     }
+  };
+
+  const resetSelections = (newTab: 'agents' | 'groups') => {
+    setTab(newTab);
+    setSelectedId(null);
+    setSelectedGroupId(null);
+    setShowCreate(false);
+    setShowCreateGroup(false);
+    setEditingAgent(null);
+    setSearch('');
   };
 
   if (loading) {
@@ -765,19 +789,47 @@ const AgentsApp = () => {
         <div className="flex items-center gap-2">
           <Bot className="w-4 h-4 text-primary" />
           <h2 className="text-sm font-display font-bold text-foreground">Agents</h2>
-          <span className="text-[10px] text-muted-foreground">({agents.length})</span>
+          {/* Tabs */}
+          <div className="flex items-center gap-0.5 ml-2 bg-secondary/30 rounded-lg p-0.5">
+            <button
+              onClick={() => resetSelections('agents')}
+              className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-colors ${
+                tab === 'agents' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Bot className="w-3 h-3 inline mr-1" />Agents ({agents.length})
+            </button>
+            <button
+              onClick={() => resetSelections('groups')}
+              className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-colors ${
+                tab === 'groups' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Users className="w-3 h-3 inline mr-1" />Groups ({groups.length})
+            </button>
+          </div>
         </div>
-        <button
-          onClick={() => { setShowCreate(!showCreate); setSelectedId(null); setEditingAgent(null); }}
-          className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-            showCreate
-              ? 'bg-secondary/50 text-muted-foreground'
-              : 'bg-primary text-primary-foreground hover:bg-primary/90'
-          }`}
-        >
-          {showCreate ? <X className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
-          {showCreate ? 'Cancel' : 'New Agent'}
-        </button>
+        {tab === 'agents' ? (
+          <button
+            onClick={() => { setShowCreate(!showCreate); setSelectedId(null); setEditingAgent(null); }}
+            className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+              showCreate ? 'bg-secondary/50 text-muted-foreground' : 'bg-primary text-primary-foreground hover:bg-primary/90'
+            }`}
+          >
+            {showCreate ? <X className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
+            {showCreate ? 'Cancel' : 'New Agent'}
+          </button>
+        ) : (
+          <button
+            onClick={() => { setShowCreateGroup(!showCreateGroup); setSelectedGroupId(null); }}
+            className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+              showCreateGroup ? 'bg-secondary/50 text-muted-foreground' : 'bg-primary text-primary-foreground hover:bg-primary/90'
+            }`}
+          >
+            {showCreateGroup ? <X className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
+            {showCreateGroup ? 'Cancel' : 'New Group'}
+          </button>
+        )}
       </div>
 
       {error && (
@@ -789,78 +841,95 @@ const AgentsApp = () => {
       )}
 
       <div className="flex gap-3 flex-1 min-h-0">
-        {/* Left: Agent List */}
+        {/* Left sidebar */}
         <div className="w-60 shrink-0 flex flex-col gap-2">
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search agents..."
+              placeholder={tab === 'agents' ? 'Search agents...' : 'Search groups...'}
               className="w-full text-xs bg-secondary/30 border border-border/30 rounded-lg pl-8 pr-3 py-2 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
             />
           </div>
           <div className="flex-1 overflow-y-auto scrollbar-thin space-y-1.5">
-            <AnimatePresence>
-              {filtered.map(agent => (
-                <AgentCard
-                  key={agent.id}
-                  agent={agent}
-                  localPersona={PERSONAS.find(p => p.id === agent.id)}
-                  selected={selectedId === agent.id && !showCreate}
-                  onSelect={() => { setSelectedId(agent.id); setShowCreate(false); setEditingAgent(null); }}
-                  onDelete={agent.custom ? () => handleDelete(agent.id) : undefined}
-                />
-              ))}
-            </AnimatePresence>
-            {filtered.length === 0 && (
-              <p className="text-[10px] text-muted-foreground text-center py-6">No agents found</p>
+            {tab === 'agents' ? (
+              <AnimatePresence>
+                {filtered.map(agent => (
+                  <AgentCard
+                    key={agent.id}
+                    agent={agent}
+                    localPersona={PERSONAS.find(p => p.id === agent.id)}
+                    selected={selectedId === agent.id && !showCreate && !editingAgent}
+                    onSelect={() => { setSelectedId(agent.id); setShowCreate(false); setEditingAgent(null); }}
+                    onDelete={agent.custom ? () => handleDelete(agent.id) : undefined}
+                  />
+                ))}
+                {filtered.length === 0 && (
+                  <p className="text-[10px] text-muted-foreground text-center py-6">No agents found</p>
+                )}
+              </AnimatePresence>
+            ) : (
+              <AnimatePresence>
+                {filteredGroups.map(group => (
+                  <GroupCard
+                    key={group.id}
+                    group={group}
+                    agents={agents}
+                    selected={selectedGroupId === group.id && !showCreateGroup}
+                    onSelect={() => { setSelectedGroupId(group.id); setShowCreateGroup(false); }}
+                    onDelete={() => handleDeleteGroup(group.id)}
+                  />
+                ))}
+                {filteredGroups.length === 0 && (
+                  <p className="text-[10px] text-muted-foreground text-center py-6">No groups yet</p>
+                )}
+              </AnimatePresence>
             )}
           </div>
         </div>
 
-        {/* Right: Detail, Edit, or Create */}
+        {/* Right panel */}
         <div className="flex-1 min-w-0 flex flex-col">
-          {showCreate ? (
-            <CreateAgentForm
-              allTools={allTools}
-              onSave={handleCreate}
-              onCancel={() => setShowCreate(false)}
-              generating={false}
-              onGenerate={handleAiGenerate}
-            />
-          ) : editingAgent ? (
-            <CreateAgentForm
-              key={`edit-${editingAgent.id}`}
-              allTools={allTools}
-              onSave={handleUpdate}
-              onCancel={() => setEditingAgent(null)}
-              generating={false}
-              onGenerate={handleAiGenerate}
-              editMode
-              initialData={{
-                name: editingAgent.name,
-                description: editingAgent.description,
-                icon: editingAgent.icon ?? '🤖',
-                tools: editingAgent.tools ?? [],
-                systemPrompt: editingAgent.systemPrompt ?? '',
-              }}
-            />
-          ) : selectedAgent ? (
-            <AgentDetail
-              agent={selectedAgent}
-              localPersona={localPersona}
-              allTools={allTools}
-              onEdit={selectedAgent.custom ? () => setEditingAgent(selectedAgent) : undefined}
-            />
-          ) : (
-            <div className="flex-1 flex items-center justify-center text-muted-foreground">
-              <div className="text-center">
-                <Bot className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                <p className="text-xs">Select an agent to view details</p>
-                <p className="text-[10px] mt-1">or create a new one with AI</p>
+          {tab === 'agents' ? (
+            showCreate ? (
+              <CreateAgentForm allTools={allTools} onSave={handleCreate} onCancel={() => setShowCreate(false)} generating={false} onGenerate={handleAiGenerate} />
+            ) : editingAgent ? (
+              <CreateAgentForm
+                key={`edit-${editingAgent.id}`}
+                allTools={allTools}
+                onSave={handleUpdate}
+                onCancel={() => setEditingAgent(null)}
+                generating={false}
+                onGenerate={handleAiGenerate}
+                editMode
+                initialData={{ name: editingAgent.name, description: editingAgent.description, icon: editingAgent.icon ?? '🤖', tools: editingAgent.tools ?? [], systemPrompt: editingAgent.systemPrompt ?? '' }}
+              />
+            ) : selectedAgent ? (
+              <AgentDetail agent={selectedAgent} localPersona={localPersona} allTools={allTools} onEdit={selectedAgent.custom ? () => setEditingAgent(selectedAgent) : undefined} />
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-muted-foreground">
+                <div className="text-center">
+                  <Bot className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                  <p className="text-xs">Select an agent to view details</p>
+                  <p className="text-[10px] mt-1">or create a new one with AI</p>
+                </div>
               </div>
-            </div>
+            )
+          ) : (
+            showCreateGroup ? (
+              <CreateGroupForm agents={agents} onSave={handleCreateGroup} onCancel={() => setShowCreateGroup(false)} />
+            ) : selectedGroup ? (
+              <GroupDetail group={selectedGroup} agents={agents} onRun={(task) => handleRunGroup(selectedGroup.id, task)} />
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-muted-foreground">
+                <div className="text-center">
+                  <Users className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                  <p className="text-xs">Select a group to view details</p>
+                  <p className="text-[10px] mt-1">or create a new collaborative workflow</p>
+                </div>
+              </div>
+            )
           )}
         </div>
       </div>
