@@ -4,6 +4,7 @@ import {
   Bot, Plus, Search, Loader2, Wrench, ChevronRight, Sparkles,
   Trash2, X, Check, AlertCircle, Pencil, Save, Users, Play,
   ArrowRight, Crown, Cog, GripVertical, ChevronUp, ChevronDown,
+  CheckCircle2, XCircle, Clock, Activity,
 } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { adapter } from '@/lib/adapter';
@@ -402,6 +403,184 @@ const GroupCard = ({
 };
 
 /* ── Group Detail ── */
+/* ── Execution status types ── */
+type MemberExecStatus = 'pending' | 'running' | 'done' | 'failed';
+
+interface MemberExecState {
+  agentId: string;
+  status: MemberExecStatus;
+  startedAt?: number;
+  completedAt?: number;
+  result?: string;
+  error?: string;
+}
+
+interface GroupExecState {
+  jobId: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  task: string;
+  startedAt: number;
+  completedAt?: number;
+  members: MemberExecState[];
+  output?: Record<string, unknown>;
+}
+
+const STATUS_ICON: Record<MemberExecStatus, React.ReactNode> = {
+  pending: <Clock className="w-3.5 h-3.5 text-muted-foreground" />,
+  running: <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" />,
+  done: <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />,
+  failed: <XCircle className="w-3.5 h-3.5 text-destructive" />,
+};
+
+const STATUS_LABEL: Record<MemberExecStatus, string> = {
+  pending: 'Pending',
+  running: 'Running…',
+  done: 'Complete',
+  failed: 'Failed',
+};
+
+/* ── GroupExecutionPanel — shows live per-member progress ── */
+const GroupExecutionPanel = ({
+  exec,
+  agents,
+  strategy,
+  onDismiss,
+}: {
+  exec: GroupExecState;
+  agents: BackendPersona[];
+  strategy: AgentGroup['strategy'];
+  onDismiss: () => void;
+}) => {
+  const elapsed = ((exec.completedAt ?? Date.now()) - exec.startedAt) / 1000;
+  const doneCount = exec.members.filter(m => m.status === 'done').length;
+  const failCount = exec.members.filter(m => m.status === 'failed').length;
+  const total = exec.members.length;
+  const progress = total > 0 ? ((doneCount + failCount) / total) * 100 : 0;
+  const isFinished = exec.status === 'completed' || exec.status === 'failed';
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="rounded-xl border border-border/30 bg-card/80 backdrop-blur-sm overflow-hidden"
+    >
+      {/* Header */}
+      <div className="px-3 py-2.5 border-b border-border/20 flex items-center gap-2">
+        <Activity className="w-4 h-4 text-primary" />
+        <span className="text-[11px] font-display font-bold text-foreground flex-1">
+          {isFinished ? 'Execution Complete' : 'Running…'}
+        </span>
+        <span className="text-[10px] font-mono text-muted-foreground">{elapsed.toFixed(1)}s</span>
+        {isFinished && (
+          <button onClick={onDismiss} className="ml-1 text-muted-foreground hover:text-foreground">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+
+      {/* Progress bar */}
+      <div className="h-1 bg-secondary/30">
+        <motion.div
+          className={`h-full ${exec.status === 'failed' ? 'bg-destructive' : 'bg-primary'}`}
+          initial={{ width: 0 }}
+          animate={{ width: `${isFinished ? 100 : progress}%` }}
+          transition={{ duration: 0.4, ease: 'easeOut' }}
+        />
+      </div>
+
+      {/* Task */}
+      <div className="px-3 py-2 border-b border-border/10">
+        <p className="text-[10px] text-muted-foreground truncate">
+          <span className="font-medium text-foreground">Task:</span> {exec.task}
+        </p>
+      </div>
+
+      {/* Per-member status */}
+      <div className="px-3 py-2 space-y-1.5">
+        {exec.members.map((memberExec, idx) => {
+          const agent = agents.find(a => a.id === memberExec.agentId);
+          const persona = agent ? PERSONAS.find(p => p.id === agent.id) : undefined;
+          const memberElapsed = memberExec.startedAt
+            ? (((memberExec.completedAt ?? Date.now()) - memberExec.startedAt) / 1000).toFixed(1)
+            : null;
+
+          return (
+            <motion.div
+              key={memberExec.agentId}
+              initial={{ opacity: 0, x: -6 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: idx * 0.05 }}
+              className={`flex items-center gap-2.5 p-2 rounded-lg border transition-colors ${
+                memberExec.status === 'running'
+                  ? 'border-primary/30 bg-primary/5'
+                  : memberExec.status === 'done'
+                  ? 'border-emerald-500/20 bg-emerald-500/5'
+                  : memberExec.status === 'failed'
+                  ? 'border-destructive/20 bg-destructive/5'
+                  : 'border-border/10 bg-secondary/10'
+              }`}
+            >
+              {strategy === 'sequential' && (
+                <span className="text-[9px] font-mono text-muted-foreground w-3 text-center">{idx + 1}</span>
+              )}
+              <Avatar className="w-6 h-6 shrink-0">
+                {persona?.avatar ? (
+                  <AvatarImage src={persona.avatar} />
+                ) : (
+                  <AvatarFallback className="text-[9px] bg-primary/20">{agent?.icon || agent?.name?.[0] || '?'}</AvatarFallback>
+                )}
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-medium text-foreground truncate">{agent?.name ?? memberExec.agentId}</p>
+                {memberExec.status === 'done' && memberExec.result && (
+                  <p className="text-[9px] text-muted-foreground truncate mt-0.5">{memberExec.result.slice(0, 120)}</p>
+                )}
+                {memberExec.status === 'failed' && memberExec.error && (
+                  <p className="text-[9px] text-destructive truncate mt-0.5">{memberExec.error}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {memberElapsed && <span className="text-[9px] font-mono text-muted-foreground">{memberElapsed}s</span>}
+                {STATUS_ICON[memberExec.status]}
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+
+      {/* Summary when done */}
+      {isFinished && (
+        <div className="px-3 py-2 border-t border-border/20 flex items-center gap-2">
+          {exec.status === 'completed' ? (
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+          ) : (
+            <XCircle className="w-4 h-4 text-destructive" />
+          )}
+          <span className="text-[10px] text-foreground font-medium">
+            {doneCount}/{total} succeeded{failCount > 0 ? `, ${failCount} failed` : ''}
+          </span>
+          <span className="text-[10px] text-muted-foreground ml-auto">{elapsed.toFixed(1)}s total</span>
+        </div>
+      )}
+
+      {/* Output preview */}
+      {isFinished && exec.output && (
+        <div className="px-3 py-2 border-t border-border/10">
+          <details className="group">
+            <summary className="text-[10px] font-medium text-muted-foreground cursor-pointer hover:text-foreground">
+              View output
+            </summary>
+            <pre className="mt-1.5 text-[9px] text-muted-foreground bg-secondary/20 rounded-lg p-2 max-h-32 overflow-auto whitespace-pre-wrap font-mono">
+              {JSON.stringify(exec.output, null, 2)}
+            </pre>
+          </details>
+        </div>
+      )}
+    </motion.div>
+  );
+};
+
+/* ── GroupDetail ── */
 const GroupDetail = ({
   group,
   agents,
@@ -410,12 +589,77 @@ const GroupDetail = ({
 }: {
   group: AgentGroup;
   agents: BackendPersona[];
-  onRun: (task: string) => void;
+  onRun: (task: string) => Promise<GroupExecState | null>;
   onEdit: () => void;
 }) => {
   const [task, setTask] = useState('');
+  const [execState, setExecState] = useState<GroupExecState | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const strat = STRATEGY_CONFIG[group.strategy];
   const sortedMembers = [...group.members].sort((a, b) => a.executionOrder - b.executionOrder);
+
+  // Poll job status when running
+  useEffect(() => {
+    if (!execState || execState.status === 'completed' || execState.status === 'failed') {
+      if (pollRef.current) clearInterval(pollRef.current);
+      return;
+    }
+
+    const poll = async () => {
+      try {
+        const res = await adapter.getJobStatus(execState.jobId);
+        if (!res) return;
+        setExecState(prev => {
+          if (!prev) return prev;
+          const updated = { ...prev };
+          if (res.status) updated.status = res.status;
+          if (res.completedAt) updated.completedAt = new Date(res.completedAt).getTime();
+          if (res.output) updated.output = res.output as Record<string, unknown>;
+          // Simulate per-member progress based on job status
+          if (res.status === 'running') {
+            const strategy = group.strategy;
+            const now = Date.now();
+            updated.members = updated.members.map((m, i) => {
+              if (m.status === 'done' || m.status === 'failed') return m;
+              if (strategy === 'sequential') {
+                const doneCount = updated.members.filter(mm => mm.status === 'done').length;
+                if (i === doneCount) return { ...m, status: 'running' as const, startedAt: m.startedAt ?? now };
+                return m;
+              }
+              // parallel / coordinator: all run at once
+              return { ...m, status: 'running' as const, startedAt: m.startedAt ?? now };
+            });
+          }
+          if (res.status === 'completed') {
+            updated.members = updated.members.map(m => ({
+              ...m,
+              status: 'done' as const,
+              completedAt: m.completedAt ?? Date.now(),
+              result: m.result ?? 'Completed',
+            }));
+          }
+          if (res.status === 'failed') {
+            updated.members = updated.members.map(m =>
+              m.status === 'running' ? { ...m, status: 'failed' as const, completedAt: Date.now(), error: 'Job failed' } : m,
+            );
+          }
+          return updated;
+        });
+      } catch { /* ignore poll errors */ }
+    };
+
+    pollRef.current = setInterval(poll, 1500);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [execState?.jobId, execState?.status, group.strategy]);
+
+  const handleRun = async () => {
+    if (!task.trim()) return;
+    const exec = await onRun(task);
+    if (exec) {
+      setExecState(exec);
+      setTask('');
+    }
+  };
 
   return (
     <motion.div
@@ -424,7 +668,7 @@ const GroupDetail = ({
       className="flex-1 flex flex-col gap-4 overflow-y-auto scrollbar-thin"
     >
       <div>
-      <div className="flex items-center gap-2 mb-1">
+        <div className="flex items-center gap-2 mb-1">
           <Users className="w-5 h-5 text-primary" />
           <h3 className="text-sm font-display font-bold text-foreground flex-1">{group.name}</h3>
           <button
@@ -441,6 +685,18 @@ const GroupDetail = ({
         </div>
       </div>
 
+      {/* Execution status panel */}
+      <AnimatePresence>
+        {execState && (
+          <GroupExecutionPanel
+            exec={execState}
+            agents={agents}
+            strategy={group.strategy}
+            onDismiss={() => setExecState(null)}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Members */}
       <div>
         <h4 className="text-[10px] font-display uppercase tracking-wider text-muted-foreground mb-2">
@@ -450,13 +706,22 @@ const GroupDetail = ({
           {sortedMembers.map((member, idx) => {
             const agent = agents.find(a => a.id === member.agentId);
             const persona = agent ? PERSONAS.find(p => p.id === agent.id) : undefined;
+            const memberExec = execState?.members.find(m => m.agentId === member.agentId);
             return (
-              <div key={member.agentId} className="flex items-center gap-3 p-2 rounded-lg bg-secondary/20 border border-border/20">
+              <div
+                key={member.agentId}
+                className={`flex items-center gap-3 p-2 rounded-lg border transition-colors ${
+                  memberExec?.status === 'running'
+                    ? 'border-primary/30 bg-primary/5'
+                    : memberExec?.status === 'done'
+                    ? 'border-emerald-500/20 bg-emerald-500/5'
+                    : memberExec?.status === 'failed'
+                    ? 'border-destructive/20 bg-destructive/5'
+                    : 'bg-secondary/20 border-border/20'
+                }`}
+              >
                 {group.strategy === 'sequential' && (
                   <span className="text-[10px] font-mono text-muted-foreground w-4 text-center">{idx + 1}</span>
-                )}
-                {group.strategy === 'sequential' && idx < sortedMembers.length - 1 && (
-                  <ArrowRight className="w-3 h-3 text-muted-foreground/50 absolute -bottom-3 left-1/2" />
                 )}
                 <Avatar className="w-7 h-7 shrink-0">
                   {persona?.avatar ? (
@@ -469,7 +734,12 @@ const GroupDetail = ({
                   <p className="text-[10px] font-medium text-foreground truncate">{agent?.name ?? member.agentId}</p>
                   <p className="text-[9px] text-muted-foreground truncate">{agent?.description ?? ''}</p>
                 </div>
-                {member.roleInGroup === 'lead' ? (
+                {memberExec ? (
+                  <div className="flex items-center gap-1">
+                    {STATUS_ICON[memberExec.status]}
+                    <span className="text-[9px] text-muted-foreground">{STATUS_LABEL[memberExec.status]}</span>
+                  </div>
+                ) : member.roleInGroup === 'lead' ? (
                   <span className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400">
                     <Crown className="w-2.5 h-2.5" /> Lead
                   </span>
@@ -493,14 +763,16 @@ const GroupDetail = ({
             onChange={e => setTask(e.target.value)}
             placeholder="Describe the task for this group..."
             className="flex-1 text-xs bg-secondary/30 border border-border/30 rounded-lg px-3 py-2 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
-            onKeyDown={e => e.key === 'Enter' && task.trim() && onRun(task)}
+            onKeyDown={e => e.key === 'Enter' && handleRun()}
+            disabled={execState?.status === 'running' || execState?.status === 'queued'}
           />
           <button
-            onClick={() => task.trim() && onRun(task)}
-            disabled={!task.trim()}
+            onClick={handleRun}
+            disabled={!task.trim() || execState?.status === 'running' || execState?.status === 'queued'}
             className="px-3 py-2 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1"
           >
-            <Play className="w-3 h-3" /> Run
+            {execState?.status === 'running' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+            {execState?.status === 'running' ? 'Running' : 'Run'}
           </button>
         </div>
       </div>
@@ -817,10 +1089,25 @@ const AgentsApp = () => {
     } catch { setError('Failed to delete group'); }
   };
 
-  const handleRunGroup = async (groupId: string, task: string) => {
+  const handleRunGroup = async (groupId: string, task: string): Promise<GroupExecState | null> => {
     try {
-      await adapter.runAgentGroup(groupId, task);
-    } catch { setError('Failed to run group task'); }
+      const group = groups.find(g => g.id === groupId);
+      const result = await adapter.runAgentGroup(groupId, task) as { jobId?: string; id?: string };
+      const jobId = result?.jobId ?? result?.id ?? `job-${Date.now()}`;
+      const members: MemberExecState[] = (group?.members ?? [])
+        .sort((a, b) => a.executionOrder - b.executionOrder)
+        .map(m => ({ agentId: m.agentId, status: 'pending' as const }));
+      return {
+        jobId,
+        status: 'queued',
+        task,
+        startedAt: Date.now(),
+        members,
+      };
+    } catch {
+      setError('Failed to run group task');
+      return null;
+    }
   };
 
   const handleAiGenerate = async (prompt: string) => {

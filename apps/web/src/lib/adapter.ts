@@ -560,6 +560,13 @@ class LocalAdapter {
     return res.json();
   }
 
+  async getJobStatus(jobId: string): Promise<{ status: string; startedAt?: string; completedAt?: string; output?: unknown } | null> {
+    try {
+      const res = await this.fetch(`/api/jobs/${jobId}`);
+      return res.json();
+    } catch { return null; }
+  }
+
   // --- Health ---
   async getSystemHealth(): Promise<SystemHealth> {
     const res = await this.fetch('/health');
