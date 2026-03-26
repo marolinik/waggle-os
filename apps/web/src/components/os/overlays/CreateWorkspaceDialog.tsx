@@ -4,7 +4,7 @@ import {
   FolderPlus, ChevronRight, Home, Check, Loader2, LayoutTemplate,
   Sparkles, Info, Wand2, Target, Microscope, Code, Megaphone,
   Rocket, Scale, Building, FileText, Laptop, PenLine, BarChart3,
-  ClipboardList, Mail, Plug, Terminal, Pencil, Trash2,
+  ClipboardList, Mail, Plug, Terminal, Pencil, Trash2, Copy,
 } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { PERSONAS } from '@/lib/personas';
