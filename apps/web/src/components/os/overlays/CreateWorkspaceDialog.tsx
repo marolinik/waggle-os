@@ -4,7 +4,7 @@ import {
   FolderPlus, ChevronRight, Home, Check, Loader2, LayoutTemplate,
   Sparkles, Info, Wand2, Target, Microscope, Code, Megaphone,
   Rocket, Scale, Building, FileText, Laptop, PenLine, BarChart3,
-  ClipboardList, Mail, Plug, Terminal, Pencil, Trash2, Copy, Filter,
+  ClipboardList, Mail, Plug, Terminal, Pencil, Trash2, Copy, Filter, Search,
 } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { PERSONAS } from '@/lib/personas';
@@ -591,6 +591,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
   const [editingTemplate, setEditingTemplate] = useState<WorkspaceTemplate | null>(null);
   const [duplicatingTemplate, setDuplicatingTemplate] = useState<WorkspaceTemplate | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<TemplateCategory | 'all'>('all');
+  const [templateSearch, setTemplateSearch] = useState('');
 
   // Connectors from backend
   const [connectors, setConnectors] = useState<Connector[]>([]);
@@ -692,18 +693,28 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                 ))}
               </div>
 
+              {/* Search input */}
+              <div className="relative mb-1.5">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
+                <input
+                  value={templateSearch}
+                  onChange={e => setTemplateSearch(e.target.value)}
+                  placeholder="Search templates…"
+                  className="w-full bg-muted/50 border border-border/50 rounded-xl pl-7 pr-3 py-1.5 text-[10px] text-foreground outline-none focus:border-primary/50 placeholder:text-muted-foreground"
+                />
+              </div>
+
               {loadingTemplates ? (
                 <div className="flex items-center justify-center py-4"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
               ) : (() => {
-                const filtered = categoryFilter === 'all'
-                  ? templates
-                  : categoryFilter === 'custom'
-                    ? templates.filter(t => !t.builtIn)
-                    : templates.filter(t => t.category === categoryFilter);
+                const searchLower = templateSearch.trim().toLowerCase();
+                const filtered = templates
+                  .filter(t => categoryFilter === 'all' ? true : categoryFilter === 'custom' ? !t.builtIn : t.category === categoryFilter)
+                  .filter(t => !searchLower || t.name.toLowerCase().includes(searchLower) || t.description.toLowerCase().includes(searchLower));
                 return (
                 <div className="grid grid-cols-4 gap-1.5 max-h-[160px] overflow-y-auto pr-1">
                   {/* Blank option */}
-                  {categoryFilter === 'all' && (
+                  {categoryFilter === 'all' && !searchLower && (
                   <button onClick={() => setSelectedTemplate(null)}
                     className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all ${
                       selectedTemplate === null ? 'bg-primary/20 border border-primary/50' : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
