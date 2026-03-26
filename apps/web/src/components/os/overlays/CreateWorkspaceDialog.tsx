@@ -604,16 +604,26 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
   // Connectors from backend
   const [connectors, setConnectors] = useState<Connector[]>([]);
 
-  // Fetch templates + connectors when dialog opens
+  // Agent groups
+  const [agentGroups, setAgentGroups] = useState<AgentGroupOption[]>([]);
+  const [agentMode, setAgentMode] = useState<'single' | 'group'>('single');
+  const [selectedGroupId, setSelectedGroupId] = useState<string | undefined>();
+
+  // Fetch templates + connectors + agent groups when dialog opens
   useEffect(() => {
     if (!open) return;
     setLoadingTemplates(true);
     Promise.all([
       adapter.getWorkspaceTemplates().catch(() => ({ templates: [] as WorkspaceTemplate[] })),
       adapter.getConnectors().catch(() => [] as Connector[]),
-    ]).then(([tmplData, connData]) => {
+      adapter.getAgentGroups().catch(() => [] as unknown[]),
+    ]).then(([tmplData, connData, groupsData]) => {
       setTemplates(tmplData.templates);
       setConnectors(connData);
+      setAgentGroups((groupsData as AgentGroupOption[]).map(g => ({
+        id: g.id, name: g.name, description: g.description,
+        strategy: g.strategy, memberCount: (g as any).members?.length ?? 0,
+      })));
     }).finally(() => setLoadingTemplates(false));
   }, [open]);
 
