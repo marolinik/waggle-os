@@ -79,10 +79,14 @@ interface FolderPickerProps {
 }
 
 function FolderPickerModal({ open, storageType, currentPath, onSelect, onClose }: FolderPickerProps) {
-  const tree = storageType === 'local' ? MOCK_LOCAL_TREE : MOCK_TEAM_TREE;
+  const [folderTree, setFolderTree] = useState<FolderNode[]>(() =>
+    storageType === 'local' ? structuredClone(MOCK_LOCAL_TREE) : structuredClone(MOCK_TEAM_TREE)
+  );
   const rootLabel = storageType === 'local' ? '/' : 'Buckets';
 
   const [browsePath, setBrowsePath] = useState(currentPath || '');
+  const [newFolderName, setNewFolderName] = useState('');
+  const [showNewFolder, setShowNewFolder] = useState(false);
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => {
     // Auto-expand ancestors of current path
     const expanded = new Set<string>();
