@@ -252,23 +252,69 @@ function FolderPickerModal({ open, storageType, currentPath, onSelect, onClose }
 
         {/* Selected path preview + actions */}
         <div className="px-4 py-3 border-t border-border/30 space-y-2">
+          {/* New folder inline input */}
+          <AnimatePresence>
+            {showNewFolder && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="flex items-center gap-1.5 overflow-hidden"
+              >
+                <FolderPlus className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <input
+                  value={newFolderName}
+                  onChange={e => setNewFolderName(e.target.value)}
+                  placeholder="New folder name…"
+                  className="flex-1 bg-muted/50 border border-border/50 rounded-lg px-2 py-1 text-[11px] text-foreground outline-none focus:border-primary/50"
+                  autoFocus
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') handleCreateFolder();
+                    if (e.key === 'Escape') { setShowNewFolder(false); setNewFolderName(''); }
+                  }}
+                />
+                <button
+                  onClick={handleCreateFolder}
+                  disabled={!newFolderName.trim()}
+                  className="px-2 py-1 text-[10px] rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-40 transition-colors"
+                >
+                  Create
+                </button>
+                <button
+                  onClick={() => { setShowNewFolder(false); setNewFolderName(''); }}
+                  className="px-1.5 py-1 text-[10px] rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <div className="flex items-center gap-2 bg-muted/30 rounded-lg px-3 py-1.5">
             <span className="text-[9px] text-muted-foreground shrink-0">Path:</span>
             <span className="text-[11px] font-mono text-foreground truncate">
               {browsePath || rootLabel}
             </span>
           </div>
-          <div className="flex justify-end gap-2">
-            <button onClick={onClose} className="px-3 py-1.5 text-[11px] rounded-lg text-muted-foreground hover:text-foreground transition-colors">
-              Cancel
-            </button>
+          <div className="flex justify-between">
             <button
-              onClick={() => { onSelect(browsePath); onClose(); }}
-              disabled={!browsePath}
-              className="flex items-center gap-1 px-3 py-1.5 text-[11px] rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-40 transition-colors"
+              onClick={() => setShowNewFolder(true)}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] rounded-lg bg-secondary/50 text-muted-foreground hover:text-foreground hover:bg-secondary/70 transition-colors"
             >
-              <Check className="w-3 h-3" /> Select
+              <FolderPlus className="w-3 h-3" /> New Folder
             </button>
+            <div className="flex gap-2">
+              <button onClick={onClose} className="px-3 py-1.5 text-[11px] rounded-lg text-muted-foreground hover:text-foreground transition-colors">
+                Cancel
+              </button>
+              <button
+                onClick={() => { onSelect(browsePath); onClose(); }}
+                disabled={!browsePath}
+                className="flex items-center gap-1 px-3 py-1.5 text-[11px] rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-40 transition-colors"
+              >
+                <Check className="w-3 h-3" /> Select
+              </button>
+            </div>
           </div>
         </div>
       </motion.div>
