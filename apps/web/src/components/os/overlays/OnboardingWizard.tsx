@@ -106,7 +106,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
 
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
 
-  // Connect on mount
+  // Connect on mount (silent)
   useEffect(() => {
     adapter.connect().catch(() => {});
   }, []);
@@ -116,7 +116,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
     onUpdate({ step: n });
   }, [onUpdate]);
 
-  // Auto-advance for step 0 only (3s); step 1 is manual
+  // Auto-advance for step 0 only (3s)
   useEffect(() => {
     if (step === 0) {
       autoTimer.current = setTimeout(() => goToStep(1), 3000);
@@ -182,7 +182,10 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
         const persona = await res.json();
         setSelectedPersona(persona.id || customPersonaName.toLowerCase().replace(/\s+/g, '-'));
       }
-    } catch { /* ignore */ }
+    } catch {
+      // Use local ID if backend is offline
+      setSelectedPersona(customPersonaName.toLowerCase().replace(/\s+/g, '-'));
+    }
     finally {
       setCreatingPersona(false);
       setShowCustomPersona(false);
@@ -200,7 +203,9 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
       setKeySaved(true);
       onUpdate({ apiKeySet: true });
     } catch {
+      // Key couldn't be validated but we can still proceed
       setKeyValid(false);
+      setKeySaved(false);
     } finally {
       setValidating(false);
     }
@@ -210,19 +215,28 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
     setCreatingWorkspace(true);
     try {
       const template = TEMPLATES.find(t => t.id === selectedTemplate);
-      const ws = await adapter.createWorkspace({
-        name: workspaceName || template?.name || 'Default Workspace',
-        group: 'Personal',
-        persona: selectedPersona || undefined,
-      });
+      const wsName = workspaceName || template?.name || 'Default Workspace';
+      
+      let wsId: string;
+      try {
+        const ws = await adapter.createWorkspace({
+          name: wsName,
+          group: 'Personal',
+          persona: selectedPersona || undefined,
+          templateId: selectedTemplate || undefined,
+        });
+        wsId = ws.id;
+      } catch {
+        // Create local workspace ID if backend is offline
+        wsId = `local-${Date.now()}`;
+      }
+      
       onUpdate({
-        workspaceId: ws.id,
+        workspaceId: wsId,
         templateId: selectedTemplate,
         personaId: selectedPersona,
       });
       goToStep(6);
-    } catch {
-      // stay on current step
     } finally {
       setCreatingWorkspace(false);
     }
@@ -233,9 +247,8 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
     onComplete(serverBaseUrl);
     const template = TEMPLATES.find(t => t.id === (state.templateId || selectedTemplate));
     const hint = template?.hint || 'Hello! What can you help me with?';
-    if (state.workspaceId) {
-      onFinish(state.workspaceId, hint);
-    }
+    const wsId = state.workspaceId || `local-${Date.now()}`;
+    onFinish(wsId, hint);
   }, [serverBaseUrl, onComplete, onFinish, state.workspaceId, state.templateId, selectedTemplate]);
 
   // Auto-finish step 6 after 2s
@@ -477,6 +490,18 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
                   </p>
                 </div>
 
+                {/* Agent explainer tip */}
+                <div className="mb-5 flex items-start gap-3 px-4 py-3 rounded-xl bg-primary/5 border border-primary/20">
+                  <Sparkles className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-display font-medium text-foreground mb-0.5">Template = What your agent knows</p>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      This sets the <span className="text-foreground font-medium">domain, tools, and goals</span> for your workspace. 
+                      In the next step, you'll choose <span className="text-foreground font-medium">how</span> the agent works — its personality and style. Together, they define your agent.
+                    </p>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-4 gap-3 mb-5">
                   {TEMPLATES.map((t) => {
                     const Icon = t.icon;
@@ -543,6 +568,18 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
                   <p className="text-sm text-muted-foreground">
                     Choose a working style for your agent
                   </p>
+                </div>
+
+                {/* Agent explainer tip */}
+                <div className="mb-4 flex items-start gap-3 px-4 py-3 rounded-xl bg-primary/5 border border-primary/20">
+                  <Brain className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-display font-medium text-foreground mb-0.5">Persona = How your agent thinks</p>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      This sets the agent's <span className="text-foreground font-medium">tone, reasoning style, and specialization</span>. 
+                      Combined with the template you chose ({selectedTemplate ? TEMPLATES.find(t => t.id === selectedTemplate)?.name : 'Blank'}), this creates your unique agent.
+                    </p>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-4 gap-3 mb-4">
@@ -732,7 +769,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
                     className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-primary-foreground font-display text-sm font-semibold hover:bg-primary/80 disabled:opacity-50 transition-colors glow-primary"
                   >
                     {creatingWorkspace ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
-                    {creatingWorkspace ? 'Creating workspace…' : 'Continue'}
+                    {creatingWorkspace ? 'Creating workspace…' : 'Create Workspace'}
                   </button>
                 </div>
 

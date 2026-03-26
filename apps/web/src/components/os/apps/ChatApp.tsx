@@ -1,10 +1,17 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ThumbsUp, ThumbsDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Upload, Code, FileText, Users, X } from 'lucide-react';
+import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ChevronUp, ThumbsUp, ThumbsDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Upload, Code, FileText, Users, X, Bot, Cpu, Layers } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getPersonaById, PERSONAS } from '@/lib/personas';
 import { adapter } from '@/lib/adapter';
 import type { ChatMessage, ToolExecution, ApprovalRequest } from '@/lib/types';
+
+export interface TeamMember {
+  id: string;
+  name: string;
+  status: string;
+  avatar?: string;
+}
 
 interface ChatAppProps {
   messages: ChatMessage[];
@@ -14,12 +21,29 @@ interface ChatAppProps {
   pendingApproval: ApprovalRequest | null;
   onApprove: (id: string, approved: boolean) => void;
   currentPersona?: string;
+  onPersonaChange?: (personaId: string) => void;
+  currentModel?: string;
+  onModelChange?: (model: string) => void;
+  availableModels?: string[];
+  teamPresence?: TeamMember[];
   sessions?: { id: string; title: string }[];
   activeSessionId?: string | null;
   onSelectSession?: (id: string) => void;
   onNewSession?: () => void;
   workspaceId?: string | null;
+  templateId?: string;
 }
+
+const TEMPLATE_DISPLAY: Record<string, { label: string; desc: string }> = {
+  'sales-pipeline': { label: 'Sales Pipeline', desc: 'Deal tracking & prospecting' },
+  'research-project': { label: 'Research Project', desc: 'Deep investigation & synthesis' },
+  'code-review': { label: 'Code Review', desc: 'Analyze and review code' },
+  'marketing-campaign': { label: 'Marketing Campaign', desc: 'Campaigns & content creation' },
+  'product-launch': { label: 'Product Launch', desc: 'Ship products faster' },
+  'legal-review': { label: 'Legal Review', desc: 'Contracts & documentation' },
+  'agency-consulting': { label: 'Agency Consulting', desc: 'Client workspace management' },
+  'blank': { label: 'Custom', desc: 'General-purpose workspace' },
+};
 
 const SLASH_COMMANDS = [
   { cmd: '/model', desc: 'Switch model' },
@@ -143,19 +167,41 @@ const FileDropZone = ({ onDrop, active }: { onDrop: (files: File[]) => void; act
 const ChatApp = ({
   messages, isLoading, onSendMessage, onClearHistory,
   pendingApproval, onApprove, currentPersona,
+  onPersonaChange, currentModel, onModelChange, availableModels,
+  teamPresence,
   sessions, activeSessionId, onSelectSession, onNewSession,
-  workspaceId,
+  workspaceId, templateId,
 }: ChatAppProps) => {
   const [input, setInput] = useState('');
   const [showSlash, setShowSlash] = useState(false);
   const [slashFilter, setSlashFilter] = useState('');
+  const [slashIndex, setSlashIndex] = useState(0);
   const [showSessions, setShowSessions] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [showAgentProfile, setShowAgentProfile] = useState(false);
+  const [showPersonaPicker, setShowPersonaPicker] = useState(false);
+  const [showModelPicker, setShowModelPicker] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const personaPickerRef = useRef<HTMLDivElement>(null);
+  const modelPickerRef = useRef<HTMLDivElement>(null);
 
   const persona = currentPersona ? getPersonaById(currentPersona) : PERSONAS[0];
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (showPersonaPicker && personaPickerRef.current && !personaPickerRef.current.contains(e.target as Node)) {
+        setShowPersonaPicker(false);
+      }
+      if (showModelPicker && modelPickerRef.current && !modelPickerRef.current.contains(e.target as Node)) {
+        setShowModelPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showPersonaPicker, showModelPicker]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -177,12 +223,32 @@ const ChatApp = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (showSlash && filteredCommands.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSlashIndex(i => (i + 1) % filteredCommands.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSlashIndex(i => (i - 1 + filteredCommands.length) % filteredCommands.length);
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const cmd = filteredCommands[slashIndex];
+        setInput(cmd.cmd + ' ');
+        setShowSlash(false);
+        setSlashIndex(0);
+        return;
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
     if (e.key === '/' && input === '') setShowSlash(true);
-    if (e.key === 'Escape') setShowSlash(false);
+    if (e.key === 'Escape') { setShowSlash(false); setSlashIndex(0); }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -191,6 +257,7 @@ const ChatApp = ({
     if (val.startsWith('/')) {
       setShowSlash(true);
       setSlashFilter(val.slice(1));
+      setSlashIndex(0);
     } else {
       setShowSlash(false);
     }
@@ -260,13 +327,160 @@ const ChatApp = ({
               <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showSessions ? 'rotate-0' : '-rotate-90'}`} />
             </button>
           )}
-          {persona && (
-            <div className="flex items-center gap-1.5">
-              <Avatar className="w-5 h-5">
-                <AvatarImage src={persona.avatar} />
-                <AvatarFallback className="text-[8px] bg-primary/20">{persona.name[0]}</AvatarFallback>
-              </Avatar>
-              <span className="text-[10px] font-display text-muted-foreground">{persona.name}</span>
+
+          {/* Persona picker */}
+          <div className="relative" ref={personaPickerRef}>
+            <button
+              onClick={() => { setShowPersonaPicker(p => !p); setShowModelPicker(false); }}
+              className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-muted/50 transition-colors"
+            >
+              {persona ? (
+                <>
+                  <Avatar className="w-5 h-5">
+                    <AvatarImage src={persona.avatar} />
+                    <AvatarFallback className="text-[8px] bg-primary/20">{persona.name[0]}</AvatarFallback>
+                  </Avatar>
+                  <span className="text-[10px] font-display text-muted-foreground">{persona.name}</span>
+                </>
+              ) : (
+                <>
+                  <Bot className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="text-[10px] text-muted-foreground">Persona</span>
+                </>
+              )}
+              <ChevronDown className="w-3 h-3 text-muted-foreground" />
+            </button>
+            {showPersonaPicker && (
+              <div className="absolute top-full left-0 mt-1 w-56 bg-card border border-border rounded-xl shadow-xl z-20 overflow-hidden max-h-64 overflow-y-auto">
+                {PERSONAS.map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => { onPersonaChange?.(p.id); setShowPersonaPicker(false); }}
+                    className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors ${
+                      currentPersona === p.id ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/50'
+                    }`}
+                  >
+                    <Avatar className="w-5 h-5 shrink-0">
+                      <AvatarImage src={p.avatar} />
+                      <AvatarFallback className="text-[8px] bg-primary/20">{p.name[0]}</AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <div className="font-display text-foreground truncate">{p.name}</div>
+                      <div className="text-[10px] text-muted-foreground truncate">{p.description}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Team presence */}
+          {teamPresence && teamPresence.length > 0 && (
+            <div className="flex items-center gap-1 mx-1">
+              <div className="flex -space-x-1.5">
+                {teamPresence.slice(0, 4).map(m => (
+                  <div key={m.id} className="relative group">
+                    <Avatar className="w-5 h-5 border-2 border-card">
+                      {m.avatar ? <AvatarImage src={m.avatar} /> : null}
+                      <AvatarFallback className="text-[7px] bg-sky-500/20 text-sky-400">{m.name[0]}</AvatarFallback>
+                    </Avatar>
+                    <div className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-card ${m.status === 'online' ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
+                    <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[9px] text-foreground bg-card px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-30 shadow-lg">
+                      {m.name}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {teamPresence.length > 4 && (
+                <span className="text-[9px] text-muted-foreground ml-1">+{teamPresence.length - 4}</span>
+              )}
+            </div>
+          )}
+
+          {/* Model picker */}
+          <div className="relative ml-auto" ref={modelPickerRef}>
+            <button
+              onClick={() => { setShowModelPicker(p => !p); setShowPersonaPicker(false); }}
+              className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-muted/50 transition-colors"
+            >
+              <Cpu className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-[10px] font-display text-muted-foreground truncate max-w-[120px]">
+                {currentModel || 'Model'}
+              </span>
+              <ChevronDown className="w-3 h-3 text-muted-foreground" />
+            </button>
+            {showModelPicker && (
+              <div className="absolute top-full right-0 mt-1 w-64 bg-card border border-border rounded-xl shadow-xl z-20 overflow-hidden max-h-64 overflow-y-auto">
+                {(availableModels && availableModels.length > 0 ? availableModels : (currentModel ? [currentModel] : [])).map(m => (
+                  <button
+                    key={m}
+                    onClick={() => { onModelChange?.(m); setShowModelPicker(false); }}
+                    className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors ${
+                      currentModel === m ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/50'
+                    }`}
+                  >
+                    <Cpu className="w-3 h-3 text-primary shrink-0" />
+                    <span className="font-display text-foreground truncate">{m}</span>
+                  </button>
+                ))}
+                {(!availableModels || availableModels.length === 0) && !currentModel && (
+                  <div className="px-3 py-2 text-xs text-muted-foreground">No models available</div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Agent Profile Panel — collapsible */}
+        <div className="shrink-0">
+          <button
+            onClick={() => setShowAgentProfile(p => !p)}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors border-b border-border/20"
+          >
+            <Layers className="w-3 h-3 text-primary" />
+            <span className="font-display font-medium">Agent Profile</span>
+            {showAgentProfile ? <ChevronUp className="w-3 h-3 ml-auto" /> : <ChevronDown className="w-3 h-3 ml-auto" />}
+          </button>
+          {showAgentProfile && (
+            <div className="px-3 py-2.5 border-b border-border/20 bg-muted/20 space-y-2">
+              <div className="flex items-center gap-3">
+                {persona && (
+                  <Avatar className="w-9 h-9 shrink-0">
+                    <AvatarImage src={persona.avatar} />
+                    <AvatarFallback className="text-[10px] bg-primary/20">{persona.name[0]}</AvatarFallback>
+                  </Avatar>
+                )}
+                <div className="min-w-0">
+                  <p className="text-xs font-display font-semibold text-foreground">{persona?.name || 'Default Agent'}</p>
+                  <p className="text-[10px] text-muted-foreground">{persona?.description || 'General-purpose assistant'}</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {templateId && templateId !== 'blank' && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-display">
+                    <Sparkles className="w-2.5 h-2.5" />
+                    {TEMPLATE_DISPLAY[templateId]?.label || templateId}
+                  </span>
+                )}
+                {currentPersona && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-accent/50 text-accent-foreground text-[10px] font-display">
+                    <Bot className="w-2.5 h-2.5" />
+                    {persona?.name || currentPersona}
+                  </span>
+                )}
+                {currentModel && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-secondary text-secondary-foreground text-[10px] font-display">
+                    <Cpu className="w-2.5 h-2.5" />
+                    {currentModel.split('/').pop()}
+                  </span>
+                )}
+              </div>
+              {templateId && TEMPLATE_DISPLAY[templateId] && (
+                <p className="text-[10px] text-muted-foreground/70 leading-relaxed">
+                  <span className="text-muted-foreground font-medium">Domain:</span> {TEMPLATE_DISPLAY[templateId].desc} · 
+                  <span className="text-muted-foreground font-medium"> Style:</span> {persona?.description || 'General'}
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -343,11 +557,11 @@ const ChatApp = ({
         <div className="p-3 border-t border-border/30 relative">
           {showSlash && filteredCommands.length > 0 && (
             <div className="absolute bottom-full left-3 right-3 mb-1 bg-card border border-border rounded-xl shadow-xl overflow-hidden z-10 max-h-48 overflow-y-auto">
-              {filteredCommands.map(c => (
+              {filteredCommands.map((c, idx) => (
                 <button
                   key={c.cmd}
-                  onClick={() => { setInput(c.cmd + ' '); setShowSlash(false); inputRef.current?.focus(); }}
-                  className="w-full text-left px-3 py-2 text-xs hover:bg-muted/50 flex items-center gap-2 transition-colors"
+                  onClick={() => { setInput(c.cmd + ' '); setShowSlash(false); setSlashIndex(0); inputRef.current?.focus(); }}
+                  className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors ${idx === slashIndex ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/50'}`}
                 >
                   <Slash className="w-3 h-3 text-primary" />
                   <span className="font-display text-foreground">{c.cmd}</span>

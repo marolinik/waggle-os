@@ -4,6 +4,7 @@ import type {
   AgentStep, Session, SkillPack, FleetSession, CronJob,
   Notification, AgentStatus, Persona, SystemHealth,
   Connector, Settings, StreamEvent, KGNode, KGEdge,
+  ModelPricing, WaggleSignal, FileEntry,
 } from './types';
 
 const DEFAULT_SERVER = 'http://127.0.0.1:3333';
@@ -47,14 +48,21 @@ class LocalAdapter {
   private authToken: string | null = null;
   private ws: WebSocket | null = null;
   private sseConnections = new Map<string, EventSource>();
+  private _connected = false;
+  private _connectAttempted = false;
 
   constructor(serverUrl?: string) {
     this.baseUrl = serverUrl || localStorage.getItem('waggle_server_url') || DEFAULT_SERVER;
   }
 
+  get isConnected() { return this._connected; }
+  get hasAttemptedConnect() { return this._connectAttempted; }
+
   setServerUrl(url: string) {
     this.baseUrl = url;
     localStorage.setItem('waggle_server_url', url);
+    this._connected = false;
+    this._connectAttempted = false;
   }
 
   getServerUrl() {
@@ -63,10 +71,17 @@ class LocalAdapter {
 
   // --- Auth ---
   async connect(): Promise<{ wsToken: string }> {
-    const res = await this.fetch('/health');
-    const data = await res.json();
-    this.authToken = data.wsToken;
-    return data;
+    this._connectAttempted = true;
+    try {
+      const res = await this.fetch('/health');
+      const data = await res.json();
+      this.authToken = data.wsToken;
+      this._connected = true;
+      return data;
+    } catch (e) {
+      this._connected = false;
+      throw e;
+    }
   }
 
   private async fetch(path: string, init?: RequestInit): Promise<Response> {
@@ -77,7 +92,13 @@ class LocalAdapter {
     if (this.authToken) {
       headers['Authorization'] = `Bearer ${this.authToken}`;
     }
-    return fetch(`${this.baseUrl}${path}`, { ...init, headers });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      return await fetch(`${this.baseUrl}${path}`, { ...init, headers, signal: controller.signal });
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   // --- Workspaces ---
@@ -86,13 +107,18 @@ class LocalAdapter {
     return res.json();
   }
 
-  async createWorkspace(data: { name: string; group: string; persona?: string }): Promise<Workspace> {
+  async createWorkspace(data: { name: string; group: string; persona?: string; templateId?: string; shared?: boolean }): Promise<Workspace> {
     const res = await this.fetch('/api/workspaces', { method: 'POST', body: JSON.stringify(data) });
     return res.json();
   }
 
   async updateWorkspace(id: string, data: Partial<Workspace>): Promise<Workspace> {
     const res = await this.fetch(`/api/workspaces/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    return res.json();
+  }
+
+  async patchWorkspace(id: string, data: Partial<Pick<Workspace, 'persona' | 'templateId' | 'name' | 'group' | 'model'>>): Promise<Workspace> {
+    const res = await this.fetch(`/api/workspaces/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
     return res.json();
   }
 
@@ -110,11 +136,53 @@ class LocalAdapter {
     return res.json();
   }
 
+  // --- File Management ---
+  async listFiles(workspaceId: string, path = '/'): Promise<FileEntry[]> {
+    const res = await this.fetch(`/api/workspaces/${workspaceId}/files/list?path=${encodeURIComponent(path)}`);
+    return res.json();
+  }
+
+  async uploadFile(workspaceId: string, dirPath: string, file: File): Promise<FileEntry> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('path', dirPath);
+    const res = await fetch(`${this.baseUrl}/api/workspaces/${workspaceId}/files/upload`, {
+      method: 'POST',
+      headers: this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {},
+      body: formData,
+    });
+    return res.json();
+  }
+
+  async downloadFile(workspaceId: string, filePath: string): Promise<Blob> {
+    const res = await this.fetch(`/api/workspaces/${workspaceId}/files/download?path=${encodeURIComponent(filePath)}`);
+    return res.blob();
+  }
+
+  async createDirectory(workspaceId: string, path: string): Promise<FileEntry> {
+    const res = await this.fetch(`/api/workspaces/${workspaceId}/files/mkdir`, { method: 'POST', body: JSON.stringify({ path }) });
+    return res.json();
+  }
+
+  async deleteFile(workspaceId: string, path: string): Promise<void> {
+    await this.fetch(`/api/workspaces/${workspaceId}/files/delete`, { method: 'POST', body: JSON.stringify({ path }) });
+  }
+
+  async moveFile(workspaceId: string, from: string, to: string): Promise<FileEntry> {
+    const res = await this.fetch(`/api/workspaces/${workspaceId}/files/move`, { method: 'POST', body: JSON.stringify({ from, to }) });
+    return res.json();
+  }
+
+  async copyFile(workspaceId: string, from: string, to: string): Promise<FileEntry> {
+    const res = await this.fetch(`/api/workspaces/${workspaceId}/files/copy`, { method: 'POST', body: JSON.stringify({ from, to }) });
+    return res.json();
+  }
+
   // --- Chat ---
-  async *sendMessage(workspaceId: string, message: string, sessionId?: string): AsyncGenerator<StreamEvent> {
+  async *sendMessage(workspaceId: string, message: string, sessionId?: string, persona?: string): AsyncGenerator<StreamEvent> {
     const res = await this.fetch('/api/chat', {
       method: 'POST',
-      body: JSON.stringify({ workspaceId, message, sessionId }),
+      body: JSON.stringify({ workspaceId, message, sessionId, persona }),
     });
 
     if (!res.body) return;
@@ -136,6 +204,10 @@ class LocalAdapter {
         }
       }
     }
+  }
+
+  async abortAgent(workspaceId: string): Promise<void> {
+    await this.fetch(`/api/agent/abort`, { method: 'POST', body: JSON.stringify({ workspaceId }) });
   }
 
   async clearHistory(sessionId: string): Promise<void> {
@@ -220,6 +292,7 @@ class LocalAdapter {
   }
 
   subscribeEvents(onEvent: (step: AgentStep) => void): () => void {
+    if (!this._connected) return () => {};
     return this.subscribeSSE('/api/events/stream', (data) => onEvent(data as AgentStep));
   }
 
@@ -297,6 +370,11 @@ class LocalAdapter {
     await this.fetch(`/api/fleet/${workspaceId}/${serverAction}`, { method: 'POST' });
   }
 
+  async spawnAgent(data: { task: string; persona?: string; model?: string; parentWorkspaceId?: string }): Promise<FleetSession> {
+    const res = await this.fetch('/api/fleet/spawn', { method: 'POST', body: JSON.stringify(data) });
+    return res.json();
+  }
+
   // --- Cron ---
   async getCronJobs(): Promise<CronJob[]> {
     const res = await this.fetch('/api/cron');
@@ -323,6 +401,7 @@ class LocalAdapter {
 
   // --- Notifications ---
   subscribeNotifications(onNotification: (n: Notification) => void): () => void {
+    if (!this._connected) return () => {};
     return this.subscribeSSE('/api/notifications/stream', (data) => onNotification(data as Notification));
   }
 
@@ -376,6 +455,11 @@ class LocalAdapter {
 
   async getLiteLLMStatus(): Promise<unknown> {
     const res = await this.fetch('/api/litellm/status');
+    return res.json();
+  }
+
+  async getModelPricing(): Promise<ModelPricing[]> {
+    const res = await this.fetch('/api/litellm/pricing');
     return res.json();
   }
 
@@ -506,7 +590,26 @@ class LocalAdapter {
     return res.json();
   }
 
-  // --- SSE helper ---
+  // --- Waggle Dance ---
+  async getWaggleSignals(): Promise<WaggleSignal[]> {
+    const res = await this.fetch('/api/waggle/signals');
+    return res.json();
+  }
+
+  async publishWaggleSignal(data: Omit<WaggleSignal, 'id' | 'timestamp'>): Promise<WaggleSignal> {
+    const res = await this.fetch('/api/waggle/signals', { method: 'POST', body: JSON.stringify(data) });
+    return res.json();
+  }
+
+  async acknowledgeWaggleSignal(id: string): Promise<void> {
+    await this.fetch(`/api/waggle/signals/${id}/ack`, { method: 'PATCH' });
+  }
+
+  subscribeWaggleDance(onSignal: (signal: WaggleSignal) => void): () => void {
+    if (!this._connected) return () => {};
+    return this.subscribeSSE('/api/waggle/stream', (data) => onSignal(data as WaggleSignal));
+  }
+
   private subscribeSSE(path: string, onData: (data: unknown) => void): () => void {
     const url = `${this.baseUrl}${path}`;
     if (this.sseConnections.has(path)) {
@@ -516,6 +619,10 @@ class LocalAdapter {
     this.sseConnections.set(path, es);
     es.onmessage = (e) => {
       try { onData(JSON.parse(e.data)); } catch { /* skip */ }
+    };
+    es.onerror = () => {
+      es.close();
+      this.sseConnections.delete(path);
     };
     return () => {
       es.close();
@@ -537,5 +644,6 @@ class LocalAdapter {
   }
 }
 
+export type { LocalAdapter };
 export const adapter = new LocalAdapter();
 export default LocalAdapter;

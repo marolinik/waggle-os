@@ -10,11 +10,21 @@ export type AppView =
   | 'mission-control'
   | 'settings';
 
+export type StorageType = 'virtual' | 'local' | 'team';
+
+export interface StorageConfig {
+  endpoint?: string;
+  bucket?: string;
+  region?: string;
+  prefix?: string;
+}
+
 export interface Workspace {
   id: string;
   name: string;
   group: string;
   persona?: string;
+  templateId?: string;
   hue?: number;
   memoryCount?: number;
   sessionCount?: number;
@@ -22,6 +32,20 @@ export interface Workspace {
   health?: 'healthy' | 'degraded' | 'error';
   budget?: { used: number; limit: number };
   model?: string;
+  shared?: boolean;
+  storageType?: StorageType;
+  storagePath?: string;
+  storageConfig?: StorageConfig;
+}
+
+export interface FileEntry {
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
+  size?: number;
+  mimeType?: string;
+  modifiedAt?: string;
+  createdAt?: string;
 }
 
 export interface WorkspaceContext {
@@ -184,4 +208,28 @@ export interface KGEdge {
   source: string;
   target: string;
   relationship: string;
+}
+
+export interface ModelPricing {
+  model: string;
+  inputCostPer1k: number;
+  outputCostPer1k: number;
+  estimatedTokens?: { min: number; max: number };
+  estimatedCost?: { min: number; max: number };
+}
+
+export interface WaggleSignal {
+  id: string;
+  type: 'discovery' | 'handoff' | 'insight' | 'alert' | 'coordination';
+  sourceWorkspaceId: string;
+  sourceWorkspaceName?: string;
+  sourceAgentId?: string;
+  sourceUser?: string;
+  targetWorkspaceId?: string;
+  title: string;
+  content: string;
+  metadata?: Record<string, unknown>;
+  timestamp: string;
+  acknowledged?: boolean;
+  priority?: 'low' | 'normal' | 'high' | 'critical';
 }

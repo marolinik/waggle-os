@@ -12,7 +12,10 @@ export const useNotifications = () => {
         setNotifications(data);
         setUnreadCount(data.filter(n => !n.read).length);
       })
-      .catch(() => {});
+      .catch(() => {
+        setNotifications([]);
+        setUnreadCount(0);
+      });
 
     try {
       const unsub = adapter.subscribeNotifications((n: Notification) => {
@@ -24,19 +27,15 @@ export const useNotifications = () => {
   }, []);
 
   const markRead = useCallback(async (id: string) => {
-    try {
-      await adapter.markNotificationRead(id);
-      setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
-      setUnreadCount(prev => Math.max(0, prev - 1));
-    } catch { /* ignore */ }
+    try { await adapter.markNotificationRead(id); } catch { /* local */ }
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+    setUnreadCount(prev => Math.max(0, prev - 1));
   }, []);
 
   const markAllRead = useCallback(async () => {
-    try {
-      await adapter.markAllNotificationsRead();
-      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-      setUnreadCount(0);
-    } catch { /* ignore */ }
+    try { await adapter.markAllNotificationsRead(); } catch { /* local */ }
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    setUnreadCount(0);
   }, []);
 
   return { notifications, unreadCount, markRead, markAllRead };

@@ -56,7 +56,7 @@ const CockpitApp = () => {
   return (
     <div className="h-full overflow-auto p-4">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-display font-semibold text-foreground">System Menu</h2>
+        <h2 className="text-lg font-display font-semibold text-foreground">Cockpit</h2>
         <button onClick={refresh} disabled={loading} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground transition-colors">
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
         </button>

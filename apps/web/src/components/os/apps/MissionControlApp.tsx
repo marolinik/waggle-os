@@ -1,9 +1,14 @@
 import { useState, useEffect } from 'react';
-import { Play, Pause, Square, Loader2, Radio, Clock, Zap, RefreshCw, Users } from 'lucide-react';
+import { Play, Pause, Square, Radio, Clock, Zap, RefreshCw, Users, Plus, Rocket } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
-import type { FleetSession } from '@/lib/types';
+import type { FleetSession, Workspace } from '@/lib/types';
+import { Button } from '@/components/ui/button';
 
-const MissionControlApp = () => {
+interface MissionControlAppProps {
+  onSpawnOpen?: () => void;
+}
+
+const MissionControlApp = ({ onSpawnOpen }: MissionControlAppProps) => {
   const [sessions, setSessions] = useState<FleetSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [teamMembers, setTeamMembers] = useState<{ id: string; name: string; status: string }[]>([]);
@@ -47,9 +52,19 @@ const MissionControlApp = () => {
         <h2 className="text-lg font-display font-semibold text-foreground flex items-center gap-2">
           <Radio className="w-5 h-5 text-primary" /> Mission Control
         </h2>
-        <button onClick={refresh} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground transition-colors">
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-        </button>
+        <div className="flex items-center gap-1">
+          <Button
+            size="sm"
+            variant="default"
+            className="gap-1.5 text-xs h-8"
+            onClick={onSpawnOpen}
+          >
+            <Plus className="w-3.5 h-3.5" /> Spawn Agent
+          </Button>
+          <button onClick={refresh} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground transition-colors">
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -73,6 +88,14 @@ const MissionControlApp = () => {
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Radio className="w-10 h-10 text-muted-foreground/20 mb-3" />
               <p className="text-sm text-muted-foreground">No active fleet sessions</p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3 gap-1.5 text-xs"
+                onClick={onSpawnOpen}
+              >
+                <Rocket className="w-3.5 h-3.5" /> Spawn your first agent
+              </Button>
             </div>
           )}
           <div className="space-y-2">

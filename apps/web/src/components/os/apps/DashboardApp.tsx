@@ -1,8 +1,30 @@
 import { useState } from 'react';
-import { Plus, Activity, Clock, Brain, ChevronRight } from 'lucide-react';
+import { Plus, Activity, Clock, Brain, ChevronRight, Users, Sparkles } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getPersonaById } from '@/lib/personas';
 import type { Workspace } from '@/lib/types';
+
+const TEMPLATE_LABELS: Record<string, string> = {
+  'sales-pipeline': 'Sales',
+  'research-project': 'Research',
+  'code-review': 'Code Review',
+  'marketing-campaign': 'Marketing',
+  'product-launch': 'Product Launch',
+  'legal-review': 'Legal',
+  'agency-consulting': 'Consulting',
+  'blank': 'Custom',
+};
+
+const PERSONA_LABELS: Record<string, string> = {
+  'researcher': 'Researcher',
+  'writer': 'Writer',
+  'analyst': 'Analyst',
+  'coder': 'Coder',
+  'project-manager': 'PM',
+  'executive-assistant': 'EA',
+  'sales-rep': 'Sales Rep',
+  'marketer': 'Marketer',
+};
 
 interface DashboardAppProps {
   workspaces: Workspace[];
@@ -85,7 +107,28 @@ const DashboardApp = ({ workspaces, activeWorkspaceId, onSelectWorkspace, onCrea
                       <div className="flex items-center gap-1.5">
                         <span className="text-sm font-display font-medium text-foreground truncate">{ws.name}</span>
                         <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${healthColors[ws.health || 'healthy']}`} />
+                        {ws.shared && (
+                          <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-sky-500/15 text-sky-400 text-[9px] font-display shrink-0">
+                            <Users className="w-2.5 h-2.5" /> Team
+                          </span>
+                        )}
                       </div>
+                      {/* Agent identity: template + persona */}
+                      {(ws.templateId || ws.persona) && (
+                        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                          {ws.templateId && ws.templateId !== 'blank' && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-primary/10 text-primary text-[9px] font-display">
+                              <Sparkles className="w-2.5 h-2.5" />
+                              {TEMPLATE_LABELS[ws.templateId] || ws.templateId}
+                            </span>
+                          )}
+                          {ws.persona && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-accent/50 text-accent-foreground text-[9px] font-display">
+                              {PERSONA_LABELS[ws.persona] || persona?.name || ws.persona}
+                            </span>
+                          )}
+                        </div>
+                      )}
                       <div className="flex items-center gap-3 mt-1 text-[10px] text-muted-foreground">
                         {ws.memoryCount !== undefined && (
                           <span className="flex items-center gap-0.5"><Brain className="w-2.5 h-2.5" />{ws.memoryCount}</span>
