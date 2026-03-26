@@ -10,6 +10,7 @@ import { formatWorkspaceStatePrompt } from '../workspace-state.js';
 import { emitNotification } from './notifications.js';
 import { emitWaggleSignal } from './waggle-signals.js';
 import { emitAuditEvent } from './events.js';
+import { getOptimizerService } from '../services/optimizer-service.js';
 import { validateOrigin } from '../cors-config.js';
 import { getPersona, composePersonaPrompt } from '@waggle/agent';
 import { TeamSync, WaggleConfig } from '@waggle/core';
@@ -1008,6 +1009,25 @@ When approaching any task:
           }
         }
 
+        // ── GEPA Optimizer: classify + expand vague prompts ──────────
+        // Uses @ax-llm/ax with cheapest model (Haiku) to optimize user input
+        // before the main LLM call. Non-blocking — falls back gracefully.
+        let gepaExpanded: string | null = null;
+        if (!hasCustomRunner) {
+          try {
+            const optimizer = await getOptimizerService(server);
+            if (optimizer) {
+              const intent = await optimizer.classify(agentMessage);
+              gepaExpanded = await optimizer.expandIfVague(agentMessage, intent);
+              if (gepaExpanded) {
+                sendEvent('step', { content: `GEPA: Expanded prompt for better results` });
+              }
+            }
+          } catch {
+            // Non-blocking — optimizer failure doesn't affect chat
+          }
+        }
+
         // Build system prompt (with workspace path awareness + recalled memories)
         // GAP-006: Prepend ambiguity guard when user message is too brief/vague
         // Q11:A — Context-aware: only trigger ambiguity detection on the FIRST user
@@ -1015,7 +1035,7 @@ When approaching any task:
         // "LGTM" are valid replies and should not be flagged.
         const priorUserMessages = history.filter((m: { role: string }) => m.role === 'user').length;
         const isFirstUserMessage = priorUserMessages <= 1; // history already includes current message
-        const shouldCheckAmbiguity = isFirstUserMessage;
+        const shouldCheckAmbiguity = isFirstUserMessage && !gepaExpanded; // Skip ambiguity check if GEPA already expanded
         const ambiguityPrefix = (!hasCustomRunner && shouldCheckAmbiguity && isAmbiguousMessage(agentMessage)) ? AMBIGUITY_PROMPT : '';
 
         // Template welcome context — inject on first message in a workspace with a template
@@ -1176,7 +1196,18 @@ When approaching any task:
 
         // Apply sliding window to conversation history — keep full history in RAM
         // for persistence but only send recent messages to the agent loop
-        const windowedMessages = applyContextWindow(history);
+        let windowedMessages = applyContextWindow(history);
+
+        // GEPA: if the prompt was expanded, replace the last user message
+        // so the LLM sees the optimized version (original stays in disk history)
+        if (gepaExpanded) {
+          windowedMessages = windowedMessages.map((m: any, i: number, arr: any[]) => {
+            if (i === arr.length - 1 && m.role === 'user') {
+              return { ...m, content: `${gepaExpanded}\n\n(Original: "${m.content}")` };
+            }
+            return m;
+          });
+        }
 
         // Governance policies for team workspaces
         let governancePolicies: { blockedTools?: string[]; allowedSources?: string[] } | undefined;
