@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Plus, Users, Cloud, HardDrive, Server } from 'lucide-react';
+import { X, Plus, Users, Cloud, HardDrive, Server, FolderOpen } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { PERSONAS } from '@/lib/personas';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -9,6 +9,7 @@ interface CreateWorkspaceDialogProps {
   open: boolean;
   onClose: () => void;
   onCreate: (data: { name: string; group: string; persona?: string; shared?: boolean; storageType?: StorageType; storagePath?: string }) => void;
+  onBrowsePath?: (storageType: StorageType, currentPath: string) => void;
 }
 
 const GROUPS = ['Personal', 'Work', 'Research', 'Team'];
@@ -19,7 +20,13 @@ const STORAGE_OPTIONS: { type: StorageType; label: string; desc: string; icon: R
   { type: 'team', label: 'Team', desc: 'Remote S3/MinIO storage', icon: Server, color: 'text-sky-400' },
 ];
 
-const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialogProps) => {
+/** Generate a default virtual storage path based on workspace name */
+function defaultVirtualPath(workspaceName: string): string {
+  const slug = workspaceName.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || 'untitled';
+  return `/workspaces/${slug}`;
+}
+
+const CreateWorkspaceDialog = ({ open, onClose, onCreate, onBrowsePath }: CreateWorkspaceDialogProps) => {
   const [name, setName] = useState('');
   const [group, setGroup] = useState('Personal');
   const [selectedPersona, setSelectedPersona] = useState<string | undefined>();
@@ -44,6 +51,8 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
   };
 
   if (!open) return null;
+
+  const virtualPath = defaultVirtualPath(name);
 
   return (
     <AnimatePresence>
@@ -121,20 +130,60 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
               </div>
             </div>
 
-            {/* Storage Path (for local/team) */}
-            {storageType !== 'virtual' && (
-              <div>
-                <label className="text-xs text-muted-foreground block mb-1.5">
-                  {storageType === 'local' ? 'Local Directory Path' : 'Bucket / Prefix'}
-                </label>
-                <input
-                  value={storagePath}
-                  onChange={e => setStoragePath(e.target.value)}
-                  placeholder={storageType === 'local' ? '/home/user/projects/my-workspace' : 'my-bucket/workspace-prefix'}
-                  className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50 font-mono text-[11px]"
-                />
-              </div>
-            )}
+            {/* Storage Path */}
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1.5">
+                {storageType === 'virtual'
+                  ? 'Storage Path'
+                  : storageType === 'local'
+                    ? 'Local Directory Path'
+                    : 'Bucket / Prefix'}
+              </label>
+
+              {storageType === 'virtual' ? (
+                /* Virtual: read-only computed path */
+                <div className="flex items-center gap-2 w-full bg-muted/30 border border-border/30 rounded-xl px-3 py-2">
+                  <Cloud className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+                  <span className="text-[11px] font-mono text-muted-foreground truncate">
+                    {virtualPath}
+                  </span>
+                </div>
+              ) : (
+                /* Local / Team: editable path with browse button */
+                <div className="flex items-center gap-1.5">
+                  <input
+                    value={storagePath}
+                    onChange={e => setStoragePath(e.target.value)}
+                    placeholder={storageType === 'local' ? '/home/user/projects/my-workspace' : 'my-bucket/workspace-prefix'}
+                    className="flex-1 bg-muted/50 border border-border/50 rounded-xl px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50 font-mono text-[11px]"
+                  />
+                  <button
+                    onClick={() => onBrowsePath?.(storageType, storagePath)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-secondary/50 border border-border/40 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/70 transition-colors shrink-0"
+                    title={storageType === 'local' ? 'Browse local folders' : 'Browse remote storage'}
+                  >
+                    <FolderOpen className="w-3.5 h-3.5" />
+                    <span className="text-[11px]">Browse</span>
+                  </button>
+                </div>
+              )}
+
+              {storageType === 'virtual' && (
+                <p className="text-[9px] text-muted-foreground/60 mt-1">
+                  Managed automatically — files stored in server-managed storage.
+                </p>
+              )}
+              {storageType === 'local' && (
+                <p className="text-[9px] text-muted-foreground/60 mt-1">
+                  Select or type the local directory where workspace files will be stored.
+                </p>
+              )}
+              {storageType === 'team' && (
+                <p className="text-[9px] text-muted-foreground/60 mt-1">
+                  Browse or type the S3/MinIO bucket and prefix for shared storage.
+                </p>
+              )}
+            </div>
 
             <div>
               <label className="text-xs text-muted-foreground block mb-1.5">Persona (optional)</label>
