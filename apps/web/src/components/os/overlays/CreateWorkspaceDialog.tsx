@@ -319,7 +319,7 @@ interface TemplateCreatorProps {
   initialData?: WorkspaceTemplate | null;
 }
 
-function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, editingTemplate }: TemplateCreatorProps) {
+function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, editingTemplate, initialData }: TemplateCreatorProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [persona, setPersona] = useState('');
@@ -329,19 +329,20 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Populate fields when editing
+  // Populate fields when editing or duplicating
   useEffect(() => {
-    if (editingTemplate) {
-      setName(editingTemplate.name);
-      setDescription(editingTemplate.description);
-      setPersona(editingTemplate.persona);
-      setSelectedConnectors(editingTemplate.connectors);
-      setSelectedCommands(editingTemplate.suggestedCommands);
-      setStarterMemory(editingTemplate.starterMemory.join('\n'));
+    const source = editingTemplate || initialData;
+    if (source) {
+      setName(editingTemplate ? source.name : `${source.name} (Copy)`);
+      setDescription(source.description);
+      setPersona(source.persona);
+      setSelectedConnectors([...source.connectors]);
+      setSelectedCommands([...source.suggestedCommands]);
+      setStarterMemory(source.starterMemory.join('\n'));
     } else {
       setName(''); setDescription(''); setPersona(''); setSelectedConnectors([]); setSelectedCommands([]); setStarterMemory('');
     }
-  }, [editingTemplate, open]);
+  }, [editingTemplate, initialData, open]);
 
   // AI generation state
   const [aiPrompt, setAiPrompt] = useState('');
