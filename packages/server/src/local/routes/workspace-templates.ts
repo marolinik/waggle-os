@@ -205,6 +205,58 @@ export const workspaceTemplateRoutes: FastifyPluginAsync = async (server) => {
     return template;
   });
 
+  // PUT /api/workspace-templates/:id — update a custom template
+  server.put<{
+    Params: { id: string };
+    Body: {
+      name: string; description: string; persona: string;
+      connectors: string[]; suggestedCommands: string[]; starterMemory: string[];
+    };
+  }>('/api/workspace-templates/:id', async (request, reply) => {
+    const { id } = request.params;
+    const body = (request.body ?? {}) as Record<string, unknown>;
+    const validationError = validateTemplateBody(body);
+    if (validationError) return reply.status(400).send({ error: validationError });
+
+    // Cannot edit built-in templates
+    if (BUILT_IN_TEMPLATES.some(t => t.id === id)) {
+      return reply.status(403).send({ error: 'Cannot edit built-in templates' });
+    }
+
+    const existing = readUserTemplates(server.localConfig.dataDir);
+    const idx = existing.findIndex(t => t.id === id);
+    if (idx < 0) return reply.status(404).send({ error: 'Template not found' });
+
+    existing[idx] = {
+      ...existing[idx],
+      name: body.name as string,
+      description: body.description as string,
+      persona: body.persona as string,
+      connectors: body.connectors as string[],
+      suggestedCommands: body.suggestedCommands as string[],
+      starterMemory: body.starterMemory as string[],
+    };
+    writeUserTemplates(server.localConfig.dataDir, existing);
+    return existing[idx];
+  });
+
+  // DELETE /api/workspace-templates/:id — delete a custom template
+  server.delete<{ Params: { id: string } }>('/api/workspace-templates/:id', async (request, reply) => {
+    const { id } = request.params;
+
+    if (BUILT_IN_TEMPLATES.some(t => t.id === id)) {
+      return reply.status(403).send({ error: 'Cannot delete built-in templates' });
+    }
+
+    const existing = readUserTemplates(server.localConfig.dataDir);
+    const idx = existing.findIndex(t => t.id === id);
+    if (idx < 0) return reply.status(404).send({ error: 'Template not found' });
+
+    existing.splice(idx, 1);
+    writeUserTemplates(server.localConfig.dataDir, existing);
+    return { ok: true };
+  });
+
   // POST /api/workspace-templates/generate — AI-powered template generation
   server.post<{
     Body: {
