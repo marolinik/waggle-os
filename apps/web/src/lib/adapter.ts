@@ -520,6 +520,11 @@ class LocalAdapter {
     await this.fetch(`/api/personas/${id}`, { method: 'DELETE' });
   }
 
+  async updatePersona(id: string, data: { name?: string; description?: string; icon?: string; systemPrompt?: string; tools?: string[] }): Promise<unknown> {
+    const res = await this.fetch(`/api/personas/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+    return res.json();
+  }
+
   async generatePersona(prompt: string): Promise<{ name: string; description: string; systemPrompt: string; tools: string[] }> {
     const res = await this.fetch('/api/personas/generate', { method: 'POST', body: JSON.stringify({ prompt }) });
     return res.json();
