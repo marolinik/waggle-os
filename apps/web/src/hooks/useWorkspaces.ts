@@ -73,6 +73,13 @@ export const useWorkspaces = () => {
     }
   }, [activeWorkspaceId, workspaces]);
 
+  const patchWorkspace = useCallback(async (id: string, data: Partial<Pick<Workspace, 'persona' | 'agentGroupId' | 'name' | 'group' | 'model'>>) => {
+    try {
+      await adapter.patchWorkspace(id, data);
+    } catch { /* best-effort */ }
+    setWorkspaces(prev => prev.map(w => w.id === id ? { ...w, ...data } : w));
+  }, []);
+
   const selectWorkspace = useCallback((id: string) => {
     setActiveWorkspaceId(id);
   }, []);
@@ -82,6 +89,6 @@ export const useWorkspaces = () => {
   return {
     workspaces, activeWorkspace, activeWorkspaceId,
     loading, error, createWorkspace, deleteWorkspace,
-    selectWorkspace, refresh: fetchWorkspaces,
+    patchWorkspace, selectWorkspace, refresh: fetchWorkspaces,
   };
 };
