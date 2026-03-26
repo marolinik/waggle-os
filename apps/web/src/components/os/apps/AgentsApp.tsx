@@ -800,6 +800,15 @@ const AgentsApp = () => {
     } catch { setError('Failed to create group'); }
   };
 
+  const handleUpdateGroup = async (data: { name: string; description: string; strategy: 'parallel' | 'sequential' | 'coordinator'; members: AgentGroupMember[] }) => {
+    if (!editingGroup) return;
+    try {
+      await adapter.updateAgentGroup(editingGroup.id, data);
+      setEditingGroup(null);
+      await loadData();
+    } catch { setError('Failed to update group'); }
+  };
+
   const handleDeleteGroup = async (id: string) => {
     try {
       await adapter.deleteAgentGroup(id);
@@ -830,6 +839,7 @@ const AgentsApp = () => {
     setShowCreate(false);
     setShowCreateGroup(false);
     setEditingAgent(null);
+    setEditingGroup(null);
     setSearch('');
   };
 
