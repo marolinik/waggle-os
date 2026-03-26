@@ -343,6 +343,7 @@ const AgentsApp = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
+  const [editingAgent, setEditingAgent] = useState<BackendPersona | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
@@ -419,6 +420,23 @@ const AgentsApp = () => {
     }
   };
 
+  const handleUpdate = async (data: { name: string; description: string; icon: string; tools: string[]; systemPrompt: string }) => {
+    if (!editingAgent) return;
+    try {
+      await adapter.updatePersona(editingAgent.id, {
+        name: data.name,
+        description: data.description,
+        icon: data.icon,
+        systemPrompt: data.systemPrompt,
+        tools: data.tools,
+      });
+      setEditingAgent(null);
+      await loadData();
+    } catch {
+      setError('Failed to update agent');
+    }
+  };
+
   const handleDelete = async (id: string) => {
     try {
       await adapter.deletePersona(id);
@@ -457,7 +475,7 @@ const AgentsApp = () => {
           <span className="text-[10px] text-muted-foreground">({agents.length})</span>
         </div>
         <button
-          onClick={() => { setShowCreate(!showCreate); setSelectedId(null); }}
+          onClick={() => { setShowCreate(!showCreate); setSelectedId(null); setEditingAgent(null); }}
           className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
             showCreate
               ? 'bg-secondary/50 text-muted-foreground'
@@ -497,7 +515,7 @@ const AgentsApp = () => {
                   agent={agent}
                   localPersona={PERSONAS.find(p => p.id === agent.id)}
                   selected={selectedId === agent.id && !showCreate}
-                  onSelect={() => { setSelectedId(agent.id); setShowCreate(false); }}
+                  onSelect={() => { setSelectedId(agent.id); setShowCreate(false); setEditingAgent(null); }}
                   onDelete={agent.custom ? () => handleDelete(agent.id) : undefined}
                 />
               ))}
