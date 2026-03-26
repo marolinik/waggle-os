@@ -31,7 +31,8 @@ interface CreateWorkspaceDialogProps {
   }) => void;
 }
 
-const GROUPS = ['Personal', 'Work', 'Research', 'Team'];
+import { STANDARD_GROUPS } from '@/lib/workspace-groups';
+const GROUPS = [...STANDARD_GROUPS];
 
 const STORAGE_OPTIONS: { type: StorageType; label: string; desc: string; icon: React.ElementType; color: string }[] = [
   { type: 'virtual', label: 'Virtual', desc: 'Server-managed storage', icon: Cloud, color: 'text-violet-400' },

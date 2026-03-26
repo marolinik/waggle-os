@@ -3,6 +3,7 @@ import { Plus, Activity, Clock, Brain, ChevronRight, Users, Sparkles } from 'luc
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getPersonaById } from '@/lib/personas';
 import type { Workspace } from '@/lib/types';
+import { getAllGroups } from '@/lib/workspace-groups';
 
 const TEMPLATE_LABELS: Record<string, string> = {
   'sales-pipeline': 'Sales',
@@ -49,8 +50,9 @@ const DashboardApp = ({ workspaces, activeWorkspaceId, onSelectWorkspace, onCrea
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<string>('All');
 
-  // Get unique group names
-  const groupNames = ['All', ...new Set(workspaces.map(ws => ws.group || 'Personal'))];
+  // Get group names: standard groups first, then any custom, with "All" at front
+  const existingGroups = workspaces.map(ws => ws.group || 'Personal');
+  const groupNames = ['All', ...getAllGroups(existingGroups).filter(g => existingGroups.includes(g))];
 
   // Filter workspaces
   const filtered = activeFilter === 'All'
