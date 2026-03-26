@@ -326,6 +326,33 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors }:
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // AI generation state
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [generating, setGenerating] = useState(false);
+
+  const handleAiGenerate = async () => {
+    if (!aiPrompt.trim()) return;
+    setGenerating(true);
+    setError(null);
+    try {
+      const result = await adapter.generateTemplateFromPrompt(aiPrompt.trim(), {
+        availableConnectors: availableConnectors.map(c => c.id),
+        availableCommands: AVAILABLE_COMMANDS.map(c => c.id),
+        availablePersonas: TEMPLATE_PERSONAS.map(p => p.id),
+      });
+      if (result.name) setName(result.name);
+      if (result.description) setDescription(result.description);
+      if (result.persona) setPersona(result.persona);
+      if (result.connectors) setSelectedConnectors(result.connectors);
+      if (result.suggestedCommands) setSelectedCommands(result.suggestedCommands);
+      if (result.starterMemory) setStarterMemory(result.starterMemory.join('\n'));
+    } catch (err: any) {
+      setError(err.message ?? 'AI generation failed — fill fields manually.');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!name.trim() || !description.trim()) return;
     setSaving(true);
