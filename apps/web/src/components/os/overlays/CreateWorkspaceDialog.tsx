@@ -837,9 +837,21 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
       <FolderPickerModal open={showFolderPicker} storageType={storageType} currentPath={storagePath}
         onSelect={(path) => setStoragePath(path)} onClose={() => setShowFolderPicker(false)} />
 
-      <TemplateCreatorModal open={showTemplateCreator} onClose={() => setShowTemplateCreator(false)}
+      <TemplateCreatorModal
+        open={showTemplateCreator}
+        onClose={() => { setShowTemplateCreator(false); setEditingTemplate(null); }}
         availableConnectors={connectorChipOptions}
-        onCreated={(t) => { setTemplates(prev => [...prev, t]); setSelectedTemplate(t.id); }} />
+        editingTemplate={editingTemplate}
+        onCreated={(t) => {
+          if (editingTemplate) {
+            setTemplates(prev => prev.map(x => x.id === t.id ? t : x));
+          } else {
+            setTemplates(prev => [...prev, t]);
+          }
+          setSelectedTemplate(t.id);
+          setEditingTemplate(null);
+        }}
+      />
     </AnimatePresence>
   );
 };
