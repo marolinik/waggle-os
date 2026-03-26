@@ -743,6 +743,31 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
             <button onClick={() => setViewMode('grid')} className={`p-1 rounded ${viewMode === 'grid' ? 'bg-muted' : 'hover:bg-muted/50'}`}>
               <Grid3X3 className="w-3.5 h-3.5" />
             </button>
+            <div className="w-px h-4 bg-border/30 mx-0.5" />
+            <div className="relative group">
+              <button className="p-1 rounded hover:bg-muted/50" title="Keyboard Shortcuts">
+                <Info className="w-3.5 h-3.5 text-muted-foreground" />
+              </button>
+              <div className="absolute right-0 top-full mt-1 w-56 rounded-lg border border-border/40 bg-popover p-3 text-popover-foreground shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity z-50">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Keyboard Shortcuts</p>
+                {[
+                  ['Ctrl+A', 'Select all'],
+                  ['Delete', 'Delete selected'],
+                  ['Ctrl+C', 'Copy'],
+                  ['Ctrl+X', 'Cut'],
+                  ['Ctrl+V', 'Paste'],
+                  ['Ctrl+D', 'Download'],
+                  ['F2', 'Rename'],
+                  ['Enter', 'Open'],
+                  ['Esc', 'Clear selection'],
+                ].map(([key, desc]) => (
+                  <div key={key} className="flex items-center justify-between py-0.5">
+                    <span className="text-[11px] text-foreground/80">{desc}</span>
+                    <kbd className="text-[10px] font-mono bg-muted text-muted-foreground rounded px-1.5 py-0.5">{key}</kbd>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 

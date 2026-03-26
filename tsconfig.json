@@ -9,8 +9,6 @@
     "resolveJsonModule": true,
     "isolatedModules": true
   },
-  "references": [
-    { "path": "apps/web" }
-  ],
+  "files": ["apps/web/src/vite-env.d.ts"],
   "exclude": ["node_modules"]
 }

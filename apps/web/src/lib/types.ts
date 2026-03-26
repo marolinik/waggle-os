@@ -24,6 +24,7 @@ export interface Workspace {
   name: string;
   group: string;
   persona?: string;
+  agentGroupId?: string;
   templateId?: string;
   hue?: number;
   memoryCount?: number;
@@ -46,6 +47,20 @@ export interface FileEntry {
   mimeType?: string;
   modifiedAt?: string;
   createdAt?: string;
+}
+
+export type TemplateCategory = 'sales' | 'research' | 'engineering' | 'marketing' | 'operations' | 'legal' | 'custom';
+
+export interface WorkspaceTemplate {
+  id: string;
+  name: string;
+  description: string;
+  persona: string;
+  connectors: string[];
+  suggestedCommands: string[];
+  starterMemory: string[];
+  builtIn: boolean;
+  category?: TemplateCategory;
 }
 
 export interface WorkspaceContext {

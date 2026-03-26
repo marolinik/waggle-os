@@ -13,6 +13,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
 
+export type TemplateCategory = 'sales' | 'research' | 'engineering' | 'marketing' | 'operations' | 'legal' | 'custom';
+
 /** Shape of a workspace template. */
 export interface WorkspaceTemplate {
   id: string;
@@ -24,6 +26,7 @@ export interface WorkspaceTemplate {
   starterMemory: string[];
   /** Whether this template is built-in (true) or user-created (false). */
   builtIn: boolean;
+  category?: TemplateCategory;
 }
 
 /** The 6 built-in workspace templates. */
@@ -41,6 +44,7 @@ export const BUILT_IN_TEMPLATES: WorkspaceTemplate[] = [
       'Use /research to investigate companies, /draft to create outreach emails.',
     ],
     builtIn: true,
+    category: 'sales',
   },
   {
     id: 'research-project',
@@ -69,6 +73,7 @@ export const BUILT_IN_TEMPLATES: WorkspaceTemplate[] = [
       'Use /review for structured code analysis, /plan for multi-step refactoring.',
     ],
     builtIn: true,
+    category: 'engineering',
   },
   {
     id: 'marketing-campaign',
@@ -83,6 +88,7 @@ export const BUILT_IN_TEMPLATES: WorkspaceTemplate[] = [
       'Use /draft for content creation, /research for competitor and audience analysis.',
     ],
     builtIn: true,
+    category: 'marketing',
   },
   {
     id: 'product-launch',
@@ -97,6 +103,7 @@ export const BUILT_IN_TEMPLATES: WorkspaceTemplate[] = [
       'Use /plan for launch checklists, /status for progress reports, /spawn for parallel work.',
     ],
     builtIn: true,
+    category: 'operations',
   },
   {
     id: 'legal-review',
@@ -111,8 +118,8 @@ export const BUILT_IN_TEMPLATES: WorkspaceTemplate[] = [
       'Use /review for document analysis, /research for legal precedent, /memory for prior findings.',
     ],
     builtIn: true,
+    category: 'legal',
   },
-  // F6: Agency / Consulting template for multi-client workspace management
   {
     id: 'agency-consulting',
     name: 'Agency / Consulting',
@@ -126,6 +133,7 @@ export const BUILT_IN_TEMPLATES: WorkspaceTemplate[] = [
       'Use /status for project metrics, /draft for deliverables, /catchup for quick briefings.',
     ],
     builtIn: true,
+    category: 'operations',
   },
 ];
 
@@ -203,5 +211,141 @@ export const workspaceTemplateRoutes: FastifyPluginAsync = async (server) => {
     writeUserTemplates(server.localConfig.dataDir, existing);
 
     return template;
+  });
+
+  // PUT /api/workspace-templates/:id — update a custom template
+  server.put<{
+    Params: { id: string };
+    Body: {
+      name: string; description: string; persona: string;
+      connectors: string[]; suggestedCommands: string[]; starterMemory: string[];
+    };
+  }>('/api/workspace-templates/:id', async (request, reply) => {
+    const { id } = request.params;
+    const body = (request.body ?? {}) as Record<string, unknown>;
+    const validationError = validateTemplateBody(body);
+    if (validationError) return reply.status(400).send({ error: validationError });
+
+    // Cannot edit built-in templates
+    if (BUILT_IN_TEMPLATES.some(t => t.id === id)) {
+      return reply.status(403).send({ error: 'Cannot edit built-in templates' });
+    }
+
+    const existing = readUserTemplates(server.localConfig.dataDir);
+    const idx = existing.findIndex(t => t.id === id);
+    if (idx < 0) return reply.status(404).send({ error: 'Template not found' });
+
+    existing[idx] = {
+      ...existing[idx],
+      name: body.name as string,
+      description: body.description as string,
+      persona: body.persona as string,
+      connectors: body.connectors as string[],
+      suggestedCommands: body.suggestedCommands as string[],
+      starterMemory: body.starterMemory as string[],
+    };
+    writeUserTemplates(server.localConfig.dataDir, existing);
+    return existing[idx];
+  });
+
+  // DELETE /api/workspace-templates/:id — delete a custom template
+  server.delete<{ Params: { id: string } }>('/api/workspace-templates/:id', async (request, reply) => {
+    const { id } = request.params;
+
+    if (BUILT_IN_TEMPLATES.some(t => t.id === id)) {
+      return reply.status(403).send({ error: 'Cannot delete built-in templates' });
+    }
+
+    const existing = readUserTemplates(server.localConfig.dataDir);
+    const idx = existing.findIndex(t => t.id === id);
+    if (idx < 0) return reply.status(404).send({ error: 'Template not found' });
+
+    existing.splice(idx, 1);
+    writeUserTemplates(server.localConfig.dataDir, existing);
+    return { ok: true };
+  });
+
+  // POST /api/workspace-templates/generate — AI-powered template generation
+  server.post<{
+    Body: {
+      prompt: string;
+      availableConnectors: string[];
+      availableCommands: string[];
+      availablePersonas: string[];
+    };
+  }>('/api/workspace-templates/generate', async (request, reply) => {
+    const { prompt, availableConnectors, availableCommands, availablePersonas } = request.body as {
+      prompt: string;
+      availableConnectors: string[];
+      availableCommands: string[];
+      availablePersonas: string[];
+    };
+
+    if (!prompt?.trim()) {
+      return reply.status(400).send({ error: 'prompt is required' });
+    }
+
+    // Check for API key in server settings
+    const settingsPath = path.join(server.localConfig.dataDir, 'settings.json');
+    let apiKey = '';
+    let model = 'claude-sonnet-4-20250514';
+    try {
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+      apiKey = settings.apiKey || '';
+      model = settings.model || model;
+    } catch { /* use defaults */ }
+
+    if (!apiKey) {
+      return reply.status(400).send({ error: 'API key not configured. Set it in Settings first.' });
+    }
+
+    try {
+      const { default: Anthropic } = await import('@anthropic-ai/sdk');
+      const client = new Anthropic({ apiKey });
+
+      const systemPrompt = `You are a workspace template generator. Given a user's description of their use case, generate a workspace template configuration.
+
+Available personas: ${availablePersonas.join(', ')}
+Available connectors: ${availableConnectors.join(', ')}
+Available commands: ${availableCommands.join(', ')}
+
+Return a JSON object with these fields:
+- name: short template name (2-4 words)
+- description: one-sentence description of the template's purpose
+- persona: one of the available personas that best fits
+- connectors: array of relevant connectors from the available list
+- suggestedCommands: array of relevant commands from the available list
+- starterMemory: array of 2-4 sentences that seed the agent's memory with domain context and key workflows
+
+Only use values from the available lists for persona, connectors, and commands. Return ONLY valid JSON, no markdown.`;
+
+      const response = await client.messages.create({
+        model,
+        max_tokens: 1024,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: prompt }],
+      });
+
+      const text = response.content
+        .filter((b: { type: string }) => b.type === 'text')
+        .map((b: { text: string }) => b.text)
+        .join('');
+
+      // Parse JSON from response (strip markdown fences if present)
+      const jsonStr = text.replace(/```json?\s*/g, '').replace(/```/g, '').trim();
+      const generated = JSON.parse(jsonStr);
+
+      return {
+        name: generated.name || '',
+        description: generated.description || '',
+        persona: generated.persona || 'analyst',
+        connectors: Array.isArray(generated.connectors) ? generated.connectors : [],
+        suggestedCommands: Array.isArray(generated.suggestedCommands) ? generated.suggestedCommands : [],
+        starterMemory: Array.isArray(generated.starterMemory) ? generated.starterMemory : [],
+      };
+    } catch (err) {
+      const msg = (err as Error).message;
+      return reply.status(500).send({ error: `AI generation failed: ${msg}` });
+    }
   });
 };

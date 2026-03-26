@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   MessageSquare, LayoutDashboard, Settings, Brain,
-  Activity, Package, Radio, Zap, FolderOpen,
+  Activity, Package, Radio, Zap, FolderOpen, Bot,
 } from "lucide-react";
 import wallpaper from "@/assets/wallpaper.jpg";
 import waggleLogo from "@/assets/waggle-logo.jpeg";
@@ -18,6 +18,7 @@ import CockpitApp from "./apps/CockpitApp";
 import MissionControlApp from "./apps/MissionControlApp";
 import CapabilitiesApp from "./apps/CapabilitiesApp";
 import WaggleDanceApp from "./apps/WaggleDanceApp";
+import AgentsApp from "./apps/AgentsApp";
 import FilesApp from "./apps/FilesApp";
 import GlobalSearch from "./overlays/GlobalSearch";
 import CreateWorkspaceDialog from "./overlays/CreateWorkspaceDialog";
@@ -85,6 +86,7 @@ const appConfig: Record<string, { title: string; icon: React.ReactNode; pos: { x
   "capabilities": { title: "Skills & Apps", icon: <Package className="w-3.5 h-3.5 text-violet-400" />, pos: { x: 150, y: 80 }, size: { w: "560px", h: "480px" } },
   "waggle-dance": { title: "Waggle Dance", icon: <Zap className="w-3.5 h-3.5 text-amber-400" />, pos: { x: 160, y: 50 }, size: { w: "580px", h: "460px" } },
   "files": { title: "Files", icon: <FolderOpen className="w-3.5 h-3.5 text-amber-300" />, pos: { x: 140, y: 55 }, size: { w: "620px", h: "440px" } },
+  "agents": { title: "Agents", icon: <Bot className="w-3.5 h-3.5 text-orange-400" />, pos: { x: 170, y: 65 }, size: { w: "640px", h: "480px" } },
 };
 
 const Desktop = () => {
@@ -309,6 +311,8 @@ const Desktop = () => {
         return <CapabilitiesApp />;
       case 'waggle-dance':
         return <WaggleDanceApp />;
+      case 'agents':
+        return <AgentsApp />;
       case 'files': {
         const wsId = activeWorkspaceId || 'local-default';
         const ws = workspaces.find(w => w.id === wsId);

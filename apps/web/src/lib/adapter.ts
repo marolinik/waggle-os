@@ -4,7 +4,7 @@ import type {
   AgentStep, Session, SkillPack, FleetSession, CronJob,
   Notification, AgentStatus, Persona, SystemHealth,
   Connector, Settings, StreamEvent, KGNode, KGEdge,
-  ModelPricing, WaggleSignal, FileEntry,
+  ModelPricing, WaggleSignal, FileEntry, WorkspaceTemplate,
 } from './types';
 
 const DEFAULT_SERVER = 'http://127.0.0.1:3333';
@@ -107,7 +107,38 @@ class LocalAdapter {
     return res.json();
   }
 
-  async createWorkspace(data: { name: string; group: string; persona?: string; templateId?: string; shared?: boolean }): Promise<Workspace> {
+  // --- Workspace Templates ---
+  async getWorkspaceTemplates(): Promise<{ templates: WorkspaceTemplate[]; count: number }> {
+    const res = await this.fetch('/api/workspace-templates');
+    return res.json();
+  }
+
+  async createWorkspaceTemplate(data: Omit<WorkspaceTemplate, 'id' | 'builtIn'>): Promise<WorkspaceTemplate> {
+    const res = await this.fetch('/api/workspace-templates', { method: 'POST', body: JSON.stringify(data) });
+    return res.json();
+  }
+
+  async generateTemplateFromPrompt(
+    prompt: string,
+    context: { availableConnectors: string[]; availableCommands: string[]; availablePersonas: string[] },
+  ): Promise<Omit<WorkspaceTemplate, 'id' | 'builtIn'>> {
+    const res = await this.fetch('/api/workspace-templates/generate', {
+      method: 'POST',
+      body: JSON.stringify({ prompt, ...context }),
+    });
+    return res.json();
+  }
+
+  async updateWorkspaceTemplate(id: string, data: Omit<WorkspaceTemplate, 'id' | 'builtIn'>): Promise<WorkspaceTemplate> {
+    const res = await this.fetch(`/api/workspace-templates/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    return res.json();
+  }
+
+  async deleteWorkspaceTemplate(id: string): Promise<void> {
+    await this.fetch(`/api/workspace-templates/${id}`, { method: 'DELETE' });
+  }
+
+  async createWorkspace(data: { name: string; group: string; persona?: string; agentGroupId?: string; templateId?: string; shared?: boolean }): Promise<Workspace> {
     const res = await this.fetch('/api/workspaces', { method: 'POST', body: JSON.stringify(data) });
     return res.json();
   }
@@ -117,7 +148,7 @@ class LocalAdapter {
     return res.json();
   }
 
-  async patchWorkspace(id: string, data: Partial<Pick<Workspace, 'persona' | 'templateId' | 'name' | 'group' | 'model'>>): Promise<Workspace> {
+  async patchWorkspace(id: string, data: Partial<Pick<Workspace, 'persona' | 'agentGroupId' | 'templateId' | 'name' | 'group' | 'model'>>): Promise<Workspace> {
     const res = await this.fetch(`/api/workspaces/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
     return res.json();
   }
@@ -133,6 +164,17 @@ class LocalAdapter {
 
   async getWorkspaceFiles(workspaceId: string): Promise<unknown[]> {
     const res = await this.fetch(`/api/workspaces/${workspaceId}/files`);
+    return res.json();
+  }
+
+  // --- Browse (system-level, not workspace-scoped) ---
+  async browseLocal(dirPath = '/'): Promise<{ entries: { name: string; path: string; type: string }[]; current: string }> {
+    const res = await this.fetch(`/api/browse/local?path=${encodeURIComponent(dirPath)}`);
+    return res.json();
+  }
+
+  async browseLocalMkdir(dirPath: string): Promise<{ name: string; path: string; type: string }> {
+    const res = await this.fetch('/api/browse/local/mkdir', { method: 'POST', body: JSON.stringify({ path: dirPath }) });
     return res.json();
   }
 
@@ -467,6 +509,66 @@ class LocalAdapter {
   async getPersonas(): Promise<Persona[]> {
     const res = await this.fetch('/api/personas');
     return unwrapArray(await res.json());
+  }
+
+  async createPersona(data: { name: string; description: string; icon?: string; systemPrompt: string; tools?: string[] }): Promise<Persona> {
+    const res = await this.fetch('/api/personas', { method: 'POST', body: JSON.stringify(data) });
+    return res.json();
+  }
+
+  async deletePersona(id: string): Promise<void> {
+    await this.fetch(`/api/personas/${id}`, { method: 'DELETE' });
+  }
+
+  async updatePersona(id: string, data: { name?: string; description?: string; icon?: string; systemPrompt?: string; tools?: string[] }): Promise<unknown> {
+    const res = await this.fetch(`/api/personas/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+    return res.json();
+  }
+
+  async generatePersona(prompt: string): Promise<{ name: string; description: string; systemPrompt: string; tools: string[] }> {
+    const res = await this.fetch('/api/personas/generate', { method: 'POST', body: JSON.stringify({ prompt }) });
+    return res.json();
+  }
+
+  async getCapabilityStatus(): Promise<unknown> {
+    const res = await this.fetch('/api/capabilities/status');
+    return res.json();
+  }
+
+  // --- Agent Groups ---
+  async getAgentGroups(): Promise<unknown[]> {
+    const res = await this.fetch('/api/agent-groups');
+    return unwrapArray(await res.json());
+  }
+
+  async createAgentGroup(data: { name: string; description: string; strategy: string; members: { agentId: string; roleInGroup: string; executionOrder: number }[] }): Promise<unknown> {
+    const res = await this.fetch('/api/agent-groups', { method: 'POST', body: JSON.stringify(data) });
+    return res.json();
+  }
+
+  async deleteAgentGroup(id: string): Promise<void> {
+    await this.fetch(`/api/agent-groups/${id}`, { method: 'DELETE' });
+  }
+
+  async updateAgentGroup(id: string, data: { name?: string; description?: string; strategy?: string; members?: { agentId: string; roleInGroup: string; executionOrder: number }[] }): Promise<unknown> {
+    const res = await this.fetch(`/api/agent-groups/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+    return res.json();
+  }
+
+  async runAgentGroup(groupId: string, task: string): Promise<unknown> {
+    const res = await this.fetch(`/api/agent-groups/${groupId}/run`, { method: 'POST', body: JSON.stringify({ task, teamId: 'default' }) });
+    return res.json();
+  }
+
+  async getJobStatus(jobId: string): Promise<{ status: string; startedAt?: string; completedAt?: string; output?: unknown } | null> {
+    try {
+      const res = await this.fetch(`/api/jobs/${jobId}`);
+      return res.json();
+    } catch { return null; }
+  }
+
+  async cancelJob(jobId: string): Promise<void> {
+    await this.fetch(`/api/jobs/${jobId}/cancel`, { method: 'POST' });
   }
 
   // --- Health ---
