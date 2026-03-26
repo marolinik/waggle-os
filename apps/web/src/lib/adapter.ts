@@ -118,7 +118,17 @@ class LocalAdapter {
     return res.json();
   }
 
-  async createWorkspace(data: { name: string; group: string; persona?: string; templateId?: string; shared?: boolean }): Promise<Workspace> {
+  async generateTemplateFromPrompt(
+    prompt: string,
+    context: { availableConnectors: string[]; availableCommands: string[]; availablePersonas: string[] },
+  ): Promise<Omit<WorkspaceTemplate, 'id' | 'builtIn'>> {
+    const res = await this.fetch('/api/workspace-templates/generate', {
+      method: 'POST',
+      body: JSON.stringify({ prompt, ...context }),
+    });
+    return res.json();
+  }
+
     const res = await this.fetch('/api/workspaces', { method: 'POST', body: JSON.stringify(data) });
     return res.json();
   }
