@@ -1,0 +1,139 @@
+# Waggle — Release Build Workflow
+#
+# Builds desktop apps for Windows (NSIS) and macOS (DMG) on tag push.
+# Publishes artifacts as GitHub Release assets.
+#
+# Trigger: push tag v* (e.g., v1.0.0)
+# Also supports manual dispatch for testing.
+
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build sidecar
+        run: node scripts/build-sidecar.mjs
+
+      - name: Build frontend
+        run: cd app && npm run build
+
+      - name: Build Tauri (Windows)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: app
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Waggle ${{ github.ref_name }}'
+          releaseBody: 'See the release notes for details.'
+          releaseDraft: true
+          prerelease: false
+
+  build-macos:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        target: [aarch64-apple-darwin, x86_64-apple-darwin]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build sidecar
+        run: node scripts/build-sidecar.mjs
+
+      - name: Build frontend
+        run: cd app && npm run build
+
+      - name: Build Tauri (macOS)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: app
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Waggle ${{ github.ref_name }}'
+          releaseBody: 'See the release notes for details.'
+          releaseDraft: true
+          prerelease: false
+          args: --target ${{ matrix.target }}
+
+  # Create the updater JSON manifest for Tauri auto-update
+  update-manifest:
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate latest.json
+        run: |
+          echo '{
+            "version": "${{ github.ref_name }}",
+            "notes": "See release notes",
+            "pub_date": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'",
+            "platforms": {
+              "windows-x86_64": {
+                "url": "https://github.com/marolinik/waggle/releases/download/${{ github.ref_name }}/Waggle_${{ github.ref_name }}_x64-setup.nsis.zip",
+                "signature": ""
+              },
+              "darwin-aarch64": {
+                "url": "https://github.com/marolinik/waggle/releases/download/${{ github.ref_name }}/Waggle_${{ github.ref_name }}_aarch64.app.tar.gz",
+                "signature": ""
+              },
+              "darwin-x86_64": {
+                "url": "https://github.com/marolinik/waggle/releases/download/${{ github.ref_name }}/Waggle_${{ github.ref_name }}_x64.app.tar.gz",
+                "signature": ""
+              }
+            }
+          }' > latest.json
+
+      - name: Upload latest.json to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: latest.json
+          tag_name: ${{ github.ref_name }}
+          draft: true

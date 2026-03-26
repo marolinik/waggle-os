@@ -1,0 +1,56 @@
+{
+  "name": "@waggle/marketplace",
+  "version": "0.1.0",
+  "description": "Waggle Marketplace — Unified package catalog and installer for skills, plugins, and MCP servers",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "bin": {
+    "waggle-market": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli.ts",
+    "sync": "tsx src/cli.ts sync",
+    "scan": "tsx src/cli.ts scan-all",
+    "audit": "tsx src/cli.ts audit",
+    "lint": "eslint src/",
+    "clean": "rm -rf dist/"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0"
+  },
+  "optionalDependencies": {
+    "mcp-guardian": "^2.4.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.5.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "files": [
+    "dist/",
+    "README.md"
+  ],
+  "keywords": [
+    "waggle",
+    "marketplace",
+    "skills",
+    "plugins",
+    "mcp",
+    "ai-agents",
+    "claude-code"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/marolinik/waggle"
+  }
+}

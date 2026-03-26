@@ -1,0 +1,20 @@
+{
+  "name": "@waggle/worker",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@waggle/shared": "*",
+    "@waggle/core": "*",
+    "@waggle/agent": "*",
+    "bullmq": "^5.0.0",
+    "drizzle-orm": "^0.44.0",
+    "ioredis": "^5.4.0",
+    "postgres": "^3.4.0"
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "name": "@waggle-ai/waggle",
+  "version": "1.0.0",
+  "description": "Waggle — Your personal AI agent swarm. Start with `npx @waggle-ai/waggle`.",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "bin": {
+    "waggle": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsup",
+    "start": "tsx src/cli.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "swarm",
+    "memory",
+    "waggle",
+    "llm",
+    "personal-assistant"
+  ],
+  "author": "Marko Markovic",
+  "license": "MIT",
+  "dependencies": {
+    "@clerk/fastify": "^3.0.0",
+    "@fastify/cors": "^10.0.0",
+    "@fastify/static": "^9.0.0",
+    "@fastify/websocket": "^11.0.0",
+    "archiver": "^7.0.1",
+    "better-sqlite3": "^12.6.2",
+    "bullmq": "^5.0.0",
+    "cron-parser": "^4.9.0",
+    "docx": "^9.6.1",
+    "drizzle-orm": "^0.44.0",
+    "exceljs": "^4.4.0",
+    "fastify": "^5.3.0",
+    "fastify-plugin": "^5.0.0",
+    "glob": "^13.0.6",
+    "ioredis": "^5.4.0",
+    "mammoth": "^1.11.0",
+    "pdf-parse": "^2.4.5",
+    "postgres": "^3.4.0",
+    "sqlite-vec": "^0.1.7-alpha.2",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "id": "writing-suite",
+  "name": "Writing Suite",
+  "description": "Draft, compare, and extract actions from documents",
+  "skills": ["draft-memo", "compare-docs", "extract-actions"]
+}

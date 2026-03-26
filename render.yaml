@@ -1,0 +1,58 @@
+# Waggle Teams — Render.com Blueprint
+#
+# Deploy with one click: https://render.com/deploy
+# Or: render blueprint apply
+#
+# This creates:
+# - waggle-server: Node.js web service (serves frontend + API)
+# - waggle-postgres: Managed PostgreSQL database
+# - waggle-redis: Managed Redis instance
+
+services:
+  - type: web
+    name: waggle-server
+    runtime: node
+    plan: starter
+    buildCommand: npm install && cd app && npm run build
+    startCommand: npx tsx packages/server/src/local/start.ts --skip-litellm
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: WAGGLE_SKIP_LITELLM
+        value: '1'
+      - key: WAGGLE_FRONTEND_DIR
+        value: ./app/dist
+      - key: WAGGLE_DATA_DIR
+        value: /data
+      - key: DATABASE_URL
+        fromDatabase:
+          name: waggle-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: waggle-redis
+          property: connectionString
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: CLERK_SECRET_KEY
+        sync: false
+      - key: CLERK_PUBLISHABLE_KEY
+        sync: false
+      - key: WAGGLE_LICENSE_KEY
+        sync: false
+    disk:
+      name: waggle-data
+      mountPath: /data
+      sizeGB: 10
+    autoDeploy: true
+
+databases:
+  - name: waggle-postgres
+    plan: starter
+    databaseName: waggle
+    user: waggle
+
+  - name: waggle-redis
+    plan: starter

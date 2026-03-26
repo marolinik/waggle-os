@@ -1,0 +1,18 @@
+{
+  "name": "@waggle/weaver",
+  "version": "0.1.0",
+  "description": "Waggle weaver — Memory consolidation engine",
+  "type": "module",
+  "main": "src/consolidation.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@waggle/core": "*"
+  },
+  "license": "MIT"
+}

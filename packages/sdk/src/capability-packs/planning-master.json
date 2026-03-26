@@ -1,0 +1,6 @@
+{
+  "id": "planning-master",
+  "name": "Planning Master",
+  "description": "Daily planning, task breakdown, and execution workflows",
+  "skills": ["daily-plan", "task-breakdown", "plan-execute", "decision-matrix"]
+}

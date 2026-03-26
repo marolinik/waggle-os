@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 120" fill="none">
+  <!-- Waggle bee logo — two hexagons (body), wings, antennae -->
+
+  <!-- Antennae -->
+  <path d="M42 28 L38 16" stroke="#E8920F" stroke-width="3.5" stroke-linecap="round"/>
+  <path d="M58 28 L62 16" stroke="#E8920F" stroke-width="3.5" stroke-linecap="round"/>
+
+  <!-- Upper hexagon (head) -->
+  <path d="M50 26 L65 35 L65 51 L50 60 L35 51 L35 35 Z"
+        stroke="#E8920F" stroke-width="3" stroke-linejoin="round" fill="none"/>
+
+  <!-- Lower hexagon (abdomen) -->
+  <path d="M50 60 L65 69 L65 85 L50 94 L35 85 L35 69 Z"
+        stroke="#E8920F" stroke-width="3" stroke-linejoin="round" fill="none"/>
+
+  <!-- Left wing -->
+  <path d="M35 51 L18 46 Q10 50 18 58 L35 60"
+        stroke="#E8920F" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" fill="none"/>
+
+  <!-- Right wing -->
+  <path d="M65 51 L82 46 Q90 50 82 58 L65 60"
+        stroke="#E8920F" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" fill="none"/>
+</svg>

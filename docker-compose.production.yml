@@ -1,0 +1,104 @@
+# Waggle Teams — Production Docker Compose
+#
+# Usage:
+#   docker compose -f docker-compose.production.yml up -d
+#
+# Required environment variables (create .env file or pass via -e):
+#   ANTHROPIC_API_KEY    — Your Anthropic API key
+#   CLERK_SECRET_KEY     — Clerk authentication secret (team mode)
+#   CLERK_PUBLISHABLE_KEY — Clerk publishable key
+#   WAGGLE_LICENSE_KEY   — Waggle license key (optional for V1)
+#
+# Optional:
+#   OPENAI_API_KEY       — If using OpenAI models
+#   WAGGLE_MAX_USERS     — Max team members (default: unlimited)
+
+services:
+  waggle:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: waggle/server:latest
+    ports:
+      - '3333:3333'
+    environment:
+      - DATABASE_URL=postgres://waggle:${POSTGRES_PASSWORD:-waggle_prod}@postgres:5432/waggle
+      - REDIS_URL=redis://redis:6379
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - CLERK_SECRET_KEY=${CLERK_SECRET_KEY:-}
+      - CLERK_PUBLISHABLE_KEY=${CLERK_PUBLISHABLE_KEY:-}
+      - WAGGLE_LICENSE_KEY=${WAGGLE_LICENSE_KEY:-}
+      - WAGGLE_MAX_USERS=${WAGGLE_MAX_USERS:-0}
+      - WAGGLE_SKIP_LITELLM=1
+      - NODE_ENV=production
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-waggle}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-waggle_s3_prod}
+      - MINIO_BUCKET=waggle-files
+    volumes:
+      - waggle-data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '--spider', 'http://localhost:3333/health']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: waggle
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-waggle_prod}
+      POSTGRES_DB: waggle
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U waggle']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-waggle}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-waggle_s3_prod}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  waggle-data:
+  pgdata:
+  redisdata:
+  minio-data:

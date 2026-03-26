@@ -1,0 +1,6 @@
+{
+  "id": "research-workflow",
+  "name": "Research Workflow",
+  "description": "Complete research pipeline: investigate, synthesize, explain",
+  "skills": ["research-synthesis", "explain-concept", "research-team"]
+}

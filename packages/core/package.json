@@ -1,0 +1,23 @@
+{
+  "name": "@waggle/core",
+  "version": "0.1.0",
+  "description": "Waggle core — MindDB, Identity, Awareness, Frames, Sessions, Search, Knowledge",
+  "type": "module",
+  "main": "src/mind/db.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.6.2",
+    "cron-parser": "^4.9.0",
+    "sqlite-vec": "^0.1.7-alpha.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13"
+  },
+  "license": "MIT"
+}

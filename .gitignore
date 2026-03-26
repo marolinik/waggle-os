@@ -12,6 +12,19 @@ dist
 dist-ssr
 *.local
 
+# Environment
+.env
+.env.local
+.env*.local
+
+# Waggle data
+.waggle/
+*.mind
+marketplace.db
+
+# Build artifacts
+*.tsbuildinfo
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

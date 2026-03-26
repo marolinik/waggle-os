@@ -1,0 +1,6 @@
+{
+  "id": "decision-framework",
+  "name": "Decision Framework",
+  "description": "Structured decision making with risk assessment and retrospectives",
+  "skills": ["decision-matrix", "risk-assessment", "retrospective"]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "@waggle/sdk",
+  "version": "0.1.0",
+  "description": "Waggle SDK — skill and plugin authoring toolkit",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}

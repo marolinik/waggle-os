@@ -1,24 +1,16 @@
 {
   "compilerOptions": {
-    "allowJs": true,
-    "noImplicitAny": false,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "paths": {
-      "@/*": [
-        "./src/*"
-      ]
-    },
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "skipLibCheck": true,
-    "strictNullChecks": false
+    "strict": false,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true
   },
-  "files": [],
   "references": [
-    {
-      "path": "./tsconfig.app.json"
-    },
-    {
-      "path": "./tsconfig.node.json"
-    }
-  ]
+    { "path": "apps/web" }
+  ],
+  "exclude": ["node_modules"]
 }

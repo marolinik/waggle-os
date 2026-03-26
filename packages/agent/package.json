@@ -1,0 +1,20 @@
+{
+  "name": "@waggle/agent",
+  "version": "0.1.0",
+  "description": "Waggle agent — Orchestrator and Tools",
+  "type": "module",
+  "main": "src/orchestrator.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@waggle/core": "*",
+    "docx": "^9.6.1",
+    "glob": "^13.0.6"
+  },
+  "license": "MIT"
+}

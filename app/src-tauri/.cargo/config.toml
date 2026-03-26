@@ -1,0 +1,4 @@
+# Ensure MSVC linker is found before Git's link.exe
+# This is needed because Git Bash ships a GNU coreutils `link` that shadows MSVC's linker.
+[target.x86_64-pc-windows-msvc]
+linker = "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\link.exe"

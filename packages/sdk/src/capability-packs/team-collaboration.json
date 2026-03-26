@@ -1,0 +1,6 @@
+{
+  "id": "team-collaboration",
+  "name": "Team Collaboration",
+  "description": "Catch up, share status, prep meetings, and pair review",
+  "skills": ["catch-up", "status-update", "meeting-prep", "review-pair"]
+}

@@ -1,16 +1,31 @@
-import { defineConfig } from "vitest/config";
-import react from "@vitejs/plugin-react-swc";
-import path from "path";
+import { defineConfig } from 'vitest/config';
+import path from 'node:path';
 
 export default defineConfig({
-  plugins: [react()],
-  test: {
-    environment: "jsdom",
-    globals: true,
-    setupFiles: ["./src/test/setup.ts"],
-    include: ["src/**/*.{test,spec}.{ts,tsx}"],
-  },
   resolve: {
-    alias: { "@": path.resolve(__dirname, "./src") },
+    alias: {
+      // Marketplace uses ESM .js extensions — alias to source for Vitest
+      '@waggle/marketplace': path.resolve(__dirname, 'packages/marketplace/src/index.ts'),
+      // drizzle-orm lives in server's node_modules (can't hoist due to peer dep conflicts)
+      'drizzle-orm': path.resolve(__dirname, 'packages/server/node_modules/drizzle-orm'),
+    },
+  },
+  test: {
+    globals: true,
+    testTimeout: 30_000,
+    setupFiles: ['./vitest.setup.ts'],
+    include: [
+      'packages/*/tests/**/*.test.ts',
+      'packages/*/tests/**/*.test.tsx',
+      'tests/**/*.test.ts',
+      'app/scripts/**/*.test.ts',
+      'app/tests/**/*.test.ts',
+    ],
+    exclude: ['apps/**', 'node_modules/**'],
+    coverage: {
+      provider: 'v8',
+      include: ['packages/*/src/**/*.ts'],
+      exclude: ['packages/*/src/**/*.d.ts'],
+    },
   },
 });

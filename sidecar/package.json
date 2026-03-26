@@ -1,0 +1,16 @@
+{
+  "name": "waggle-sidecar",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@waggle/core": "*",
+    "@waggle/agent": "*",
+    "@waggle/weaver": "*"
+  }
+}
