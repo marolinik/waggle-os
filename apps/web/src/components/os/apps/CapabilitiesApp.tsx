@@ -179,10 +179,11 @@ const CapabilitiesApp = () => {
         </div>
       )}
 
+      {/* TODO: Marketplace tab may show duplicate data if getMarketplacePacks() returns same content as getSkills() — needs backend fix to serve distinct catalog */}
       <div className={viewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 gap-2' : 'space-y-2'}>
-        {filtered.map(pack => (
+        {filtered.map((pack, index) => (
           <PackCard
-            key={pack.id}
+            key={`${pack.id || pack.name}-${pack.category || 'uncategorized'}-${index}`}
             pack={pack}
             onInstall={tab === 'marketplace' ? handleMarketplaceInstall : handleInstall}
           />

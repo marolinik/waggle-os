@@ -41,13 +41,13 @@ export async function getOptimizerService(server: FastifyInstance): Promise<Opti
 
   try {
     // Dynamic import to avoid loading @ax-llm/ax at startup if not needed
-    const { AxAI } = await import('@ax-llm/ax');
+    const { AxAI, AxAIAnthropicModel } = await import('@ax-llm/ax');
     const { PromptOptimizer } = await import('@waggle/optimizer');
 
     const ai = new AxAI({
       name: 'anthropic',
       apiKey,
-      config: { model: 'claude-haiku-4-5-20251001' }, // Use cheapest model for optimization
+      config: { model: AxAIAnthropicModel.Claude45Haiku }, // Use cheapest model for optimization
     });
 
     const optimizer = new PromptOptimizer({ ai });

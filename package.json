@@ -16,6 +16,10 @@
     "build": "cd apps/web && npx vite build --outDir ../../dist --emptyOutDir",
     "build:dev": "cd apps/web && npx vite build --mode development --outDir ../../dist --emptyOutDir",
     "preview": "cd apps/web && npx vite preview",
+    "build:packages": "cd packages/shared && npx tsc --build && cd ../core && npx tsc --build && cd ../agent && npx tsc --build && cd ../server && npx tsc --build",
+    "build:all": "npm run build:packages && npm run build",
+    "dev:www": "cd apps/www && npx vite",
+    "build:www": "cd apps/www && npx vite build",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -45,6 +49,7 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "^6.0.1"
+    "@vitejs/plugin-react": "^6.0.1",
+    "lightningcss-win32-x64-msvc": "^1.32.0"
   }
 }

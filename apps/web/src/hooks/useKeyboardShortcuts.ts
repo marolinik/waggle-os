@@ -7,17 +7,21 @@ interface UseKeyboardShortcutsOptions {
   onTogglePersonaSwitcher: () => void;
   onToggleWorkspaceSwitcher: () => void;
   onToggleKeyboardHelp: () => void;
+  onCloseTopWindow?: () => void;
+  onMinimizeTopWindow?: () => void;
 }
 
 const APP_SHORTCUTS: Record<string, AppId> = {
   '0': 'dashboard',
   '1': 'chat',
-  '2': 'capabilities',
-  '3': 'cockpit',
-  '4': 'mission-control',
+  '2': 'agents',
+  '3': 'files',
+  '4': 'cockpit',
   '5': 'memory',
   '6': 'events',
   '7': 'settings',
+  '8': 'capabilities',
+  '9': 'waggle-dance',
 };
 
 export const useKeyboardShortcuts = ({
@@ -26,10 +30,26 @@ export const useKeyboardShortcuts = ({
   onTogglePersonaSwitcher,
   onToggleWorkspaceSwitcher,
   onToggleKeyboardHelp,
+  onCloseTopWindow,
+  onMinimizeTopWindow,
 }: UseKeyboardShortcutsOptions) => {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const ctrl = e.ctrlKey || e.metaKey;
+
+      // Ctrl+W: Close focused window (prevent browser tab close)
+      if (ctrl && e.key === 'w' && !e.shiftKey) {
+        e.preventDefault();
+        onCloseTopWindow?.();
+        return;
+      }
+
+      // Ctrl+Shift+M: Minimize focused window
+      if (ctrl && e.shiftKey && (e.key === 'M' || e.key === 'm')) {
+        e.preventDefault();
+        onMinimizeTopWindow?.();
+        return;
+      }
 
       // Ctrl+Shift+0-7: Open apps
       if (ctrl && e.shiftKey && APP_SHORTCUTS[e.key]) {
@@ -69,5 +89,5 @@ export const useKeyboardShortcuts = ({
 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [onOpenApp, onToggleGlobalSearch, onTogglePersonaSwitcher, onToggleWorkspaceSwitcher, onToggleKeyboardHelp]);
+  }, [onOpenApp, onToggleGlobalSearch, onTogglePersonaSwitcher, onToggleWorkspaceSwitcher, onToggleKeyboardHelp, onCloseTopWindow, onMinimizeTopWindow]);
 };

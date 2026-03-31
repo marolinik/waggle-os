@@ -30,6 +30,12 @@ const SUGGESTED_SECRETS: { category: string; items: { name: string; type: string
     ],
   },
   {
+    category: 'Embedding Providers',
+    items: [
+      { name: 'voyage-api-key', type: 'api_key', label: 'Voyage AI API Key (Embeddings)' },
+    ],
+  },
+  {
     category: 'Search & Tools',
     items: [
       { name: 'perplexity', type: 'api_key', label: 'Perplexity API Key (Search + LLM)' },

@@ -55,10 +55,10 @@ const StatusBar = ({ workspaceName, model, tokensUsed, costUsd, offline, unreadN
       </div>
 
       <div className="flex items-center gap-4">
-        <button onClick={onSearchClick} className="text-muted-foreground hover:text-primary transition-colors" title="Search (⌘K)">
+        <button onClick={onSearchClick} className="text-muted-foreground hover:text-primary transition-colors" aria-label="Search" title="Search (⌘K)">
           <Search className="w-3.5 h-3.5" />
         </button>
-        <button onClick={onNotificationClick} className="relative text-muted-foreground hover:text-primary transition-colors">
+        <button onClick={onNotificationClick} className="relative text-muted-foreground hover:text-primary transition-colors" aria-label="Notifications">
           <Bell className="w-3.5 h-3.5" />
           {unreadNotifications > 0 && (
             <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-destructive text-[7px] text-destructive-foreground flex items-center justify-center font-bold">

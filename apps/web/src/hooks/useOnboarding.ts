@@ -1,8 +1,10 @@
 import { useState, useCallback } from 'react';
+import type { UserTier } from '@/lib/dock-tiers';
 
 export interface OnboardingState {
   completed: boolean;
   step: number;
+  tier?: UserTier;
   workspaceId?: string;
   apiKeySet?: boolean;
   templateId?: string;
@@ -21,12 +23,20 @@ function loadState(): OnboardingState {
     // Migrate from old key
     if (localStorage.getItem('waggle_onboarding_complete') === 'true') {
       localStorage.removeItem('waggle_onboarding_complete');
-      const done: OnboardingState = { ...defaultState, completed: true, step: 6 };
+      const done: OnboardingState = { ...defaultState, completed: true, step: 7 };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(done));
       return done;
     }
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return { ...defaultState, ...JSON.parse(raw) };
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const state = { ...defaultState, ...parsed };
+      // Existing completed users without a tier default to 'simple'
+      if (parsed.completed && !parsed.tier) {
+        state.tier = 'simple';
+      }
+      return state;
+    }
   } catch { /* ignore */ }
   return defaultState;
 }
@@ -47,7 +57,7 @@ export const useOnboarding = () => {
   }, []);
 
   const complete = useCallback(() => {
-    update({ completed: true, step: 6 });
+    update({ completed: true, step: 7 });
   }, [update]);
 
   const reset = useCallback(() => {

@@ -12,7 +12,8 @@ export const useNotifications = () => {
         setNotifications(data);
         setUnreadCount(data.filter(n => !n.read).length);
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error('[useNotifications] fetch failed:', err);
         setNotifications([]);
         setUnreadCount(0);
       });
@@ -23,17 +24,17 @@ export const useNotifications = () => {
         if (!n.read) setUnreadCount(prev => prev + 1);
       });
       return unsub;
-    } catch { /* ignore SSE errors */ }
+    } catch (err) { console.error('[useNotifications] SSE subscribe failed:', err); }
   }, []);
 
   const markRead = useCallback(async (id: string) => {
-    try { await adapter.markNotificationRead(id); } catch { /* local */ }
+    try { await adapter.markNotificationRead(id); } catch (err) { console.error('[useNotifications] mark read failed:', err); }
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
     setUnreadCount(prev => Math.max(0, prev - 1));
   }, []);
 
   const markAllRead = useCallback(async () => {
-    try { await adapter.markAllNotificationsRead(); } catch { /* local */ }
+    try { await adapter.markAllNotificationsRead(); } catch (err) { console.error('[useNotifications] mark all read failed:', err); }
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
     setUnreadCount(0);
   }, []);

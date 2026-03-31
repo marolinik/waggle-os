@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, MessageSquare, Brain, Clock, Settings, Loader2 } from 'lucide-react';
+import { Search, MessageSquare, Brain, Clock, Settings, Loader2, LayoutDashboard, Bot, FolderOpen, Activity, Package, Plug, Store, Mic, Sparkles } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -18,10 +18,18 @@ interface SearchResult {
 }
 
 const QUICK_COMMANDS: SearchResult[] = [
-  { type: 'command', id: 'dashboard', title: 'Open Dashboard', icon: Settings },
-  { type: 'command', id: 'chat', title: 'Open Chat', icon: MessageSquare },
-  { type: 'command', id: 'memory', title: 'Open Memory', icon: Brain },
-  { type: 'command', id: 'settings', title: 'Open Settings', icon: Settings },
+  { type: 'command', id: 'dashboard', title: 'Dashboard', subtitle: 'Home overview', icon: LayoutDashboard },
+  { type: 'command', id: 'chat', title: 'Chat', subtitle: 'Open conversation', icon: MessageSquare },
+  { type: 'command', id: 'agents', title: 'Agents', subtitle: 'Manage personas & groups', icon: Bot },
+  { type: 'command', id: 'files', title: 'Files', subtitle: 'Workspace documents', icon: FolderOpen },
+  { type: 'command', id: 'memory', title: 'Memory', subtitle: 'Knowledge frames', icon: Brain },
+  { type: 'command', id: 'cockpit', title: 'Command Center', subtitle: 'System health & ops', icon: Activity },
+  { type: 'command', id: 'capabilities', title: 'Skills & Apps', subtitle: 'Installed capabilities', icon: Package },
+  { type: 'command', id: 'connectors', title: 'Connectors', subtitle: 'Service integrations', icon: Plug },
+  { type: 'command', id: 'scheduled-jobs', title: 'Scheduled Jobs', subtitle: 'Recurring tasks', icon: Clock },
+  { type: 'command', id: 'marketplace', title: 'Marketplace', subtitle: 'Browse extensions', icon: Store },
+  { type: 'command', id: 'voice', title: 'Voice', subtitle: 'Voice interface', icon: Mic },
+  { type: 'command', id: 'settings', title: 'Settings', subtitle: 'Configuration', icon: Settings },
 ];
 
 const GlobalSearch = ({ open, onClose, onNavigate }: GlobalSearchProps) => {
@@ -100,6 +108,7 @@ const GlobalSearch = ({ open, onClose, onNavigate }: GlobalSearchProps) => {
         >
           <div className="flex items-center gap-3 px-4 py-3 border-b border-border/30">
             <Search className="w-5 h-5 text-muted-foreground" />
+            <span className="text-[9px] px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-400 font-semibold">AI</span>
             <input
               ref={inputRef}
               value={query}
@@ -137,6 +146,7 @@ const GlobalSearch = ({ open, onClose, onNavigate }: GlobalSearchProps) => {
             <span>↑↓ Navigate</span>
             <span>↵ Open</span>
             <span>⌘K Toggle</span>
+            <span className="ml-auto text-violet-400/60">AI understands natural language</span>
           </div>
         </motion.div>
       </motion.div>

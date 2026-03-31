@@ -17,6 +17,12 @@ export interface WorkspaceConfig {
   team?: string | null;
   /** Filesystem directory where agent operates and generates files. */
   directory?: string;
+  /** Storage type for workspace files. */
+  storageType?: 'virtual' | 'local' | 'team';
+  /** Path to local file storage for this workspace. */
+  storagePath?: string;
+  /** Extra storage provider configuration (e.g. S3 bucket, credentials). */
+  storageConfig?: Record<string, unknown>;
   created: string; // ISO 8601
 
   // --- Team Mode fields (Phase 5) ---

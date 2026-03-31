@@ -1,0 +1,96 @@
+/* ── Waggle Landing Page — Hive Design System ── */
+/* No Tailwind — pure CSS with custom properties for this static site */
+
+:root {
+  --hive-950: #08090c;
+  --hive-900: #0c0e14;
+  --hive-850: #11141c;
+  --hive-800: #171b26;
+  --hive-700: #1f2433;
+  --hive-600: #2a3044;
+  --hive-500: #3d4560;
+  --hive-400: #5a6380;
+  --hive-300: #7d869e;
+  --hive-200: #b0b7cc;
+  --hive-100: #dce0eb;
+  --hive-50: #f0f2f7;
+  --honey-600: #b87a00;
+  --honey-500: #e5a000;
+  --honey-400: #f5b731;
+  --honey-300: #fcd34d;
+  --honey-glow: rgba(229, 160, 0, 0.12);
+  --honey-pulse: rgba(229, 160, 0, 0.06);
+  --status-ai: #a78bfa;
+  --status-healthy: #34d399;
+  --shadow-honey: 0 0 24px rgba(229,160,0,0.12), 0 0 4px rgba(229,160,0,0.08);
+  --shadow-elevated: 0 4px 16px rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.3);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: var(--hive-950);
+  color: var(--hive-100);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  min-height: 100vh;
+  background: var(--hive-950);
+}
+
+::selection {
+  background: rgba(229, 160, 0, 0.3);
+  color: var(--hive-50);
+}
+
+/* ── Honeycomb Background ── */
+.honeycomb-bg {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cg fill-rule='evenodd'%3E%3Cg fill='%231f2433' fill-opacity='0.15'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9zM0 15l12.98-7.5V0h-2v6.35L0 12.69v2.3zm0 18.5L12.98 41v8h-2v-6.85L0 35.81v-2.3zM15 0v7.5L27.99 15H28v-2.31h-.01L17 6.35V0h-2zm0 49v-8l12.99-7.5H28v2.31h-.01L17 42.15V49h-2z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* ── Animations ── */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes honey-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.05); }
+}
+
+@keyframes card-enter {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.float { animation: float 3s ease-in-out infinite; }
+.honey-pulse { animation: honey-pulse 3s ease-in-out infinite; }
+.card-enter { animation: card-enter 0.6s ease-out both; }
+
+/* Staggered entrance */
+.card-enter-1 { animation-delay: 0.1s; }
+.card-enter-2 { animation-delay: 0.2s; }
+.card-enter-3 { animation-delay: 0.3s; }
+.card-enter-4 { animation-delay: 0.4s; }
+
+/* ── Card hover lift ── */
+.card-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.card-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-honey);
+  border-color: var(--honey-500) !important;
+}
+
+/* ── Button press ── */
+.btn-press:active {
+  transform: scale(0.97);
+}

@@ -327,8 +327,8 @@ Only use values from the available lists for persona, connectors, and commands. 
       });
 
       const text = response.content
-        .filter((b: { type: string }) => b.type === 'text')
-        .map((b: { text: string }) => b.text)
+        .filter((b): b is Extract<(typeof response.content)[number], { type: 'text' }> => b.type === 'text')
+        .map((b) => b.text)
         .join('');
 
       // Parse JSON from response (strip markdown fences if present)

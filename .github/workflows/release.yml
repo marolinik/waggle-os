@@ -43,6 +43,12 @@ jobs:
       - name: Build sidecar
         run: node scripts/build-sidecar.mjs
 
+      - name: Bundle native dependencies
+        run: node scripts/bundle-native-deps.mjs
+
+      - name: Bundle Node.js runtime
+        run: node scripts/bundle-node.mjs
+
       - name: Build frontend
         run: cd app && npm run build
 
@@ -87,6 +93,16 @@ jobs:
 
       - name: Build sidecar
         run: node scripts/build-sidecar.mjs
+
+      - name: Bundle native dependencies
+        run: node scripts/bundle-native-deps.mjs
+        env:
+          TARGET_ARCH: ${{ matrix.target == 'aarch64-apple-darwin' && 'arm64' || 'x64' }}
+
+      - name: Bundle Node.js runtime
+        run: node scripts/bundle-node.mjs
+        env:
+          TARGET_ARCH: ${{ matrix.target == 'aarch64-apple-darwin' && 'arm64' || 'x64' }}
 
       - name: Build frontend
         run: cd app && npm run build

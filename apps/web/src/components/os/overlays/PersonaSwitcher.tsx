@@ -3,7 +3,8 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { PERSONAS } from '@/lib/personas';
 import { adapter } from '@/lib/adapter';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, Users, Loader2 } from 'lucide-react';
+import { Bot, Users, Loader2, Lock } from 'lucide-react';
+import { useFeatureGate } from '@/hooks/useFeatureGate';
 
 interface BackendPersona {
   id: string;
@@ -29,8 +30,12 @@ interface PersonaSwitcherProps {
   onSelectGroup?: (groupId: string) => void;
 }
 
+const FREE_PERSONA_IDS = ['researcher', 'writer', 'analyst'];
+
 const PersonaSwitcher = ({ open, onClose, currentPersona, currentGroupId, onSelect, onSelectGroup }: PersonaSwitcherProps) => {
   const [tab, setTab] = useState<'agents' | 'groups'>('agents');
+  const { isEnabled } = useFeatureGate();
+  const allPersonasUnlocked = isEnabled('all-personas');
   const [backendPersonas, setBackendPersonas] = useState<BackendPersona[] | null>(null);
   const [groups, setGroups] = useState<AgentGroupOption[]>([]);
   const [loading, setLoading] = useState(false);
@@ -111,27 +116,41 @@ const PersonaSwitcher = ({ open, onClose, currentPersona, currentGroupId, onSele
             </div>
           ) : tab === 'agents' ? (
             <div className="grid grid-cols-2 gap-2 max-h-[320px] overflow-y-auto scrollbar-thin">
-              {personas.map(p => (
-                <button
-                  key={p.id}
-                  onClick={() => { onSelect(p.id); onClose(); }}
-                  className={`flex items-center gap-3 p-3 rounded-xl transition-all text-left ${
-                    currentPersona === p.id && !currentGroupId
-                      ? 'bg-primary/20 border border-primary/50'
-                      : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
-                  }`}
-                >
-                  <Avatar className="w-10 h-10 shrink-0">
-                    {p.avatar ? <AvatarImage src={p.avatar} /> : (
-                      <AvatarFallback className="text-[10px] bg-primary/20">{p.icon || p.name[0]}</AvatarFallback>
-                    )}
-                  </Avatar>
-                  <div className="min-w-0">
-                    <p className="text-xs font-display font-medium text-foreground truncate">{p.name}</p>
-                    <p className="text-[10px] text-muted-foreground truncate">{p.description}</p>
-                  </div>
-                </button>
-              ))}
+              {personas.map(p => {
+                const isLocked = !allPersonasUnlocked && !FREE_PERSONA_IDS.includes(p.id);
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => { if (!isLocked) { onSelect(p.id); onClose(); } }}
+                    disabled={isLocked}
+                    className={`flex items-center gap-3 p-3 rounded-xl transition-all text-left ${
+                      isLocked
+                        ? 'bg-secondary/20 border border-transparent opacity-50 cursor-not-allowed'
+                        : currentPersona === p.id && !currentGroupId
+                        ? 'bg-primary/20 border border-primary/50'
+                        : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
+                    }`}
+                  >
+                    <Avatar className="w-10 h-10 shrink-0">
+                      {p.avatar ? <AvatarImage src={p.avatar} /> : (
+                        <AvatarFallback className="text-[10px] bg-primary/20">{p.icon || p.name[0]}</AvatarFallback>
+                      )}
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1">
+                        <p className="text-xs font-display font-medium text-foreground truncate">{p.name}</p>
+                        {isLocked && <Lock className="w-3 h-3 text-muted-foreground shrink-0" />}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground truncate">{p.description}</p>
+                    </div>
+                  </button>
+                );
+              })}
+              {!allPersonasUnlocked && (
+                <p className="col-span-2 text-[10px] text-muted-foreground text-center py-2">
+                  Upgrade to Teams to unlock all personas
+                </p>
+              )}
             </div>
           ) : (
             <div className="space-y-2 max-h-[320px] overflow-y-auto scrollbar-thin">

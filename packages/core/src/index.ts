@@ -18,6 +18,10 @@ export {
 } from './mind/scoring.js';
 export type { Embedder } from './mind/embeddings.js';
 export { createLiteLLMEmbedder, type LiteLLMEmbedderConfig } from './mind/litellm-embedder.js';
+export { createInProcessEmbedder, normalizeDimensions, type InProcessEmbedderConfig } from './mind/inprocess-embedder.js';
+export { createOllamaEmbedder, type OllamaEmbedderConfig } from './mind/ollama-embedder.js';
+export { createApiEmbedder, type ApiEmbedderConfig } from './mind/api-embedder.js';
+export { createEmbeddingProvider, type EmbeddingProviderConfig, type EmbeddingProviderStatus, type EmbeddingProviderType, type EmbeddingProviderInstance } from './mind/embedding-provider.js';
 export { normalizeEntityName, findDuplicates } from './mind/entity-normalizer.js';
 export { Ontology, validateEntity, type EntitySchema, type ValidationResult } from './mind/ontology.js';
 export { WaggleConfig, type ProviderEntry, type TeamServerConfig } from './config.js';

@@ -19,7 +19,7 @@ export const useChat = ({ workspaceId, sessionId, persona }: UseChatOptions) => 
     if (workspaceId && sessionId) {
       adapter.getHistory(workspaceId, sessionId)
         .then(setMessages)
-        .catch(() => setMessages([]));
+        .catch((err) => { console.error('[useChat] history fetch failed:', err); setMessages([]); });
     } else {
       setMessages([]);
     }
@@ -149,13 +149,13 @@ export const useChat = ({ workspaceId, sessionId, persona }: UseChatOptions) => 
     if (sessionId) {
       try {
         await adapter.clearHistory(sessionId);
-      } catch { /* local clear */ }
+      } catch (err) { console.error('[useChat] clear history failed:', err); }
       setMessages([]);
     }
   }, [sessionId]);
 
   const approveAction = useCallback(async (requestId: string, approved: boolean) => {
-    try { await adapter.respondApproval(requestId, approved); } catch { /* ignore */ }
+    try { await adapter.respondApproval(requestId, approved); } catch (err) { console.error('[useChat] approval response failed:', err); }
     setPendingApproval(null);
   }, []);
 

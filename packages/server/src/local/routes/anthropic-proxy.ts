@@ -91,11 +91,18 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
         const content: unknown[] = [];
         if (msg.content) content.push({ type: 'text', text: msg.content });
         for (const tc of msg.tool_calls) {
+          let input: unknown = {};
+          try {
+            input = JSON.parse(tc.function.arguments || '{}');
+          } catch {
+            // Malformed tool call arguments from chat history — use empty object
+            input = {};
+          }
           content.push({
             type: 'tool_use',
             id: tc.id,
             name: tc.function.name,
-            input: JSON.parse(tc.function.arguments || '{}'),
+            input,
           });
         }
         messages.push({ role: 'assistant', content });

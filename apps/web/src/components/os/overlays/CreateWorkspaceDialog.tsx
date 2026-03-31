@@ -10,6 +10,9 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { PERSONAS } from '@/lib/personas';
 import { motion, AnimatePresence } from 'framer-motion';
 import { adapter } from '@/lib/adapter';
+import { useFeatureGate } from '@/hooks/useFeatureGate';
+import { useWorkspaces } from '@/hooks/useWorkspaces';
+import LockedFeature from '@/components/os/LockedFeature';
 import type { StorageType, WorkspaceTemplate, Connector, TemplateCategory } from '@/lib/types';
 
 /* ── Shared constants ─────────────────────────────────────────────── */
@@ -584,6 +587,10 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
 /* ── Main Dialog ──────────────────────────────────────────────────── */
 
 const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialogProps) => {
+  const { isEnabled: isFeatureEnabled } = useFeatureGate();
+  const { workspaces } = useWorkspaces();
+  const canCreateWorkspace = isFeatureEnabled('multi-workspace') || workspaces.length < 1;
+
   const [name, setName] = useState('');
   const [group, setGroup] = useState('Personal');
   const [selectedPersona, setSelectedPersona] = useState<string | undefined>();
@@ -667,6 +674,25 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
   })();
 
   if (!open) return null;
+
+  if (!canCreateWorkspace) {
+    return (
+      <AnimatePresence>
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[100] flex items-center justify-center" onClick={onClose}>
+          <div className="absolute inset-0 bg-background/60 backdrop-blur-sm" />
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="relative w-full max-w-sm glass-strong rounded-2xl shadow-2xl overflow-hidden"
+            onClick={e => e.stopPropagation()}>
+            <div className="p-6">
+              <LockedFeature featureName="Multiple Workspaces" upgradePrompt="Upgrade to Teams for unlimited workspaces. Solo plan includes one workspace." />
+            </div>
+          </motion.div>
+        </motion.div>
+      </AnimatePresence>
+    );
+  }
 
   const virtualPath = defaultVirtualPath(name);
 

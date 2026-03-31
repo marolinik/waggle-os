@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { Bot, Plus, Search, Loader2, Users, X, AlertCircle } from 'lucide-react';
+import { Bot, Plus, Search, Loader2, Users, X, AlertCircle, RefreshCw } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { PERSONAS } from '@/lib/personas';
 import type { BackendPersona, AgentGroup, ToolDef, GroupExecState, MemberExecState } from './agents/types';
@@ -53,8 +53,9 @@ const AgentsApp = () => {
         if (caps.mcpServers) caps.mcpServers.forEach((m: any) => { for (let i = 0; i < (m.tools ?? 0); i++) tools.push({ name: `${m.name}:tool-${i + 1}`, description: `MCP tool from ${m.name}` }); });
         setAllTools(tools);
       }
-    } catch {
-      setError('Failed to load data');
+    } catch (err) {
+      console.error('[AgentsApp] load failed:', err);
+      setError('Failed to load data — server may be unreachable');
     } finally {
       setLoading(false);
     }
@@ -78,7 +79,7 @@ const AgentsApp = () => {
       await adapter.createPersona({ name: data.name, description: data.description, icon: data.icon, systemPrompt: data.systemPrompt, tools: data.tools });
       setShowCreate(false);
       await loadData();
-    } catch { setError('Failed to create agent'); }
+    } catch (err) { console.error('[AgentsApp] create agent failed:', err); setError('Failed to create agent'); }
   };
 
   const handleUpdate = async (data: { name: string; description: string; icon: string; tools: string[]; systemPrompt: string }) => {
@@ -87,7 +88,7 @@ const AgentsApp = () => {
       await adapter.updatePersona(editingAgent.id, data);
       setEditingAgent(null);
       await loadData();
-    } catch { setError('Failed to update agent'); }
+    } catch (err) { console.error('[AgentsApp] update agent failed:', err); setError('Failed to update agent'); }
   };
 
   const handleDelete = async (id: string) => {
@@ -95,7 +96,7 @@ const AgentsApp = () => {
       await adapter.deletePersona(id);
       if (selectedId === id) setSelectedId(null);
       await loadData();
-    } catch { setError('Failed to delete agent'); }
+    } catch (err) { console.error('[AgentsApp] delete agent failed:', err); setError('Failed to delete agent'); }
   };
 
   const handleCreateGroup = async (data: { name: string; description: string; strategy: 'parallel' | 'sequential' | 'coordinator'; members: { agentId: string; roleInGroup: string; executionOrder: number }[] }) => {
@@ -103,7 +104,7 @@ const AgentsApp = () => {
       await adapter.createAgentGroup(data as any);
       setShowCreateGroup(false);
       await loadData();
-    } catch { setError('Failed to create group'); }
+    } catch (err) { console.error('[AgentsApp] create group failed:', err); setError('Failed to create group'); }
   };
 
   const handleUpdateGroup = async (data: { name: string; description: string; strategy: 'parallel' | 'sequential' | 'coordinator'; members: { agentId: string; roleInGroup: string; executionOrder: number }[] }) => {
@@ -112,7 +113,7 @@ const AgentsApp = () => {
       await adapter.updateAgentGroup(editingGroup.id, data as any);
       setEditingGroup(null);
       await loadData();
-    } catch { setError('Failed to update group'); }
+    } catch (err) { console.error('[AgentsApp] update group failed:', err); setError('Failed to update group'); }
   };
 
   const handleDeleteGroup = async (id: string) => {
@@ -120,7 +121,7 @@ const AgentsApp = () => {
       await adapter.deleteAgentGroup(id);
       if (selectedGroupId === id) setSelectedGroupId(null);
       await loadData();
-    } catch { setError('Failed to delete group'); }
+    } catch (err) { console.error('[AgentsApp] delete group failed:', err); setError('Failed to delete group'); }
   };
 
   const handleRunGroup = async (groupId: string, task: string): Promise<GroupExecState | null> => {
@@ -132,7 +133,8 @@ const AgentsApp = () => {
         .sort((a, b) => a.executionOrder - b.executionOrder)
         .map(m => ({ agentId: m.agentId, status: 'pending' as const }));
       return { jobId, status: 'queued', task, startedAt: Date.now(), members };
-    } catch {
+    } catch (err) {
+      console.error('[AgentsApp] run group failed:', err);
       setError('Failed to run group task');
       return null;
     }
@@ -140,7 +142,7 @@ const AgentsApp = () => {
 
   const handleAiGenerate = async (prompt: string) => {
     try { return await adapter.generatePersona(prompt); }
-    catch { setError('AI generation failed'); return null; }
+    catch (err) { console.error('[AgentsApp] AI generate failed:', err); setError('AI generation failed'); return null; }
   };
 
   const resetSelections = (newTab: 'agents' | 'groups') => {
@@ -216,7 +218,10 @@ const AgentsApp = () => {
         <div className="flex items-center gap-2 p-2 rounded-lg bg-destructive/10 text-destructive text-xs">
           <AlertCircle className="w-3.5 h-3.5 shrink-0" />
           {error}
-          <button onClick={() => setError(null)} className="ml-auto"><X className="w-3 h-3" /></button>
+          <button onClick={() => { setError(null); loadData(); }} className="ml-auto flex items-center gap-1 text-[10px] text-primary hover:text-primary/80 mr-2">
+            <RefreshCw className="w-3 h-3" /> Retry
+          </button>
+          <button onClick={() => setError(null)}><X className="w-3 h-3" /></button>
         </div>
       )}
 

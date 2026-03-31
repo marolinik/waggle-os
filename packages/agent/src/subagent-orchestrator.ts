@@ -60,6 +60,7 @@ export class SubagentOrchestrator extends EventEmitter {
   private config: OrchestratorConfig;
   private workers: Map<string, WorkerState>;
   private workflowCounter: number;
+  private parentContext: string = '';
 
   /** Role presets (same as subagent-tools for consistency, plus synthesizer/summarizer) */
   static ROLE_TOOL_PRESETS: Record<string, string[]> = {
@@ -78,6 +79,18 @@ export class SubagentOrchestrator extends EventEmitter {
     this.config = config;
     this.workers = new Map();
     this.workflowCounter = 0;
+  }
+
+  /** Set parent agent context to inject into all worker prompts */
+  setParentContext(ctx: { userName?: string; userRole?: string; workspaceName?: string; workspaceDomain?: string }): void {
+    const parts: string[] = ['# Context from Parent Agent'];
+    if (ctx.userName) parts.push(`User: ${ctx.userName}${ctx.userRole ? `, ${ctx.userRole}` : ''}`);
+    if (ctx.workspaceName) parts.push(`Workspace: ${ctx.workspaceName}${ctx.workspaceDomain ? ` (${ctx.workspaceDomain})` : ''}`);
+    parts.push('', '## Key Rules');
+    parts.push('- Search memory before claiming you don\'t know something');
+    parts.push('- Be grounded in facts — if unsure, say so');
+    parts.push('- Save important findings to memory for future reference');
+    this.parentContext = parts.join('\n');
   }
 
   /** Run a workflow from a template, executing steps in dependency order */
@@ -236,7 +249,11 @@ export class SubagentOrchestrator extends EventEmitter {
   }
 
   private buildWorkerContext(step: WorkflowStep, contextResults: Map<string, string>): string {
-    let prompt = `# Sub-Agent: ${step.name}\nRole: ${step.role}\nTask: Complete the following task and return a comprehensive result.\n\n## Your Task\n${step.task}\n`;
+    let prompt = '';
+    if (this.parentContext) {
+      prompt += this.parentContext + '\n\n';
+    }
+    prompt += `# Sub-Agent: ${step.name}\nRole: ${step.role}\nTask: Complete the following task and return a comprehensive result.\n\n## Your Task\n${step.task}\n`;
 
     // Inject context from previous steps
     const contextFrom = step.contextFrom ?? [];

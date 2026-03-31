@@ -6,7 +6,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
-import { MindDB, MultiMind, WorkspaceManager, WaggleConfig, createLiteLLMEmbedder, FrameStore, SessionStore, InstallAuditStore, CronStore, AwarenessLayer, VaultStore, SkillHashStore, OptimizationLogStore, reconcileIndexes, TeamSync } from '@waggle/core';
+import { MindDB, MultiMind, WorkspaceManager, WaggleConfig, createEmbeddingProvider, type EmbeddingProviderConfig, type EmbeddingProviderInstance, FrameStore, SessionStore, InstallAuditStore, CronStore, AwarenessLayer, VaultStore, SkillHashStore, OptimizationLogStore, reconcileIndexes, TeamSync } from '@waggle/core';
 import { ALLOWED_ORIGINS } from './cors-config.js';
 import { MemoryWeaver } from '@waggle/weaver';
 import {
@@ -215,6 +215,7 @@ declare module 'fastify' {
     auditStore: import('@waggle/core').InstallAuditStore;
     cronStore: import('@waggle/core').CronStore;
     vault: import('@waggle/core').VaultStore;
+    embeddingProvider: import('@waggle/core').EmbeddingProviderInstance;
     skillHashStore: import('@waggle/core').SkillHashStore;
     scheduler: import('./cron.js').LocalScheduler;
     marketplace: import('@waggle/marketplace').MarketplaceDB | null;
@@ -339,6 +340,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   // Vault — encrypted secret storage
   const vault = new VaultStore(fullConfig.dataDir);
   server.decorate('vault', vault);
+  // embeddingProvider decorated later after creation (needs vault for API keys)
 
   // Migrate plaintext keys from config.json to vault on first run
   try {
@@ -441,14 +443,52 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   const litellmApiKey = process.env.LITELLM_API_KEY ?? process.env.LITELLM_MASTER_KEY ?? 'sk-waggle-dev';
   const litellmUrl = fullConfig.litellmUrl;
 
-  // Embedder backed by LiteLLM (falls back to mock)
-  const embedder = createLiteLLMEmbedder({
-    litellmUrl,
-    litellmApiKey,
-    model: 'text-embedding',
-    dimensions: 1024,
-    fallbackToMock: true,
-  });
+  // Build embedding config from WaggleConfig + Vault keys
+  const waggleConfig = new WaggleConfig(fullConfig.dataDir || undefined);
+  const embeddingConfig: EmbeddingProviderConfig = waggleConfig.getEmbeddingConfig();
+
+  // Inject API keys from encrypted Vault (never from config.json)
+  try {
+    const voyageEntry = vault.get('voyage-api-key');
+    if (voyageEntry?.value) embeddingConfig.voyage = { apiKey: voyageEntry.value };
+  } catch { /* vault may not have this key */ }
+  try {
+    const openaiEntry = vault.get('openai');
+    if (openaiEntry?.value) embeddingConfig.openai = { apiKey: openaiEntry.value };
+  } catch { /* vault may not have this key */ }
+
+  // Environment variable override for CI/headless
+  if (process.env.VOYAGE_API_KEY && !embeddingConfig.voyage) {
+    embeddingConfig.voyage = { apiKey: process.env.VOYAGE_API_KEY };
+  }
+  if (process.env.OPENAI_API_KEY && !embeddingConfig.openai) {
+    embeddingConfig.openai = { apiKey: process.env.OPENAI_API_KEY };
+  }
+
+  // Create embedding provider with InProcess → Ollama → API → Mock fallback chain
+  const embeddingProvider = await createEmbeddingProvider(embeddingConfig);
+  const embedder = embeddingProvider; // satisfies Embedder — drop-in replacement
+
+  // Decorate server with embedding provider for status endpoints
+  server.decorate('embeddingProvider', embeddingProvider);
+
+  // Vec index rebuild when real provider activates (mock → real transition)
+  if (embeddingProvider.getActiveProvider() !== 'mock') {
+    try {
+      const db = multiMind.personal.getDatabase();
+      const vecRow = db.prepare('SELECT COUNT(*) as cnt FROM memory_frames_vec').get() as { cnt: number } | undefined;
+      const totalRow = db.prepare('SELECT COUNT(*) as cnt FROM memory_frames').get() as { cnt: number };
+      if (totalRow.cnt > 0 && (vecRow?.cnt ?? 0) < totalRow.cnt) {
+        console.log(`[waggle] Re-indexing ${totalRow.cnt} frames with real embeddings (${embeddingProvider.getActiveProvider()})...`);
+        const { vecFixed } = await reconcileIndexes(multiMind.personal, embedder);
+        if (vecFixed > 0) {
+          console.log(`[waggle] Re-indexed ${vecFixed} frames with real embeddings`);
+        }
+      }
+    } catch (err) {
+      console.warn(`[waggle] Vec reconciliation deferred: ${(err as Error).message}`);
+    }
+  }
 
   // Orchestrator — connects to personal .mind
   const orchestrator = new Orchestrator({
@@ -1589,6 +1629,24 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
     };
   });
 
+  // Embedding provider status + reprobe endpoints
+  server.get('/api/embedding/status', async () => {
+    return embeddingProvider.getStatus();
+  });
+
+  server.post('/api/embedding/reprobe', async () => {
+    // Re-read API keys from Vault (user may have just added one)
+    try {
+      const voyageEntry = vault.get('voyage-api-key');
+      if (voyageEntry?.value) embeddingConfig.voyage = { apiKey: voyageEntry.value };
+    } catch { /* skip */ }
+    try {
+      const openaiEntry = vault.get('openai');
+      if (openaiEntry?.value) embeddingConfig.openai = { apiKey: openaiEntry.value };
+    } catch { /* skip */ }
+    return embeddingProvider.reprobe();
+  });
+
   // Health check — truthful, not optimistic
   server.get('/health', async () => {
     const llm = { ...server.agentState.llmProvider };
@@ -1644,9 +1702,10 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
           }
         } catch { /* vec table may not exist */ }
 
-        return { frameCount, mindSizeBytes, embeddingCoverage };
+        const embeddingProviderStatus = server.embeddingProvider?.getStatus?.() ?? null;
+        return { frameCount, mindSizeBytes, embeddingCoverage, embeddingProvider: embeddingProviderStatus };
       } catch {
-        return { frameCount: 0, mindSizeBytes: 0, embeddingCoverage: 0 };
+        return { frameCount: 0, mindSizeBytes: 0, embeddingCoverage: 0, embeddingProvider: null };
       }
     })();
 

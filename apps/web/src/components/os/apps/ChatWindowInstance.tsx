@@ -80,7 +80,8 @@ const ChatWindowInstance = ({ workspaceId, workspaceName, initialPersona, templa
         } else {
           setAvailableModels(FALLBACK_MODELS);
         }
-      } catch {
+      } catch (err) {
+        console.error('[ChatWindowInstance] fetch models failed:', err);
         setAvailableModels(FALLBACK_MODELS);
       }
     };
@@ -96,7 +97,8 @@ const ChatWindowInstance = ({ workspaceId, workspaceName, initialPersona, templa
           const settings = await adapter.getSettings();
           setCurrentModel(settings.model || FALLBACK_MODELS[0]);
         }
-      } catch {
+      } catch (err) {
+        console.error('[ChatWindowInstance] fetch current model failed:', err);
         setCurrentModel(FALLBACK_MODELS[0]);
       }
     };
@@ -109,7 +111,8 @@ const ChatWindowInstance = ({ workspaceId, workspaceName, initialPersona, templa
       try {
         const members = await adapter.getTeamMembers();
         setTeamPresence(members.filter(m => m.status === 'online'));
-      } catch {
+      } catch (err) {
+        console.error('[ChatWindowInstance] fetch team failed:', err);
         setTeamPresence([]);
       }
     };
@@ -120,7 +123,7 @@ const ChatWindowInstance = ({ workspaceId, workspaceName, initialPersona, templa
 
   const handleModelChange = (model: string) => {
     setCurrentModel(model);
-    adapter.setModel(model).catch(() => {});
+    adapter.setModel(model).catch((err) => console.error('[ChatWindowInstance] set model failed:', err));
     adapter.patchWorkspace(workspaceId, { model })
       .then(() => toast({ title: 'Model updated', description: `Now using ${model.split('/').pop()}` }))
       .catch(() => toast({ title: 'Model updated locally', description: 'Backend offline — will sync when connected', variant: 'destructive' }));

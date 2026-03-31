@@ -622,7 +622,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
   // PATCH /api/workspaces/:id — partial update (same as PUT but PATCH method)
   server.patch<{
     Params: { id: string };
-    Body: { name?: string; group?: string; icon?: string; model?: string; personaId?: string | null; agentGroupId?: string | null; directory?: string; tone?: string; budget?: number | null };
+    Body: { name?: string; group?: string; icon?: string; model?: string; personaId?: string | null; agentGroupId?: string | null; directory?: string; tone?: 'professional' | 'casual' | 'technical' | 'legal' | 'marketing'; budget?: number | null };
   }>('/api/workspaces/:id', async (request, reply) => {
     assertSafeSegment(request.params.id, 'id');
     const existing = server.workspaceManager.get(request.params.id);

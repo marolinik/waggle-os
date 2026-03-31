@@ -13,8 +13,13 @@ export class MindDB {
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
 
-    // Load sqlite-vec extension
-    sqliteVec.load(this.db);
+    // Load sqlite-vec extension — support bundled path override for desktop builds
+    const vecPath = process.env.WAGGLE_SQLITE_VEC_PATH;
+    if (vecPath) {
+      this.db.loadExtension(vecPath);
+    } else {
+      sqliteVec.load(this.db);
+    }
 
     this.initSchema();
   }

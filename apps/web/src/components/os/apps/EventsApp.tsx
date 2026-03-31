@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Activity, Loader2, CheckCircle2, XCircle, Zap, MessageSquare, Clock, ChevronRight, StopCircle, GitBranch, Circle } from 'lucide-react';
 import type { AgentStep } from '@/lib/types';
+import { decodeHtmlEntities } from '@/lib/decode-entities';
 
 const stepIcons: Record<string, React.ElementType> = {
   think: Activity,
@@ -45,7 +46,7 @@ const StepCard = ({ step, onAbort }: { step: AgentStep; onAbort?: () => void }) 
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-xs text-foreground">{step.description}</p>
+          <p className="text-xs text-foreground">{decodeHtmlEntities(step.description)}</p>
           <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground">
             <span className="capitalize">{step.type.replace('_', ' ')}</span>
             {step.duration && <span>{step.duration}ms</span>}

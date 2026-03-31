@@ -268,7 +268,7 @@ const ChatApp = ({
     for (const file of files) {
       try {
         await adapter.ingestFile(file);
-      } catch { /* ignore */ }
+      } catch (err) { console.error('[ChatApp] file ingest failed:', err); }
     }
     setDragging(false);
   }, []);

@@ -14,6 +14,7 @@ export const useSessions = (workspaceId: string | null) => {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!workspaceId) { setSessions([]); setActiveSessionId(null); return; }
@@ -29,7 +30,9 @@ export const useSessions = (workspaceId: string | null) => {
           setActiveSessionId(def.id);
         }
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error('[useSessions] fetch failed:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load');
         const def = makeDefaultSession(workspaceId);
         setSessions([def]);
         setActiveSessionId(def.id);
@@ -44,7 +47,8 @@ export const useSessions = (workspaceId: string | null) => {
       setSessions(prev => [session, ...prev]);
       setActiveSessionId(session.id);
       return session;
-    } catch {
+    } catch (err) {
+      console.error('[useSessions] create failed, using local fallback:', err);
       const local: Session = {
         id: `local-session-${Date.now()}`,
         workspaceId,
@@ -60,7 +64,7 @@ export const useSessions = (workspaceId: string | null) => {
 
   const deleteSession = useCallback(async (sessionId: string) => {
     if (!workspaceId) return;
-    try { await adapter.deleteSession(sessionId, workspaceId); } catch { /* local */ }
+    try { await adapter.deleteSession(sessionId, workspaceId); } catch (err) { console.error('[useSessions] delete failed:', err); }
     setSessions(prev => prev.filter(s => s.id !== sessionId));
     if (activeSessionId === sessionId) {
       setActiveSessionId(sessions.find(s => s.id !== sessionId)?.id || null);
@@ -69,12 +73,12 @@ export const useSessions = (workspaceId: string | null) => {
 
   const renameSession = useCallback(async (sessionId: string, title: string) => {
     if (!workspaceId) return;
-    try { await adapter.renameSession(workspaceId, sessionId, title); } catch { /* local */ }
+    try { await adapter.renameSession(workspaceId, sessionId, title); } catch (err) { console.error('[useSessions] rename failed:', err); }
     setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, title } : s));
   }, [workspaceId]);
 
   return {
     sessions, activeSessionId, setActiveSessionId,
-    loading, createSession, deleteSession, renameSession,
+    loading, error, createSession, deleteSession, renameSession,
   };
 };

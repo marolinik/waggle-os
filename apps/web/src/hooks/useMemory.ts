@@ -25,6 +25,7 @@ export const useMemory = (workspaceId: string | null) => {
       setFrames(data);
       setError(null);
     } catch (e) {
+      console.error('[useMemory] fetch failed:', e);
       setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
       setLoading(false);
@@ -43,6 +44,21 @@ export const useMemory = (workspaceId: string | null) => {
     setFrames(prev => prev.map(f => f.id === id ? updated : f));
   }, []);
 
+  // TODO: Ideally needs a dedicated PATCH /api/memory/frames/:id/access endpoint
+  // that atomically increments accessCount on the server. For now, we use PUT with
+  // a best-effort increment based on the local frame's current count.
+  const incrementAccess = useCallback(async (id: string) => {
+    const frame = frames.find(f => f.id === id);
+    const currentCount = (frame?.metadata as Record<string, unknown> | undefined)?.accessCount;
+    const nextCount = (typeof currentCount === 'number' ? currentCount : 0) + 1;
+    try {
+      await adapter.updateMemoryFrame(id, { metadata: { ...frame?.metadata, accessCount: nextCount } });
+      setFrames(prev => prev.map(f => f.id === id ? { ...f, metadata: { ...f.metadata, accessCount: nextCount } } : f));
+    } catch (err) {
+      console.error('[useMemory] incrementAccess failed:', err);
+    }
+  }, [frames]);
+
   const deleteFrame = useCallback(async (id: string) => {
     await adapter.deleteMemoryFrame(id);
     setFrames(prev => prev.filter(f => f.id !== id));
@@ -58,7 +74,7 @@ export const useMemory = (workspaceId: string | null) => {
   return {
     frames: filteredFrames, selectedFrame, setSelectedFrame,
     loading, error, filters, setFilters,
-    addFrame, editFrame, deleteFrame, refresh: fetchFrames,
+    addFrame, editFrame, deleteFrame, incrementAccess, refresh: fetchFrames,
     stats: { total: frames.length, filtered: filteredFrames.length },
   };
 };

@@ -172,8 +172,8 @@ export const profileRoutes: FastifyPluginAsync = async (fastify) => {
     // Also save key identity to personal memory for agent access
     if (profile.name || profile.role || profile.company) {
       try {
-        const mind = fastify.agentState?.orchestrator?.personalMind;
-        if (mind) {
+        const orch = fastify.agentState?.orchestrator;
+        if (orch) {
           const identity = [
             profile.name && `Name: ${profile.name}`,
             profile.role && `Role: ${profile.role}`,
@@ -181,7 +181,16 @@ export const profileRoutes: FastifyPluginAsync = async (fastify) => {
             profile.industry && `Industry: ${profile.industry}`,
           ].filter(Boolean).join('. ');
           if (identity) {
-            mind.frames.createPFrame(`User identity: ${identity}`, 'important');
+            const frames = orch.getFrames();
+            const sessions = orch.getSessions();
+            const active = sessions.getActive();
+            const gopId = active.length > 0 ? active[0].gop_id : sessions.create().gop_id;
+            const latestI = frames.getLatestIFrame(gopId);
+            if (latestI) {
+              frames.createPFrame(gopId, `User identity: ${identity}`, latestI.id, 'important');
+            } else {
+              frames.createIFrame(gopId, `User identity: ${identity}`, 'important');
+            }
           }
         }
       } catch { /* non-blocking */ }

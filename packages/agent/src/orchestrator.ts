@@ -413,8 +413,17 @@ export class Orchestrator {
       saved.push(content.slice(0, 80));
     };
 
-    // Skip trivial exchanges (very short messages)
-    if (userMsg.length < 20 && assistantMsg.length < 100) return saved;
+    // Skip trivial exchanges — short messages are rarely worth memorizing
+    if (userMsg.length < 100 && !assistantMsg.includes('```')) return saved;
+
+    // Skip casual patterns that produce false-positive memory saves
+    const CASUAL_PATTERNS = [
+      /\b(lunch|dinner|breakfast|coffee|pizza|food|snack|drink)\b/i,
+      /\b(weather|weekend|holiday|vacation|birthday|party)\b/i,
+      /^(hi|hey|hello|thanks|thank you|bye|goodbye|ok|okay|sure|yep|nope|yes|no)\b/i,
+      /\b(rather not|don't want to|prefer not to|let's not)\b/i,
+    ];
+    if (CASUAL_PATTERNS.some(p => p.test(userMsg))) return saved;
 
     // ── Pattern: User stated a preference (C4: broadened patterns) ──
     const prefPatterns = [

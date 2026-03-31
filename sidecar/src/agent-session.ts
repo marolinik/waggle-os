@@ -1,30 +1,6 @@
 import { Orchestrator, type OrchestratorConfig } from '@waggle/agent';
-import type { MindDB, Embedder } from '@waggle/core';
-
-// Mock embedder for M1 — real embeddings in M2
-const mockEmbedder: Embedder = {
-  embed: async (text: string) => {
-    const arr = new Float32Array(1024);
-    const bytes = new TextEncoder().encode(text);
-    for (let i = 0; i < Math.min(bytes.length, 1024); i++) {
-      arr[i] = (bytes[i] - 128) / 128;
-    }
-    return arr;
-  },
-  embedBatch: async (texts: string[]) => {
-    const results: Float32Array[] = [];
-    for (const text of texts) {
-      const arr = new Float32Array(1024);
-      const bytes = new TextEncoder().encode(text);
-      for (let i = 0; i < Math.min(bytes.length, 1024); i++) {
-        arr[i] = (bytes[i] - 128) / 128;
-      }
-      results.push(arr);
-    }
-    return results;
-  },
-  dimensions: 1024,
-};
+import type { MindDB } from '@waggle/core';
+import { createEmbeddingProvider } from '@waggle/core';
 
 export type StreamCallback = (event: StreamEvent) => void;
 
@@ -34,12 +10,20 @@ export interface StreamEvent {
 }
 
 export class AgentSession {
-  private orchestrator: Orchestrator;
+  private orchestrator!: Orchestrator;
+  private initPromise: Promise<void>;
 
   constructor(db: MindDB) {
+    this.initPromise = this.init(db);
+  }
+
+  private async init(db: MindDB): Promise<void> {
+    const embeddingProvider = await createEmbeddingProvider({
+      targetDimensions: 1024,
+    });
     this.orchestrator = new Orchestrator({
       db,
-      embedder: mockEmbedder,
+      embedder: embeddingProvider,
     });
   }
 
@@ -49,6 +33,7 @@ export class AgentSession {
     model: string,
     onStream?: StreamCallback,
   ): Promise<string> {
+    await this.initPromise;
     const systemPrompt = this.orchestrator.buildSystemPrompt();
     const tools = this.orchestrator.getTools();
 
@@ -84,7 +69,7 @@ export class AgentSession {
         const textBlocks = response.content.filter((b: { type: string }) => b.type === 'text');
 
         if (toolBlocks.length === 0) {
-          const text = textBlocks.map((b: { text: string }) => b.text).join('');
+          const text = textBlocks.map((b) => (b as { text: string }).text).join('');
           onStream?.({ type: 'done', data: text });
           return text;
         }

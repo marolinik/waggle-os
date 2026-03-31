@@ -1,4 +1,5 @@
 // LocalAdapter — HTTP/SSE/WS client for Waggle backend
+import { fetchWithTimeout } from './fetch-utils';
 import type {
   Workspace, WorkspaceContext, ChatMessage, MemoryFrame,
   AgentStep, Session, SkillPack, FleetSession, CronJob,
@@ -52,7 +53,7 @@ class LocalAdapter {
   private _connectAttempted = false;
 
   constructor(serverUrl?: string) {
-    this.baseUrl = serverUrl || localStorage.getItem('waggle_server_url') || DEFAULT_SERVER;
+    this.baseUrl = serverUrl || localStorage.getItem('waggle:server-url') || DEFAULT_SERVER;
   }
 
   get isConnected() { return this._connected; }
@@ -60,7 +61,7 @@ class LocalAdapter {
 
   setServerUrl(url: string) {
     this.baseUrl = url;
-    localStorage.setItem('waggle_server_url', url);
+    localStorage.setItem('waggle:server-url', url);
     this._connected = false;
     this._connectAttempted = false;
   }
@@ -92,13 +93,7 @@ class LocalAdapter {
     if (this.authToken) {
       headers['Authorization'] = `Bearer ${this.authToken}`;
     }
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    try {
-      return await fetch(`${this.baseUrl}${path}`, { ...init, headers, signal: controller.signal });
-    } finally {
-      clearTimeout(timeout);
-    }
+    return fetchWithTimeout(`${this.baseUrl}${path}`, { ...init, headers });
   }
 
   // --- Workspaces ---
@@ -188,11 +183,11 @@ class LocalAdapter {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('path', dirPath);
-    const res = await fetch(`${this.baseUrl}/api/workspaces/${workspaceId}/files/upload`, {
+    const res = await fetchWithTimeout(`${this.baseUrl}/api/workspaces/${workspaceId}/files/upload`, {
       method: 'POST',
       headers: this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {},
       body: formData,
-    });
+    }, 30000);
     return res.json();
   }
 
@@ -610,7 +605,7 @@ class LocalAdapter {
     try {
       const res = await this.fetch(`/api/jobs/${jobId}`);
       return res.json();
-    } catch { return null; }
+    } catch (err) { console.error('[adapter] getJobStatus failed:', err); return null; }
   }
 
   async cancelJob(jobId: string): Promise<void> {
@@ -717,7 +712,7 @@ class LocalAdapter {
       const res = await this.fetch('/api/team/members');
       if (!res.ok) return [];
       return unwrapArray(await res.json());
-    } catch { return []; }
+    } catch (err) { console.error('[adapter] getTeamMembers failed:', err); return []; }
   }
 
   async getTeamActivity(): Promise<{ id: string; user: string; action: string; timestamp: string }[]> {
@@ -725,7 +720,7 @@ class LocalAdapter {
       const res = await this.fetch('/api/team/activity');
       if (!res.ok) return [];
       return unwrapArray(await res.json());
-    } catch { return []; }
+    } catch (err) { console.error('[adapter] getTeamActivity failed:', err); return []; }
   }
 
   async getTeamMessages(workspaceId: string): Promise<unknown[]> {
@@ -733,7 +728,7 @@ class LocalAdapter {
       const res = await this.fetch(`/api/team/messages?workspaceId=${workspaceId}`);
       if (!res.ok) return [];
       return unwrapArray(await res.json());
-    } catch { return []; }
+    } catch (err) { console.error('[adapter] getTeamMessages failed:', err); return []; }
   }
 
   // --- Costs ---
@@ -757,11 +752,11 @@ class LocalAdapter {
   async ingestFile(file: File): Promise<unknown> {
     const formData = new FormData();
     formData.append('file', file);
-    const res = await fetch(`${this.baseUrl}/api/ingest`, {
+    const res = await fetchWithTimeout(`${this.baseUrl}/api/ingest`, {
       method: 'POST',
       headers: this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {},
       body: formData,
-    });
+    }, 30000);
     return res.json();
   }
 
@@ -779,7 +774,7 @@ class LocalAdapter {
       const res = await this.fetch('/api/waggle/signals');
       if (!res.ok) return [];
       return unwrapArray(await res.json());
-    } catch { return []; }
+    } catch (err) { console.error('[adapter] getWaggleSignals failed:', err); return []; }
   }
 
   async publishWaggleSignal(data: Omit<WaggleSignal, 'id' | 'timestamp'>): Promise<WaggleSignal> {

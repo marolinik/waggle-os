@@ -11,7 +11,8 @@ export const useOfflineStatus = () => {
         await adapter.getSystemHealth();
         setOffline(false);
         failCount.current = 0;
-      } catch {
+      } catch (err) {
+        console.error('[useOfflineStatus] health check failed:', err);
         failCount.current++;
         setOffline(true);
       }

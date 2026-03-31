@@ -25,6 +25,14 @@ marketplace.db
 # Build artifacts
 *.tsbuildinfo
 
+# Build cache (Node.js runtime downloads)
+scripts/.cache/
+
+# Bundled resources (generated at build time)
+app/src-tauri/resources/node
+app/src-tauri/resources/node.exe
+app/src-tauri/resources/native/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

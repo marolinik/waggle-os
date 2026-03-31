@@ -5,7 +5,9 @@ import {
   Target, Microscope, Laptop, Megaphone, Rocket, Scale, Building, Plus,
   PenLine, BarChart3, Code, ClipboardList, Mail,
   Key, Check, Loader2, ExternalLink, Hexagon, Sparkles, FileJson,
+  Zap, Crown,
 } from 'lucide-react';
+import type { UserTier } from '@/lib/dock-tiers';
 import waggleLogo from '@/assets/waggle-logo.jpeg';
 import { adapter } from '@/lib/adapter';
 import { getProviders } from '@/lib/providers';
@@ -64,6 +66,30 @@ const PROVIDERS = getProviders().map(p => ({
   keyUrl: p.keyUrl ?? '',
 }));
 
+const TIER_OPTIONS = [
+  {
+    id: 'simple' as UserTier,
+    name: 'Simple',
+    icon: Hexagon,
+    color: 'text-sky-400',
+    desc: 'Clean and focused. Just the essentials — chat, files, and home.',
+  },
+  {
+    id: 'professional' as UserTier,
+    name: 'Professional',
+    icon: Zap,
+    color: 'text-amber-400',
+    desc: 'Agents, memory, and workspace tools. The full knowledge-worker kit.',
+  },
+  {
+    id: 'power' as UserTier,
+    name: 'Full Control',
+    icon: Crown,
+    color: 'text-violet-400',
+    desc: 'Everything. Ops console, scheduled jobs, marketplace.',
+  },
+];
+
 const VALUE_PROPS = [
   { icon: Brain, title: 'Remembers everything', desc: 'Persistent memory across all sessions' },
   { icon: Layers, title: 'Workspace-native', desc: 'One brain per project, fully isolated' },
@@ -84,6 +110,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
   const autoTimer = useRef<ReturnType<typeof setTimeout>>();
 
   // Step-local state
+  const [selectedTier, setSelectedTier] = useState<UserTier>(state.tier || 'professional');
   const [selectedTemplate, setSelectedTemplate] = useState(state.templateId || '');
   const [workspaceName, setWorkspaceName] = useState('');
   const [selectedPersona, setSelectedPersona] = useState(state.personaId || '');
@@ -160,7 +187,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
         body: JSON.stringify({ data: importData, source: importSource }),
       });
       setImportDone(true);
-      setTimeout(() => goToStep(3), 800);
+      setTimeout(() => goToStep(4), 800);
     } catch { /* ignore */ }
     finally { setImporting(false); }
   };
@@ -236,7 +263,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
         templateId: selectedTemplate,
         personaId: selectedPersona,
       });
-      goToStep(6);
+      goToStep(7);
     } finally {
       setCreatingWorkspace(false);
     }
@@ -251,9 +278,9 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
     onFinish(wsId, hint);
   }, [serverBaseUrl, onComplete, onFinish, state.workspaceId, state.templateId, selectedTemplate]);
 
-  // Auto-finish step 6 after 2s
+  // Auto-finish step 7 after 2s
   useEffect(() => {
-    if (step === 6) {
+    if (step === 7) {
       autoTimer.current = setTimeout(handleLetsGo, 2000);
       return () => clearTimeout(autoTimer.current);
     }
@@ -261,8 +288,8 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
 
   if (state.completed) return null;
 
-  const progressPct = (step / 6) * 100;
-  const displayStep = step >= 1 && step <= 5 ? step : null;
+  const progressPct = (step / 7) * 100;
+  const displayStep = step >= 1 && step <= 6 ? step : null;
 
   return (
     <motion.div
@@ -286,11 +313,11 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
         <div className="flex items-center gap-3">
           {displayStep !== null && (
             <span className="text-xs font-display text-muted-foreground">
-              Step {displayStep} of 5
+              Step {displayStep} of 6
             </span>
           )}
           <div className="flex gap-1.5">
-            {[0, 1, 2, 3, 4, 5, 6].map(i => (
+            {[0, 1, 2, 3, 4, 5, 6, 7].map(i => (
               <div
                 key={i}
                 className={`w-2 h-2 rounded-full transition-colors ${
@@ -380,9 +407,55 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
               </motion.div>
             )}
 
-            {/* ═══ STEP 2: Memory Import ═══ */}
+            {/* ═══ STEP 2: Choose Your Experience ═══ */}
             {step === 2 && (
-              <motion.div key="step-2" {...fadeSlide}>
+              <motion.div key="step-2" {...fadeSlide} className="text-center">
+                <Sparkles className="w-10 h-10 text-primary mx-auto mb-4" />
+                <h2 className="text-2xl font-display font-bold text-foreground mb-2">
+                  Choose Your Experience
+                </h2>
+                <p className="text-sm text-muted-foreground mb-8">
+                  You can change this anytime in Settings.
+                </p>
+
+                <div className="grid grid-cols-3 gap-4 mb-8">
+                  {TIER_OPTIONS.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => {
+                        onUpdate({ tier: t.id });
+                        setSelectedTier(t.id);
+                      }}
+                      className={`glass-strong rounded-xl p-5 text-left transition-all ${
+                        selectedTier === t.id
+                          ? 'ring-2 ring-primary bg-primary/10'
+                          : 'hover:bg-muted/30'
+                      }`}
+                    >
+                      <t.icon className={`w-6 h-6 mb-3 ${t.color}`} />
+                      <div className="text-sm font-display font-semibold text-foreground mb-1">
+                        {t.name}
+                      </div>
+                      <div className="text-xs text-muted-foreground leading-relaxed">
+                        {t.desc}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  onClick={() => goToStep(3)}
+                  disabled={!selectedTier}
+                  className="px-6 py-2.5 rounded-lg bg-primary text-primary-foreground font-display text-sm font-semibold disabled:opacity-40 hover:bg-primary/80 transition-colors"
+                >
+                  Continue <ChevronRight className="inline w-4 h-4 ml-1" />
+                </button>
+              </motion.div>
+            )}
+
+            {/* ═══ STEP 3: Memory Import ═══ */}
+            {step === 3 && (
+              <motion.div key="step-3" {...fadeSlide}>
                 <div className="text-center mb-6">
                   <Brain className="w-10 h-10 text-primary mx-auto mb-3" />
                   <h2 className="text-2xl font-display font-bold text-foreground mb-2">
@@ -462,13 +535,13 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
 
                 <div className="flex items-center justify-center gap-4">
                   <button
-                    onClick={() => goToStep(1)}
+                    onClick={() => goToStep(2)}
                     className="text-sm text-muted-foreground hover:text-foreground transition-colors font-display"
                   >
                     Back
                   </button>
                   <button
-                    onClick={() => goToStep(3)}
+                    onClick={() => goToStep(4)}
                     className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                   >
                     {importDone ? 'Continue' : 'Skip this step'}
@@ -477,9 +550,9 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
               </motion.div>
             )}
 
-            {/* ═══ STEP 3: Choose Template ═══ */}
-            {step === 3 && (
-              <motion.div key="step-3" {...fadeSlide}>
+            {/* ═══ STEP 4: Choose Template ═══ */}
+            {step === 4 && (
+              <motion.div key="step-4" {...fadeSlide}>
                 <div className="text-center mb-6">
                   <Sparkles className="w-10 h-10 text-primary mx-auto mb-3" />
                   <h2 className="text-2xl font-display font-bold text-foreground mb-2">
@@ -542,13 +615,13 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
 
                 <div className="flex items-center gap-3">
                   <button
-                    onClick={() => goToStep(2)}
+                    onClick={() => goToStep(3)}
                     className="px-4 py-2.5 rounded-xl text-sm text-muted-foreground hover:text-foreground transition-colors"
                   >
                     Back
                   </button>
                   <button
-                    onClick={() => goToStep(4)}
+                    onClick={() => goToStep(5)}
                     disabled={!selectedTemplate}
                     className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-primary-foreground font-display text-sm font-semibold hover:bg-primary/80 disabled:opacity-40 transition-colors"
                   >
@@ -558,9 +631,9 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
               </motion.div>
             )}
 
-            {/* ═══ STEP 4: Choose Persona ═══ */}
-            {step === 4 && (
-              <motion.div key="step-4" {...fadeSlide}>
+            {/* ═══ STEP 5: Choose Persona ═══ */}
+            {step === 5 && (
+              <motion.div key="step-5" {...fadeSlide}>
                 <div className="text-center mb-6">
                   <h2 className="text-2xl font-display font-bold text-foreground mb-2">
                     How should I work?
@@ -649,13 +722,13 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
 
                 <div className="flex items-center gap-3 mt-5">
                   <button
-                    onClick={() => goToStep(3)}
+                    onClick={() => goToStep(4)}
                     className="px-4 py-2.5 rounded-xl text-sm text-muted-foreground hover:text-foreground transition-colors"
                   >
                     Back
                   </button>
                   <button
-                    onClick={() => goToStep(5)}
+                    onClick={() => goToStep(6)}
                     disabled={!selectedPersona}
                     className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-primary-foreground font-display text-sm font-semibold hover:bg-primary/80 disabled:opacity-40 transition-colors"
                   >
@@ -665,9 +738,9 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
               </motion.div>
             )}
 
-            {/* ═══ STEP 5: API Key ═══ */}
-            {step === 5 && (
-              <motion.div key="step-5" {...fadeSlide}>
+            {/* ═══ STEP 6: API Key ═══ */}
+            {step === 6 && (
+              <motion.div key="step-6" {...fadeSlide}>
                 <div className="text-center mb-6">
                   <Key className="w-10 h-10 text-primary mx-auto mb-3" />
                   <h2 className="text-2xl font-display font-bold text-foreground mb-2">
@@ -758,7 +831,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
 
                 <div className="flex items-center gap-3 mt-5">
                   <button
-                    onClick={() => goToStep(4)}
+                    onClick={() => goToStep(5)}
                     className="px-4 py-2.5 rounded-xl text-sm text-muted-foreground hover:text-foreground transition-colors"
                   >
                     Back
@@ -785,9 +858,9 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
               </motion.div>
             )}
 
-            {/* ═══ STEP 6: Celebration ═══ */}
-            {step === 6 && (
-              <motion.div key="step-6" {...fadeSlide} className="text-center">
+            {/* ═══ STEP 7: Celebration ═══ */}
+            {step === 7 && (
+              <motion.div key="step-7" {...fadeSlide} className="text-center">
                 <motion.div
                   initial={{ scale: 0.8, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}

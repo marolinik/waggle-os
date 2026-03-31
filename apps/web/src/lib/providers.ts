@@ -189,7 +189,7 @@ const BUILT_IN_PROVIDERS: ProviderConfig[] = [
 let _providers: ProviderConfig[] = [...BUILT_IN_PROVIDERS];
 
 /** Custom providers added by user, persisted to localStorage */
-const CUSTOM_PROVIDERS_KEY = 'waggle_custom_providers';
+const CUSTOM_PROVIDERS_KEY = 'waggle:custom-providers';
 
 function loadCustomProviders(): ProviderConfig[] {
   try {

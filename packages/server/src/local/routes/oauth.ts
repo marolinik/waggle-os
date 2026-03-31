@@ -275,7 +275,8 @@ export const oauthRoutes: FastifyPluginAsync = async (server) => {
       }
 
       const tokenData = await tokenRes.json() as Record<string, unknown>;
-      const accessToken = (tokenData.access_token ?? tokenData.authed_user?.access_token) as string | undefined;
+      const authedUser = tokenData.authed_user as Record<string, unknown> | undefined;
+      const accessToken = (tokenData.access_token ?? authedUser?.access_token) as string | undefined;
 
       if (!accessToken) {
         return reply.type('text/html').send(

@@ -1,5 +1,6 @@
 import { motion, useDragControls, PanInfo } from "framer-motion";
 import { useState, useCallback, useRef, useEffect } from "react";
+import { savePosition } from "@/lib/window-positions";
 
 type SnapZone = "left" | "right" | "top" | null;
 
@@ -22,9 +23,11 @@ interface AppWindowProps {
   title: string;
   icon: React.ReactNode;
   children: React.ReactNode;
+  appId?: string;
   onClose: () => void;
   onMinimize: () => void;
   isMinimized?: boolean;
+  isFocused?: boolean;
   defaultPosition?: { x: number; y: number };
   defaultSize?: { w: string; h: string };
   zIndex: number;
@@ -37,9 +40,11 @@ const AppWindow = ({
   title,
   icon,
   children,
+  appId,
   onClose,
   onMinimize,
   isMinimized = false,
+  isFocused = false,
   defaultPosition = { x: 100, y: 60 },
   defaultSize = { w: "500px", h: "400px" },
   zIndex,
@@ -63,6 +68,16 @@ const AppWindow = ({
   } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Escape key closes the focused window
+  useEffect(() => {
+    if (!isFocused) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.preventDefault(); onClose(); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isFocused, onClose]);
+
   const detectSnap = useCallback((info: PanInfo): SnapZone => {
     const px = info.point.x;
     const py = info.point.y;
@@ -80,8 +95,13 @@ const AppWindow = ({
     setIsDragging(false);
     const zone = detectSnap(info);
     setSnapPreview(null);
-    if (zone) setSnapZone(zone);
-  }, [detectSnap]);
+    if (zone) {
+      setSnapZone(zone);
+    } else if (appId && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      savePosition(appId, { x: rect.left, y: rect.top, width: rect.width, height: rect.height });
+    }
+  }, [detectSnap, appId]);
 
   const unsnap = useCallback(() => {
     if (snapZone) setSnapZone(null);
@@ -138,6 +158,9 @@ const AppWindow = ({
       if (r?.el) {
         const rect = r.el.getBoundingClientRect();
         setSize({ w: rect.width, h: rect.height });
+        if (appId) {
+          savePosition(appId, { x: rect.left, y: rect.top, width: rect.width, height: rect.height });
+        }
       }
       resizeRef.current = null;
       setIsResizing(false);
@@ -210,6 +233,8 @@ const AppWindow = ({
         className={`absolute top-0 left-0 glass-strong overflow-visible flex flex-col shadow-2xl ${
           isSnappedOrMax ? "rounded-none" : "rounded-xl"
         }`}
+        role="dialog"
+        aria-label={title}
         style={{ zIndex, pointerEvents: isMinimized ? "none" : "auto" }}
         onMouseDown={onFocus}
       >
@@ -244,22 +269,31 @@ const AppWindow = ({
             {icon}
             <span className="text-xs font-display font-medium text-foreground">{title}</span>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-0">
             <button
               onClick={onMinimize}
-              className="w-3 h-3 rounded-full bg-primary/40 hover:bg-primary/60 transition-colors"
+              className="w-6 h-6 flex items-center justify-center"
+              aria-label="Minimize window"
               title="Minimize"
-            />
+            >
+              <span className="w-3 h-3 rounded-full bg-primary/40 hover:bg-primary/60 transition-colors" />
+            </button>
             <button
               onClick={() => { setSnapZone(null); setIsMaximized(!isMaximized); }}
-              className="w-3 h-3 rounded-full bg-primary/40 hover:bg-primary/60 transition-colors"
+              className="w-6 h-6 flex items-center justify-center"
+              aria-label="Toggle fullscreen"
               title="Maximize"
-            />
+            >
+              <span className="w-3 h-3 rounded-full bg-primary/40 hover:bg-primary/60 transition-colors" />
+            </button>
             <button
               onClick={onClose}
-              className="w-3 h-3 rounded-full bg-destructive/60 hover:bg-destructive transition-colors"
+              className="w-6 h-6 flex items-center justify-center"
+              aria-label="Close window"
               title="Close"
-            />
+            >
+              <span className="w-3 h-3 rounded-full bg-destructive/60 hover:bg-destructive transition-colors" />
+            </button>
           </div>
         </div>
 

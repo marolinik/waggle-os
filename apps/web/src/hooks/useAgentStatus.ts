@@ -19,7 +19,8 @@ export const useAgentStatus = () => {
         setStatus(data);
         setOffline(false);
         failCount.current = 0;
-      } catch {
+      } catch (err) {
+        console.error('[useAgentStatus] poll failed:', err);
         failCount.current++;
         setOffline(true);
       }

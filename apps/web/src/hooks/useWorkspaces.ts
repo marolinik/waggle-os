@@ -30,8 +30,8 @@ export const useWorkspaces = () => {
         }
       }
       setError(null);
-    } catch {
-      // Keep default workspace — don't set error for offline state
+    } catch (err) {
+      console.error('[useWorkspaces] fetch failed:', err);
     } finally {
       setLoading(false);
     }
@@ -45,8 +45,8 @@ export const useWorkspaces = () => {
       setWorkspaces(prev => [...prev.filter(w => w.id !== DEFAULT_WORKSPACE.id), ws]);
       setActiveWorkspaceId(ws.id);
       return ws;
-    } catch {
-      // Create locally if backend is offline
+    } catch (err) {
+      console.error('[useWorkspaces] create failed, using local fallback:', err);
       const localWs: Workspace = {
         id: `local-${Date.now()}`,
         name: data.name,
@@ -66,7 +66,7 @@ export const useWorkspaces = () => {
   }, []);
 
   const deleteWorkspace = useCallback(async (id: string) => {
-    try { await adapter.deleteWorkspace(id); } catch { /* local delete */ }
+    try { await adapter.deleteWorkspace(id); } catch (err) { console.error('[useWorkspaces] delete failed:', err); }
     setWorkspaces(prev => prev.filter(w => w.id !== id));
     if (activeWorkspaceId === id) {
       setActiveWorkspaceId(workspaces.find(w => w.id !== id)?.id || null);
@@ -76,7 +76,7 @@ export const useWorkspaces = () => {
   const patchWorkspace = useCallback(async (id: string, data: Partial<Pick<Workspace, 'persona' | 'agentGroupId' | 'name' | 'group' | 'model'>>) => {
     try {
       await adapter.patchWorkspace(id, data);
-    } catch { /* best-effort */ }
+    } catch (err) { console.error('[useWorkspaces] patch failed:', err); }
     setWorkspaces(prev => prev.map(w => w.id === id ? { ...w, ...data } : w));
   }, []);
 

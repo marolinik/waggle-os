@@ -1,4 +1,4 @@
-import { Bell, Check, CheckCheck, X } from 'lucide-react';
+import { Bell, Check, CheckCheck, X, CheckCircle2 } from 'lucide-react';
 import type { Notification } from '@/lib/types';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -51,8 +51,9 @@ const NotificationInbox = ({ open, onClose, notifications, onMarkRead, onMarkAll
           <div className="max-h-80 overflow-auto">
             {notifications.length === 0 && (
               <div className="py-8 text-center">
-                <Bell className="w-8 h-8 text-muted-foreground/20 mx-auto mb-2" />
-                <p className="text-xs text-muted-foreground">No notifications</p>
+                <CheckCircle2 className="w-8 h-8 text-emerald-400/40 mx-auto mb-2" />
+                <p className="text-xs text-foreground font-display font-medium">All caught up</p>
+                <p className="text-[10px] text-muted-foreground mt-1">No new notifications</p>
               </div>
             )}
             {notifications.map(n => (

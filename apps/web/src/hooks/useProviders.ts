@@ -34,6 +34,7 @@ export const useProviders = () => {
   const [search, setSearch] = useState<SearchProvider[]>([]);
   const [activeSearch, setActiveSearch] = useState('duckduckgo');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -41,8 +42,10 @@ export const useProviders = () => {
       setProviders(data.providers);
       setSearch(data.search);
       setActiveSearch(data.activeSearch);
-    } catch {
-      // Fallback: empty
+      setError(null);
+    } catch (err) {
+      console.error('[useProviders] fetch failed:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load');
     } finally {
       setLoading(false);
     }
@@ -74,6 +77,7 @@ export const useProviders = () => {
     activeProviders,
     availableModels,
     loading,
+    error,
     refresh,
   };
 };

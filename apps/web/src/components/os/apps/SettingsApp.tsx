@@ -3,8 +3,12 @@ import {
   Cpu, Shield, Palette, Save, Loader2, Users, Database,
   Download, Upload, Link2, Building, Wrench, DollarSign, Key, Lock,
 } from 'lucide-react';
+import { useFeatureGate } from '@/hooks/useFeatureGate';
+import LockedFeature from '@/components/os/LockedFeature';
 import { adapter } from '@/lib/adapter';
 import { useProviders } from '@/hooks/useProviders';
+import { useOnboarding } from '@/hooks/useOnboarding';
+import type { UserTier } from '@/lib/dock-tiers';
 import ModelSelector from '@/components/os/ModelSelector';
 
 type SettingsTab = 'general' | 'models' | 'permissions' | 'team' | 'backup' | 'enterprise' | 'advanced';
@@ -29,6 +33,19 @@ const SettingsApp = () => {
 
   // Provider data from single source of truth
   const { providers, search, activeSearch, loading: providersLoading } = useProviders();
+
+  // Dock tier
+  const { state: onboardingState, update: updateOnboarding } = useOnboarding();
+
+  // Feature gating
+  const { isEnabled } = useFeatureGate();
+  const isTeamLocked = !isEnabled('mission-control');
+  const isEnterpriseLocked = !isEnabled('audit-trail');
+
+  const LOCKED_TABS: Partial<Record<SettingsTab, { feature: string; label: string; prompt: string }>> = {
+    ...(isTeamLocked ? { team: { feature: 'mission-control', label: 'Team Management', prompt: 'Upgrade to Business for team management features' } } : {}),
+    ...(isEnterpriseLocked ? { enterprise: { feature: 'audit-trail', label: 'Enterprise Features', prompt: 'Enterprise feature — contact sales for audit trail, compliance, and governance' } } : {}),
+  };
 
   // Permissions state
   const [yoloMode, setYoloMode] = useState(false);
@@ -83,18 +100,22 @@ const SettingsApp = () => {
     <div className="flex h-full">
       {/* Tab sidebar */}
       <div className="w-36 border-r border-border/50 p-2 space-y-0.5 shrink-0 overflow-auto">
-        {tabs.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors ${
-              activeTab === tab.id ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-            }`}
-          >
-            <tab.icon className="w-3.5 h-3.5" />
-            {tab.label}
-          </button>
-        ))}
+        {tabs.map(tab => {
+          const locked = LOCKED_TABS[tab.id];
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors ${
+                activeTab === tab.id ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+              }`}
+            >
+              <tab.icon className="w-3.5 h-3.5" />
+              {tab.label}
+              {locked && <Lock className="w-3 h-3 ml-auto text-muted-foreground/50" />}
+            </button>
+          );
+        })}
       </div>
 
       {/* Content */}
@@ -114,6 +135,21 @@ const SettingsApp = () => {
                 </div>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-display bg-primary/20 text-primary capitalize">{tier}</span>
               </div>
+            </div>
+
+            {/* Dock Experience */}
+            <div>
+              <p className="text-xs font-display font-medium text-foreground mb-2">Dock Experience</p>
+              <select
+                value={onboardingState.tier || 'simple'}
+                onChange={(e) => updateOnboarding({ tier: e.target.value as UserTier })}
+                className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none focus:border-primary/50"
+              >
+                <option value="simple">Simple — essentials only</option>
+                <option value="professional">Professional — full workspace tools</option>
+                <option value="power">Full Control — everything visible</option>
+              </select>
+              <p className="text-[10px] text-muted-foreground mt-1.5">Controls which apps appear in the dock. All apps remain accessible via Ctrl+K.</p>
             </div>
 
             {/* Theme */}
@@ -255,7 +291,10 @@ const SettingsApp = () => {
         )}
 
         {/* ═══ TEAM ═══ */}
-        {activeTab === 'team' && (
+        {activeTab === 'team' && LOCKED_TABS.team && (
+          <LockedFeature featureName={LOCKED_TABS.team.label} upgradePrompt={LOCKED_TABS.team.prompt} />
+        )}
+        {activeTab === 'team' && !LOCKED_TABS.team && (
           <div className="space-y-4">
             <h3 className="text-sm font-display font-semibold text-foreground">Team Server</h3>
             <div className="space-y-3">
@@ -334,7 +373,10 @@ const SettingsApp = () => {
         )}
 
         {/* ═══ ENTERPRISE ═══ */}
-        {activeTab === 'enterprise' && (
+        {activeTab === 'enterprise' && LOCKED_TABS.enterprise && (
+          <LockedFeature featureName={LOCKED_TABS.enterprise.label} upgradePrompt={LOCKED_TABS.enterprise.prompt} />
+        )}
+        {activeTab === 'enterprise' && !LOCKED_TABS.enterprise && (
           <div className="space-y-4">
             <h3 className="text-sm font-display font-semibold text-foreground">Enterprise (KVARK)</h3>
             <p className="text-xs text-muted-foreground">Connect to KVARK for enterprise document retrieval, compliance, and governance features.</p>

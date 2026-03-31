@@ -131,7 +131,7 @@ export async function agentRoutes(fastify: FastifyInstance) {
 
     // Build workflow template from group definition
     const { buildWorkflowFromGroup } = await import('../services/agent-group-executor.js');
-    const workflow = buildWorkflowFromGroup(group, task);
+    const workflow = buildWorkflowFromGroup({ ...group, description: group.description ?? undefined }, task);
 
     // If teamId provided, also create a job record for tracking
     let jobId: string | undefined;

@@ -54,6 +54,7 @@ const ConnectorsApp = () => {
   const [emailInput, setEmailInput] = useState('');
   const [connecting, setConnecting] = useState(false);
   const [filter, setFilter] = useState('all');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => { loadConnectors(); }, []);
 
@@ -62,8 +63,12 @@ const ConnectorsApp = () => {
     try {
       const data = await adapter.getConnectors();
       setConnectors(data);
-    } catch { setConnectors([]); }
-    finally { setLoading(false); }
+      setError(null);
+    } catch (err) {
+      console.error('[ConnectorsApp] load failed:', err);
+      setConnectors([]);
+      setError(err instanceof Error ? err.message : 'Server unreachable');
+    } finally { setLoading(false); }
   };
 
   const handleConnect = async (id: string) => {
@@ -79,7 +84,7 @@ const ConnectorsApp = () => {
       setEmailInput('');
       setExpanded(null);
       await loadConnectors();
-    } catch { /* ignore */ }
+    } catch (err) { console.error('[ConnectorsApp] connect failed:', err); }
     finally { setConnecting(false); }
   };
 
@@ -87,7 +92,7 @@ const ConnectorsApp = () => {
     try {
       await adapter.disconnectConnector(id);
       await loadConnectors();
-    } catch { /* ignore */ }
+    } catch (err) { console.error('[ConnectorsApp] disconnect failed:', err); }
   };
 
   // Group connectors by category
@@ -116,8 +121,21 @@ const ConnectorsApp = () => {
     return <div className="flex items-center justify-center h-full"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>;
   }
 
+  if (error && connectors.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-3 p-6 text-center">
+        <AlertTriangle className="w-8 h-8 text-muted-foreground/30" />
+        <p className="text-sm font-display font-medium text-foreground">Server unreachable</p>
+        <p className="text-xs text-muted-foreground max-w-xs">Could not connect to the backend — check Settings</p>
+        <button onClick={loadConnectors} className="mt-2 px-3 py-1.5 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 transition-colors flex items-center gap-1.5">
+          <RefreshCw className="w-3 h-3" /> Retry
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-full">
+    <div className="flex h-full bg-background">
       {/* Sidebar */}
       <div className="w-36 border-r border-border/50 p-2 space-y-0.5 shrink-0">
         <button onClick={() => setTab('services')}

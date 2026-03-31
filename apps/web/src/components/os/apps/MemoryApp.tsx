@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Brain, Search, Clock, Trash2, Edit3, Filter, Network, ChevronDown, X } from 'lucide-react';
+import { Brain, Search, Clock, Trash2, Edit3, Filter, Network, ChevronDown, X, Eye, Copy, Pencil } from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
 import type { MemoryFrame, KGNode, KGEdge } from '@/lib/types';
+import { renderSimpleMarkdown } from '@/lib/render-markdown';
+import ContextMenu, { type ContextMenuItem } from '@/components/os/ContextMenu';
 
 const frameTypeIcons: Record<string, string> = {
   fact: '📋', event: '📅', insight: '💡', decision: '⚖️', task: '✅', entity: '🏷️',
@@ -87,6 +90,21 @@ const MemoryApp = ({
 }: MemoryAppProps) => {
   const [view, setView] = useState<'timeline' | 'graph'>('timeline');
   const [showFilters, setShowFilters] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ position: { x: number; y: number }; items: ContextMenuItem[] } | null>(null);
+
+  const handleFrameContextMenu = (e: React.MouseEvent, frame: MemoryFrame) => {
+    e.preventDefault();
+    setContextMenu({
+      position: { x: e.clientX, y: e.clientY },
+      items: [
+        { label: 'View Details', icon: <Eye className="w-3.5 h-3.5" />, onClick: () => onSelectFrame(frame) },
+        { label: 'Copy Content', icon: <Copy className="w-3.5 h-3.5" />, onClick: () => navigator.clipboard.writeText(frame.content) },
+        { label: 'Edit', icon: <Pencil className="w-3.5 h-3.5" />, onClick: () => { /* TODO: add edit modal */ console.log('[MemoryApp] Edit frame:', frame.id); }, disabled: true },
+        { label: '', onClick: () => {}, separator: true },
+        { label: 'Delete', icon: <Trash2 className="w-3.5 h-3.5" />, onClick: () => onDeleteFrame(frame.id), danger: true },
+      ],
+    });
+  };
 
   const toggleTypeFilter = (type: string) => {
     if (!onTypeFiltersChange) return;
@@ -163,6 +181,7 @@ const MemoryApp = ({
             <button
               key={f.id}
               onClick={() => onSelectFrame(f)}
+              onContextMenu={e => handleFrameContextMenu(e, f)}
               className={`w-full text-left p-2 rounded-lg text-xs transition-colors ${
                 selectedFrame?.id === f.id ? 'bg-primary/20 border border-primary/30' : 'hover:bg-muted/50'
               }`}
@@ -214,9 +233,11 @@ const MemoryApp = ({
               <span>Importance: {selectedFrame.importance}/5</span>
               <span>{new Date(selectedFrame.timestamp).toLocaleString()}</span>
             </div>
-            <div className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
-              {selectedFrame.content}
-            </div>
+            {/* Safe: renderSimpleMarkdown escapes HTML entities before applying formatting */}
+            <div
+              className="text-sm text-foreground leading-relaxed"
+              dangerouslySetInnerHTML={{ __html: renderSimpleMarkdown(selectedFrame.content) }}
+            />
             {selectedFrame.metadata && Object.keys(selectedFrame.metadata).length > 0 && (
               <div className="mt-4 p-3 rounded-lg bg-secondary/30 border border-border/30">
                 <p className="text-xs font-display font-medium text-muted-foreground mb-1">Metadata</p>
@@ -233,6 +254,17 @@ const MemoryApp = ({
           </div>
         )}
       </div>
+
+      {/* Context menu */}
+      <AnimatePresence>
+        {contextMenu && (
+          <ContextMenu
+            items={contextMenu.items}
+            position={contextMenu.position}
+            onClose={() => setContextMenu(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };
