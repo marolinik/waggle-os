@@ -795,6 +795,11 @@ class LocalAdapter {
     return res.json();
   }
 
+  // --- Feedback ---
+  async submitFeedback(data: { sessionId: string; messageIndex: number; rating: 'up' | 'down'; reason?: string; detail?: string }): Promise<void> {
+    this.fetch('/api/feedback', { method: 'POST', body: JSON.stringify(data) }).catch(() => {});
+  }
+
   // --- Waggle Dance ---
   async getWaggleSignals(): Promise<WaggleSignal[]> {
     try {

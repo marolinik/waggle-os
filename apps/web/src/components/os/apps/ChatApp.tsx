@@ -106,22 +106,61 @@ const ToolCard = ({ tool }: { tool: ToolExecution }) => {
   );
 };
 
-const FeedbackButtons = ({ messageId, feedback }: { messageId: string; feedback?: 'up' | 'down' | null }) => {
+const FEEDBACK_REASONS = [
+  { id: 'wrong_answer', label: 'Wrong answer' },
+  { id: 'too_verbose', label: 'Too verbose' },
+  { id: 'wrong_tool', label: 'Wrong tool used' },
+  { id: 'too_slow', label: 'Too slow' },
+  { id: 'other', label: 'Other' },
+] as const;
+
+const FeedbackButtons = ({ messageId, messageIndex, sessionId, feedback }: {
+  messageId: string; messageIndex: number; sessionId?: string; feedback?: 'up' | 'down' | null;
+}) => {
   const [vote, setVote] = useState(feedback);
+  const [showReasons, setShowReasons] = useState(false);
+
+  const handleVote = (rating: 'up' | 'down', reason?: string) => {
+    const newVote = vote === rating ? null : rating;
+    setVote(newVote);
+    setShowReasons(false);
+    if (newVote && sessionId) {
+      adapter.submitFeedback({ sessionId, messageIndex, rating: newVote, reason });
+    }
+  };
+
   return (
-    <div className="flex items-center gap-1 mt-1">
+    <div className="flex items-center gap-1 mt-1 relative">
       <button
-        onClick={() => setVote(vote === 'up' ? null : 'up')}
+        onClick={() => handleVote('up')}
         className={`p-0.5 rounded transition-colors ${vote === 'up' ? 'text-emerald-400' : 'text-muted-foreground/40 hover:text-muted-foreground'}`}
+        title="Good response"
       >
         <ThumbsUp className="w-3 h-3" />
       </button>
       <button
-        onClick={() => setVote(vote === 'down' ? null : 'down')}
+        onClick={() => {
+          if (vote === 'down') { handleVote('down'); return; }
+          setShowReasons(s => !s);
+        }}
         className={`p-0.5 rounded transition-colors ${vote === 'down' ? 'text-destructive' : 'text-muted-foreground/40 hover:text-muted-foreground'}`}
+        title="Poor response"
       >
         <ThumbsDown className="w-3 h-3" />
       </button>
+      {showReasons && (
+        <div className="absolute bottom-full left-0 mb-1 bg-card border border-border rounded-lg shadow-xl z-20 py-1 w-36">
+          {FEEDBACK_REASONS.map(r => (
+            <button
+              key={r.id}
+              onClick={() => handleVote('down', r.id)}
+              className="w-full text-left px-3 py-1.5 text-[10px] text-foreground hover:bg-muted/50 transition-colors"
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
@@ -521,7 +560,7 @@ const ChatApp = ({
               <p className="text-xs text-muted-foreground">Select a workspace to get started</p>
             </div>
           )}
-          {messages.map((msg) => (
+          {messages.map((msg, msgIdx) => (
             <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} gap-2`}>
               {msg.role === 'assistant' && persona && (
                 <Avatar className="w-6 h-6 mt-1 shrink-0">
@@ -563,7 +602,7 @@ const ChatApp = ({
                   </div>
                 )}
                 {msg.role === 'assistant' && msg.content && (
-                  <FeedbackButtons messageId={msg.id} feedback={msg.feedback} />
+                  <FeedbackButtons messageId={msg.id} messageIndex={msgIdx} sessionId={activeSessionId ?? undefined} feedback={msg.feedback} />
                 )}
               </div>
             </div>
