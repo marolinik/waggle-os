@@ -1,4 +1,6 @@
 /**
+ * @internal Not exported from index.ts — future feature, tested but not wired.
+ *
  * Improvement Wiring — processes each interaction for improvement signals.
  *
  * Bridges the gap between the chat route (which has raw messages) and the

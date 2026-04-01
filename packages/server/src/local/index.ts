@@ -34,40 +34,6 @@ import {
   createLspTools,
   createCliTools,
   McpRuntime,
-  ConnectorRegistry,
-  GitHubConnector,
-  SlackConnector,
-  JiraConnector,
-  EmailConnector,
-  GoogleCalendarConnector,
-  DiscordConnector,
-  LinearConnector,
-  AsanaConnector,
-  TrelloConnector,
-  MondayConnector,
-  NotionConnector,
-  ConfluenceConnector,
-  ObsidianConnector,
-  HubSpotConnector,
-  SalesforceConnector,
-  PipedriveConnector,
-  AirtableConnector,
-  GitLabConnector,
-  BitbucketConnector,
-  DropboxConnector,
-  PostgresConnector,
-  GmailConnector,
-  GoogleDocsConnector,
-  GoogleDriveConnector,
-  GoogleSheetsConnector,
-  MSTeamsConnector,
-  OutlookConnector,
-  OneDriveConnector,
-  ComposioConnector,
-  // MOCK: Remove when real OAuth integrations are ready
-  MockSlackConnector,
-  MockTeamsConnector,
-  MockDiscordConnector,
   isWithinBudget,
   getRecentLogs,
   setPersonaDataDir,
@@ -122,6 +88,9 @@ import { providerRoutes } from './routes/providers.js';
 import { profileRoutes } from './routes/profile.js';
 import { telemetryRoutes } from './routes/telemetry.js';
 import { OfflineManager } from './offline-manager.js';
+import { log, createLogger } from './logger.js';
+import { seedDefaultCrons } from './setup-crons.js';
+import { registerConnectors } from './setup-connectors.js';
 import { securityMiddleware } from './security-middleware.js';
 import { LocalScheduler } from './cron.js';
 import {
@@ -266,80 +235,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   const cronStore = new CronStore(multiMind.personal);
   server.decorate('cronStore', cronStore);
 
-  // Seed default routines on first run
-  if (cronStore.list().length === 0) {
-    cronStore.create({ name: 'Memory consolidation', cronExpr: '0 3 * * *', jobType: 'memory_consolidation' });
-    cronStore.create({ name: 'Workspace health check', cronExpr: '0 8 * * 1', jobType: 'workspace_health' });
-  }
-
-  // Ensure marketplace_sync cron exists (added separately so existing installs get it)
-  const existingSync = cronStore.list().find(s => s.name === 'Marketplace sync');
-  if (!existingSync) {
-    cronStore.create({
-      name: 'Marketplace sync',
-      cronExpr: '0 2 * * 0', // Sunday 2 AM
-      jobType: 'memory_consolidation', // system-level maintenance (no workspace needed)
-      jobConfig: { action: 'marketplace_sync' },
-    });
-  }
-
-  // Ensure proactive behavior cron routines exist (added separately so existing installs get them)
-  const existingCrons = cronStore.list();
-  if (!existingCrons.find(s => s.name === 'Morning briefing')) {
-    cronStore.create({
-      name: 'Morning briefing',
-      cronExpr: '0 8 * * *', // daily at 8:00 AM
-      jobType: 'proactive',
-      jobConfig: { action: 'morning_briefing' },
-    });
-  }
-  if (!existingCrons.find(s => s.name === 'Stale workspace check')) {
-    cronStore.create({
-      name: 'Stale workspace check',
-      cronExpr: '0 9 * * 1', // weekly on Monday at 9:00 AM
-      jobType: 'proactive',
-      jobConfig: { action: 'stale_workspace_check' },
-    });
-  }
-  if (!existingCrons.find(s => s.name === 'Task reminder')) {
-    cronStore.create({
-      name: 'Task reminder',
-      cronExpr: '30 8 * * *', // daily at 8:30 AM (30 min after briefing)
-      jobType: 'proactive',
-      jobConfig: { action: 'task_reminder' },
-    });
-  }
-  if (!existingCrons.find(s => s.name === 'Capability suggestion')) {
-    cronStore.create({
-      name: 'Capability suggestion',
-      cronExpr: '0 10 * * 3', // weekly on Wednesday at 10:00 AM
-      jobType: 'proactive',
-      jobConfig: { action: 'capability_suggestion' },
-    });
-  }
-  if (!existingCrons.find(s => s.name === 'Prompt optimization')) {
-    cronStore.create({
-      name: 'Prompt optimization',
-      cronExpr: '0 2 * * *', // daily at 2:00 AM
-      jobType: 'prompt_optimization',
-      enabled: false,         // opt-in — only runs when workspace has optimizationEnabled
-    });
-  }
-  if (!existingCrons.find(s => s.name === 'Monthly assessment')) {
-    cronStore.create({
-      name: 'Monthly assessment',
-      cronExpr: '0 6 1 * *', // 1st of each month at 6:00 AM
-      jobType: 'monthly_assessment',
-    });
-  }
-  if (!existingCrons.find(s => s.name === 'Index reconciliation')) {
-    cronStore.create({
-      name: 'Index reconciliation',
-      cronExpr: '0 4 * * 0', // Sunday 4 AM — weekly maintenance
-      jobType: 'memory_consolidation',
-      jobConfig: { action: 'index_reconcile' },
-    });
-  }
+  seedDefaultCrons(cronStore);
 
   // Vault — encrypted secret storage
   const vault = new VaultStore(fullConfig.dataDir);
@@ -359,7 +255,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     if (Object.keys(configProviders).length > 0) {
       const migrated = vault.migrateFromConfig({ providers: configProviders });
       if (migrated > 0) {
-        console.log(`[waggle] Migrated ${migrated} API key(s) to encrypted vault`);
+        log.info(` Migrated ${migrated} API key(s) to encrypted vault`);
       }
     }
   } catch {
@@ -367,40 +263,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   }
 
   // Connector Registry — manages registered connectors and generates dynamic tools
-  const connectorRegistry = new ConnectorRegistry(vault);
-  connectorRegistry.register(new GitHubConnector());
-  connectorRegistry.register(new SlackConnector());
-  connectorRegistry.register(new JiraConnector());
-  connectorRegistry.register(new EmailConnector());
-  connectorRegistry.register(new GoogleCalendarConnector());
-  connectorRegistry.register(new DiscordConnector());
-  connectorRegistry.register(new LinearConnector());
-  connectorRegistry.register(new AsanaConnector());
-  connectorRegistry.register(new TrelloConnector());
-  connectorRegistry.register(new MondayConnector());
-  connectorRegistry.register(new NotionConnector());
-  connectorRegistry.register(new ConfluenceConnector());
-  connectorRegistry.register(new ObsidianConnector());
-  connectorRegistry.register(new HubSpotConnector());
-  connectorRegistry.register(new SalesforceConnector());
-  connectorRegistry.register(new PipedriveConnector());
-  connectorRegistry.register(new AirtableConnector());
-  connectorRegistry.register(new GitLabConnector());
-  connectorRegistry.register(new BitbucketConnector());
-  connectorRegistry.register(new DropboxConnector());
-  connectorRegistry.register(new PostgresConnector());
-  connectorRegistry.register(new GmailConnector());
-  connectorRegistry.register(new GoogleDocsConnector());
-  connectorRegistry.register(new GoogleDriveConnector());
-  connectorRegistry.register(new GoogleSheetsConnector());
-  connectorRegistry.register(new MSTeamsConnector());
-  connectorRegistry.register(new OutlookConnector());
-  connectorRegistry.register(new OneDriveConnector());
-  connectorRegistry.register(new ComposioConnector());
-  // MOCK: Remove when real OAuth integrations are ready
-  connectorRegistry.register(new MockSlackConnector());
-  connectorRegistry.register(new MockTeamsConnector());
-  connectorRegistry.register(new MockDiscordConnector());
+  const connectorRegistry = registerConnectors(vault);
   server.decorate('connectorRegistry', connectorRegistry);
 
   // Seed marketplace.db if not present, then open it for production routes
@@ -416,7 +279,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
       for (const seedPath of seedPaths) {
         if (fs.existsSync(seedPath)) {
           fs.copyFileSync(seedPath, marketplaceDbTarget);
-          console.log(`[waggle] Seeded marketplace.db from ${seedPath}`);
+          log.info(` Seeded marketplace.db from ${seedPath}`);
           break;
         }
       }
@@ -427,24 +290,24 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
       try {
         const mcpAdded = seedMcpServers(marketplaceDb);
         if (mcpAdded > 0) {
-          console.log(`[waggle] Seeded ${mcpAdded} MCP servers into marketplace`);
+          log.info(` Seeded ${mcpAdded} MCP servers into marketplace`);
         }
       } catch (err) {
-        console.warn(`[waggle] MCP registry seed failed: ${(err as Error).message}`);
+        log.warn(` MCP registry seed failed: ${(err as Error).message}`);
       }
       // Seed new marketplace sources (skills.sh, mcpmarket, npm, awesome-mcp-servers, etc.)
       try {
         const sourcesAdded = seedNewSources(marketplaceDb);
         if (sourcesAdded > 0) {
-          console.log(`[waggle] Seeded ${sourcesAdded} new marketplace sources`);
+          log.info(` Seeded ${sourcesAdded} new marketplace sources`);
         }
       } catch (err) {
-        console.warn(`[waggle] Source seed failed: ${(err as Error).message}`);
+        log.warn(` Source seed failed: ${(err as Error).message}`);
       }
-      console.log('[waggle] Marketplace DB loaded');
+      log.info(' Marketplace DB loaded');
     }
   } catch (err) {
-    console.warn(`[waggle] Marketplace DB failed to load: ${(err as Error).message}`);
+    log.warn(` Marketplace DB failed to load: ${(err as Error).message}`);
     // Marketplace is optional — never block startup
   }
   server.decorate('marketplace', marketplaceDb);
@@ -489,14 +352,14 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
       const vecRow = db.prepare('SELECT COUNT(*) as cnt FROM memory_frames_vec').get() as { cnt: number } | undefined;
       const totalRow = db.prepare('SELECT COUNT(*) as cnt FROM memory_frames').get() as { cnt: number };
       if (totalRow.cnt > 0 && (vecRow?.cnt ?? 0) < totalRow.cnt) {
-        console.log(`[waggle] Re-indexing ${totalRow.cnt} frames with real embeddings (${embeddingProvider.getActiveProvider()})...`);
+        log.info(` Re-indexing ${totalRow.cnt} frames with real embeddings (${embeddingProvider.getActiveProvider()})...`);
         const { vecFixed } = await reconcileIndexes(multiMind.personal, embedder);
         if (vecFixed > 0) {
-          console.log(`[waggle] Re-indexed ${vecFixed} frames with real embeddings`);
+          log.info(` Re-indexed ${vecFixed} frames with real embeddings`);
         }
       }
     } catch (err) {
-      console.warn(`[waggle] Vec reconciliation deferred: ${(err as Error).message}`);
+      log.warn(` Vec reconciliation deferred: ${(err as Error).message}`);
     }
   }
 
@@ -647,8 +510,8 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
 
   // Log changed skills as warnings
   if (hashCheck.changed.length > 0) {
-    console.log(`[waggle] WARNING: ${hashCheck.changed.length} skill(s) changed on disk: ${hashCheck.changed.join(', ')}`);
-    console.log('[waggle] Run /skills to review changes');
+    log.info(` WARNING: ${hashCheck.changed.length} skill(s) changed on disk: ${hashCheck.changed.join(', ')}`);
+    log.info(' Run /skills to review changes');
   }
 
   // Clean up removed skill hashes
@@ -688,19 +551,19 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
           const raw = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as Record<string, unknown>;
           const validation = validatePluginManifest(raw);
           if (!validation.valid) {
-            console.log(`[waggle] Skipping plugin "${pluginName}": invalid manifest — ${validation.errors.join(', ')}`);
+            log.info(` Skipping plugin "${pluginName}": invalid manifest — ${validation.errors.join(', ')}`);
             continue;
           }
           pluginRuntimeManager.register(raw as unknown as Parameters<typeof pluginRuntimeManager.register>[0]);
           await pluginRuntimeManager.enable(raw.name as string);
         } catch (err) {
-          console.log(`[waggle] Failed to load plugin "${pluginName}": ${(err as Error).message}`);
+          log.info(` Failed to load plugin "${pluginName}": ${(err as Error).message}`);
         }
       }
 
       const active = pluginRuntimeManager.getActive();
       if (active.length > 0) {
-        console.log(`[waggle] Loaded ${active.length} plugin(s): ${active.map(p => p.getManifest().name).join(', ')}`);
+        log.info(` Loaded ${active.length} plugin(s): ${active.map(p => p.getManifest().name).join(', ')}`);
       }
     } catch { /* non-blocking — plugin scan failure must not prevent startup */ }
   }
@@ -907,10 +770,10 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
             if (frames.length > 0) {
               // Insert pulled frames into local workspace mind
               // Use the mind's frame store to create I-frames from pulled content
-              console.log(`[waggle] TeamSync: pulled ${frames.length} frames for workspace ${workspaceId}`);
+              log.info(` TeamSync: pulled ${frames.length} frames for workspace ${workspaceId}`);
             }
           }).catch(err => {
-            console.warn(`[waggle] TeamSync pull failed:`, err.message);
+            log.warn(` TeamSync pull failed:`, err.message);
           });
         }
       }
@@ -997,7 +860,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
             // Reconcile personal mind FTS/vec indexes
             const result = await reconcileIndexes(multiMind.personal);
             if (result.ftsFixed > 0 || result.vecFixed > 0) {
-              console.log(`[cron] Index reconciliation: FTS=${result.ftsFixed} vec=${result.vecFixed} fixed (personal)`);
+              log.info(`[cron] Index reconciliation: FTS=${result.ftsFixed} vec=${result.vecFixed} fixed (personal)`);
             }
             // Reconcile workspace minds
             const workspaces = wsManager.list();
@@ -1006,12 +869,12 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
               if (wsDb) {
                 const wsResult = await reconcileIndexes(wsDb);
                 if (wsResult.ftsFixed > 0 || wsResult.vecFixed > 0) {
-                  console.log(`[cron] Index reconciliation: FTS=${wsResult.ftsFixed} vec=${wsResult.vecFixed} fixed (workspace "${ws.name}")`);
+                  log.info(`[cron] Index reconciliation: FTS=${wsResult.ftsFixed} vec=${wsResult.vecFixed} fixed (workspace "${ws.name}")`);
                 }
               }
             }
           } catch (err) {
-            console.warn(`[cron] Index reconciliation failed: ${(err as Error).message}`);
+            log.warn(`[cron] Index reconciliation failed: ${(err as Error).message}`);
           }
         } else if (mcJobConfig.action === 'marketplace_sync' && marketplaceDb) {
           try {
@@ -1029,9 +892,9 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
                 actionUrl: '/capabilities',
               });
             }
-            console.log(`[cron] Marketplace sync: ${totalAdded} added across ${results.length} sources`);
+            log.info(`[cron] Marketplace sync: ${totalAdded} added across ${results.length} sources`);
           } catch (err) {
-            console.warn(`[cron] Marketplace sync failed: ${(err as Error).message}`);
+            log.warn(`[cron] Marketplace sync failed: ${(err as Error).message}`);
           }
         } else {
           // Normal memory consolidation
@@ -1107,10 +970,10 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
               break;
             }
             default:
-              console.warn(`[cron] Unknown proactive action: ${proactiveConfig.action}`);
+              log.warn(`[cron] Unknown proactive action: ${proactiveConfig.action}`);
           }
         } catch (err) {
-          console.warn(`[cron] Proactive handler failed: ${(err as Error).message}`);
+          log.warn(`[cron] Proactive handler failed: ${(err as Error).message}`);
         }
         break;
       }
@@ -1129,7 +992,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
 
             // Check budget before spending any tokens
             if (!isWithinBudget(optStore, budget)) {
-              console.log(`[cron] Prompt optimization: workspace "${ws.name}" over budget, skipping`);
+              log.info(`[cron] Prompt optimization: workspace "${ws.name}" over budget, skipping`);
               continue;
             }
 
@@ -1149,18 +1012,18 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
             // or turn count is significantly above average (indicating inefficiency)
             if (correctionRate > 0.2 || avgTurns > 15) {
               const rate = (correctionRate * 100).toFixed(1);
-              console.log(`[cron] Prompt optimization: workspace "${ws.name}" — correction rate ${rate}%, avg turns ${avgTurns.toFixed(1)}`);
+              log.info(`[cron] Prompt optimization: workspace "${ws.name}" — correction rate ${rate}%, avg turns ${avgTurns.toFixed(1)}`);
 
               // Re-check budget before the LLM call (another workspace may have consumed tokens)
               if (!isWithinBudget(optStore, budget)) {
-                console.log(`[waggle] GEPA optimization skipped — daily budget exceeded`);
+                log.info(` GEPA optimization skipped — daily budget exceeded`);
                 continue;
               }
 
               // Get the most recent system prompt from the workspace's logs
               const currentSystemPrompt = recentLogs[0]?.system_prompt ?? '';
               if (!currentSystemPrompt) {
-                console.log(`[cron] Prompt optimization: no system prompt in logs, skipping`);
+                log.info(`[cron] Prompt optimization: no system prompt in logs, skipping`);
                 continue;
               }
 
@@ -1201,7 +1064,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
                 });
 
                 if (!variantResponse.ok) {
-                  console.warn(`[cron] GEPA variant generation failed: HTTP ${variantResponse.status}`);
+                  log.warn(`[cron] GEPA variant generation failed: HTTP ${variantResponse.status}`);
                 } else {
                   const variantBody = await variantResponse.json() as {
                     choices?: Array<{ message?: { content?: string } }>;
@@ -1220,13 +1083,13 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
                       inputTokens: currentSystemPrompt.length,
                       outputTokens: variantText.length,
                     });
-                    console.log(`[waggle] GEPA generated prompt variant (correction_rate=${rate}%)`);
+                    log.info(` GEPA generated prompt variant (correction_rate=${rate}%)`);
                   } else {
-                    console.warn(`[cron] GEPA variant too short (${variantText.length} chars), discarding`);
+                    log.warn(`[cron] GEPA variant too short (${variantText.length} chars), discarding`);
                   }
                 }
               } catch (variantErr) {
-                console.warn(`[cron] GEPA variant generation error: ${(variantErr as Error).message}`);
+                log.warn(`[cron] GEPA variant generation error: ${(variantErr as Error).message}`);
               }
 
               eventBus.emit('notification', {
@@ -1242,7 +1105,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
             optStore.pruneOlderThan(30);
           }
         } catch (err) {
-          console.warn(`[cron] Prompt optimization failed: ${(err as Error).message}`);
+          log.warn(`[cron] Prompt optimization failed: ${(err as Error).message}`);
         }
         break;
       }
@@ -1253,7 +1116,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
         const taskWorkspace = schedule.workspace_id;
 
         if (!taskPrompt) {
-          console.warn(`[cron] agent_task "${schedule.name}" has no prompt in job_config, skipping`);
+          log.warn(`[cron] agent_task "${schedule.name}" has no prompt in job_config, skipping`);
           break;
         }
 
@@ -1271,12 +1134,12 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
             if (ws) {
               targetWorkspaces.push({ id: ws.id, name: ws.name });
             } else {
-              console.warn(`[cron] agent_task "${schedule.name}" references unknown workspace "${taskWorkspace}"`);
+              log.warn(`[cron] agent_task "${schedule.name}" references unknown workspace "${taskWorkspace}"`);
             }
           }
 
           if (targetWorkspaces.length === 0) {
-            console.warn(`[cron] agent_task "${schedule.name}" has no valid target workspaces`);
+            log.warn(`[cron] agent_task "${schedule.name}" has no valid target workspaces`);
             break;
           }
 
@@ -1317,16 +1180,16 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
                   actionUrl: `/workspace/${target.id}`,
                 });
 
-                console.log(`[cron] agent_task "${schedule.name}" completed for workspace "${target.name}" (${output.length} chars)`);
+                log.info(`[cron] agent_task "${schedule.name}" completed for workspace "${target.name}" (${output.length} chars)`);
               } else {
-                console.warn(`[cron] agent_task "${schedule.name}" LLM call failed: HTTP ${response.status}`);
+                log.warn(`[cron] agent_task "${schedule.name}" LLM call failed: HTTP ${response.status}`);
               }
             } catch (wsErr) {
-              console.warn(`[cron] agent_task "${schedule.name}" failed for workspace "${target.name}": ${(wsErr as Error).message}`);
+              log.warn(`[cron] agent_task "${schedule.name}" failed for workspace "${target.name}": ${(wsErr as Error).message}`);
             }
           }
         } catch (err) {
-          console.warn(`[cron] agent_task handler failed: ${(err as Error).message}`);
+          log.warn(`[cron] agent_task handler failed: ${(err as Error).message}`);
         }
         break;
       }
@@ -1334,7 +1197,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
         try {
           const assessment = generateMonthlyAssessment(fullConfig, multiMind.personal);
           saveAssessmentToMind(multiMind.personal, assessment);
-          console.log(`[cron] Monthly assessment for ${assessment.period}: ${assessment.totalInteractions} interactions, ${(assessment.correctionRate * 100).toFixed(1)}% correction rate`);
+          log.info(`[cron] Monthly assessment for ${assessment.period}: ${assessment.totalInteractions} interactions, ${(assessment.correctionRate * 100).toFixed(1)}% correction rate`);
           emitNotification(server, {
             title: 'Monthly agent assessment ready',
             body: `${assessment.period} report: ${assessment.totalInteractions} interactions, ${(assessment.correctionRate * 100).toFixed(1)}% correction rate — check your workspace home`,
@@ -1342,7 +1205,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
             actionUrl: '/',
           });
         } catch (err) {
-          console.warn(`[cron] Monthly assessment failed: ${(err as Error).message}`);
+          log.warn(`[cron] Monthly assessment failed: ${(err as Error).message}`);
         }
         break;
       }
@@ -1373,7 +1236,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   const auditCleanupTimer = setInterval(() => {
     const deleted = cleanupAuditEvents(fullConfig.dataDir, auditRetentionDays);
     if (deleted > 0) {
-      console.log(`[audit] Cleaned up ${deleted} events older than ${auditRetentionDays} days`);
+      log.info(`[audit] Cleaned up ${deleted} events older than ${auditRetentionDays} days`);
     }
   }, 24 * 60 * 60 * 1000); // once per day
 

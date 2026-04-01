@@ -6,6 +6,8 @@
  */
 
 import type { FastifyPluginAsync } from 'fastify';
+import { createLogger } from '../logger.js';
+const log = createLogger('providers');
 
 interface ProviderModel {
   id: string;

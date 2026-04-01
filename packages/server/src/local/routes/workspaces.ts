@@ -9,6 +9,8 @@ import { readFileRegistry, type FileRegistryEntry } from './ingest.js';
 import { buildWorkspaceState, type WorkspaceState } from '../workspace-state.js';
 import { buildTimeAwareGreeting, buildUpcomingSchedules } from './workspace-context.js';
 import { emitAuditEvent } from './events.js';
+import { createLogger } from '../logger.js';
+const log = createLogger('workspaces');
 
 // BUG-R3-03: Known model IDs for validation
 /** Accept any reasonable model string — provider registry is the authority, not a hardcoded set */
@@ -240,7 +242,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
         }
       } catch (err) {
         // Non-blocking — workspace creation succeeds even if memory seeding fails
-        console.warn(`[waggle] Starter memory seeding failed:`, (err as Error).message);
+        log.warn(`[waggle] Starter memory seeding failed:`, (err as Error).message);
       }
     }
 
@@ -281,7 +283,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
             }),
             signal: AbortSignal.timeout(5000),
           }).catch(err => {
-            console.warn(`[waggle] Team workspace registration failed:`, err.message);
+            log.warn(`[waggle] Team workspace registration failed:`, err.message);
           });
         }
       } catch { /* team registration is best-effort */ }

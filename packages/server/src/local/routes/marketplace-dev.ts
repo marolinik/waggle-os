@@ -14,6 +14,8 @@
 
 import type { FastifyInstance } from 'fastify';
 import path from 'node:path';
+import { createLogger } from '../logger.js';
+const log = createLogger('marketplace-dev');
 import fs from 'node:fs';
 
 export async function marketplaceDevRoutes(fastify: FastifyInstance) {
@@ -41,7 +43,7 @@ export async function marketplaceDevRoutes(fastify: FastifyInstance) {
       db = new MarketplaceDB(dbPath);
       return db;
     } catch (err) {
-      console.warn('[waggle] Marketplace DB not available:', (err as Error).message);
+      log.warn('[waggle] Marketplace DB not available:', (err as Error).message);
       return null;
     }
   }
@@ -53,7 +55,7 @@ export async function marketplaceDevRoutes(fastify: FastifyInstance) {
       securityGate = new SecurityGate();
       return securityGate;
     } catch (err) {
-      console.warn('[waggle] SecurityGate not available:', (err as Error).message);
+      log.warn('[waggle] SecurityGate not available:', (err as Error).message);
       return null;
     }
   }

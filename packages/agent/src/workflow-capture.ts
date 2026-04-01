@@ -1,4 +1,6 @@
 /**
+ * @internal Not exported from index.ts — future feature, tested but not wired.
+ *
  * Workflow Capture — proactive detection of repeatable patterns.
  *
  * Monitors session activity and suggests capturing workflows as reusable skills

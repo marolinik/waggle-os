@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
+import { createLogger } from '../logger.js';
+const log = createLogger('chat');
 import { runAgentLoop, needsConfirmation, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities } from '@waggle/agent';
 import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
 import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
@@ -356,7 +358,7 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
     const content = ctx.memoryContent ?? '';
     for (const pattern of DRAMATIC_PATTERNS) {
       if (pattern.test(content)) {
-        console.warn('[memory-validation] Dramatic claim detected in save_memory:', content.slice(0, 100));
+        log.warn('[memory-validation] Dramatic claim detected in save_memory:', content.slice(0, 100));
         // Don't block — but annotate the args so the tool can tag source appropriately
         // Future: could cancel and ask for confirmation
         break;
@@ -456,9 +458,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
     // Token monitoring
     const estimatedTokens = Math.ceil(prompt.length / 4);
-    console.log(`[Orchestrator] System prompt: ~${estimatedTokens} tokens (behavioral-spec v${BEHAVIORAL_SPEC.version})`);
+    log.info(`[Orchestrator] System prompt: ~${estimatedTokens} tokens (behavioral-spec v${BEHAVIORAL_SPEC.version})`);
     if (estimatedTokens > 12000) {
-      console.warn(`[Orchestrator] System prompt exceeds 12K tokens (${estimatedTokens}). Consider trimming.`);
+      log.warn(`[Orchestrator] System prompt exceeds 12K tokens (${estimatedTokens}). Consider trimming.`);
     }
 
     // Behavioral spec (v${BEHAVIORAL_SPEC.version}) extracted to packages/agent/src/behavioral-spec.ts
@@ -556,14 +558,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     const injectionResult = scanForInjection(message, 'user_input');
     if (injectionResult.score >= 0.7) {
       // High-confidence injection: block entirely
-      console.warn('[security] Prompt injection BLOCKED (score %.2f):', injectionResult.score, injectionResult.flags);
+      log.warn(`[security] Prompt injection BLOCKED (score ${injectionResult.score})`, injectionResult.flags);
       return reply.code(400).send({
         error: 'Message blocked by security scanner',
         code: 'INJECTION_DETECTED',
         flags: injectionResult.flags,
       });
     } else if (injectionResult.score >= 0.3) {
-      console.warn('[security] Potential prompt injection detected (score %.2f):', injectionResult.score, injectionResult.flags);
+      log.warn(`[security] Potential prompt injection detected (score ${injectionResult.score})`, injectionResult.flags);
     }
 
     // Hijack the response so Fastify doesn't try to send its own reply
@@ -926,7 +928,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             setTimeout(() => {
               if (server.agentState.pendingApprovals.has(requestId)) {
                 server.agentState.pendingApprovals.delete(requestId);
-                console.warn(`[security] Approval timed out for ${toolName} (requestId: ${requestId}) — auto-denied for safety`);
+                log.warn(`[security] Approval timed out for ${toolName} (requestId: ${requestId}) — auto-denied for safety`);
                 resolve(false);
               }
             }, 300_000);
@@ -1136,7 +1138,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                       access_count: 0,
                       created_at: new Date().toISOString(),
                       last_accessed: new Date().toISOString(),
-                    }).catch(err => console.warn('[waggle] TeamSync push failed:', err.message));
+                    }).catch(err => log.warn('[waggle] TeamSync push failed:', err.message));
                   }
                 } catch { /* TeamSync not available */ }
               }
@@ -1190,7 +1192,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               }
             }
           } catch (e) {
-            console.log('[waggle] KG extraction error:', e instanceof Error ? e.message : String(e));
+            log.info('[waggle] KG extraction error:', e instanceof Error ? e.message : String(e));
           }
         }
 
