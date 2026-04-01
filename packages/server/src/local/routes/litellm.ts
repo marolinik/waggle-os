@@ -54,4 +54,20 @@ export const litellmRoutes: FastifyPluginAsync = async (server) => {
       return { models: [] };
     }
   });
+
+  /**
+   * GET /api/litellm/pricing — Model pricing info
+   * Returns basic pricing data for known models (local reference, no external call)
+   */
+  server.get('/api/litellm/pricing', async () => {
+    return [
+      { model: 'claude-sonnet-4-6', inputPer1k: 0.003, outputPer1k: 0.015, provider: 'anthropic' },
+      { model: 'claude-haiku-4-6', inputPer1k: 0.0008, outputPer1k: 0.004, provider: 'anthropic' },
+      { model: 'claude-opus-4-6', inputPer1k: 0.015, outputPer1k: 0.075, provider: 'anthropic' },
+      { model: 'gpt-5.4', inputPer1k: 0.005, outputPer1k: 0.015, provider: 'openai' },
+      { model: 'gpt-5.4-mini', inputPer1k: 0.0004, outputPer1k: 0.0016, provider: 'openai' },
+      { model: 'gemini-3.1-pro', inputPer1k: 0.00125, outputPer1k: 0.005, provider: 'google' },
+      { model: 'gemini-3.1-flash', inputPer1k: 0.000075, outputPer1k: 0.0003, provider: 'google' },
+    ];
+  });
 };

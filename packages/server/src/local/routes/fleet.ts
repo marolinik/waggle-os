@@ -40,6 +40,28 @@ export async function fleetRoutes(fastify: FastifyInstance) {
     return { sessions, count: sessions.length, maxSessions };
   });
 
+  // POST /api/fleet/spawn — spawn a new agent session in a workspace
+  fastify.post<{
+    Body: { task: string; persona?: string; model?: string; parentWorkspaceId?: string };
+  }>('/api/fleet/spawn', async (request, reply) => {
+    const { task, persona, model, parentWorkspaceId } = request.body;
+    if (!task) return reply.code(400).send({ error: 'task is required' });
+
+    const wsId = parentWorkspaceId || 'local-default';
+    const sessionManager = (fastify as any).sessionManager;
+    if (!sessionManager) return reply.code(503).send({ error: 'Session manager not available' });
+
+    const session = sessionManager.create(wsId, { persona, model });
+    return {
+      workspaceId: wsId,
+      sessionId: session?.id ?? `session-${Date.now()}`,
+      status: 'active',
+      task,
+      persona: persona ?? null,
+      model: model ?? fastify.agentState?.currentModel ?? 'default',
+    };
+  });
+
   // POST /api/fleet/:workspaceId/pause — pause a workspace session
   fastify.post('/api/fleet/:workspaceId/pause', async (request, reply) => {
     const { workspaceId } = request.params as { workspaceId: string };

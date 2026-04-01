@@ -118,7 +118,7 @@ const Desktop = () => {
     else if (type === 'memory') wm.openApp('memory');
   }, [wm.openApp, selectWorkspace, wm.openChatForWorkspace, workspaces]);
 
-  const handleOnboardingComplete = useCallback(() => { completeOnboarding(); }, [completeOnboarding]);
+  const handleOnboardingComplete = useCallback((_serverBaseUrl: string) => { completeOnboarding(); }, [completeOnboarding]);
   const handleOnboardingFinish = useCallback((workspaceId: string) => {
     selectWorkspace(workspaceId);
     const ws = workspaces.find(w => w.id === workspaceId);

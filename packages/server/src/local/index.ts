@@ -87,6 +87,7 @@ import { waggleSignalRoutes } from './routes/waggle-signals.js';
 import { providerRoutes } from './routes/providers.js';
 import { profileRoutes } from './routes/profile.js';
 import { telemetryRoutes } from './routes/telemetry.js';
+import { agentGroupRoutes } from './routes/agent-groups.js';
 import { OfflineManager } from './offline-manager.js';
 import { log, createLogger } from './logger.js';
 import { seedDefaultCrons } from './setup-crons.js';
@@ -1314,6 +1315,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(oauthRoutes);
   await server.register(browseRoutes);
   await server.register(telemetryRoutes);
+  await server.register(agentGroupRoutes);
 
   // ── Static file serving for web mode ──────────────────────────
   // When WAGGLE_FRONTEND_DIR is set (or app/dist exists), serve the React frontend
