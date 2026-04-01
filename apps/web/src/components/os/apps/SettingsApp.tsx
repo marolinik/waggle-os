@@ -419,6 +419,54 @@ const SettingsApp = () => {
                 <p className="text-[10px] text-muted-foreground">Import from ChatGPT or Claude export</p>
               </div>
             </button>
+
+            {/* Encrypted Backup/Restore */}
+            <div className="pt-4 border-t border-border/30">
+              <h3 className="text-sm font-display font-semibold text-foreground mb-2">Encrypted Backup</h3>
+              <p className="text-[10px] text-muted-foreground mb-3">
+                Create an AES-256-GCM encrypted backup of all data. Restore on any machine with the same vault key.
+              </p>
+              <div className="flex gap-2">
+                <button onClick={async () => {
+                  try {
+                    const res = await fetch(`${adapter.getServerUrl()}/api/backup`, { method: 'POST' });
+                    if (!res.ok) { const err = await res.json(); alert(err.error); return; }
+                    const blob = await res.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `waggle-backup-${new Date().toISOString().slice(0, 10)}.waggle-backup`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  } catch { alert('Backup failed — server unreachable'); }
+                }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-display rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-colors">
+                  <Download className="w-3 h-3" /> Create Backup
+                </button>
+                <label className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-display rounded-lg bg-secondary/50 text-foreground hover:bg-secondary/70 transition-colors cursor-pointer">
+                  <Upload className="w-3 h-3" /> Restore
+                  <input type="file" accept=".waggle-backup" className="hidden" onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    if (!confirm('Restoring will overwrite current data. Continue?')) return;
+                    try {
+                      const reader = new FileReader();
+                      reader.onload = async () => {
+                        const base64 = (reader.result as string).split(',')[1];
+                        const res = await fetch(`${adapter.getServerUrl()}/api/restore`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ backup: base64 }),
+                        });
+                        if (res.ok) { alert('Backup restored successfully. Restart the server to apply.'); }
+                        else { const err = await res.json(); alert(err.error ?? 'Restore failed'); }
+                      };
+                      reader.readAsDataURL(file);
+                    } catch { alert('Restore failed — server unreachable'); }
+                  }} />
+                </label>
+              </div>
+            </div>
           </div>
         )}
 
