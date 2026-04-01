@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { Plus, Activity, Clock, Brain, ChevronRight, Users, Sparkles } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Activity, Clock, Brain, ChevronRight, Users, Sparkles, CheckCircle2, Circle } from 'lucide-react';
+import { adapter } from '@/lib/adapter';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getPersonaById } from '@/lib/personas';
 import type { Workspace } from '@/lib/types';
@@ -49,6 +50,14 @@ const groupColors: Record<string, string> = {
 const DashboardApp = ({ workspaces, activeWorkspaceId, onSelectWorkspace, onCreateWorkspace }: DashboardAppProps) => {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<string>('All');
+  const [tasks, setTasks] = useState<Array<{ id: string; title: string; status: string; workspaceName: string; updatedAt: string }>>([]);
+
+  useEffect(() => {
+    fetch(`${adapter.getServerUrl()}/api/tasks?status=open`)
+      .then(r => r.json())
+      .then(data => setTasks((data.tasks ?? []).slice(0, 8)))
+      .catch(() => {});
+  }, []);
 
   // Get group names: standard groups first, then any custom, with "All" at front
   const existingGroups = workspaces.map(ws => ws.group || 'Personal');
@@ -172,6 +181,25 @@ const DashboardApp = ({ workspaces, activeWorkspaceId, onSelectWorkspace, onCrea
           </div>
         </div>
       ))}
+
+      {/* Cross-workspace tasks */}
+      {tasks.length > 0 && (
+        <div className="mt-4 p-3 rounded-xl bg-secondary/20 border border-border/30">
+          <h3 className="text-xs font-display font-semibold text-foreground mb-2 flex items-center gap-1.5">
+            <CheckCircle2 className="w-3.5 h-3.5" style={{ color: 'var(--honey-500)' }} />
+            Open Tasks
+          </h3>
+          <div className="space-y-1.5">
+            {tasks.map(t => (
+              <div key={t.id} className="flex items-center gap-2 text-xs">
+                <Circle className="w-3 h-3 text-muted-foreground/40 shrink-0" />
+                <span className="text-foreground flex-1 truncate">{t.title}</span>
+                <span className="text-[9px] text-muted-foreground shrink-0">{t.workspaceName}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {workspaces.length === 0 && (
         <div className="flex flex-col items-center justify-center py-12 text-center">
