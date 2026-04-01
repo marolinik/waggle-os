@@ -14,6 +14,8 @@ export const useMemory = (workspaceId: string | null) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<MemoryFilters>({ types: [], minImportance: 0, searchQuery: '' });
+  const [entityCount, setEntityCount] = useState(0);
+  const [relationCount, setRelationCount] = useState(0);
 
   const fetchFrames = useCallback(async () => {
     if (!workspaceId) return;
@@ -24,6 +26,11 @@ export const useMemory = (workspaceId: string | null) => {
         : await adapter.getMemoryFrames(workspaceId);
       setFrames(data);
       setError(null);
+      // Fetch entity/relation counts in background
+      adapter.getMemoryStats().then(s => {
+        setEntityCount(s.total.entities);
+        setRelationCount(s.total.relations);
+      }).catch(() => {});
     } catch (e) {
       console.error('[useMemory] fetch failed:', e);
       setError(e instanceof Error ? e.message : 'Failed to load');
@@ -75,6 +82,6 @@ export const useMemory = (workspaceId: string | null) => {
     frames: filteredFrames, selectedFrame, setSelectedFrame,
     loading, error, filters, setFilters,
     addFrame, editFrame, deleteFrame, incrementAccess, refresh: fetchFrames,
-    stats: { total: frames.length, filtered: filteredFrames.length },
+    stats: { total: frames.length, filtered: filteredFrames.length, entities: entityCount, relations: relationCount },
   };
 };

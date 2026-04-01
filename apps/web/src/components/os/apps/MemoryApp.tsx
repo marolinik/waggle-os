@@ -21,7 +21,7 @@ interface MemoryAppProps {
   onSearchChange: (q: string) => void;
   onDeleteFrame: (id: string) => void;
   loading: boolean;
-  stats: { total: number; filtered: number };
+  stats: { total: number; filtered: number; entities?: number; relations?: number };
   typeFilters?: string[];
   onTypeFiltersChange?: (types: string[]) => void;
   minImportance?: number;
@@ -130,7 +130,11 @@ const MemoryApp = ({
             />
           </div>
           <div className="flex items-center justify-between mt-1.5">
-            <p className="text-[10px] text-muted-foreground">{stats.filtered} of {stats.total} frames</p>
+            <p className="text-[10px] text-muted-foreground">
+              {stats.filtered} of {stats.total} frames
+              {(stats.entities ?? 0) > 0 && <span> · {stats.entities} entities</span>}
+              {(stats.relations ?? 0) > 0 && <span> · {stats.relations} relations</span>}
+            </p>
             <div className="flex gap-1">
               <button
                 onClick={() => setShowFilters(!showFilters)}

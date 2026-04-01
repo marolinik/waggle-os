@@ -6,12 +6,15 @@ import type { CronJob } from '@/lib/types';
 interface CockpitData {
   health?: { status: string; uptime: number; services: { name: string; status: string }[] };
   cost?: { totalCost: number; totalTokens: number };
+  costSummary?: { totalTokens: number; estimatedCost: number; budgetLimit?: number };
   connectors?: { id: string; name: string; status: string }[];
   crons?: CronJob[];
   memoryStats?: { total: number };
   vault?: unknown;
   capStatus?: unknown;
   auditTrail?: unknown[];
+  weaver?: { lastConsolidation?: string; status: string };
+  eventStats?: { byType: Record<string, number>; total: number };
 }
 
 const CockpitApp = () => {
@@ -23,7 +26,7 @@ const CockpitApp = () => {
   const refresh = async () => {
     setLoading(true);
     try {
-      const [health, cost, connectors, crons, vault, capStatus, audit] = await Promise.allSettled([
+      const [health, cost, connectors, crons, vault, capStatus, audit, costSum, weaver, evStats] = await Promise.allSettled([
         adapter.getSystemHealth(),
         adapter.getAgentCost(),
         adapter.getConnectors(),
@@ -31,15 +34,21 @@ const CockpitApp = () => {
         adapter.getVault(),
         adapter.getCapabilitiesStatus(),
         adapter.getAuditInstalls(),
+        adapter.getCostSummary(),
+        adapter.getWeaverStatus(),
+        adapter.getEventStats(),
       ]);
       setData({
         health: health.status === 'fulfilled' ? health.value : undefined,
         cost: cost.status === 'fulfilled' ? cost.value : undefined,
+        costSummary: costSum.status === 'fulfilled' ? costSum.value : undefined,
         connectors: connectors.status === 'fulfilled' ? connectors.value : undefined,
         crons: crons.status === 'fulfilled' ? crons.value : undefined,
         vault: vault.status === 'fulfilled' ? vault.value : undefined,
         capStatus: capStatus.status === 'fulfilled' ? capStatus.value : undefined,
         auditTrail: audit.status === 'fulfilled' ? audit.value : undefined,
+        weaver: weaver.status === 'fulfilled' ? weaver.value : undefined,
+        eventStats: evStats.status === 'fulfilled' ? evStats.value : undefined,
       });
       const allFailed = [health, cost, connectors, crons, vault, capStatus, audit].every(r => r.status === 'rejected');
       setOffline(allFailed);
@@ -113,12 +122,54 @@ const CockpitApp = () => {
             <span className="text-xs font-display font-medium text-foreground">Cost</span>
           </div>
           <div className="text-lg font-display font-bold text-foreground">
-            ${data.cost?.totalCost?.toFixed(4) || '0.00'}
+            ${(data.costSummary?.estimatedCost ?? data.cost?.totalCost ?? 0).toFixed(4)}
           </div>
           <p className="text-[10px] text-muted-foreground mt-1">
-            {data.cost?.totalTokens?.toLocaleString() || '0'} tokens
+            {(data.costSummary?.totalTokens ?? data.cost?.totalTokens ?? 0).toLocaleString()} tokens
+            {data.costSummary?.budgetLimit != null && (
+              <span className="ml-1">· Budget: ${data.costSummary.budgetLimit}/day</span>
+            )}
           </p>
         </div>
+
+        {/* 2b. Memory Weaver */}
+        {data.weaver && (
+          <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
+            <div className="flex items-center gap-2 mb-2">
+              <Brain className="w-4 h-4 text-muted-foreground" />
+              <span className="text-xs font-display font-medium text-foreground">Memory Weaver</span>
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              Status: <span className={data.weaver.status === 'active' ? 'text-green-400' : 'text-muted-foreground'}>{data.weaver.status}</span>
+            </p>
+            {data.weaver.lastConsolidation && (
+              <p className="text-[10px] text-muted-foreground">
+                Last consolidation: {new Date(data.weaver.lastConsolidation).toLocaleDateString()}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* 2c. Event Activity */}
+        {data.eventStats && data.eventStats.total > 0 && (
+          <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
+            <div className="flex items-center gap-2 mb-2">
+              <Activity className="w-4 h-4 text-muted-foreground" />
+              <span className="text-xs font-display font-medium text-foreground">Activity</span>
+            </div>
+            <div className="text-lg font-display font-bold text-foreground">
+              {data.eventStats.total.toLocaleString()}
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1">total events</p>
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {Object.entries(data.eventStats.byType).slice(0, 5).map(([type, count]) => (
+                <span key={type} className="text-[9px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">
+                  {type}: {count}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* 3. Cron Schedules */}
         <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">

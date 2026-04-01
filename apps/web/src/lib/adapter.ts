@@ -738,6 +738,37 @@ class LocalAdapter {
     return res.json();
   }
 
+  async getCostSummary(): Promise<{ totalTokens: number; estimatedCost: number; dailyBreakdown?: Array<{ date: string; tokens: number; cost: number }>; budgetLimit?: number }> {
+    try {
+      const res = await this.fetch('/api/cost/summary');
+      return res.json();
+    } catch { return { totalTokens: 0, estimatedCost: 0 }; }
+  }
+
+  // --- Memory Stats ---
+  async getMemoryStats(): Promise<{ personal: { frames: number; entities: number; relations: number }; workspace: { frames: number; entities: number; relations: number }; total: { frames: number; entities: number; relations: number } }> {
+    try {
+      const res = await this.fetch('/api/memory/stats');
+      return res.json();
+    } catch { return { personal: { frames: 0, entities: 0, relations: 0 }, workspace: { frames: 0, entities: 0, relations: 0 }, total: { frames: 0, entities: 0, relations: 0 } }; }
+  }
+
+  // --- Event Stats ---
+  async getEventStats(): Promise<{ byType: Record<string, number>; total: number; dailyBreakdown?: Array<{ date: string; count: number }> }> {
+    try {
+      const res = await this.fetch('/api/events/stats');
+      return res.json();
+    } catch { return { byType: {}, total: 0 }; }
+  }
+
+  // --- Weaver ---
+  async getWeaverStatus(): Promise<{ lastConsolidation?: string; status: string }> {
+    try {
+      const res = await this.fetch('/api/weaver/status');
+      return res.json();
+    } catch { return { status: 'unknown' }; }
+  }
+
   // --- Audit ---
   async getAuditInstalls(): Promise<unknown[]> {
     const res = await this.fetch('/api/audit/installs');
