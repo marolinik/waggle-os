@@ -338,8 +338,9 @@ class LocalAdapter {
   }
 
   // --- Events ---
-  async getEvents(): Promise<AgentStep[]> {
-    const res = await this.fetch('/api/events');
+  async getEvents(workspaceId?: string): Promise<AgentStep[]> {
+    const qs = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : '';
+    const res = await this.fetch(`/api/events${qs}`);
     return unwrapArray(await res.json()).map((e: any) => ({
       id: String(e.id),
       type: e.type ?? e.eventType ?? 'response',

@@ -9,7 +9,7 @@ export const useEvents = (workspaceId: string | null) => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    adapter.getEvents()
+    adapter.getEvents(workspaceId ?? undefined)
       .then((data) => { setSteps(data); setError(null); })
       .catch((err) => { console.error('[useEvents] fetch failed:', err); setSteps([]); setError(err instanceof Error ? err.message : 'Failed to load'); });
     if (!workspaceId) return;
