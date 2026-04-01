@@ -795,6 +795,24 @@ class LocalAdapter {
     return res.json();
   }
 
+  // --- Pins ---
+  async getPins(workspaceId: string): Promise<{ id: string; messageContent: string; messageRole: string; pinnedAt: string; label?: string; status?: string }[]> {
+    try {
+      const res = await this.fetch(`/api/workspaces/${workspaceId}/pins`);
+      const data = await res.json();
+      return data.pins ?? [];
+    } catch { return []; }
+  }
+
+  async addPin(workspaceId: string, data: { messageContent: string; messageRole: 'assistant' | 'user'; label?: string }): Promise<unknown> {
+    const res = await this.fetch(`/api/workspaces/${workspaceId}/pins`, { method: 'POST', body: JSON.stringify(data) });
+    return res.json();
+  }
+
+  async removePin(workspaceId: string, pinId: string): Promise<void> {
+    await this.fetch(`/api/workspaces/${workspaceId}/pins/${pinId}`, { method: 'DELETE' });
+  }
+
   // --- Feedback ---
   async submitFeedback(data: { sessionId: string; messageIndex: number; rating: 'up' | 'down'; reason?: string; detail?: string }): Promise<void> {
     this.fetch('/api/feedback', { method: 'POST', body: JSON.stringify(data) }).catch(() => {});

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ChevronUp, ThumbsUp, ThumbsDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Upload, Code, FileText, Users, X, Bot, Cpu, Layers } from 'lucide-react';
+import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ChevronUp, ThumbsUp, ThumbsDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Upload, Code, FileText, Users, X, Bot, Cpu, Layers, Pin, PinOff } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getPersonaById, PERSONAS } from '@/lib/personas';
@@ -226,6 +226,32 @@ const ChatApp = ({
   const modelPickerRef = useRef<HTMLDivElement>(null);
 
   const persona = currentPersona ? getPersonaById(currentPersona) : PERSONAS[0];
+
+  // Pins
+  const [pins, setPins] = useState<Array<{ id: string; messageContent: string; messageRole: string; pinnedAt: string; label?: string }>>([]);
+  const [showPins, setShowPins] = useState(false);
+
+  useEffect(() => {
+    if (workspaceId) {
+      adapter.getPins(workspaceId).then(setPins).catch(() => {});
+    }
+  }, [workspaceId]);
+
+  const handlePin = async (msg: ChatMessage) => {
+    if (!workspaceId) return;
+    const existing = pins.find(p => p.messageContent === msg.content);
+    if (existing) {
+      await adapter.removePin(workspaceId, existing.id);
+      setPins(prev => prev.filter(p => p.id !== existing.id));
+    } else {
+      const result = await adapter.addPin(workspaceId, {
+        messageContent: msg.content,
+        messageRole: msg.role as 'assistant' | 'user',
+      });
+      const pin = (result as { pin: { id: string; messageContent: string; messageRole: string; pinnedAt: string } }).pin;
+      if (pin) setPins(prev => [...prev, pin]);
+    }
+  };
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -546,6 +572,30 @@ const ChatApp = ({
         </div>
 
         {/* Messages */}
+        {/* Pins bar */}
+        {pins.length > 0 && (
+          <div className="px-3 py-1.5 border-b border-border/30 flex items-center gap-2">
+            <button onClick={() => setShowPins(p => !p)} className="flex items-center gap-1.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
+              <Pin className="w-3 h-3" style={{ color: 'var(--honey-500)' }} />
+              <span>{pins.length} pinned</span>
+              <ChevronDown className={`w-3 h-3 transition-transform ${showPins ? 'rotate-180' : ''}`} />
+            </button>
+          </div>
+        )}
+        {showPins && pins.length > 0 && (
+          <div className="px-3 py-2 border-b border-border/30 space-y-1.5 max-h-32 overflow-auto" style={{ backgroundColor: 'var(--hive-850)' }}>
+            {pins.map(pin => (
+              <div key={pin.id} className="flex items-start gap-2 text-xs">
+                <span style={{ color: 'var(--honey-500)' }}>{'\u2B21'}</span>
+                <span className="text-foreground line-clamp-1 flex-1">{pin.messageContent.slice(0, 100)}</span>
+                <button onClick={() => { if (workspaceId) adapter.removePin(workspaceId, pin.id); setPins(p => p.filter(x => x.id !== pin.id)); }} className="text-muted-foreground/40 hover:text-destructive shrink-0">
+                  <PinOff className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div ref={scrollRef} className="flex-1 overflow-auto p-4 space-y-3">
           {messages.length === 0 && workspaceId && (
             <WorkspaceBriefing
@@ -586,6 +636,19 @@ const ChatApp = ({
                       title="Copy message"
                     >
                       <Code className="w-3 h-3" />
+                    </button>
+                  )}
+                  {msg.content && msg.role === 'assistant' && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handlePin(msg); }}
+                      className={`absolute top-1 right-7 p-1 rounded transition-opacity bg-background/50 ${
+                        pins.some(p => p.messageContent === msg.content)
+                          ? 'opacity-80 text-primary'
+                          : 'opacity-0 group-hover/msg:opacity-60 hover:!opacity-100'
+                      }`}
+                      title={pins.some(p => p.messageContent === msg.content) ? 'Unpin' : 'Pin message'}
+                    >
+                      <Pin className="w-3 h-3" />
                     </button>
                   )}
                   {isLoading && msg === messages[messages.length - 1] && msg.role === 'assistant' && !msg.content && (
