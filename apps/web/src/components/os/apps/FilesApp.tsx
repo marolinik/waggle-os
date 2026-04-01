@@ -20,6 +20,37 @@ interface FilesAppProps {
   storageType?: StorageType;
 }
 
+/** Inline version history panel for file properties dialog */
+const VersionHistory = ({ workspaceId, fileName }: { workspaceId: string; fileName: string }) => {
+  const [versions, setVersions] = useState<{ version: number; createdAt: string; sizeBytes: number }[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    adapter.getDocumentVersions(workspaceId, fileName).then(v => { setVersions(v); setLoaded(true); }).catch(() => setLoaded(true));
+  }, [workspaceId, fileName]);
+
+  if (!loaded) return null;
+  if (versions.length === 0) return null;
+
+  return (
+    <>
+      <div className="h-px bg-border/20" />
+      <div>
+        <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Version History</h4>
+        <div className="space-y-1.5">
+          {versions.map(v => (
+            <div key={v.version} className="flex items-center justify-between text-xs">
+              <span className="text-foreground">v{v.version}</span>
+              <span className="text-muted-foreground">{formatSize(v.sizeBytes)}</span>
+              <span className="text-muted-foreground/60 text-[9px]">{new Date(v.createdAt).toLocaleDateString()}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+};
+
 const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: FilesAppProps) => {
   const { toast } = useToast();
   const [currentPath, setCurrentPath] = useState('/');
@@ -1118,6 +1149,11 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
                     </div>
                   </div>
                 </div>
+
+                {/* Version History (loaded on demand from /api/workspaces/:id/documents) */}
+                {propertiesFile.type === 'file' && (
+                  <VersionHistory workspaceId={workspaceId} fileName={propertiesFile.name} />
+                )}
               </div>
 
               {/* Footer */}

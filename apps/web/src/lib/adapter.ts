@@ -813,6 +813,23 @@ class LocalAdapter {
     await this.fetch(`/api/workspaces/${workspaceId}/pins/${pinId}`, { method: 'DELETE' });
   }
 
+  // --- Documents (version tracking) ---
+  async getDocuments(workspaceId: string): Promise<{ name: string; versions: { version: number; path: string; createdAt: string; sizeBytes: number }[] }[]> {
+    try {
+      const res = await this.fetch(`/api/workspaces/${workspaceId}/documents`);
+      const data = await res.json();
+      return data.documents ?? [];
+    } catch { return []; }
+  }
+
+  async getDocumentVersions(workspaceId: string, name: string): Promise<{ version: number; path: string; createdAt: string; sizeBytes: number }[]> {
+    try {
+      const res = await this.fetch(`/api/workspaces/${workspaceId}/documents/${encodeURIComponent(name)}/versions`);
+      const data = await res.json();
+      return data.versions ?? [];
+    } catch { return []; }
+  }
+
   // --- Feedback ---
   async submitFeedback(data: { sessionId: string; messageIndex: number; rating: 'up' | 'down'; reason?: string; detail?: string }): Promise<void> {
     this.fetch('/api/feedback', { method: 'POST', body: JSON.stringify(data) }).catch(() => {});
