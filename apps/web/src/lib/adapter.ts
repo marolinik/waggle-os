@@ -514,11 +514,6 @@ class LocalAdapter {
     return res.json();
   }
 
-  async getConfig(): Promise<unknown> {
-    const res = await this.fetch('/api/config');
-    return res.json();
-  }
-
   async getModels(): Promise<string[]> {
     const res = await this.fetch('/api/litellm/models');
     return unwrapArray(await res.json());
