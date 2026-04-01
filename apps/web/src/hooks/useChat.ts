@@ -14,6 +14,11 @@ export const useChat = ({ workspaceId, sessionId, persona }: UseChatOptions) => 
   const [pendingApproval, setPendingApproval] = useState<ApprovalRequest | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
+  // Cancel any in-flight stream on unmount
+  useEffect(() => {
+    return () => { abortRef.current?.abort(); };
+  }, []);
+
   // Load history when session changes
   useEffect(() => {
     if (workspaceId && sessionId) {
@@ -46,8 +51,12 @@ export const useChat = ({ workspaceId, sessionId, persona }: UseChatOptions) => 
     };
     setMessages(prev => [...prev, assistantMsg]);
 
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+
     try {
       for await (const event of adapter.sendMessage(workspaceId, content, sessionId || undefined, persona)) {
+        if (abortRef.current?.signal.aborted) break;
         const evt = event as StreamEvent;
         const data = evt.data as Record<string, unknown>;
 

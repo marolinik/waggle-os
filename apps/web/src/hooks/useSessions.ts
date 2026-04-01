@@ -18,12 +18,14 @@ export const useSessions = (workspaceId: string | null) => {
 
   useEffect(() => {
     if (!workspaceId) { setSessions([]); setActiveSessionId(null); return; }
+    // Reset active session on workspace change to avoid stale cross-workspace refs
+    setActiveSessionId(null);
     setLoading(true);
     adapter.getSessions(workspaceId)
       .then(data => {
         if (data.length > 0) {
           setSessions(data);
-          if (!activeSessionId) setActiveSessionId(data[0].id);
+          setActiveSessionId(data[0].id);
         } else {
           const def = makeDefaultSession(workspaceId);
           setSessions([def]);

@@ -25,9 +25,10 @@ export const useWorkspaces = () => {
       const data = await adapter.getWorkspaces();
       if (data.length > 0) {
         setWorkspaces(data);
-        if (!activeWorkspaceId || activeWorkspaceId === DEFAULT_WORKSPACE.id) {
-          setActiveWorkspaceId(data[0].id);
-        }
+        // Only auto-select if no active workspace or still on default
+        setActiveWorkspaceId(prev =>
+          (!prev || prev === DEFAULT_WORKSPACE.id) ? data[0].id : prev
+        );
       }
       setError(null);
     } catch (err) {
@@ -35,7 +36,7 @@ export const useWorkspaces = () => {
     } finally {
       setLoading(false);
     }
-  }, [activeWorkspaceId]);
+  }, []);
 
   useEffect(() => { fetchWorkspaces(); }, []);
 

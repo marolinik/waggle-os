@@ -18,13 +18,15 @@ export const useNotifications = () => {
         setUnreadCount(0);
       });
 
+    let unsub: (() => void) | undefined;
     try {
-      const unsub = adapter.subscribeNotifications((n: Notification) => {
+      unsub = adapter.subscribeNotifications((n: Notification) => {
         setNotifications(prev => [n, ...prev]);
         if (!n.read) setUnreadCount(prev => prev + 1);
       });
-      return unsub;
     } catch (err) { console.error('[useNotifications] SSE subscribe failed:', err); }
+
+    return () => unsub?.();
   }, []);
 
   const markRead = useCallback(async (id: string) => {
