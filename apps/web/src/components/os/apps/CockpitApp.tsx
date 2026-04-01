@@ -126,9 +126,10 @@ const CockpitApp = () => {
           </div>
           <p className="text-[10px] text-muted-foreground mt-1">
             {(data.costSummary?.totalTokens ?? data.cost?.totalTokens ?? 0).toLocaleString()} tokens
-            {data.costSummary?.budgetLimit != null && (
-              <span className="ml-1">· Budget: ${data.costSummary.budgetLimit}/day</span>
-            )}
+            {data.costSummary?.budgetLimit != null
+              ? <span className="ml-1">· Budget: ${data.costSummary.budgetLimit}/day</span>
+              : <span className="ml-1">· Set budget in Settings</span>
+            }
           </p>
         </div>
 
@@ -185,7 +186,11 @@ const CockpitApp = () => {
                   <span className={c.enabled ? 'text-emerald-400' : 'text-muted-foreground'}>{c.schedule}</span>
                 </div>
               ))}
-              {data.crons.length > 3 && <p className="text-[10px] text-muted-foreground">+{data.crons.length - 3} more</p>}
+              {data.crons.length > 3 && (
+                <button onClick={() => setShowAdvanced(true)} className="text-[10px] text-primary hover:text-primary/80 transition-colors">
+                  +{data.crons.length - 3} more — view all
+                </button>
+              )}
             </div>
           ) : (
             <p className="text-xs text-muted-foreground">No routines</p>

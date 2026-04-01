@@ -12,6 +12,8 @@ import { adapter } from '@/lib/adapter';
 import { getFileIcon, formatSize, STORAGE_LABELS, MOCK_FILES } from './files/file-utils';
 import { SyntaxPreview } from './files/SyntaxPreview';
 
+import { useToast } from '@/hooks/use-toast';
+
 interface FilesAppProps {
   workspaceId: string;
   workspaceName?: string;
@@ -19,6 +21,7 @@ interface FilesAppProps {
 }
 
 const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: FilesAppProps) => {
+  const { toast } = useToast();
   const [currentPath, setCurrentPath] = useState('/');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
   const [files, setFiles] = useState<FileEntry[]>(MOCK_FILES);
@@ -192,14 +195,14 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
     if (!newName.trim()) return;
     const path = `${currentPath === '/' ? '' : currentPath}/${newName.trim()}`;
     setFiles(prev => [...prev, { name: newName.trim(), path, type: 'directory', modifiedAt: new Date().toISOString() }]);
-    adapter.createDirectory(workspaceId, path).catch(() => {});
+    adapter.createDirectory(workspaceId, path).catch(() => toast({ title: 'Failed to create folder', variant: 'destructive' }));
     setCreating(null);
     setNewName('');
   };
 
   const handleDelete = (file: FileEntry) => {
     setFiles(prev => prev.filter(f => f.path !== file.path && !f.path.startsWith(file.path + '/')));
-    adapter.deleteFile(workspaceId, file.path).catch(() => {});
+    adapter.deleteFile(workspaceId, file.path).catch(() => toast({ title: 'Failed to delete file', variant: 'destructive' }));
     setContextMenu(null);
   };
 
@@ -207,7 +210,7 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
     if (!renameValue.trim() || renameValue === file.name) { setRenaming(null); return; }
     const newPath = file.path.replace(file.name, renameValue.trim());
     setFiles(prev => prev.map(f => f.path === file.path ? { ...f, name: renameValue.trim(), path: newPath } : f));
-    adapter.moveFile(workspaceId, file.path, newPath).catch(() => {});
+    adapter.moveFile(workspaceId, file.path, newPath).catch(() => toast({ title: 'Failed to move file', variant: 'destructive' }));
     setRenaming(null);
   };
 
