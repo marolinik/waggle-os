@@ -99,10 +99,10 @@ const SettingsApp = () => {
   const handleSavePermissions = async () => {
     setSaving(true);
     try {
-      // TODO: wire to PUT /api/settings/permissions when needed
+      await adapter.saveSettings({ yoloMode });
       setSaveMsg('Permissions saved');
       setTimeout(() => setSaveMsg(''), 2000);
-    } catch { setSaveMsg('Failed'); }
+    } catch { setSaveMsg('Failed to save'); }
     finally { setSaving(false); }
   };
 

@@ -4,6 +4,7 @@ import {
   Shield, ChevronDown, ChevronRight, RefreshCw, CheckCircle2, User, Pencil,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { useToast } from '@/hooks/use-toast';
 
 interface VaultSecret {
   name: string;
@@ -70,6 +71,7 @@ const TYPE_BADGES: Record<string, { label: string; color: string }> = {
 };
 
 const VaultApp = () => {
+  const { toast } = useToast();
   const [tab, setTab] = useState<'secrets' | 'connectors'>('secrets');
   const [secrets, setSecrets] = useState<VaultSecret[]>([]);
   const [suggestedSecrets, setSuggestedSecrets] = useState<SuggestedCategory[]>([]);
@@ -133,7 +135,10 @@ const VaultApp = () => {
       setNewValue('');
       setNewUsername('');
       setShowSuggestions(false);
-    } catch { /* ignore */ }
+      toast({ title: 'Key saved', description: `${newName} added to vault` });
+    } catch {
+      toast({ title: 'Failed to save key', description: 'Check server connection', variant: 'destructive' });
+    }
     finally { setAdding(false); }
   };
 
@@ -147,7 +152,10 @@ const VaultApp = () => {
     try {
       await adapter.deleteVaultSecret(name);
       setSecrets(prev => prev.filter(s => s.name !== name));
-    } catch { /* ignore */ }
+      toast({ title: 'Key deleted', description: `${name} removed` });
+    } catch {
+      toast({ title: 'Failed to delete key', description: 'Check server connection', variant: 'destructive' });
+    }
   };
 
   const handleReveal = async (name: string) => {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Brain, Search, Clock, Trash2, Edit3, Filter, Network, ChevronDown, X, Eye, Copy, Pencil } from 'lucide-react';
+import { Brain, Search, Clock, Trash2, Edit3, Filter, Network, ChevronDown, X, Eye, Copy, Pencil, Loader2 } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import type { MemoryFrame, KGNode, KGEdge } from '@/lib/types';
 import { renderSimpleMarkdown } from '@/lib/render-markdown';
@@ -196,6 +196,12 @@ const MemoryApp = ({
               </div>
             </button>
           ))}
+          {loading && frames.length === 0 && (
+            <div className="text-center py-8">
+              <Loader2 className="w-6 h-6 text-muted-foreground/40 mx-auto mb-2 animate-spin" />
+              <p className="text-xs text-muted-foreground">Loading memories...</p>
+            </div>
+          )}
           {frames.length === 0 && !loading && (
             <div className="text-center py-8">
               <Brain className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />

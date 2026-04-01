@@ -31,6 +31,7 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
   const [creating, setCreating] = useState<'file' | 'folder' | null>(null);
   const [newName, setNewName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [offline, setOffline] = useState(false);
   const [clipboard, setClipboard] = useState<{ files: FileEntry[]; operation: 'copy' | 'cut' } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [previewFile, setPreviewFile] = useState<FileEntry | null>(null);
@@ -91,8 +92,9 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
     try {
       const result = await adapter.listFiles(workspaceId, currentPath);
       setFiles(result);
+      setOffline(false);
     } catch {
-      // offline — keep mock
+      setOffline(true);
     } finally {
       setLoading(false);
     }
@@ -391,6 +393,13 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
+      {/* Offline banner */}
+      {offline && (
+        <div className="absolute top-0 left-0 right-0 z-10 px-4 py-2 text-xs text-center" style={{ backgroundColor: 'var(--hive-800)', borderBottom: '1px solid var(--hive-700)', color: 'var(--honey-500)' }}>
+          Server unreachable — showing cached files. <button onClick={refreshFiles} className="underline ml-1">Retry</button>
+        </div>
+      )}
+
       {/* Drag overlay */}
       <AnimatePresence>
         {isDragging && (
