@@ -100,6 +100,9 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
     }
   }, [workspaceId, currentPath]);
 
+  // Auto-fetch files on mount and when path changes
+  useEffect(() => { refreshFiles(); }, [refreshFiles]);
+
   const handleNavigate = (path: string) => {
     setCurrentPath(path);
     setSelectedFiles(new Set());
@@ -462,6 +465,17 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
           <button onClick={refreshFiles} className={`p-1 rounded hover:bg-muted/50 ${loading ? 'animate-spin' : ''}`}>
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
+
+          {/* Storage type badge */}
+          {(() => {
+            const meta = STORAGE_LABELS[storageType];
+            const Icon = meta.icon;
+            return (
+              <span className={`flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded ${meta.color}`} style={{ backgroundColor: 'var(--hive-800)', border: '1px solid var(--hive-700)' }}>
+                <Icon className="w-2.5 h-2.5" />{meta.label}
+              </span>
+            );
+          })()}
 
           {/* Breadcrumbs */}
           <div className="flex items-center gap-0.5 ml-1 flex-1 min-w-0 overflow-hidden">
