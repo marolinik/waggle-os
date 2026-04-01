@@ -23,6 +23,8 @@ interface ConfigData {
   teamServer?: TeamServerConfig;
   /** F8: Daily cost budget in dollars. null = no limit. */
   dailyBudget?: number | null;
+  /** M2-7: Telemetry opt-in (default: false — privacy first) */
+  telemetryEnabled?: boolean;
   /** M2-1: Embedding provider configuration */
   embedding?: {
     provider?: EmbeddingProviderType | 'auto';
@@ -125,6 +127,17 @@ export class WaggleConfig {
 
   isTeamConnected(): boolean {
     return this.data.teamServer !== null && this.data.teamServer !== undefined && typeof this.data.teamServer.url === 'string' && this.data.teamServer.url.length > 0;
+  }
+
+  // --- Telemetry (M2-7) ---
+
+  getTelemetryEnabled(): boolean {
+    return this.data.telemetryEnabled ?? false;
+  }
+
+  setTelemetryEnabled(enabled: boolean): void {
+    this.data.telemetryEnabled = enabled;
+    this.save();
   }
 
   // --- Embedding Provider (M2-1) ---

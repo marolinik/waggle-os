@@ -9,6 +9,7 @@ export interface OnboardingState {
   apiKeySet?: boolean;
   templateId?: string;
   personaId?: string;
+  tooltipsDismissed?: boolean;
 }
 
 const STORAGE_KEY = 'waggle:onboarding';

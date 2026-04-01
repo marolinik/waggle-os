@@ -1,166 +1,203 @@
 /**
- * TelemetryCollector — local-only opt-in usage analytics.
+ * TelemetryStore — local, privacy-first event tracking.
  *
- * Collects: tool use, commands, errors, capability gaps, workflow modes, session metrics.
- * Does NOT collect: message content, file contents, workspace names, API keys, PII.
- * Storage: ~/.waggle/telemetry.json with daily aggregation.
- * No remote sending in V1 — collection only.
+ * All data stays in ~/.waggle/telemetry.db (SQLite).
+ * Default: OFF. User opts in via Settings toggle.
+ * No cloud reporting in M2 — data is queryable via local API only.
+ *
+ * NEVER tracked: message content, memory content, file paths,
+ * API keys, personal info, IP addresses, device IDs.
  */
 
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+import Database from 'better-sqlite3';
+import type { Database as DatabaseType } from 'better-sqlite3';
+import path from 'node:path';
 
+/* ── Schema ── */
+const TELEMETRY_SCHEMA = `
+CREATE TABLE IF NOT EXISTS telemetry_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event TEXT NOT NULL,
+  properties TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_telemetry_event ON telemetry_events (event, created_at);
+CREATE INDEX IF NOT EXISTS idx_telemetry_date ON telemetry_events (created_at);
+`;
+
+/* ── Event constants ── */
+export const TELEMETRY_EVENTS = {
+  // Onboarding funnel
+  ONBOARDING_START: 'onboarding_start',
+  ONBOARDING_STEP: 'onboarding_step',
+  ONBOARDING_COMPLETE: 'onboarding_complete',
+  ONBOARDING_SKIP: 'onboarding_skip',
+
+  // Session engagement
+  SESSION_START: 'session_start',
+  SESSION_END: 'session_end',
+
+  // Infrastructure
+  EMBEDDING_PROVIDER: 'embedding_provider',
+  LLM_PROVIDER: 'llm_provider',
+
+  // Feature usage
+  TEMPLATE_SELECTED: 'template_selected',
+  WORKSPACE_CREATED: 'workspace_created',
+  FIRST_AGENT_RESPONSE: 'first_agent_response',
+  SLASH_COMMAND_USED: 'slash_command_used',
+
+  // App lifecycle
+  APP_START: 'app_start',
+  APP_ERROR: 'app_error',
+} as const;
+
+/* ── Types ── */
 export interface TelemetryEvent {
-  category: 'tool_use' | 'command' | 'error' | 'capability_gap' | 'workflow' | 'session';
-  name: string;
-  count: number;
-  date: string; // YYYY-MM-DD
+  id: number;
+  event: string;
+  properties: Record<string, unknown>;
+  created_at: string;
 }
 
-export interface TelemetryReport {
-  events: TelemetryEvent[];
+export interface TelemetrySummary {
+  enabled: boolean;
   totalEvents: number;
-  dateRange: { from: string; to: string };
+  firstEvent: string | null;
+  lastEvent: string | null;
+  onboardingCompleted: boolean;
+  totalSessions: number;
+  embeddingProvider: string | null;
+  templatesUsed: string[];
+  eventBreakdown: Record<string, number>;
 }
 
-export class TelemetryCollector {
-  private dataDir: string;
-  private filePath: string;
+/* ── Store ── */
+export class TelemetryStore {
+  private db: DatabaseType;
   private enabled: boolean;
-  private events: Map<string, TelemetryEvent> = new Map();
 
   constructor(dataDir: string, enabled = false) {
-    this.dataDir = dataDir;
-    this.filePath = path.join(dataDir, 'telemetry.json');
     this.enabled = enabled;
-
-    // Load existing events from disk
-    if (this.enabled) {
-      this.loadFromDisk();
-    }
+    const dbPath = path.join(dataDir, 'telemetry.db');
+    this.db = new Database(dbPath);
+    this.db.pragma('journal_mode = WAL');
+    this.db.exec(TELEMETRY_SCHEMA);
   }
 
+  /** Track an event. No-op if telemetry is disabled. */
+  track(event: string, properties?: Record<string, unknown>): void {
+    if (!this.enabled) return;
+    this.db.prepare(
+      'INSERT INTO telemetry_events (event, properties) VALUES (?, ?)'
+    ).run(event, JSON.stringify(properties ?? {}));
+  }
+
+  /** Enable/disable telemetry at runtime. */
+  setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+  }
+
+  /** Whether telemetry is currently enabled. */
   isEnabled(): boolean {
     return this.enabled;
   }
 
-  setEnabled(enabled: boolean): void {
-    this.enabled = enabled;
-    if (enabled && this.events.size === 0) {
-      this.loadFromDisk();
+  /** Get aggregated summary. */
+  getSummary(): TelemetrySummary {
+    const total = (this.db.prepare(
+      'SELECT COUNT(*) as cnt FROM telemetry_events'
+    ).get() as { cnt: number }).cnt;
+
+    const first = this.db.prepare(
+      'SELECT MIN(created_at) as d FROM telemetry_events'
+    ).get() as { d: string | null };
+
+    const last = this.db.prepare(
+      'SELECT MAX(created_at) as d FROM telemetry_events'
+    ).get() as { d: string | null };
+
+    const onboarded = (this.db.prepare(
+      "SELECT COUNT(*) as cnt FROM telemetry_events WHERE event = 'onboarding_complete'"
+    ).get() as { cnt: number }).cnt > 0;
+
+    const sessions = (this.db.prepare(
+      "SELECT COUNT(*) as cnt FROM telemetry_events WHERE event = 'session_start'"
+    ).get() as { cnt: number }).cnt;
+
+    const embRow = this.db.prepare(
+      "SELECT properties FROM telemetry_events WHERE event = 'embedding_provider' ORDER BY created_at DESC LIMIT 1"
+    ).get() as { properties: string } | undefined;
+    const embProvider = embRow
+      ? (JSON.parse(embRow.properties) as Record<string, unknown>).provider as string ?? null
+      : null;
+
+    const tplRows = this.db.prepare(
+      "SELECT DISTINCT json_extract(properties, '$.templateId') as tid FROM telemetry_events WHERE event IN ('template_selected', 'workspace_created') AND json_extract(properties, '$.templateId') IS NOT NULL"
+    ).all() as Array<{ tid: string }>;
+
+    const breakdownRows = this.db.prepare(
+      'SELECT event, COUNT(*) as cnt FROM telemetry_events GROUP BY event ORDER BY cnt DESC'
+    ).all() as Array<{ event: string; cnt: number }>;
+    const breakdown: Record<string, number> = {};
+    for (const row of breakdownRows) {
+      breakdown[row.event] = row.cnt;
     }
-  }
-
-  private today(): string {
-    return new Date().toISOString().slice(0, 10);
-  }
-
-  private eventKey(category: string, name: string, date: string): string {
-    return `${category}:${name}:${date}`;
-  }
-
-  private record(category: TelemetryEvent['category'], name: string): void {
-    if (!this.enabled) return;
-
-    const date = this.today();
-    const key = this.eventKey(category, name, date);
-    const existing = this.events.get(key);
-
-    if (existing) {
-      existing.count++;
-    } else {
-      this.events.set(key, { category, name, count: 1, date });
-    }
-  }
-
-  recordToolUse(toolName: string): void {
-    this.record('tool_use', toolName);
-  }
-
-  recordCommand(commandName: string): void {
-    this.record('command', commandName);
-  }
-
-  recordError(errorType: string): void {
-    this.record('error', errorType);
-  }
-
-  recordCapabilityGap(need: string): void {
-    this.record('capability_gap', need);
-  }
-
-  recordWorkflow(mode: string): void {
-    this.record('workflow', mode);
-  }
-
-  recordSession(durationMs: number, interactionCount: number): void {
-    if (!this.enabled) return;
-    const date = this.today();
-    // Store as aggregated metrics
-    const durationKey = this.eventKey('session', 'duration_total_ms', date);
-    const countKey = this.eventKey('session', 'interaction_count', date);
-    const sessionKey = this.eventKey('session', 'session_count', date);
-
-    const durationEvt = this.events.get(durationKey);
-    if (durationEvt) { durationEvt.count += durationMs; }
-    else { this.events.set(durationKey, { category: 'session', name: 'duration_total_ms', count: durationMs, date }); }
-
-    const countEvt = this.events.get(countKey);
-    if (countEvt) { countEvt.count += interactionCount; }
-    else { this.events.set(countKey, { category: 'session', name: 'interaction_count', count: interactionCount, date }); }
-
-    const sessEvt = this.events.get(sessionKey);
-    if (sessEvt) { sessEvt.count++; }
-    else { this.events.set(sessionKey, { category: 'session', name: 'session_count', count: 1, date }); }
-  }
-
-  /** Write collected events to disk */
-  flush(): void {
-    if (!this.enabled) return;
-    if (this.events.size === 0) return;
-
-    try {
-      if (!fs.existsSync(this.dataDir)) {
-        fs.mkdirSync(this.dataDir, { recursive: true });
-      }
-      const data = [...this.events.values()];
-      fs.writeFileSync(this.filePath, JSON.stringify(data, null, 2));
-    } catch {
-      // Telemetry failure should never affect the app
-    }
-  }
-
-  /** Get a report of collected events */
-  getReport(days = 30): TelemetryReport {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - days);
-    const cutoffStr = cutoff.toISOString().slice(0, 10);
-
-    const events = [...this.events.values()].filter(e => e.date >= cutoffStr);
-    const dates = events.map(e => e.date).sort();
 
     return {
-      events,
-      totalEvents: events.reduce((sum, e) => sum + e.count, 0),
-      dateRange: {
-        from: dates[0] ?? this.today(),
-        to: dates[dates.length - 1] ?? this.today(),
-      },
+      enabled: this.enabled,
+      totalEvents: total,
+      firstEvent: first.d,
+      lastEvent: last.d,
+      onboardingCompleted: onboarded,
+      totalSessions: sessions,
+      embeddingProvider: embProvider,
+      templatesUsed: tplRows.map(r => r.tid),
+      eventBreakdown: breakdown,
     };
   }
 
-  private loadFromDisk(): void {
-    try {
-      if (!fs.existsSync(this.filePath)) return;
-      const raw = JSON.parse(fs.readFileSync(this.filePath, 'utf-8'));
-      if (Array.isArray(raw)) {
-        for (const evt of raw) {
-          const key = this.eventKey(evt.category, evt.name, evt.date);
-          this.events.set(key, evt);
-        }
-      }
-    } catch {
-      // Corrupted telemetry file — start fresh
+  /** Get raw events with optional filters. */
+  getEvents(options?: { event?: string; since?: string; until?: string; limit?: number }): TelemetryEvent[] {
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (options?.event) {
+      conditions.push('event = ?');
+      params.push(options.event);
     }
+    if (options?.since) {
+      conditions.push('created_at >= ?');
+      params.push(options.since);
+    }
+    if (options?.until) {
+      conditions.push('created_at <= ?');
+      params.push(options.until);
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const limit = options?.limit ?? 100;
+
+    const rows = this.db.prepare(
+      `SELECT id, event, properties, created_at FROM telemetry_events ${where} ORDER BY created_at DESC LIMIT ?`
+    ).all(...params, limit) as Array<{ id: number; event: string; properties: string; created_at: string }>;
+
+    return rows.map(r => ({
+      id: r.id,
+      event: r.event,
+      properties: JSON.parse(r.properties) as Record<string, unknown>,
+      created_at: r.created_at,
+    }));
+  }
+
+  /** Delete all telemetry data (user right-to-delete). */
+  clear(): { deleted: number } {
+    const result = this.db.prepare('DELETE FROM telemetry_events').run();
+    return { deleted: result.changes };
+  }
+
+  /** Close the database connection. */
+  close(): void {
+    this.db.close();
   }
 }

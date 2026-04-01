@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   Cpu, Shield, Palette, Save, Loader2, Users, Database,
-  Download, Upload, Link2, Building, Wrench, DollarSign, Key, Lock,
+  Download, Upload, Link2, Building, Wrench, DollarSign, Key, Lock, BarChart3, Trash2,
 } from 'lucide-react';
 import { useFeatureGate } from '@/hooks/useFeatureGate';
 import LockedFeature from '@/components/os/LockedFeature';
@@ -62,6 +62,10 @@ const SettingsApp = () => {
   const [kvarkUrl, setKvarkUrl] = useState('');
   const [kvarkToken, setKvarkToken] = useState('');
 
+  // M2-7: Telemetry state
+  const [telemetryEnabled, setTelemetryEnabled] = useState(false);
+  const [telemetryCount, setTelemetryCount] = useState(0);
+
   // Load settings
   useEffect(() => {
     adapter.getSettings().then((s: any) => {
@@ -72,6 +76,15 @@ const SettingsApp = () => {
     }).catch(() => {});
 
     adapter.getTeamStatus().then(s => setTeamConnected(s.connected)).catch(() => {});
+
+    // M2-7: Load telemetry status
+    fetch(`${adapter.getServerUrl()}/api/telemetry/status`)
+      .then(r => r.json())
+      .then((s: { enabled: boolean; totalEvents: number }) => {
+        setTelemetryEnabled(s.enabled);
+        setTelemetryCount(s.totalEvents);
+      })
+      .catch(() => {});
   }, []);
 
   const handleSaveModel = async () => {
@@ -167,6 +180,50 @@ const SettingsApp = () => {
                 <button className="flex-1 p-4 rounded-xl bg-[hsl(40,20%,92%)] border border-border/30 text-center opacity-40 cursor-not-allowed">
                   <p className="text-xs font-display text-[hsl(30,6%,8%)] mb-1">Light</p>
                   <p className="text-[9px] text-[hsl(30,6%,30%)]">Coming soon</p>
+                </button>
+              </div>
+            </div>
+
+            {/* M2-7: Privacy & Telemetry */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-display font-semibold text-foreground flex items-center gap-2">
+                <BarChart3 className="w-3.5 h-3.5 text-muted-foreground" />
+                Privacy & Telemetry
+              </h3>
+              <p className="text-[10px] text-muted-foreground leading-relaxed">
+                Help improve Waggle by tracking anonymous usage patterns. All data stays on your machine — nothing is sent to any server. No message content, file paths, or personal info is ever recorded.
+              </p>
+              <div className="flex items-center justify-between p-3 rounded-xl bg-secondary/30 border border-border/30">
+                <div>
+                  <p className="text-xs font-display font-medium text-foreground">Enable anonymous telemetry</p>
+                  <p className="text-[10px] text-muted-foreground">{telemetryCount} events collected</p>
+                </div>
+                <button
+                  onClick={async () => {
+                    const next = !telemetryEnabled;
+                    setTelemetryEnabled(next);
+                    await fetch(`${adapter.getServerUrl()}/api/telemetry/toggle`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ enabled: next }),
+                    }).catch(() => {});
+                  }}
+                  className={`relative w-10 h-5 rounded-full transition-colors ${telemetryEnabled ? 'bg-primary' : 'bg-muted'}`}
+                >
+                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${telemetryEnabled ? 'left-5' : 'left-0.5'}`} />
+                </button>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={async () => {
+                    if (!confirm('Delete all collected telemetry data? This cannot be undone.')) return;
+                    await fetch(`${adapter.getServerUrl()}/api/telemetry/events`, { method: 'DELETE' }).catch(() => {});
+                    setTelemetryCount(0);
+                  }}
+                  className="flex items-center gap-1.5 text-[10px] text-destructive hover:text-destructive/80 transition-colors"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  Delete all data
                 </button>
               </div>
             </div>

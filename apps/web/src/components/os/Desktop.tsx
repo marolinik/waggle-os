@@ -121,8 +121,9 @@ const Desktop = () => {
   const handleOnboardingComplete = useCallback(() => { completeOnboarding(); }, [completeOnboarding]);
   const handleOnboardingFinish = useCallback((workspaceId: string) => {
     selectWorkspace(workspaceId);
-    wm.openApp('dashboard');
-  }, [selectWorkspace, wm.openApp]);
+    const ws = workspaces.find(w => w.id === workspaceId);
+    wm.openChatForWorkspace(workspaceId, ws?.name);
+  }, [selectWorkspace, workspaces, wm.openChatForWorkspace]);
 
   // Render app content inside windows
   const renderAppContent = (win: WindowState) => {
@@ -268,7 +269,12 @@ const Desktop = () => {
         <OnboardingWizard serverBaseUrl={adapter.getServerUrl()} state={onboardingState} onUpdate={updateOnboarding}
           onComplete={handleOnboardingComplete} onDismiss={completeOnboarding} onFinish={handleOnboardingFinish} />
       )}
-      {onboardingState.completed && <OnboardingTooltips />}
+      {onboardingState.completed && !onboardingState.tooltipsDismissed && (
+        <OnboardingTooltips
+          templateId={onboardingState.templateId}
+          onDismiss={() => updateOnboarding({ tooltipsDismissed: true })}
+        />
+      )}
       {onboardingState.completed && ov.showLoginBriefing && (
         <LoginBriefing onDismiss={() => ov.setShowLoginBriefing(false)}
           onOpenWorkspace={(wsId) => { selectWorkspace(wsId); wm.openChatForWorkspace(wsId); ov.setShowLoginBriefing(false); }} />

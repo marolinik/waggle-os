@@ -6,7 +6,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
-import { MindDB, MultiMind, WorkspaceManager, WaggleConfig, createEmbeddingProvider, type EmbeddingProviderConfig, type EmbeddingProviderInstance, FrameStore, SessionStore, InstallAuditStore, CronStore, AwarenessLayer, VaultStore, SkillHashStore, OptimizationLogStore, reconcileIndexes, TeamSync } from '@waggle/core';
+import { MindDB, MultiMind, WorkspaceManager, WaggleConfig, createEmbeddingProvider, type EmbeddingProviderConfig, type EmbeddingProviderInstance, FrameStore, SessionStore, InstallAuditStore, CronStore, AwarenessLayer, VaultStore, SkillHashStore, OptimizationLogStore, reconcileIndexes, TeamSync, TelemetryStore, TELEMETRY_EVENTS } from '@waggle/core';
 import { ALLOWED_ORIGINS } from './cors-config.js';
 import { MemoryWeaver } from '@waggle/weaver';
 import {
@@ -120,6 +120,7 @@ import { oauthRoutes } from './routes/oauth.js';
 import { waggleSignalRoutes } from './routes/waggle-signals.js';
 import { providerRoutes } from './routes/providers.js';
 import { profileRoutes } from './routes/profile.js';
+import { telemetryRoutes } from './routes/telemetry.js';
 import { OfflineManager } from './offline-manager.js';
 import { securityMiddleware } from './security-middleware.js';
 import { LocalScheduler } from './cron.js';
@@ -221,6 +222,7 @@ declare module 'fastify' {
     marketplace: import('@waggle/marketplace').MarketplaceDB | null;
     offlineManager: OfflineManager;
     rateLimiter: import('./security-middleware.js').RateLimiter;
+    telemetry: import('@waggle/core').TelemetryStore;
   }
 }
 
@@ -340,6 +342,12 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   // Vault — encrypted secret storage
   const vault = new VaultStore(fullConfig.dataDir);
   server.decorate('vault', vault);
+
+  // M2-7: Telemetry — local, opt-in, privacy-first
+  const waggleConfigForTelemetry = new WaggleConfig(fullConfig.dataDir);
+  const telemetry = new TelemetryStore(fullConfig.dataDir, waggleConfigForTelemetry.getTelemetryEnabled());
+  server.decorate('telemetry', telemetry);
+  telemetry.track(TELEMETRY_EVENTS.APP_START, { version: '0.2.0', platform: process.platform });
   // embeddingProvider decorated later after creation (needs vault for API keys)
 
   // Migrate plaintext keys from config.json to vault on first run
@@ -1440,6 +1448,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(profileRoutes);
   await server.register(oauthRoutes);
   await server.register(browseRoutes);
+  await server.register(telemetryRoutes);
 
   // ── Static file serving for web mode ──────────────────────────
   // When WAGGLE_FRONTEND_DIR is set (or app/dist exists), serve the React frontend

@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import type { AppId } from '@/components/os/Dock';
+import { useEffect, useRef } from 'react';
+import type { AppId } from '@/lib/dock-tiers';
 
 interface UseKeyboardShortcutsOptions {
   onOpenApp: (id: AppId) => void;
@@ -24,70 +24,83 @@ const APP_SHORTCUTS: Record<string, AppId> = {
   '9': 'waggle-dance',
 };
 
-export const useKeyboardShortcuts = ({
-  onOpenApp,
-  onToggleGlobalSearch,
-  onTogglePersonaSwitcher,
-  onToggleWorkspaceSwitcher,
-  onToggleKeyboardHelp,
-  onCloseTopWindow,
-  onMinimizeTopWindow,
-}: UseKeyboardShortcutsOptions) => {
+/** Shortcuts that work even when an input/textarea is focused */
+function isGlobalShortcut(e: KeyboardEvent): boolean {
+  const ctrl = e.ctrlKey || e.metaKey;
+  return (ctrl && e.key === 'k') || e.key === 'Escape' || (ctrl && e.shiftKey && (e.key === 'M' || e.key === 'm'));
+}
+
+function isInputFocused(): boolean {
+  const active = document.activeElement;
+  if (!active) return false;
+  const tag = active.tagName.toLowerCase();
+  return tag === 'input' || tag === 'textarea' || (active as HTMLElement).isContentEditable;
+}
+
+export const useKeyboardShortcuts = (options: UseKeyboardShortcutsOptions) => {
+  // Store callbacks in refs so the event listener never re-registers
+  const optsRef = useRef(options);
+  optsRef.current = options;
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const ctrl = e.ctrlKey || e.metaKey;
+      const opts = optsRef.current;
 
-      // Ctrl+W: Close focused window (prevent browser tab close)
+      // Skip non-global shortcuts when typing in an input
+      if (isInputFocused() && !isGlobalShortcut(e)) return;
+
+      // Ctrl+W: Close focused window
       if (ctrl && e.key === 'w' && !e.shiftKey) {
         e.preventDefault();
-        onCloseTopWindow?.();
+        opts.onCloseTopWindow?.();
         return;
       }
 
       // Ctrl+Shift+M: Minimize focused window
       if (ctrl && e.shiftKey && (e.key === 'M' || e.key === 'm')) {
         e.preventDefault();
-        onMinimizeTopWindow?.();
+        opts.onMinimizeTopWindow?.();
         return;
       }
 
-      // Ctrl+Shift+0-7: Open apps
+      // Ctrl+Shift+0-9: Open apps
       if (ctrl && e.shiftKey && APP_SHORTCUTS[e.key]) {
         e.preventDefault();
-        onOpenApp(APP_SHORTCUTS[e.key]);
+        opts.onOpenApp(APP_SHORTCUTS[e.key]);
         return;
       }
 
       // Ctrl+K: Global search
       if (ctrl && e.key === 'k') {
         e.preventDefault();
-        onToggleGlobalSearch();
+        opts.onToggleGlobalSearch();
         return;
       }
 
       // Ctrl+Shift+P: Persona switcher
       if (ctrl && e.shiftKey && e.key === 'P') {
         e.preventDefault();
-        onTogglePersonaSwitcher();
+        opts.onTogglePersonaSwitcher();
         return;
       }
 
       // Ctrl+Tab: Workspace switcher
       if (ctrl && e.key === 'Tab') {
         e.preventDefault();
-        onToggleWorkspaceSwitcher();
+        opts.onToggleWorkspaceSwitcher();
         return;
       }
 
       // Ctrl+?: Keyboard help
       if (ctrl && e.key === '?') {
         e.preventDefault();
-        onToggleKeyboardHelp();
+        opts.onToggleKeyboardHelp();
         return;
       }
     };
 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [onOpenApp, onToggleGlobalSearch, onTogglePersonaSwitcher, onToggleWorkspaceSwitcher, onToggleKeyboardHelp, onCloseTopWindow, onMinimizeTopWindow]);
+  }, []); // Empty deps — handler is stable via ref
 };

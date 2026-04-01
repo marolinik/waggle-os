@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { fuzzyMatch } from '../../utils/fuzzy-match.js';
 
 export interface SlashCommand {
   name: string;
@@ -127,13 +128,16 @@ export function ChatInput({
 
   const commandList = commands ?? CLIENT_COMMANDS;
 
-  // Filter commands based on current input
+  // Filter commands based on current input (fuzzy match)
   const filteredCommands = useMemo(() => {
     if (!text.startsWith('/')) return [];
-    const query = text.toLowerCase();
-    return commandList.filter(cmd =>
-      cmd.name.toLowerCase().startsWith(query)
-    );
+    const q = text.slice(1).toLowerCase(); // strip leading /
+    if (!q) return commandList; // show all on bare /
+    return commandList
+      .map(cmd => ({ cmd, result: fuzzyMatch(q, cmd.name.slice(1) + ' ' + cmd.description) }))
+      .filter(({ result }) => result.match)
+      .sort((a, b) => b.result.score - a.result.score)
+      .map(({ cmd }) => cmd);
   }, [text, commandList]);
 
   // Show/hide command popup

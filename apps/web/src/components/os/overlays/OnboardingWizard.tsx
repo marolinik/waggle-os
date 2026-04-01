@@ -104,6 +104,15 @@ const fadeSlide = {
   transition: { duration: 0.2 },
 };
 
+/* ─── M2-7: Fire-and-forget telemetry helper ─── */
+function trackTelemetry(serverBaseUrl: string, event: string, properties?: Record<string, unknown>) {
+  fetch(`${serverBaseUrl}/api/telemetry/track`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ event, properties }),
+  }).catch(() => {});
+}
+
 /* ─── Main Component ─── */
 const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismiss, onFinish }: OnboardingWizardProps) => {
   const [step, setStep] = useState(state.step);
@@ -133,15 +142,18 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
 
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
 
-  // Connect on mount (silent)
+  // Connect on mount (silent) + track onboarding start
   useEffect(() => {
     adapter.connect().catch(() => {});
+    trackTelemetry(serverBaseUrl, 'onboarding_start');
   }, []);
 
+  const STEP_NAMES = ['welcome', 'why-waggle', 'tier', 'memory-import', 'template', 'persona', 'api-key', 'ready'];
   const goToStep = useCallback((n: number) => {
     setStep(n);
     onUpdate({ step: n });
-  }, [onUpdate]);
+    trackTelemetry(serverBaseUrl, 'onboarding_step', { step: n, stepName: STEP_NAMES[n] ?? `step-${n}` });
+  }, [onUpdate, serverBaseUrl]);
 
   // Auto-advance for step 0 only (3s)
   useEffect(() => {
@@ -263,6 +275,11 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
         templateId: selectedTemplate,
         personaId: selectedPersona,
       });
+      trackTelemetry(serverBaseUrl, 'onboarding_complete', {
+        templateId: selectedTemplate || null,
+        personaId: selectedPersona || null,
+        apiKeySet: !!keySaved,
+      });
       goToStep(7);
     } finally {
       setCreatingWorkspace(false);
@@ -328,7 +345,10 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
           </div>
         </div>
         <button
-          onClick={onDismiss}
+          onClick={() => {
+            trackTelemetry(serverBaseUrl, 'onboarding_skip', { atStep: step });
+            onDismiss();
+          }}
           className="text-xs text-muted-foreground hover:text-foreground transition-colors font-display"
         >
           Skip setup

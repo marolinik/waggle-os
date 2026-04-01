@@ -47,6 +47,7 @@ export {
   type CronSchedule, type CreateScheduleInput, type CronJobType,
 } from './cron-store.js';
 export { VaultStore, type VaultEntry } from './vault.js';
+export { TelemetryStore, TELEMETRY_EVENTS, type TelemetryEvent, type TelemetrySummary } from './telemetry.js';
 export {
   SkillHashStore, computeSkillHash, SKILL_HASHES_TABLE_SQL,
   type SkillHash,

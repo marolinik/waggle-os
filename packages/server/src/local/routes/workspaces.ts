@@ -208,6 +208,42 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
 
     emitAuditEvent(server, { workspaceId: ws.id, eventType: 'workspace_create', input: JSON.stringify({ name: ws.name, group: ws.group }) });
 
+    // M2-7: Track workspace creation (no content — just template/persona IDs)
+    if (server.telemetry) {
+      server.telemetry.track('workspace_created', {
+        templateId: resolvedTemplateId ?? null,
+        personaId: personaId ?? null,
+      });
+    }
+
+    // M2-5: Seed template starter memory as visible Memory frames
+    if (resolvedTemplateId && resolvedTemplateId !== 'blank') {
+      try {
+        const { BUILT_IN_TEMPLATES } = await import('./workspace-templates.js');
+        const tpl = BUILT_IN_TEMPLATES.find(t => t.id === resolvedTemplateId);
+        if (tpl?.starterMemory?.length) {
+          const mindPath = server.workspaceManager.getMindPath(ws.id);
+          const wsDb = new MindDB(mindPath);
+          const raw = wsDb.getDatabase();
+          // Create a synthetic session for onboarding frames (FK enforced)
+          raw.prepare(
+            "INSERT OR IGNORE INTO sessions (gop_id, project_id, status, summary) VALUES (?, ?, 'closed', 'Workspace template starter content')"
+          ).run(`onboarding-${ws.id}`, ws.id);
+          // Seed each starter memory as an I-frame
+          const insert = raw.prepare(
+            "INSERT INTO memory_frames (frame_type, gop_id, t, content, importance, source) VALUES ('I', ?, ?, ?, 'normal', 'system')"
+          );
+          for (let i = 0; i < tpl.starterMemory.length; i++) {
+            insert.run(`onboarding-${ws.id}`, i, tpl.starterMemory[i]);
+          }
+          wsDb.close();
+        }
+      } catch (err) {
+        // Non-blocking — workspace creation succeeds even if memory seeding fails
+        console.warn(`[waggle] Starter memory seeding failed:`, (err as Error).message);
+      }
+    }
+
     // IMP-012: Fire-and-forget template skill pack installation
     const template = resolvedTemplateId;
     if (template && TEMPLATE_PACK_MAP[template]) {

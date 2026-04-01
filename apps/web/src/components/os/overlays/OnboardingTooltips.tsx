@@ -1,41 +1,69 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const TIPS = [
+const BASE_TIPS = [
   'Type / for 22 powerful commands — search, draft, research, and more.',
-  'I remember everything you tell me across sessions.',
-  'Create workspaces to organize projects with separate memory.',
-  'Your AI remembers everything — facts, decisions, preferences.',
-  'Check your Memory tab to see what I\'ve learned.',
-  'Type /help in chat for a full list of commands.',
-  'Try /research [topic] to kick off a deep dive.',
+  'Your AI remembers everything — across every session, every workspace.',
 ];
 
+const TEMPLATE_TIPS: Record<string, string[]> = {
+  'sales-pipeline': [
+    'Try "Research [company name]" to get a full prospect brief.',
+    'Use /draft to create personalized outreach emails.',
+  ],
+  'research-project': [
+    'Try /research [any topic] — watch your agent search and synthesize.',
+    'Use /memory to review what your agent has learned so far.',
+  ],
+  'code-review': [
+    'Try /review to analyze code quality and suggest improvements.',
+    'Use /plan for multi-step refactoring plans.',
+  ],
+  'marketing-campaign': [
+    'Try /draft campaign brief to kickstart your strategy.',
+    'Use /research competitors to analyze your market.',
+  ],
+  'product-launch': [
+    'Try /draft PRD to create a product requirements document.',
+    'Use /plan to build a launch checklist with milestones.',
+  ],
+  'legal-review': [
+    'Try /review to analyze contracts and flag risky clauses.',
+    'Use /research for legal precedent and regulatory context.',
+  ],
+  'agency-consulting': [
+    'Try /research [client company] for a deep client brief.',
+    'Use /status for project metrics across engagements.',
+  ],
+};
+
+const CLOSING_TIP = 'Check your Memory tab to see what your agent learns over time.';
+
 interface OnboardingTooltipsProps {
-  onComplete?: () => void;
+  templateId?: string;
+  onDismiss?: () => void;
 }
 
-const OnboardingTooltips = ({ onComplete }: OnboardingTooltipsProps) => {
+const OnboardingTooltips = ({ templateId, onDismiss }: OnboardingTooltipsProps) => {
   const [tipIndex, setTipIndex] = useState(0);
   const [dismissed, setDismissed] = useState(() => {
     return localStorage.getItem('waggle:tooltips_done') === 'true';
   });
 
-  useEffect(() => {
-    // Small delay before showing first tooltip
-    const timer = setTimeout(() => {}, 500);
-    return () => clearTimeout(timer);
-  }, []);
+  const tips = useMemo(() => {
+    const specific = templateId ? (TEMPLATE_TIPS[templateId] ?? []) : [];
+    return [...BASE_TIPS, ...specific, CLOSING_TIP];
+  }, [templateId]);
 
   if (dismissed) return null;
 
-  const isLast = tipIndex >= TIPS.length - 1;
+  const isLast = tipIndex >= tips.length - 1;
 
   const handleNext = () => {
     if (isLast) {
       setDismissed(true);
       localStorage.setItem('waggle:tooltips_done', 'true');
-      onComplete?.();
+      onDismiss?.();
     } else {
       setTipIndex(i => i + 1);
     }
@@ -44,7 +72,7 @@ const OnboardingTooltips = ({ onComplete }: OnboardingTooltipsProps) => {
   const handleDismissAll = () => {
     setDismissed(true);
     localStorage.setItem('waggle:tooltips_done', 'true');
-    onComplete?.();
+    onDismiss?.();
   };
 
   return (
@@ -66,14 +94,14 @@ const OnboardingTooltips = ({ onComplete }: OnboardingTooltipsProps) => {
                 transition={{ duration: 0.15 }}
                 className="text-sm text-foreground mb-3"
               >
-                {TIPS[tipIndex]}
+                {tips[tipIndex]}
               </motion.p>
             </AnimatePresence>
 
             <div className="flex items-center justify-between">
               {/* Dot indicators */}
               <div className="flex gap-1">
-                {TIPS.map((_, i) => (
+                {tips.map((_, i) => (
                   <div
                     key={i}
                     className={`w-1.5 h-1.5 rounded-full transition-colors ${

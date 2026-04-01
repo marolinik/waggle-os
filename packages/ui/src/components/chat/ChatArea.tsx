@@ -19,6 +19,21 @@ import type { FeedbackRating, FeedbackReason } from './FeedbackButtons.js';
 /** Scroll positions keyed by workspace/session for persistence across switches */
 const scrollPositions = new Map<string, number>();
 
+// M2-5: Template-specific welcome messages — static, no API call needed
+const TEMPLATE_WELCOMES: Record<string, string> = {
+  'sales-pipeline': "I'm your sales research assistant. I can research prospects, draft personalized outreach, and help you prepare for calls. Pick a quick start below, or tell me about your first prospect.",
+  'research-project': "I'm set up for deep research. I can search the web, synthesize findings across sources, and help you build structured research reports. What topic should we investigate?",
+  'code-review': "Ready to review code. I can analyze diffs, spot architectural issues, suggest refactoring, and track technical debt. Paste a code snippet or tell me about your project.",
+  'marketing-campaign': "I'm your campaign strategist. I can draft briefs, create content calendars, analyze competitors, and write copy. What are we launching?",
+  'product-launch': "Let's coordinate your launch. I can write PRDs, build roadmaps, draft stakeholder updates, and track milestones. What product are we shipping?",
+  'legal-review': "I'm configured for legal document work. I can review contracts, flag risk clauses, research regulations, and draft legal correspondence. What document should we start with?",
+  'agency-consulting': "Set up for client work. I can research clients, draft deliverables, build project plans, and manage multiple engagements. Which client are we working on?",
+};
+
+function getTemplateWelcome(templateId: string): string | null {
+  return TEMPLATE_WELCOMES[templateId] ?? null;
+}
+
 // Wave 1.6: Template-specific starter card definitions
 const TEMPLATE_STARTERS: Record<string, Array<{ label: string; sub: string; cmd: string }>> = {
   'sales-pipeline': [
@@ -541,6 +556,22 @@ export function ChatArea({ messages, isLoading, onSendMessage, onSlashCommand, o
             <div className="text-xs text-muted-foreground/60 text-center pt-2">
               Type <kbd className="px-1.5 py-0.5 rounded bg-secondary text-foreground text-[10px]">/</kbd> for workflows · <kbd className="px-1.5 py-0.5 rounded bg-secondary text-foreground text-[10px]">Ctrl+K</kbd> to search
             </div>
+
+            {/* M2-5: Template welcome — static assistant greeting, no API call */}
+            {workspaceContext.workspace.templateId && getTemplateWelcome(workspaceContext.workspace.templateId) && (
+              <div className="flex gap-3 items-start animate-in fade-in slide-in-from-bottom-2 duration-500">
+                <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0"
+                     style={{ backgroundColor: 'var(--hive-800)', border: '1px solid var(--hive-700)' }}>
+                  <span style={{ color: 'var(--honey-500)', fontSize: '14px' }}>{'\u2B21'}</span>
+                </div>
+                <div className="space-y-1.5 max-w-[80%]">
+                  <p className="text-xs font-medium" style={{ color: 'var(--honey-500)' }}>Waggle</p>
+                  <div className="text-sm leading-relaxed" style={{ color: 'var(--hive-200)' }}>
+                    {getTemplateWelcome(workspaceContext.workspace.templateId)}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Template-specific starter cards — shown when workspace has a matching template */}
             {workspaceContext.workspace.templateId && TEMPLATE_STARTERS[workspaceContext.workspace.templateId] && (

@@ -836,6 +836,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         const shouldCheckAmbiguity = isFirstUserMessage && !gepaExpanded; // Skip ambiguity check if GEPA already expanded
         const ambiguityPrefix = (!hasCustomRunner && shouldCheckAmbiguity && isAmbiguousMessage(agentMessage)) ? AMBIGUITY_PROMPT : '';
 
+        // M2-7: Track session start on first user message
+        if (isFirstUserMessage && server.telemetry) {
+          server.telemetry.track('session_start', {
+            workspaceId: effectiveWorkspace,
+            templateId: server.workspaceManager?.get(effectiveWorkspace)?.templateId ?? null,
+          });
+        }
+
         // Template welcome context — inject on first message in a workspace with a template
         let templateContext = '';
         if (!hasCustomRunner && isFirstUserMessage) {
