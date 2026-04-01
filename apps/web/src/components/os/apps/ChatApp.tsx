@@ -27,7 +27,7 @@ interface ChatAppProps {
   onModelChange?: (model: string) => void;
   availableModels?: string[];
   teamPresence?: TeamMember[];
-  sessions?: { id: string; title: string }[];
+  sessions?: { id: string; title: string; messageCount?: number; lastActive?: string }[];
   activeSessionId?: string | null;
   onSelectSession?: (id: string) => void;
   onNewSession?: () => void;
@@ -394,11 +394,20 @@ const ChatApp = ({
               <button
                 key={s.id}
                 onClick={() => onSelectSession?.(s.id)}
-                className={`w-full text-left text-xs px-2 py-1.5 rounded-lg truncate transition-colors ${
-                  activeSessionId === s.id ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground'
+                className={`w-full text-left px-2 py-1.5 rounded-lg transition-colors ${
+                  activeSessionId === s.id ? 'bg-primary/20' : 'hover:bg-muted/50'
                 }`}
               >
-                {s.title}
+                <span className={`text-xs truncate block ${activeSessionId === s.id ? 'text-primary' : 'text-foreground'}`}>
+                  {s.title}
+                </span>
+                {(s.messageCount != null || s.lastActive) && (
+                  <span className="text-[9px] text-muted-foreground/60">
+                    {s.messageCount != null && `${s.messageCount} msgs`}
+                    {s.messageCount != null && s.lastActive && ' · '}
+                    {s.lastActive && new Date(s.lastActive).toLocaleDateString()}
+                  </span>
+                )}
               </button>
             ))}
           </div>
