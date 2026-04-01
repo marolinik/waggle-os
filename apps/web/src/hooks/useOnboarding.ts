@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type { UserTier } from '@/lib/dock-tiers';
 
 export interface OnboardingState {
@@ -44,10 +44,19 @@ function loadState(): OnboardingState {
 
 function saveState(state: OnboardingState) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  // Notify other hook instances in the same tab via custom event
+  window.dispatchEvent(new CustomEvent('waggle:onboarding-sync'));
 }
 
 export const useOnboarding = () => {
   const [state, setState] = useState<OnboardingState>(loadState);
+
+  // Re-sync when another hook instance writes to localStorage
+  useEffect(() => {
+    const handler = () => setState(loadState());
+    window.addEventListener('waggle:onboarding-sync', handler);
+    return () => window.removeEventListener('waggle:onboarding-sync', handler);
+  }, []);
 
   const update = useCallback((updates: Partial<OnboardingState>) => {
     setState(prev => {

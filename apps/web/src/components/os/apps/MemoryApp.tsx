@@ -99,7 +99,7 @@ const MemoryApp = ({
       items: [
         { label: 'View Details', icon: <Eye className="w-3.5 h-3.5" />, onClick: () => onSelectFrame(frame) },
         { label: 'Copy Content', icon: <Copy className="w-3.5 h-3.5" />, onClick: () => navigator.clipboard.writeText(frame.content) },
-        { label: 'Edit', icon: <Pencil className="w-3.5 h-3.5" />, onClick: () => { /* TODO: add edit modal */ console.log('[MemoryApp] Edit frame:', frame.id); }, disabled: true },
+        { label: 'Edit', icon: <Pencil className="w-3.5 h-3.5" />, onClick: () => { /* TODO: add edit modal */ }, disabled: true },
         { label: '', onClick: () => {}, separator: true },
         { label: 'Delete', icon: <Trash2 className="w-3.5 h-3.5" />, onClick: () => onDeleteFrame(frame.id), danger: true },
       ],

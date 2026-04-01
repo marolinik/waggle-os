@@ -223,6 +223,8 @@ declare module 'fastify' {
     offlineManager: OfflineManager;
     rateLimiter: import('./security-middleware.js').RateLimiter;
     telemetry: import('@waggle/core').TelemetryStore;
+    connectorRegistry: import('@waggle/agent').ConnectorRegistry;
+    sessionManager: import('./workspace-sessions.js').WorkspaceSessionManager;
   }
 }
 

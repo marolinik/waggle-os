@@ -68,7 +68,7 @@ const SettingsApp = () => {
 
   // Load settings
   useEffect(() => {
-    adapter.getSettings().then((s: any) => {
+    adapter.getSettings().then((s: { defaultModel?: string; model?: string; dailyBudget?: number; tier?: string; yoloMode?: boolean }) => {
       setDefaultModel(s.defaultModel ?? s.model ?? '');
       setDailyBudget(s.dailyBudget != null ? String(s.dailyBudget) : '');
       setTier(s.tier ?? 'solo');
@@ -78,13 +78,10 @@ const SettingsApp = () => {
     adapter.getTeamStatus().then(s => setTeamConnected(s.connected)).catch(() => {});
 
     // M2-7: Load telemetry status
-    fetch(`${adapter.getServerUrl()}/api/telemetry/status`)
-      .then(r => r.json())
-      .then((s: { enabled: boolean; totalEvents: number }) => {
-        setTelemetryEnabled(s.enabled);
-        setTelemetryCount(s.totalEvents);
-      })
-      .catch(() => {});
+    adapter.getTelemetryStatus().then(s => {
+      setTelemetryEnabled(s.enabled);
+      setTelemetryCount(s.totalEvents);
+    });
   }, []);
 
   const handleSaveModel = async () => {
@@ -202,11 +199,7 @@ const SettingsApp = () => {
                   onClick={async () => {
                     const next = !telemetryEnabled;
                     setTelemetryEnabled(next);
-                    await fetch(`${adapter.getServerUrl()}/api/telemetry/toggle`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ enabled: next }),
-                    }).catch(() => {});
+                    await adapter.toggleTelemetry(next);
                   }}
                   className={`relative w-10 h-5 rounded-full transition-colors ${telemetryEnabled ? 'bg-primary' : 'bg-muted'}`}
                 >
@@ -217,7 +210,7 @@ const SettingsApp = () => {
                 <button
                   onClick={async () => {
                     if (!confirm('Delete all collected telemetry data? This cannot be undone.')) return;
-                    await fetch(`${adapter.getServerUrl()}/api/telemetry/events`, { method: 'DELETE' }).catch(() => {});
+                    await adapter.clearTelemetry();
                     setTelemetryCount(0);
                   }}
                   className="flex items-center gap-1.5 text-[10px] text-destructive hover:text-destructive/80 transition-colors"

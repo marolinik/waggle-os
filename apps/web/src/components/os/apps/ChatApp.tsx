@@ -51,8 +51,6 @@ const SLASH_COMMANDS = [
   { cmd: '/models', desc: 'List models' },
   { cmd: '/cost', desc: 'Show cost' },
   { cmd: '/clear', desc: 'Clear history' },
-  { cmd: '/identity', desc: 'Agent identity' },
-  { cmd: '/awareness', desc: 'Self awareness' },
   { cmd: '/skills', desc: 'List skills' },
   { cmd: '/help', desc: 'Show help' },
   { cmd: '/research', desc: 'Deep research' },
@@ -213,11 +211,33 @@ const ChatApp = ({
   const handleSend = () => {
     const text = input.trim();
     if (!text) return;
+
+    // Client-only commands — handled locally, not sent to server
     if (text === '/clear') {
       onClearHistory();
       setInput('');
       return;
     }
+    if (text.startsWith('/model ') && onModelChange) {
+      const model = text.slice(7).trim();
+      if (model) onModelChange(model);
+      setInput('');
+      return;
+    }
+    if (text === '/models') {
+      // Show available models as a local message
+      const models = availableModels?.join(', ') || 'No models loaded';
+      onSendMessage(`Available models: ${models}`);
+      setInput('');
+      return;
+    }
+    if (text === '/cost') {
+      onSendMessage('/cost');
+      setInput('');
+      setShowSlash(false);
+      return;
+    }
+
     onSendMessage(text);
     setInput('');
     setShowSlash(false);

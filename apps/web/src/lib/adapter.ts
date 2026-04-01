@@ -811,6 +811,37 @@ class LocalAdapter {
     };
   }
 
+  // --- Telemetry ---
+  async getTelemetryStatus(): Promise<{ enabled: boolean; totalEvents: number }> {
+    try {
+      const res = await this.fetch('/api/telemetry/status');
+      return res.json();
+    } catch { return { enabled: false, totalEvents: 0 }; }
+  }
+
+  async toggleTelemetry(enabled: boolean): Promise<void> {
+    await this.fetch('/api/telemetry/toggle', { method: 'POST', body: JSON.stringify({ enabled }) });
+  }
+
+  async clearTelemetry(): Promise<{ deleted: number }> {
+    const res = await this.fetch('/api/telemetry/events', { method: 'DELETE' });
+    return res.json();
+  }
+
+  async trackTelemetry(event: string, properties?: Record<string, unknown>): Promise<void> {
+    this.fetch('/api/telemetry/track', { method: 'POST', body: JSON.stringify({ event, properties }) }).catch(() => {});
+  }
+
+  // --- Import ---
+  async importPreview(data: unknown, source: string): Promise<{ knowledgeExtracted: unknown[] }> {
+    const res = await this.fetch('/api/import/preview', { method: 'POST', body: JSON.stringify({ data, source }) });
+    return res.json();
+  }
+
+  async importCommit(data: unknown, source: string): Promise<void> {
+    await this.fetch('/api/import/commit', { method: 'POST', body: JSON.stringify({ data, source }) });
+  }
+
   // --- WebSocket ---
   connectWebSocket(onMessage: (data: unknown) => void): () => void {
     const wsUrl = this.baseUrl.replace('http', 'ws') + `/ws?token=${this.authToken}`;

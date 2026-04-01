@@ -22,9 +22,6 @@ export const CLIENT_COMMANDS: SlashCommand[] = [
   { name: '/models', description: 'List available models' },
   { name: '/cost', description: 'Show token usage and cost' },
   { name: '/clear', description: 'Clear conversation history' },
-  { name: '/identity', description: 'Show agent identity' },
-  { name: '/awareness', description: 'Show agent awareness state' },
-  { name: '/git', description: 'Show git status' },
 ];
 
 export interface ChatInputProps {

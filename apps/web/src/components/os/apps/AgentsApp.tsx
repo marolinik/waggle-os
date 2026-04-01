@@ -39,18 +39,18 @@ const AgentsApp = () => {
 
       const backendPersonas: BackendPersona[] =
         personasRes.status === 'fulfilled'
-          ? (personasRes.value as any[]).map(p => ({ ...p, custom: false }))
+          ? (personasRes.value as BackendPersona[]).map(p => ({ ...p, custom: false }))
           : PERSONAS.map(p => ({ id: p.id, name: p.name, description: p.description, icon: undefined, custom: false }));
       setAgents(backendPersonas);
 
       if (groupsRes.status === 'fulfilled') setGroups(groupsRes.value as AgentGroup[]);
 
       if (capsRes.status === 'fulfilled') {
-        const caps = capsRes.value as any;
+        const caps = capsRes.value as { commands?: Array<{ name: string; description: string }>; plugins?: Array<{ name: string; tools?: number }>; mcpServers?: Array<{ name: string; tools?: number }> };
         const tools: ToolDef[] = [];
-        if (caps.commands) caps.commands.forEach((c: any) => tools.push({ name: c.name, description: c.description }));
-        if (caps.plugins) caps.plugins.forEach((p: any) => { for (let i = 0; i < (p.tools ?? 0); i++) tools.push({ name: `${p.name}:tool-${i + 1}`, description: `Plugin tool from ${p.name}` }); });
-        if (caps.mcpServers) caps.mcpServers.forEach((m: any) => { for (let i = 0; i < (m.tools ?? 0); i++) tools.push({ name: `${m.name}:tool-${i + 1}`, description: `MCP tool from ${m.name}` }); });
+        if (caps.commands) caps.commands.forEach(c => tools.push({ name: c.name, description: c.description }));
+        if (caps.plugins) caps.plugins.forEach(p => { for (let i = 0; i < (p.tools ?? 0); i++) tools.push({ name: `${p.name}:tool-${i + 1}`, description: `Plugin tool from ${p.name}` }); });
+        if (caps.mcpServers) caps.mcpServers.forEach(m => { for (let i = 0; i < (m.tools ?? 0); i++) tools.push({ name: `${m.name}:tool-${i + 1}`, description: `MCP tool from ${m.name}` }); });
         setAllTools(tools);
       }
     } catch (err) {
@@ -101,7 +101,7 @@ const AgentsApp = () => {
 
   const handleCreateGroup = async (data: { name: string; description: string; strategy: 'parallel' | 'sequential' | 'coordinator'; members: { agentId: string; roleInGroup: string; executionOrder: number }[] }) => {
     try {
-      await adapter.createAgentGroup(data as any);
+      await adapter.createAgentGroup(data);
       setShowCreateGroup(false);
       await loadData();
     } catch (err) { console.error('[AgentsApp] create group failed:', err); setError('Failed to create group'); }
@@ -110,7 +110,7 @@ const AgentsApp = () => {
   const handleUpdateGroup = async (data: { name: string; description: string; strategy: 'parallel' | 'sequential' | 'coordinator'; members: { agentId: string; roleInGroup: string; executionOrder: number }[] }) => {
     if (!editingGroup) return;
     try {
-      await adapter.updateAgentGroup(editingGroup.id, data as any);
+      await adapter.updateAgentGroup(editingGroup.id, data);
       setEditingGroup(null);
       await loadData();
     } catch (err) { console.error('[AgentsApp] update group failed:', err); setError('Failed to update group'); }

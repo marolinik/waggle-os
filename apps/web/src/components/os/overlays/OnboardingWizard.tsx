@@ -104,13 +104,9 @@ const fadeSlide = {
   transition: { duration: 0.2 },
 };
 
-/* ─── M2-7: Fire-and-forget telemetry helper ─── */
-function trackTelemetry(serverBaseUrl: string, event: string, properties?: Record<string, unknown>) {
-  fetch(`${serverBaseUrl}/api/telemetry/track`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ event, properties }),
-  }).catch(() => {});
+/* ─── M2-7: Fire-and-forget telemetry via adapter ─── */
+function trackTelemetry(_serverBaseUrl: string, event: string, properties?: Record<string, unknown>) {
+  adapter.trackTelemetry(event, properties);
 }
 
 /* ─── Main Component ─── */
@@ -177,15 +173,8 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
       const data = JSON.parse(text);
       setImportData(data);
       setImportSource(source);
-      const res = await fetch(`${serverBaseUrl}/api/import/preview`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data, source }),
-      });
-      if (res.ok) {
-        const result = await res.json();
-        setImportPreview(result.knowledgeExtracted || []);
-      }
+      const result = await adapter.importPreview(data, source);
+      setImportPreview(result.knowledgeExtracted || []);
     } catch { /* ignore parse errors */ }
   };
 
@@ -193,11 +182,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
     if (!importData || !importSource) return;
     setImporting(true);
     try {
-      await fetch(`${serverBaseUrl}/api/import/commit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: importData, source: importSource }),
-      });
+      await adapter.importCommit(importData, importSource);
       setImportDone(true);
       setTimeout(() => goToStep(4), 800);
     } catch { /* ignore */ }
@@ -208,19 +193,12 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
     if (!customPersonaName.trim()) return;
     setCreatingPersona(true);
     try {
-      const res = await fetch(`${serverBaseUrl}/api/personas`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: customPersonaName,
-          description: customPersonaDesc,
-          systemPrompt: customPersonaDesc,
-        }),
+      const persona = await adapter.createPersona({
+        name: customPersonaName,
+        description: customPersonaDesc,
+        systemPrompt: customPersonaDesc,
       });
-      if (res.ok) {
-        const persona = await res.json();
-        setSelectedPersona(persona.id || customPersonaName.toLowerCase().replace(/\s+/g, '-'));
-      }
+      setSelectedPersona(persona.id || customPersonaName.toLowerCase().replace(/\s+/g, '-'));
     } catch {
       // Use local ID if backend is offline
       setSelectedPersona(customPersonaName.toLowerCase().replace(/\s+/g, '-'));

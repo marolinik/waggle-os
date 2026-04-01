@@ -1,7 +1,7 @@
 import type { ElementType } from 'react';
 import {
   LayoutDashboard, MessageSquare, FolderOpen, Settings, Bot, Brain,
-  Zap, Activity, Radio, Clock, Package, Plug, Store,
+  Zap, Activity, Radio, Clock, Package, Plug, Store, Lock,
 } from 'lucide-react';
 
 export type AppId =
@@ -50,6 +50,7 @@ const POWER_CONFIG: DockEntry[] = [
     ],
   },
   { type: 'separator', key: 'sep-2', label: '' },
+  { type: 'app', key: 'vault', appId: 'vault', icon: Lock, label: 'API Keys', color: 'text-amber-400' },
   { type: 'app', key: 'system', appId: 'settings', icon: Settings, label: 'Settings', color: 'text-muted-foreground' },
 ];
 
@@ -59,6 +60,7 @@ export const TIER_DOCK_CONFIG: Record<UserTier, DockEntry[]> = {
     { type: 'app', key: 'chat', appId: 'chat', icon: MessageSquare, label: 'Chat', color: 'text-primary' },
     { type: 'app', key: 'files', appId: 'files', icon: FolderOpen, label: 'Files', color: 'text-amber-300' },
     { type: 'separator', key: 'sep-1', label: '' },
+    { type: 'app', key: 'vault', appId: 'vault', icon: Lock, label: 'API Keys', color: 'text-amber-400' },
     { type: 'app', key: 'system', appId: 'settings', icon: Settings, label: 'Settings', color: 'text-muted-foreground' },
   ],
 
@@ -69,6 +71,7 @@ export const TIER_DOCK_CONFIG: Record<UserTier, DockEntry[]> = {
     { type: 'app', key: 'files', appId: 'files', icon: FolderOpen, label: 'Files', color: 'text-amber-300' },
     { type: 'separator', key: 'sep-1', label: '' },
     { type: 'app', key: 'memory', appId: 'memory', icon: Brain, label: 'Memory', color: 'text-amber-300' },
+    { type: 'app', key: 'vault', appId: 'vault', icon: Lock, label: 'API Keys', color: 'text-amber-400' },
     { type: 'app', key: 'system', appId: 'settings', icon: Settings, label: 'Settings', color: 'text-muted-foreground' },
   ],
 

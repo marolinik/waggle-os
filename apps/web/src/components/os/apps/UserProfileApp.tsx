@@ -29,7 +29,13 @@ const INDUSTRIES = [
 
 const UserProfileApp = () => {
   const [tab, setTab] = useState<ProfileTab>('identity');
-  const [profile, setProfile] = useState<any>(null);
+  interface UserProfile {
+    name?: string; role?: string; company?: string; industry?: string; bio?: string;
+    communicationStyle?: string; language?: string; interests?: string[];
+    brand?: { primaryColor?: string; secondaryColor?: string; accentColor?: string; fontHeading?: string; fontBody?: string; description?: string };
+    writingStyle?: { tone?: string; vocabulary?: string; structurePreference?: string; examples?: string[] };
+  }
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
@@ -58,7 +64,7 @@ const UserProfileApp = () => {
   const [brandDesc, setBrandDesc] = useState('');
 
   useEffect(() => {
-    adapter.getProfile().then((p: any) => {
+    adapter.getProfile().then((p: UserProfile) => {
       setProfile(p);
       setName(p.name ?? '');
       setRole(p.role ?? '');
