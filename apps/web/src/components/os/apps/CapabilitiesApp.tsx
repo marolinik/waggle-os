@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Package, Download, CheckCircle2, Shield, Star, Search, Loader2, Store, Grid3X3, List, Trash2 } from 'lucide-react';
+import { Package, Download, CheckCircle2, Shield, Star, Search, Loader2, Store, Grid3X3, List, Trash2, FlaskConical, X } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import type { SkillPack } from '@/lib/types';
 
@@ -25,6 +25,24 @@ const CapabilitiesApp = () => {
   const [installing, setInstalling] = useState<string | null>(null);
   const [tab, setTab] = useState<'installed' | 'marketplace' | 'starter' | 'tools'>('installed');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [testResult, setTestResult] = useState<{ name: string; preview: string; metadata?: Record<string, unknown> } | null>(null);
+  const [testing, setTesting] = useState<string | null>(null);
+
+  const handleTestSkill = async (skillName: string) => {
+    setTesting(skillName);
+    try {
+      const res = await fetch(`${adapter.getServerUrl()}/api/skills/test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skillName }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTestResult({ name: skillName, preview: data.injectedPrompt ?? data.content ?? 'No preview available', metadata: data.metadata });
+      }
+    } catch { /* ignore */ }
+    finally { setTesting(null); }
+  };
 
   useEffect(() => {
     Promise.allSettled([
@@ -101,7 +119,15 @@ const CapabilitiesApp = () => {
         {pack.skills && pack.skills.length > 0 && (
           <div className="flex flex-wrap gap-1 mb-2">
             {pack.skills.slice(0, 3).map(s => (
-              <span key={s} className="px-1.5 py-0.5 rounded text-[9px] bg-muted text-muted-foreground">{s}</span>
+              <button
+                key={s}
+                onClick={(e) => { e.stopPropagation(); handleTestSkill(s); }}
+                disabled={testing === s}
+                className="px-1.5 py-0.5 rounded text-[9px] bg-muted text-muted-foreground hover:bg-primary/20 hover:text-primary transition-colors"
+                title={`Test skill: ${s}`}
+              >
+                {testing === s ? '...' : s}
+              </button>
             ))}
             {pack.skills.length > 3 && <span className="text-[9px] text-muted-foreground">+{pack.skills.length - 3}</span>}
           </div>
@@ -228,6 +254,21 @@ const CapabilitiesApp = () => {
               </div>
             </div>
           ))}
+        </div>
+      )}
+      {/* Skill Test Preview */}
+      {testResult && (
+        <div className="border-t border-border/30 p-3 max-h-48 overflow-auto" style={{ backgroundColor: 'var(--hive-850)' }}>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <FlaskConical className="w-3.5 h-3.5" style={{ color: 'var(--honey-500)' }} />
+              <span className="text-xs font-display font-medium text-foreground">Test: {testResult.name}</span>
+            </div>
+            <button onClick={() => setTestResult(null)} className="p-0.5 rounded hover:bg-muted/50">
+              <X className="w-3 h-3 text-muted-foreground" />
+            </button>
+          </div>
+          <pre className="text-[10px] font-mono text-muted-foreground whitespace-pre-wrap leading-relaxed">{testResult.preview.slice(0, 500)}{testResult.preview.length > 500 ? '...' : ''}</pre>
         </div>
       )}
     </div>
