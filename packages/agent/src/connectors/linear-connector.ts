@@ -12,10 +12,13 @@ const API_URL = 'https://api.linear.app/graphql';
 export class LinearConnector extends BaseConnector {
   readonly id = 'linear';
   readonly name = 'Linear';
-  readonly description = 'Manage issues, projects, and teams in Linear';
+  readonly description = "Manage Linear issues, projects, cycles, and teams. Create issues, update statuses, assign work, search across projects, and track engineering velocity.";
   readonly service = 'linear.app';
   readonly authType = 'bearer' as const;
   readonly substrate = 'waggle' as const;
+  readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/linear.svg';
+  readonly category = 'development' as const;
+  readonly setupGuide = "Create a Personal API Key at linear.app/settings/api.";
 
   readonly actions: ConnectorAction[] = [
     {

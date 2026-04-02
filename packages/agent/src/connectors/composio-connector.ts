@@ -16,10 +16,13 @@ const API_BASE = 'https://backend.composio.dev/api/v1';
 export class ComposioConnector extends BaseConnector {
   readonly id = 'composio';
   readonly name = 'Composio (250+ services)';
-  readonly description = 'Meta-connector bridging to Composio for 250+ external integrations';
+  readonly description = "Meta-connector bridging to 250+ external services via Composio. Discover available integrations, list and execute actions across GitHub, Salesforce, HubSpot, Slack, and hundreds more through a single API key.";
   readonly service = 'composio.dev';
   readonly authType = 'api_key' as const;
   readonly substrate = 'waggle' as const;
+  readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/databricks.svg';
+  readonly category = 'integration' as const;
+  readonly setupGuide = "Get your API key from app.composio.dev and connect your external services through the Composio dashboard.";
 
   readonly actions: ConnectorAction[] = [
     {

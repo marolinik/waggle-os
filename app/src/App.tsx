@@ -21,7 +21,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
-import type { Message, WaggleConfig, WorkspaceContext, Frame, OnboardingData, FileEntry, DroppedFile, WorkspaceMicroStatus } from '@waggle/ui';
+import type { Message, WaggleConfig, WorkspaceContext, Frame, FileEntry, DroppedFile, WorkspaceMicroStatus } from '@waggle/ui';
 import {
   ThemeProvider,
   useTheme,
@@ -37,7 +37,6 @@ import {
   useMemory,
   useEvents,
   useSessions,
-  useOnboardingSetup,
   useApprovalGate,
   useTeamPresence,
   useTeamActivity,
@@ -58,9 +57,10 @@ import { KeyboardShortcutsHelp } from './components/KeyboardShortcutsHelp';
 import { PersonaSwitcher } from './components/PersonaSwitcher';
 import { NotificationInbox } from './components/NotificationInbox';
 import { WorkspaceSwitcher } from './components/WorkspaceSwitcher';
-import { OnboardingWizard as EnhancedOnboardingWizard, OnboardingTooltips } from './components/onboarding/OnboardingWizard';
+import { OnboardingWizard as EnhancedOnboardingWizard } from './components/onboarding/OnboardingWizard';
 import { useOnboarding } from './hooks/useOnboarding';
 import { getServerBaseUrl } from './lib/ipc';
+import { TierProvider } from './context/TierContext';
 
 // ── Extracted hooks ──────────────────────────────────────────────────────
 import { useToastManager } from './hooks/useToastManager';
@@ -105,7 +105,8 @@ function friendlyModelName(model: string): string {
   return parts[parts.length - 1];
 }
 
-type AppView = 'chat' | 'dashboard' | 'memory' | 'events' | 'capabilities' | 'cockpit' | 'mission-control' | 'settings';
+import type { AppView } from './types';
+
 
 function WaggleApp() {
   const service = useService();
@@ -672,8 +673,6 @@ function WaggleApp() {
   } = useEvents({ service });
 
   // ── Onboarding ────────────────────────────────────────────────────
-  const { performSetup } = useOnboardingSetup({ service });
-
   // Check if onboarding is needed on mount
   useEffect(() => {
     service.getConfig()
@@ -689,34 +688,7 @@ function WaggleApp() {
       });
   }, [service]);
 
-  const handleOnboardingComplete = useCallback(async (data: OnboardingData) => {
-    const result = await performSetup(data);
-    if (result.success) {
-      setShowOnboarding(false);
-      try {
-        const cfg = await service.getConfig();
-        setConfig(cfg);
-      } catch {
-        // Config will be loaded next time
-      }
-
-      // B4: Save basic personal style preferences to personal mind via a chat message
-      // This seeds the personal memory so draft-from-context has style data from day 1
-      try {
-        const userName = data.name;
-        if (userName) {
-          await fetch(`${SERVER_BASE}/api/chat`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              message: `My name is ${userName}. I prefer concise, direct responses. Save this to my personal memory.`,
-              workspace: 'default',
-            }),
-          });
-        }
-      } catch { /* non-blocking */ }
-    }
-  }, [performSetup, service]);
+  // Legacy onboarding handler removed — EnhancedOnboardingWizard uses onComplete/onFinish props directly
 
   const handleConfigUpdate = useCallback(async (updates: Partial<WaggleConfig>) => {
     await service.updateConfig(updates);
@@ -1336,9 +1308,11 @@ export function App() {
   return (
     <ErrorBoundary viewName="Waggle">
       <ThemeProvider defaultTheme="dark">
-        <ServiceProvider adapter={adapter}>
-          <WaggleApp />
-        </ServiceProvider>
+        <TierProvider serverBaseUrl={SERVER_BASE}>
+          <ServiceProvider adapter={adapter}>
+            <WaggleApp />
+          </ServiceProvider>
+        </TierProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );

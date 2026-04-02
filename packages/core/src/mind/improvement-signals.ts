@@ -43,27 +43,31 @@ export class ImprovementSignalStore {
 
   /** Ensure improvement_signals table exists for databases created before this feature */
   private ensureTable(): void {
-    const raw = this.db.getDatabase();
-    const exists = raw.prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='improvement_signals'",
-    ).get();
-    if (!exists) {
-      raw.exec(`
-        CREATE TABLE IF NOT EXISTS improvement_signals (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          category TEXT NOT NULL CHECK (category IN ('capability_gap', 'correction', 'workflow_pattern')),
-          pattern_key TEXT NOT NULL,
-          detail TEXT NOT NULL DEFAULT '',
-          count INTEGER NOT NULL DEFAULT 1,
-          first_seen TEXT NOT NULL DEFAULT (datetime('now')),
-          last_seen TEXT NOT NULL DEFAULT (datetime('now')),
-          surfaced INTEGER NOT NULL DEFAULT 0,
-          surfaced_at TEXT,
-          metadata TEXT NOT NULL DEFAULT '{}'
-        );
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_signals_category_key ON improvement_signals (category, pattern_key);
-        CREATE INDEX IF NOT EXISTS idx_signals_category ON improvement_signals (category, count DESC);
-      `);
+    try {
+      const raw = this.db.getDatabase();
+      const exists = raw.prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='improvement_signals'",
+      ).get();
+      if (!exists) {
+        raw.exec(`
+          CREATE TABLE IF NOT EXISTS improvement_signals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category TEXT NOT NULL CHECK (category IN ('capability_gap', 'correction', 'workflow_pattern')),
+            pattern_key TEXT NOT NULL,
+            detail TEXT NOT NULL DEFAULT '',
+            count INTEGER NOT NULL DEFAULT 1,
+            first_seen TEXT NOT NULL DEFAULT (datetime('now')),
+            last_seen TEXT NOT NULL DEFAULT (datetime('now')),
+            surfaced INTEGER NOT NULL DEFAULT 0,
+            surfaced_at TEXT,
+            metadata TEXT NOT NULL DEFAULT '{}'
+          );
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_signals_category_key ON improvement_signals (category, pattern_key);
+          CREATE INDEX IF NOT EXISTS idx_signals_category ON improvement_signals (category, count DESC);
+        `);
+      }
+    } catch {
+      // Database may already be closed during async teardown — safe to skip migration
     }
   }
 

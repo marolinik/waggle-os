@@ -12,10 +12,10 @@ const ROOT = path.resolve(import.meta.dirname, '..', '..', '..');
 const TAURI_DIR = path.join(ROOT, 'app', 'src-tauri');
 
 describe('Tauri Production Configuration', () => {
-  it('tauri.conf.json exists and has v1.0.0', () => {
+  it('tauri.conf.json exists and has valid version', () => {
     const conf = JSON.parse(fs.readFileSync(path.join(TAURI_DIR, 'tauri.conf.json'), 'utf-8'));
     expect(conf.productName).toBe('Waggle');
-    expect(conf.version).toBe('1.0.0');
+    expect(conf.version).toMatch(/^\d+\.\d+\.\d+$/);
     expect(conf.identifier).toBe('com.waggle.app');
   });
 

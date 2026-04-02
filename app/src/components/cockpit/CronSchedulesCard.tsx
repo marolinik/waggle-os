@@ -42,7 +42,7 @@ export function CronSchedulesCard({
   const [name, setName] = useState('');
   const [presetIndex, setPresetIndex] = useState(0);
   const [customCron, setCustomCron] = useState('');
-  const [jobType, setJobType] = useState(JOB_TYPES[0].value);
+  const [jobType, setJobType] = useState<string>(JOB_TYPES[0].value);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 

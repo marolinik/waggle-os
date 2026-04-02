@@ -6,6 +6,9 @@ export default defineConfig({
     alias: {
       // Marketplace uses ESM .js extensions — alias to source for Vitest
       '@waggle/marketplace': path.resolve(__dirname, 'packages/marketplace/src/index.ts'),
+      // App uses @/ alias for src directory
+      '@/': path.resolve(__dirname, 'app/src') + '/',
+      '@': path.resolve(__dirname, 'app/src'),
     },
   },
   test: {

@@ -13,10 +13,13 @@ const DRIVE_API = 'https://www.googleapis.com/drive/v3';
 export class GoogleDocsConnector extends BaseConnector {
   readonly id = 'gdocs';
   readonly name = 'Google Docs';
-  readonly description = 'Create, read, and update Google Docs documents';
+  readonly description = "Read and edit Google Docs documents, manage comments, and extract structured content. Ideal for document workflows, review cycles, and content extraction pipelines.";
   readonly service = 'docs.google.com';
   readonly authType = 'bearer' as const;
   readonly substrate = 'waggle' as const;
+  readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/googledocs.svg';
+  readonly category = 'productivity' as const;
+  readonly setupGuide = "Enable Google Docs API at console.cloud.google.com and create OAuth2 credentials.";
 
   readonly actions: ConnectorAction[] = [
     {

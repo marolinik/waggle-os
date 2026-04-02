@@ -4,6 +4,8 @@
  */
 
 import type { FastifyInstance } from 'fastify';
+import { parseTier, getCapabilities } from '@waggle/shared';
+import { requireTier } from '../../middleware/assert-tier.js';
 
 export async function fleetRoutes(fastify: FastifyInstance) {
   // GET /api/fleet — list all active workspace sessions
@@ -32,18 +34,19 @@ export async function fleetRoutes(fastify: FastifyInstance) {
       };
     });
 
-    // Tier-based maxSessions: Solo=3, Teams=10, Business=25, Enterprise=unlimited
-    const tier = (fastify as any).localConfig?.tier ?? 'solo';
-    const maxByTier: Record<string, number> = { solo: 3, teams: 10, business: 25, enterprise: 100 };
-    const maxSessions = maxByTier[tier] ?? 3;
+    // Tier-based maxSessions: SOLO=3, BASIC=10, TEAMS=25, ENTERPRISE=100
+    const tierRaw = (fastify as any).localConfig?.tier ?? '';
+    const tier = parseTier(String(tierRaw)) ?? 'SOLO';
+    const caps = getCapabilities(tier);
+    const maxSessions = tier === 'SOLO' ? 3 : tier === 'BASIC' ? 10 : tier === 'TEAMS' ? 25 : 100;
 
     return { sessions, count: sessions.length, maxSessions };
   });
 
-  // POST /api/fleet/spawn — spawn a new agent session in a workspace
+  // POST /api/fleet/spawn — spawn a new agent session (BASIC+ tier required for sub-agents)
   fastify.post<{
     Body: { task: string; persona?: string; model?: string; parentWorkspaceId?: string };
-  }>('/api/fleet/spawn', async (request, reply) => {
+  }>('/api/fleet/spawn', { preHandler: [requireTier('BASIC')] }, async (request, reply) => {
     const { task, persona, model, parentWorkspaceId } = request.body;
     if (!task) return reply.code(400).send({ error: 'task is required' });
 

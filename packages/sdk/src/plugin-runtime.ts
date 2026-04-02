@@ -6,6 +6,8 @@
  */
 
 import { EventEmitter } from 'events';
+import { existsSync } from 'fs';
+import { join } from 'path';
 import type { PluginManifest } from './plugin-manifest.js';
 
 // ---------------------------------------------------------------------------
@@ -43,6 +45,8 @@ export interface ActivationDependencies {
   requiredCapabilities?: string[];
   /** Capabilities available in the current environment */
   availableCapabilities?: string[];
+  /** Path to the plugin directory (e.g., ~/.waggle/plugins/<name>/) for resolving tool implementations */
+  pluginDir?: string;
 }
 
 /** Events emitted by PluginRuntime */
@@ -121,7 +125,7 @@ export class PluginRuntime extends EventEmitter {
 
       // Build contributed tools
       const toolDefs = this.manifest.tools ?? [];
-      const executor = this.deps.toolExecutor ?? defaultToolExecutor;
+      const executor = this.deps.toolExecutor ?? ((d: PluginToolDef) => makePluginToolExecutor(d, this.deps.pluginDir));
       this.contributedTools = toolDefs.map((def) => ({
         name: def.name,
         description: def.description,
@@ -166,10 +170,37 @@ export class PluginRuntime extends EventEmitter {
 // Default tool executor (stub — returns plugin-name-prefixed acknowledgement)
 // ---------------------------------------------------------------------------
 
-function defaultToolExecutor(def: PluginToolDef): (args: Record<string, unknown>) => Promise<string> {
-  return async (args) => {
-    return JSON.stringify({ tool: def.name, args, status: 'executed' });
-  };
+/**
+ * Build a real tool executor for a plugin.
+ * Resolution: pluginDir/tools/<tool-name>.js → .cjs → stub fallback.
+ */
+function makePluginToolExecutor(
+  def: PluginToolDef,
+  pluginDir?: string,
+): (args: Record<string, unknown>) => Promise<string> {
+  if (pluginDir) {
+    const slug = def.name.replace(/[^a-zA-Z0-9_-]/g, '-');
+    const candidates = [
+      join(pluginDir, 'tools', `${slug}.js`),
+      join(pluginDir, 'tools', `${slug}.cjs`),
+      join(pluginDir, 'tools', `${def.name}.js`),
+    ];
+    const toolFile = candidates.find(f => existsSync(f));
+    if (toolFile) {
+      return async (args: Record<string, unknown>): Promise<string> => {
+        try {
+          const mod = await import(toolFile) as { execute?: (a: Record<string, unknown>) => Promise<string | unknown> };
+          if (typeof mod.execute !== 'function') return JSON.stringify({ error: `Tool "${def.name}" does not export execute()` });
+          const result = await mod.execute(args);
+          return typeof result === 'string' ? result : JSON.stringify(result);
+        } catch (err) {
+          return JSON.stringify({ error: `Tool "${def.name}" failed: ${(err as Error).message}` });
+        }
+      };
+    }
+  }
+  // Stub fallback
+  return async (args) => JSON.stringify({ tool: def.name, args, status: 'executed' });
 }
 
 // ---------------------------------------------------------------------------

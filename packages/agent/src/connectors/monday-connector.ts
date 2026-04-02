@@ -12,10 +12,13 @@ const API_URL = 'https://api.monday.com/v2';
 export class MondayConnector extends BaseConnector {
   readonly id = 'monday';
   readonly name = 'Monday.com';
-  readonly description = 'Manage boards and items in Monday.com';
+  readonly description = "Read and update Monday.com boards, items, and columns. Query work items, update statuses, manage assignments, and track project progress across boards.";
   readonly service = 'monday.com';
   readonly authType = 'bearer' as const;
   readonly substrate = 'waggle' as const;
+  readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/mondaydotcom.svg';
+  readonly category = 'productivity' as const;
+  readonly setupGuide = "Get your API Token from monday.com Profile > Developers > API.";
 
   readonly actions: ConnectorAction[] = [
     {

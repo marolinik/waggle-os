@@ -44,6 +44,12 @@ export interface WaggleConnector {
   readonly actions: ConnectorAction[];
   /** Which substrate manages this connector */
   readonly substrate: 'waggle' | 'kvark';
+  /** CDN URL for SVG logo */
+  readonly logoUrl?: string;
+  /** Connector category */
+  readonly category?: 'productivity' | 'development' | 'crm' | 'data' | 'communication' | 'storage' | 'integration';
+  /** Setup guide — what credential is needed and where to get it */
+  readonly setupGuide?: string;
 
   /** Initialize connector with vault credentials */
   connect(vault: VaultStore): Promise<void>;
@@ -67,6 +73,9 @@ export abstract class BaseConnector implements WaggleConnector {
   abstract readonly authType: 'bearer' | 'oauth2' | 'api_key' | 'basic';
   abstract readonly actions: ConnectorAction[];
   abstract readonly substrate: 'waggle' | 'kvark';
+  readonly logoUrl?: string;
+  readonly category?: 'productivity' | 'development' | 'crm' | 'data' | 'communication' | 'storage' | 'integration';
+  readonly setupGuide?: string;
 
   abstract connect(vault: VaultStore): Promise<void>;
   abstract healthCheck(): Promise<ConnectorHealth>;
@@ -113,6 +122,9 @@ export abstract class BaseConnector implements WaggleConnector {
       substrate: this.substrate,
       tools: this.actions.map(a => `connector_${this.id}_${a.name}`),
       actions: actionMeta,
+      ...(this.logoUrl && { logoUrl: this.logoUrl }),
+      ...(this.category && { category: this.category }),
+      ...(this.setupGuide && { setupGuide: this.setupGuide }),
     };
   }
 }

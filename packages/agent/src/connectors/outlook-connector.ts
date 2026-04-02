@@ -12,10 +12,13 @@ const API_BASE = 'https://graph.microsoft.com/v1.0';
 export class OutlookConnector extends BaseConnector {
   readonly id = 'outlook';
   readonly name = 'Outlook Calendar & Email';
-  readonly description = 'Access calendar events and email via Microsoft Graph';
+  readonly description = "Read, search, and send Outlook/Microsoft 365 email. Supports folder browsing, message threading, attachment handling, and full-text inbox search.";
   readonly service = 'outlook.office365.com';
   readonly authType = 'bearer' as const;
   readonly substrate = 'waggle' as const;
+  readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/microsoftoutlook.svg';
+  readonly category = 'communication' as const;
+  readonly setupGuide = "Register an app in Azure AD with Mail permissions and use OAuth2 flow.";
 
   readonly actions: ConnectorAction[] = [
     {

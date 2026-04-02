@@ -52,15 +52,16 @@ import { CapabilityRouter } from '../../packages/agent/src/capability-router.js'
 // Persona System
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe('Persona system — all 13 personas', () => {
+describe('Persona system — all 17 personas', () => {
   const EXPECTED_PERSONAS = [
     'researcher', 'writer', 'analyst', 'coder',
     'project-manager', 'executive-assistant', 'sales-rep', 'marketer',
     'product-manager-senior', 'hr-manager', 'legal-professional', 'finance-owner', 'consultant',
+    'general-purpose', 'planner', 'verifier', 'coordinator',
   ] as const;
 
-  it('exports exactly 13 personas', () => {
-    expect(listPersonas()).toHaveLength(13);
+  it('exports exactly 17 personas', () => {
+    expect(listPersonas()).toHaveLength(17);
     const ids = listPersonas().map(p => p.id);
     for (const id of EXPECTED_PERSONAS) {
       expect(ids).toContain(id);
@@ -90,10 +91,11 @@ describe('Persona system — all 13 personas', () => {
     expect(getPersona('nonexistent-persona')).toBeNull();
   });
 
-  it('researcher persona: system prompt contains MANDATORY RECALL instruction', () => {
+  it('researcher persona: system prompt references memory and is read-only', () => {
     const r = getPersona('researcher')!;
-    expect(r.systemPrompt).toContain('MANDATORY RECALL');
-    expect(r.systemPrompt).toContain('search_memory');
+    expect(r.systemPrompt).toContain('Cross-reference memory');
+    expect(r.systemPrompt).toContain('READ-ONLY PERSONA');
+    expect(r.isReadOnly).toBe(true);
   });
 
   it('coder persona: tools include git and file system tools', () => {
@@ -103,9 +105,9 @@ describe('Persona system — all 13 personas', () => {
     expect(c.tools).toContain('edit_file');
   });
 
-  it('executive-assistant: system prompt contains professional disclaimer', () => {
+  it('executive-assistant: system prompt contains contextual disclaimer guidance', () => {
     const ea = getPersona('executive-assistant')!;
-    expect(ea.systemPrompt).toContain('does not constitute professional advice');
+    expect(ea.systemPrompt).toContain('professional disclaimer ONLY when');
   });
 
   it('composePersonaPrompt appends persona prompt after separator', () => {

@@ -12,6 +12,7 @@
  */
 
 import type { FastifyPluginAsync } from 'fastify';
+import { requireTier } from '../../middleware/assert-tier.js';
 
 // ── Types (inline to avoid cross-package resolution issues in worktrees) ──
 
@@ -198,7 +199,7 @@ export const costRoutes: FastifyPluginAsync = async (server) => {
   });
 
   // GET /api/cost/by-workspace — per-workspace token usage breakdown
-  server.get('/api/cost/by-workspace', async () => {
+  server.get('/api/cost/by-workspace', { preHandler: [requireTier('TEAMS')] }, async () => {
     const entries = getEntries();
     const workspaces = server.workspaceManager.list();
 
@@ -259,7 +260,7 @@ export const costRoutes: FastifyPluginAsync = async (server) => {
 
   // D2: Alias /api/costs → /api/cost/summary for API discoverability
   // Use internal routing instead of 302 redirect so clients get a direct 200 response
-  server.get('/api/costs', async (request, reply) => {
+  server.get('/api/costs', { preHandler: [requireTier('BASIC')] }, async (request, reply) => {
     const days = (request.query as Record<string, string>)?.days;
     const url = days ? `/api/cost/summary?days=${days}` : '/api/cost/summary';
     const response = await server.inject({ method: 'GET', url, headers: request.headers });

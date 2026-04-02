@@ -14,6 +14,7 @@ import Database from 'better-sqlite3';
 import { WaggleConfig } from '@waggle/core';
 import { emitNotification } from './notifications.js';
 import { emitAuditEvent } from './events.js';
+import { requireTier } from '../../middleware/assert-tier.js';
 
 // ── Local team DB ────────────────────────────────────────────────────
 
@@ -106,7 +107,7 @@ export async function teamRoutes(fastify: FastifyInstance) {
    * POST /api/team/connect
    * Connect to a team server by validating the token against the server's health endpoint.
    */
-  fastify.post('/api/team/connect', async (request, reply) => {
+  fastify.post('/api/team/connect', { preHandler: [requireTier('TEAMS')] }, async (request, reply) => {
     const { serverUrl, token } = request.body as { serverUrl: string; token: string };
 
     if (!serverUrl || !token) {
@@ -410,7 +411,7 @@ export async function teamRoutes(fastify: FastifyInstance) {
   }
 
   // GET /api/team/governance/permissions — get effective permissions for current user
-  fastify.get('/api/team/governance/permissions', async (request, reply) => {
+  fastify.get('/api/team/governance/permissions', { preHandler: [requireTier('ENTERPRISE')] }, async (request, reply) => {
     const { workspaceId } = request.query as { workspaceId?: string };
     const waggleConfig = new WaggleConfig(dataDir);
     const teamServer = waggleConfig.getTeamServer();

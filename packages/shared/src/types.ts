@@ -293,6 +293,12 @@ export interface ConnectorDefinition {
   config?: Record<string, unknown>;
   /** Rich action metadata (optional — available when SDK connector is loaded) */
   actions?: ConnectorActionMeta[];
+  /** CDN URL for SVG logo */
+  logoUrl?: string;
+  /** Connector category */
+  category?: 'productivity' | 'development' | 'crm' | 'data' | 'communication' | 'storage' | 'integration';
+  /** 1-2 sentences: what credential is needed and where to get it */
+  setupGuide?: string;
 }
 
 /** Connector health for cockpit display */

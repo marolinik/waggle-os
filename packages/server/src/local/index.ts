@@ -87,6 +87,7 @@ import { waggleSignalRoutes } from './routes/waggle-signals.js';
 import { providerRoutes } from './routes/providers.js';
 import { profileRoutes } from './routes/profile.js';
 import { telemetryRoutes } from './routes/telemetry.js';
+import { stripeRoutes } from '../stripe/index.js';
 import { agentGroupRoutes } from './routes/agent-groups.js';
 import { OfflineManager } from './offline-manager.js';
 import { log, createLogger } from './logger.js';
@@ -312,6 +313,25 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     // Marketplace is optional — never block startup
   }
   server.decorate('marketplace', marketplaceDb);
+
+  // ── Daily marketplace sync (non-blocking, 15s delay after startup) ──
+  if (marketplaceDb) {
+    const mpDb = marketplaceDb;
+    setTimeout(async () => {
+      async function runSync() {
+        try {
+          const sync = new MarketplaceSync(mpDb);
+          const results = await sync.syncAll();
+          const added = results.reduce((s: number, r: { added: number }) => s + r.added, 0);
+          if (added > 0) log.info(`[marketplace] Sync: +${added} new packages`);
+        } catch (e) {
+          log.info(`[marketplace] Sync error (non-blocking): ${(e as Error).message}`);
+        }
+      }
+      await runSync();
+      setInterval(runSync, 24 * 60 * 60 * 1000);
+    }, 15_000);
+  }
 
   // ── Agent state (matches CLI initialization) ────────────────────────
   const litellmApiKey = process.env.LITELLM_API_KEY ?? process.env.LITELLM_MASTER_KEY ?? 'sk-waggle-dev';
@@ -555,7 +575,10 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
             log.info(` Skipping plugin "${pluginName}": invalid manifest — ${validation.errors.join(', ')}`);
             continue;
           }
-          pluginRuntimeManager.register(raw as unknown as Parameters<typeof pluginRuntimeManager.register>[0]);
+          pluginRuntimeManager.register(
+            raw as unknown as Parameters<typeof pluginRuntimeManager.register>[0],
+            { pluginDir: pluginPath },
+          );
           await pluginRuntimeManager.enable(raw.name as string);
         } catch (err) {
           log.info(` Failed to load plugin "${pluginName}": ${(err as Error).message}`);
@@ -1316,6 +1339,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(browseRoutes);
   await server.register(telemetryRoutes);
   await server.register(agentGroupRoutes);
+  await server.register(stripeRoutes);
 
   // ── Static file serving for web mode ──────────────────────────
   // When WAGGLE_FRONTEND_DIR is set (or app/dist exists), serve the React frontend
@@ -1639,15 +1663,34 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
     workspaceMindCache.clear();
     multiMind.close();
 
-    // Close audit DB and teams DB
+    // Close audit DB, teams DB, and telemetry
     closeAuditDb();
     closeTeamsDb();
+    try { telemetry.close(); } catch { /* already closed */ }
 
     // Close marketplace DB
     if (marketplaceDb) {
       try { marketplaceDb.close(); } catch { /* already closed */ }
     }
   });
+
+  // ── Start Teams server if PostgreSQL is configured (TEAMS tier) ──
+  // Skip in test environment to avoid port conflicts and addHook-after-listen errors
+  if (process.env.DATABASE_URL && !process.env.VITEST && process.env.NODE_ENV !== 'test') {
+    const teamsPort = parseInt(process.env.TEAMS_SERVER_PORT ?? '3101', 10);
+    import('../index.js').then(({ buildServer }) => {
+      buildServer().then(teamsServer => {
+        teamsServer.listen({ port: teamsPort, host: '127.0.0.1' }, (err) => {
+          if (err) {
+            log.info(`[teams-server] Failed to start: ${err.message}`);
+          } else {
+            log.info(`[teams-server] Running at http://127.0.0.1:${teamsPort}`);
+          }
+        });
+        server.addHook('onClose', async () => { await teamsServer.close(); });
+      }).catch(err => log.info(`[teams-server] Build failed: ${(err as Error).message}`));
+    }).catch(() => { /* Teams server optional — non-blocking */ });
+  }
 
   return server;
 }

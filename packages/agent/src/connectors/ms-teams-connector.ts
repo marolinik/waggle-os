@@ -12,10 +12,13 @@ const API_BASE = 'https://graph.microsoft.com/v1.0';
 export class MSTeamsConnector extends BaseConnector {
   readonly id = 'ms-teams';
   readonly name = 'Microsoft Teams';
-  readonly description = 'List teams, channels, messages, and chats via Microsoft Graph';
+  readonly description = "Read and send Microsoft Teams messages across channels and chats. Supports team browsing, message history, and posting to any accessible channel.";
   readonly service = 'teams.microsoft.com';
   readonly authType = 'bearer' as const;
   readonly substrate = 'waggle' as const;
+  readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/microsoftteams.svg';
+  readonly category = 'communication' as const;
+  readonly setupGuide = "Register an app in Azure AD with Teams permissions and use client credentials flow.";
 
   readonly actions: ConnectorAction[] = [
     {

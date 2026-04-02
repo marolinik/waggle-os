@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
 import { MindDB, createFileStore } from '@waggle/core';
+import { parseTier, getCapabilities } from '@waggle/shared';
 import { assertSafeSegment } from './validate.js';
 import { extractProgressItems, type ProgressItem } from './sessions.js';
 import { readFileRegistry, type FileRegistryEntry } from './ingest.js';
@@ -137,19 +138,19 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
       return reply.status(400).send({ error: 'name and group are required' });
     }
 
-    // Tier limit enforcement: check maxWorkspaces
+    // Tier limit enforcement: check workspaceLimit from @waggle/shared
     try {
       const configPath = path.join(server.localConfig.dataDir, 'config.json');
-      const tierRaw = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, 'utf-8')).tier : 'solo';
-      const tier = ['solo', 'teams', 'business', 'enterprise'].includes(tierRaw) ? tierRaw : 'solo';
-      const maxWs = tier === 'solo' ? 5 : tier === 'teams' ? 25 : tier === 'business' ? 100 : -1;
-      if (maxWs > 0) {
+      const tierRaw = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, 'utf-8')).tier : '';
+      const tier = parseTier(String(tierRaw ?? '')) ?? 'SOLO';
+      const caps = getCapabilities(tier);
+      if (caps.workspaceLimit > 0) {
         const currentCount = server.workspaceManager.list().length;
-        if (currentCount >= maxWs) {
+        if (currentCount >= caps.workspaceLimit) {
           return reply.status(403).send({
-            error: `Workspace limit reached for ${tier} tier (${maxWs} max). Upgrade to create more.`,
+            error: `Workspace limit reached for ${tier} tier (${caps.workspaceLimit} max). Upgrade to create more.`,
             tier,
-            limit: maxWs,
+            limit: caps.workspaceLimit,
             current: currentCount,
           });
         }

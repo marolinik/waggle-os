@@ -14,10 +14,13 @@ const CONTENT_BASE = 'https://content.dropboxapi.com/2';
 export class DropboxConnector extends BaseConnector {
   readonly id = 'dropbox';
   readonly name = 'Dropbox';
-  readonly description = 'Access files, folders, and search in Dropbox';
+  readonly description = "Browse, read, and manage Dropbox files and folders. Supports directory listing, file content reading, upload, and search across personal and team accounts.";
   readonly service = 'dropbox.com';
   readonly authType = 'bearer' as const;
   readonly substrate = 'waggle' as const;
+  readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/dropbox.svg';
+  readonly category = 'storage' as const;
+  readonly setupGuide = "Create an App at dropbox.com/developers and generate an Access Token.";
 
   readonly actions: ConnectorAction[] = [
     {

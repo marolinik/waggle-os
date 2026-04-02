@@ -14,7 +14,7 @@ export interface KvarkSectionProps {
 
 type ConnectionStatus = 'idle' | 'testing' | 'connected' | 'error' | 'unconfigured';
 
-export function KvarkSection({ serverUrl = 'http://127.0.0.1:3333' }: KvarkSectionProps) {
+export function KvarkSection({ serverUrl: _serverUrl = 'http://127.0.0.1:3333' }: KvarkSectionProps) {
   const [kvarkUrl, setKvarkUrl] = useState('');
   const [apiToken, setApiToken] = useState('');
   const [status, setStatus] = useState<ConnectionStatus>('unconfigured');

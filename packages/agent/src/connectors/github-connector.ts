@@ -12,10 +12,13 @@ const API_BASE = 'https://api.github.com';
 export class GitHubConnector extends BaseConnector {
   readonly id = 'github';
   readonly name = 'GitHub';
-  readonly description = 'Access repositories, issues, and pull requests';
+  readonly description = "Access GitHub repositories, issues, pull requests, and code search. Supports listing repos, searching code, managing issues, reading files, and creating commits.";
   readonly service = 'github.com';
   readonly authType = 'bearer' as const;
   readonly substrate = 'waggle' as const;
+  readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/github.svg';
+  readonly category = 'development' as const;
+  readonly setupGuide = "Create a Personal Access Token at github.com/settings/tokens with repo scope.";
 
   readonly actions: ConnectorAction[] = [
     {

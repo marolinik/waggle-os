@@ -13,10 +13,13 @@ const API_VERSION = 'v59.0';
 export class SalesforceConnector extends BaseConnector {
   readonly id = 'salesforce';
   readonly name = 'Salesforce';
-  readonly description = 'Access records, contacts, and opportunities in Salesforce CRM';
+  readonly description = "Query and manage Salesforce objects using SOQL. Access leads, contacts, opportunities, accounts, and custom objects with full CRM visibility.";
   readonly service = 'salesforce.com';
   readonly authType = 'bearer' as const;
   readonly substrate = 'waggle' as const;
+  readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/salesforce.svg';
+  readonly category = 'crm' as const;
+  readonly setupGuide = "Create a Connected App in Salesforce Setup and use OAuth2 flow to get an access token.";
 
   readonly actions: ConnectorAction[] = [
     {

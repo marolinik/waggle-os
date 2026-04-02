@@ -20,6 +20,11 @@ describe('Cost Dashboard API', () => {
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-cost-test-'));
+    // Set tier to TEAMS so cost routes pass tier enforcement
+    fs.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify({ tier: 'TEAMS' }));
+    // Prevent auto-install of starter skills
+    fs.mkdirSync(path.join(tmpDir, 'skills'), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, 'skills', '.starter-installed'), 'test');
 
     // Create personal.mind (required by buildLocalServer)
     const personalPath = path.join(tmpDir, 'personal.mind');

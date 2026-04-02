@@ -13,7 +13,7 @@ import { useState, useCallback } from 'react';
 import type { Session, SessionSearchResult, Frame, FileEntry, TeamMember, ActivityItem, TeamMessage } from '@waggle/ui';
 import { SessionList, FrameDetail, FilePreview, TeamPresence, ActivityFeed, TeamMessages } from '@waggle/ui';
 
-type AppView = 'chat' | 'memory' | 'events' | 'capabilities' | 'cockpit' | 'mission-control' | 'settings';
+import type { AppView } from '@/types';
 
 /** Model badge color mapping — matches ChatInput.tsx MODEL_COLORS */
 function getModelBadgeColor(model: string): string {

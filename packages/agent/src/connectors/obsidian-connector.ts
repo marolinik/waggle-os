@@ -15,10 +15,13 @@ import type { ConnectorHealth } from '@waggle/shared';
 export class ObsidianConnector extends BaseConnector {
   readonly id = 'obsidian';
   readonly name = 'Obsidian';
-  readonly description = 'Read, search, and manage notes in a local Obsidian vault';
+  readonly description = "Read and manage local Obsidian vault files. Search notes, read markdown content, and navigate the knowledge graph of your personal or team vault.";
   readonly service = 'local';
   readonly authType = 'api_key' as const;
   readonly substrate = 'waggle' as const;
+  readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/obsidian.svg';
+  readonly category = 'productivity' as const;
+  readonly setupGuide = "Install the Local REST API community plugin in Obsidian and enable it to get the API key.";
 
   readonly actions: ConnectorAction[] = [
     {

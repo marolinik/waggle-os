@@ -13,10 +13,13 @@ const NOTION_VERSION = '2022-06-28';
 export class NotionConnector extends BaseConnector {
   readonly id = 'notion';
   readonly name = 'Notion';
-  readonly description = 'Search, read, and manage Notion pages and databases';
+  readonly description = "Search, read, create, and update Notion pages and databases. Supports block-level content manipulation, database queries, and property updates across your workspace.";
   readonly service = 'notion.so';
   readonly authType = 'bearer' as const;
   readonly substrate = 'waggle' as const;
+  readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/notion.svg';
+  readonly category = 'productivity' as const;
+  readonly setupGuide = "Create an Internal Integration at notion.so/my-integrations and share the relevant pages with it.";
 
   readonly actions: ConnectorAction[] = [
     {

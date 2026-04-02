@@ -57,6 +57,12 @@ export class Orchestrator {
   /** Workspace-specific layers (null when no workspace is active) */
   private workspaceLayers: WorkspaceLayers | null = null;
 
+  /**
+   * Section cache — stores computed values and their inputs.
+   * Cached sections are recomputed only when their input changes.
+   */
+  private _sectionCache = new Map<string, { input: string; output: string }>();
+
   constructor(config: OrchestratorConfig) {
     this.db = config.db;
     this.embedder = config.embedder;
@@ -208,9 +214,10 @@ export class Orchestrator {
     }
 
     // E4: Always include personal preferences in context (cross-workspace continuity)
-    if (this.workspaceLayers) {
-      const personalRaw = this.db.getDatabase();
-      const personalPrefs = personalRaw.prepare(
+    // Query personal mind for preferences regardless of workspace state
+    {
+      const prefDb = this.db.getDatabase();
+      const personalPrefs = prefDb.prepare(
         `SELECT content FROM memory_frames
          WHERE importance != 'deprecated'
            AND (content LIKE 'User preference:%' OR content LIKE 'Correction from user:%'
@@ -218,7 +225,10 @@ export class Orchestrator {
          ORDER BY id DESC LIMIT 5`
       ).all() as Array<{ content: string }>;
       if (personalPrefs.length > 0) {
-        parts.push('\n## Personal Preferences (across all workspaces)');
+        const label = this.workspaceLayers
+          ? 'Personal Preferences (across all workspaces)'
+          : 'Personal Preferences';
+        parts.push(`\n## ${label}`);
         for (const p of personalPrefs) {
           parts.push(`- ${p.content.slice(0, 200)}`);
         }
@@ -228,37 +238,62 @@ export class Orchestrator {
     return parts.join('\n');
   }
 
+  /**
+   * Return a cached section value if the input hasn't changed.
+   * Avoids redundant string construction for stable sections (e.g., identity).
+   */
+  private cachedSection(name: string, input: string, compute: () => string): string {
+    const cached = this._sectionCache.get(name);
+    if (cached && cached.input === input) return cached.output;
+    const output = compute();
+    this._sectionCache.set(name, { input, output });
+    return output;
+  }
+
+  /**
+   * Always recomputes — for sections that depend on runtime state.
+   * Structurally consistent with cachedSection for future TTL-based optimization.
+   */
+  private uncachedSection(_name: string, compute: () => string): string {
+    return compute();
+  }
+
   buildSystemPrompt(): string {
-    const parts: string[] = [];
+    // ── IDENTITY (always personal, stable within a session) ──
+    const identitySection = this.cachedSection(
+      'identity',
+      this.identity.exists() ? 'exists' : 'empty',
+      () => this.identity.exists() ? '# Identity\n' + this.identity.toContext() : '',
+    );
 
-    // ── IDENTITY (always personal) ──
-    if (this.identity.exists()) {
-      parts.push('# Identity\n' + this.identity.toContext());
-    }
+    // ── SELF-AWARENESS (runtime context, changes every call) ──
+    const awarenessSection = this.uncachedSection('self_awareness', () => {
+      const awareness = buildAwarenessSummary(this.improvementSignals);
+      // Mark signals as surfaced so they won't repeat (per correction #6)
+      if (awareness.totalActionable > 0) {
+        markSummarySurfaced(this.improvementSignals, awareness);
+      }
+      const caps: AgentCapabilities = {
+        tools: this.tools.map(t => ({ name: t.name, description: t.description })),
+        skills: this.skills,
+        model: this.model,
+        memoryStats: this.getMemoryStats(),
+        mode: this.mode,
+        version: this.version,
+        awareness: awareness.totalActionable > 0 ? awareness : undefined,
+      };
+      return buildSelfAwareness(caps);
+    });
 
-    // ── SELF-AWARENESS (runtime context) ──
-    const awareness = buildAwarenessSummary(this.improvementSignals);
-    // Mark signals as surfaced so they won't repeat (per correction #6)
-    if (awareness.totalActionable > 0) {
-      markSummarySurfaced(this.improvementSignals, awareness);
-    }
-    const caps: AgentCapabilities = {
-      tools: this.tools.map(t => ({ name: t.name, description: t.description })),
-      skills: this.skills,
-      model: this.model,
-      memoryStats: this.getMemoryStats(),
-      mode: this.mode,
-      version: this.version,
-      awareness: awareness.totalActionable > 0 ? awareness : undefined,
-    };
-    parts.push(buildSelfAwareness(caps));
+    // ── PRELOADED CONTEXT (per-session memory, changes every call) ──
+    const contextSection = this.uncachedSection('recent_context', () => {
+      const recentContext = this.loadRecentContext();
+      return recentContext
+        ? '# Context From Your Memory\nThis was automatically loaded — you already know this:\n' + recentContext
+        : '';
+    });
 
-    // ── PRELOADED CONTEXT ──
-    const recentContext = this.loadRecentContext();
-    if (recentContext) {
-      parts.push('# Context From Your Memory\nThis was automatically loaded — you already know this:\n' + recentContext);
-    }
-
+    const parts = [identitySection, awarenessSection, contextSection].filter(Boolean);
     return parts.join('\n\n');
   }
 
@@ -413,15 +448,15 @@ export class Orchestrator {
       saved.push(content.slice(0, 80));
     };
 
-    // Skip trivial exchanges — short messages are rarely worth memorizing
-    if (userMsg.length < 100 && !assistantMsg.includes('```')) return saved;
+    // Skip trivial exchanges — very short messages are rarely worth memorizing
+    // Threshold lowered from 100 to 30: preference/style statements are often concise
+    if (userMsg.length < 30 && !assistantMsg.includes('```')) return saved;
 
     // Skip casual patterns that produce false-positive memory saves
     const CASUAL_PATTERNS = [
       /\b(lunch|dinner|breakfast|coffee|pizza|food|snack|drink)\b/i,
       /\b(weather|weekend|holiday|vacation|birthday|party)\b/i,
       /^(hi|hey|hello|thanks|thank you|bye|goodbye|ok|okay|sure|yep|nope|yes|no)\b/i,
-      /\b(rather not|don't want to|prefer not to|let's not)\b/i,
     ];
     if (CASUAL_PATTERNS.some(p => p.test(userMsg))) return saved;
 

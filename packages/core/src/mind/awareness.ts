@@ -34,11 +34,15 @@ export class AwarenessLayer {
 
   /** Ensure metadata column exists for databases created before this feature */
   private ensureMetadataColumn(): void {
-    const raw = this.db.getDatabase();
-    const columns = raw.prepare("PRAGMA table_info(awareness)").all() as Array<{ name: string }>;
-    const hasMetadata = columns.some(c => c.name === 'metadata');
-    if (!hasMetadata) {
-      raw.exec("ALTER TABLE awareness ADD COLUMN metadata TEXT NOT NULL DEFAULT '{}'");
+    try {
+      const raw = this.db.getDatabase();
+      const columns = raw.prepare("PRAGMA table_info(awareness)").all() as Array<{ name: string }>;
+      const hasMetadata = columns.some(c => c.name === 'metadata');
+      if (!hasMetadata) {
+        raw.exec("ALTER TABLE awareness ADD COLUMN metadata TEXT NOT NULL DEFAULT '{}'");
+      }
+    } catch {
+      // Database may already be closed during async teardown — safe to skip migration
     }
   }
 

@@ -10,10 +10,13 @@ import type { ConnectorHealth } from '@waggle/shared';
 export class JiraConnector extends BaseConnector {
   readonly id = 'jira';
   readonly name = 'Jira';
-  readonly description = 'Manage issues, search, and transition workflows';
+  readonly description = "Manage Jira issues, projects, and sprints. Search issues with JQL, create and update tickets, transition statuses, and add comments across all Jira projects.";
   readonly service = 'atlassian.net';
   readonly authType = 'bearer' as const; // Presents as bearer in UI, uses basic internally
   readonly substrate = 'waggle' as const;
+  readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/jira.svg';
+  readonly category = 'development' as const;
+  readonly setupGuide = "Generate an API token at id.atlassian.com/manage-profile/security/api-tokens and use your Atlassian email as username.";
 
   readonly actions: ConnectorAction[] = [
     {

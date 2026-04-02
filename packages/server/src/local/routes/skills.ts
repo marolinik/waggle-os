@@ -45,6 +45,20 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
   if (!fs.existsSync(skillsDir)) fs.mkdirSync(skillsDir, { recursive: true });
   if (!fs.existsSync(pluginsDir)) fs.mkdirSync(pluginsDir, { recursive: true });
 
+  // Auto-install starter skills on first run (empty skills dir + no marker)
+  const markerPath = path.join(skillsDir, '.starter-installed');
+  const existingSkills = fs.readdirSync(skillsDir).filter(f => f.endsWith('.md'));
+  if (existingSkills.length === 0 && !fs.existsSync(markerPath)) {
+    try {
+      const { installStarterSkills } = await import('@waggle/sdk');
+      const installed = installStarterSkills(skillsDir);
+      if (installed.length > 0) {
+        console.log(`[waggle] Installed ${installed.length} starter skills on first run`);
+      }
+      fs.writeFileSync(markerPath, new Date().toISOString());
+    } catch { /* starter skills unavailable — non-blocking */ }
+  }
+
   const pluginManager = new PluginManager(pluginsDir);
 
   // ── Skills ────────────────────────────────────────────────────────
@@ -697,15 +711,33 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
   });
 
   // POST /api/plugins/install — install a plugin from a local directory
+  // Called by MarketplaceInstaller.notifyServer() with { path } or manually with { sourceDir }
   server.post<{
-    Body: { sourceDir: string };
+    Body: { sourceDir?: string; path?: string };
   }>('/api/plugins/install', async (request, reply) => {
-    const { sourceDir } = request.body ?? {};
+    const sourceDir = (request.body as any)?.sourceDir ?? (request.body as any)?.path;
     if (!sourceDir) {
-      return reply.status(400).send({ error: 'sourceDir is required' });
+      return reply.status(400).send({ error: 'sourceDir or path is required' });
     }
     try {
       pluginManager.installLocal(sourceDir);
+
+      // Hot-reload: register and enable the newly installed plugin in the runtime
+      const manifestPath = path.join(sourceDir, 'plugin.json');
+      if (fs.existsSync(manifestPath)) {
+        try {
+          const raw = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+          const prm = server.agentState?.pluginRuntimeManager;
+          if (prm) {
+            try { await prm.disable(raw.name); } catch { /* not registered yet */ }
+            prm.register(raw);
+            await prm.enable(raw.name);
+          }
+        } catch {
+          // Hot-reload failure is non-blocking — plugin takes effect on next restart
+        }
+      }
+
       return { ok: true, source: sourceDir };
     } catch (err) {
       return reply.status(400).send({
@@ -730,5 +762,135 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
         error: err instanceof Error ? err.message : 'Uninstall failed',
       });
     }
+  });
+
+  // ── Plugin Tool File API ──────────────────────────────────────────
+
+  function generateToolTemplate(toolName: string): string {
+    return `/**\n * Tool: ${toolName}\n * This file is executed when the agent calls the "${toolName}" tool.\n */\n\n/**\n * @param {Record<string, unknown>} args\n * @returns {Promise<string>}\n */\nexport async function execute(args) {\n  return JSON.stringify({ tool: '${toolName}', args, result: 'TODO: implement' })\n}\n`;
+  }
+
+  server.get<{ Params: { name: string } }>('/api/plugins/:name/tools', async (request, reply) => {
+    const { name } = request.params;
+    if (name.includes('..') || name.includes('/')) return reply.code(400).send({ error: 'Invalid plugin name' });
+    const pluginDir = path.join(pluginsDir, name);
+    const manifestPath = path.join(pluginDir, 'plugin.json');
+    if (!fs.existsSync(manifestPath)) return reply.code(404).send({ error: `Plugin "${name}" not found` });
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as { tools?: Array<{ name: string; description: string }> };
+    const declaredTools = manifest.tools ?? [];
+    const toolsDirPath = path.join(pluginDir, 'tools');
+    const toolsWithStatus = declaredTools.map(tool => {
+      const slug = tool.name.replace(/[^a-zA-Z0-9_-]/g, '-');
+      const candidates = [path.join(toolsDirPath, `${slug}.js`), path.join(toolsDirPath, `${slug}.cjs`), path.join(toolsDirPath, `${tool.name}.js`)];
+      const implFile = candidates.find(f => fs.existsSync(f));
+      return { name: tool.name, description: tool.description, parameters: (tool as any).parameters ?? { type: 'object', properties: {} }, hasImplementation: !!implFile, implPath: implFile ?? null, content: implFile ? fs.readFileSync(implFile, 'utf-8') : null };
+    });
+    return { pluginName: name, tools: toolsWithStatus, toolsDir: toolsDirPath };
+  });
+
+  server.get<{ Params: { name: string; toolName: string } }>('/api/plugins/:name/tools/:toolName', async (request, reply) => {
+    const { name, toolName } = request.params;
+    if (name.includes('..') || toolName.includes('..') || toolName.includes('/')) return reply.code(400).send({ error: 'Invalid name' });
+    const toolsDirPath = path.join(pluginsDir, name, 'tools');
+    const slug = toolName.replace(/[^a-zA-Z0-9_-]/g, '-');
+    const candidates = [path.join(toolsDirPath, `${slug}.js`), path.join(toolsDirPath, `${slug}.cjs`), path.join(toolsDirPath, `${toolName}.js`)];
+    const implFile = candidates.find(f => fs.existsSync(f));
+    if (!implFile) return { exists: false, content: generateToolTemplate(toolName), path: path.join(toolsDirPath, `${slug}.js`) };
+    return { exists: true, content: fs.readFileSync(implFile, 'utf-8'), path: implFile };
+  });
+
+  server.put<{ Params: { name: string; toolName: string }; Body: { content: string } }>('/api/plugins/:name/tools/:toolName', async (request, reply) => {
+    const { name, toolName } = request.params;
+    const { content } = request.body ?? {};
+    if (name.includes('..') || toolName.includes('..') || toolName.includes('/')) return reply.code(400).send({ error: 'Invalid name' });
+    if (typeof content !== 'string') return reply.code(400).send({ error: 'content is required' });
+    if (!content.includes('export') || !content.includes('execute')) {
+      return reply.code(400).send({ error: 'Tool file must export an execute() function' });
+    }
+    const toolsDirPath = path.join(pluginsDir, name, 'tools');
+    fs.mkdirSync(toolsDirPath, { recursive: true });
+    const slug = toolName.replace(/[^a-zA-Z0-9_-]/g, '-');
+    const filePath = path.join(toolsDirPath, `${slug}.js`);
+    fs.writeFileSync(filePath, content, 'utf-8');
+    try {
+      const prm = server.agentState?.pluginRuntimeManager;
+      if (prm) { try { prm.disable(name); } catch { /* */ } await prm.enable(name); }
+    } catch { /* hot-reload non-blocking */ }
+    return { ok: true, path: filePath, toolName };
+  });
+
+  server.delete<{ Params: { name: string; toolName: string } }>('/api/plugins/:name/tools/:toolName', async (request, reply) => {
+    const { name, toolName } = request.params;
+    if (name.includes('..') || toolName.includes('..') || toolName.includes('/')) return reply.code(400).send({ error: 'Invalid name' });
+    const slug = toolName.replace(/[^a-zA-Z0-9_-]/g, '-');
+    const candidates = [path.join(pluginsDir, name, 'tools', `${slug}.js`), path.join(pluginsDir, name, 'tools', `${slug}.cjs`)];
+    const implFile = candidates.find(f => fs.existsSync(f));
+    if (!implFile) return reply.code(404).send({ error: `Tool "${toolName}" not found` });
+    fs.unlinkSync(implFile);
+    return { ok: true, deleted: implFile };
+  });
+
+  server.post<{ Params: { name: string }; Body: { name: string; description: string; parameters?: Record<string, unknown> } }>('/api/plugins/:name/tools', async (request, reply) => {
+    const pluginName = request.params.name;
+    const { name: toolName, description, parameters } = request.body ?? {};
+    if (!toolName || !description) return reply.code(400).send({ error: 'name and description are required' });
+    if (!/^[a-zA-Z0-9_-]+$/.test(toolName)) return reply.code(400).send({ error: 'tool name must be alphanumeric/hyphens/underscores only' });
+    const manifestPath = path.join(pluginsDir, pluginName, 'plugin.json');
+    if (!fs.existsSync(manifestPath)) return reply.code(404).send({ error: `Plugin "${pluginName}" not found` });
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as any;
+    if (!manifest.tools) manifest.tools = [];
+    if (manifest.tools.find((t: any) => t.name === toolName)) return reply.code(409).send({ error: `Tool "${toolName}" already exists` });
+    manifest.tools.push({ name: toolName, description, parameters: parameters ?? { type: 'object', properties: {}, required: [] } });
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8');
+    return { ok: true, tool: manifest.tools.at(-1), totalTools: manifest.tools.length };
+  });
+
+  // ── Hooks ─────────────────────────────────────────────────────────
+
+  const hooksConfigPath = path.join(waggleHome, 'hooks.json');
+
+  function readHooksConfig(): { hooks: { 'pre:tool'?: Array<{ type: string; tools: string[]; pattern: string }> } } {
+    if (!fs.existsSync(hooksConfigPath)) return { hooks: {} };
+    try { return JSON.parse(fs.readFileSync(hooksConfigPath, 'utf-8')); } catch { return { hooks: {} }; }
+  }
+
+  function writeHooksConfig(config: object): void {
+    fs.writeFileSync(hooksConfigPath, JSON.stringify(config, null, 2), 'utf-8');
+  }
+
+  server.get('/api/hooks', async () => {
+    const config = readHooksConfig();
+    const rules = config.hooks?.['pre:tool'] ?? [];
+    return { rules, total: rules.length };
+  });
+
+  server.post<{
+    Body: { type: 'deny'; tools: string[]; pattern: string };
+  }>('/api/hooks', async (request, reply) => {
+    const { type, tools, pattern } = request.body ?? {};
+    if (type !== 'deny' || !Array.isArray(tools) || !tools.length || !pattern?.trim()) {
+      return reply.code(400).send({ error: 'type must be "deny", tools must be a non-empty array, pattern is required' });
+    }
+    const config = readHooksConfig();
+    if (!config.hooks) config.hooks = {};
+    if (!config.hooks['pre:tool']) config.hooks['pre:tool'] = [];
+    config.hooks['pre:tool'].push({ type, tools, pattern: pattern.trim() });
+    writeHooksConfig(config);
+    return { ok: true, rules: config.hooks['pre:tool'] };
+  });
+
+  server.delete<{
+    Params: { index: string };
+  }>('/api/hooks/:index', async (request, reply) => {
+    const idx = parseInt(request.params.index, 10);
+    const config = readHooksConfig();
+    const rules = config.hooks?.['pre:tool'] ?? [];
+    if (isNaN(idx) || idx < 0 || idx >= rules.length) {
+      return reply.code(404).send({ error: `Rule index ${idx} not found` });
+    }
+    rules.splice(idx, 1);
+    config.hooks['pre:tool'] = rules;
+    writeHooksConfig(config);
+    return { ok: true, rules };
   });
 };

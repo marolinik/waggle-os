@@ -12,10 +12,13 @@ const API_BASE = 'https://graph.microsoft.com/v1.0';
 export class OneDriveConnector extends BaseConnector {
   readonly id = 'onedrive';
   readonly name = 'OneDrive';
-  readonly description = 'Access files, search, and upload via Microsoft Graph';
+  readonly description = "Browse, read, and manage OneDrive files and folders. Supports file listing, content reading, upload, and sharing across personal and business accounts.";
   readonly service = 'onedrive.live.com';
   readonly authType = 'bearer' as const;
   readonly substrate = 'waggle' as const;
+  readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/microsoftonedrive.svg';
+  readonly category = 'storage' as const;
+  readonly setupGuide = "Register an app in Azure AD with Files permissions and use OAuth2 flow.";
 
   readonly actions: ConnectorAction[] = [
     {

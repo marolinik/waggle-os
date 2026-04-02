@@ -12,10 +12,13 @@ const API_BASE = 'https://api.trello.com/1';
 export class TrelloConnector extends BaseConnector {
   readonly id = 'trello';
   readonly name = 'Trello';
-  readonly description = 'Manage boards, lists, and cards in Trello';
+  readonly description = "Manage Trello boards, lists, and cards. Create cards, move between lists, assign members, add labels, and search across all accessible boards.";
   readonly service = 'trello.com';
   readonly authType = 'api_key' as const;
   readonly substrate = 'waggle' as const;
+  readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/trello.svg';
+  readonly category = 'productivity' as const;
+  readonly setupGuide = "Get your API Key at trello.com/app-key and generate a Token with write access.";
 
   readonly actions: ConnectorAction[] = [
     {

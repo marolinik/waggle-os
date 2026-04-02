@@ -13,10 +13,13 @@ const DEFAULT_API_BASE = 'https://gitlab.com/api/v4';
 export class GitLabConnector extends BaseConnector {
   readonly id = 'gitlab';
   readonly name = 'GitLab';
-  readonly description = 'Access projects, issues, merge requests, and code';
+  readonly description = "Access GitLab repositories, issues, merge requests, and pipelines. Supports code browsing, issue management, MR reviews, and CI/CD pipeline inspection.";
   readonly service = 'gitlab.com';
   readonly authType = 'bearer' as const;
   readonly substrate = 'waggle' as const;
+  readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/gitlab.svg';
+  readonly category = 'development' as const;
+  readonly setupGuide = "Create a Personal Access Token at gitlab.com/-/user_settings/personal_access_tokens with api scope.";
 
   readonly actions: ConnectorAction[] = [
     {

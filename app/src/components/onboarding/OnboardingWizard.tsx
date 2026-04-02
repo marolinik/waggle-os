@@ -1,7 +1,7 @@
 /**
  * OnboardingWizard — premium first-run experience for new Waggle users.
  *
- * 7 steps: Welcome → Why Waggle → Memory Import → Template → Persona → API Key → Hive Ready
+ * 8 steps: Welcome → Why Waggle → Memory Import → Template → Persona → API Key → Tier Selection → Hive Ready
  * Full-screen overlay with smooth transitions. Goal: "wow" within 60 seconds.
  */
 
@@ -13,34 +13,83 @@ import type { OnboardingState } from '@/hooks/useOnboarding';
 // ── Constants ───────────────────────────────────────────────────────
 
 const TEMPLATES = [
-  { id: 'sales-pipeline', name: 'Sales Pipeline', icon: '🎯', hint: 'Research the top 5 competitors in my industry', desc: 'Track leads, draft outreach, prep for calls' },
-  { id: 'research-project', name: 'Research Project', icon: '🔬', hint: 'Help me design a literature review on my topic', desc: 'Deep research with multi-source synthesis' },
-  { id: 'code-review', name: 'Code Review', icon: '💻', hint: 'Read my project and tell me what you see', desc: 'Review PRs, debug, architecture decisions' },
-  { id: 'marketing-campaign', name: 'Marketing Campaign', icon: '📣', hint: 'Draft a campaign brief for my product launch', desc: 'Content calendar, copy, competitive analysis' },
-  { id: 'product-launch', name: 'Product Launch', icon: '🚀', hint: 'Help me write a PRD for my next feature', desc: 'PRDs, roadmaps, stakeholder updates' },
-  { id: 'legal-review', name: 'Legal Review', icon: '⚖️', hint: 'Draft a standard NDA template', desc: 'Contract review, compliance, legal research' },
-  { id: 'agency-consulting', name: 'Agency Consulting', icon: '🏢', hint: 'Set up client workspaces for my biggest accounts', desc: 'Client research, deliverables, presentations' },
+  { id: 'strategy-consulting', name: 'Strategy & Consulting', icon: '🏛️', hint: 'Build a competitive landscape for my market', desc: 'Frameworks, research, client deliverables' },
+  { id: 'legal-compliance', name: 'Legal & Compliance', icon: '⚖️', hint: 'Review this contract for non-standard clauses', desc: 'Contract review, legal research, compliance' },
+  { id: 'finance-investment', name: 'Finance & Investment', icon: '💹', hint: 'Analyze this company\'s financials and valuation', desc: 'Modelling, due diligence, investment research' },
+  { id: 'sales-bizdev', name: 'Sales & Business Dev', icon: '🤝', hint: 'Research this prospect and draft a personalised outreach', desc: 'Prospect research, outreach, pipeline management' },
+  { id: 'marketing-brand', name: 'Marketing & Brand', icon: '📣', hint: 'Draft a campaign brief for our product launch', desc: 'Content, campaigns, brand voice, copy' },
+  { id: 'product-management', name: 'Product Management', icon: '🗺️', hint: 'Help me write a PRD for my next feature', desc: 'PRDs, roadmaps, user research synthesis' },
+  { id: 'operations-process', name: 'Operations & Process', icon: '⚙️', hint: 'Map and improve this operational workflow', desc: 'Process design, SOPs, efficiency analysis' },
+  { id: 'hr-people', name: 'HR & People', icon: '👥', hint: 'Write a job description for a senior engineer', desc: 'JDs, policies, performance, L&D' },
+  { id: 'research-intelligence', name: 'Research & Intelligence', icon: '🔬', hint: 'Deep research on this topic with source triangulation', desc: 'Multi-source research, synthesis, briefings' },
+  { id: 'executive-leadership', name: 'Executive & Leadership', icon: '🎯', hint: 'Prepare my board update for next week', desc: 'Briefings, comms, strategic decisions' },
+  { id: 'technology-engineering', name: 'Technology & Engineering', icon: '💻', hint: 'Review my codebase and tell me what you see', desc: 'Code review, debugging, architecture' },
+  { id: 'startup-founder', name: 'Startup & Founder', icon: '🚀', hint: 'Help me structure my Series A pitch narrative', desc: 'Fundraising, PMF, all-hands execution' },
+  { id: 'independent-consultant', name: 'Independent Consultant', icon: '🎓', hint: 'Draft a proposal for this client engagement', desc: 'Proposals, client work, business development' },
+  { id: 'government-policy', name: 'Government & Policy', icon: '🏛️', hint: 'Draft a policy brief on this issue', desc: 'Policy briefs, regulatory analysis, stakeholder comms' },
+  { id: 'personal-productivity', name: 'Personal Productivity', icon: '✨', hint: 'Help me think through this decision', desc: 'Personal knowledge, writing, learning, life admin' },
 ];
 
 const PERSONAS = [
+  // Universal Modes
+  { id: 'general-purpose', name: 'General Purpose', icon: '🧠', desc: 'Adapts to any task' },
+  { id: 'planner', name: 'Planner', icon: '🗂️', desc: 'Strategic planning — read only' },
   { id: 'researcher', name: 'Researcher', icon: '🔬', desc: 'Deep investigation & synthesis' },
+  { id: 'analyst', name: 'Analyst', icon: '📊', desc: 'Data analysis & structured evaluation' },
   { id: 'writer', name: 'Writer', icon: '✍️', desc: 'Long-form content & editing' },
-  { id: 'analyst', name: 'Analyst', icon: '📊', desc: 'Data analysis & reporting' },
+  { id: 'verifier', name: 'Verifier', icon: '🔍', desc: 'Adversarial quality assurance' },
+  { id: 'coordinator', name: 'Coordinator', icon: '🎛️', desc: 'Multi-agent orchestration' },
   { id: 'coder', name: 'Coder', icon: '💻', desc: 'Code review & development' },
-  { id: 'project-manager', name: 'Project Manager', icon: '📋', desc: 'Planning & coordination' },
-  { id: 'executive-assistant', name: 'Executive Assistant', icon: '📧', desc: 'Email, scheduling, briefs' },
-  { id: 'sales-rep', name: 'Sales Rep', icon: '🎯', desc: 'Prospecting & outreach' },
-  { id: 'marketer', name: 'Marketer', icon: '📢', desc: 'Campaigns & copy' },
+  // Domain Specialists
+  { id: 'legal-professional', name: 'Legal Counsel', icon: '⚖️', desc: 'Contracts, compliance, legal research' },
+  { id: 'finance-owner', name: 'Financial Advisor', icon: '💰', desc: 'Financial analysis & modelling' },
+  { id: 'sales-rep', name: 'Sales Strategist', icon: '🎯', desc: 'Prospecting, outreach, pipeline' },
+  { id: 'marketer', name: 'Marketing Strategist', icon: '📢', desc: 'Campaigns, copy, brand voice' },
+  { id: 'project-manager', name: 'Project Manager', icon: '📋', desc: 'Planning, tracking, coordination' },
+  { id: 'executive-assistant', name: 'Executive Assistant', icon: '📧', desc: 'Briefings, comms, scheduling' },
+  { id: 'hr-manager', name: 'HR Specialist', icon: '👥', desc: 'People ops, policies, talent' },
+  { id: 'product-manager-senior', name: 'Product Manager', icon: '🗺️', desc: 'PRDs, roadmaps, product thinking' },
+  { id: 'consultant', name: 'Operations Manager', icon: '⚙️', desc: 'Process design, SOPs, efficiency' },
 ];
 
 const TEMPLATE_PERSONA: Record<string, string> = {
-  'sales-pipeline': 'sales-rep',
-  'research-project': 'researcher',
-  'code-review': 'coder',
-  'marketing-campaign': 'marketer',
-  'product-launch': 'project-manager',
-  'legal-review': 'analyst',
-  'agency-consulting': 'executive-assistant',
+  'strategy-consulting':    'consultant',
+  'legal-compliance':       'legal-professional',
+  'finance-investment':     'finance-owner',
+  'sales-bizdev':           'sales-rep',
+  'marketing-brand':        'marketer',
+  'product-management':     'product-manager-senior',
+  'operations-process':     'consultant',
+  'hr-people':              'hr-manager',
+  'research-intelligence':  'researcher',
+  'executive-leadership':   'executive-assistant',
+  'technology-engineering': 'coder',
+  'startup-founder':        'general-purpose',
+  'independent-consultant': 'consultant',
+  'government-policy':      'analyst',
+  'personal-productivity':  'general-purpose',
+};
+
+const PERSONA_RECOMMENDATIONS: Record<string, {
+  skills: string[]; connectors: string[]; mcp: string[]
+}> = {
+  'general-purpose':        { skills: [], connectors: [], mcp: ['filesystem', 'brave-search'] },
+  'planner':                { skills: [], connectors: ['notion', 'gdrive'], mcp: [] },
+  'researcher':             { skills: ['browser-automation'], connectors: ['gdrive', 'notion'], mcp: ['brave-search', 'fetch'] },
+  'analyst':                { skills: ['xlsx-generator', 'chart-generator'], connectors: ['gsheets', 'postgres'], mcp: ['sqlite'] },
+  'writer':                 { skills: ['pdf-generator', 'pptx-generator'], connectors: ['gdrive', 'gdocs', 'notion'], mcp: [] },
+  'verifier':               { skills: [], connectors: [], mcp: ['filesystem', 'git'] },
+  'coordinator':            { skills: [], connectors: ['slack'], mcp: [] },
+  'coder':                  { skills: [], connectors: ['github', 'gitlab'], mcp: ['filesystem', 'git', 'github'] },
+  'legal-professional':     { skills: ['pdf-generator'], connectors: ['gdrive', 'gdocs', 'email'], mcp: [] },
+  'finance-owner':          { skills: ['xlsx-generator', 'chart-generator'], connectors: ['gsheets', 'postgres'], mcp: [] },
+  'sales-rep':              { skills: [], connectors: ['hubspot', 'salesforce', 'gmail', 'slack'], mcp: [] },
+  'marketer':               { skills: ['pdf-generator', 'pptx-generator'], connectors: ['gmail', 'notion', 'airtable'], mcp: [] },
+  'project-manager':        { skills: [], connectors: ['jira', 'linear', 'asana', 'slack'], mcp: ['github'] },
+  'executive-assistant':    { skills: ['pdf-generator'], connectors: ['gmail', 'gcal', 'slack', 'outlook'], mcp: [] },
+  'hr-manager':             { skills: ['pdf-generator'], connectors: ['gmail', 'gdrive', 'notion'], mcp: [] },
+  'product-manager-senior': { skills: ['pdf-generator', 'pptx-generator'], connectors: ['jira', 'linear', 'notion', 'github'], mcp: [] },
+  'consultant':             { skills: ['pdf-generator', 'pptx-generator', 'xlsx-generator'], connectors: ['gdrive', 'notion', 'slack'], mcp: ['brave-search'] },
 };
 
 const VALUE_PROPS = [
@@ -108,6 +157,7 @@ export function OnboardingWizard({
   const [customPersonaMode, setCustomPersonaMode] = useState(false);
   const [customPersonaDesc, setCustomPersonaDesc] = useState('');
   const [authToken, setAuthToken] = useState<string | null>(null);
+  const [tierCheckoutLoading, setTierCheckoutLoading] = useState(false);
 
   // Fetch auth token from /health on mount
   useEffect(() => {
@@ -215,7 +265,7 @@ export function OnboardingWizard({
     const wsId = await createWorkspace();
     if (wsId) {
       // Show the "Hive is Ready" celebration step first
-      goToStep(6);
+      goToStep(7);
       const hint = TEMPLATES.find(t => t.id === selectedTemplate)?.hint || 'Hello! What can you help me with?';
       // Then finish after 2s delay so the user sees the celebration
       finishTimerRef.current = setTimeout(() => {
@@ -252,7 +302,7 @@ export function OnboardingWizard({
   }, []);
 
   // ── Step rendering ──────────────────────────────────────────────
-  const totalSteps = 7;
+  const totalSteps = 8;
   const progress = Math.min((step / (totalSteps - 1)) * 100, 100);
 
   // Current provider object for the API key step
@@ -274,9 +324,9 @@ export function OnboardingWizard({
       )}
 
       {/* Hex step indicator dots */}
-      {step > 0 && step < 6 && (
+      {step > 0 && step < 7 && (
         <div className="absolute top-5 left-1/2 -translate-x-1/2 flex items-center gap-2.5">
-          {[1, 2, 3, 4, 5].map(s => (
+          {[1, 2, 3, 4, 5, 6].map(s => (
             <span
               key={s}
               className="text-[10px] transition-all"
@@ -289,13 +339,13 @@ export function OnboardingWizard({
             </span>
           ))}
           <span className="text-[10px] ml-1" style={{ color: 'var(--hive-500)' }}>
-            Step {step} of {totalSteps - 2}
+            Step {step} of {totalSteps - 2}  {/* Steps 1-6 of 6 visible steps */}
           </span>
         </div>
       )}
 
       {/* Skip link */}
-      {step > 0 && step < 6 && (
+      {step > 0 && step < 7 && (
         <button
           onClick={onDismiss}
           className="absolute top-4 right-6 text-xs text-muted-foreground/40 hover:text-muted-foreground transition-colors"
@@ -426,7 +476,7 @@ export function OnboardingWizard({
           <div className="flex flex-col items-center gap-5">
             <h2 className="text-2xl font-bold text-foreground text-center">What are you working on?</h2>
             <p className="text-sm text-muted-foreground text-center">Pick a template to get started instantly.</p>
-            <div className="grid grid-cols-2 gap-3 w-full mt-2">
+            <div className="grid grid-cols-3 gap-3 w-full mt-2">
               {TEMPLATES.map(t => (
                 <button
                   key={t.id}
@@ -493,7 +543,7 @@ export function OnboardingWizard({
           <div className="flex flex-col items-center gap-5">
             <h2 className="text-2xl font-bold text-foreground text-center">How should I work?</h2>
             <p className="text-sm text-muted-foreground text-center">Choose an agent persona for this workspace.</p>
-            <div className="grid grid-cols-2 gap-2.5 w-full mt-2">
+            <div className="grid grid-cols-3 gap-2.5 w-full mt-2">
               {PERSONAS.map(p => (
                 <button
                   key={p.id}
@@ -519,7 +569,7 @@ export function OnboardingWizard({
               <button
                 type="button"
                 onClick={() => setCustomPersonaMode(true)}
-                className="flex items-center gap-3 p-3 rounded-lg border border-dashed text-left transition-all cursor-pointer border-border/50 bg-transparent hover:border-[var(--honey-500)]/40 col-span-2"
+                className="flex items-center gap-3 p-3 rounded-lg border border-dashed text-left transition-all cursor-pointer border-border/50 bg-transparent hover:border-[var(--honey-500)]/40 col-span-3"
               >
                 <span className="text-xl shrink-0 opacity-50">+</span>
                 <div className="min-w-0">
@@ -581,6 +631,38 @@ export function OnboardingWizard({
                 </div>
               </div>
             )}
+            {/* Persona recommendation block */}
+            {selectedPersona && (() => {
+              const rec = PERSONA_RECOMMENDATIONS[selectedPersona];
+              if (!rec) return null;
+              const hasAny = rec.skills.length > 0 || rec.connectors.length > 0 || rec.mcp.length > 0;
+              if (!hasAny) return null;
+              return (
+                <div className="mt-4 rounded-lg border border-border bg-card/50 p-3">
+                  <p className="text-xs font-medium text-muted-foreground mb-2">
+                    Recommended setup for this persona
+                  </p>
+                  {rec.skills.length > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      <span className="text-foreground">Skills: </span>{rec.skills.join(', ')}
+                    </p>
+                  )}
+                  {rec.connectors.length > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      <span className="text-foreground">Connect: </span>{rec.connectors.join(', ')}
+                    </p>
+                  )}
+                  {rec.mcp.length > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      <span className="text-foreground">MCP: </span>{rec.mcp.join(', ')}
+                    </p>
+                  )}
+                  <p className="text-[10px] text-muted-foreground mt-2 opacity-60">
+                    Install these after setup via Capabilities
+                  </p>
+                </div>
+              );
+            })()}
             <Button
               className="mt-2 px-8"
               size="lg"
@@ -670,8 +752,8 @@ export function OnboardingWizard({
                     {keyChecking ? 'Validating...' : keyValid ? 'Key saved!' : 'Validate & save'}
                   </Button>
                   {keyValid && (
-                    <Button variant="outline" onClick={handleFinish} disabled={creating}>
-                      {creating ? 'Creating...' : 'Continue →'}
+                    <Button variant="outline" onClick={() => goToStep(6)}>
+                      Continue →
                     </Button>
                   )}
                 </div>
@@ -697,25 +779,164 @@ export function OnboardingWizard({
                 >
                   Download Ollama →
                 </a>
-                <Button className="mt-4 px-8 block mx-auto" size="lg" onClick={handleFinish} disabled={creating}>
-                  {creating ? 'Creating workspace...' : 'Continue →'}
+                <Button className="mt-4 px-8 block mx-auto" size="lg" onClick={() => goToStep(6)}>
+                  Continue →
                 </Button>
               </div>
             )}
 
             {/* Skip button — full opacity, prominent */}
             <button
-              onClick={handleFinish}
-              disabled={creating}
+              onClick={() => goToStep(6)}
               className="text-sm text-muted-foreground hover:text-foreground mt-2 transition-colors underline underline-offset-2"
             >
-              {creating ? 'Creating workspace...' : "Skip — I'll add a key later"}
+              Skip — I&apos;ll add a key later
             </button>
           </div>
         )}
 
-        {/* ── Step 6: Your Hive is Ready ──────────────────────── */}
+        {/* ── Step 6: Choose Your Plan ─────────────────────────── */}
         {step === 6 && (
+          <div className="flex flex-col items-center gap-5">
+            <h2 className="text-2xl font-bold text-center" style={{ color: 'var(--hive-50)' }}>Choose your plan</h2>
+            <p className="text-sm text-center" style={{ color: 'var(--hive-300)' }}>Start free. Upgrade anytime.</p>
+
+            <div className="grid grid-cols-3 gap-4 w-full mt-2">
+              {/* SOLO — Free */}
+              <div
+                className="rounded-xl border p-5 flex flex-col"
+                style={{ backgroundColor: 'var(--hive-900)', borderColor: 'var(--hive-700)' }}
+              >
+                <h3 className="text-base font-bold" style={{ color: 'var(--hive-50)' }}>Solo</h3>
+                <div className="mt-1 mb-3">
+                  <span className="text-2xl font-bold" style={{ color: 'var(--hive-50)' }}>Free</span>
+                </div>
+                <ul className="text-xs space-y-1.5 flex-1 mb-4" style={{ color: 'var(--hive-300)' }}>
+                  <li>5 workspaces</li>
+                  <li>Local embeddings</li>
+                  <li>Community marketplace</li>
+                </ul>
+                <Button
+                  className="w-full"
+                  variant="outline"
+                  onClick={() => {
+                    onUpdate({ selectedTier: 'SOLO' });
+                    handleFinish();
+                  }}
+                  disabled={creating}
+                  style={{ color: 'var(--hive-200)', borderColor: 'var(--hive-600)' }}
+                >
+                  {creating ? 'Creating...' : 'Start Free'}
+                </Button>
+              </div>
+
+              {/* BASIC — $15/mo */}
+              <div
+                className="rounded-xl border p-5 flex flex-col relative"
+                style={{ backgroundColor: 'var(--hive-850)', borderColor: 'var(--honey-500)', boxShadow: 'var(--shadow-honey)' }}
+              >
+                <span
+                  className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider"
+                  style={{ backgroundColor: 'var(--honey-500)', color: 'var(--hive-950)' }}
+                >
+                  Most Popular
+                </span>
+                <h3 className="text-base font-bold" style={{ color: 'var(--hive-50)' }}>Basic</h3>
+                <div className="mt-1 mb-3">
+                  <span className="text-2xl font-bold" style={{ color: 'var(--hive-50)' }}>$15</span>
+                  <span className="text-xs ml-1" style={{ color: 'var(--hive-400)' }}>/mo</span>
+                </div>
+                <ul className="text-xs space-y-1.5 flex-1 mb-4" style={{ color: 'var(--hive-300)' }}>
+                  <li>Unlimited workspaces</li>
+                  <li>Sub-agent spawning</li>
+                  <li>Custom skills</li>
+                </ul>
+                <Button
+                  className="w-full"
+                  onClick={async () => {
+                    setTierCheckoutLoading(true);
+                    onUpdate({ selectedTier: 'BASIC', stripeSessionPending: true });
+                    try {
+                      const res = await fetch(`${serverBaseUrl}/api/stripe/create-checkout-session`, {
+                        method: 'POST',
+                        headers: authHeaders({ 'Content-Type': 'application/json' }),
+                        body: JSON.stringify({ tier: 'BASIC' }),
+                      });
+                      if (res.ok) {
+                        const { url } = await res.json();
+                        if (url) window.open(url, '_blank');
+                      }
+                    } catch { /* handled */ }
+                    setTierCheckoutLoading(false);
+                    // After user returns from checkout, handleFinish will be called
+                    // For now, also allow proceeding directly
+                    handleFinish();
+                  }}
+                  disabled={tierCheckoutLoading || creating}
+                  style={{ backgroundColor: 'var(--honey-500)', color: 'var(--hive-950)' }}
+                >
+                  {tierCheckoutLoading ? 'Opening checkout...' : 'Start Basic'}
+                </Button>
+              </div>
+
+              {/* TEAMS — $79/mo */}
+              <div
+                className="rounded-xl border p-5 flex flex-col"
+                style={{ backgroundColor: 'var(--hive-900)', borderColor: 'var(--hive-700)' }}
+              >
+                <h3 className="text-base font-bold" style={{ color: 'var(--hive-50)' }}>Teams</h3>
+                <div className="mt-1 mb-3">
+                  <span className="text-2xl font-bold" style={{ color: 'var(--hive-50)' }}>$79</span>
+                  <span className="text-xs ml-1" style={{ color: 'var(--hive-400)' }}>/mo per seat</span>
+                </div>
+                <ul className="text-xs space-y-1.5 flex-1 mb-4" style={{ color: 'var(--hive-300)' }}>
+                  <li>Shared workspaces</li>
+                  <li>Team skill library</li>
+                  <li>Admin panel &amp; audit</li>
+                </ul>
+                <Button
+                  className="w-full"
+                  variant="outline"
+                  onClick={async () => {
+                    setTierCheckoutLoading(true);
+                    onUpdate({ selectedTier: 'TEAMS', stripeSessionPending: true });
+                    try {
+                      const res = await fetch(`${serverBaseUrl}/api/stripe/create-checkout-session`, {
+                        method: 'POST',
+                        headers: authHeaders({ 'Content-Type': 'application/json' }),
+                        body: JSON.stringify({ tier: 'TEAMS' }),
+                      });
+                      if (res.ok) {
+                        const { url } = await res.json();
+                        if (url) window.open(url, '_blank');
+                      }
+                    } catch { /* handled */ }
+                    setTierCheckoutLoading(false);
+                    handleFinish();
+                  }}
+                  disabled={tierCheckoutLoading || creating}
+                  style={{ color: 'var(--hive-200)', borderColor: 'var(--hive-600)' }}
+                >
+                  {tierCheckoutLoading ? 'Opening checkout...' : 'Start Teams'}
+                </Button>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                onUpdate({ selectedTier: 'SOLO' });
+                handleFinish();
+              }}
+              disabled={creating}
+              className="text-xs text-muted-foreground hover:text-foreground mt-1 transition-colors"
+            >
+              {creating ? 'Creating workspace...' : 'Skip for now — start on Solo'}
+            </button>
+          </div>
+        )}
+
+        {/* ── Step 7: Your Hive is Ready ──────────────────────── */}
+        {step === 7 && (
           <div className="flex flex-col items-center gap-4 text-center animate-in fade-in duration-500">
             <BeeImage role="celebrating" className="w-[160px] h-[160px] float" />
             <h2 className="text-2xl font-bold" style={{ color: 'var(--hive-50)' }}>Your hive is ready ⬡</h2>

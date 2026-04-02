@@ -17,6 +17,7 @@ import type { InstallationType, SearchSort, ScanResult, MarketplacePackage } fro
 import { validateSkillMd } from '@waggle/sdk';
 import { getKvarkConfig } from '../../kvark/kvark-config.js';
 import { emitNotification } from './notifications.js';
+import { requireTier } from '../../middleware/assert-tier.js';
 
 type ScanStatus = 'passed' | 'failed' | 'not_scanned' | 'unavailable';
 
@@ -137,7 +138,7 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
   // Returns enterprise packs that require KVARK. Only populated when
   // KVARK credentials are configured in the vault.
 
-  fastify.get('/api/marketplace/enterprise-packs', async (request, reply) => {
+  fastify.get('/api/marketplace/enterprise-packs', { preHandler: [requireTier('ENTERPRISE')] }, async (request, reply) => {
     const vault = fastify.vault;
     const kvarkConfigured = vault ? getKvarkConfig(vault) !== null : false;
 
@@ -166,7 +167,7 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
   //   LOW      → install proceeds, logged to audit trail
   //   CLEAN    → install proceeds immediately
 
-  fastify.post('/api/marketplace/install', async (request, reply) => {
+  fastify.post('/api/marketplace/install', { preHandler: [requireTier('BASIC')] }, async (request, reply) => {
     const db = requireDb(reply);
     if (!db) return;
 
@@ -671,7 +672,7 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
   // Reads the skill from ~/.waggle/skills/, validates frontmatter,
   // runs SecurityGate scan, then upserts into the marketplace DB.
 
-  fastify.post('/api/marketplace/publish', async (request, reply) => {
+  fastify.post('/api/marketplace/publish', { preHandler: [requireTier('BASIC')] }, async (request, reply) => {
     const db = requireDb(reply);
     if (!db) return;
 

@@ -12,6 +12,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { InstallCenter } from '@waggle/ui';
 import { getServerBaseUrl, authFetch } from '../lib/ipc';
+import { KvarkNudge } from '@/components/kvark';
+import { PluginToolsEditor } from '@/components/plugins/PluginToolsEditor';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -249,6 +251,17 @@ export default function CapabilitiesView({ onNavigate }: CapabilitiesViewProps) 
   const [createError, setCreateError] = useState<string | null>(null);
   const [createSuccess, setCreateSuccess] = useState<string | null>(null);
 
+  // ── Installed Plugins ──
+  const [installedPlugins, setInstalledPlugins] = useState<Array<{ name: string; version: string; description: string; tools?: Array<{ name: string; description: string }> }>>([]);
+  const [editingPluginTools, setEditingPluginTools] = useState<string | null>(null);
+
+  // ── Add Custom Source state ──
+  const [showAddSource, setShowAddSource] = useState(false);
+  const [newSourceUrl, setNewSourceUrl] = useState('');
+  const [newSourceName, setNewSourceName] = useState('');
+  const [addingSource, setAddingSource] = useState(false);
+  const [addSourceResult, setAddSourceResult] = useState<{ added: number; errors: string[] } | null>(null);
+
   // ── Recommended packs (existing 5 Waggle packs) ──
   const [packs, setPacks] = useState<PackEntry[]>([]);
   const [packsLoading, setPacksLoading] = useState(true);
@@ -327,6 +340,14 @@ export default function CapabilitiesView({ onNavigate }: CapabilitiesViewProps) 
     }
   }, []);
 
+  // Fetch installed plugins
+  useEffect(() => {
+    authFetch(`${baseUrl}/api/plugins`)
+      .then(r => r.ok ? r.json() : { plugins: [] })
+      .then(d => setInstalledPlugins(d.plugins ?? []))
+      .catch(() => {});
+  }, []);
+
   // ── Fetch marketplace packages (search) ──
   const fetchMarketplace = useCallback(async () => {
     setMarketplaceLoading(true);
@@ -376,6 +397,35 @@ export default function CapabilitiesView({ onNavigate }: CapabilitiesViewProps) 
       if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     };
   }, [activeTab, fetchMarketplace, searchQuery]);
+
+  const handleAddSource = useCallback(async () => {
+    if (!newSourceUrl.trim()) return;
+    setAddingSource(true);
+    setAddSourceResult(null);
+    try {
+      const res = await authFetch(`${baseUrl}/api/marketplace/sources`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newSourceName.trim() || newSourceUrl.trim().split('/').filter(Boolean).pop() || 'custom',
+          url: newSourceUrl.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setAddSourceResult({ added: data.syncResult?.added ?? 0, errors: data.syncResult?.errors ?? [] });
+        setNewSourceUrl('');
+        setNewSourceName('');
+        fetchMarketplace();
+      } else {
+        setAddSourceResult({ added: 0, errors: [data.error ?? 'Failed to add source'] });
+      }
+    } catch (e) {
+      setAddSourceResult({ added: 0, errors: [(e as Error).message] });
+    } finally {
+      setAddingSource(false);
+    }
+  }, [newSourceUrl, newSourceName, fetchMarketplace]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -808,16 +858,44 @@ export default function CapabilitiesView({ onNavigate }: CapabilitiesViewProps) 
           {communityPacks.length > 0 && <div className="h-px bg-border my-6" />}
 
           {/* ── W5.5: Enterprise Section (KVARK) ──────────────────────── */}
-          <div className="flex items-center gap-2 mb-3 mt-6">
-            <span className="text-[13px] font-semibold text-foreground tracking-wide">Enterprise</span>
-            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-widest bg-amber-500/15 text-amber-500">KVARK</span>
-          </div>
-          <div className="rounded-lg border border-border bg-card/50 p-4 mb-6">
-            <div className="text-xs text-muted-foreground leading-relaxed">
-              <p className="mb-2">KVARK enterprise packs provide governed knowledge access with data sovereignty, audit trails, and compliance-ready integrations.</p>
-              <p className="text-[10px] text-muted-foreground/60">Configure your KVARK connection in Settings &gt; Team to unlock enterprise capability packs.</p>
+          <KvarkNudge trigger="capabilities_page" variant="card" className="mt-6 mb-6" />
+
+          {/* ── Installed Plugins ─────────────────────────────────── */}
+          {installedPlugins.length > 0 && (
+            <div className="mt-6">
+              <div className="flex items-center gap-2 mb-4">
+                <span className="text-[13px] font-semibold text-foreground">Installed Plugins</span>
+                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-widest bg-muted/50 text-muted-foreground">{installedPlugins.length}</span>
+              </div>
+              {installedPlugins.map(plugin => (
+                <div key={plugin.name} className="mb-3 rounded-lg border border-border bg-card p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-sm font-medium text-foreground">{plugin.name}</span>
+                      <span className="ml-2 text-[10px] text-muted-foreground">v{plugin.version}</span>
+                    </div>
+                    <button
+                      onClick={() => setEditingPluginTools(editingPluginTools === plugin.name ? null : plugin.name)}
+                      className="text-[11px] px-2.5 py-1 rounded border border-border text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors"
+                    >
+                      {editingPluginTools === plugin.name ? '\u25B2 Close' : '\u2699 Edit Tools'}
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">{plugin.description}</p>
+                  {plugin.tools && plugin.tools.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {plugin.tools.map(t => (
+                        <span key={t.name} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary/10 text-primary">{t.name}</span>
+                      ))}
+                    </div>
+                  )}
+                  {editingPluginTools === plugin.name && (
+                    <PluginToolsEditor pluginName={plugin.name} baseUrl={baseUrl} onClose={() => setEditingPluginTools(null)} />
+                  )}
+                </div>
+              ))}
             </div>
-          </div>
+          )}
 
           {/* ── Community Section ───────────────────────────────────── */}
           {communityLoading ? (
@@ -934,6 +1012,44 @@ export default function CapabilitiesView({ onNavigate }: CapabilitiesViewProps) 
           ════════════════════════════════════════════════════════════════════ */}
       {activeTab === 'browse' && (
         <div id="panel-browse" role="tabpanel" aria-label="Browse All">
+          {/* ── Add Custom Source ─────────────────────────────── */}
+          <div className="mb-4">
+            <button
+              onClick={() => { setShowAddSource(v => !v); setAddSourceResult(null); }}
+              className="text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+            >
+              <span className="text-xs">{showAddSource ? '\u25B2' : '\u25BC'}</span>
+              Add Custom Source
+            </button>
+            {showAddSource && (
+              <div className="mt-2 rounded-lg border border-border bg-card/50 p-4">
+                <p className="text-xs text-muted-foreground mb-3">
+                  Add any GitHub repo with SKILL.md files or a skills marketplace URL.
+                </p>
+                <div className="flex flex-col gap-2">
+                  <input type="text" placeholder="Source name (optional)" value={newSourceName} onChange={e => setNewSourceName(e.target.value)}
+                    className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
+                  <div className="flex gap-2">
+                    <input type="url" placeholder="https://github.com/user/repo" value={newSourceUrl} onChange={e => setNewSourceUrl(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleAddSource(); }}
+                      className="flex-1 rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
+                    <button onClick={handleAddSource} disabled={addingSource || !newSourceUrl.trim()}
+                      className="px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium cursor-pointer disabled:opacity-50 hover:bg-primary/90 transition-colors">
+                      {addingSource ? 'Syncing...' : 'Add & Sync'}
+                    </button>
+                  </div>
+                  {addSourceResult && (
+                    <div className={`text-[11px] rounded px-2 py-1.5 ${addSourceResult.errors.length === 0 ? 'text-green-500 bg-green-500/10' : 'text-yellow-600 bg-yellow-600/10'}`}>
+                      {addSourceResult.added > 0 ? `Added ${addSourceResult.added} packages from this source`
+                        : addSourceResult.errors.length > 0 ? `Synced with warnings: ${addSourceResult.errors[0]}`
+                        : 'Source added (no SKILL.md files found)'}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* ── Filter bar ────────────────────────────────────────── */}
           <div className="flex flex-col gap-3 mb-5">
             {/* Search input */}
@@ -967,6 +1083,22 @@ export default function CapabilitiesView({ onNavigate }: CapabilitiesViewProps) 
                   )}
                 </button>
               ))}
+              <button
+                onClick={async () => {
+                  try {
+                    await authFetch(`${baseUrl}/api/marketplace/sync`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({}),
+                    });
+                    fetchMarketplace();
+                  } catch { /* silent */ }
+                }}
+                className="ml-auto text-[11px] text-muted-foreground hover:text-foreground transition-colors px-1.5 py-1 rounded hover:bg-muted/50"
+                title="Sync packages from all marketplace sources"
+              >
+                ↻ Sync
+              </button>
             </div>
 
             {/* Category filter chips */}

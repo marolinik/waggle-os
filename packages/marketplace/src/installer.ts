@@ -345,12 +345,24 @@ export class MarketplaceInstaller {
     try {
       mkdirSync(pluginDir, { recursive: true });
 
-      // Step 1: Clone repo or create from manifest
+      // Step 1: Clone repo, install npm package, or create from metadata
       if (manifest?.git_url) {
         execSync(`git clone --depth 1 ${manifest.git_url} ${pluginDir}`, {
           stdio: 'pipe',
           timeout: 60_000,
         });
+      } else if (manifest?.npm_package) {
+        // Install npm package into plugin directory
+        try {
+          writeFileSync(join(pluginDir, 'package.json'), JSON.stringify({ name: pluginName, private: true }), 'utf-8');
+          execSync(`npm install ${manifest.npm_package} --save`, {
+            cwd: pluginDir,
+            stdio: 'pipe',
+            timeout: 120_000,
+          });
+        } catch {
+          // npm install failed — continue with metadata-only plugin
+        }
       }
 
       // Step 2: Write plugin.json

@@ -29,6 +29,11 @@ describe('Trust Model Runtime Wiring', () => {
     const mind = new MindDB(personalPath);
     mind.close();
 
+    // Create skills dir with marker to prevent auto-install of starter skills
+    const skillsDir = path.join(tmpDir, 'skills');
+    fs.mkdirSync(skillsDir, { recursive: true });
+    fs.writeFileSync(path.join(skillsDir, '.starter-installed'), 'test');
+
     server = await buildLocalServer({ dataDir: tmpDir });
   });
 
@@ -50,7 +55,8 @@ describe('Trust Model Runtime Wiring', () => {
     });
 
     it('installing a starter skill creates audit entries', async () => {
-      // Install a skill
+      // Remove skill if auto-installed, then install fresh
+      await injectWithAuth(server, { method: 'DELETE', url: '/api/skills/brainstorm' });
       const res = await injectWithAuth(server, {
         method: 'POST',
         url: '/api/skills/starter-pack/brainstorm',

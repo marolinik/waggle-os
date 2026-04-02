@@ -12,10 +12,13 @@ const API_BASE = 'https://discord.com/api/v10';
 export class DiscordConnector extends BaseConnector {
   readonly id = 'discord';
   readonly name = 'Discord';
-  readonly description = 'Send messages, list guilds and channels, and read Discord conversations';
+  readonly description = "Read messages, search channels, and send notifications in Discord servers. Supports guild browsing, message search, and channel posting for bot integrations.";
   readonly service = 'discord.com';
   readonly authType = 'bearer' as const;
   readonly substrate = 'waggle' as const;
+  readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/discord.svg';
+  readonly category = 'communication' as const;
+  readonly setupGuide = "Create a Discord Application at discord.com/developers, add a Bot, copy the Bot Token.";
 
   readonly actions: ConnectorAction[] = [
     {

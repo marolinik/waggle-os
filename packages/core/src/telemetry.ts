@@ -12,6 +12,7 @@
 import Database from 'better-sqlite3';
 import type { Database as DatabaseType } from 'better-sqlite3';
 import path from 'node:path';
+import fs from 'node:fs';
 
 /* ── Schema ── */
 const TELEMETRY_SCHEMA = `
@@ -200,4 +201,124 @@ export class TelemetryStore {
   close(): void {
     this.db.close();
   }
+}
+
+/* ── Collector ── */
+
+const COLLECTOR_SCHEMA = `
+CREATE TABLE IF NOT EXISTS collector_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  category TEXT NOT NULL,
+  name TEXT NOT NULL,
+  count INTEGER NOT NULL DEFAULT 1,
+  date TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_collector_date ON collector_events (date);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_collector_name_date ON collector_events (name, date);
+`;
+
+/**
+ * TelemetryCollector — higher-level daily-aggregated event tracker.
+ *
+ * Records tool usage, commands, errors, and capability gaps by day.
+ * Privacy-safe: only category + name + count, no content or PII.
+ */
+export class TelemetryCollector {
+  private db: DatabaseType;
+  private enabled: boolean;
+  private dataDir: string;
+
+  constructor(dataDir: string, enabled = false) {
+    this.dataDir = dataDir;
+    this.enabled = enabled;
+    const dbPath = path.join(dataDir, 'telemetry.db');
+    this.db = new Database(dbPath);
+    this.db.pragma('journal_mode = WAL');
+    this.db.exec(COLLECTOR_SCHEMA);
+  }
+
+  recordToolUse(toolName: string): void {
+    if (!this.enabled) return;
+    this.upsertEvent('tool', toolName);
+  }
+
+  recordCommand(command: string): void {
+    if (!this.enabled) return;
+    this.upsertEvent('command', command);
+  }
+
+  recordError(errorName: string): void {
+    if (!this.enabled) return;
+    this.upsertEvent('error', errorName);
+  }
+
+  recordCapabilityGap(capability: string): void {
+    if (!this.enabled) return;
+    this.upsertEvent('capability_gap', capability);
+  }
+
+  recordSession(durationMs: number, interactionCount: number): void {
+    if (!this.enabled) return;
+    const today = new Date().toISOString().split('T')[0];
+    this.db.prepare(
+      `INSERT INTO collector_events (category, name, count, date) VALUES ('session', 'duration_total_ms', ?, ?)
+       ON CONFLICT(name, date) DO UPDATE SET count = count + excluded.count`
+    ).run(durationMs, today);
+    this.db.prepare(
+      `INSERT INTO collector_events (category, name, count, date) VALUES ('session', 'interaction_count', ?, ?)
+       ON CONFLICT(name, date) DO UPDATE SET count = count + excluded.count`
+    ).run(interactionCount, today);
+    this.db.prepare(
+      `INSERT INTO collector_events (category, name, count, date) VALUES ('session', 'session_count', 1, ?)
+       ON CONFLICT(name, date) DO UPDATE SET count = count + 1`
+    ).run(today);
+  }
+
+  private upsertEvent(category: string, name: string): void {
+    const today = new Date().toISOString().split('T')[0];
+    this.db.prepare(
+      `INSERT INTO collector_events (category, name, count, date) VALUES (?, ?, 1, ?)
+       ON CONFLICT(name, date) DO UPDATE SET count = count + 1`
+    ).run(category, name, today);
+  }
+
+  getReport(days = 7): {
+    totalEvents: number;
+    events: Array<{ name: string; count: number; category: string; date: string }>;
+    dateRange: { from: string | null };
+  } {
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+    const sinceStr = since.toISOString().split('T')[0];
+
+    const rows = this.db.prepare(
+      `SELECT name, SUM(count) as total_count, category, date
+       FROM collector_events WHERE date >= ?
+       GROUP BY name, category, date ORDER BY date DESC, name`
+    ).all(sinceStr) as Array<{ name: string; total_count: number; category: string; date: string }>;
+
+    const totalEvents = rows.reduce((sum, r) => sum + r.total_count, 0);
+    const events = rows.map(r => ({ name: r.name, count: r.total_count, category: r.category, date: r.date }));
+    const firstRow = this.db.prepare(
+      'SELECT MIN(date) as first_date FROM collector_events'
+    ).get() as { first_date: string | null };
+
+    return { totalEvents, events, dateRange: { from: firstRow.first_date } };
+  }
+
+  /** Write events to telemetry.json for external consumption. */
+  flush(): void {
+    const rows = this.db.prepare(
+      'SELECT name, count, category, date FROM collector_events ORDER BY date DESC, name'
+    ).all() as Array<{ name: string; count: number; category: string; date: string }>;
+    fs.writeFileSync(
+      path.join(this.dataDir, 'telemetry.json'),
+      JSON.stringify(rows, null, 2),
+    );
+  }
+
+  setEnabled(enabled: boolean): void { this.enabled = enabled; }
+  isEnabled(): boolean { return this.enabled; }
+  close(): void { this.db.close(); }
 }

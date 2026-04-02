@@ -12,10 +12,13 @@ const API_BASE = 'https://api.pipedrive.com/v1';
 export class PipedriveConnector extends BaseConnector {
   readonly id = 'pipedrive';
   readonly name = 'Pipedrive';
-  readonly description = 'Manage deals, persons, and activities in Pipedrive CRM';
+  readonly description = "Manage Pipedrive deals, contacts, organizations, and activities. Track pipeline stages, log calls and emails, and search your entire sales CRM.";
   readonly service = 'pipedrive.com';
   readonly authType = 'api_key' as const;
   readonly substrate = 'waggle' as const;
+  readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/pipedrive.svg';
+  readonly category = 'crm' as const;
+  readonly setupGuide = "Get your Personal API Token from Pipedrive Settings > Personal Preferences > API.";
 
   readonly actions: ConnectorAction[] = [
     {

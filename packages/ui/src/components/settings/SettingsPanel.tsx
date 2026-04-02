@@ -16,6 +16,8 @@ import { TeamSection } from './TeamSection.js';
 import { VaultSection } from './VaultSection.js';
 import { BackupSection } from './BackupSection.js';
 import { KvarkSection } from './KvarkSection.js';
+import { HooksSection } from './HooksSection.js';
+import { AdminSection } from './AdminSection.js';
 
 export interface SettingsPanelProps {
   activeTab?: string;
@@ -171,6 +173,12 @@ export function SettingsPanel({
             config={config}
             onConfigUpdate={onConfigUpdate}
           />
+        )}
+        {activeTab === 'hooks' && (
+          <HooksSection baseUrl={baseUrl} />
+        )}
+        {activeTab === 'admin' && (
+          <AdminSection baseUrl={baseUrl} />
         )}
       </div>
     </div>

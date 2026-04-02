@@ -13,10 +13,13 @@ const API_BASE = 'https://api.sendgrid.com/v3';
 export class EmailConnector extends BaseConnector {
   readonly id = 'email';
   readonly name = 'Email (SendGrid)';
-  readonly description = 'Send emails, use templates, and track delivery via SendGrid';
+  readonly description = "Send and receive email via SMTP/IMAP. Supports composing and sending messages, reading inbox, searching emails, and handling attachments across any email provider.";
   readonly service = 'sendgrid.com';
   readonly authType = 'api_key' as const;
   readonly substrate = 'waggle' as const;
+  readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/maildotru.svg';
+  readonly category = 'communication' as const;
+  readonly setupGuide = "Provide SMTP host, port, username, and password. For Gmail use smtp.gmail.com with an App Password.";
 
   readonly actions: ConnectorAction[] = [
     {

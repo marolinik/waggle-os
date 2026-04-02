@@ -11,10 +11,13 @@ import type { ConnectorHealth } from '@waggle/shared';
 export class PostgresConnector extends BaseConnector {
   readonly id = 'postgres';
   readonly name = 'PostgreSQL';
-  readonly description = 'Execute SQL queries against a PostgreSQL database';
+  readonly description = "Execute SQL queries against PostgreSQL databases. Supports SELECT queries, schema inspection, table listing, and parameterized queries with connection pooling.";
   readonly service = 'local';
   readonly authType = 'api_key' as const;
   readonly substrate = 'waggle' as const;
+  readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/postgresql.svg';
+  readonly category = 'data' as const;
+  readonly setupGuide = "Provide a PostgreSQL connection string: postgresql://user:password@host:port/database";
 
   readonly actions: ConnectorAction[] = [
     {

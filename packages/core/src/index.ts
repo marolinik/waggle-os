@@ -21,7 +21,7 @@ export { createLiteLLMEmbedder, type LiteLLMEmbedderConfig } from './mind/litell
 export { createInProcessEmbedder, normalizeDimensions, type InProcessEmbedderConfig } from './mind/inprocess-embedder.js';
 export { createOllamaEmbedder, type OllamaEmbedderConfig } from './mind/ollama-embedder.js';
 export { createApiEmbedder, type ApiEmbedderConfig } from './mind/api-embedder.js';
-export { createEmbeddingProvider, type EmbeddingProviderConfig, type EmbeddingProviderStatus, type EmbeddingProviderType, type EmbeddingProviderInstance } from './mind/embedding-provider.js';
+export { createEmbeddingProvider, EmbeddingQuotaExceededError, getMinimumTierForProvider, type EmbeddingProviderConfig, type EmbeddingProviderStatus, type EmbeddingProviderType, type EmbeddingProviderInstance, type EmbeddingQuotaStatus } from './mind/embedding-provider.js';
 export { normalizeEntityName, findDuplicates } from './mind/entity-normalizer.js';
 export { Ontology, validateEntity, type EntitySchema, type ValidationResult } from './mind/ontology.js';
 export { WaggleConfig, type ProviderEntry, type TeamServerConfig } from './config.js';
@@ -47,7 +47,7 @@ export {
   type CronSchedule, type CreateScheduleInput, type CronJobType,
 } from './cron-store.js';
 export { VaultStore, type VaultEntry } from './vault.js';
-export { TelemetryStore, TELEMETRY_EVENTS, type TelemetryEvent, type TelemetrySummary } from './telemetry.js';
+export { TelemetryStore, TelemetryCollector, TELEMETRY_EVENTS, type TelemetryEvent, type TelemetrySummary } from './telemetry.js';
 export {
   SkillHashStore, computeSkillHash, SKILL_HASHES_TABLE_SQL,
   type SkillHash,

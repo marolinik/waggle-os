@@ -12,10 +12,13 @@ const API_BASE = 'https://api.bitbucket.org/2.0';
 export class BitbucketConnector extends BaseConnector {
   readonly id = 'bitbucket';
   readonly name = 'Bitbucket';
-  readonly description = 'Access repositories, pull requests, issues, and files';
+  readonly description = "Access Bitbucket repositories, issues, and pull requests. Supports repo browsing, issue tracking, PR reviews, and code search across workspaces.";
   readonly service = 'bitbucket.org';
   readonly authType = 'bearer' as const;
   readonly substrate = 'waggle' as const;
+  readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/bitbucket.svg';
+  readonly category = 'development' as const;
+  readonly setupGuide = "Create an App Password at bitbucket.org/account/settings/app-passwords with repository and issue permissions.";
 
   readonly actions: ConnectorAction[] = [
     {

@@ -71,6 +71,7 @@ describe('TelemetryCollector', () => {
     expect(data).toHaveLength(1);
     expect(data[0].name).toBe('search_memory');
 
+    collector.close();
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 

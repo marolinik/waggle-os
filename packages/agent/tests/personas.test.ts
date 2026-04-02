@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { PERSONAS, getPersona, listPersonas, composePersonaPrompt } from '../src/personas.js';
 
 describe('Agent Personas', () => {
-  it('PERSONAS catalog has 13 entries', () => {
-    expect(PERSONAS).toHaveLength(13);
+  it('PERSONAS catalog has 17 entries', () => {
+    expect(PERSONAS).toHaveLength(17);
   });
 
   it('each persona has required fields', () => {
@@ -38,9 +38,9 @@ describe('Agent Personas', () => {
     expect(getPersona('')).toBeNull();
   });
 
-  it('listPersonas() returns all 13 personas', () => {
+  it('listPersonas() returns all 17 personas', () => {
     const list = listPersonas();
-    expect(list).toHaveLength(13);
+    expect(list).toHaveLength(17);
     expect(list).not.toBe(PERSONAS); // Returns a copy
   });
 
@@ -50,7 +50,7 @@ describe('Agent Personas', () => {
     }
   });
 
-  it('covers the 8 expected roles', () => {
+  it('covers the 8 original roles', () => {
     const ids = PERSONAS.map(p => p.id);
     expect(ids).toContain('researcher');
     expect(ids).toContain('writer');
@@ -60,6 +60,56 @@ describe('Agent Personas', () => {
     expect(ids).toContain('executive-assistant');
     expect(ids).toContain('sales-rep');
     expect(ids).toContain('marketer');
+  });
+
+  it('covers the 4 new universal/orchestration personas', () => {
+    const ids = PERSONAS.map(p => p.id);
+    expect(ids).toContain('general-purpose');
+    expect(ids).toContain('planner');
+    expect(ids).toContain('verifier');
+    expect(ids).toContain('coordinator');
+  });
+
+  it('every persona has failurePatterns with exactly 3 entries', () => {
+    for (const persona of PERSONAS) {
+      expect(persona.failurePatterns).toBeDefined();
+      expect(persona.failurePatterns).toHaveLength(3);
+    }
+  });
+
+  it('every persona has disallowedTools array', () => {
+    for (const persona of PERSONAS) {
+      expect(Array.isArray(persona.disallowedTools)).toBe(true);
+    }
+  });
+
+  it('read-only personas have isReadOnly true', () => {
+    const readOnlyIds = ['researcher', 'analyst', 'planner', 'verifier'];
+    for (const id of readOnlyIds) {
+      const persona = getPersona(id);
+      expect(persona).not.toBeNull();
+      expect(persona!.isReadOnly).toBe(true);
+    }
+  });
+
+  it('planner disallowedTools includes write_file', () => {
+    const planner = getPersona('planner');
+    expect(planner).not.toBeNull();
+    expect(planner!.disallowedTools).toContain('write_file');
+  });
+
+  it('verifier disallowedTools includes write_file', () => {
+    const verifier = getPersona('verifier');
+    expect(verifier).not.toBeNull();
+    expect(verifier!.disallowedTools).toContain('write_file');
+  });
+
+  it('coordinator tools has exactly 11 items', () => {
+    const coordinator = getPersona('coordinator');
+    expect(coordinator).not.toBeNull();
+    expect(coordinator!.tools).toHaveLength(11);
+    expect(coordinator!.tools).toContain('spawn_agent');
+    expect(coordinator!.tools).toContain('show_plan');
   });
 });
 

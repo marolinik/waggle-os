@@ -1,27 +1,30 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import { Check } from 'lucide-react';
+
+const API_URL = import.meta.env.VITE_API_URL ?? 'https://cloud.waggle-os.ai';
 
 const TIERS = [
   {
-    name: 'Solo', price: 'Free', period: '', target: 'For individual power users',
-    cta: 'Download Free', ctaHref: 'https://github.com/marolinik/waggle/releases/latest', highlighted: false,
-    features: ['1 workspace', 'Local in-process embeddings', '53+ tools, 29 connectors', 'Community skills marketplace', 'Persistent .mind file', 'AES-256 encrypted vault'],
+    id: 'SOLO' as const, name: 'Solo', price: 'Free', period: '', target: 'For individual power users',
+    cta: 'Download Free', ctaHref: 'https://github.com/marolinik/waggle/releases/latest', highlighted: false, stripeCheckout: false,
+    features: ['5 workspaces', 'Local in-process embeddings', '53+ tools, 29 connectors', 'Community skills marketplace', 'Persistent .mind file', 'AES-256 encrypted vault'],
   },
   {
-    name: 'Teams', price: '$29', period: '/mo per seat', target: 'For small teams (2-10)',
-    cta: 'Join the Beta', ctaHref: '#beta', highlighted: true,
-    features: ['Everything in Solo, plus:', '5 workspaces', 'Cloud embeddings', 'Team memory sharing', 'Workspace templates', 'Priority support'],
+    id: 'BASIC' as const, name: 'Basic', price: '$15', period: '/mo', target: 'For power users who need more',
+    cta: 'Start Basic', ctaHref: '', highlighted: true, stripeCheckout: true,
+    features: ['Everything in Solo, plus:', 'Unlimited workspaces', 'All embedding providers', 'Sub-agent spawning', 'Custom skills', 'Priority support'],
   },
   {
-    name: 'Business', price: '$79', period: '/mo per seat', target: 'For enterprises',
-    cta: 'Talk to Us', ctaHref: 'mailto:marko@egzakta.rs?subject=Waggle%20Business%20Inquiry', highlighted: false,
-    features: ['Everything in Teams, plus:', 'Unlimited workspaces', 'RBAC & audit trail', 'SSO / SAML', 'Custom agent templates', 'Self-host option', 'Dedicated support'],
+    id: 'TEAMS' as const, name: 'Teams', price: '$79', period: '/mo per seat', target: 'For teams and organizations',
+    cta: 'Talk to Us', ctaHref: 'mailto:marko@egzakta.rs?subject=Waggle%20Teams%20Inquiry', highlighted: false, stripeCheckout: false,
+    features: ['Everything in Basic, plus:', 'Shared workspaces', 'Team skill library', 'Cloud sync', 'Admin panel & audit log', 'Self-host option', 'Dedicated support'],
   },
 ];
 
 const Pricing = () => {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
+  const [loading, setLoading] = useState<string | null>(null);
 
   useEffect(() => {
     const el = ref.current;
@@ -29,6 +32,27 @@ const Pricing = () => {
     const observer = new IntersectionObserver(([e]) => { if (e.isIntersecting) setVisible(true); }, { threshold: 0.1 });
     observer.observe(el);
     return () => observer.disconnect();
+  }, []);
+
+  const handleStripeCheckout = useCallback(async (tierId: string) => {
+    setLoading(tierId);
+    try {
+      const res = await fetch(`${API_URL}/api/stripe/create-checkout-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tier: tierId, billingPeriod: 'monthly' }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.url) window.open(data.url, '_blank');
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert((err as { message?: string }).message ?? 'Checkout unavailable. Please try again later.');
+      }
+    } catch {
+      alert('Could not connect to server. Please try again later.');
+    }
+    setLoading(null);
   }, []);
 
   return (
@@ -69,15 +93,31 @@ const Pricing = () => {
                   </li>
                 ))}
               </ul>
-              <a href={t.ctaHref} target={t.ctaHref.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer" className="btn-press"
-                style={{
-                  display: 'block', textAlign: 'center', padding: '12px 0', borderRadius: 12, fontSize: 14, fontWeight: 600, textDecoration: 'none',
-                  ...(t.highlighted
-                    ? { background: 'var(--honey-500)', color: 'var(--hive-950)', boxShadow: 'var(--shadow-honey)' }
-                    : { background: 'var(--hive-800)', color: 'var(--hive-100)', border: '1px solid var(--hive-600)' }),
-                }}>
-                {t.cta}
-              </a>
+              {t.stripeCheckout ? (
+                <button
+                  onClick={() => handleStripeCheckout(t.id)}
+                  disabled={loading === t.id}
+                  className="btn-press"
+                  style={{
+                    display: 'block', width: '100%', textAlign: 'center', padding: '12px 0', borderRadius: 12, fontSize: 14, fontWeight: 600,
+                    cursor: loading === t.id ? 'wait' : 'pointer',
+                    background: 'var(--honey-500)', color: 'var(--hive-950)', boxShadow: 'var(--shadow-honey)',
+                    border: 'none',
+                  }}
+                >
+                  {loading === t.id ? 'Loading...' : t.cta}
+                </button>
+              ) : (
+                <a href={t.ctaHref} target={t.ctaHref.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer" className="btn-press"
+                  style={{
+                    display: 'block', textAlign: 'center', padding: '12px 0', borderRadius: 12, fontSize: 14, fontWeight: 600, textDecoration: 'none',
+                    ...(t.highlighted
+                      ? { background: 'var(--honey-500)', color: 'var(--hive-950)', boxShadow: 'var(--shadow-honey)' }
+                      : { background: 'var(--hive-800)', color: 'var(--hive-100)', border: '1px solid var(--hive-600)' }),
+                  }}>
+                  {t.cta}
+                </a>
+              )}
             </div>
           ))}
         </div>

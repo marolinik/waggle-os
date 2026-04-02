@@ -12,10 +12,13 @@ const API_BASE = 'https://api.airtable.com/v0';
 export class AirtableConnector extends BaseConnector {
   readonly id = 'airtable';
   readonly name = 'Airtable';
-  readonly description = 'Access bases, records, and search in Airtable';
+  readonly description = "Read, create, and update Airtable records and views. Supports filtering, sorting, linked record traversal, and batch operations across bases and tables.";
   readonly service = 'airtable.com';
   readonly authType = 'bearer' as const;
   readonly substrate = 'waggle' as const;
+  readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/airtable.svg';
+  readonly category = 'data' as const;
+  readonly setupGuide = "Create a Personal Access Token at airtable.com/create/tokens with data.records and schema scopes.";
 
   readonly actions: ConnectorAction[] = [
     {

@@ -36,6 +36,7 @@ import type {
 } from '@/components/cockpit';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
+import { KvarkNudge } from '@/components/kvark';
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -303,9 +304,6 @@ export default function CockpitView() {
     [fetchConnectors],
   );
 
-  // ── Enterprise check for KVARK card ────────────────────────────────────
-  const hasEnterpriseConfig = health && typeof (health as Record<string, unknown>).kvark === 'object' && (health as Record<string, unknown>).kvark !== null;
-
   // ── Render ─────────────────────────────────────────────────────────────
 
   return (
@@ -449,24 +447,8 @@ export default function CockpitView() {
                 </CardContent>
               </Card>
 
-              {/* W5.2: KVARK Enterprise health indicator — only shown when enterprise config present */}
-              {hasEnterpriseConfig && (
-                <Card>
-                  <CardHeader className="pb-2">
-                    <h3 className="text-sm font-semibold text-foreground">KVARK Enterprise</h3>
-                  </CardHeader>
-                  <CardContent className="text-xs text-muted-foreground space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-muted-foreground/30" />
-                      <span>Not configured</span>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground/60 leading-relaxed">
-                      KVARK enables enterprise knowledge access with data sovereignty, audit trails, and governed actions.
-                      Configure in Settings &gt; Team.
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
+              {/* W5.2: KVARK Enterprise — centralized KvarkNudge (renders only for TEAMS+ tier) */}
+              <KvarkNudge trigger="cockpit_enterprise" variant="inline" />
             </div>
           )}
         </>

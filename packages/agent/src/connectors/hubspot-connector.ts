@@ -12,10 +12,13 @@ const API_BASE = 'https://api.hubapi.com';
 export class HubSpotConnector extends BaseConnector {
   readonly id = 'hubspot';
   readonly name = 'HubSpot';
-  readonly description = 'Access contacts, deals, and companies in HubSpot CRM';
+  readonly description = "Manage HubSpot contacts, companies, deals, and activities. Search CRM records, create and update properties, log activities, and track pipeline stages.";
   readonly service = 'hubspot.com';
   readonly authType = 'bearer' as const;
   readonly substrate = 'waggle' as const;
+  readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/hubspot.svg';
+  readonly category = 'crm' as const;
+  readonly setupGuide = "Create a Private App at app.hubspot.com/private-apps with the required CRM scopes.";
 
   readonly actions: ConnectorAction[] = [
     {

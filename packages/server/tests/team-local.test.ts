@@ -15,6 +15,8 @@ describe('Team local routes', () => {
     fs.mkdirSync(path.join(tmpDir, 'workspaces'), { recursive: true });
     // Create a personal.mind file (empty SQLite — MindDB inits schema)
     fs.writeFileSync(path.join(tmpDir, 'personal.mind'), '');
+    // Set tier to TEAMS so team routes pass tier enforcement
+    fs.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify({ tier: 'TEAMS' }));
 
     server = await buildLocalServer({
       dataDir: tmpDir,

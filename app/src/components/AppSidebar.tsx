@@ -10,7 +10,7 @@ import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { HiveIcon, HiveLogo } from '@/components/HiveIcon';
 
-type AppView = 'chat' | 'dashboard' | 'memory' | 'events' | 'capabilities' | 'cockpit' | 'mission-control' | 'settings';
+import type { AppView } from '@/types';
 
 export interface AppSidebarProps {
   collapsed: boolean;

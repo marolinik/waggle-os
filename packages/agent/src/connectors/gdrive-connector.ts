@@ -13,10 +13,13 @@ const UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3';
 export class GoogleDriveConnector extends BaseConnector {
   readonly id = 'gdrive';
   readonly name = 'Google Drive';
-  readonly description = 'List, search, download, and upload files in Google Drive';
+  readonly description = "Browse, read, upload, and manage Google Drive files and folders. Supports document listing, file search, content reading, and permission management.";
   readonly service = 'drive.google.com';
   readonly authType = 'bearer' as const;
   readonly substrate = 'waggle' as const;
+  readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/googledrive.svg';
+  readonly category = 'storage' as const;
+  readonly setupGuide = "Enable Google Drive API at console.cloud.google.com and create OAuth2 credentials.";
 
   readonly actions: ConnectorAction[] = [
     {

@@ -1051,6 +1051,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           hooks: hasCustomRunner ? undefined : hookRegistry,
           capabilityRouter,
           governancePolicies,
+          pluginTools: server.agentState.pluginRuntimeManager,
           signal: abortController.signal,
           onToken: (token: string) => {
             sendEvent('token', { content: token });

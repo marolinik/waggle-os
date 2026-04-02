@@ -215,8 +215,8 @@ describe('Marketplace DB Seed Seam', () => {
 // ── Module Export Check ──────────────────────────────────────────────
 
 describe('Marketplace Dev Routes Module', () => {
-  it('exports marketplaceDevRoutes function', () => {
-    const mod = require('../../src/local/routes/marketplace-dev.ts');
+  it('exports marketplaceDevRoutes function', async () => {
+    const mod = await import('../../src/local/routes/marketplace-dev.js');
     expect(mod.marketplaceDevRoutes).toBeDefined();
     expect(typeof mod.marketplaceDevRoutes).toBe('function');
   });

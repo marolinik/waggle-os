@@ -12,10 +12,13 @@ const API_BASE = 'https://app.asana.com/api/1.0';
 export class AsanaConnector extends BaseConnector {
   readonly id = 'asana';
   readonly name = 'Asana';
-  readonly description = 'Manage tasks and projects in Asana';
+  readonly description = "Manage Asana tasks, projects, and teams. Create and update tasks, manage assignees and due dates, search across workspaces, and track project milestones.";
   readonly service = 'asana.com';
   readonly authType = 'bearer' as const;
   readonly substrate = 'waggle' as const;
+  readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/asana.svg';
+  readonly category = 'productivity' as const;
+  readonly setupGuide = "Create a Personal Access Token at app.asana.com/0/developer-console.";
 
   readonly actions: ConnectorAction[] = [
     {

@@ -163,6 +163,8 @@ export const SETTINGS_TABS: SettingsTab[] = [
   { id: 'backup', label: 'Backup' },
   { id: 'kvark', label: 'Enterprise' },
   { id: 'advanced', label: 'Advanced' },
+  { id: 'hooks', label: 'Automation' },
+  { id: 'admin', label: 'Admin' },
 ];
 
 // ── Utility Functions ───────────────────────────────────────────────

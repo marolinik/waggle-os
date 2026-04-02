@@ -12,10 +12,13 @@ const API_BASE = 'https://gmail.googleapis.com/gmail/v1';
 export class GmailConnector extends BaseConnector {
   readonly id = 'gmail';
   readonly name = 'Gmail';
-  readonly description = 'Read, search, and send emails via Gmail';
+  readonly description = "Read, search, send, and organize Gmail messages and threads. Supports label management, attachment handling, and full-text search across your entire inbox.";
   readonly service = 'gmail.com';
   readonly authType = 'bearer' as const;
   readonly substrate = 'waggle' as const;
+  readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/gmail.svg';
+  readonly category = 'communication' as const;
+  readonly setupGuide = "Enable Gmail API at console.cloud.google.com and create OAuth2 credentials for a Desktop application.";
 
   readonly actions: ConnectorAction[] = [
     {

@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
 import { WaggleConfig } from '@waggle/core';
+import { type Tier, TIERS, TIER_CAPABILITIES, parseTier, getCapabilities } from '@waggle/shared';
+import { requireTier } from '../../middleware/assert-tier.js';
 
 function maskApiKey(key: string): string {
   if (!key || key.length < 8) return '****';
@@ -211,56 +213,65 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
     return updated;
   });
 
-  // ── Tier detection (MOCK) ────────────────────────────────────────────
-  // MOCK: Remove when real tier/billing system is integrated.
-  // Tier is read from config.json → tier field (defaults to 'solo').
-  // Supported values: 'solo' | 'teams' | 'business' | 'enterprise'
-
-  type Tier = 'solo' | 'teams' | 'business' | 'enterprise';
-
-  function getTierLimits(tier: Tier) {
-    return {
-      maxWorkspaces: tier === 'solo' ? 5 : tier === 'teams' ? 25 : tier === 'business' ? 100 : -1,
-      maxSessions: tier === 'solo' ? 3 : tier === 'teams' ? 10 : tier === 'business' ? 25 : -1,
-      maxMembers: tier === 'solo' ? 1 : tier === 'teams' ? 10 : tier === 'business' ? 50 : -1,
-      features: {
-        teams: tier !== 'solo',
-        marketplace: tier !== 'solo',
-        budgetControls: tier === 'business' || tier === 'enterprise',
-        kvark: tier === 'enterprise',
-        governance: tier === 'enterprise',
-        customModels: tier !== 'solo',
-      },
-    };
-  }
+  // ── Tier detection ───────────────────────────────────────────────────
+  // Tier is read from config.json → tier field (defaults to SOLO).
+  // Canonical values: SOLO | BASIC | TEAMS | ENTERPRISE (from @waggle/shared)
+  // Legacy lowercase names are auto-migrated via parseTier().
+  // Will be replaced by Stripe webhook in Prompt 04.
 
   function readTier(dataDir: string): Tier {
     try {
       const configPath = path.join(dataDir, 'config.json');
       if (fs.existsSync(configPath)) {
         const raw = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-        const t = raw.tier as string;
-        if (t === 'solo' || t === 'teams' || t === 'business' || t === 'enterprise') return t;
+        const parsed = parseTier(String(raw.tier ?? ''));
+        if (parsed) return parsed;
       }
     } catch { /* ignore */ }
-    return 'solo';
+    return 'SOLO';
   }
 
-  // GET /api/tier — return current tier and feature limits
+  // GET /api/tier — authoritative tier source for frontend
   server.get('/api/tier', async () => {
     const tier = readTier(server.localConfig.dataDir);
-    return { tier, limits: getTierLimits(tier) };
+    const caps = getCapabilities(tier);
+    // Usage counts for limit display
+    const workspaceCount = server.workspaceManager?.list().length ?? 0;
+    return {
+      tier,
+      capabilities: caps,
+      teamsServerUrl: process.env.DATABASE_URL
+        ? `http://127.0.0.1:${process.env.TEAMS_SERVER_PORT ?? '3101'}`
+        : null,
+      teamsServerAvailable: !!process.env.DATABASE_URL,
+      usage: {
+        workspaceCount,
+      },
+      // Legacy shape — kept for backward compatibility with existing frontend
+      limits: {
+        maxWorkspaces: caps.workspaceLimit,
+        maxSessions: tier === 'SOLO' ? 3 : tier === 'BASIC' ? 10 : 25,
+        maxMembers: caps.teamMembersLimit,
+        features: {
+          teams: caps.sharedWorkspaces,
+          marketplace: tier !== 'SOLO',
+          budgetControls: caps.adminPanel,
+          kvark: tier === 'ENTERPRISE',
+          governance: tier === 'ENTERPRISE',
+          customModels: tier !== 'SOLO',
+        },
+      },
+    };
   });
 
-  // PATCH /api/tier — change tier for testing
-  // MOCK: In production, tier changes are managed by the billing system.
+  // PATCH /api/tier — change tier (testing/dev — will be replaced by Stripe webhook)
   server.patch<{
     Body: { tier: string };
   }>('/api/tier', async (request, reply) => {
-    const { tier } = request.body ?? {};
-    const valid: Tier[] = ['solo', 'teams', 'business', 'enterprise'];
-    if (!valid.includes(tier as Tier)) {
-      return reply.status(400).send({ error: `Invalid tier. Must be one of: ${valid.join(', ')}` });
+    const { tier: tierRaw } = request.body ?? {};
+    const parsed = parseTier(String(tierRaw ?? ''));
+    if (!parsed) {
+      return reply.status(400).send({ error: `Invalid tier. Must be one of: ${TIERS.join(', ')}` });
     }
 
     const configPath = path.join(server.localConfig.dataDir, 'config.json');
@@ -271,11 +282,88 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
       }
     } catch { /* fresh */ }
 
-    raw.tier = tier;
+    raw.tier = parsed;
     fs.writeFileSync(configPath, JSON.stringify(raw, null, 2), 'utf-8');
 
-    const newTier = tier as Tier;
-    return { tier: newTier, limits: getTierLimits(newTier), updated: true };
+    return { tier: parsed, capabilities: getCapabilities(parsed), updated: true };
+  });
+
+  // ── Cloud Sync ────────────────────────────────────────────────────
+
+  server.get('/api/cloud-sync', async () => {
+    const tier = readTier(server.localConfig.dataDir);
+    const caps = getCapabilities(tier);
+    const configPath = path.join(server.localConfig.dataDir, 'config.json');
+    let raw: Record<string, unknown> = {};
+    try { if (fs.existsSync(configPath)) raw = JSON.parse(fs.readFileSync(configPath, 'utf-8')); } catch { /* */ }
+    return {
+      available: caps.cloudSync,
+      enabled: raw.cloudSyncEnabled === true,
+      tier,
+      teamServerUrl: (raw.teamServer as Record<string, unknown>)?.url ?? null,
+      connected: !!((raw.teamServer as Record<string, unknown>)?.token),
+    };
+  });
+
+  server.post<{ Body: { enabled: boolean } }>('/api/cloud-sync/toggle', { preHandler: [requireTier('TEAMS')] }, async (request, reply) => {
+    const { enabled } = request.body ?? {};
+    if (typeof enabled !== 'boolean') return reply.code(400).send({ error: 'enabled must be a boolean' });
+    const configPath = path.join(server.localConfig.dataDir, 'config.json');
+    let raw: Record<string, unknown> = {};
+    try { if (fs.existsSync(configPath)) raw = JSON.parse(fs.readFileSync(configPath, 'utf-8')); } catch { /* */ }
+    raw.cloudSyncEnabled = enabled;
+    fs.writeFileSync(configPath, JSON.stringify(raw, null, 2), 'utf-8');
+    return { ok: true, enabled };
+  });
+
+  // ── Admin Overview ────────────────────────────────────────────────
+
+  server.get('/api/admin/overview', { preHandler: [requireTier('TEAMS')] }, async () => {
+    const workspaces = server.workspaceManager?.list() ?? [];
+    return {
+      usage: { totalInputTokens: 0, totalOutputTokens: 0 },
+      workspaces: workspaces.map((w: { id?: string; name: string; teamId?: string }) => ({
+        id: w.id ?? w.name,
+        name: w.name,
+        hasTeam: !!(w.teamId),
+      })),
+      connectors: [],
+      plugins: server.agentState?.pluginRuntimeManager?.getActive()?.map((p: { getManifest: () => { name: string; version: string }; getContributedTools: () => unknown[] }) => ({
+        name: p.getManifest().name,
+        version: p.getManifest().version,
+        tools: p.getContributedTools().length,
+      })) ?? [],
+      generatedAt: new Date().toISOString(),
+    };
+  });
+
+  // GET /api/admin/audit-export — download audit log as JSON or CSV
+  server.get<{
+    Querystring: { from?: string; to?: string; format?: 'json' | 'csv' };
+  }>('/api/admin/audit-export', { preHandler: [requireTier('TEAMS')] }, async (request, reply) => {
+    const { from, to, format = 'json' } = request.query;
+    const auditStore = (server as any).installAuditStore;
+    if (!auditStore?.getAll) {
+      return reply.code(503).send({ error: 'Audit store not available' });
+    }
+    const records = auditStore.getAll() as Array<Record<string, string>>;
+    const filtered = records.filter((r) => {
+      if (from && (r.timestamp ?? '') < from) return false;
+      if (to && (r.timestamp ?? '') > to) return false;
+      return true;
+    });
+    if (format === 'csv') {
+      const header = 'timestamp,capability_name,capability_type,source,risk_level,action,initiator\n';
+      const rows = filtered.map(r =>
+        [r.timestamp, r.capability_name, r.capability_type, r.source, r.risk_level, r.action, r.initiator]
+          .map(v => `"${v ?? ''}"`)
+          .join(',')
+      ).join('\n');
+      reply.header('Content-Type', 'text/csv');
+      reply.header('Content-Disposition', 'attachment; filename="audit-export.csv"');
+      return reply.send(header + rows);
+    }
+    return { records: filtered, total: filtered.length, exportedAt: new Date().toISOString() };
   });
 };
 

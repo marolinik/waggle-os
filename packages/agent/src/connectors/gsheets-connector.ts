@@ -12,10 +12,13 @@ const API_BASE = 'https://sheets.googleapis.com/v4';
 export class GoogleSheetsConnector extends BaseConnector {
   readonly id = 'gsheets';
   readonly name = 'Google Sheets';
-  readonly description = 'Read, write, and manage Google Sheets spreadsheets';
+  readonly description = "Read, write, and analyze Google Sheets data. Supports cell updates, batch operations, sheet management, and formula-based data extraction at scale.";
   readonly service = 'sheets.google.com';
   readonly authType = 'bearer' as const;
   readonly substrate = 'waggle' as const;
+  readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/googlesheets.svg';
+  readonly category = 'data' as const;
+  readonly setupGuide = "Enable Google Sheets API at console.cloud.google.com and create OAuth2 credentials.";
 
   readonly actions: ConnectorAction[] = [
     {

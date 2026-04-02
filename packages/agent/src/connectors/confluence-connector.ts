@@ -10,10 +10,13 @@ import type { ConnectorHealth } from '@waggle/shared';
 export class ConfluenceConnector extends BaseConnector {
   readonly id = 'confluence';
   readonly name = 'Confluence';
-  readonly description = 'Search, read, and manage Confluence pages and spaces';
+  readonly description = "Search and read Confluence pages and spaces. Retrieve documentation, meeting notes, and technical specs from your organization wiki.";
   readonly service = 'atlassian.net';
   readonly authType = 'basic' as const;
   readonly substrate = 'waggle' as const;
+  readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/confluence.svg';
+  readonly category = 'productivity' as const;
+  readonly setupGuide = "Generate an API token at id.atlassian.com and use your Atlassian email and cloud URL.";
 
   readonly actions: ConnectorAction[] = [
     {

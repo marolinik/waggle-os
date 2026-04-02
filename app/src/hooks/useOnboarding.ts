@@ -14,6 +14,8 @@ export interface OnboardingState {
   apiKeySet?: boolean;
   templateId?: string;
   personaId?: string;
+  selectedTier?: 'SOLO' | 'BASIC' | 'TEAMS';
+  stripeSessionPending?: boolean;
 }
 
 const DEFAULT_STATE: OnboardingState = {

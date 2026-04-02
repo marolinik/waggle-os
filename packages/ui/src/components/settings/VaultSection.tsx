@@ -20,6 +20,9 @@ interface ConnectorInfo {
   authType: string;
   capabilities: string[];
   substrate: string;
+  logoUrl?: string;
+  category?: string;
+  setupGuide?: string;
 }
 
 interface VaultSecret {
@@ -896,7 +899,9 @@ export function VaultSection({ baseUrl = 'http://127.0.0.1:3333' }: VaultSection
         ) : (
           <div className="space-y-3">
             {connectors.map((c) => {
-              const guide = CONNECTOR_GUIDES[c.id];
+              const guide = CONNECTOR_GUIDES[c.id] ?? (c.setupGuide ? {
+                id: c.id, unlocks: '', steps: [c.setupGuide], setupUrl: '', setupUrlLabel: '', tokenPlaceholder: 'Paste your API key or token',
+              } : null);
               return (
               <div key={c.id} className="rounded-lg border border-border p-4">
                 <div className="flex items-center justify-between">
@@ -905,6 +910,9 @@ export function VaultSection({ baseUrl = 'http://127.0.0.1:3333' }: VaultSection
                       className={`inline-block h-2 w-2 shrink-0 rounded-full ${statusDotClass(c.status)}`}
                       aria-hidden="true"
                     />
+                    {c.logoUrl && (
+                      <img src={c.logoUrl} alt="" width={16} height={16} className="shrink-0 opacity-80" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                    )}
                     <span className="text-sm font-medium text-foreground">{c.name}</span>
                     <span
                       className={`text-xs font-semibold uppercase ${statusTextClass(c.status)}`}

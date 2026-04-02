@@ -76,12 +76,12 @@ describe('Personas Routes', () => {
       await server.close();
     });
 
-    it('contains the expected 8 personas', async () => {
+    it('contains all 17 personas', async () => {
       const server = createTestServer();
       const res = await server.inject({ method: 'GET', url: '/api/personas' });
       const { personas } = res.json();
 
-      expect(personas.length).toBe(13);
+      expect(personas.length).toBe(17);
       const ids = personas.map((p: { id: string }) => p.id);
       expect(ids).toContain('researcher');
       expect(ids).toContain('writer');
@@ -91,6 +91,10 @@ describe('Personas Routes', () => {
       expect(ids).toContain('executive-assistant');
       expect(ids).toContain('sales-rep');
       expect(ids).toContain('marketer');
+      expect(ids).toContain('general-purpose');
+      expect(ids).toContain('planner');
+      expect(ids).toContain('verifier');
+      expect(ids).toContain('coordinator');
       await server.close();
     });
   });

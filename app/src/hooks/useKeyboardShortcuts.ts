@@ -11,7 +11,7 @@ import { useEffect } from 'react';
 import { matchesNamedShortcut } from '@waggle/ui';
 import type { Workspace } from '@waggle/ui';
 
-type AppView = 'chat' | 'memory' | 'events' | 'capabilities' | 'cockpit' | 'mission-control' | 'settings';
+import type { AppView } from '@/types';
 
 export interface UseKeyboardShortcutsOptions {
   /** Currently previewed file (for Escape handling) */

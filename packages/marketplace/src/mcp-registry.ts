@@ -741,7 +741,21 @@ export function seedMcpServers(db: MarketplaceDB): number {
   for (const server of MCP_SERVERS) {
     // Check if already present by name
     const existing = db.getPackageByName(server.name);
-    if (existing) continue;
+    if (existing) {
+      // Patch existing records that are missing npm_package in install_manifest
+      const manifest = typeof existing.install_manifest === 'string'
+        ? JSON.parse(existing.install_manifest)
+        : existing.install_manifest;
+      const seedManifest = server.install_manifest;
+      if (seedManifest?.npm_package && (!manifest || !manifest.npm_package)) {
+        const patched = { ...manifest, ...seedManifest };
+        const rawDb = (db as any).db;
+        rawDb
+          .prepare('UPDATE packages SET install_manifest = ? WHERE id = ?')
+          .run(JSON.stringify(patched), existing.id);
+      }
+      continue;
+    }
 
     db.upsertPackage({
       source_id: sourceId,

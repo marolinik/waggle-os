@@ -140,11 +140,18 @@ describe('Persona Tool Filtering', () => {
       }
     });
 
-    it('filtered set is smaller than full set for all personas', () => {
-      for (const persona of PERSONAS) {
+    it('filtered set is smaller than full set for specialized personas', () => {
+      // general-purpose intentionally has full tool access — skip it
+      const specialized = PERSONAS.filter(p => p.id !== 'general-purpose');
+      for (const persona of specialized) {
         const result = filterToolsForPersona(ALL_TOOL_NAMES, persona.id);
         expect(result.length, `${persona.id} should have fewer tools than full set`).toBeLessThan(ALL_TOOL_NAMES.length);
       }
+    });
+
+    it('general-purpose has access to all tools in the test set', () => {
+      const result = filterToolsForPersona(ALL_TOOL_NAMES, 'general-purpose');
+      expect(result.length).toBe(ALL_TOOL_NAMES.length);
     });
   });
 

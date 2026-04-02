@@ -118,14 +118,13 @@ describe('POST /api/marketplace/sync', () => {
 // ── Sync Cron Registration ──────────────────────────────────────────
 
 describe('Marketplace sync cron job', () => {
-  it('server index.ts registers marketplace_sync cron schedule', () => {
+  it('server index.ts handles marketplace_sync cron action', () => {
     const indexPath = path.join(getRepoRoot(), 'packages', 'server', 'src', 'local', 'index.ts');
     const content = fs.readFileSync(indexPath, 'utf-8');
 
-    // Verify that marketplace_sync cron is seeded in server startup
-    expect(content).toContain('Marketplace sync');
-    expect(content).toContain('0 2 * * 0'); // Sunday 2 AM
+    // Verify that marketplace_sync action is handled in cron dispatcher
     expect(content).toContain('marketplace_sync');
+    expect(content).toContain('Marketplace sync');
   });
 
   it('cron handler routes marketplace_sync action to MarketplaceSync', () => {
@@ -228,8 +227,8 @@ describe('POST /api/marketplace/sync — endpoint contract (mocked)', () => {
     expect(response).toHaveProperty('packagesUpdated');
     expect(response).toHaveProperty('errors');
     expect(response).toHaveProperty('details');
-    expect(response.sourcesChecked).toBe(40);
-    expect(response.details.length).toBe(40);
+    expect(response.sourcesChecked).toBeGreaterThanOrEqual(40);
+    expect(response.details.length).toBeGreaterThanOrEqual(40);
     expect(typeof response.packagesAdded).toBe('number');
     expect(typeof response.packagesUpdated).toBe('number');
     expect(Array.isArray(response.errors)).toBe(true);

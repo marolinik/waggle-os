@@ -9,6 +9,7 @@ export interface PluginManifest {
   skills?: string[];
   mcpServers?: Array<{ name: string; command: string; args?: string[] }>;
   settingsSchema?: Record<string, unknown>;
+  tools?: Array<{ name: string; description: string; parameters: Record<string, unknown> }>;
 }
 
 export interface ManifestValidation {
@@ -73,6 +74,28 @@ export function validatePluginManifest(manifest: Record<string, unknown>): Manif
   if (manifest.settingsSchema !== undefined) {
     if (typeof manifest.settingsSchema !== 'object' || manifest.settingsSchema === null || Array.isArray(manifest.settingsSchema)) {
       errors.push('settingsSchema must be an object');
+    }
+  }
+
+  if (manifest.tools !== undefined) {
+    if (!Array.isArray(manifest.tools)) {
+      errors.push('tools must be an array');
+    } else {
+      for (let i = 0; i < manifest.tools.length; i++) {
+        const tool = manifest.tools[i] as Record<string, unknown>;
+        if (typeof tool !== 'object' || tool === null) {
+          errors.push(`tools[${i}] must be an object`);
+          continue;
+        }
+        if (typeof tool.name !== 'string' || !(tool.name as string).trim()) {
+          errors.push(`tools[${i}].name is required`);
+        } else if (!/^[a-zA-Z0-9_-]+$/.test(tool.name as string)) {
+          errors.push(`tools[${i}].name must be alphanumeric/hyphens/underscores only`);
+        }
+        if (typeof tool.description !== 'string' || !(tool.description as string).trim()) {
+          errors.push(`tools[${i}].description is required`);
+        }
+      }
     }
   }
 

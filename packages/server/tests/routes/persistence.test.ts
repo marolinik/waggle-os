@@ -15,6 +15,10 @@ describe('Capability Persistence & Cross-Surface Agreement', () => {
 
   function makeTmpDir(): string {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-persist-test-'));
+    // Create skills dir with marker to prevent auto-install of starter skills
+    const skillsDir = path.join(dir, 'skills');
+    fs.mkdirSync(skillsDir, { recursive: true });
+    fs.writeFileSync(path.join(skillsDir, '.starter-installed'), 'test');
     tmpDirs.push(dir);
     return dir;
   }

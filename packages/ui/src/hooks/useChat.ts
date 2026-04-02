@@ -211,7 +211,7 @@ export function useChat({ service, workspace, session, workspacePath, onFileCrea
 
     // Create placeholder assistant message
     const assistantId = nextId();
-    let accumulated = { content: '', tools: [] as ToolUseEvent[], steps: [] as string[], cost: undefined as number | undefined, tokens: undefined as { input: number; output: number } | undefined };
+    let accumulated: { content: string; tools: ToolUseEvent[]; steps: string[]; cost?: number; tokens?: { input: number; output: number } } = { content: '', tools: [], steps: [] };
 
     try {
       const stream = service.sendMessage(workspace, text, session, undefined, workspacePath);

@@ -37,3 +37,5 @@ export {
   SETTINGS_TABS,
 } from './utils.js';
 export type { ProviderConfig, SettingsTab } from './utils.js';
+export { HooksSection } from './HooksSection.js';
+export { AdminSection } from './AdminSection.js';

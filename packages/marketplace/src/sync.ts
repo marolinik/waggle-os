@@ -181,7 +181,7 @@ const awesomeListAdapter: SyncAdapter = {
         if (!slug) continue;
 
         const manifest: InstallManifest = installType === 'mcp'
-          ? { mcp_config: { name: slug, command: 'npx', args: ['-y', slug] } }
+          ? { npm_package: slug, mcp_config: { name: slug, command: 'npx', args: ['-y', slug] } }
           : { skill_url: link.url };
 
         try {
@@ -426,8 +426,9 @@ const webRegistryAdapter: SyncAdapter = {
           item.url || item.repository_url || item.homepage,
         );
 
+        const npmPkg = item.npm_package || slug;
         const manifest: InstallManifest = installType === 'mcp'
-          ? { mcp_config: { name: slug, command: 'npx', args: ['-y', item.npm_package || slug] } }
+          ? { npm_package: npmPkg, mcp_config: { name: slug, command: 'npx', args: ['-y', npmPkg] } }
           : { skill_url: item.raw_url || item.content_url || item.download_url || item.url };
 
         try {
@@ -640,7 +641,7 @@ const githubAdapter: SyncAdapter = {
         const manifest: InstallManifest = installType === 'skill'
           ? { skill_url: `https://raw.githubusercontent.com/${owner}/${repo.name}/main/SKILL.md` }
           : installType === 'mcp'
-            ? { mcp_config: { name: repo.name, command: 'npx', args: ['-y', repo.full_name] } }
+            ? { npm_package: repo.full_name, mcp_config: { name: repo.name, command: 'npx', args: ['-y', repo.full_name] } }
             : { git_url: repo.clone_url };
 
         db.upsertPackage({

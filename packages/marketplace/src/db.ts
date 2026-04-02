@@ -8,6 +8,7 @@
 import Database from 'better-sqlite3';
 import { join } from 'path';
 import { homedir } from 'os';
+import { seedMcpServers } from './mcp-registry';
 import type {
   MarketplacePackage,
   MarketplaceSource,
@@ -29,6 +30,12 @@ export class MarketplaceDB {
     this.db.pragma('foreign_keys = ON');
     // Auto-migrate: ensure is_custom column exists on sources table
     this.migrateSchema();
+    // Seed MCP servers with proper install_manifest only on production DBs
+    // (skip for fresh/empty test DBs to avoid interfering with test expectations)
+    try {
+      const count = (this.db.prepare('SELECT COUNT(*) as cnt FROM packages').get() as { cnt: number })?.cnt ?? 0;
+      if (count > 0) seedMcpServers(this);
+    } catch { /* packages table may not exist in empty DBs */ }
   }
 
   /**

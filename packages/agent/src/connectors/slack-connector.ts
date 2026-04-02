@@ -12,10 +12,13 @@ const API_BASE = 'https://slack.com/api';
 export class SlackConnector extends BaseConnector {
   readonly id = 'slack';
   readonly name = 'Slack';
-  readonly description = 'Send messages, search conversations, and manage channels';
+  readonly description = "Send messages, search conversations, read channels, and manage Slack workspaces. Supports all standard Slack messaging operations including DMs and channel posts.";
   readonly service = 'slack.com';
   readonly authType = 'bearer' as const;
   readonly substrate = 'waggle' as const;
+  readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/slack.svg';
+  readonly category = 'communication' as const;
+  readonly setupGuide = "Create a Slack App at api.slack.com, add Bot Token Scopes, install to workspace, copy Bot User OAuth Token.";
 
   readonly actions: ConnectorAction[] = [
     {

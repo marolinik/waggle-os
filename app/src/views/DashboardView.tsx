@@ -21,7 +21,7 @@ export interface DashboardMicroStatus {
 export interface DashboardViewProps {
   workspaces: Array<{ id: string; name: string; group: string }>;
   activeWorkspaceId: string | null;
-  microStatus?: Map<string, DashboardMicroStatus> | Record<string, DashboardMicroStatus>;
+  microStatus?: Map<string, DashboardMicroStatus> | Record<string, DashboardMicroStatus> | Record<string, { memoryCount?: number; lastActive?: string; isAgentActive?: boolean }>;
   onSelectWorkspace: (id: string) => void;
   onCreateWorkspace: () => void;
 }

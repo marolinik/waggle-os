@@ -13,10 +13,13 @@ const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 export class GoogleCalendarConnector extends BaseConnector {
   readonly id = 'gcal';
   readonly name = 'Google Calendar';
-  readonly description = 'List events, create events, find free time on Google Calendar';
+  readonly description = "Read and create Google Calendar events, manage schedules, check availability, and handle meeting invites across multiple calendars.";
   readonly service = 'calendar.google.com';
   readonly authType = 'oauth2' as const;
   readonly substrate = 'waggle' as const;
+  readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/googlecalendar.svg';
+  readonly category = 'productivity' as const;
+  readonly setupGuide = "Enable Google Calendar API at console.cloud.google.com and create OAuth2 credentials.";
 
   readonly actions: ConnectorAction[] = [
     {
