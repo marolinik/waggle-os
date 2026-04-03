@@ -28,9 +28,9 @@ export default defineConfig({
         /^@tauri-apps\/.*/,
       ],
       output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom'],
-          markdown: ['marked', 'dompurify'],
+        manualChunks(id) {
+          if (id.includes('node_modules/react-dom') || id.includes('node_modules/react/')) return 'vendor';
+          if (id.includes('node_modules/marked') || id.includes('node_modules/dompurify')) return 'markdown';
         },
       },
     },
