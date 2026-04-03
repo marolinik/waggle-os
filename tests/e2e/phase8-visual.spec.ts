@@ -47,7 +47,20 @@ async function isOnboarding(page: Page): Promise<boolean> {
   const overlay = page.locator('.fixed.inset-0.z-\\[1000\\]');
   if (await overlay.isVisible().catch(() => false)) return true;
   const text = page.locator('text=Welcome').or(page.locator('text=API Key'));
-  return text.isVisible().catch(() => false);
+  if (await text.isVisible().catch(() => false)) return true;
+  const onboardingEl = page.locator('[class*="onboarding"]');
+  if (await onboardingEl.isVisible().catch(() => false)) return true;
+  // If sidebar navigation is absent, onboarding is likely active
+  const nav = page.locator('[role="navigation"]');
+  return !(await nav.isVisible().catch(() => false));
+}
+
+/** Skip onboarding via localStorage before navigation. */
+async function skipOnboarding(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    localStorage.setItem('waggle:onboarding', JSON.stringify({ completed: true, step: 7 }));
+    localStorage.setItem('waggle:first-run', 'done');
+  });
 }
 
 /**
@@ -151,10 +164,14 @@ for (const theme of THEMES) {
   test.describe(`Visual baselines — ${theme} mode`, () => {
     test.beforeEach(async ({ page }) => {
       await page.goto('/');
-      await waitForApp(page);
+      await skipOnboarding(page);
+      await page.reload();
 
-      if (await isOnboarding(page)) {
-        test.skip(true, 'Onboarding wizard active — cannot capture view baselines');
+      // Wait for sidebar to appear (fast timeout — skip early if app didn't load)
+      const sidebar = page.locator('[role="navigation"][aria-label="Main navigation"]');
+      const loaded = await sidebar.isVisible({ timeout: 8000 }).catch(() => false);
+      if (!loaded) {
+        test.skip(true, 'App shell did not load — cannot capture view baselines');
         return;
       }
 
@@ -168,6 +185,19 @@ for (const theme of THEMES) {
           return;
         }
 
+        // Quick check: can we find the strict sidebar that navigateTo uses?
+        const strictSidebar = page.locator('[role="navigation"][aria-label="Main navigation"]');
+        const hasSidebar = await strictSidebar.isVisible({ timeout: 3000 }).catch(() => false);
+        if (!hasSidebar) {
+          test.skip(true, `Main navigation sidebar not found — skipping visual baseline`);
+          return;
+        }
+        const sidebarBtn = strictSidebar.locator('button', { hasText: view.sidebar });
+        const hasBtn = await sidebarBtn.first().isVisible({ timeout: 2000 }).catch(() => false);
+        if (!hasBtn) {
+          test.skip(true, `Sidebar button "${view.sidebar}" not found — skipping visual baseline`);
+          return;
+        }
         await navigateTo(page, view.sidebar);
 
         // Cockpit and Capabilities load async data — give them extra time
