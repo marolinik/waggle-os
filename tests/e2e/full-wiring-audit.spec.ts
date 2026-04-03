@@ -323,19 +323,11 @@ test.describe('Workspace Wiring', () => {
   });
 
   test('workspaces load from API', async ({ page }) => {
-    const apiResponse = await page.waitForResponse(
-      res => res.url().includes('/api/workspaces') && res.request().method() === 'GET',
-      { timeout: 10000 }
-    ).catch(() => null);
-
-    if (apiResponse) {
-      expect(apiResponse.ok()).toBeTruthy();
-      expect(Array.isArray(await apiResponse.json())).toBeTruthy();
-    } else {
-      // Verify via direct API call
-      const res = await page.request.get(`${API}/api/workspaces`);
-      expect(res.ok()).toBeTruthy();
-    }
+    const res = await page.request.get(`${API}/api/workspaces`);
+    expect(res.ok()).toBeTruthy();
+    const data = await res.json();
+    expect(Array.isArray(data)).toBeTruthy();
+    expect(data.length).toBeGreaterThanOrEqual(1);
   });
 
   test('workspace list is not empty', async ({ page }) => {

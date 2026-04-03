@@ -363,9 +363,10 @@ test.describe('4. Marketplace', () => {
   });
 
   test('4.9 POST /api/marketplace/sync returns sync results', async ({ request }) => {
+    test.setTimeout(75_000); // sync makes real network calls — can take 30-60s under load
     const res = await request.post(`${API}/api/marketplace/sync`, {
       data: {},
-      timeout: 30000,
+      timeout: 65_000,
     });
     expect(res.ok()).toBe(true);
     const data = await res.json();
@@ -912,10 +913,16 @@ test.describe('14. UI Journey Tests', () => {
     await page.reload();
     await waitForApp(page);
     await navigateTo(page, 'Settings');
-    const settingsContent = page.locator('.settings-panel__tabs, text=General, text=Models');
-    const visible = await settingsContent.first().isVisible({ timeout: 5000 }).catch(() => false);
-    const bodyText = await page.textContent('body');
-    expect(visible || (bodyText?.includes('General') || bodyText?.includes('Settings'))).toBeTruthy();
+    // Wait for settings panel to fully render — under load, 500ms is insufficient
+    await page.waitForFunction(() =>
+      (document.body.textContent?.length ?? 0) > 200,
+      { timeout: 15000 }
+    ).catch(() => {});
+    const bodyText = await page.textContent('body') ?? '';
+    expect(
+      bodyText.includes('General') || bodyText.includes('Models') ||
+      bodyText.includes('Keys') || bodyText.includes('Settings')
+    ).toBeTruthy();
   });
 
   test('14.5 Settings tabs are present (General, Models, Vault, Team)', async ({ page }) => {
@@ -924,7 +931,11 @@ test.describe('14. UI Journey Tests', () => {
     await page.reload();
     await waitForApp(page);
     await navigateTo(page, 'Settings');
-    await page.waitForTimeout(500);
+    // Wait for tab labels to appear in DOM — not just a fixed timer
+    await page.waitForFunction(() => {
+      const t = document.body.textContent ?? '';
+      return t.includes('General') || t.includes('Models') || t.includes('Keys');
+    }, { timeout: 10000 }).catch(() => {});
     const bodyText = await page.textContent('body') ?? '';
     const hasTabs = bodyText.includes('General') || bodyText.includes('Models') || bodyText.includes('Keys');
     expect(hasTabs).toBe(true);
@@ -960,11 +971,14 @@ test.describe('14. UI Journey Tests', () => {
     await page.reload();
     await waitForApp(page);
     await navigateTo(page, 'Chat');
-    await page.waitForTimeout(500);
-    const textarea = page.locator('textarea');
-    const hasInput = await textarea.isVisible().catch(() => false);
+    // Wait for chat content to render — textarea OR chat text
+    await page.waitForFunction(() => {
+      const t = document.body.textContent ?? '';
+      return document.querySelector('textarea') !== null ||
+        t.includes('Ask') || t.includes('message') || t.includes('workspace');
+    }, { timeout: 8000 }).catch(() => {});
+    const hasInput = await page.locator('textarea').isVisible().catch(() => false);
     const body = await page.textContent('body') ?? '';
-    // Either textarea or chat-like content
     expect(hasInput || body.includes('Ask') || body.includes('message') || body.includes('workspace')).toBe(true);
   });
 

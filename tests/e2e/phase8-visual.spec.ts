@@ -46,13 +46,8 @@ async function waitForApp(page: Page): Promise<void> {
 async function isOnboarding(page: Page): Promise<boolean> {
   const overlay = page.locator('.fixed.inset-0.z-\\[1000\\]');
   if (await overlay.isVisible().catch(() => false)) return true;
-  const text = page.locator('text=Welcome').or(page.locator('text=API Key'));
-  if (await text.isVisible().catch(() => false)) return true;
-  const onboardingEl = page.locator('[class*="onboarding"]');
-  if (await onboardingEl.isVisible().catch(() => false)) return true;
-  // If sidebar navigation is absent, onboarding is likely active
-  const nav = page.locator('[role="navigation"]');
-  return !(await nav.isVisible().catch(() => false));
+  const text = page.locator('text=Welcome').or(page.locator('text=Get Started'));
+  return text.isVisible().catch(() => false);
 }
 
 /** Skip onboarding via localStorage before navigation. */
@@ -77,8 +72,8 @@ async function navigateTo(page: Page, viewName: string): Promise<void> {
     await page.waitForTimeout(300);
   }
 
-  const btn = sidebar.locator('button', { hasText: viewName });
-  await btn.click();
+  const btn = sidebar.locator('button', { hasText: viewName }).first();
+  await btn.click({ timeout: 5000 });
   await page.waitForTimeout(600); // allow view transition + data load
 }
 
@@ -166,44 +161,42 @@ for (const theme of THEMES) {
       await page.goto('/');
       await skipOnboarding(page);
       await page.reload();
+      await skipOnboarding(page);
+      await page.waitForTimeout(400);
+      await skipOnboarding(page); // third call — belt and suspenders
 
-      // Wait for sidebar to appear (fast timeout — skip early if app didn't load)
       const sidebar = page.locator('[role="navigation"][aria-label="Main navigation"]');
-      const loaded = await sidebar.isVisible({ timeout: 8000 }).catch(() => false);
+      const loaded = await sidebar.isVisible({ timeout: 25000 }).catch(() => false);
       if (!loaded) {
-        test.skip(true, 'App shell did not load — cannot capture view baselines');
-        return;
+        await page.reload();
+        await skipOnboarding(page);
+        const retryLoaded = await sidebar.isVisible({ timeout: 20000 }).catch(() => false);
+        if (!retryLoaded) {
+          test.skip(true, 'App shell did not load after retry');
+          return;
+        }
       }
-
       await setTheme(page, theme);
     });
 
     for (const view of VIEWS) {
       test(`${view.name} view — ${theme}`, async ({ page }) => {
-        if (await isOnboarding(page)) {
-          test.skip(true, 'Onboarding active — cannot capture view baselines');
+        await skipOnboarding(page);
+        const hasOverlay = await page.locator('.fixed.inset-0.z-\\[1000\\]').isVisible().catch(() => false);
+        if (hasOverlay) {
+          test.skip(true, 'Onboarding overlay still visible');
           return;
         }
 
-        // Quick check: can we find the strict sidebar that navigateTo uses?
-        const strictSidebar = page.locator('[role="navigation"][aria-label="Main navigation"]');
-        const hasSidebar = await strictSidebar.isVisible({ timeout: 3000 }).catch(() => false);
-        if (!hasSidebar) {
-          test.skip(true, `Main navigation sidebar not found — skipping visual baseline`);
-          return;
-        }
-        const sidebarBtn = strictSidebar.locator('button', { hasText: view.sidebar });
-        const hasBtn = await sidebarBtn.first().isVisible({ timeout: 2000 }).catch(() => false);
-        if (!hasBtn) {
-          test.skip(true, `Sidebar button "${view.sidebar}" not found — skipping visual baseline`);
-          return;
-        }
         await navigateTo(page, view.sidebar);
 
-        // Cockpit and Capabilities load async data — give them extra time
-        if (view.name === 'Cockpit' || view.name === 'Capabilities') {
-          await page.waitForTimeout(1500);
-        }
+        // Wait for view content — not a fixed timer
+        await page.waitForFunction(() =>
+          (document.body.textContent?.length ?? 0) > 100,
+          { timeout: 8000 }
+        ).catch(() => {});
+        await page.waitForLoadState('networkidle').catch(() => {});
+        await page.waitForTimeout(400); // short final settle for animations
 
         const screenshot = await stableScreenshot(page);
         expect(screenshot).toMatchSnapshot(`${view.name}-${theme}.png`);
@@ -220,14 +213,18 @@ for (const theme of THEMES) {
 test.describe('View structural smoke tests', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
+    await skipOnboarding(page);
+    await page.reload();
+    await skipOnboarding(page);
+    await page.waitForTimeout(300);
+    await skipOnboarding(page);
     await waitForApp(page);
   });
 
   test('Chat view: textarea is present and accepts input', async ({ page }) => {
-    if (await isOnboarding(page)) {
-      test.skip(true, 'Onboarding active');
-      return;
-    }
+    await skipOnboarding(page);
+    const hasOverlay = await page.locator('.fixed.inset-0.z-\\[1000\\]').isVisible().catch(() => false);
+    if (hasOverlay) { test.skip(true, 'Onboarding overlay visible'); return; }
 
     await navigateTo(page, 'Chat');
     const textarea = page.locator('textarea').first();
@@ -237,10 +234,9 @@ test.describe('View structural smoke tests', () => {
   });
 
   test('Memory view: search input is present', async ({ page }) => {
-    if (await isOnboarding(page)) {
-      test.skip(true, 'Onboarding active');
-      return;
-    }
+    await skipOnboarding(page);
+    const hasOverlay = await page.locator('.fixed.inset-0.z-\\[1000\\]').isVisible().catch(() => false);
+    if (hasOverlay) { test.skip(true, 'Onboarding overlay visible'); return; }
 
     await navigateTo(page, 'Memory');
     // Memory view has a search input or empty state
@@ -251,10 +247,9 @@ test.describe('View structural smoke tests', () => {
   });
 
   test('Settings view: renders at least 5 tabs', async ({ page }) => {
-    if (await isOnboarding(page)) {
-      test.skip(true, 'Onboarding active');
-      return;
-    }
+    await skipOnboarding(page);
+    const hasOverlay = await page.locator('.fixed.inset-0.z-\\[1000\\]').isVisible().catch(() => false);
+    if (hasOverlay) { test.skip(true, 'Onboarding overlay visible'); return; }
 
     await navigateTo(page, 'Settings');
     await page.waitForTimeout(500);
@@ -271,10 +266,9 @@ test.describe('View structural smoke tests', () => {
   });
 
   test('Cockpit view: renders cards or loading skeletons', async ({ page }) => {
-    if (await isOnboarding(page)) {
-      test.skip(true, 'Onboarding active');
-      return;
-    }
+    await skipOnboarding(page);
+    const hasOverlay = await page.locator('.fixed.inset-0.z-\\[1000\\]').isVisible().catch(() => false);
+    if (hasOverlay) { test.skip(true, 'Onboarding overlay visible'); return; }
 
     await navigateTo(page, 'Cockpit');
     await page.waitForTimeout(1500);
@@ -285,10 +279,9 @@ test.describe('View structural smoke tests', () => {
   });
 
   test('Capabilities view: renders marketplace or loading state', async ({ page }) => {
-    if (await isOnboarding(page)) {
-      test.skip(true, 'Onboarding active');
-      return;
-    }
+    await skipOnboarding(page);
+    const hasOverlay = await page.locator('.fixed.inset-0.z-\\[1000\\]').isVisible().catch(() => false);
+    if (hasOverlay) { test.skip(true, 'Onboarding overlay visible'); return; }
 
     await navigateTo(page, 'Capabilities');
     await page.waitForTimeout(1000);
@@ -302,10 +295,9 @@ test.describe('View structural smoke tests', () => {
   });
 
   test('Events view: renders timeline or empty state', async ({ page }) => {
-    if (await isOnboarding(page)) {
-      test.skip(true, 'Onboarding active');
-      return;
-    }
+    await skipOnboarding(page);
+    const hasOverlay = await page.locator('.fixed.inset-0.z-\\[1000\\]').isVisible().catch(() => false);
+    if (hasOverlay) { test.skip(true, 'Onboarding overlay visible'); return; }
 
     await navigateTo(page, 'Events');
     await page.waitForTimeout(1000);
@@ -316,10 +308,9 @@ test.describe('View structural smoke tests', () => {
   });
 
   test('Mission Control view: renders without crashing', async ({ page }) => {
-    if (await isOnboarding(page)) {
-      test.skip(true, 'Onboarding active');
-      return;
-    }
+    await skipOnboarding(page);
+    const hasOverlay = await page.locator('.fixed.inset-0.z-\\[1000\\]').isVisible().catch(() => false);
+    if (hasOverlay) { test.skip(true, 'Onboarding overlay visible'); return; }
 
     await navigateTo(page, 'Mission Control');
     await page.waitForTimeout(500);
@@ -331,10 +322,9 @@ test.describe('View structural smoke tests', () => {
   });
 
   test('theme toggle changes html class or data-theme attribute', async ({ page }) => {
-    if (await isOnboarding(page)) {
-      test.skip(true, 'Onboarding active');
-      return;
-    }
+    await skipOnboarding(page);
+    const hasOverlay = await page.locator('.fixed.inset-0.z-\\[1000\\]').isVisible().catch(() => false);
+    if (hasOverlay) { test.skip(true, 'Onboarding overlay visible'); return; }
 
     const getThemeSignal = async () => {
       const cls = await page.locator('html').getAttribute('class') ?? '';
