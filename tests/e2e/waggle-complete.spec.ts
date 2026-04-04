@@ -946,7 +946,7 @@ test.describe('14. UI Journey Tests', () => {
     await skipOnboarding(page);
     await page.reload();
     await waitForApp(page);
-    await navigateTo(page, 'Capabilities');
+    await navigateTo(page, 'Skills & Apps');
     await page.waitForTimeout(600);
     const bodyText = await page.textContent('body') ?? '';
     const hasCapabilities = bodyText.includes('Capabilities') || bodyText.includes('Browse') ||

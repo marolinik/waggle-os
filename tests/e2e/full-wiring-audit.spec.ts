@@ -265,7 +265,7 @@ test.describe('Sidebar Navigation', () => {
   });
 
   test('clicking Capabilities navigates to marketplace', async ({ page }) => {
-    const navigated = await navigateSidebar(page, 'Capabilities');
+    const navigated = await navigateSidebar(page, 'Skills & Apps');
     if (navigated) {
       await page.waitForTimeout(500);
       const body = await page.textContent('body') ?? '';
@@ -459,7 +459,7 @@ test.describe('Capabilities Wiring', () => {
 
   test('capabilities view opens without JS crash', async ({ page }) => {
     const errors = collectErrors(page);
-    await navigateSidebar(page, 'Capabilities');
+    await navigateSidebar(page, 'Skills & Apps');
     await page.waitForTimeout(800);
     const fatal = errors.filter(e =>
       e.includes('is not a function') || e.includes('Cannot read properties of')
@@ -468,7 +468,7 @@ test.describe('Capabilities Wiring', () => {
   });
 
   test('marketplace search API is accessible from capabilities view', async ({ page }) => {
-    await navigateSidebar(page, 'Capabilities');
+    await navigateSidebar(page, 'Skills & Apps');
     const res = await page.request.get(`${API}/api/marketplace/search?query=&limit=5`);
     expect(res.ok()).toBeTruthy();
     const data = await res.json();
@@ -544,7 +544,7 @@ test.describe('Full Console Error Audit', () => {
     await page.reload();
     await waitForApp(page);
 
-    const views = ['Chat', 'Memory', 'Events', 'Capabilities', 'Cockpit', 'Mission Control', 'Settings'];
+    const views = ['Chat', 'Memory', 'Events', 'Skills & Apps', 'Cockpit', 'Mission Control', 'Settings'];
     for (const view of views) {
       const nav = page.locator('[role="navigation"]');
       const btn = nav.locator('button', { hasText: view });
@@ -579,7 +579,7 @@ test.describe('Full Console Error Audit', () => {
     await waitForApp(page);
 
     // Navigate through key views to trigger their API calls
-    for (const view of ['Chat', 'Settings', 'Capabilities']) {
+    for (const view of ['Chat', 'Settings', 'Skills & Apps']) {
       const btn = page.locator('[role="navigation"] button', { hasText: view });
       if (await btn.isVisible().catch(() => false)) {
         await btn.click();
