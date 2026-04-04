@@ -44,18 +44,37 @@ async function waitForApp(page: Page): Promise<void> {
 
 /** Returns true if the onboarding wizard is blocking the main UI. */
 async function isOnboarding(page: Page): Promise<boolean> {
-  const overlay = page.locator('.fixed.inset-0.z-\\[1000\\]');
+  // OnboardingWizard renders with z-[9999] (not z-[1000])
+  const overlay = page.locator('.fixed.inset-0.z-\\[9999\\]');
   if (await overlay.isVisible().catch(() => false)) return true;
-  const text = page.locator('text=Welcome').or(page.locator('text=Get Started'));
+  const text = page.locator('text=Welcome to Waggle').or(page.locator('text=Why Waggle'));
   return text.isVisible().catch(() => false);
 }
 
-/** Skip onboarding via localStorage before navigation. */
+/** Skip onboarding — hits the server API (source of truth) AND localStorage.
+ *  The server persists onboardingCompleted in config.json which the app reads
+ *  on every load — localStorage alone is not sufficient.
+ */
 async function skipOnboarding(page: Page): Promise<void> {
-  await page.evaluate(() => {
+  // 1. Server-side: PATCH /api/settings — this is what the app reads on load
+  await page.request.patch('http://127.0.0.1:3333/api/settings', {
+    data: { onboardingCompleted: true },
+    headers: { 'Content-Type': 'application/json' },
+  }).catch(() => {}); // non-blocking — proceed even if server unreachable
+
+  // 2. addInitScript: fires before React mounts on next navigation
+  await page.addInitScript(() => {
     localStorage.setItem('waggle:onboarding', JSON.stringify({ completed: true, step: 7 }));
     localStorage.setItem('waggle:first-run', 'done');
   });
+
+  // 3. Immediate evaluate: sets localStorage if page already loaded
+  await page.evaluate(() => {
+    try {
+      localStorage.setItem('waggle:onboarding', JSON.stringify({ completed: true, step: 7 }));
+      localStorage.setItem('waggle:first-run', 'done');
+    } catch { /* ignore */ }
+  }).catch(() => {});
 }
 
 /**
@@ -63,18 +82,34 @@ async function skipOnboarding(page: Page): Promise<void> {
  * Retries if the sidebar is collapsed.
  */
 async function navigateTo(page: Page, viewName: string): Promise<void> {
-  const sidebar = page.locator('[role="navigation"][aria-label="Main navigation"]');
+  // If onboarding overlay is visible, press Escape or click skip to dismiss it
+  const overlay = page.locator('.fixed.inset-0.z-\[9999\]');
+  if (await overlay.isVisible({ timeout: 500 }).catch(() => false)) {
+    // Try to find and click a skip/dismiss button
+    const skipBtn = page.locator('button').filter({ hasText: /skip|dismiss|close|later/i }).first();
+    if (await skipBtn.isVisible({ timeout: 500 }).catch(() => false)) {
+      await skipBtn.click().catch(() => {});
+      await page.waitForTimeout(500);
+    } else {
+      // Press Escape to dismiss
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(500);
+    }
+  }
+
+  const sidebar = page.locator('[role="navigation"]');
 
   // Ensure sidebar is expanded
   const expandBtn = page.locator('button[aria-label="Expand sidebar"]');
-  if (await expandBtn.isVisible().catch(() => false)) {
+  if (await expandBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
     await expandBtn.click();
     await page.waitForTimeout(300);
   }
 
   const btn = sidebar.locator('button', { hasText: viewName }).first();
-  await btn.click({ timeout: 5000 });
-  await page.waitForTimeout(600); // allow view transition + data load
+  await btn.waitFor({ state: 'visible', timeout: 10000 });
+  await btn.click();
+  await page.waitForTimeout(600);
 }
 
 /**
@@ -89,7 +124,7 @@ async function setTheme(page: Page, target: 'dark' | 'light'): Promise<void> {
     await page.waitForTimeout(200);
   }
 
-  const sidebar = page.locator('[role="navigation"][aria-label="Main navigation"]');
+  const sidebar = page.locator('[role="navigation"]');
 
   // Check current theme from html element
   const getCurrentTheme = async (): Promise<'dark' | 'light'> => {
@@ -157,37 +192,32 @@ const THEMES = ['light', 'dark'] as const;
 
 for (const theme of THEMES) {
   test.describe(`Visual baselines — ${theme} mode`, () => {
-    test.beforeEach(async ({ page }) => {
-      await page.goto('/');
-      await skipOnboarding(page);
-      await page.reload();
-      await skipOnboarding(page);
-      await page.waitForTimeout(400);
-      await skipOnboarding(page); // third call — belt and suspenders
+    // Visual tests need more time: beforeEach (goto + waitForApp + setTheme) ~10-20s
+    // + navigateTo ~5s + waitForFunction + networkidle + screenshot ~10s = up to 35s
+    test.describe.configure({ timeout: 90_000 });
 
-      const sidebar = page.locator('[role="navigation"][aria-label="Main navigation"]');
-      const loaded = await sidebar.isVisible({ timeout: 25000 }).catch(() => false);
-      if (!loaded) {
-        await page.reload();
-        await skipOnboarding(page);
-        const retryLoaded = await sidebar.isVisible({ timeout: 20000 }).catch(() => false);
-        if (!retryLoaded) {
-          test.skip(true, 'App shell did not load after retry');
-          return;
-        }
-      }
+    test.beforeEach(async ({ page }) => {
+      // CRITICAL: register addInitScript BEFORE first goto so localStorage
+      // is set BEFORE React mounts and reads onboarding state.
+      await page.addInitScript(() => {
+        localStorage.setItem('waggle:onboarding', JSON.stringify({ completed: true, step: 7 }));
+        localStorage.setItem('waggle:first-run', 'done');
+      });
+      // Server-side: PATCH /api/settings (belt and suspenders)
+      await page.request.patch('http://127.0.0.1:3333/api/settings', {
+        data: { onboardingCompleted: true },
+        headers: { 'Content-Type': 'application/json' },
+      }).catch(() => {});
+      // NOW navigate — initScript fires before React, no onboarding shown
+      await page.goto('/');
+      await waitForApp(page);
       await setTheme(page, theme);
     });
 
     for (const view of VIEWS) {
       test(`${view.name} view — ${theme}`, async ({ page }) => {
-        await skipOnboarding(page);
-        const hasOverlay = await page.locator('.fixed.inset-0.z-\\[1000\\]').isVisible().catch(() => false);
-        if (hasOverlay) {
-          test.skip(true, 'Onboarding overlay still visible');
-          return;
-        }
-
+        // No skip conditions — if onboarding blocks navigation, test fails with clear error
+        // navigateTo will throw if sidebar button not found within 5s
         await navigateTo(page, view.sidebar);
 
         // Wait for view content — not a fixed timer
@@ -212,19 +242,23 @@ for (const theme of THEMES) {
 
 test.describe('View structural smoke tests', () => {
   test.beforeEach(async ({ page }) => {
+    // Register initScript BEFORE first goto — sets localStorage before React mounts
+    await page.addInitScript(() => {
+      localStorage.setItem('waggle:onboarding', JSON.stringify({ completed: true, step: 7 }));
+      localStorage.setItem('waggle:first-run', 'done');
+    });
+    await page.request.patch('http://127.0.0.1:3333/api/settings', {
+      data: { onboardingCompleted: true },
+      headers: { 'Content-Type': 'application/json' },
+    }).catch(() => {});
     await page.goto('/');
-    await skipOnboarding(page);
-    await page.reload();
-    await skipOnboarding(page);
-    await page.waitForTimeout(300);
-    await skipOnboarding(page);
     await waitForApp(page);
   });
 
   test('Chat view: textarea is present and accepts input', async ({ page }) => {
     await skipOnboarding(page);
-    const hasOverlay = await page.locator('.fixed.inset-0.z-\\[1000\\]').isVisible().catch(() => false);
-    if (hasOverlay) { test.skip(true, 'Onboarding overlay visible'); return; }
+    const hasOverlay = await page.locator('.fixed.inset-0.z-\\[9999\\]').isVisible().catch(() => false);
+    if (hasOverlay) { test.skip(true, 'Onboarding overlay still active'); return; }
 
     await navigateTo(page, 'Chat');
     const textarea = page.locator('textarea').first();
@@ -235,8 +269,8 @@ test.describe('View structural smoke tests', () => {
 
   test('Memory view: search input is present', async ({ page }) => {
     await skipOnboarding(page);
-    const hasOverlay = await page.locator('.fixed.inset-0.z-\\[1000\\]').isVisible().catch(() => false);
-    if (hasOverlay) { test.skip(true, 'Onboarding overlay visible'); return; }
+    const hasOverlay = await page.locator('.fixed.inset-0.z-\\[9999\\]').isVisible().catch(() => false);
+    if (hasOverlay) { test.skip(true, 'Onboarding overlay still active'); return; }
 
     await navigateTo(page, 'Memory');
     // Memory view has a search input or empty state
@@ -248,8 +282,8 @@ test.describe('View structural smoke tests', () => {
 
   test('Settings view: renders at least 5 tabs', async ({ page }) => {
     await skipOnboarding(page);
-    const hasOverlay = await page.locator('.fixed.inset-0.z-\\[1000\\]').isVisible().catch(() => false);
-    if (hasOverlay) { test.skip(true, 'Onboarding overlay visible'); return; }
+    const hasOverlay = await page.locator('.fixed.inset-0.z-\\[9999\\]').isVisible().catch(() => false);
+    if (hasOverlay) { test.skip(true, 'Onboarding overlay still active'); return; }
 
     await navigateTo(page, 'Settings');
     await page.waitForTimeout(500);
@@ -267,8 +301,8 @@ test.describe('View structural smoke tests', () => {
 
   test('Cockpit view: renders cards or loading skeletons', async ({ page }) => {
     await skipOnboarding(page);
-    const hasOverlay = await page.locator('.fixed.inset-0.z-\\[1000\\]').isVisible().catch(() => false);
-    if (hasOverlay) { test.skip(true, 'Onboarding overlay visible'); return; }
+    const hasOverlay = await page.locator('.fixed.inset-0.z-\\[9999\\]').isVisible().catch(() => false);
+    if (hasOverlay) { test.skip(true, 'Onboarding overlay still active'); return; }
 
     await navigateTo(page, 'Cockpit');
     await page.waitForTimeout(1500);
@@ -280,8 +314,8 @@ test.describe('View structural smoke tests', () => {
 
   test('Capabilities view: renders marketplace or loading state', async ({ page }) => {
     await skipOnboarding(page);
-    const hasOverlay = await page.locator('.fixed.inset-0.z-\\[1000\\]').isVisible().catch(() => false);
-    if (hasOverlay) { test.skip(true, 'Onboarding overlay visible'); return; }
+    const hasOverlay = await page.locator('.fixed.inset-0.z-\\[9999\\]').isVisible().catch(() => false);
+    if (hasOverlay) { test.skip(true, 'Onboarding overlay still active'); return; }
 
     await navigateTo(page, 'Skills & Apps');
     await page.waitForTimeout(1000);
@@ -296,8 +330,8 @@ test.describe('View structural smoke tests', () => {
 
   test('Events view: renders timeline or empty state', async ({ page }) => {
     await skipOnboarding(page);
-    const hasOverlay = await page.locator('.fixed.inset-0.z-\\[1000\\]').isVisible().catch(() => false);
-    if (hasOverlay) { test.skip(true, 'Onboarding overlay visible'); return; }
+    const hasOverlay = await page.locator('.fixed.inset-0.z-\\[9999\\]').isVisible().catch(() => false);
+    if (hasOverlay) { test.skip(true, 'Onboarding overlay still active'); return; }
 
     await navigateTo(page, 'Events');
     await page.waitForTimeout(1000);
@@ -309,8 +343,8 @@ test.describe('View structural smoke tests', () => {
 
   test('Mission Control view: renders without crashing', async ({ page }) => {
     await skipOnboarding(page);
-    const hasOverlay = await page.locator('.fixed.inset-0.z-\\[1000\\]').isVisible().catch(() => false);
-    if (hasOverlay) { test.skip(true, 'Onboarding overlay visible'); return; }
+    const hasOverlay = await page.locator('.fixed.inset-0.z-\\[9999\\]').isVisible().catch(() => false);
+    if (hasOverlay) { test.skip(true, 'Onboarding overlay still active'); return; }
 
     await navigateTo(page, 'Mission Control');
     await page.waitForTimeout(500);
@@ -323,8 +357,8 @@ test.describe('View structural smoke tests', () => {
 
   test('theme toggle changes html class or data-theme attribute', async ({ page }) => {
     await skipOnboarding(page);
-    const hasOverlay = await page.locator('.fixed.inset-0.z-\\[1000\\]').isVisible().catch(() => false);
-    if (hasOverlay) { test.skip(true, 'Onboarding overlay visible'); return; }
+    const hasOverlay = await page.locator('.fixed.inset-0.z-\\[9999\\]').isVisible().catch(() => false);
+    if (hasOverlay) { test.skip(true, 'Onboarding overlay still active'); return; }
 
     const getThemeSignal = async () => {
       const cls = await page.locator('html').getAttribute('class') ?? '';
