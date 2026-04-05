@@ -137,6 +137,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
   const [importDone, setImportDone] = useState(false);
 
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   // Connect on mount (silent) + track onboarding start
   useEffect(() => {
@@ -243,8 +244,10 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
           templateId: selectedTemplate || undefined,
         });
         wsId = ws.id;
+        setCreateError(null);
       } catch {
-        // Create local workspace ID if backend is offline
+        // Show error but allow proceeding with local workspace
+        setCreateError('Could not connect to server — workspace created locally. Connect to sync later.');
         wsId = `local-${Date.now()}`;
       }
       
@@ -872,6 +875,9 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
                       style={{ boxShadow: '0 0 60px hsl(38 92% 50% / 0.4)' }}
                     />
                   </div>
+                  {createError && (
+                    <p className="text-xs text-amber-400 mb-3 text-center">{createError}</p>
+                  )}
                   <h2 className="text-3xl font-display font-bold text-foreground mb-2">
                     Your hive is ready ⬡
                   </h2>
