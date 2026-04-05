@@ -41,4 +41,15 @@ describe('CostTracker', () => {
     expect(summary).toContain('500');
     expect(summary).toContain('$');
   });
+
+  describe('getDailyTotal', () => {
+    it('returns total cost across all models for current session', () => {
+      const tracker = new CostTracker();
+      tracker.addUsage('claude-sonnet-4-6', 1000, 500);
+      tracker.addUsage('claude-sonnet-4-6', 2000, 1000);
+      const total = tracker.getDailyTotal();
+      expect(total).toBeGreaterThan(0);
+      expect(total).toBe(tracker.getStats().estimatedCost);
+    });
+  });
 });

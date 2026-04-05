@@ -92,6 +92,11 @@ export class CostTracker {
     return total;
   }
 
+  /** Get total estimated cost for the current session (proxy for daily total). */
+  getDailyTotal(): number {
+    return this.getStats().estimatedCost;
+  }
+
   formatSummary(): string {
     const stats = this.getStats();
     return `Tokens: ${stats.totalInputTokens} in / ${stats.totalOutputTokens} out (${stats.turns} turns) | Est. cost: $${stats.estimatedCost.toFixed(4)}`;
