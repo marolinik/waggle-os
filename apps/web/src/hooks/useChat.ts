@@ -126,6 +126,22 @@ export const useChat = ({ workspaceId, sessionId, persona }: UseChatOptions) => 
           case 'approval_request':
             setPendingApproval(data as unknown as ApprovalRequest);
             break;
+          case 'model_switch': {
+            const switchModel = (data as Record<string, string>).model ?? 'fallback';
+            const switchReason = (data as Record<string, string>).reason ?? 'primary unavailable';
+            setMessages(prev => {
+              const msgs = [...prev];
+              const last = msgs[msgs.length - 1];
+              if (last.role === 'assistant') {
+                const notice = `\n\n⬡ Switched to ${switchModel} — ${switchReason}\n\n`;
+                return msgs.map((m, i) =>
+                  i === msgs.length - 1 ? { ...m, content: m.content + notice } : m
+                );
+              }
+              return msgs;
+            });
+            break;
+          }
           case 'error': {
             const errorMsg = typeof data === 'string' ? data : (data?.message as string ?? 'Unknown error');
             setMessages(prev => {
