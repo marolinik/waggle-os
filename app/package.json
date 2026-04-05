@@ -9,8 +9,8 @@
     "typecheck": "tsc -b",
     "preview": "vite preview",
     "tauri": "tauri",
-    "tauri:build": "node ../scripts/build-sidecar.mjs && node ../scripts/bundle-native-deps.mjs && node ../scripts/bundle-node.mjs && npm run build && tauri build",
-    "tauri:build:local": "node ../scripts/build-sidecar.mjs && node ../scripts/bundle-native-deps.mjs && node ../scripts/bundle-node.mjs && npm run build && tauri build --debug",
+    "tauri:build": "node ../scripts/build-sidecar.mjs && node ../scripts/bundle-native-deps.mjs && node ../scripts/bundle-node.mjs && cd ../apps/web && npx vite build && cd ../../app && tauri build",
+    "tauri:build:local": "node ../scripts/build-sidecar.mjs && node ../scripts/bundle-native-deps.mjs && node ../scripts/bundle-node.mjs && cd ../apps/web && npx vite build && cd ../../app && tauri build --debug",
     "tauri:dev": "tauri dev"
   },
   "dependencies": {
