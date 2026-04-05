@@ -6,7 +6,7 @@
 // ── Stream Events ──────────────────────────────────────────────────────
 
 export interface StreamEvent {
-  type: 'token' | 'tool' | 'tool_result' | 'step' | 'done' | 'error' | 'approval_required' | 'file_created';
+  type: 'token' | 'tool' | 'tool_result' | 'step' | 'done' | 'error' | 'approval_required' | 'file_created' | 'model_switch';
   content?: string;
   name?: string;
   input?: Record<string, unknown>;
@@ -25,6 +25,12 @@ export interface StreamEvent {
   cost?: number;
   /** For done events: token counts for this agent turn */
   tokens?: { input: number; output: number };
+  /** For model_switch events: the model that was switched to */
+  model?: string;
+  /** For model_switch events: why the switch occurred */
+  reason?: string;
+  /** For model_switch events: the primary model that was originally requested */
+  primary?: string;
 }
 
 // ── Messages ───────────────────────────────────────────────────────────
@@ -211,6 +217,14 @@ export interface WaggleConfig {
   teamConnection?: TeamConnection | null;
   /** User-defined custom models (local or remote) */
   customModels?: CustomModelEntry[];
+  /** Fallback model ID — auto-activates if primary fails or hits rate limit */
+  fallbackModel?: string | null;
+  /** Budget model ID — activates when daily budget threshold is reached */
+  budgetModel?: string | null;
+  /** Budget threshold (0-1) — fraction of daily budget at which to switch to budget model */
+  budgetThreshold?: number;
+  /** Daily budget in USD — null means no budget configured */
+  dailyBudget?: number | null;
 }
 
 // ── Install Center (Slice 3) ────────────────────────────────────────

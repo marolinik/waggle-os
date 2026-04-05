@@ -16,6 +16,8 @@ export interface UseChatOptions {
   workspacePath?: string;
   /** Called when agent creates/writes a file */
   onFileCreated?: (filePath: string, action: 'write' | 'edit' | 'generate') => void;
+  /** Model Pilot: called when backend switches to a fallback model */
+  onModelSwitch?: (data: { model: string; reason: string; primary: string }) => void;
 }
 
 /** Q12:C — Tool progress counter for top-bar progress indicator */
@@ -140,6 +142,11 @@ export function processStreamEvent(
       }
       break;
     }
+    case 'model_switch':
+      // Model Pilot: backend switched to a different model.
+      // Structured data is handled by the streaming loop (onModelSwitch callback).
+      // The inline message comes through as a separate 'step' event.
+      break;
     case 'file_created':
       // Handled externally via onFileCreated callback — nothing to accumulate
       break;
@@ -158,7 +165,7 @@ export function processStreamEvent(
 
 const EMPTY_TOOL_PROGRESS: ToolProgress = { total: 0, completed: 0, active: null };
 
-export function useChat({ service, workspace, session, workspacePath, onFileCreated }: UseChatOptions): UseChatReturn {
+export function useChat({ service, workspace, session, workspacePath, onFileCreated, onModelSwitch }: UseChatOptions): UseChatReturn {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [toolProgress, setToolProgress] = useState<ToolProgress>(EMPTY_TOOL_PROGRESS);
@@ -222,6 +229,11 @@ export function useChat({ service, workspace, session, workspacePath, onFileCrea
         // Notify on file creation events
         if (event.type === 'file_created' && event.filePath && onFileCreated) {
           onFileCreated(event.filePath, event.fileAction ?? 'write');
+        }
+
+        // Model Pilot: notify parent on model switch
+        if (event.type === 'model_switch' && onModelSwitch && event.model && event.reason && event.primary) {
+          onModelSwitch({ model: event.model, reason: event.reason, primary: event.primary });
         }
 
         accumulated = processStreamEvent(event, accumulated);
@@ -289,7 +301,7 @@ export function useChat({ service, workspace, session, workspacePath, onFileCrea
       setIsLoading(false);
       setToolProgress(EMPTY_TOOL_PROGRESS);
     }
-  }, [service, workspace, session, workspacePath, isLoading, onFileCreated]);
+  }, [service, workspace, session, workspacePath, isLoading, onFileCreated, onModelSwitch]);
 
   const clearMessages = useCallback(() => {
     setMessages([]);

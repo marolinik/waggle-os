@@ -61,6 +61,8 @@ import { OnboardingWizard as EnhancedOnboardingWizard } from './components/onboa
 import { useOnboarding } from './hooks/useOnboarding';
 import { getServerBaseUrl } from './lib/ipc';
 import { TierProvider } from './context/TierContext';
+import { useTier } from './hooks/useTier';
+import { tierSatisfies } from '@waggle/shared';
 
 // ── Extracted hooks ──────────────────────────────────────────────────────
 import { useToastManager } from './hooks/useToastManager';
@@ -111,6 +113,7 @@ import type { AppView } from './types';
 function WaggleApp() {
   const service = useService();
   const { toggleTheme } = useTheme();
+  const { tier } = useTier();
 
   // ── Auto-update (silent, non-blocking — Rust checks, frontend listens) ──
   useAutoUpdate();
@@ -387,6 +390,15 @@ function WaggleApp() {
     session: activeSessionId ?? undefined,
     workspacePath: activeWorkspace?.directory,
     onFileCreated: handleFileCreated,
+    onModelSwitch: useCallback((data: { model: string; reason: string; primary: string }) => {
+      setToasts(prev => [{
+        id: `model-switch-${Date.now()}`,
+        category: 'agent',
+        title: `\u2B21 Switched to ${friendlyModelName(data.model)}`,
+        body: data.reason,
+        createdAt: Date.now(),
+      }, ...prev]);
+    }, [setToasts]),
   });
 
   // ── F7: Update active workspace agent status in micro-status ──
@@ -564,6 +576,11 @@ function WaggleApp() {
           // Workflow commands that need LLM → send as regular agent message
           const llmCommands = ['/research', '/draft', '/review', '/spawn', '/plan'];
           if (llmCommands.includes(command)) {
+            // Gate /spawn to BASIC+ tier
+            if (command === '/spawn' && !tierSatisfies(tier, 'BASIC')) {
+              addSystemMessage('⬡ **Spawn Agent** requires a Basic plan or above. Upgrade in Settings to unlock sub-agents.');
+              break;
+            }
             // Send the full command text as a user message so the agent handles it
             // with full workspace context + skills
             const fullText = args ? `${command} ${args}` : command;
@@ -1001,6 +1018,7 @@ function WaggleApp() {
             onCreateWorkspace={() => setShowCreateWorkspace(true)}
             onOpenSearch={() => setGlobalSearchOpen(true)}
             onOpenHelp={() => setShowHelp(true)}
+            onToggleWorkspaceSwitcher={() => setShowWorkspaceSwitcher(prev => !prev)}
             microStatus={workspaceMicroStatus}
             memoryBadge={newMemoryCount}
           />
