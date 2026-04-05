@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -152,6 +152,67 @@ describe('WaggleConfig', () => {
       const config2 = new WaggleConfig(configDir);
       expect(config2.getTeamServer()!.url).toBe('https://example.com');
       expect(config2.getTeamServer()!.userId).toBe('u1');
+    });
+  });
+
+  describe('Model Pilot config fields', () => {
+    let tmpDir: string;
+
+    beforeEach(() => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-config-pilot-'));
+    });
+
+    afterEach(() => {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it('returns null for fallbackModel when not set', () => {
+      const config = new WaggleConfig(tmpDir);
+      expect(config.getFallbackModel()).toBeNull();
+    });
+
+    it('persists fallbackModel', () => {
+      const config = new WaggleConfig(tmpDir);
+      config.setFallbackModel('qwen/qwen3.6-plus:free');
+      config.save();
+      const config2 = new WaggleConfig(tmpDir);
+      expect(config2.getFallbackModel()).toBe('qwen/qwen3.6-plus:free');
+    });
+
+    it('returns null for budgetModel when not set', () => {
+      const config = new WaggleConfig(tmpDir);
+      expect(config.getBudgetModel()).toBeNull();
+    });
+
+    it('persists budgetModel', () => {
+      const config = new WaggleConfig(tmpDir);
+      config.setBudgetModel('deepseek/deepseek-chat-v3-0324:free');
+      config.save();
+      const config2 = new WaggleConfig(tmpDir);
+      expect(config2.getBudgetModel()).toBe('deepseek/deepseek-chat-v3-0324:free');
+    });
+
+    it('returns 0.8 as default budgetThreshold', () => {
+      const config = new WaggleConfig(tmpDir);
+      expect(config.getBudgetThreshold()).toBe(0.8);
+    });
+
+    it('persists budgetThreshold', () => {
+      const config = new WaggleConfig(tmpDir);
+      config.setBudgetThreshold(0.6);
+      config.save();
+      const config2 = new WaggleConfig(tmpDir);
+      expect(config2.getBudgetThreshold()).toBe(0.6);
+    });
+
+    it('clearFallbackModel removes the field', () => {
+      const config = new WaggleConfig(tmpDir);
+      config.setFallbackModel('test-model');
+      config.save();
+      config.clearFallbackModel();
+      config.save();
+      const config2 = new WaggleConfig(tmpDir);
+      expect(config2.getFallbackModel()).toBeNull();
     });
   });
 });

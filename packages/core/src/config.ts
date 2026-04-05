@@ -23,6 +23,12 @@ interface ConfigData {
   teamServer?: TeamServerConfig;
   /** F8: Daily cost budget in dollars. null = no limit. */
   dailyBudget?: number | null;
+  /** Model Pilot: fallback model when primary fails (429/500/timeout) */
+  fallbackModel?: string;
+  /** Model Pilot: budget-saver model when daily spend hits threshold */
+  budgetModel?: string;
+  /** Model Pilot: budget threshold as 0.0-1.0 fraction. Default 0.8 */
+  budgetThreshold?: number;
   /** M2-7: Telemetry opt-in (default: false — privacy first) */
   telemetryEnabled?: boolean;
   /** M2-1: Embedding provider configuration */
@@ -83,10 +89,11 @@ export class WaggleConfig {
   }
 
   getProviders(): Record<string, ProviderEntry> {
-    return { ...this.data.providers };
+    return { ...(this.data.providers ?? {}) };
   }
 
   setProvider(name: string, entry: ProviderEntry): void {
+    if (!this.data.providers) this.data.providers = {};
     this.data.providers[name] = entry;
   }
 
@@ -109,6 +116,40 @@ export class WaggleConfig {
 
   setDailyBudget(budget: number | null): void {
     this.data.dailyBudget = budget;
+  }
+
+  // --- Model Pilot ---
+
+  getFallbackModel(): string | null {
+    return this.data.fallbackModel ?? null;
+  }
+
+  setFallbackModel(model: string): void {
+    this.data.fallbackModel = model;
+  }
+
+  clearFallbackModel(): void {
+    delete this.data.fallbackModel;
+  }
+
+  getBudgetModel(): string | null {
+    return this.data.budgetModel ?? null;
+  }
+
+  setBudgetModel(model: string): void {
+    this.data.budgetModel = model;
+  }
+
+  clearBudgetModel(): void {
+    delete this.data.budgetModel;
+  }
+
+  getBudgetThreshold(): number {
+    return this.data.budgetThreshold ?? 0.8;
+  }
+
+  setBudgetThreshold(threshold: number): void {
+    this.data.budgetThreshold = Math.max(0.5, Math.min(0.95, threshold));
   }
 
   // --- Team Server (Phase 5) ---
