@@ -33,6 +33,22 @@ function isRegulatedContent(content: string, personaId: string): boolean {
   return matches.length >= 2;
 }
 
+// ── Retryable Error Detection (Model Pilot) ───────────────────────────
+
+/** Check if an LLM error is transient and worth retrying with a fallback model. */
+function isRetryableError(err: unknown): boolean {
+  if (err instanceof Error) {
+    const msg = err.message.toLowerCase();
+    if (/\b(429|500|502|503)\b/.test(msg)) return true;
+    if (msg.includes('etimedout') || msg.includes('econnrefused') || msg.includes('econnaborted')) return true;
+    if (msg.includes('rate limit') || msg.includes('too many requests')) return true;
+    if (msg.includes('overloaded') || msg.includes('capacity')) return true;
+  }
+  const status = (err as { status?: number })?.status;
+  if (status === 429 || status === 500 || status === 502 || status === 503) return true;
+  return false;
+}
+
 // ── Ambiguity Detection (GAP-006) ──────────────────────────────────────
 
 /** Action verbs that indicate clear user intent (case-insensitive start of message) */
@@ -601,10 +617,26 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // Resolve the agent runner (injectable for tests)
       const agentRunner: AgentRunner = server.agentRunner ?? runAgentLoop;
 
-      // Resolve model: request param > workspace config > global default > fallback
-      // Per-workspace model selection: each workspace can specify its own model
+      // ── Model Pilot: resolve model with fallback chain ──
+      const pilotConfig = new WaggleConfig(server.localConfig.dataDir);
       const wsModelConfig = workspace ? server.workspaceManager?.get(workspace)?.model : undefined;
-      const resolvedModel = model ?? wsModelConfig ?? server.agentState.currentModel ?? 'claude-sonnet-4-6';
+      const primaryModel = model ?? wsModelConfig ?? pilotConfig.getDefaultModel() ?? 'claude-sonnet-4-6';
+      const fallbackModel = pilotConfig.getFallbackModel();
+      const budgetModel = pilotConfig.getBudgetModel();
+      const budgetThreshold = pilotConfig.getBudgetThreshold();
+
+      // Budget check: if daily spend exceeds threshold, use budget model
+      let resolvedModel = primaryModel;
+      let modelSwitchReason: string | null = null;
+
+      const dailyBudget = pilotConfig.getDailyBudget();
+      if (dailyBudget && dailyBudget > 0 && budgetModel) {
+        const spent = costTracker.getDailyTotal();
+        if (spent / dailyBudget >= budgetThreshold) {
+          resolvedModel = budgetModel;
+          modelSwitchReason = `Budget ${Math.round(budgetThreshold * 100)}% reached ($${spent.toFixed(2)}/$${dailyBudget.toFixed(2)})`;
+        }
+      }
 
       // ── Conversation history management (moved before LLM check so echo mode also persists) ──
       const sessionId = session ?? workspace ?? 'default';
@@ -1147,13 +1179,30 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           },
         };
 
-        // Run the agent loop
-        const result = await agentRunner(agentConfig);
+        // ── Run agent with fallback chain ──
+        let result;
+        try {
+          result = await agentRunner(agentConfig);
+        } catch (primaryErr) {
+          if (isRetryableError(primaryErr) && fallbackModel && resolvedModel !== fallbackModel) {
+            modelSwitchReason = `${resolvedModel} failed (${(primaryErr as { status?: number }).status ?? 'timeout'})`;
+            resolvedModel = fallbackModel;
+            result = await agentRunner({ ...agentConfig, model: resolvedModel });
+          } else {
+            throw primaryErr;
+          }
+        }
+
+        // Notify client of model switch
+        if (modelSwitchReason) {
+          sendEvent('model_switch', { model: resolvedModel, reason: modelSwitchReason, primary: primaryModel });
+          sendEvent('step', { content: `⬡ Switched to ${resolvedModel} — ${modelSwitchReason}` });
+        }
 
         // Unregister the per-request approval hook
         if (unregisterHook) unregisterHook();
 
-        // Track cost (same as CLI) — include workspace for per-workspace breakdown
+        // Track cost with the ACTUALLY used model
         costTracker.addUsage(resolvedModel, result.usage.inputTokens, result.usage.outputTokens, effectiveWorkspace);
 
         // ── Post-response memory write-back ──────────────────────
