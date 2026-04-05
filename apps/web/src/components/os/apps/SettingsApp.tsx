@@ -10,6 +10,7 @@ import { useProviders } from '@/hooks/useProviders';
 import { useOnboarding } from '@/hooks/useOnboarding';
 import type { UserTier } from '@/lib/dock-tiers';
 import ModelSelector from '@/components/os/ModelSelector';
+import ModelPilotCard from '@/components/os/ModelPilotCard';
 
 type SettingsTab = 'general' | 'models' | 'permissions' | 'team' | 'backup' | 'enterprise' | 'advanced';
 
@@ -26,6 +27,9 @@ const tabs: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
 const SettingsApp = () => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [defaultModel, setDefaultModel] = useState('');
+  const [fallbackModel, setFallbackModel] = useState<string | null>(null);
+  const [budgetModel, setBudgetModel] = useState<string | null>(null);
+  const [budgetThreshold, setBudgetThreshold] = useState(0.8);
   const [dailyBudget, setDailyBudget] = useState<string>('');
   const [tier, setTier] = useState('solo');
   const [saving, setSaving] = useState(false);
@@ -68,8 +72,11 @@ const SettingsApp = () => {
 
   // Load settings
   useEffect(() => {
-    adapter.getSettings().then((s: { defaultModel?: string; model?: string; dailyBudget?: number; tier?: string; yoloMode?: boolean }) => {
+    adapter.getSettings().then((s: { defaultModel?: string; model?: string; dailyBudget?: number; tier?: string; yoloMode?: boolean; fallbackModel?: string; budgetModel?: string; budgetThreshold?: number }) => {
       setDefaultModel(s.defaultModel ?? s.model ?? '');
+      setFallbackModel(s.fallbackModel ?? null);
+      setBudgetModel(s.budgetModel ?? null);
+      setBudgetThreshold(s.budgetThreshold ?? 0.8);
       setDailyBudget(s.dailyBudget != null ? String(s.dailyBudget) : '');
       setTier(s.tier ?? 'solo');
       setYoloMode(s.yoloMode ?? false);
@@ -88,6 +95,9 @@ const SettingsApp = () => {
     setSaving(true);
     try {
       const updates: Record<string, unknown> = { defaultModel };
+      if (fallbackModel !== undefined) updates.fallbackModel = fallbackModel;
+      if (budgetModel !== undefined) updates.budgetModel = budgetModel;
+      if (budgetThreshold !== undefined) updates.budgetThreshold = budgetThreshold;
       if (dailyBudget) updates.dailyBudget = parseFloat(dailyBudget);
       await adapter.saveSettings(updates);
       setSaveMsg('Saved');
@@ -226,6 +236,21 @@ const SettingsApp = () => {
         {/* ═══ MODELS ═══ */}
         {activeTab === 'models' && (
           <div className="space-y-5">
+            <ModelPilotCard
+              defaultModel={defaultModel}
+              fallbackModel={fallbackModel}
+              budgetModel={budgetModel}
+              budgetThreshold={budgetThreshold}
+              dailyBudget={dailyBudget ? parseFloat(dailyBudget) : null}
+              providers={providers}
+              onUpdate={(fields) => {
+                if (fields.defaultModel !== undefined) setDefaultModel(fields.defaultModel);
+                if (fields.fallbackModel !== undefined) setFallbackModel(fields.fallbackModel);
+                if (fields.budgetModel !== undefined) setBudgetModel(fields.budgetModel);
+                if (fields.budgetThreshold !== undefined) setBudgetThreshold(fields.budgetThreshold);
+              }}
+            />
+
             <h3 className="text-sm font-display font-semibold text-foreground">Model Configuration</h3>
 
             {/* Default model selector — from /api/providers */}
