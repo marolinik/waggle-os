@@ -51,6 +51,9 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
     } catch { /* ignore */ }
     return {
       defaultModel: config.getDefaultModel(),
+      fallbackModel: config.getFallbackModel(),
+      budgetModel: config.getBudgetModel(),
+      budgetThreshold: config.getBudgetThreshold(),
       providers,
       mindPath: config.getMindPath(),
       dataDir: server.localConfig.dataDir,
@@ -62,10 +65,17 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
 
   // PUT /api/settings — update config (keys to vault, non-secret fields to config.json)
   server.put<{
-    Body: { defaultModel?: string; providers?: Record<string, unknown>; dailyBudget?: number | null };
+    Body: {
+      defaultModel?: string;
+      providers?: Record<string, unknown>;
+      dailyBudget?: number | null;
+      fallbackModel?: string | null;
+      budgetModel?: string | null;
+      budgetThreshold?: number;
+    };
   }>('/api/settings', async (request) => {
     const config = new WaggleConfig(server.localConfig.dataDir);
-    const { defaultModel, providers, dailyBudget } = request.body;
+    const { defaultModel, providers, dailyBudget, fallbackModel, budgetModel, budgetThreshold } = request.body;
 
     if (defaultModel) {
       config.setDefaultModel(defaultModel);
@@ -76,6 +86,25 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
       config.setDailyBudget(dailyBudget);
     }
 
+    // Model Pilot fields
+    if (fallbackModel !== undefined) {
+      if (fallbackModel === null) {
+        config.clearFallbackModel();
+      } else {
+        config.setFallbackModel(fallbackModel);
+      }
+    }
+    if (budgetModel !== undefined) {
+      if (budgetModel === null) {
+        config.clearBudgetModel();
+      } else {
+        config.setBudgetModel(budgetModel);
+      }
+    }
+    if (budgetThreshold !== undefined) {
+      config.setBudgetThreshold(budgetThreshold);
+    }
+
     if (providers && typeof providers === 'object') {
       for (const [name, entry] of Object.entries(providers)) {
         const { apiKey, models, baseUrl } = entry as { apiKey?: string; models?: string[]; baseUrl?: string };
@@ -83,6 +112,10 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
         // Save secret to vault (encrypted)
         if (apiKey && server.vault) {
           server.vault.set(name, apiKey, { models, baseUrl });
+          // Invalidate health check key cache so next /health re-validates
+          if (typeof (server as any)._invalidateKeyValidationCache === 'function') {
+            (server as any)._invalidateKeyValidationCache();
+          }
         }
 
         // Also keep in config.json for backward compat (non-secret fields)
