@@ -39,3 +39,6 @@ export {
 export type { ProviderConfig, SettingsTab } from './utils.js';
 export { HooksSection } from './HooksSection.js';
 export { AdminSection } from './AdminSection.js';
+
+export { ModelPilotCard } from './ModelPilotCard.js';
+export type { ModelPilotCardProps } from './ModelPilotCard.js';

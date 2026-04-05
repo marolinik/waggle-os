@@ -18,6 +18,7 @@ import { BackupSection } from './BackupSection.js';
 import { KvarkSection } from './KvarkSection.js';
 import { HooksSection } from './HooksSection.js';
 import { AdminSection } from './AdminSection.js';
+import { ModelPilotCard } from './ModelPilotCard.js';
 
 export interface SettingsPanelProps {
   activeTab?: string;
@@ -138,11 +139,26 @@ export function SettingsPanel({
           <ThemeSection config={config} onConfigUpdate={onConfigUpdate} />
         )}
         {activeTab === 'models' && (
-          <ModelsSection
-            config={config}
-            onConfigUpdate={onConfigUpdate}
-            onTestApiKey={onTestApiKey}
-          />
+          <>
+            <ModelPilotCard
+              defaultModel={config.defaultModel ?? 'claude-sonnet-4-6'}
+              fallbackModel={config.fallbackModel ?? null}
+              budgetModel={config.budgetModel ?? null}
+              budgetThreshold={config.budgetThreshold ?? 0.8}
+              dailyBudget={config.dailyBudget ?? null}
+              onUpdate={(fields) => onConfigUpdate(fields as Partial<WaggleConfig>)}
+              serverUrl={baseUrl}
+              onNavigateToVault={() => {
+                const tabSetter = onTabChange ?? setInternalTab;
+                tabSetter('vault');
+              }}
+            />
+            <ModelsSection
+              config={config}
+              onConfigUpdate={onConfigUpdate}
+              onTestApiKey={onTestApiKey}
+            />
+          </>
         )}
         {activeTab === 'vault' && (
           <VaultSection />
