@@ -1098,6 +1098,7 @@ function WaggleApp() {
                   workflowSuggestion={workflowSuggestion}
                   onWorkflowAccept={handleWorkflowAccept}
                   onWorkflowDismiss={dismissSuggestion}
+                  agentModel={friendlyModelName(agentModel)}
                 />
               </ErrorBoundary>
             )}

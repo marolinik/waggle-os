@@ -41,6 +41,8 @@ export interface ChatViewProps {
   onWorkflowAccept?: (pattern: WorkflowSuggestion['pattern']) => void;
   /** Called when user dismisses a workflow suggestion */
   onWorkflowDismiss?: () => void;
+  /** Active model name (friendly display string) */
+  agentModel?: string;
 }
 
 export function ChatView({
@@ -66,6 +68,7 @@ export function ChatView({
   workflowSuggestion,
   onWorkflowAccept,
   onWorkflowDismiss,
+  agentModel,
 }: ChatViewProps) {
   return (
     <div className="flex flex-col h-full">
@@ -111,6 +114,20 @@ export function ChatView({
             <span className="text-[10px]">⬡</span>
             <span>Persona</span>
           </button>
+        )}
+        {/* Model badge — shows active model */}
+        {agentModel && (
+          <span
+            className="text-[10px] font-mono px-2 py-0.5 rounded-full shrink-0 mr-2 cursor-default"
+            style={{
+              border: '1px solid var(--hive-700)',
+              backgroundColor: 'var(--hive-850)',
+              color: 'var(--hive-400)',
+            }}
+            title="Active model for this workspace. Change global defaults in Settings → Models."
+          >
+            {agentModel}
+          </span>
         )}
       </div>
       <div className="flex-1 overflow-hidden">
