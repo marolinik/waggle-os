@@ -21,6 +21,15 @@ const defaultState: OnboardingState = {
 
 function loadState(): OnboardingState {
   try {
+    // E2E test bypass: ?skipOnboarding=true skips wizard and sets tier to 'power'
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('skipOnboarding') === 'true') {
+      const tier = (params.get('tier') as UserTier) || 'power';
+      const done: OnboardingState = { ...defaultState, completed: true, step: 7, tier, tooltipsDismissed: true };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(done));
+      return done;
+    }
+
     // Migrate from old key
     if (localStorage.getItem('waggle_onboarding_complete') === 'true') {
       localStorage.removeItem('waggle_onboarding_complete');
