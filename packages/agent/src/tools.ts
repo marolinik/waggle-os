@@ -75,6 +75,13 @@ export interface ToolDefinition {
   execute: (args: Record<string, unknown>) => Promise<string>;
   /** PM-6: Whether this tool can operate without LLM connectivity (default: false) */
   offlineCapable?: boolean;
+  /**
+   * Dynamic availability check — called before each agent turn to decide
+   * whether this tool should be included in the tool list.
+   * Return false to hide the tool (e.g., browser not connected, no git repo).
+   * If not provided, the tool is always available.
+   */
+  checkAvailability?: () => boolean;
 }
 
 /** Workspace-specific layers for dual-mind routing */

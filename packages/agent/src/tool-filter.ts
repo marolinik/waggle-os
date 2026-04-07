@@ -44,6 +44,24 @@ export function filterToolsForContext(
 }
 
 /**
+ * Dynamic availability filter — runs each tool's checkAvailability function
+ * and excludes tools that return false.
+ *
+ * Tools without checkAvailability are always included.
+ * Catches exceptions in checkAvailability (treats as unavailable).
+ */
+export function filterAvailableTools(tools: ToolDefinition[]): ToolDefinition[] {
+  return tools.filter(t => {
+    if (!t.checkAvailability) return true;
+    try {
+      return t.checkAvailability();
+    } catch {
+      return false; // Broken check = unavailable
+    }
+  });
+}
+
+/**
  * PM-6: Filter tools to only those that work offline (no LLM needed).
  * Returns tools where offlineCapable is explicitly true.
  */

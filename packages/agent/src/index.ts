@@ -32,7 +32,7 @@ export { Plan, type PlanStep } from './plan.js';
 export { createPlanTools } from './plan-tools.js';
 export { createGitTools } from './git-tools.js';
 export { PermissionManager, READONLY_TOOLS } from './permissions.js';
-export { filterToolsForContext, filterOfflineTools, getOfflineCapableToolNames, type ToolContext, type ToolFilterConfig } from './tool-filter.js';
+export { filterToolsForContext, filterAvailableTools, filterOfflineTools, getOfflineCapableToolNames, type ToolContext, type ToolFilterConfig } from './tool-filter.js';
 export { needsConfirmation, ConfirmationGate, getApprovalClass, type ConfirmationGateConfig, type ApprovalClass } from './confirmation.js';
 export { createAuditTools } from './audit-tools.js';
 export { createDocumentTools } from './document-tools.js';
@@ -98,6 +98,20 @@ export {
 export { IterationBudget, type IterationBudgetConfig } from './iteration-budget.js';
 export { captureInteraction, getRecentLogs, isWithinBudget, type CaptureInteractionInput } from './optimization-capture.js';
 export { routeMessage, type RoutingDecision } from './smart-router.js';
+export {
+  compressConversation, estimateTokens, needsCompression,
+  pruneToolResults, splitProtectedRegions, summarizeMiddle,
+  createDefaultCompressionConfig,
+  type CompressionConfig, type CompressionResult, type CompressibleMessage,
+} from './context-compressor.js';
+export {
+  CredentialPool, loadCredentialPool, extractStatusCode,
+  type CredentialEntry, type CredentialPoolConfig, type PoolStatus, type VaultLike,
+} from './credential-pool.js';
+export {
+  shouldSuggestCapture,
+  type CaptureCheckParams, type CaptureResult, type CaptureNotification,
+} from './workflow-capture.js';
 export { detectCorrection, detectCorrectionsInHistory, type DetectedCorrection, type CorrectionDurability } from './correction-detector.js';
 export { detectContradiction, type ContradictionResult } from './contradiction-detector.js';
 export {

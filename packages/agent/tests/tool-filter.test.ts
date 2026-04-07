@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { filterToolsForContext } from '../src/tool-filter.js';
+import { filterToolsForContext, filterAvailableTools } from '../src/tool-filter.js';
 import type { ToolDefinition } from '../src/tools.js';
 
 function makeTool(name: string): ToolDefinition {
@@ -74,5 +74,61 @@ describe('filterToolsForContext', () => {
     expect(names).not.toContain('git_commit');
     expect(names).toContain('read_file');
     expect(names).toContain('git_status');
+  });
+});
+
+describe('filterAvailableTools', () => {
+  it('includes tools without checkAvailability', () => {
+    const tools = [makeTool('bash'), makeTool('web_search')];
+    const result = filterAvailableTools(tools);
+    expect(result).toHaveLength(2);
+  });
+
+  it('includes tools where checkAvailability returns true', () => {
+    const tool: ToolDefinition = {
+      ...makeTool('browser'),
+      checkAvailability: () => true,
+    };
+    const result = filterAvailableTools([tool]);
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('browser');
+  });
+
+  it('excludes tools where checkAvailability returns false', () => {
+    const tool: ToolDefinition = {
+      ...makeTool('browser'),
+      checkAvailability: () => false,
+    };
+    const result = filterAvailableTools([tool]);
+    expect(result).toHaveLength(0);
+  });
+
+  it('excludes tools where checkAvailability throws', () => {
+    const tool: ToolDefinition = {
+      ...makeTool('broken_tool'),
+      checkAvailability: () => { throw new Error('Connection lost'); },
+    };
+    const result = filterAvailableTools([tool]);
+    expect(result).toHaveLength(0);
+  });
+
+  it('handles mixed tools correctly', () => {
+    const tools: ToolDefinition[] = [
+      makeTool('always_on'),
+      { ...makeTool('browser'), checkAvailability: () => true },
+      { ...makeTool('git'), checkAvailability: () => false },
+      { ...makeTool('broken'), checkAvailability: () => { throw new Error(); } },
+    ];
+    const result = filterAvailableTools(tools);
+    const names = result.map(t => t.name);
+    expect(names).toEqual(['always_on', 'browser']);
+  });
+
+  it('returns empty array when all tools are unavailable', () => {
+    const tools: ToolDefinition[] = [
+      { ...makeTool('a'), checkAvailability: () => false },
+      { ...makeTool('b'), checkAvailability: () => false },
+    ];
+    expect(filterAvailableTools(tools)).toHaveLength(0);
   });
 });

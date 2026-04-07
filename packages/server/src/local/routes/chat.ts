@@ -5,7 +5,7 @@ import path from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
-import { runAgentLoop, needsConfirmation, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities } from '@waggle/agent';
+import { runAgentLoop, needsConfirmation, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture } from '@waggle/agent';
 import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
 import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
 import { formatWorkspaceStatePrompt } from '../workspace-state.js';
@@ -385,6 +385,26 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
   // C3: Cache the base system prompt per session to avoid rebuilding on every message
   const systemPromptCache = new Map<string, { prompt: string; workspace: string | undefined; workspaceId: string | undefined; skillCount: number; personaId: string | null }>();
 
+  // Context compression: track previous summaries per session for iterative compression
+  const compressionSummaries = new Map<string, string>();
+
+  // Credential pool: lazily initialized per-provider key pools for round-robin + cooldown
+  const credentialPools = new Map<string, CredentialPool>();
+
+  /** Get or create a credential pool for the LLM provider, loading keys from vault. */
+  function getCredentialPool(provider: string): CredentialPool | null {
+    if (!server.vault) return null;
+    if (credentialPools.has(provider)) return credentialPools.get(provider)!;
+    const pool = loadCredentialPool(server.vault, provider);
+    if (pool.size === 0) return null;
+    credentialPools.set(provider, pool);
+    return pool;
+  }
+
+  // Auto skill capture: track tool sequences per session and dismissed suggestions
+  const sessionToolSequences = new Map<string, string[][]>();
+  const dismissedCaptureSuggestions = new Set<string>();
+
   // Build the rich system prompt — behavioral specification, not just tool docs
   function buildSystemPrompt(workspacePath?: string, sessionId?: string, historyLength?: number, workspaceId?: string): string {
     // Resolve workspace persona (if workspace has one set)
@@ -635,6 +655,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         if (spent / dailyBudget >= budgetThreshold) {
           resolvedModel = budgetModel;
           modelSwitchReason = `Budget ${Math.round(budgetThreshold * 100)}% reached ($${spent.toFixed(2)}/$${dailyBudget.toFixed(2)})`;
+        }
+      }
+
+      // Smart routing: simple messages → budget model (cost optimization)
+      if (!modelSwitchReason && budgetModel) {
+        const routing = routeMessage(message, resolvedModel, budgetModel);
+        if (routing.reason === 'simple_turn') {
+          resolvedModel = routing.model;
+          // Smart routing is silent — no toast, no inline message
         }
       }
 
@@ -1001,6 +1030,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           }
         }
 
+        // Dynamic tool availability — run checkAvailability on each tool
+        if (!hasCustomRunner) {
+          effectiveTools = filterAvailableTools(effectiveTools);
+        }
+
         // Track tool execution times for duration reporting
         const toolStartTimes = new Map<string, number>();
         let toolStartCounter = 0;
@@ -1034,9 +1068,31 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           }
         }
 
-        // Apply sliding window to conversation history — keep full history in RAM
-        // for persistence but only send recent messages to the agent loop
-        let windowedMessages = applyContextWindow(history);
+        // Apply intelligent context compression — replaces the old sliding window.
+        // When conversation exceeds 50% of context window: prune tool results,
+        // protect head/tail, LLM-summarize the middle using budget model ($0 cost).
+        let windowedMessages: Array<{ role: string; content: string }>;
+        if (budgetModel) {
+          const compressionConfig = createDefaultCompressionConfig({
+            budgetModel,
+            litellmUrl: getLitellmUrl(),
+            litellmApiKey: server.agentState.litellmApiKey,
+          });
+          const previousSummary = compressionSummaries.get(sessionId) ?? null;
+          const compressionResult = await compressConversation(history, compressionConfig, previousSummary);
+          windowedMessages = compressionResult.messages;
+
+          if (compressionResult.compressed) {
+            log.info(`[context-compression] Compressed ${compressionResult.originalTokens}→${compressionResult.compressedTokens} tokens (session=${sessionId})`);
+            sendEvent('step', { content: `Context compressed: ${compressionResult.originalTokens}→${compressionResult.compressedTokens} tokens` });
+            if (compressionResult.summary) {
+              compressionSummaries.set(sessionId, compressionResult.summary);
+            }
+          }
+        } else {
+          // Fallback to simple sliding window when no budget model is configured
+          windowedMessages = applyContextWindow(history);
+        }
 
         // GEPA: if the prompt was expanded, replace the last user message
         // so the LLM sees the optimized version (original stays in disk history)
@@ -1069,6 +1125,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             }
           } catch { /* governance not available — allow all */ }
         }
+
+        // Iteration budget — prevents runaway agent loops
+        const iterBudget = new IterationBudget({
+          maxIterations: 90,
+          freeToolCalls: ['execute_code'],
+        });
 
         // Build agent loop config — with windowed conversation history + hooks
         const agentConfig: AgentLoopConfig = {
@@ -1179,15 +1241,49 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           },
         };
 
-        // ── Run agent with fallback chain ──
+        // ── Credential pool: resolve API key with round-robin ──
+        // Extract provider name from model ID (e.g., "anthropic" from "claude-sonnet-4-6")
+        const providerName = resolvedModel.startsWith('claude') ? 'anthropic' : resolvedModel.split('/')[0] ?? 'anthropic';
+        const credPool = getCredentialPool(providerName);
+        const poolKey = credPool?.getKey();
+        const effectiveApiKey = poolKey ?? server.agentState.litellmApiKey;
+        const runConfig = { ...agentConfig, litellmApiKey: effectiveApiKey };
+
+        // ── Run agent with credential pool + fallback chain ──
         let result;
         try {
-          result = await agentRunner(agentConfig);
+          result = await agentRunner(runConfig);
+          // Report success to credential pool
+          if (credPool && poolKey) credPool.reportSuccess(poolKey);
         } catch (primaryErr) {
-          if (isRetryableError(primaryErr) && fallbackModel && resolvedModel !== fallbackModel) {
+          // Report error to credential pool and try next key
+          const errStatus = extractStatusCode(primaryErr);
+          if (credPool && poolKey && errStatus) {
+            const keyName = credPool.getNameForKey(poolKey) ?? poolKey;
+            const hasMore = credPool.reportError(poolKey, errStatus, (primaryErr as Error).message);
+            log.warn(`[credential-pool] Key ${keyName} failed (${errStatus}), cooldown applied. More keys: ${hasMore}`);
+
+            if (hasMore) {
+              const nextKey = credPool.getKey();
+              if (nextKey) {
+                sendEvent('step', { content: `API key rotated — retrying with next credential` });
+                result = await agentRunner({ ...runConfig, litellmApiKey: nextKey });
+                credPool.reportSuccess(nextKey);
+              } else {
+                throw primaryErr;
+              }
+            } else if (isRetryableError(primaryErr) && fallbackModel && resolvedModel !== fallbackModel) {
+              // No pool keys left — fall back to different model
+              modelSwitchReason = `${resolvedModel} failed (${errStatus}), all keys exhausted`;
+              resolvedModel = fallbackModel;
+              result = await agentRunner({ ...runConfig, model: resolvedModel });
+            } else {
+              throw primaryErr;
+            }
+          } else if (isRetryableError(primaryErr) && fallbackModel && resolvedModel !== fallbackModel) {
             modelSwitchReason = `${resolvedModel} failed (${(primaryErr as { status?: number }).status ?? 'timeout'})`;
             resolvedModel = fallbackModel;
-            result = await agentRunner({ ...agentConfig, model: resolvedModel });
+            result = await agentRunner({ ...runConfig, model: resolvedModel });
           } else {
             throw primaryErr;
           }
@@ -1197,6 +1293,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         if (modelSwitchReason) {
           sendEvent('model_switch', { model: resolvedModel, reason: modelSwitchReason, primary: primaryModel });
           sendEvent('step', { content: `⬡ Switched to ${resolvedModel} — ${modelSwitchReason}` });
+        }
+
+        // Track iteration and inject budget pressure
+        iterBudget.tick();
+        const budgetPressure = iterBudget.getPressureMessage();
+        if (budgetPressure) {
+          sendEvent('step', { content: budgetPressure.trim() });
         }
 
         // Unregister the per-request approval hook
@@ -1264,6 +1367,48 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             }
           } catch {
             // Non-blocking
+          }
+        }
+
+        // ── Auto skill capture — detect repeatable workflow patterns ──
+        if (!hasCustomRunner && result.toolsUsed && result.toolsUsed.length > 0) {
+          try {
+            // Track this session's tool sequence
+            if (!sessionToolSequences.has(sessionId)) {
+              sessionToolSequences.set(sessionId, []);
+            }
+            sessionToolSequences.get(sessionId)!.push(result.toolsUsed);
+
+            // Build session history from other sessions' tool sequences
+            const otherSessions = [...sessionToolSequences.entries()]
+              .filter(([id]) => id !== sessionId)
+              .map(([, seqs]) => ({ toolSequence: seqs.flat() }));
+
+            if (otherSessions.length >= 2) {
+              const captureResult = shouldSuggestCapture({
+                messages: history.map((m, _i) => ({
+                  role: m.role,
+                  content: m.content,
+                  toolsUsed: result.toolsUsed,
+                })),
+                sessionHistory: otherSessions,
+              });
+
+              if (captureResult.suggest && captureResult.pattern) {
+                const patternKey = captureResult.pattern.name;
+                if (!dismissedCaptureSuggestions.has(patternKey)) {
+                  sendEvent('notification', {
+                    type: 'workflow_captured',
+                    title: captureResult.notification?.title ?? 'Pattern detected',
+                    message: captureResult.notification?.message ?? captureResult.reason,
+                    pattern: captureResult.pattern,
+                  });
+                  log.info(`[auto-skill] Suggested capture: ${patternKey}`);
+                }
+              }
+            }
+          } catch {
+            // Non-blocking — capture detection failure never affects the response
           }
         }
 
