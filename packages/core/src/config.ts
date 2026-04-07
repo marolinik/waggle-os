@@ -29,6 +29,8 @@ interface ConfigData {
   budgetModel?: string;
   /** Model Pilot: budget threshold as 0.0-1.0 fraction. Default 0.8 */
   budgetThreshold?: number;
+  /** Agent Intelligence: max LLM iterations per conversation. Default 90. */
+  maxIterations?: number;
   /** M2-7: Telemetry opt-in (default: false — privacy first) */
   telemetryEnabled?: boolean;
   /** M2-1: Embedding provider configuration */
@@ -150,6 +152,16 @@ export class WaggleConfig {
 
   setBudgetThreshold(threshold: number): void {
     this.data.budgetThreshold = Math.max(0.5, Math.min(0.95, threshold));
+  }
+
+  // --- Agent Intelligence ---
+
+  getMaxIterations(): number {
+    return this.data.maxIterations ?? 90;
+  }
+
+  setMaxIterations(max: number): void {
+    this.data.maxIterations = Math.max(5, Math.min(500, max));
   }
 
   // --- Team Server (Phase 5) ---

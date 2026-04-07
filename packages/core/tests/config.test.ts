@@ -214,5 +214,18 @@ describe('WaggleConfig', () => {
       const config2 = new WaggleConfig(tmpDir);
       expect(config2.getFallbackModel()).toBeNull();
     });
+
+    it('returns 90 as default maxIterations', () => {
+      const config = new WaggleConfig(tmpDir);
+      expect(config.getMaxIterations()).toBe(90);
+    });
+
+    it('persists maxIterations', () => {
+      const config = new WaggleConfig(tmpDir);
+      config.setMaxIterations(50);
+      config.save();
+      const config2 = new WaggleConfig(tmpDir);
+      expect(config2.getMaxIterations()).toBe(50);
+    });
   });
 });
