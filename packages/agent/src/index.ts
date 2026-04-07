@@ -112,6 +112,11 @@ export {
   shouldSuggestCapture,
   type CaptureCheckParams, type CaptureResult, type CaptureNotification,
 } from './workflow-capture.js';
+export {
+  deliverCronResult, createDefaultDeliveryPreferences,
+  type DeliveryChannel, type DeliveryPreferences, type DeliveryMessage, type DeliveryResult,
+  type DeliveryConnector, type DeliveryConnectorRegistry, type InAppEmitter,
+} from './cron-delivery-router.js';
 export { detectCorrection, detectCorrectionsInHistory, type DetectedCorrection, type CorrectionDurability } from './correction-detector.js';
 export { detectContradiction, type ContradictionResult } from './contradiction-detector.js';
 export {

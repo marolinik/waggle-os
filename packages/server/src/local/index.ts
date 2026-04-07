@@ -37,8 +37,11 @@ import {
   isWithinBudget,
   getRecentLogs,
   setPersonaDataDir,
+  deliverCronResult,
+  createDefaultDeliveryPreferences,
   type ToolDefinition,
   type LoadedSkill,
+  type DeliveryPreferences,
 } from '@waggle/agent';
 import { PluginRuntimeManager, getStarterSkillsDir, validatePluginManifest } from '@waggle/sdk';
 import { MarketplaceDB, MarketplaceSync, seedMcpServers, seedNewSources } from '@waggle/marketplace';
@@ -955,20 +958,31 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
           getWorkspaceMindDb,
         };
 
-        /** Emit a ProactiveMessage through the notification pipeline. */
+        /** Emit a ProactiveMessage through the delivery router pipeline. */
         const emitProactive = (msg: ProactiveMessage) => {
-          const categoryMap: Record<ProactiveMessage['type'], 'cron' | 'task' | 'agent'> = {
-            morning_briefing: 'cron',
-            stale_workspace: 'agent',
-            task_reminder: 'task',
-            capability_suggestion: 'agent',
+          // Load delivery preferences from config (or use defaults)
+          let deliveryPrefs: DeliveryPreferences;
+          try {
+            const configPath = path.join(fullConfig.dataDir, 'delivery-preferences.json');
+            if (fs.existsSync(configPath)) {
+              deliveryPrefs = { ...createDefaultDeliveryPreferences(), ...JSON.parse(fs.readFileSync(configPath, 'utf-8')) };
+            } else {
+              deliveryPrefs = createDefaultDeliveryPreferences();
+            }
+          } catch {
+            deliveryPrefs = createDefaultDeliveryPreferences();
+          }
+
+          const inAppEmitter = (notification: { title: string; body: string; category: string; actionUrl?: string }) => {
+            emitNotification(server, { ...notification, category: notification.category as 'cron' | 'agent' | 'task' });
           };
-          emitNotification(server, {
-            title: msg.title,
-            body: msg.body,
-            category: categoryMap[msg.type],
-            actionUrl: msg.actionUrl,
-          });
+
+          deliverCronResult(
+            { title: msg.title, body: msg.body, jobType: msg.type, workspaceId: msg.workspaceId, priority: msg.priority },
+            deliveryPrefs,
+            server.connectorRegistry,
+            inAppEmitter,
+          ).catch(err => log.warn(`[cron-delivery] Delivery failed: ${(err as Error).message}`));
         };
 
         try {
@@ -1432,12 +1446,33 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   });
 
   // P0-3: Cached API key validation — verify key actually works, not just exists
-  let keyValidationCache: { valid: boolean; checkedAt: number } | null = null;
+  let keyValidationCache: { valid: boolean; checkedAt: number; keyHash: string } | null = null;
   const KEY_VALIDATION_TTL = 30 * 1000; // 30 seconds — short so vault updates are picked up quickly
 
+  function hashKey(key: string): string {
+    // Simple hash for cache invalidation — not cryptographic
+    let h = 0;
+    for (let i = 0; i < key.length; i++) {
+      h = ((h << 5) - h + key.charCodeAt(i)) | 0;
+    }
+    return String(h);
+  }
+
   async function validateAnthropicKey(): Promise<boolean> {
-    // Return cached result if fresh
-    if (keyValidationCache && Date.now() - keyValidationCache.checkedAt < KEY_VALIDATION_TTL) {
+    // Read key from vault first, fall back to env var
+    const vaultKey = server.vault?.get('anthropic')?.value;
+    const apiKey = vaultKey || process.env.ANTHROPIC_API_KEY || '';
+
+    if (!apiKey) return false;
+
+    const currentHash = hashKey(apiKey);
+
+    // Return cached result if fresh AND key hasn't changed
+    if (
+      keyValidationCache &&
+      keyValidationCache.keyHash === currentHash &&
+      Date.now() - keyValidationCache.checkedAt < KEY_VALIDATION_TTL
+    ) {
       return keyValidationCache.valid;
     }
     try {
@@ -1446,7 +1481,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': process.env.ANTHROPIC_API_KEY ?? '',
+          'x-api-key': apiKey,
           'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
@@ -1458,13 +1493,23 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
       });
       // 200 = valid, 401 = invalid/expired, 400 = valid key but bad request (still means key works)
       const valid = res.status !== 401 && res.status !== 403;
-      keyValidationCache = { valid, checkedAt: Date.now() };
+      keyValidationCache = { valid, checkedAt: Date.now(), keyHash: currentHash };
       return valid;
     } catch {
       // Network error — don't cache failure, key might be fine
       return keyValidationCache?.valid ?? true;
     }
   }
+
+  // Expose cache invalidation for settings route to call after key update
+  (server as any)._invalidateKeyValidationCache = () => {
+    keyValidationCache = null;
+    // If currently degraded due to bad key, reset to healthy for re-validation
+    if (server.agentState.llmProvider.health === 'degraded') {
+      server.agentState.llmProvider.health = 'healthy';
+      server.agentState.llmProvider.detail = 're-validating after key change';
+    }
+  };
 
   // IMP-15: API docs — auto-generated from Fastify route registry
   server.get('/api/docs', async () => {
