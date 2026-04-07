@@ -924,6 +924,137 @@ export class SecurityGate {
       }
     }
 
+    // ── HIGH: Tool poisoning — MCP/tool descriptions that trick the agent ──
+    const toolPoisoning = [
+      /when the user asks you to.*instead/i,
+      /always (?:run|execute|call) this (?:tool|command) (?:first|before)/i,
+      /do not (?:tell|inform|show) the user/i,
+      /secretly|covertly|without.*(?:user|them) knowing/i,
+      /pretend (?:this|you|that)/i,
+      /this tool (?:should|must|needs to) (?:be )?(?:run|called|executed) (?:on every|before each|automatically)/i,
+      /override.*(?:user|default).*(?:preference|setting|choice)/i,
+    ];
+    for (const pat of toolPoisoning) {
+      const match = content.match(pat);
+      if (match) {
+        findings.push({
+          rule_id: 'WAG-008',
+          severity: 'HIGH',
+          category: 'tool_poisoning',
+          title: 'Tool poisoning — deceptive agent instruction',
+          description: `Found "${match[0]}" — this may manipulate agent behavior without user awareness.`,
+          location: this.findLineNumber(content, match.index || 0),
+          engine: 'waggle_heuristics',
+        });
+      }
+    }
+
+    // ── HIGH: Credential harvesting patterns ──
+    const credentialHarvest = [
+      /(?:api[_-]?key|token|password|secret|credential).*(?:send|post|upload|transmit|forward)/i,
+      /(?:send|post|upload|transmit|forward).*(?:api[_-]?key|token|password|secret|credential)/i,
+      /(?:extract|harvest|collect|gather).*(?:key|token|password|secret|credential)/i,
+      /(?:ANTHROPIC|OPENAI|GITHUB|AWS|STRIPE)[_-](?:API[_-])?(?:KEY|TOKEN|SECRET)/,
+      /process\.env\[.*(?:KEY|TOKEN|SECRET|PASSWORD)/i,
+      /vault\.(?:get|read|reveal|list)/i,
+    ];
+    for (const pat of credentialHarvest) {
+      const match = content.match(pat);
+      if (match) {
+        findings.push({
+          rule_id: 'WAG-009',
+          severity: 'HIGH',
+          category: 'data_exfiltration',
+          title: 'Credential harvesting pattern',
+          description: `Found "${match[0]}" — this may attempt to extract or transmit credentials.`,
+          location: this.findLineNumber(content, match.index || 0),
+          engine: 'waggle_heuristics',
+        });
+      }
+    }
+
+    // ── HIGH: Network beaconing — DNS/webhook/ping-back patterns ──
+    const beaconing = [
+      /(?:webhook|callback|ping[_-]?back|beacon|phone[_-]?home).*(?:url|endpoint|server)/i,
+      /(?:url|endpoint|server).*(?:webhook|callback|ping[_-]?back|beacon|phone[_-]?home)/i,
+      /dns[_-]?(?:lookup|resolve|query).*(?:encode|embed|exfil)/i,
+      /(?:ngrok|requestbin|webhook\.site|pipedream|hookbin|burp|interactsh)/i,
+      /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d{2,5}\b/,  // Raw IP:port
+    ];
+    for (const pat of beaconing) {
+      const match = content.match(pat);
+      if (match) {
+        findings.push({
+          rule_id: 'WAG-010',
+          severity: 'HIGH',
+          category: 'suspicious_network',
+          title: 'Network beaconing pattern',
+          description: `Found "${match[0]}" — this may establish unauthorized external communication.`,
+          location: this.findLineNumber(content, match.index || 0),
+          engine: 'waggle_heuristics',
+        });
+      }
+    }
+
+    // ── MEDIUM: Behavioral dataflow — read sensitive then write to network ──
+    const readsSensitive = /(?:read|cat|load|open|access).*(?:\.env|\.ssh|\.aws|credentials|vault|secret|\.mind)/i.test(content);
+    const writesNetwork = /(?:fetch|curl|wget|http|post|send|upload|socket)/i.test(content);
+    if (readsSensitive && writesNetwork) {
+      findings.push({
+        rule_id: 'WAG-011',
+        severity: 'MEDIUM',
+        category: 'data_exfiltration',
+        title: 'Sensitive data + network access pattern',
+        description: 'Skill reads sensitive local files AND makes network calls — potential data exfiltration pipeline.',
+        engine: 'waggle_heuristics',
+      });
+    }
+
+    // ── MEDIUM: Supply chain — suspicious package/dependency patterns ──
+    const supplyChain = [
+      /npm install\s+[a-z0-9-]+(?![\s\S]*(?:npm\.js|npmjs\.com|github\.com))/i,  // Install unknown packages
+      /pip install\s+[a-z0-9-]+\s+--index-url\s+(?!https:\/\/pypi)/i,  // Custom PyPI index
+      /go get\s+[a-z0-9./]+/i,
+      /(?:require|import)\s*\(?['"][a-z0-9-]+['"]\)?\s*.*(?:eval|exec|Function)/i,  // Dynamic import + execution
+    ];
+    for (const pat of supplyChain) {
+      const match = content.match(pat);
+      if (match) {
+        findings.push({
+          rule_id: 'WAG-012',
+          severity: 'MEDIUM',
+          category: 'malicious_code',
+          title: 'Supply chain risk — dynamic dependency installation',
+          description: `Found "${match[0]}" — skills should not install dependencies at runtime.`,
+          location: this.findLineNumber(content, match.index || 0),
+          engine: 'waggle_heuristics',
+        });
+      }
+    }
+
+    // ── MEDIUM: Cross-origin escalation — skill tries to modify other skills/plugins ──
+    const crossOrigin = [
+      /~\/\.claude\/(?:skills|plugins|hooks|commands)/i,
+      /~\/\.waggle\/skills/i,
+      /CLAUDE\.md/i,
+      /\.cursorrules/i,
+      /write.*(?:CLAUDE\.md|\.cursorrules|settings\.json|hooks\/)/i,
+    ];
+    let crossOriginCount = 0;
+    for (const pat of crossOrigin) {
+      if (pat.test(content)) crossOriginCount++;
+    }
+    if (crossOriginCount >= 2) {
+      findings.push({
+        rule_id: 'WAG-013',
+        severity: 'MEDIUM',
+        category: 'cross_origin_escalation',
+        title: 'Cross-origin skill modification',
+        description: `Skill references ${crossOriginCount} external agent config paths — may attempt to modify other agents' behavior.`,
+        engine: 'waggle_heuristics',
+      });
+    }
+
     // ── LOW: Waggle internals referenced ──
     const internals = [
       /orchestrator/i,
