@@ -95,6 +95,7 @@ export {
   // MOCK: Remove when real OAuth integrations are ready
   MockSlackConnector, MockTeamsConnector, MockDiscordConnector,
 } from './connectors/index.js';
+export { IterationBudget, type IterationBudgetConfig } from './iteration-budget.js';
 export { captureInteraction, getRecentLogs, isWithinBudget, type CaptureInteractionInput } from './optimization-capture.js';
 export { routeMessage, type RoutingDecision } from './smart-router.js';
 export { detectCorrection, detectCorrectionsInHistory, type DetectedCorrection, type CorrectionDurability } from './correction-detector.js';
