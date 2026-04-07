@@ -122,11 +122,35 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
       input_schema: t.function.parameters,
     }));
 
+    // Apply Anthropic prompt caching — cache system prompt for multi-turn efficiency
+    // See: https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching
+    const systemWithCache = system
+      ? [{ type: 'text', text: system, cache_control: { type: 'ephemeral' as const } }]
+      : undefined;
+
+    // Mark last 3 non-system messages for caching (rolling window)
+    // Anthropic allows max 4 cache breakpoints — 1 for system + 3 for messages
+    const cachedMessages = merged.map((msg, i) => {
+      const isInCacheWindow = i >= merged.length - 3;
+      if (!isInCacheWindow) return msg;
+
+      const content = msg.content;
+      if (typeof content === 'string') {
+        return { ...msg, content: [{ type: 'text', text: content, cache_control: { type: 'ephemeral' } }] };
+      }
+      if (Array.isArray(content) && content.length > 0) {
+        const lastBlock = content[content.length - 1];
+        const taggedBlock = { ...lastBlock, cache_control: { type: 'ephemeral' } };
+        return { ...msg, content: [...content.slice(0, -1), taggedBlock] };
+      }
+      return msg;
+    });
+
     const anthropicBody: Record<string, unknown> = {
       model: mapModel(body.model),
       max_tokens: body.max_tokens ?? 4096,
-      system,
-      messages: merged,
+      system: systemWithCache ?? system,
+      messages: cachedMessages,
       stream: body.stream ?? false,
     };
     if (body.temperature !== undefined) anthropicBody.temperature = body.temperature;
