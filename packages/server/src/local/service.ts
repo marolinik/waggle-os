@@ -7,6 +7,9 @@ import { needsMigration, migrateToMultiMind, MindDB } from '@waggle/core';
 import { buildLocalServer } from './index.js';
 import type { LlmHealthStatus } from './index.js';
 import { startLiteLLM, stopLiteLLM, type LiteLLMStatus } from './lifecycle.js';
+import { createLogger } from './logger.js';
+
+const log = createLogger('service');
 
 // ── Startup progress types ─────────────────────────────────────────
 
@@ -188,7 +191,7 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
     providerName = 'litellm';
     providerHealth = 'healthy';
     providerDetail = `LiteLLM on port ${litellmPort}`;
-    console.log(`[waggle] LLM provider: LiteLLM (http://localhost:${litellmPort})`);
+    log.info(`LLM provider: LiteLLM (http://localhost:${litellmPort})`);
   } else {
     // Fall back to built-in Anthropic proxy
     const selfUrl = `http://127.0.0.1:${port}/v1`;
@@ -206,11 +209,11 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
     }
 
     if (litellm.status !== 'running' && litellm.status !== 'started') {
-      console.log(`[waggle] LiteLLM unavailable (${litellm.status}), using built-in Anthropic proxy`);
+      log.info(`LiteLLM unavailable (${litellm.status}), using built-in Anthropic proxy`);
     } else {
-      console.log(`[waggle] LiteLLM not reachable, using built-in Anthropic proxy`);
+      log.info(`LiteLLM not reachable, using built-in Anthropic proxy`);
     }
-    console.log(`[waggle] LLM provider: ${providerDetail}`);
+    log.info(`LLM provider: ${providerDetail}`);
   }
 
   // Set the provider status on server state
@@ -249,8 +252,8 @@ if (isMain) {
       const addr = server.server.address();
       const port = typeof addr === 'object' && addr ? addr.port : '?';
       const llm = server.agentState.llmProvider;
-      console.log(`[waggle] Server running on http://127.0.0.1:${port}`);
-      console.log(`[waggle] LLM: ${llm.provider} (${llm.health}) — ${llm.detail}`);
+      log.info(`Server running on http://127.0.0.1:${port}`);
+      log.info(`LLM: ${llm.provider} (${llm.health}) — ${llm.detail}`);
     })
     .catch((err) => {
       console.error('[waggle] Failed to start:', err.message ?? err);

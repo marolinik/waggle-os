@@ -23,6 +23,7 @@ export interface AppSidebarProps {
   onCreateWorkspace: () => void;
   onOpenSearch?: () => void;
   onOpenHelp?: () => void;
+  onToggleWorkspaceSwitcher?: () => void;
   microStatus?: Record<string, WorkspaceMicroStatus>;
   memoryBadge?: number;
 }

@@ -10,6 +10,9 @@
 import type { Embedder } from './embeddings.js';
 import type { Database as DatabaseType } from 'better-sqlite3';
 import { type Tier, TIERS, TIER_CAPABILITIES, TierError } from '@waggle/shared';
+import { createCoreLogger } from '../logger.js';
+
+const log = createCoreLogger('embedding');
 
 export type EmbeddingProviderType = 'inprocess' | 'ollama' | 'voyage' | 'openai' | 'litellm' | 'mock';
 
@@ -229,7 +232,7 @@ async function probeProvider(
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.log(`[waggle] Trying ${type}... FAILED (${msg})`);
+    log.info(`Trying ${type}... FAILED (${msg})`);
     return null;
   }
 }
@@ -268,7 +271,7 @@ export async function createEmbeddingProvider(config?: EmbeddingProviderConfig):
       throw new EmbeddingQuotaExceededError(userTier, quota, used);
     }
     if (used + count >= quota * 0.8) {
-      console.warn(`[waggle] Embedding quota warning: ${used + count}/${quota} (${Math.round(((used + count) / quota) * 100)}%) for ${userTier} tier`);
+      log.warn(`Embedding quota warning: ${used + count}/${quota} (${Math.round(((used + count) / quota) * 100)}%) for ${userTier} tier`);
     }
   }
 
@@ -279,7 +282,7 @@ export async function createEmbeddingProvider(config?: EmbeddingProviderConfig):
   }
 
   async function runProbe(): Promise<void> {
-    console.log('[waggle] Probing embedding providers...');
+    log.info('Probing embedding providers...');
     const available: EmbeddingProviderType[] = [];
     activeResult = null;
     probeTimestamp = new Date().toISOString();
@@ -292,12 +295,12 @@ export async function createEmbeddingProvider(config?: EmbeddingProviderConfig):
         const required = getMinimumTierForProvider(requestedProvider);
         throw new TierError(required, userTier);
       }
-      console.log(`[waggle] Trying ${requestedProvider}...`);
+      log.info(`Trying ${requestedProvider}...`);
       const result = await probeProvider(requestedProvider, cfg);
       if (result) {
         activeResult = result;
         available.push(result.type);
-        console.log(`[waggle] Trying ${requestedProvider}... OK`);
+        log.info(`Trying ${requestedProvider}... OK`);
       }
     } else if (requestedProvider === 'auto') {
       // Auto: iterate chain, skip providers not allowed by tier
@@ -306,24 +309,24 @@ export async function createEmbeddingProvider(config?: EmbeddingProviderConfig):
       for (const providerType of chain) {
         // Tier gate — skip providers not allowed (only when tier is explicitly configured)
         if (tierEnforced && !allowedProviders.includes(providerType)) {
-          console.log(`[waggle] Skipping ${providerType} (not available on ${userTier} tier)`);
+          log.info(`Skipping ${providerType} (not available on ${userTier} tier)`);
           continue;
         }
         // Skip API providers without keys
         if (providerType === 'voyage' && !cfg.voyage?.apiKey) {
-          console.log('[waggle] Skipping voyage (no API key in Vault)');
+          log.info('Skipping voyage (no API key in Vault)');
           continue;
         }
         if (providerType === 'openai' && !cfg.openai?.apiKey) {
-          console.log('[waggle] Skipping openai (no API key in Vault)');
+          log.info('Skipping openai (no API key in Vault)');
           continue;
         }
 
-        console.log(`[waggle] Trying ${providerType}...`);
+        log.info(`Trying ${providerType}...`);
         const result = await probeProvider(providerType, cfg);
         if (result) {
           available.push(result.type);
-          console.log(`[waggle] Trying ${providerType}... OK`);
+          log.info(`Trying ${providerType}... OK`);
           if (!activeResult) {
             activeResult = result;
           }
@@ -339,13 +342,13 @@ export async function createEmbeddingProvider(config?: EmbeddingProviderConfig):
       activeType = activeResult.type;
       activeModelName = activeResult.modelName;
       lastError = undefined;
-      console.log(`[waggle] Embedding provider: ${activeType} (${activeModelName}, ${dims} dims)`);
+      log.info(`Embedding provider: ${activeType} (${activeModelName}, ${dims} dims)`);
     } else {
       activeEmbedder = createMockEmbedder(dims);
       activeType = 'mock';
       activeModelName = 'deterministic-mock';
       lastError = 'No real providers available';
-      console.log('[waggle] Embedding provider: mock (no real providers available — semantic search quality degraded)');
+      log.info('Embedding provider: mock (no real providers available — semantic search quality degraded)');
     }
   }
 
@@ -376,7 +379,7 @@ export async function createEmbeddingProvider(config?: EmbeddingProviderConfig):
         return result;
       } catch (err) {
         if (err instanceof EmbeddingQuotaExceededError) throw err;
-        console.warn(`[waggle] Embedding failed with ${activeType}, falling back to mock: ${(err as Error).message}`);
+        log.warn(`Embedding failed with ${activeType}, falling back to mock: ${(err as Error).message}`);
         lastError = (err as Error).message;
         const fallback = mockEmbed(text, dims);
         recordUsage(1);
@@ -393,7 +396,7 @@ export async function createEmbeddingProvider(config?: EmbeddingProviderConfig):
         return result;
       } catch (err) {
         if (err instanceof EmbeddingQuotaExceededError) throw err;
-        console.warn(`[waggle] Batch embedding failed with ${activeType}, falling back to mock: ${(err as Error).message}`);
+        log.warn(`Batch embedding failed with ${activeType}, falling back to mock: ${(err as Error).message}`);
         lastError = (err as Error).message;
         const fallback = texts.map(t => mockEmbed(t, dims));
         recordUsage(texts.length);

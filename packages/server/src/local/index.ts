@@ -735,14 +735,14 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
       const active = personalSessions.getActive();
       for (const s of active) personalWeaver.consolidateGop(s.gop_id);
       weaverState.lastPersonalConsolidation = new Date().toISOString();
-    } catch { /* non-blocking */ }
+    } catch (err) { log.debug('Personal consolidation skipped', err); }
   };
   const runPersonalDecay = () => {
     try {
       personalWeaver.decayFrames();
       personalWeaver.strengthenFrames();
       weaverState.lastPersonalDecay = new Date().toISOString();
-    } catch { /* non-blocking */ }
+    } catch (err) { log.debug('Personal decay skipped', err); }
   };
   weaverTimers.push(setInterval(runPersonalConsolidation, 60 * 60 * 1000)); // hourly
   weaverTimers.push(setInterval(runPersonalDecay, 24 * 60 * 60 * 1000));    // daily
@@ -771,7 +771,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
           } catch { /* non-blocking */ }
         }, 60 * 60 * 1000));
         timers.push(setInterval(() => {
-          try { wsWeaver.decayFrames(); wsWeaver.strengthenFrames(); } catch { /* non-blocking */ }
+          try { wsWeaver.decayFrames(); wsWeaver.strengthenFrames(); } catch (err) { log.debug('Workspace memory decay skipped', err); }
         }, 24 * 60 * 60 * 1000));
         workspaceWeavers.set(workspaceId, { weaver: wsWeaver, timers });
 
@@ -783,7 +783,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
             wsWeaver.distillSessionContent(session.date, session.summary, session.keyPoints);
             markSessionDistilled(session.filePath);
           }
-        } catch { /* non-blocking — distillation failure should never break workspace activation */ }
+        } catch (err) { log.debug('Workspace distillation skipped', err); }
       }
     }
 

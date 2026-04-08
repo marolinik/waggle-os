@@ -21,6 +21,9 @@ import { capabilityGovernanceRoutes } from './routes/capability-governance.js';
 import { analyticsRoutes } from './routes/analytics.js';
 import { wsGateway } from './ws/gateway.js';
 import { JobService } from './services/job-service.js';
+import { createLogger } from './local/logger.js';
+
+const log = createLogger('server');
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -76,5 +79,5 @@ const isDirectRun = process.argv[1]?.replace(/\\/g, '/').includes('server/src/in
 if (isDirectRun) {
   const server = await buildServer();
   await server.listen({ port: server.config.port, host: server.config.host });
-  console.log(`Waggle server listening on ${server.config.host}:${server.config.port}`);
+  log.info(`Waggle server listening on ${server.config.host}:${server.config.port}`);
 }

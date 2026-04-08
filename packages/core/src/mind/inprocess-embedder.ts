@@ -8,6 +8,9 @@
 import path from 'node:path';
 import os from 'node:os';
 import type { Embedder } from './embeddings.js';
+import { createCoreLogger } from '../logger.js';
+
+const log = createCoreLogger('inprocess-embedder');
 
 export interface InProcessEmbedderConfig {
   model?: string;
@@ -29,7 +32,7 @@ export async function createInProcessEmbedder(config?: Partial<InProcessEmbedder
   const cacheDir = config?.cacheDir ?? path.join(os.homedir(), '.waggle', 'models');
   const targetDims = config?.targetDimensions ?? 1024;
 
-  console.log(`[waggle] Loading in-process embedding model: ${model} (~23MB first download)`);
+  log.info(`Loading in-process embedding model: ${model} (~23MB first download)`);
 
   const { pipeline, env } = await import('@huggingface/transformers');
   env.cacheDir = cacheDir;
@@ -38,7 +41,7 @@ export async function createInProcessEmbedder(config?: Partial<InProcessEmbedder
   const extractor = await pipeline('feature-extraction', model, { dtype: 'fp32' });
   const nativeDims = 384; // all-MiniLM-L6-v2 output dimensions
 
-  console.log(`[waggle] In-process embedder ready (${nativeDims} native dims → ${targetDims} normalized)`);
+  log.info(`In-process embedder ready (${nativeDims} native dims → ${targetDims} normalized)`);
 
   return {
     dimensions: targetDims,
