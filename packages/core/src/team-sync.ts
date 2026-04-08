@@ -14,6 +14,8 @@
  */
 
 import type { MemoryFrame, FrameType, Importance } from './mind/frames.js';
+import { createCoreLogger } from './logger.js';
+const log = createCoreLogger('team-sync');
 
 export interface TeamSyncConfig {
   teamServerUrl: string;
@@ -113,14 +115,14 @@ export class TeamSync {
       );
 
       if (!response.ok) {
-        console.error(`TeamSync push failed: ${response.status} ${response.statusText}`);
+        log.error(`Push failed: ${response.status} ${response.statusText}`);
         return null;
       }
 
       const created = await response.json() as { id: string };
       return { remoteId: created.id };
     } catch (err) {
-      console.error('TeamSync push error:', err);
+      log.error('Push error:', err);
       return null;
     }
   }
@@ -142,7 +144,7 @@ export class TeamSync {
       });
 
       if (!response.ok) {
-        console.error(`TeamSync pull failed: ${response.status} ${response.statusText}`);
+        log.error(`Pull failed: ${response.status} ${response.statusText}`);
         return [];
       }
 
@@ -163,7 +165,7 @@ export class TeamSync {
       this.lastSyncTimestamp = new Date().toISOString();
       return frames;
     } catch (err) {
-      console.error('TeamSync pull error:', err);
+      log.error('Pull error:', err);
       return [];
     }
   }

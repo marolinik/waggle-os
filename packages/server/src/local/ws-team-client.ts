@@ -12,6 +12,8 @@
  */
 
 import { EventEmitter } from 'node:events';
+import { createLogger } from './logger.js';
+const log = createLogger('team-ws');
 
 export interface WsTeamClientConfig {
   serverUrl: string;
@@ -63,11 +65,11 @@ export class WsTeamClient extends EventEmitter {
       });
 
       this.ws.on('error', (err: Error) => {
-        console.warn('[waggle] WS team client error:', err.message);
+        log.warn('WS team client error:', err.message);
         // 'close' event will follow — reconnect happens there
       });
     } catch (err) {
-      console.warn('[waggle] WS team client connect failed:', (err as Error).message);
+      log.warn('WS team client connect failed:', (err as Error).message);
       this.ws = null;
       this.scheduleReconnect();
     }
@@ -87,7 +89,7 @@ export class WsTeamClient extends EventEmitter {
         this.emit('message', event.message);
         break;
       case 'error':
-        console.warn('[waggle] WS team server error:', event.message);
+        log.warn('WS team server error:', event.message);
         break;
     }
   }

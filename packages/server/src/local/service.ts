@@ -256,7 +256,7 @@ if (isMain) {
       log.info(`LLM: ${llm.provider} (${llm.health}) — ${llm.detail}`);
     })
     .catch((err) => {
-      console.error('[waggle] Failed to start:', err.message ?? err);
+      log.error('Failed to start:', err.message ?? err);
       process.exit(1);
     });
 }

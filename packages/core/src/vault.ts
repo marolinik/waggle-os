@@ -10,7 +10,9 @@
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { createCoreLogger } from './logger.js';
 
+const log = createCoreLogger('vault');
 const ALGORITHM = 'aes-256-gcm';
 const KEY_LENGTH = 32;
 const IV_LENGTH = 16;
@@ -79,7 +81,7 @@ export class VaultStore {
         ], { stdio: 'ignore' });
       } catch {
         // icacls may not be available in all contexts — log but don't fail
-        console.warn('[vault] Could not restrict key file permissions via icacls');
+        log.warn('Could not restrict key file permissions via icacls');
       }
     }
     return key;

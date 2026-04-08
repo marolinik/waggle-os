@@ -15,6 +15,8 @@
  */
 
 import { COMPACTION_PROMPT } from './behavioral-spec.js';
+import { createCoreLogger } from '@waggle/core';
+const log = createCoreLogger('context-compressor');
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -222,7 +224,7 @@ export async function summarizeMiddle(
   if (!response.ok) {
     try {
       const errBody = await response.text();
-      console.warn(`[context-compressor] Summarizer returned ${response.status}: ${errBody.slice(0, 200)}`);
+      log.warn(`Summarizer returned ${response.status}: ${errBody.slice(0, 200)}`);
     } catch { /* ignore read errors */ }
     return buildFallbackSummary(middle, previousSummary);
   }

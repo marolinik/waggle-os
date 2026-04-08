@@ -5,69 +5,14 @@ import { execFile, type ChildProcess } from 'node:child_process';
 import { glob } from 'glob';
 import type { ToolDefinition } from './tools.js';
 import { SearchCache, RateLimiter } from './web-search-utils.js';
+import {
+  IMAGE_EXTENSIONS, DENIED_BINARIES, SENSITIVE_ENV_VARS, MAX_OUTPUT_SIZE,
+  checkDeniedBinaries, createSanitizedEnv, truncateOutput, resolveSafe,
+} from './system-tools-helpers.js';
 
 // Module-level instances — shared across all tool invocations
 const searchCache = new SearchCache(300_000); // 5 min TTL
 const searchRateLimiter = new RateLimiter(10, 60_000); // 10 searches per minute
-
-/** Image file extensions (binary, should not be read as text) */
-const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp']);
-
-/** Denylist of dangerous binaries that must not appear anywhere in a bash command */
-const DENIED_BINARIES = [
-  'powershell', 'pwsh', 'cmd.exe',   // shell escape
-  'certutil',                          // Windows download/decode
-  'bitsadmin',                         // Windows download
-  'mshta',                             // Windows script host
-  'regsvr32',                          // DLL registration
-  'rundll32',                          // DLL execution
-  'wscript', 'cscript',               // Windows Script Host
-];
-
-/** Environment variables to strip from child processes for security */
-const SENSITIVE_ENV_VARS = [
-  'ANTHROPIC_API_KEY',
-  'OPENAI_API_KEY',
-  'CLERK_SECRET_KEY',
-  'DATABASE_URL',
-  'REDIS_URL',
-];
-
-/** Maximum output size per stream (stdout/stderr) in bytes — 1 MB */
-const MAX_OUTPUT_SIZE = 1024 * 1024;
-
-/**
- * Check if a command contains any denied binary (case-insensitive).
- * Returns the matched binary name or null if the command is safe.
- */
-function checkDeniedBinaries(command: string): string | null {
-  const lowerCmd = command.toLowerCase();
-  for (const bin of DENIED_BINARIES) {
-    if (lowerCmd.includes(bin)) {
-      return bin;
-    }
-  }
-  return null;
-}
-
-/**
- * Create a sanitized copy of the process environment with sensitive vars removed.
- */
-function createSanitizedEnv(): Record<string, string | undefined> {
-  const sanitizedEnv = { ...process.env };
-  for (const key of SENSITIVE_ENV_VARS) {
-    delete sanitizedEnv[key];
-  }
-  return sanitizedEnv;
-}
-
-/**
- * Truncate output to MAX_OUTPUT_SIZE, appending a warning if truncated.
- */
-function truncateOutput(output: string): string {
-  if (output.length <= MAX_OUTPUT_SIZE) return output;
-  return output.slice(0, MAX_OUTPUT_SIZE) + '\n[output truncated — exceeded 1 MB limit]';
-}
 
 /** Background task tracking */
 interface BackgroundTask {
@@ -119,18 +64,6 @@ export function cleanupStaleTasks(): number {
     }
   }
   return removed;
-}
-
-/**
- * Resolve a relative path within a workspace, rejecting traversal outside it.
- * Returns the resolved absolute path or throws.
- */
-function resolveSafe(workspace: string, filePath: string): string {
-  const resolved = path.resolve(workspace, filePath);
-  if (!resolved.startsWith(path.resolve(workspace))) {
-    throw new Error(`Path resolves outside workspace: ${filePath}`);
-  }
-  return resolved;
 }
 
 export function createSystemTools(workspace: string): ToolDefinition[] {
@@ -950,8 +883,11 @@ export function createSystemTools(workspace: string): ToolDefinition[] {
 }
 
 /** Expose internals for testing */
+export { backgroundTasks, MAX_BACKGROUND_TASKS, STALE_TASK_THRESHOLD_MS };
+
+/** Re-export helpers so existing consumers keep working */
 export {
-  backgroundTasks, MAX_BACKGROUND_TASKS, STALE_TASK_THRESHOLD_MS,
   DENIED_BINARIES, SENSITIVE_ENV_VARS, MAX_OUTPUT_SIZE,
   checkDeniedBinaries, createSanitizedEnv, truncateOutput,
-};
+  resolveSafe,
+} from './system-tools-helpers.js';
