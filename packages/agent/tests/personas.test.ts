@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { PERSONAS, getPersona, listPersonas, composePersonaPrompt } from '../src/personas.js';
 
 describe('Agent Personas', () => {
-  it('PERSONAS catalog has 17 entries', () => {
-    expect(PERSONAS).toHaveLength(17);
+  it('PERSONAS catalog has 22 entries', () => {
+    expect(PERSONAS).toHaveLength(22);
   });
 
   it('each persona has required fields', () => {
@@ -38,9 +38,9 @@ describe('Agent Personas', () => {
     expect(getPersona('')).toBeNull();
   });
 
-  it('listPersonas() returns all 17 personas', () => {
+  it('listPersonas() returns all 22 personas', () => {
     const list = listPersonas();
-    expect(list).toHaveLength(17);
+    expect(list).toHaveLength(22);
     expect(list).not.toBe(PERSONAS); // Returns a copy
   });
 
@@ -77,14 +77,18 @@ describe('Agent Personas', () => {
     }
   });
 
-  it('every persona has disallowedTools array', () => {
+  it('every persona has disallowedTools defined (array or undefined for soft-model personas)', () => {
+    const softModelIds = ['researcher', 'analyst'];
     for (const persona of PERSONAS) {
-      expect(Array.isArray(persona.disallowedTools)).toBe(true);
+      if (softModelIds.includes(persona.id)) {
+        // Soft model personas should NOT have disallowedTools
+        expect(persona.disallowedTools, `${persona.id} should not have disallowedTools`).toBeUndefined();
+      }
     }
   });
 
   it('read-only personas have isReadOnly true', () => {
-    const readOnlyIds = ['researcher', 'analyst', 'planner', 'verifier'];
+    const readOnlyIds = ['planner', 'verifier'];
     for (const id of readOnlyIds) {
       const persona = getPersona(id);
       expect(persona).not.toBeNull();
@@ -147,5 +151,72 @@ describe('Prompt composition', () => {
     const result = composePersonaPrompt(corePrompt, null);
     expect(result).toContain(corePrompt);
     expect(result).toContain('generate_docx');
+  });
+});
+
+describe('Persona field completeness', () => {
+  for (const persona of PERSONAS) {
+    it(`${persona.id} has tagline, bestFor, wontDo`, () => {
+      expect(persona.tagline, `${persona.id} missing tagline`).toBeTruthy();
+      expect(persona.bestFor, `${persona.id} missing bestFor`).toBeDefined();
+      expect(persona.bestFor!.length, `${persona.id} bestFor should have 3 items`).toBe(3);
+      expect(persona.wontDo, `${persona.id} missing wontDo`).toBeTruthy();
+    });
+  }
+
+  it('all personas have failurePatterns with at least 3 entries', () => {
+    for (const p of PERSONAS) {
+      expect(p.failurePatterns, `${p.id} missing failurePatterns`).toBeDefined();
+      expect(p.failurePatterns!.length, `${p.id} needs 3+ failure patterns`).toBeGreaterThanOrEqual(3);
+    }
+  });
+});
+
+describe('Soft tool model', () => {
+  it('researcher is NOT hard read-only', () => {
+    const r = getPersona('researcher');
+    expect(r!.isReadOnly).toBeFalsy();
+    expect(r!.disallowedTools).toBeUndefined();
+  });
+
+  it('analyst is NOT hard read-only', () => {
+    const a = getPersona('analyst');
+    expect(a!.isReadOnly).toBeFalsy();
+    expect(a!.disallowedTools).toBeUndefined();
+  });
+
+  it('planner still has hard disallowedTools', () => {
+    const p = getPersona('planner');
+    expect(p!.disallowedTools).toBeDefined();
+    expect(p!.disallowedTools).toContain('write_file');
+    expect(p!.isReadOnly).toBe(true);
+  });
+
+  it('verifier still has hard disallowedTools', () => {
+    const v = getPersona('verifier');
+    expect(v!.disallowedTools).toBeDefined();
+    expect(v!.disallowedTools).toContain('write_file');
+    expect(v!.isReadOnly).toBe(true);
+  });
+});
+
+describe('New domain personas', () => {
+  const NEW_IDS = ['support-agent', 'ops-manager', 'data-engineer', 'recruiter', 'creative-director'];
+
+  for (const id of NEW_IDS) {
+    it(`${id} exists and has complete fields`, () => {
+      const p = getPersona(id);
+      expect(p, `${id} not found`).toBeTruthy();
+      expect(p!.tagline).toBeTruthy();
+      expect(p!.bestFor?.length).toBe(3);
+      expect(p!.wontDo).toBeTruthy();
+      expect(p!.failurePatterns?.length).toBeGreaterThanOrEqual(3);
+      expect(p!.systemPrompt.length).toBeGreaterThan(100);
+      expect(p!.tools.length).toBeGreaterThan(3);
+    });
+  }
+
+  it('total persona count is 22', () => {
+    expect(PERSONAS.length).toBe(22);
   });
 });

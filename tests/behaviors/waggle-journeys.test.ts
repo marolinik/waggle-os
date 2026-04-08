@@ -60,8 +60,8 @@ describe('Persona system — all 17 personas', () => {
     'general-purpose', 'planner', 'verifier', 'coordinator',
   ] as const;
 
-  it('exports exactly 17 personas', () => {
-    expect(listPersonas()).toHaveLength(17);
+  it('exports exactly 22 personas', () => {
+    expect(listPersonas()).toHaveLength(22);
     const ids = listPersonas().map(p => p.id);
     for (const id of EXPECTED_PERSONAS) {
       expect(ids).toContain(id);
@@ -91,11 +91,11 @@ describe('Persona system — all 17 personas', () => {
     expect(getPersona('nonexistent-persona')).toBeNull();
   });
 
-  it('researcher persona: system prompt references memory and is read-only', () => {
+  it('researcher persona: system prompt references memory and uses soft working style', () => {
     const r = getPersona('researcher')!;
     expect(r.systemPrompt).toContain('Cross-reference memory');
-    expect(r.systemPrompt).toContain('READ-ONLY PERSONA');
-    expect(r.isReadOnly).toBe(true);
+    expect(r.systemPrompt).toContain('Working Style');
+    expect(r.isReadOnly).toBeFalsy();
   });
 
   it('coder persona: tools include git and file system tools', () => {

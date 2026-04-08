@@ -81,7 +81,7 @@ describe('Personas Routes', () => {
       const res = await server.inject({ method: 'GET', url: '/api/personas' });
       const { personas } = res.json();
 
-      expect(personas.length).toBe(17);
+      expect(personas.length).toBe(22);
       const ids = personas.map((p: { id: string }) => p.id);
       expect(ids).toContain('researcher');
       expect(ids).toContain('writer');
