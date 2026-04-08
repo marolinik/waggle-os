@@ -9,64 +9,10 @@ import type {
   Embedder,
 } from '@waggle/core';
 import type { CognifyPipeline } from './cognify.js';
-import type { CombinedRetrievalResult, CombinedResult } from './combined-retrieval.js';
 import type { FeedbackHandler } from './feedback-handler.js';
-
-// ── F16: Text normalization for fuzzy dedup ──────────────────────────────
-/** Normalize text for fuzzy dedup: lowercase, collapse whitespace, strip punctuation */
-function normalizeForDedup(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^\w\s]/g, '')    // strip punctuation
-    .replace(/\s+/g, ' ')       // collapse whitespace
-    .trim();
-}
-
-/** Compute cosine similarity between two Float32Arrays */
-function cosineSimilarity(a: Float32Array, b: Float32Array): number {
-  if (a.length !== b.length || a.length === 0) return 0;
-  let dot = 0, magA = 0, magB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    magA += a[i] * a[i];
-    magB += b[i] * b[i];
-  }
-  const denom = Math.sqrt(magA) * Math.sqrt(magB);
-  return denom === 0 ? 0 : dot / denom;
-}
-
-// ── F22: Dramatic claims detection ───────────────────────────────────────
-const DRAMATIC_CLAIM_PATTERNS: RegExp[] = [
-  /\b(shut(?:ting)?\s*down|clos(?:ing|ed)\s+(?:the\s+)?company|going\s+bankrupt|bankrupt(?:cy)?|dissolv(?:ing|ed))\b/i,
-  /\b(mass\s+layoff|laid?\s+off\s+everyone|fir(?:ing|ed)\s+(?:all|everyone|the\s+entire))\b/i,
-  /\b(lawsuit|legal\s+threat|su(?:ing|ed)\s+(?:us|them|the\s+company)|cease\s+and\s+desist)\b/i,
-  /\b(revenue\s*(?:is|=|dropped?\s+to)\s*(?:\$?\s*)?0|lost\s+all\s+(?:our\s+)?funding|funding\s+(?:fell?\s+through|collapsed?))\b/i,
-];
-
-/** Detect dramatic claim patterns in content. Returns matched pattern descriptions. */
-function detectDramaticClaims(content: string): string[] {
-  const labels = ['company_shutdown', 'mass_layoffs', 'legal_threats', 'dramatic_financial'];
-  const matches: string[] = [];
-  for (let i = 0; i < DRAMATIC_CLAIM_PATTERNS.length; i++) {
-    if (DRAMATIC_CLAIM_PATTERNS[i].test(content)) {
-      matches.push(labels[i]);
-    }
-  }
-  return matches;
-}
-
-// ── F6: Confidence level type ────────────────────────────────────────────
-export type ConfidenceLevel = 'high' | 'medium' | 'low' | 'unverified';
-
-/** Derive default confidence from source provenance */
-function deriveConfidence(source: string): ConfidenceLevel {
-  switch (source) {
-    case 'tool_verified': return 'high';
-    case 'user_stated':   return 'medium';
-    case 'agent_inferred': return 'low';
-    default:              return 'unverified';
-  }
-}
+import { normalizeForDedup, cosineSimilarity, detectDramaticClaims, deriveConfidence, type ConfidenceLevel } from './text-analysis.js';
+export type { ConfidenceLevel } from './text-analysis.js';
+export { formatCombinedResult } from './result-formatter.js';
 
 export interface ToolDefinition {
   name: string;
@@ -648,69 +594,3 @@ export function createMindTools(deps: MindToolDeps): ToolDefinition[] {
   ];
 }
 
-// ── Combined retrieval result formatter ─────────────────────────────────
-
-function formatResultEntry(r: CombinedResult, includeFrameType: boolean): string {
-  const lines = [`- ${r.content} ${r.attribution} (score: ${r.score.toFixed(3)}`];
-  if (includeFrameType && r.metadata.frameType) {
-    lines[0] += `, type: ${r.metadata.frameType}`;
-  }
-  if (includeFrameType && r.metadata.importance) {
-    lines[0] += `, importance: ${r.metadata.importance}`;
-  }
-  lines[0] += ')';
-  return lines.join('\n');
-}
-
-/**
- * Format a CombinedRetrievalResult into a human-readable string for the agent.
- * @param result The combined retrieval result
- * @param hasWorkspace Whether a workspace is active (controls header display)
- */
-export function formatCombinedResult(result: CombinedRetrievalResult, hasWorkspace: boolean): string {
-  const sections: string[] = [];
-
-  // Workspace results
-  if (result.workspaceResults.length > 0) {
-    const header = '## Workspace Memory';
-    const entries = result.workspaceResults.map(r => formatResultEntry(r, true)).join('\n');
-    sections.push(`${header}\n${entries}`);
-  }
-
-  // Personal results
-  if (result.personalResults.length > 0) {
-    if (hasWorkspace) {
-      const header = '## Personal Memory';
-      const entries = result.personalResults.map(r => formatResultEntry(r, true)).join('\n');
-      sections.push(`${header}\n${entries}`);
-    } else {
-      // No workspace = no header, just results
-      const entries = result.personalResults.map(r => formatResultEntry(r, true)).join('\n');
-      sections.push(entries);
-    }
-  }
-
-  // KVARK results
-  if (result.kvarkResults.length > 0) {
-    const header = '## Enterprise Knowledge (KVARK)';
-    // KVARK results: score only, no frame_type/importance
-    const entries = result.kvarkResults.map(r => formatResultEntry(r, false)).join('\n');
-    sections.push(`${header}\n${entries}`);
-  }
-
-  // Source conflict notice
-  if (result.hasConflict && result.conflictNote) {
-    sections.push(`## Source Conflict\n${result.conflictNote}\nReview both sources carefully and note which is more recent or authoritative.`);
-  }
-
-  // KVARK error notice
-  if (result.kvarkError && result.kvarkAvailable) {
-    sections.push(`> Enterprise search encountered an error: ${result.kvarkError}\n> Results shown are from local memory only.`);
-  }
-
-  if (sections.length === 0) {
-    return 'No relevant memories found.';
-  }
-
-  return sections.join('\n\n');
-}

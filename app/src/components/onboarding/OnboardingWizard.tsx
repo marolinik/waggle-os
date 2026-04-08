@@ -158,13 +158,18 @@ export function OnboardingWizard({
   const [customPersonaDesc, setCustomPersonaDesc] = useState('');
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [tierCheckoutLoading, setTierCheckoutLoading] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [customPersonaError, setCustomPersonaError] = useState<string | null>(null);
 
   // Fetch auth token from /health on mount
   useEffect(() => {
     fetch(`${serverBaseUrl}/health`)
       .then(r => r.json())
       .then((d: any) => { if (d.wsToken) setAuthToken(d.wsToken); })
-      .catch(() => {});
+      .catch(() => {
+        // Auth token is optional — wizard works without it (unauthenticated mode).
+        // No user-visible error needed; API calls will proceed without the token.
+      });
   }, [serverBaseUrl]);
 
   // Auto-advance step 0 (Welcome) after 3 seconds
@@ -602,6 +607,7 @@ export function OnboardingWizard({
                     type="button"
                     onClick={async () => {
                       if (!customPersonaDesc.trim()) return;
+                      setCustomPersonaError(null);
                       // Create persona via API — agent will refine it later
                       const name = customPersonaDesc.trim().split(/[.,!?\n]/)[0].slice(0, 40);
                       try {
@@ -619,8 +625,13 @@ export function OnboardingWizard({
                           setSelectedPersona(persona.id);
                           setCustomPersonaMode(false);
                           setCustomPersonaDesc('');
+                        } else {
+                          const data = await res.json().catch(() => ({}));
+                          setCustomPersonaError((data as { error?: string }).error ?? 'Failed to create persona. You can pick a built-in one instead.');
                         }
-                      } catch { /* handled — user can proceed with built-in persona */ }
+                      } catch {
+                        setCustomPersonaError('Could not connect to server. You can pick a built-in persona instead.');
+                      }
                     }}
                     disabled={!customPersonaDesc.trim()}
                     className="rounded-md px-3 py-1.5 text-sm text-primary-foreground transition-colors disabled:opacity-50"
@@ -629,6 +640,9 @@ export function OnboardingWizard({
                     Create Persona
                   </button>
                 </div>
+                {customPersonaError && (
+                  <p className="text-xs text-red-400 mt-1">{customPersonaError}</p>
+                )}
               </div>
             )}
             {/* Persona recommendation block */}
@@ -855,6 +869,7 @@ export function OnboardingWizard({
                   className="w-full"
                   onClick={async () => {
                     setTierCheckoutLoading(true);
+                    setCheckoutError(null);
                     onUpdate({ selectedTier: 'BASIC', stripeSessionPending: true });
                     try {
                       const res = await fetch(`${serverBaseUrl}/api/stripe/create-checkout-session`, {
@@ -865,8 +880,12 @@ export function OnboardingWizard({
                       if (res.ok) {
                         const { url } = await res.json();
                         if (url) window.open(url, '_blank');
+                      } else {
+                        setCheckoutError('Could not start checkout. You can continue on Solo and upgrade later.');
                       }
-                    } catch { /* handled */ }
+                    } catch {
+                      setCheckoutError('Could not connect to payment server. You can continue on Solo and upgrade later.');
+                    }
                     setTierCheckoutLoading(false);
                     // After user returns from checkout, handleFinish will be called
                     // For now, also allow proceeding directly
@@ -899,6 +918,7 @@ export function OnboardingWizard({
                   variant="outline"
                   onClick={async () => {
                     setTierCheckoutLoading(true);
+                    setCheckoutError(null);
                     onUpdate({ selectedTier: 'TEAMS', stripeSessionPending: true });
                     try {
                       const res = await fetch(`${serverBaseUrl}/api/stripe/create-checkout-session`, {
@@ -909,8 +929,12 @@ export function OnboardingWizard({
                       if (res.ok) {
                         const { url } = await res.json();
                         if (url) window.open(url, '_blank');
+                      } else {
+                        setCheckoutError('Could not start checkout. You can continue on Solo and upgrade later.');
                       }
-                    } catch { /* handled */ }
+                    } catch {
+                      setCheckoutError('Could not connect to payment server. You can continue on Solo and upgrade later.');
+                    }
                     setTierCheckoutLoading(false);
                     handleFinish();
                   }}
@@ -922,6 +946,9 @@ export function OnboardingWizard({
               </div>
             </div>
 
+            {checkoutError && (
+              <p className="text-xs text-yellow-500 mt-2 text-center">{checkoutError}</p>
+            )}
             <button
               onClick={() => {
                 onUpdate({ selectedTier: 'SOLO' });
