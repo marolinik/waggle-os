@@ -297,9 +297,9 @@ describe('Phase 6 — Capability Truth integration', () => {
 
   // ── 8. Workflow Templates ───────────────────────────────────────────
 
-  it('workflow templates: 3 available, each has description and steps', () => {
+  it('workflow templates: 5 available, each has description and steps', () => {
     const templateNames = listWorkflowTemplates();
-    expect(templateNames).toHaveLength(3);
+    expect(templateNames).toHaveLength(5);
     expect(templateNames).toContain('research-team');
     expect(templateNames).toContain('review-pair');
     expect(templateNames).toContain('plan-execute');

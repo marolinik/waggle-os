@@ -125,11 +125,13 @@ describe('Workflow Templates', () => {
   });
 
   describe('WORKFLOW_TEMPLATES registry', () => {
-    it('contains all three templates', () => {
+    it('contains all five templates', () => {
       expect(WORKFLOW_TEMPLATES).toHaveProperty('research-team');
       expect(WORKFLOW_TEMPLATES).toHaveProperty('review-pair');
       expect(WORKFLOW_TEMPLATES).toHaveProperty('plan-execute');
-      expect(Object.keys(WORKFLOW_TEMPLATES)).toHaveLength(3);
+      expect(WORKFLOW_TEMPLATES).toHaveProperty('ticket-resolve');
+      expect(WORKFLOW_TEMPLATES).toHaveProperty('content-pipeline');
+      expect(Object.keys(WORKFLOW_TEMPLATES)).toHaveLength(5);
     });
   });
 
@@ -139,7 +141,7 @@ describe('Workflow Templates', () => {
       expect(names).toContain('research-team');
       expect(names).toContain('review-pair');
       expect(names).toContain('plan-execute');
-      expect(names).toHaveLength(3);
+      expect(names).toHaveLength(5);
     });
   });
 
