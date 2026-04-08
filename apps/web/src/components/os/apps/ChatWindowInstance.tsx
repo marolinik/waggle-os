@@ -49,7 +49,7 @@ interface ChatWindowInstanceProps {
 }
 
 const ChatWindowInstance = ({ workspaceId, workspaceName, initialPersona, templateId }: ChatWindowInstanceProps) => {
-  const [currentPersona, setCurrentPersona] = useState(initialPersona || 'analytics');
+  const [currentPersona, setCurrentPersona] = useState(initialPersona || 'general-purpose');
   const { sessions, activeSessionId, setActiveSessionId, createSession } = useSessions(workspaceId);
   const { messages, isLoading, sendMessage, clearHistory, pendingApproval, approveAction } = useChat({
     workspaceId,

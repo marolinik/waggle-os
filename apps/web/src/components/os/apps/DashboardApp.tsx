@@ -18,14 +18,31 @@ const TEMPLATE_LABELS: Record<string, string> = {
 };
 
 const PERSONA_LABELS: Record<string, string> = {
+  // Universal modes
+  'general-purpose': 'General',
+  'planner': 'Planner',
+  'verifier': 'Verifier',
+  'coordinator': 'Coordinator',
+  // Knowledge workers
   'researcher': 'Researcher',
   'writer': 'Writer',
   'analyst': 'Analyst',
   'coder': 'Coder',
+  // Domain specialists
   'project-manager': 'PM',
   'executive-assistant': 'EA',
   'sales-rep': 'Sales Rep',
   'marketer': 'Marketer',
+  'product-manager-senior': 'Senior PM',
+  'hr-manager': 'HR',
+  'legal-professional': 'Legal',
+  'finance-owner': 'Finance',
+  'consultant': 'Consultant',
+  'support-agent': 'Support',
+  'ops-manager': 'Ops',
+  'data-engineer': 'Data Eng',
+  'recruiter': 'Recruiter',
+  'creative-director': 'Creative',
 };
 
 interface DashboardAppProps {
