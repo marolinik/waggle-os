@@ -2,15 +2,28 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { adapter } from '@/lib/adapter';
 import type {
   ChatMessage, StreamEvent, ApprovalRequest,
-  ContentBlock, TextContentBlock,
+  ContentBlock, TextContentBlock, ToolExecution,
 } from '@/lib/types';
+
+let blockCounter = 0;
+function nextBlockId(prefix: string): string {
+  return `${prefix}-${++blockCounter}-${Date.now()}`;
+}
 
 /** Convert legacy messages (from history API) that lack blocks */
 function ensureBlocks(msg: ChatMessage): ChatMessage {
-  if (msg.blocks && msg.blocks.length > 0) return msg;
+  if (msg.blocks && msg.blocks.length > 0) {
+    // Backfill blockId on legacy blocks that were persisted without one
+    const patched = msg.blocks.map((b, i) => {
+      if (b.type === 'tool_use') return b; // tool_use uses `id` as key
+      if ('blockId' in b && b.blockId) return b;
+      return { ...b, blockId: `legacy-${msg.id}-${i}` };
+    });
+    return { ...msg, blocks: patched };
+  }
   const blocks: ContentBlock[] = [];
   if (msg.content) {
-    blocks.push({ type: 'text', content: msg.content });
+    blocks.push({ type: 'text', blockId: nextBlockId('text'), content: msg.content });
   }
   if (msg.tools) {
     for (const t of msg.tools) {
@@ -71,7 +84,7 @@ export const useChat = ({ workspaceId, sessionId, persona }: UseChatOptions) => 
       id: crypto.randomUUID(),
       role: 'user',
       content: content.trim(),
-      blocks: [{ type: 'text', content: content.trim() }],
+      blocks: [{ type: 'text', blockId: nextBlockId('text'), content: content.trim() }],
       timestamp: new Date().toISOString(),
     };
     setMessages(prev => [...prev, userMsg]);
@@ -101,6 +114,7 @@ export const useChat = ({ workspaceId, sessionId, persona }: UseChatOptions) => 
           const last = msgs[msgs.length - 1];
           if (last.role !== 'assistant') return msgs;
           const blocks = [...(last.blocks || [])];
+          let toolsUpdate: ToolExecution[] | null = null;
 
           switch (evt.type) {
             case 'token': {
@@ -109,7 +123,7 @@ export const useChat = ({ workspaceId, sessionId, persona }: UseChatOptions) => 
               if (lastBlock?.type === 'text') {
                 blocks[blocks.length - 1] = { ...lastBlock, content: lastBlock.content + tokenContent };
               } else {
-                blocks.push({ type: 'text', content: tokenContent });
+                blocks.push({ type: 'text', blockId: nextBlockId('text'), content: tokenContent });
               }
               break;
             }
@@ -124,7 +138,7 @@ export const useChat = ({ workspaceId, sessionId, persona }: UseChatOptions) => 
                     blocks[i] = { ...b, status: 'done' };
                   }
                 }
-                blocks.push({ type: 'step', description, status: 'running' });
+                blocks.push({ type: 'step', blockId: nextBlockId('step'), description, status: 'running' });
               }
               break;
             }
@@ -139,10 +153,9 @@ export const useChat = ({ workspaceId, sessionId, persona }: UseChatOptions) => 
                 input: data?.input as Record<string, unknown>,
                 status: 'running',
               });
-              // Legacy tools[] for backward compat
-              if (last.tools) {
-                last.tools = [...last.tools, { id: toolId, name: toolName, status: 'running', input: data?.input as Record<string, unknown> }];
-              }
+              // Legacy tools[] — immutable accumulation
+              const prevTools = last.tools || [];
+              toolsUpdate = [...prevTools, { id: toolId, name: toolName, status: 'running' as const, input: data?.input as Record<string, unknown> }];
               break;
             }
 
@@ -165,13 +178,13 @@ export const useChat = ({ workspaceId, sessionId, persona }: UseChatOptions) => 
                   break;
                 }
               }
-              // Legacy tools[]
+              // Legacy tools[] — immutable update
               if (last.tools && toolName) {
                 const idx = last.tools.findIndex(t => t.name === toolName && t.status === 'running');
                 if (idx >= 0) {
-                  const updated = [...last.tools];
-                  updated[idx] = { ...updated[idx], status: 'done', output: result, duration };
-                  last.tools = updated;
+                  toolsUpdate = last.tools.map((t, ti) =>
+                    ti === idx ? { ...t, status: 'done' as const, output: result, duration } : t
+                  );
                 }
               }
               break;
@@ -180,6 +193,7 @@ export const useChat = ({ workspaceId, sessionId, persona }: UseChatOptions) => 
             case 'model_switch': {
               blocks.push({
                 type: 'model_switch',
+                blockId: nextBlockId('model'),
                 from: (data as Record<string, string>).primary ?? 'primary',
                 to: (data as Record<string, string>).model ?? 'fallback',
                 reason: (data as Record<string, string>).reason ?? 'primary unavailable',
@@ -189,22 +203,23 @@ export const useChat = ({ workspaceId, sessionId, persona }: UseChatOptions) => 
 
             case 'error': {
               const errorMsg = typeof data === 'string' ? data : (data?.message as string ?? 'Unknown error');
-              blocks.push({ type: 'error', message: errorMsg });
+              blocks.push({ type: 'error', blockId: nextBlockId('error'), message: errorMsg });
               break;
             }
 
             case 'done': {
-              // Mark all running blocks as done
+              // Mark all running blocks as done — type-narrowed, no unsafe cast
               for (let i = 0; i < blocks.length; i++) {
                 const b = blocks[i];
-                if ((b.type === 'step' && b.status === 'running') ||
-                    (b.type === 'tool_use' && b.status === 'running')) {
-                  blocks[i] = { ...b, status: 'done' } as ContentBlock;
+                if (b.type === 'step' && b.status === 'running') {
+                  blocks[i] = { ...b, status: 'done' };
+                } else if (b.type === 'tool_use' && b.status === 'running') {
+                  blocks[i] = { ...b, status: 'done' };
                 }
               }
               const doneContent = data?.content as string;
               if (doneContent && !blocks.some(b => b.type === 'text' && b.content)) {
-                blocks.push({ type: 'text', content: doneContent });
+                blocks.push({ type: 'text', blockId: nextBlockId('text'), content: doneContent });
               }
               break;
             }
@@ -216,7 +231,9 @@ export const useChat = ({ workspaceId, sessionId, persona }: UseChatOptions) => 
 
           const content = flattenBlocks(blocks);
           return msgs.map((m, i) =>
-            i === msgs.length - 1 ? { ...m, blocks, content } : m
+            i === msgs.length - 1
+              ? { ...m, blocks, content, ...(toolsUpdate && { tools: toolsUpdate }) }
+              : m
           );
         });
       }
@@ -225,7 +242,7 @@ export const useChat = ({ workspaceId, sessionId, persona }: UseChatOptions) => 
         const msgs = [...prev];
         const last = msgs[msgs.length - 1];
         if (last.role === 'assistant') {
-          const blocks = [...(last.blocks || []), { type: 'error' as const, message: 'Backend is offline. Connect to a Waggle server to start chatting.' }];
+          const blocks = [...(last.blocks || []), { type: 'error' as const, blockId: nextBlockId('error'), message: 'Backend is offline. Connect to a Waggle server to start chatting.' }];
           return msgs.map((m, i) =>
             i === msgs.length - 1 ? { ...m, blocks, content: 'Backend is offline.' } : m
           );

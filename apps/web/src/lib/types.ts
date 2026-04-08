@@ -147,11 +147,13 @@ export type ContentBlock =
 
 export interface TextContentBlock {
   type: 'text';
+  blockId: string;
   content: string;
 }
 
 export interface StepContentBlock {
   type: 'step';
+  blockId: string;
   description: string;
   status: 'running' | 'done';
 }
@@ -168,6 +170,7 @@ export interface ToolUseContentBlock {
 
 export interface ModelSwitchContentBlock {
   type: 'model_switch';
+  blockId: string;
   from: string;
   to: string;
   reason: string;
@@ -175,6 +178,7 @@ export interface ModelSwitchContentBlock {
 
 export interface ErrorContentBlock {
   type: 'error';
+  blockId: string;
   message: string;
 }
 
