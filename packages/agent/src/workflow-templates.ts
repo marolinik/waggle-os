@@ -101,11 +101,77 @@ export function createPlanExecuteTemplate(task: string): WorkflowTemplate {
   };
 }
 
+export function createTicketResolveTemplate(task: string): WorkflowTemplate {
+  return {
+    name: 'ticket-resolve',
+    description: 'Support workflow: triage → investigate → draft response → verify',
+    steps: [
+      {
+        name: 'Triage',
+        role: 'analyst',
+        task: `Analyze this customer issue and classify it by severity, category, and required expertise:\n\n${task}\n\nSearch memory for similar resolved issues. Output: severity (P1-P4), category, similar past cases, initial diagnosis.`,
+        maxTurns: 10,
+      },
+      {
+        name: 'Investigator',
+        role: 'researcher',
+        task: `Investigate this customer issue using all available sources (KB, memory, web):\n\n${task}\n\nFind the root cause and a proven solution. Check memory for known fixes.`,
+        dependsOn: ['Triage'],
+        contextFrom: ['Triage'],
+        maxTurns: 20,
+      },
+      {
+        name: 'Responder',
+        role: 'writer',
+        task: `Draft a professional, empathetic support response that resolves this issue:\n\n${task}\n\nInclude: acknowledgment, solution steps, verification instructions, and follow-up offer.`,
+        dependsOn: ['Investigator'],
+        contextFrom: ['Triage', 'Investigator'],
+        maxTurns: 15,
+      },
+    ],
+    aggregation: 'last',
+  };
+}
+
+export function createContentPipelineTemplate(task: string): WorkflowTemplate {
+  return {
+    name: 'content-pipeline',
+    description: 'Content creation: research → outline → draft → edit → polish',
+    steps: [
+      {
+        name: 'Researcher',
+        role: 'researcher',
+        task: `Research background, data points, and competitor content for:\n\n${task}\n\nProvide organized findings with sources, key statistics, and angles to explore.`,
+        maxTurns: 20,
+      },
+      {
+        name: 'Drafter',
+        role: 'writer',
+        task: `Write a comprehensive first draft incorporating the research findings:\n\n${task}\n\nFocus on completeness, accuracy, and engaging structure.`,
+        dependsOn: ['Researcher'],
+        contextFrom: ['Researcher'],
+        maxTurns: 25,
+      },
+      {
+        name: 'Editor',
+        role: 'reviewer',
+        task: `Edit this draft for clarity, flow, accuracy, and audience fit. Provide the polished final version:\n\n${task}`,
+        dependsOn: ['Drafter'],
+        contextFrom: ['Researcher', 'Drafter'],
+        maxTurns: 15,
+      },
+    ],
+    aggregation: 'last',
+  };
+}
+
 /** Registry of all built-in workflow template factories */
 export const WORKFLOW_TEMPLATES: Record<string, (task: string) => WorkflowTemplate> = {
   'research-team': createResearchTeamTemplate,
   'review-pair': createReviewPairTemplate,
   'plan-execute': createPlanExecuteTemplate,
+  'ticket-resolve': createTicketResolveTemplate,
+  'content-pipeline': createContentPipelineTemplate,
 };
 
 /** List available workflow template names */

@@ -51,7 +51,7 @@ export { McpServerInstance, McpRuntime, type McpServerConfig, type McpServerStat
 export { SubagentOrchestrator, type WorkerState, type WorkerStatus, type WorkflowStep, type WorkflowTemplate, type OrchestratorConfig as SubagentOrchestratorConfig } from './subagent-orchestrator.js';
 export { BEHAVIORAL_SPEC, COMPACTION_PROMPT } from './behavioral-spec.js';
 export { FEATURE_FLAGS, isEnabled, type FeatureFlag } from './feature-flags.js';
-export { WORKFLOW_TEMPLATES, listWorkflowTemplates, createResearchTeamTemplate, createReviewPairTemplate, createPlanExecuteTemplate } from './workflow-templates.js';
+export { WORKFLOW_TEMPLATES, listWorkflowTemplates, createResearchTeamTemplate, createReviewPairTemplate, createPlanExecuteTemplate, createTicketResolveTemplate, createContentPipelineTemplate } from './workflow-templates.js';
 export { loadCustomWorkflows, saveCustomWorkflow, deleteCustomWorkflow, listAllWorkflows } from './custom-workflows.js';
 export { createWorkflowTools, type WorkflowToolsConfig } from './workflow-tools.js';
 export { detectTaskShape, type TaskShape, type TaskShapeType, type TaskShapeSignal, type ComponentPhase } from './task-shape.js';
