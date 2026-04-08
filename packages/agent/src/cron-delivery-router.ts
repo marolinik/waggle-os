@@ -73,6 +73,16 @@ const CHANNEL_CONNECTORS: Record<Exclude<DeliveryChannel, 'in_app'>, {
   teams: { connectorIds: ['ms-teams', 'teams-mock'], action: 'send_message' },
 };
 
+// ── HTML escaping ────────────────────────────────────────────────────────
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 // ── Router ───────────────────────────────────────────────────────────────
 
 /**
@@ -167,7 +177,7 @@ function buildChannelParams(
         to: preferences.emailTo ?? '',
         subject: `[Waggle] ${message.title}`,
         body: message.body,
-        html: `<h3>${message.title}</h3><p>${message.body.replace(/\n/g, '<br>')}</p>`,
+        html: `<h3>${escapeHtml(message.title)}</h3><p>${escapeHtml(message.body).replace(/\n/g, '<br>')}</p>`,
       };
     case 'slack':
       return {

@@ -225,6 +225,31 @@ describe('deliverCronResult — error handling', () => {
   });
 });
 
+// ── XSS prevention ─────────────────────────────────────────────────────
+
+describe('deliverCronResult — XSS prevention', () => {
+  it('escapes HTML in email body to prevent XSS', async () => {
+    const emailConnector = makeConnector(true);
+    const registry = makeRegistry({ gmail: emailConnector });
+    const emitter = makeEmitter();
+    const prefs = createDefaultDeliveryPreferences({
+      defaultChannels: ['email'],
+      emailTo: 'user@test.com',
+    });
+
+    await deliverCronResult(
+      makeMessage({ title: '<script>alert("xss")</script>', body: 'Test & "quotes"' }),
+      prefs, registry, emitter,
+    );
+
+    const callArgs = (emailConnector.execute as any).mock.calls[0][1];
+    expect(callArgs.html).not.toContain('<script>');
+    expect(callArgs.html).toContain('&lt;script&gt;');
+    expect(callArgs.html).toContain('&amp;');
+    expect(callArgs.html).toContain('&quot;');
+  });
+});
+
 // ── Default preferences ──────────────────────────────────────────────────
 
 describe('createDefaultDeliveryPreferences', () => {
