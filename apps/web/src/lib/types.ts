@@ -88,6 +88,7 @@ export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
+  blocks?: ContentBlock[];
   timestamp: string;
   tools?: ToolExecution[];
   feedback?: 'up' | 'down' | null;
@@ -131,6 +132,50 @@ export interface AgentStep {
   duration?: number;
   timestamp: string;
   details?: Record<string, unknown>;
+}
+
+// ── Content Block System ─────────────────────────────────────────────
+// Messages are composed of ordered blocks that interleave text, tool usage,
+// and agent activity — matching Claude.ai's visual rendering pattern.
+
+export type ContentBlock =
+  | TextContentBlock
+  | StepContentBlock
+  | ToolUseContentBlock
+  | ModelSwitchContentBlock
+  | ErrorContentBlock;
+
+export interface TextContentBlock {
+  type: 'text';
+  content: string;
+}
+
+export interface StepContentBlock {
+  type: 'step';
+  description: string;
+  status: 'running' | 'done';
+}
+
+export interface ToolUseContentBlock {
+  type: 'tool_use';
+  id: string;
+  name: string;
+  input?: Record<string, unknown>;
+  status: 'running' | 'done' | 'error' | 'denied';
+  result?: string;
+  duration?: number;
+}
+
+export interface ModelSwitchContentBlock {
+  type: 'model_switch';
+  from: string;
+  to: string;
+  reason: string;
+}
+
+export interface ErrorContentBlock {
+  type: 'error';
+  message: string;
 }
 
 export interface Session {
@@ -209,7 +254,7 @@ export interface Connector {
 }
 
 export interface StreamEvent {
-  type: 'token' | 'tool_start' | 'tool_end' | 'done' | 'error' | 'approval_request';
+  type: 'token' | 'step' | 'tool_start' | 'tool_end' | 'done' | 'error' | 'approval_request' | 'model_switch' | 'notification';
   data: unknown;
 }
 
