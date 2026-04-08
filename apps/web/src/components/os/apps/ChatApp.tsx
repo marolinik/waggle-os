@@ -5,6 +5,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getPersonaById, PERSONAS } from '@/lib/personas';
 import { adapter } from '@/lib/adapter';
 import type { ChatMessage, ToolExecution, ApprovalRequest } from '@/lib/types';
+import { BlockRenderer } from './chat-blocks';
 import WorkspaceBriefing from '@/components/os/WorkspaceBriefing';
 
 export interface TeamMember {
@@ -636,7 +637,14 @@ const ChatApp = ({
                     : 'bg-secondary text-foreground'
                 }`}>
                   {msg.role === 'assistant' && <Sparkles className="w-3 h-3 text-primary inline mr-1.5 -mt-0.5" />}
-                  <span className="whitespace-pre-wrap">{msg.content}</span>
+                  {msg.role === 'assistant' && msg.blocks && msg.blocks.length > 0 ? (
+                    <BlockRenderer
+                      blocks={msg.blocks}
+                      isStreaming={isLoading && msg === messages[messages.length - 1]}
+                    />
+                  ) : (
+                    <span className="whitespace-pre-wrap">{msg.content}</span>
+                  )}
                   {/* Copy button */}
                   {msg.content && (
                     <button
@@ -660,15 +668,8 @@ const ChatApp = ({
                       <Pin className="w-3 h-3" />
                     </button>
                   )}
-                  {isLoading && msg === messages[messages.length - 1] && msg.role === 'assistant' && !msg.content && (
-                    <span className="inline-flex gap-1 ml-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <span className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: '150ms' }} />
-                      <span className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: '300ms' }} />
-                    </span>
-                  )}
                 </div>
-                {msg.tools && msg.tools.length > 0 && (
+                {msg.tools && msg.tools.length > 0 && (!msg.blocks || msg.blocks.length === 0) && (
                   <div className="mt-1 space-y-1">
                     {msg.tools.map(tool => <ToolCard key={tool.id} tool={tool} />)}
                   </div>
