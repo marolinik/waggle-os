@@ -53,6 +53,7 @@ export interface PoolStatus {
 
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+const FIVE_MINUTES_MS = 5 * 60 * 1000;
 
 // ── CredentialPool ───────────────────────────────────────────────────────
 
@@ -73,6 +74,21 @@ export class CredentialPool {
       ...config,
     };
     this.nowFn = nowFn;
+  }
+
+  /**
+   * Recover any keys whose cooldown period has expired.
+   * Shared by getKey() and getStatus() to avoid DRY violation.
+   */
+  private recoverExpiredCooldowns(): void {
+    const now = this.nowFn();
+    for (const entry of this.entries) {
+      if (entry.status === 'cooldown' && entry.cooldownUntil !== null && now >= entry.cooldownUntil) {
+        entry.status = 'active';
+        entry.cooldownUntil = null;
+        entry.lastError = null;
+      }
+    }
   }
 
   /**
@@ -101,16 +117,8 @@ export class CredentialPool {
   getKey(): string | null {
     if (this.entries.length === 0) return null;
 
-    const now = this.nowFn();
-
     // First pass: recover any keys whose cooldown has expired
-    for (const entry of this.entries) {
-      if (entry.status === 'cooldown' && entry.cooldownUntil !== null && now >= entry.cooldownUntil) {
-        entry.status = 'active';
-        entry.cooldownUntil = null;
-        entry.lastError = null;
-      }
-    }
+    this.recoverExpiredCooldowns();
 
     // Second pass: find the next active key using round-robin
     const startIndex = this.roundRobinIndex;
@@ -183,7 +191,7 @@ export class CredentialPool {
       default:
         // Other errors (500, 503, etc.) — brief cooldown (5 minutes)
         entry.status = 'cooldown';
-        entry.cooldownUntil = now + 5 * 60 * 1000;
+        entry.cooldownUntil = now + FIVE_MINUTES_MS;
         break;
     }
 
@@ -205,16 +213,8 @@ export class CredentialPool {
    * Get the pool status for monitoring and debugging.
    */
   getStatus(): PoolStatus {
-    const now = this.nowFn();
-
     // Recover expired cooldowns before reporting
-    for (const entry of this.entries) {
-      if (entry.status === 'cooldown' && entry.cooldownUntil !== null && now >= entry.cooldownUntil) {
-        entry.status = 'active';
-        entry.cooldownUntil = null;
-        entry.lastError = null;
-      }
-    }
+    this.recoverExpiredCooldowns();
 
     return {
       provider: this.config.provider,

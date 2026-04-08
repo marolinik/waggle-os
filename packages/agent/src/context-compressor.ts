@@ -220,7 +220,10 @@ export async function summarizeMiddle(
   });
 
   if (!response.ok) {
-    // On summarizer failure, fall back to a basic text-only summary
+    try {
+      const errBody = await response.text();
+      console.warn(`[context-compressor] Summarizer returned ${response.status}: ${errBody.slice(0, 200)}`);
+    } catch { /* ignore read errors */ }
     return buildFallbackSummary(middle, previousSummary);
   }
 
