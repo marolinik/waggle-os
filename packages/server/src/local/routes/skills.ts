@@ -1,7 +1,10 @@
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
+import { createLogger } from '../logger.js';
 import type { FastifyPluginAsync } from 'fastify';
+
+const log = createLogger('skills');
 import { PluginManager, getStarterSkillsDir, listStarterSkills, listCapabilityPacks, getPackManifest } from '@waggle/sdk';
 import { loadSkills, SkillRecommender, assessTrust, generateSkillMarkdown, type SkillTemplate } from '@waggle/agent';
 import { computeSkillHash } from '@waggle/core';
@@ -53,7 +56,7 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
       const { installStarterSkills } = await import('@waggle/sdk');
       const installed = installStarterSkills(skillsDir);
       if (installed.length > 0) {
-        console.log(`[waggle] Installed ${installed.length} starter skills on first run`);
+        log.info(`Installed ${installed.length} starter skills on first run`);
       }
       fs.writeFileSync(markerPath, new Date().toISOString());
     } catch { /* starter skills unavailable — non-blocking */ }

@@ -5,7 +5,6 @@
  *  - VaultApp → API key management
  *  - Adapter → key validation
  *
- * Users can add custom providers at runtime via addProvider().
  */
 
 export interface ProviderModel {
@@ -222,49 +221,3 @@ export function getProvider(id: string): ProviderConfig | undefined {
   return _providers.find(p => p.id === id);
 }
 
-/** Add a custom provider (persisted to localStorage) */
-export function addProvider(provider: ProviderConfig): void {
-  if (_providers.find(p => p.id === provider.id)) return;
-  _providers.push(provider);
-  const customs = loadCustomProviders();
-  customs.push(provider);
-  saveCustomProviders(customs);
-}
-
-/** Remove a custom provider */
-export function removeProvider(id: string): void {
-  // Don't remove built-in providers
-  if (BUILT_IN_PROVIDERS.find(p => p.id === id)) return;
-  _providers = _providers.filter(p => p.id !== id);
-  const customs = loadCustomProviders().filter(p => p.id !== id);
-  saveCustomProviders(customs);
-}
-
-/** Get all models across all providers (flat list) */
-export function getAllModels(): (ProviderModel & { provider: string })[] {
-  return _providers.flatMap(p =>
-    p.models.map(m => ({ ...m, provider: p.id }))
-  );
-}
-
-/** Get cost tier from model name (fallback for unknown models) */
-export function getCostTier(model: string): '$' | '$$' | '$$$' {
-  const m = model.toLowerCase();
-  if (m.includes('opus') || m.includes('gpt-5') || m.includes('o3') && !m.includes('mini')) return '$$$';
-  if (m.includes('haiku') || m.includes('mini') || m.includes('flash') || m.includes('turbo')) return '$';
-  return '$$';
-}
-
-/** Get speed tier from model name (fallback for unknown models) */
-export function getSpeedTier(model: string): 'fast' | 'medium' | 'slow' {
-  const m = model.toLowerCase();
-  if (m.includes('haiku') || m.includes('mini') || m.includes('flash') || m.includes('turbo')) return 'fast';
-  if (m.includes('opus') || m.includes('reasoner') || m.includes('o3') && !m.includes('mini')) return 'slow';
-  return 'medium';
-}
-
-/** Mask an API key for display (first 7 + ... + last 4) */
-export function maskApiKey(key: string): string {
-  if (!key || key.length < 12) return '••••••••';
-  return key.slice(0, 7) + '...' + key.slice(-4);
-}

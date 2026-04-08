@@ -9,6 +9,9 @@
  */
 
 import type { CronStore, CronSchedule } from '@waggle/core';
+import { createLogger } from './logger.js';
+
+const log = createLogger('cron');
 
 /** Function that executes a cron job. Injected to keep the scheduler generic and testable. */
 export type JobExecutor = (schedule: CronSchedule) => Promise<void>;
@@ -109,7 +112,7 @@ export class LocalScheduler {
         } catch (err) {
           const count = (this.failCounts.get(schedule.id) ?? 0) + 1;
           this.failCounts.set(schedule.id, count);
-          console.error('[cron] Job failed:', schedule.id, err);
+          log.error(`Job failed: ${schedule.id}`, err);
 
           // Q16:C — notify on failure
           this.onJobComplete?.(schedule, {
@@ -119,7 +122,7 @@ export class LocalScheduler {
 
           if (count >= MAX_CONSECUTIVE_FAILURES) {
             this.disabledJobs.add(schedule.id);
-            console.warn('[cron] Job disabled after 5 failures:', schedule.id);
+            log.warn(`Job disabled after 5 failures: ${schedule.id}`);
           }
         }
       }
