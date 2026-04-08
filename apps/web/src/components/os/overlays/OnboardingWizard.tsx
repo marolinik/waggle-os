@@ -5,7 +5,7 @@ import {
   Target, Microscope, Laptop, Megaphone, Rocket, Scale, Building, Plus,
   PenLine, BarChart3, Code, ClipboardList, Mail,
   Key, Check, Loader2, ExternalLink, Hexagon, Sparkles, FileJson,
-  Zap, Crown,
+  Zap, Crown, HeadphonesIcon, Settings, Database, Users, Palette, DollarSign, Briefcase,
 } from 'lucide-react';
 import type { UserTier } from '@/lib/dock-tiers';
 import waggleLogo from '@/assets/waggle-logo.jpeg';
@@ -26,12 +26,19 @@ interface OnboardingWizardProps {
 /* ─── Constants ─── */
 const TEMPLATES = [
   { id: 'sales-pipeline', name: 'Sales Pipeline', icon: Target, hint: 'Research the top 5 competitors in my industry', desc: 'Track deals and prospects' },
-  { id: 'research-project', name: 'Research Project', icon: Microscope, hint: 'Help me design a literature review on my topic', desc: 'Deep dive into any subject' },
-  { id: 'code-review', name: 'Code Review', icon: Laptop, hint: 'Read my project and tell me what you see', desc: 'Analyze and review code' },
-  { id: 'marketing-campaign', name: 'Marketing Campaign', icon: Megaphone, hint: 'Draft a campaign brief for my product launch', desc: 'Plan campaigns & content' },
-  { id: 'product-launch', name: 'Product Launch', icon: Rocket, hint: 'Help me write a PRD for my next feature', desc: 'Ship products faster' },
-  { id: 'legal-review', name: 'Legal Review', icon: Scale, hint: 'Draft a standard NDA template', desc: 'Review contracts & docs' },
-  { id: 'agency-consulting', name: 'Agency Consulting', icon: Building, hint: 'Set up client workspaces for my biggest accounts', desc: 'Manage client work' },
+  { id: 'research-project', name: 'Research Hub', icon: Microscope, hint: 'Help me design a literature review on my topic', desc: 'Deep dive into any subject' },
+  { id: 'code-review', name: 'Engineering', icon: Laptop, hint: 'Read my project and tell me what you see', desc: 'Code, review, and ship' },
+  { id: 'marketing-campaign', name: 'Marketing & Content', icon: Megaphone, hint: 'Draft a campaign brief for my product launch', desc: 'Campaigns, copy, and SEO' },
+  { id: 'product-launch', name: 'Product Management', icon: Rocket, hint: 'Help me write a PRD for my next feature', desc: 'Specs, roadmaps, and launches' },
+  { id: 'legal-review', name: 'Legal & Compliance', icon: Scale, hint: 'Draft a standard NDA template', desc: 'Contracts, compliance, and risk' },
+  { id: 'agency-consulting', name: 'Consulting', icon: Building, hint: 'Set up client workspaces for my biggest accounts', desc: 'Client delivery and strategy' },
+  { id: 'customer-support', name: 'Customer Support', icon: HeadphonesIcon, hint: 'Help me draft a response to this customer issue', desc: 'Tickets, KB, and escalation' },
+  { id: 'finance-accounting', name: 'Finance', icon: DollarSign, hint: 'Prepare a variance analysis for this month', desc: 'Budgets, reports, and close' },
+  { id: 'hr-people', name: 'HR & People', icon: Users, hint: 'Draft a job description for a senior engineer', desc: 'Hiring, policy, and onboarding' },
+  { id: 'operations-center', name: 'Operations', icon: Settings, hint: 'Create an SOP for our onboarding process', desc: 'Processes, SOPs, and vendors' },
+  { id: 'data-analytics', name: 'Data & Analytics', icon: Database, hint: 'Write a SQL query to find our top customers', desc: 'SQL, dashboards, and insights' },
+  { id: 'recruiting-pipeline', name: 'Recruiting', icon: Briefcase, hint: 'Write a job description and screening scorecard', desc: 'Source, screen, and hire' },
+  { id: 'design-studio', name: 'Design Studio', icon: Palette, hint: 'Write a creative brief for our rebrand', desc: 'Briefs, feedback, and brand' },
   { id: 'blank', name: 'Blank Workspace', icon: Plus, hint: 'Hello! What can you help me with?', desc: 'Start from scratch' },
 ] as const;
 
@@ -40,22 +47,54 @@ const TEMPLATE_PERSONA: Record<string, string> = {
   'research-project': 'researcher',
   'code-review': 'coder',
   'marketing-campaign': 'marketer',
-  'product-launch': 'project-manager',
-  'legal-review': 'analyst',
-  'agency-consulting': 'executive-assistant',
-  'blank': 'researcher',
+  'product-launch': 'product-manager-senior',
+  'legal-review': 'legal-professional',
+  'agency-consulting': 'consultant',
+  'customer-support': 'support-agent',
+  'finance-accounting': 'finance-owner',
+  'hr-people': 'hr-manager',
+  'operations-center': 'ops-manager',
+  'data-analytics': 'data-engineer',
+  'recruiting-pipeline': 'recruiter',
+  'design-studio': 'creative-director',
+  'blank': 'general-purpose',
 };
 
-const ONBOARDING_PERSONAS = [
-  { id: 'researcher', name: 'Researcher', icon: Microscope, desc: 'Deep investigation & synthesis' },
-  { id: 'writer', name: 'Writer', icon: PenLine, desc: 'Long-form content & editing' },
-  { id: 'analyst', name: 'Analyst', icon: BarChart3, desc: 'Data analysis & reporting' },
-  { id: 'coder', name: 'Coder', icon: Code, desc: 'Code review & development' },
-  { id: 'project-manager', name: 'Project Manager', icon: ClipboardList, desc: 'Planning & coordination' },
-  { id: 'executive-assistant', name: 'Executive Assistant', icon: Mail, desc: 'Email, scheduling, briefs' },
-  { id: 'sales-rep', name: 'Sales Rep', icon: Target, desc: 'Prospecting & outreach' },
-  { id: 'marketer', name: 'Marketer', icon: Megaphone, desc: 'Campaigns & copy' },
+const ALL_ONBOARDING_PERSONAS = [
+  { id: 'general-purpose', name: 'General Purpose', icon: Brain, desc: 'Adapts to any task', tier: 'universal' as const },
+  { id: 'researcher', name: 'Researcher', icon: Microscope, desc: 'Deep research & synthesis', tier: 'knowledge' as const },
+  { id: 'writer', name: 'Writer', icon: PenLine, desc: 'Drafting & editing', tier: 'knowledge' as const },
+  { id: 'analyst', name: 'Analyst', icon: BarChart3, desc: 'Data analysis & decisions', tier: 'knowledge' as const },
+  { id: 'coder', name: 'Coder', icon: Code, desc: 'Code & architecture', tier: 'knowledge' as const },
+  { id: 'project-manager', name: 'Project Manager', icon: ClipboardList, desc: 'Planning & coordination', tier: 'domain' as const },
+  { id: 'executive-assistant', name: 'Exec Assistant', icon: Mail, desc: 'Email & scheduling', tier: 'domain' as const },
+  { id: 'sales-rep', name: 'Sales Rep', icon: Target, desc: 'Prospecting & outreach', tier: 'domain' as const },
+  { id: 'marketer', name: 'Marketer', icon: Megaphone, desc: 'Campaigns & copy', tier: 'domain' as const },
+  { id: 'product-manager-senior', name: 'Senior PM', icon: Rocket, desc: 'PRDs & roadmaps', tier: 'domain' as const },
+  { id: 'hr-manager', name: 'HR Manager', icon: Users, desc: 'Policy & compliance', tier: 'domain' as const },
+  { id: 'legal-professional', name: 'Legal Counsel', icon: Scale, desc: 'Contracts & compliance', tier: 'domain' as const },
+  { id: 'finance-owner', name: 'Business Finance', icon: DollarSign, desc: 'Budgets & reporting', tier: 'domain' as const },
+  { id: 'consultant', name: 'Consultant', icon: Building, desc: 'Strategy & deliverables', tier: 'domain' as const },
+  { id: 'support-agent', name: 'Support Agent', icon: HeadphonesIcon, desc: 'Tickets & KB articles', tier: 'domain' as const },
+  { id: 'ops-manager', name: 'Ops Manager', icon: Settings, desc: 'SOPs & processes', tier: 'domain' as const },
+  { id: 'data-engineer', name: 'Data Engineer', icon: Database, desc: 'SQL & dashboards', tier: 'domain' as const },
+  { id: 'recruiter', name: 'Recruiter', icon: Briefcase, desc: 'Sourcing & hiring', tier: 'domain' as const },
+  { id: 'creative-director', name: 'Creative Director', icon: Palette, desc: 'Briefs & brand', tier: 'domain' as const },
 ] as const;
+
+/** Get personas relevant to the selected template — recommended first, then others */
+function getPersonasForTemplate(templateId: string) {
+  const recommended = TEMPLATE_PERSONA[templateId];
+  const universal = ALL_ONBOARDING_PERSONAS.filter(p => p.tier === 'universal');
+  const knowledge = ALL_ONBOARDING_PERSONAS.filter(p => p.tier === 'knowledge');
+  const domain = ALL_ONBOARDING_PERSONAS.filter(p => p.tier === 'domain');
+  return [
+    ...domain.filter(p => p.id === recommended),
+    ...universal,
+    ...knowledge,
+    ...domain.filter(p => p.id !== recommended),
+  ];
+}
 
 // Use shared provider registry — single source of truth
 const PROVIDERS = getProviders().map(p => ({
@@ -576,7 +615,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
                   </div>
                 </div>
 
-                <div className="grid grid-cols-4 gap-3 mb-5">
+                <div className="grid grid-cols-5 gap-2 mb-5">
                   {TEMPLATES.map((t) => {
                     const Icon = t.icon;
                     const selected = selectedTemplate === t.id;
@@ -587,7 +626,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
                           setSelectedTemplate(t.id);
                           setWorkspaceName(t.id === 'blank' ? '' : t.name);
                         }}
-                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-all text-center ${
+                        className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all text-center ${
                           selected
                             ? 'border-primary/60 bg-primary/10'
                             : 'border-border/40 bg-secondary/20 hover:border-border'
@@ -656,25 +695,31 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
                   </div>
                 </div>
 
-                <div className="grid grid-cols-4 gap-3 mb-4">
-                  {ONBOARDING_PERSONAS.map((p) => {
+                <div className="grid grid-cols-4 gap-2 max-h-[280px] overflow-y-auto scrollbar-thin mb-4">
+                  {getPersonasForTemplate(selectedTemplate).map((p) => {
                     const Icon = p.icon;
                     const selected = selectedPersona === p.id;
+                    const isRecommended = TEMPLATE_PERSONA[selectedTemplate] === p.id;
                     return (
                       <button
                         key={p.id}
                         onClick={() => { setSelectedPersona(p.id); setShowCustomPersona(false); }}
-                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-all ${
+                        className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all relative ${
                           selected
                             ? 'border-primary/60 bg-primary/10'
                             : 'border-border/40 bg-secondary/20 hover:border-border'
                         }`}
                       >
+                        {isRecommended && (
+                          <span className="absolute -top-1.5 -right-1.5 text-[8px] bg-primary text-primary-foreground px-1.5 py-0.5 rounded-full font-bold">
+                            REC
+                          </span>
+                        )}
                         <Icon className={`w-5 h-5 ${selected ? 'text-primary' : 'text-muted-foreground'}`} />
-                        <span className={`text-xs font-display font-medium ${selected ? 'text-foreground' : 'text-muted-foreground'}`}>
+                        <span className={`text-[11px] font-display font-medium leading-tight ${selected ? 'text-foreground' : 'text-muted-foreground'}`}>
                           {p.name}
                         </span>
-                        <span className="text-[10px] text-muted-foreground/70 leading-tight">{p.desc}</span>
+                        <span className="text-[9px] text-muted-foreground/70 leading-tight">{p.desc}</span>
                       </button>
                     );
                   })}

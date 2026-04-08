@@ -32,6 +32,15 @@ interface PersonaSwitcherProps {
 
 const FREE_PERSONA_IDS = ['researcher', 'writer', 'analyst'];
 
+const UNIVERSAL_IDS = ['general-purpose', 'planner', 'verifier', 'coordinator'];
+const KNOWLEDGE_IDS = ['researcher', 'writer', 'analyst', 'coder'];
+
+function getPersonaTier(id: string): 'universal' | 'knowledge' | 'domain' {
+  if (UNIVERSAL_IDS.includes(id)) return 'universal';
+  if (KNOWLEDGE_IDS.includes(id)) return 'knowledge';
+  return 'domain';
+}
+
 const PersonaSwitcher = ({ open, onClose, currentPersona, currentGroupId, onSelect, onSelectGroup }: PersonaSwitcherProps) => {
   const [tab, setTab] = useState<'agents' | 'groups'>('agents');
   const { isEnabled } = useFeatureGate();
@@ -59,6 +68,8 @@ const PersonaSwitcher = ({ open, onClose, currentPersona, currentGroupId, onSele
 
   if (!open) return null;
 
+  const isLocked = (id: string) => !allPersonasUnlocked && !FREE_PERSONA_IDS.includes(id);
+
   // Use backend personas if available, fall back to local
   const personas: { id: string; name: string; description: string; icon?: string; avatar?: string }[] =
     backendPersonas
@@ -67,6 +78,35 @@ const PersonaSwitcher = ({ open, onClose, currentPersona, currentGroupId, onSele
           return { ...bp, avatar: local?.avatar };
         })
       : PERSONAS.map(p => ({ id: p.id, name: p.name, description: p.description, avatar: p.avatar }));
+
+  const renderPersonaCard = (p: typeof personas[0], locked: boolean) => (
+    <button
+      key={p.id}
+      onClick={() => { if (!locked) { onSelect(p.id); onClose(); } }}
+      disabled={locked}
+      className={`flex items-center gap-3 p-3 rounded-xl transition-all text-left ${
+        locked
+          ? 'bg-secondary/20 border border-transparent opacity-50 cursor-not-allowed'
+          : currentPersona === p.id && !currentGroupId
+          ? 'bg-primary/20 border border-primary/50'
+          : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
+      }`}
+      title={p.description}
+    >
+      <Avatar className="w-10 h-10 shrink-0">
+        {p.avatar ? <AvatarImage src={p.avatar} /> : (
+          <AvatarFallback className="text-[10px] bg-primary/20">{p.icon || p.name[0]}</AvatarFallback>
+        )}
+      </Avatar>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1">
+          <p className="text-xs font-display font-medium text-foreground truncate">{p.name}</p>
+          {locked && <Lock className="w-3 h-3 text-muted-foreground shrink-0" />}
+        </div>
+        <p className="text-[10px] text-muted-foreground truncate">{p.description}</p>
+      </div>
+    </button>
+  );
 
   return (
     <AnimatePresence>
@@ -115,39 +155,45 @@ const PersonaSwitcher = ({ open, onClose, currentPersona, currentGroupId, onSele
               <Loader2 className="w-5 h-5 animate-spin text-primary" />
             </div>
           ) : tab === 'agents' ? (
-            <div className="grid grid-cols-2 gap-2 max-h-[320px] overflow-y-auto scrollbar-thin">
-              {personas.map(p => {
-                const isLocked = !allPersonasUnlocked && !FREE_PERSONA_IDS.includes(p.id);
-                return (
-                  <button
-                    key={p.id}
-                    onClick={() => { if (!isLocked) { onSelect(p.id); onClose(); } }}
-                    disabled={isLocked}
-                    className={`flex items-center gap-3 p-3 rounded-xl transition-all text-left ${
-                      isLocked
-                        ? 'bg-secondary/20 border border-transparent opacity-50 cursor-not-allowed'
-                        : currentPersona === p.id && !currentGroupId
-                        ? 'bg-primary/20 border border-primary/50'
-                        : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
-                    }`}
-                  >
-                    <Avatar className="w-10 h-10 shrink-0">
-                      {p.avatar ? <AvatarImage src={p.avatar} /> : (
-                        <AvatarFallback className="text-[10px] bg-primary/20">{p.icon || p.name[0]}</AvatarFallback>
-                      )}
-                    </Avatar>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1">
-                        <p className="text-xs font-display font-medium text-foreground truncate">{p.name}</p>
-                        {isLocked && <Lock className="w-3 h-3 text-muted-foreground shrink-0" />}
-                      </div>
-                      <p className="text-[10px] text-muted-foreground truncate">{p.description}</p>
-                    </div>
-                  </button>
-                );
-              })}
+            <div className="max-h-[380px] overflow-y-auto scrollbar-thin space-y-4">
+              {/* Universal Modes */}
+              <div>
+                <h3 className="text-[10px] font-display font-bold text-muted-foreground uppercase tracking-wider mb-2 px-1">
+                  Universal Modes
+                </h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {personas
+                    .filter(p => UNIVERSAL_IDS.includes(p.id))
+                    .map(p => renderPersonaCard(p, isLocked(p.id)))}
+                </div>
+              </div>
+
+              {/* Knowledge Workers */}
+              <div>
+                <h3 className="text-[10px] font-display font-bold text-muted-foreground uppercase tracking-wider mb-2 px-1">
+                  Knowledge Workers
+                </h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {personas
+                    .filter(p => KNOWLEDGE_IDS.includes(p.id))
+                    .map(p => renderPersonaCard(p, isLocked(p.id)))}
+                </div>
+              </div>
+
+              {/* Domain Specialists */}
+              <div>
+                <h3 className="text-[10px] font-display font-bold text-muted-foreground uppercase tracking-wider mb-2 px-1">
+                  Specialists
+                </h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {personas
+                    .filter(p => getPersonaTier(p.id) === 'domain')
+                    .map(p => renderPersonaCard(p, isLocked(p.id)))}
+                </div>
+              </div>
+
               {!allPersonasUnlocked && (
-                <p className="col-span-2 text-[10px] text-muted-foreground text-center py-2">
+                <p className="text-[10px] text-muted-foreground text-center py-1">
                   Upgrade to Teams to unlock all personas
                 </p>
               )}
