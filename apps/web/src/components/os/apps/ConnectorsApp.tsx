@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
+import McpCatalog from './connectors/McpCatalog';
 
 type ConnTab = 'services' | 'mcp';
 
@@ -184,6 +185,25 @@ const ConnectorsApp = () => {
               <button onClick={loadConnectors} className="p-1 rounded hover:bg-muted/50"><RefreshCw className="w-3.5 h-3.5 text-muted-foreground" /></button>
             </div>
 
+            {/* Composio gateway banner */}
+            {!connectors.find(c => c.id === 'composio' && c.status === 'connected') && (
+              <div className="p-3 rounded-xl bg-violet-500/10 border border-violet-500/20">
+                <div className="flex items-center gap-2 mb-1">
+                  <Zap className="w-4 h-4 text-violet-400" />
+                  <p className="text-xs font-display font-semibold text-violet-400">Composio Gateway</p>
+                </div>
+                <p className="text-[11px] text-muted-foreground mb-2">
+                  Connect Composio with a single API key to unlock <strong>250+ services</strong> instantly — Google Workspace, Slack, Notion, Jira, Salesforce, HubSpot, and more. No individual setup needed.
+                </p>
+                <button
+                  onClick={() => setExpanded('composio')}
+                  className="px-2.5 py-1 rounded-lg bg-violet-500/20 text-violet-400 text-[11px] font-display hover:bg-violet-500/30 transition-colors"
+                >
+                  Set up Composio
+                </button>
+              </div>
+            )}
+
             {filteredCategories.map(group => (
               <div key={group.category}>
                 <p className="text-[11px] font-display font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">{group.category}</p>
@@ -274,26 +294,7 @@ const ConnectorsApp = () => {
         )}
 
         {/* ═══ MCP SERVERS ═══ */}
-        {tab === 'mcp' && (
-          <div className="space-y-4">
-            <h3 className="text-sm font-display font-semibold text-foreground">MCP Servers</h3>
-            <p className="text-[11px] text-muted-foreground">
-              Model Context Protocol servers extend the agent with external tools.
-              Install from the marketplace or configure custom servers.
-            </p>
-
-            <div className="p-4 rounded-xl bg-secondary/30 border border-border/30 text-center">
-              <Server className="w-8 h-8 text-primary/30 mx-auto mb-2" />
-              <p className="text-xs text-foreground mb-1">No MCP servers configured</p>
-              <p className="text-[11px] text-muted-foreground mb-3">
-                MCP servers provide specialized tools like database access, file systems, and API integrations.
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                Browse available servers in the <strong>Skills</strong> app → Marketplace tab.
-              </p>
-            </div>
-          </div>
-        )}
+        {tab === 'mcp' && <McpCatalog />}
       </div>
     </div>
   );
