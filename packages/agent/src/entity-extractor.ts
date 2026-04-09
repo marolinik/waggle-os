@@ -107,6 +107,56 @@ export function extractEntities(text: string): ExtractedEntity[] {
   return entities;
 }
 
+// ── 9d: LLM-based entity extraction ─────────────────────────────────
+
+const LLM_EXTRACT_PROMPT = `Extract named entities from this text. Return a JSON array:
+[{"name": "Entity Name", "type": "person|project|technology|organization|tool|concept", "confidence": 0.0-1.0}]
+
+Rules:
+- Only extract specific, named entities (not generic nouns)
+- "type" must be one of: person, project, technology, organization, tool, concept
+- confidence: 1.0 = explicitly named, 0.7 = strongly implied, 0.5 = inferred
+- Return [] if no entities found
+- Maximum 20 entities per text
+
+Text:
+`;
+
+export type LLMCallFn = (prompt: string) => Promise<string>;
+
+/**
+ * LLM-based entity extraction — dramatically better than regex for
+ * natural conversation text. Falls back to regex on failure or when
+ * no LLM function is provided.
+ */
+export async function extractEntitiesWithLLM(
+  text: string,
+  llmCall: LLMCallFn,
+): Promise<ExtractedEntity[]> {
+  if (text.length < 20) return extractEntities(text);
+
+  try {
+    const response = await llmCall(LLM_EXTRACT_PROMPT + text.slice(0, 3000));
+    const cleaned = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const parsed = JSON.parse(cleaned);
+
+    if (!Array.isArray(parsed)) return extractEntities(text);
+
+    const validTypes = new Set(['person', 'project', 'technology', 'organization', 'tool', 'concept']);
+    return parsed
+      .filter((e: any) => e.name && validTypes.has(e.type))
+      .slice(0, 20)
+      .map((e: any) => ({
+        name: String(e.name),
+        type: e.type as ExtractedEntity['type'],
+        confidence: Math.max(0, Math.min(1, Number(e.confidence) || 0.7)),
+      }));
+  } catch {
+    // LLM failed — fall back to regex extraction
+    return extractEntities(text);
+  }
+}
+
 /** Extracted semantic relation between two entities. */
 export interface ExtractedRelation {
   source: string;

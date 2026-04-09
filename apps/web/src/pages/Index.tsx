@@ -5,6 +5,12 @@ import BootScreen from "@/components/os/BootScreen";
 
 const BOOT_KEY = "waggle-booted";
 
+// 9f: Restore saved theme on load
+const savedTheme = localStorage.getItem('waggle-theme');
+if (savedTheme === 'light') {
+  document.documentElement.setAttribute('data-theme', 'light');
+}
+
 const Index = () => {
   const [booted, setBooted] = useState(
     () => localStorage.getItem(BOOT_KEY) !== null

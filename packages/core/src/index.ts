@@ -53,7 +53,7 @@ export {
   SkillHashStore, computeSkillHash, SKILL_HASHES_TABLE_SQL,
   type SkillHash,
 } from './skill-hashes.js';
-export { reconcileIndexes, reconcileFtsIndex, reconcileVecIndex, type ReconcileResult } from './mind/reconcile.js';
+export { reconcileIndexes, reconcileFtsIndex, reconcileVecIndex, cleanOrphanVectors, cleanOrphanFts, type ReconcileResult } from './mind/reconcile.js';
 export {
   ConceptTracker, CONCEPT_MASTERY_TABLE_SQL,
   type ConceptEntry, type ConceptUpdate,

@@ -252,6 +252,104 @@ export class FrameStore {
     return result.changes > 0;
   }
 
+  // ── 9a: Memory Compaction ──────────────────────────────────────────
+
+  /**
+   * Compact memory: merge stale P-frames into their base I-frame,
+   * prune deprecated frames, and clean up temporary frames older than maxAge.
+   *
+   * @param maxTempAgeDays - Delete temporary frames older than this (default 30)
+   * @param maxDeprecatedAgeDays - Delete deprecated frames older than this (default 90)
+   * @returns Summary of compaction actions taken
+   */
+  compact(maxTempAgeDays = 30, maxDeprecatedAgeDays = 90): {
+    temporaryPruned: number;
+    deprecatedPruned: number;
+    pframesMerged: number;
+  } {
+    const raw = this.db.getDatabase();
+    let temporaryPruned = 0;
+    let deprecatedPruned = 0;
+    let pframesMerged = 0;
+
+    // 1. Delete old temporary frames
+    const tempResult = raw.prepare(`
+      DELETE FROM memory_frames
+      WHERE importance = 'temporary'
+        AND created_at < datetime('now', '-' || ? || ' days')
+    `).run(maxTempAgeDays);
+    temporaryPruned = tempResult.changes;
+
+    // 2. Delete old deprecated frames
+    const depResult = raw.prepare(`
+      DELETE FROM memory_frames
+      WHERE importance = 'deprecated'
+        AND created_at < datetime('now', '-' || ? || ' days')
+    `).run(maxDeprecatedAgeDays);
+    deprecatedPruned = depResult.changes;
+
+    // 3. Merge P-frames into I-frames when there are more than 10 P-frames
+    //    for a single GOP. The merged content becomes a new I-frame and the
+    //    old P-frames are deleted.
+    const gopsWithManyPframes = raw.prepare(`
+      SELECT gop_id, COUNT(*) as cnt FROM memory_frames
+      WHERE frame_type = 'P'
+      GROUP BY gop_id
+      HAVING cnt > 10
+    `).all() as { gop_id: string; cnt: number }[];
+
+    for (const { gop_id } of gopsWithManyPframes) {
+      const latestI = this.getLatestIFrame(gop_id);
+      if (!latestI) continue;
+
+      const pframes = raw.prepare(`
+        SELECT * FROM memory_frames
+        WHERE gop_id = ? AND frame_type = 'P' AND t > ?
+        ORDER BY t ASC
+      `).all(gop_id, latestI.t) as MemoryFrame[];
+
+      if (pframes.length <= 10) continue;
+
+      // Keep the 5 most recent P-frames, merge the rest into the I-frame
+      const toMerge = pframes.slice(0, pframes.length - 5);
+      const mergedContent = [latestI.content, ...toMerge.map(p => p.content)].join('\n---\n');
+
+      // Update the I-frame with merged content
+      raw.prepare('UPDATE memory_frames SET content = ? WHERE id = ?').run(mergedContent, latestI.id);
+      // Update FTS
+      raw.prepare('DELETE FROM memory_frames_fts WHERE rowid = ?').run(latestI.id);
+      raw.prepare('INSERT INTO memory_frames_fts (rowid, content) VALUES (?, ?)').run(latestI.id, mergedContent);
+
+      // Delete merged P-frames
+      for (const pf of toMerge) {
+        raw.prepare('DELETE FROM memory_frames_fts WHERE rowid = ?').run(pf.id);
+        try { raw.prepare('DELETE FROM memory_frames_vec WHERE rowid = ?').run(pf.id); } catch { /* ok */ }
+        raw.prepare('DELETE FROM memory_frames WHERE id = ?').run(pf.id);
+        pframesMerged++;
+      }
+    }
+
+    return { temporaryPruned, deprecatedPruned, pframesMerged };
+  }
+
+  /** Get frame statistics for monitoring. */
+  getStats(): { total: number; byType: Record<string, number>; byImportance: Record<string, number> } {
+    const raw = this.db.getDatabase();
+    const total = (raw.prepare('SELECT COUNT(*) as cnt FROM memory_frames').get() as { cnt: number }).cnt;
+
+    const byType: Record<string, number> = {};
+    for (const row of raw.prepare('SELECT frame_type, COUNT(*) as cnt FROM memory_frames GROUP BY frame_type').all() as { frame_type: string; cnt: number }[]) {
+      byType[row.frame_type] = row.cnt;
+    }
+
+    const byImportance: Record<string, number> = {};
+    for (const row of raw.prepare('SELECT importance, COUNT(*) as cnt FROM memory_frames GROUP BY importance').all() as { importance: string; cnt: number }[]) {
+      byImportance[row.importance] = row.cnt;
+    }
+
+    return { total, byType, byImportance };
+  }
+
   private nextT(gopId: string): number {
     const row = this.db.getDatabase().prepare(`
       SELECT COALESCE(MAX(t), -1) + 1 AS next_t FROM memory_frames WHERE gop_id = ?

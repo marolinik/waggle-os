@@ -38,6 +38,20 @@ const SettingsApp = () => {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
 
+  // Theme
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    return (document.documentElement.getAttribute('data-theme') as 'dark' | 'light') || 'dark';
+  });
+  const applyTheme = (t: 'dark' | 'light') => {
+    setTheme(t);
+    if (t === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+    localStorage.setItem('waggle-theme', t);
+  };
+
   // Provider data from single source of truth
   const { providers, search, activeSearch, loading: providersLoading } = useProviders();
 
@@ -185,17 +199,27 @@ const SettingsApp = () => {
             <div>
               <p className="text-xs font-display font-medium text-foreground mb-2">Theme</p>
               <div className="flex gap-3">
-                <button className="flex-1 p-4 rounded-xl bg-[hsl(30,6%,8%)] border-2 border-primary/50 text-center">
-                  <p className="text-xs font-display text-foreground mb-1">Dark</p>
+                <button
+                  onClick={() => applyTheme('dark')}
+                  className={`flex-1 p-4 rounded-xl bg-[hsl(30,6%,8%)] text-center ${theme === 'dark' ? 'border-2 border-primary/50' : 'border border-border/30'}`}
+                >
+                  <p className="text-xs font-display text-[hsl(40,20%,92%)] mb-1">Dark</p>
                   <div className="flex gap-1 justify-center">
-                    <div className="w-3 h-3 rounded-full bg-background border border-border" />
-                    <div className="w-3 h-3 rounded-full bg-primary" />
-                    <div className="w-3 h-3 rounded-full bg-secondary" />
+                    <div className="w-3 h-3 rounded-full bg-[hsl(30,6%,8%)] border border-[hsl(40,6%,20%)]" />
+                    <div className="w-3 h-3 rounded-full bg-[hsl(38,92%,50%)]" />
+                    <div className="w-3 h-3 rounded-full bg-[hsl(30,6%,15%)]" />
                   </div>
                 </button>
-                <button className="flex-1 p-4 rounded-xl bg-[hsl(40,20%,92%)] border border-border/30 text-center opacity-40 cursor-not-allowed">
+                <button
+                  onClick={() => applyTheme('light')}
+                  className={`flex-1 p-4 rounded-xl bg-[hsl(40,20%,92%)] text-center ${theme === 'light' ? 'border-2 border-[hsl(37,100%,39%)]/50' : 'border border-[hsl(40,8%,81%)]'}`}
+                >
                   <p className="text-xs font-display text-[hsl(30,6%,8%)] mb-1">Light</p>
-                  <p className="text-[11px] text-[hsl(30,6%,30%)]">Coming soon</p>
+                  <div className="flex gap-1 justify-center">
+                    <div className="w-3 h-3 rounded-full bg-[hsl(40,18%,97%)] border border-[hsl(40,8%,81%)]" />
+                    <div className="w-3 h-3 rounded-full bg-[hsl(37,100%,39%)]" />
+                    <div className="w-3 h-3 rounded-full bg-[hsl(40,10%,89%)]" />
+                  </div>
                 </button>
               </div>
             </div>

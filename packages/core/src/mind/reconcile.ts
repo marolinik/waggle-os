@@ -94,14 +94,75 @@ export async function reconcileVecIndex(db: MindDB, embedder: Embedder): Promise
 }
 
 /**
- * Full reconciliation: repairs both FTS5 and vector indexes.
+ * 9b: Remove orphan vector entries — vectors whose frame has been deleted.
+ * Returns the number of orphan entries removed.
+ */
+export function cleanOrphanVectors(db: MindDB): number {
+  const raw = db.getDatabase();
+
+  // Check if vec table exists
+  const vecExists = raw.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='memory_frames_vec'",
+  ).get();
+  if (!vecExists) return 0;
+
+  // Find vec entries with no corresponding frame
+  const orphans = raw.prepare(`
+    SELECT v.rowid FROM memory_frames_vec v
+    WHERE v.rowid NOT IN (SELECT id FROM memory_frames)
+  `).all() as { rowid: number }[];
+
+  if (orphans.length === 0) return 0;
+
+  const deleteTx = raw.transaction(() => {
+    for (const { rowid } of orphans) {
+      raw.prepare('DELETE FROM memory_frames_vec WHERE rowid = ?').run(rowid);
+    }
+  });
+  deleteTx();
+
+  return orphans.length;
+}
+
+/**
+ * Remove orphan FTS entries — FTS entries whose frame has been deleted.
+ */
+export function cleanOrphanFts(db: MindDB): number {
+  const raw = db.getDatabase();
+
+  const orphans = raw.prepare(`
+    SELECT rowid FROM memory_frames_fts
+    WHERE rowid NOT IN (SELECT id FROM memory_frames)
+  `).all() as { rowid: number }[];
+
+  if (orphans.length === 0) return 0;
+
+  const deleteTx = raw.transaction(() => {
+    for (const { rowid } of orphans) {
+      raw.prepare('DELETE FROM memory_frames_fts WHERE rowid = ?').run(rowid);
+    }
+  });
+  deleteTx();
+
+  return orphans.length;
+}
+
+/**
+ * Full reconciliation: repairs both FTS5 and vector indexes,
+ * and cleans up orphan entries.
  * If no embedder is provided, only FTS5 is reconciled.
  */
 export async function reconcileIndexes(
   db: MindDB,
   embedder?: Embedder,
 ): Promise<ReconcileResult> {
+  // Fix missing entries
   const ftsFixed = reconcileFtsIndex(db);
   const vecFixed = embedder ? await reconcileVecIndex(db, embedder) : 0;
+
+  // Clean orphans
+  cleanOrphanFts(db);
+  cleanOrphanVectors(db);
+
   return { ftsFixed, vecFixed };
 }

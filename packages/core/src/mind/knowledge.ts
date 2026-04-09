@@ -97,22 +97,47 @@ export class KnowledgeGraph {
     ).run(id);
   }
 
-  getEntitiesByType(entityType: string): Entity[] {
+  getEntitiesByType(entityType: string, limit = 500): Entity[] {
+    if (!entityType) {
+      return this.getEntities(limit);
+    }
     return this.db.getDatabase().prepare(
-      'SELECT * FROM knowledge_entities WHERE entity_type = ? AND valid_to IS NULL ORDER BY name'
-    ).all(entityType) as Entity[];
+      'SELECT * FROM knowledge_entities WHERE entity_type = ? AND valid_to IS NULL ORDER BY name LIMIT ?'
+    ).all(entityType, limit) as Entity[];
   }
 
-  searchEntities(query: string): Entity[] {
+  /** 9c: Paginated entity listing — prevents unbounded fetches. */
+  getEntities(limit = 200, offset = 0): Entity[] {
     return this.db.getDatabase().prepare(
-      'SELECT * FROM knowledge_entities WHERE name LIKE ? AND valid_to IS NULL ORDER BY name'
-    ).all(`%${query}%`) as Entity[];
+      'SELECT * FROM knowledge_entities WHERE valid_to IS NULL ORDER BY name LIMIT ? OFFSET ?'
+    ).all(limit, offset) as Entity[];
   }
 
-  getEntitiesValidAt(isoTime: string): Entity[] {
+  /** Get entity type counts (for dashboard display without fetching all rows). */
+  getEntityTypeCounts(): { type: string; count: number }[] {
     return this.db.getDatabase().prepare(
-      'SELECT * FROM knowledge_entities WHERE valid_from <= ? AND (valid_to IS NULL OR valid_to > ?)'
-    ).all(isoTime, isoTime) as Entity[];
+      'SELECT entity_type as type, COUNT(*) as count FROM knowledge_entities WHERE valid_to IS NULL GROUP BY entity_type ORDER BY count DESC'
+    ).all() as { type: string; count: number }[];
+  }
+
+  /** Total active entity count. */
+  getEntityCount(): number {
+    const row = this.db.getDatabase().prepare(
+      'SELECT COUNT(*) as cnt FROM knowledge_entities WHERE valid_to IS NULL'
+    ).get() as { cnt: number };
+    return row.cnt;
+  }
+
+  searchEntities(query: string, limit = 100): Entity[] {
+    return this.db.getDatabase().prepare(
+      'SELECT * FROM knowledge_entities WHERE name LIKE ? AND valid_to IS NULL ORDER BY name LIMIT ?'
+    ).all(`%${query}%`, limit) as Entity[];
+  }
+
+  getEntitiesValidAt(isoTime: string, limit = 500): Entity[] {
+    return this.db.getDatabase().prepare(
+      'SELECT * FROM knowledge_entities WHERE valid_from <= ? AND (valid_to IS NULL OR valid_to > ?) LIMIT ?'
+    ).all(isoTime, isoTime, limit) as Entity[];
   }
 
   // --- Relation operations ---
