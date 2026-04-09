@@ -899,6 +899,35 @@ class LocalAdapter {
     this.fetch('/api/telemetry/track', { method: 'POST', body: JSON.stringify({ event, properties }) }).catch(() => {});
   }
 
+  // --- Stripe Billing ---
+  async syncStripeCheckout(sessionId: string): Promise<{ tier: string; customerId: string | null }> {
+    const res = await this.fetch('/api/stripe/sync', {
+      method: 'POST',
+      body: JSON.stringify({ sessionId }),
+    });
+    return res.json();
+  }
+
+  async createCheckoutSession(tier: 'BASIC' | 'TEAMS'): Promise<{ url: string }> {
+    const res = await this.fetch('/api/stripe/create-checkout-session', {
+      method: 'POST',
+      body: JSON.stringify({ tier }),
+    });
+    return res.json();
+  }
+
+  async createPortalSession(): Promise<{ url: string }> {
+    const res = await this.fetch('/api/stripe/create-portal-session', {
+      method: 'POST',
+    });
+    return res.json();
+  }
+
+  async getTier(): Promise<{ tier: string; capabilities: Record<string, unknown>; usage: Record<string, unknown> }> {
+    const res = await this.fetch('/api/tier');
+    return res.json();
+  }
+
   // --- Import ---
   async importPreview(data: unknown, source: string): Promise<{ knowledgeExtracted: unknown[] }> {
     const res = await this.fetch('/api/import/preview', { method: 'POST', body: JSON.stringify({ data, source }) });

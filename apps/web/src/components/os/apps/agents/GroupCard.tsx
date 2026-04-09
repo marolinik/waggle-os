@@ -29,8 +29,8 @@ const GroupCard = ({ group, selected, onSelect, onDelete }: GroupCardProps) => {
       <div className="min-w-0 flex-1">
         <p className="text-xs font-display font-semibold text-foreground truncate">{group.name}</p>
         <div className="flex items-center gap-1.5 mt-0.5">
-          <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${strat.color}`}>{strat.label}</span>
-          <span className="text-[10px] text-muted-foreground">{group.members.length} agents</span>
+          <span className={`text-[11px] px-1.5 py-0.5 rounded-full ${strat.color}`}>{strat.label}</span>
+          <span className="text-[11px] text-muted-foreground">{group.members.length} agents</span>
         </div>
       </div>
       <button

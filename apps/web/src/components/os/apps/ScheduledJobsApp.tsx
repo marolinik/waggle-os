@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Clock, Plus, Trash2, Play, Loader2, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
 import { useToast } from '@/hooks/use-toast';
 import type { CronJob } from '@/lib/types';
@@ -73,11 +74,11 @@ const ScheduledJobsApp = () => {
         <div className="flex items-center gap-2">
           <Clock className="w-5 h-5" style={{ color: 'var(--honey-500)' }} />
           <h2 className="text-sm font-display font-semibold text-foreground">Scheduled Jobs</h2>
-          <span className="text-[10px] text-muted-foreground">{jobs.length} jobs</span>
+          <span className="text-[11px] text-muted-foreground">{jobs.length} jobs</span>
         </div>
         <button
           onClick={() => setCreating(true)}
-          className="flex items-center gap-1 px-2 py-1 text-[10px] font-display rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-colors"
+          className="flex items-center gap-1 px-2 py-1 text-[11px] font-display rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-colors"
         >
           <Plus className="w-3 h-3" /> New
         </button>
@@ -100,22 +101,22 @@ const ScheduledJobsApp = () => {
         {/* Create form */}
         {creating && (
           <div className="p-3 rounded-xl border border-primary/30 bg-primary/5 space-y-2">
-            <input
+            <Input
               value={newName}
               onChange={e => setNewName(e.target.value)}
               placeholder="Job name"
-              className="w-full bg-muted/30 rounded-lg px-3 py-1.5 text-sm outline-none"
+              className="w-full bg-muted/30 h-auto py-1.5"
               autoFocus
             />
-            <input
+            <Input
               value={newSchedule}
               onChange={e => setNewSchedule(e.target.value)}
               placeholder="Cron expression (0 8 * * *)"
-              className="w-full bg-muted/30 rounded-lg px-3 py-1.5 text-xs font-mono outline-none"
+              className="w-full bg-muted/30 text-xs font-mono h-auto py-1.5"
             />
             <div className="flex gap-2">
-              <button onClick={handleCreate} className="px-3 py-1 text-[10px] font-display rounded-lg bg-primary text-primary-foreground">Create</button>
-              <button onClick={() => setCreating(false)} className="px-3 py-1 text-[10px] font-display rounded-lg text-muted-foreground hover:text-foreground">Cancel</button>
+              <button onClick={handleCreate} className="px-3 py-1 text-[11px] font-display rounded-lg bg-primary text-primary-foreground">Create</button>
+              <button onClick={() => setCreating(false)} className="px-3 py-1 text-[11px] font-display rounded-lg text-muted-foreground hover:text-foreground">Cancel</button>
             </div>
           </div>
         )}
@@ -132,8 +133,8 @@ const ScheduledJobsApp = () => {
             <div className="flex-1 min-w-0">
               <p className={`text-sm font-display ${job.enabled ? 'text-foreground' : 'text-muted-foreground'}`}>{job.name}</p>
               <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-[10px] font-mono text-muted-foreground">{job.schedule}</span>
-                {job.lastRun && <span className="text-[9px] text-muted-foreground/60">Last: {new Date(job.lastRun).toLocaleDateString()}</span>}
+                <span className="text-[11px] font-mono text-muted-foreground">{job.schedule}</span>
+                {job.lastRun && <span className="text-[11px] text-muted-foreground/60">Last: {new Date(job.lastRun).toLocaleDateString()}</span>}
               </div>
             </div>
             <button

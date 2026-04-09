@@ -33,11 +33,15 @@ export const checkoutRoutes: FastifyPluginAsync = async (server) => {
     }
 
     try {
+      const origin = request.headers['origin']
+        ?? process.env['APP_URL']
+        ?? 'http://localhost:1420';
+
       const session = await stripe.checkout.sessions.create({
         mode: 'subscription',
         line_items: [{ price: priceId, quantity: 1 }],
-        success_url: 'waggle://payment-success?session_id={CHECKOUT_SESSION_ID}',
-        cancel_url: 'waggle://payment-cancelled',
+        success_url: `${origin}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${origin}/payment-cancelled`,
         allow_promotion_codes: true,
         metadata: {
           tier,

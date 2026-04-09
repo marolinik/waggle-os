@@ -47,7 +47,7 @@ const StepCard = ({ step, onAbort }: { step: AgentStep; onAbort?: () => void }) 
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-xs text-foreground">{decodeHtmlEntities(step.description)}</p>
-          <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground">
+          <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
             <span className="capitalize">{step.type.replace('_', ' ')}</span>
             {step.duration && <span>{step.duration}ms</span>}
             <span>{new Date(step.timestamp).toLocaleTimeString()}</span>
@@ -56,7 +56,7 @@ const StepCard = ({ step, onAbort }: { step: AgentStep; onAbort?: () => void }) 
         {step.status === 'running' && onAbort && (
           <button
             onClick={(e) => { e.stopPropagation(); onAbort(); }}
-            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-destructive/20 text-destructive text-[10px] font-display hover:bg-destructive/30 transition-colors shrink-0"
+            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-destructive/20 text-destructive text-[11px] font-display hover:bg-destructive/30 transition-colors shrink-0"
             title="Cancel execution"
           >
             <StopCircle className="w-3 h-3" /> Cancel
@@ -68,7 +68,7 @@ const StepCard = ({ step, onAbort }: { step: AgentStep; onAbort?: () => void }) 
       </button>
       {expanded && step.details && (
         <div className="px-3 pb-2 pt-0">
-          <pre className="text-[10px] text-muted-foreground bg-background/50 rounded p-2 overflow-x-auto max-h-32">
+          <pre className="text-[11px] text-muted-foreground bg-background/50 rounded p-2 overflow-x-auto max-h-32">
             {JSON.stringify(step.details, null, 2)}
           </pre>
         </div>
@@ -197,21 +197,21 @@ const TreeNode = ({ node, depth = 0 }: { node: AgentNode; depth?: number }) => {
           <div className="flex items-center gap-2">
             <span className="text-xs font-display font-medium text-foreground truncate">{node.name}</span>
             {node.persona && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary shrink-0">{node.persona}</span>
+              <span className="text-[11px] px-1.5 py-0.5 rounded bg-primary/10 text-primary shrink-0">{node.persona}</span>
             )}
           </div>
-          <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
+          <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
             {node.model && <span>{node.model}</span>}
             <span>{node.stepCount} steps</span>
             <span>{new Date(node.timestamp).toLocaleTimeString()}</span>
           </div>
           {node.task && depth > 0 && (
-            <p className="text-[10px] text-muted-foreground/70 mt-0.5 truncate">{node.task}</p>
+            <p className="text-[11px] text-muted-foreground/70 mt-0.5 truncate">{node.task}</p>
           )}
         </div>
 
         {/* Status badge */}
-        <span className={`text-[10px] capitalize shrink-0 ${
+        <span className={`text-[11px] capitalize shrink-0 ${
           node.status === 'running' ? 'text-primary' : node.status === 'error' ? 'text-destructive' : 'text-emerald-400'
         }`}>
           {node.status}
@@ -253,10 +253,10 @@ const AgentTreeView = ({ steps }: { steps: AgentStep[] }) => {
     <div className="space-y-1">
       <div className="flex items-center gap-2 mb-3 px-2">
         <GitBranch className="w-3.5 h-3.5 text-primary" />
-        <span className="text-[10px] font-display text-muted-foreground uppercase">
+        <span className="text-[11px] font-display text-muted-foreground uppercase">
           Agent Hierarchy
         </span>
-        <span className="text-[10px] text-muted-foreground">
+        <span className="text-[11px] text-muted-foreground">
           · {spawnCount} spawn{spawnCount !== 1 ? 's' : ''}
         </span>
       </div>
@@ -292,7 +292,7 @@ const EventsApp = ({ steps, autoScroll, onToggleAutoScroll, filter, onFilterChan
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`flex-1 text-[10px] py-1 rounded font-display transition-colors capitalize ${
+              className={`flex-1 text-[11px] py-1 rounded font-display transition-colors capitalize ${
                 tab === t ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'
               }`}
             >
@@ -303,7 +303,7 @@ const EventsApp = ({ steps, autoScroll, onToggleAutoScroll, filter, onFilterChan
 
         {tab !== 'tree' && (
           <>
-            <p className="text-[10px] font-display text-muted-foreground uppercase mb-2">Filter by type</p>
+            <p className="text-[11px] font-display text-muted-foreground uppercase mb-2">Filter by type</p>
             <button
               onClick={() => onFilterChange(null)}
               className={`w-full text-left text-xs px-2 py-1.5 rounded-lg transition-colors ${
@@ -332,14 +332,14 @@ const EventsApp = ({ steps, autoScroll, onToggleAutoScroll, filter, onFilterChan
 
         {tab === 'tree' && (
           <div className="space-y-2">
-            <p className="text-[10px] font-display text-muted-foreground uppercase">Legend</p>
+            <p className="text-[11px] font-display text-muted-foreground uppercase">Legend</p>
             <div className="space-y-1.5">
               {[
                 { color: 'bg-primary', label: 'Running' },
                 { color: 'bg-emerald-400', label: 'Complete' },
                 { color: 'bg-destructive', label: 'Error' },
               ].map(l => (
-                <div key={l.label} className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                <div key={l.label} className="flex items-center gap-2 text-[11px] text-muted-foreground">
                   <div className={`w-2 h-2 rounded-full ${l.color}`} />
                   {l.label}
                 </div>
@@ -359,7 +359,7 @@ const EventsApp = ({ steps, autoScroll, onToggleAutoScroll, filter, onFilterChan
           </div>
         )}
         <div className="pt-2 mt-2 border-t border-border/30">
-          <p className="text-[10px] text-muted-foreground">{steps.length} events</p>
+          <p className="text-[11px] text-muted-foreground">{steps.length} events</p>
         </div>
       </div>
 
@@ -390,7 +390,7 @@ const EventsApp = ({ steps, autoScroll, onToggleAutoScroll, filter, onFilterChan
               <div key={date}>
                 <div className="flex items-center gap-2 mb-2 mt-3 first:mt-0">
                   <Clock className="w-3 h-3 text-muted-foreground" />
-                  <span className="text-[10px] font-display text-muted-foreground">{date}</span>
+                  <span className="text-[11px] font-display text-muted-foreground">{date}</span>
                   <div className="flex-1 h-px bg-border/30" />
                 </div>
                 {dateSteps.map(step => <StepCard key={step.id} step={step} />)}

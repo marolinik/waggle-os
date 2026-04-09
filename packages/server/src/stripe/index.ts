@@ -11,6 +11,7 @@ import type { Tier } from '@waggle/shared';
 export { checkoutRoutes } from './checkout.js';
 export { webhookRoutes } from './webhook.js';
 export { portalRoutes } from './portal.js';
+export { syncRoutes } from './sync.js';
 
 // ── Stripe SDK singleton ─────────────────────────────────────────────
 
@@ -69,9 +70,11 @@ export const stripeRoutes: FastifyPluginAsync = async (server) => {
     await webhookScope.register(webhookRoutes);
   });
 
-  // Checkout and portal use standard JSON parsing
+  // Checkout, portal, and sync use standard JSON parsing
   const { checkoutRoutes } = await import('./checkout.js');
   const { portalRoutes } = await import('./portal.js');
+  const { syncRoutes } = await import('./sync.js');
   await server.register(checkoutRoutes);
   await server.register(portalRoutes);
+  await server.register(syncRoutes);
 };

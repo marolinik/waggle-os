@@ -102,7 +102,7 @@ const WorkspaceBriefing = ({ workspaceId, onSendMessage, onSelectSession }: Work
             {ctx.recentDecisions.slice(0, 3).map((d, i) => (
               <li key={i} className="text-xs text-muted-foreground">
                 <span className="text-foreground">{d.content}</span>
-                {d.date && <span className="text-[10px] text-muted-foreground/60 ml-2">{new Date(d.date).toLocaleDateString()}</span>}
+                {d.date && <span className="text-[11px] text-muted-foreground/60 ml-2">{new Date(d.date).toLocaleDateString()}</span>}
               </li>
             ))}
           </ul>
@@ -118,7 +118,7 @@ const WorkspaceBriefing = ({ workspaceId, onSendMessage, onSelectSession }: Work
           <ul className="space-y-1.5">
             {ctx.recentMemories.slice(0, 5).map((m, i) => (
               <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
-                <span className={`mt-0.5 text-[8px] px-1 rounded ${
+                <span className={`mt-0.5 text-[11px] px-1 rounded ${
                   m.importance === 'critical' ? 'bg-rose-500/20 text-rose-400' :
                   m.importance === 'important' ? 'bg-primary/20 text-primary' :
                   'bg-muted text-muted-foreground'
@@ -179,7 +179,7 @@ const WorkspaceBriefing = ({ workspaceId, onSendMessage, onSelectSession }: Work
 
       {/* Upcoming schedules */}
       {ctx.upcomingSchedules && ctx.upcomingSchedules.length > 0 && (
-        <div className="mt-4 text-[10px] text-muted-foreground">
+        <div className="mt-4 text-[11px] text-muted-foreground">
           <Clock className="w-3 h-3 inline mr-1" />
           Upcoming: {ctx.upcomingSchedules.slice(0, 2).join(' · ')}
         </div>

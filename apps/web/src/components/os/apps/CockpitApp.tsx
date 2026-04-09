@@ -79,9 +79,9 @@ const CockpitApp = () => {
           <AlertTriangle className="w-4 h-4 text-destructive shrink-0" />
           <div>
             <p className="text-xs font-medium text-foreground">Server unreachable</p>
-            <p className="text-[10px] text-muted-foreground">Could not connect to the backend — check Settings</p>
+            <p className="text-[11px] text-muted-foreground">Could not connect to the backend — check Settings</p>
           </div>
-          <button onClick={refresh} className="ml-auto px-2.5 py-1 text-[10px] font-medium rounded-lg bg-muted hover:bg-muted/80 transition-colors flex items-center gap-1">
+          <button onClick={refresh} className="ml-auto px-2.5 py-1 text-[11px] font-medium rounded-lg bg-muted hover:bg-muted/80 transition-colors flex items-center gap-1">
             <RefreshCw className="w-3 h-3" /> Retry
           </button>
         </div>
@@ -98,12 +98,12 @@ const CockpitApp = () => {
             {data.health?.status || 'Unknown'}
           </div>
           {data.health?.uptime && (
-            <p className="text-[10px] text-muted-foreground mt-1">Uptime: {Math.round(data.health.uptime / 3600)}h</p>
+            <p className="text-[11px] text-muted-foreground mt-1">Uptime: {Math.round(data.health.uptime / 3600)}h</p>
           )}
           {data.health?.status === 'degraded' && data.health.services && data.health.services.filter(s => s.status !== 'healthy').length > 0 && (
             <div className="mt-2 space-y-0.5">
               {data.health.services.filter(s => s.status !== 'healthy').map(s => (
-                <p key={s.name} className="text-[10px] text-amber-400/80 flex items-center gap-1">
+                <p key={s.name} className="text-[11px] text-amber-400/80 flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
                   {s.name}: {s.status}
                 </p>
@@ -111,7 +111,7 @@ const CockpitApp = () => {
             </div>
           )}
           {data.health?.status === 'degraded' && (!data.health.services || data.health.services.filter(s => s.status !== 'healthy').length === 0) && (
-            <p className="text-[10px] text-muted-foreground mt-1">Some services are running at reduced capacity</p>
+            <p className="text-[11px] text-muted-foreground mt-1">Some services are running at reduced capacity</p>
           )}
         </div>
 
@@ -124,7 +124,7 @@ const CockpitApp = () => {
           <div className="text-lg font-display font-bold text-foreground">
             ${(data.costSummary?.estimatedCost ?? data.cost?.totalCost ?? 0).toFixed(4)}
           </div>
-          <p className="text-[10px] text-muted-foreground mt-1">
+          <p className="text-[11px] text-muted-foreground mt-1">
             {(data.costSummary?.totalTokens ?? data.cost?.totalTokens ?? 0).toLocaleString()} tokens
             {data.costSummary?.budgetLimit != null
               ? <span className="ml-1">· Budget: ${data.costSummary.budgetLimit}/day</span>
@@ -140,11 +140,11 @@ const CockpitApp = () => {
               <Brain className="w-4 h-4 text-muted-foreground" />
               <span className="text-xs font-display font-medium text-foreground">Memory Weaver</span>
             </div>
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-[11px] text-muted-foreground">
               Status: <span className={data.weaver.status === 'active' ? 'text-green-400' : 'text-muted-foreground'}>{data.weaver.status}</span>
             </p>
             {data.weaver.lastConsolidation && (
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground">
                 Last consolidation: {new Date(data.weaver.lastConsolidation).toLocaleDateString()}
               </p>
             )}
@@ -161,10 +161,10 @@ const CockpitApp = () => {
             <div className="text-lg font-display font-bold text-foreground">
               {data.eventStats.total.toLocaleString()}
             </div>
-            <p className="text-[10px] text-muted-foreground mt-1">total events</p>
+            <p className="text-[11px] text-muted-foreground mt-1">total events</p>
             <div className="flex flex-wrap gap-1.5 mt-2">
               {Object.entries(data.eventStats.byType).slice(0, 5).map(([type, count]) => (
-                <span key={type} className="text-[9px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">
+                <span key={type} className="text-[11px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">
                   {type}: {count}
                 </span>
               ))}
@@ -187,7 +187,7 @@ const CockpitApp = () => {
                 </div>
               ))}
               {data.crons.length > 3 && (
-                <button onClick={() => setShowAdvanced(true)} className="text-[10px] text-primary hover:text-primary/80 transition-colors">
+                <button onClick={() => setShowAdvanced(true)} className="text-[11px] text-primary hover:text-primary/80 transition-colors">
                   +{data.crons.length - 3} more — view all
                 </button>
               )}

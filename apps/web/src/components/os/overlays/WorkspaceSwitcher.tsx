@@ -50,7 +50,7 @@ const WorkspaceSwitcher = ({ open, onClose, workspaces, activeWorkspaceId, onSel
                   {persona ? (
                     <Avatar className="w-7 h-7 shrink-0">
                       <AvatarImage src={persona.avatar} />
-                      <AvatarFallback className="text-[8px] bg-primary/20">{persona.name[0]}</AvatarFallback>
+                      <AvatarFallback className="text-[11px] bg-primary/20">{persona.name[0]}</AvatarFallback>
                     </Avatar>
                   ) : (
                     <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0">
@@ -59,7 +59,7 @@ const WorkspaceSwitcher = ({ open, onClose, workspaces, activeWorkspaceId, onSel
                   )}
                   <div className="flex-1 min-w-0">
                     <span className="text-xs font-display font-medium text-foreground truncate block">{ws.name}</span>
-                    <span className="text-[10px] text-muted-foreground">{ws.group}</span>
+                    <span className="text-[11px] text-muted-foreground">{ws.group}</span>
                   </div>
                   <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
                 </button>
@@ -69,7 +69,7 @@ const WorkspaceSwitcher = ({ open, onClose, workspaces, activeWorkspaceId, onSel
               <p className="text-xs text-muted-foreground text-center py-4">No workspaces</p>
             )}
           </div>
-          <p className="text-[10px] text-muted-foreground mt-3 text-center">Ctrl+Tab to toggle</p>
+          <p className="text-[11px] text-muted-foreground mt-3 text-center">Ctrl+Tab to toggle</p>
         </motion.div>
       </motion.div>
     </AnimatePresence>

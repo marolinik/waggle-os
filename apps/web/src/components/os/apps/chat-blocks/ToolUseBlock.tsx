@@ -54,12 +54,12 @@ const ToolUseBlock = memo(({ block }: ToolUseBlockProps) => {
       {expanded && (block.input || block.result) && (
         <div className="px-2.5 pb-2 border-t border-border/30">
           {block.input && (
-            <pre className="mt-1.5 text-[10px] text-muted-foreground bg-background/50 rounded p-1.5 overflow-x-auto max-h-24">
+            <pre className="mt-1.5 text-[11px] text-muted-foreground bg-background/50 rounded p-1.5 overflow-x-auto max-h-24">
               {JSON.stringify(block.input, null, 2)}
             </pre>
           )}
           {block.result && (
-            <pre className="mt-1 text-[10px] text-muted-foreground bg-background/50 rounded p-1.5 overflow-x-auto max-h-32">
+            <pre className="mt-1 text-[11px] text-muted-foreground bg-background/50 rounded p-1.5 overflow-x-auto max-h-32">
               {typeof block.result === 'string' ? block.result.slice(0, 2000) : JSON.stringify(block.result, null, 2)}
             </pre>
           )}

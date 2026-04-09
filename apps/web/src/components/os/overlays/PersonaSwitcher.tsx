@@ -95,7 +95,7 @@ const PersonaSwitcher = ({ open, onClose, currentPersona, currentGroupId, onSele
     >
       <Avatar className="w-10 h-10 shrink-0">
         {p.avatar ? <AvatarImage src={p.avatar} /> : (
-          <AvatarFallback className="text-[10px] bg-primary/20">{p.icon || p.name[0]}</AvatarFallback>
+          <AvatarFallback className="text-[11px] bg-primary/20">{p.icon || p.name[0]}</AvatarFallback>
         )}
       </Avatar>
       <div className="min-w-0 flex-1">
@@ -103,7 +103,7 @@ const PersonaSwitcher = ({ open, onClose, currentPersona, currentGroupId, onSele
           <p className="text-xs font-display font-medium text-foreground truncate">{p.name}</p>
           {locked && <Lock className="w-3 h-3 text-muted-foreground shrink-0" />}
         </div>
-        <p className="text-[10px] text-muted-foreground truncate">{p.description}</p>
+        <p className="text-[11px] text-muted-foreground truncate">{p.description}</p>
       </div>
     </button>
   );
@@ -131,7 +131,7 @@ const PersonaSwitcher = ({ open, onClose, currentPersona, currentGroupId, onSele
             <div className="flex items-center gap-0.5 bg-secondary/30 rounded-lg p-0.5">
               <button
                 onClick={() => setTab('agents')}
-                className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-colors ${
+                className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors ${
                   tab === 'agents' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -140,7 +140,7 @@ const PersonaSwitcher = ({ open, onClose, currentPersona, currentGroupId, onSele
               {(groups.length > 0 || onSelectGroup) && (
                 <button
                   onClick={() => setTab('groups')}
-                  className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-colors ${
+                  className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors ${
                     tab === 'groups' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
@@ -158,7 +158,7 @@ const PersonaSwitcher = ({ open, onClose, currentPersona, currentGroupId, onSele
             <div className="max-h-[380px] overflow-y-auto scrollbar-thin space-y-4">
               {/* Universal Modes */}
               <div>
-                <h3 className="text-[10px] font-display font-bold text-muted-foreground uppercase tracking-wider mb-2 px-1">
+                <h3 className="text-[11px] font-display font-bold text-muted-foreground uppercase tracking-wider mb-2 px-1">
                   Universal Modes
                 </h3>
                 <div className="grid grid-cols-2 gap-2">
@@ -170,7 +170,7 @@ const PersonaSwitcher = ({ open, onClose, currentPersona, currentGroupId, onSele
 
               {/* Knowledge Workers */}
               <div>
-                <h3 className="text-[10px] font-display font-bold text-muted-foreground uppercase tracking-wider mb-2 px-1">
+                <h3 className="text-[11px] font-display font-bold text-muted-foreground uppercase tracking-wider mb-2 px-1">
                   Knowledge Workers
                 </h3>
                 <div className="grid grid-cols-2 gap-2">
@@ -182,7 +182,7 @@ const PersonaSwitcher = ({ open, onClose, currentPersona, currentGroupId, onSele
 
               {/* Domain Specialists */}
               <div>
-                <h3 className="text-[10px] font-display font-bold text-muted-foreground uppercase tracking-wider mb-2 px-1">
+                <h3 className="text-[11px] font-display font-bold text-muted-foreground uppercase tracking-wider mb-2 px-1">
                   Specialists
                 </h3>
                 <div className="grid grid-cols-2 gap-2">
@@ -193,7 +193,7 @@ const PersonaSwitcher = ({ open, onClose, currentPersona, currentGroupId, onSele
               </div>
 
               {!allPersonasUnlocked && (
-                <p className="text-[10px] text-muted-foreground text-center py-1">
+                <p className="text-[11px] text-muted-foreground text-center py-1">
                   Upgrade to Teams to unlock all personas
                 </p>
               )}
@@ -220,17 +220,17 @@ const PersonaSwitcher = ({ open, onClose, currentPersona, currentGroupId, onSele
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-display font-medium text-foreground truncate">{g.name}</p>
                     <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary capitalize">{g.strategy}</span>
-                      <span className="text-[10px] text-muted-foreground">{g.members.length} agents</span>
+                      <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary capitalize">{g.strategy}</span>
+                      <span className="text-[11px] text-muted-foreground">{g.members.length} agents</span>
                     </div>
-                    {g.description && <p className="text-[10px] text-muted-foreground truncate mt-0.5">{g.description}</p>}
+                    {g.description && <p className="text-[11px] text-muted-foreground truncate mt-0.5">{g.description}</p>}
                   </div>
                 </button>
               ))}
             </div>
           )}
 
-          <p className="text-[10px] text-muted-foreground mt-3 text-center">⌘⇧P to toggle</p>
+          <p className="text-[11px] text-muted-foreground mt-3 text-center">⌘⇧P to toggle</p>
         </motion.div>
       </motion.div>
     </AnimatePresence>

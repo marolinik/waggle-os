@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import waggleLogo from "@/assets/waggle-logo.jpeg";
 
 const PHASES = [
@@ -10,28 +10,47 @@ const PHASES = [
   "Ready.",
 ];
 
-const PHASE_DURATION = 600;
+const PHASE_DURATION = 400;
+const READY_PAUSE = 400;
+const EXIT_DELAY = 300;
+const SKIP_HINT_DELAY = 1000;
 
 const BootScreen = ({ onComplete }: { onComplete: () => void }) => {
   const [phase, setPhase] = useState(0);
   const [done, setDone] = useState(false);
+  const [showSkipHint, setShowSkipHint] = useState(false);
+
+  const handleSkip = useCallback(() => {
+    onComplete();
+  }, [onComplete]);
 
   useEffect(() => {
     if (phase < PHASES.length - 1) {
       const t = setTimeout(() => setPhase(p => p + 1), PHASE_DURATION);
       return () => clearTimeout(t);
     } else {
-      const t = setTimeout(() => setDone(true), 800);
+      const t = setTimeout(() => setDone(true), READY_PAUSE);
       return () => clearTimeout(t);
     }
   }, [phase]);
 
   useEffect(() => {
     if (done) {
-      const t = setTimeout(onComplete, 500);
+      const t = setTimeout(onComplete, EXIT_DELAY);
       return () => clearTimeout(t);
     }
   }, [done, onComplete]);
+
+  useEffect(() => {
+    const handleKeyDown = () => handleSkip();
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleSkip]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setShowSkipHint(true), SKIP_HINT_DELAY);
+    return () => clearTimeout(t);
+  }, []);
 
   const progress = ((phase + 1) / PHASES.length) * 100;
 
@@ -40,7 +59,8 @@ const BootScreen = ({ onComplete }: { onComplete: () => void }) => {
       initial={{ opacity: 1 }}
       exit={{ opacity: 0, scale: 1.05 }}
       transition={{ duration: 0.5, ease: "easeInOut" }}
-      className="fixed inset-0 z-[9999] bg-background flex flex-col items-center justify-center"
+      className="fixed inset-0 z-[9999] bg-background flex flex-col items-center justify-center cursor-pointer"
+      onClick={handleSkip}
     >
       {/* Subtle radial glow */}
       <div className="absolute inset-0 overflow-hidden">
@@ -131,6 +151,21 @@ const BootScreen = ({ onComplete }: { onComplete: () => void }) => {
           />
         ))}
       </div>
+
+      {/* Skip hint */}
+      <AnimatePresence>
+        {showSkipHint && (
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="absolute bottom-8 text-xs text-muted-foreground/50"
+          >
+            Click or press any key to skip
+          </motion.p>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };

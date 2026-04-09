@@ -32,13 +32,13 @@ const AgentDetail = ({ agent, localPersona, allTools, onEdit }: AgentDetailProps
           <h3 className="text-sm font-display font-bold text-foreground">{agent.name}</h3>
           <p className="text-xs text-muted-foreground">{agent.description}</p>
           {agent.custom && (
-            <span className="inline-block mt-1 text-[9px] px-1.5 py-0.5 rounded-full bg-primary/20 text-primary font-medium">Custom</span>
+            <span className="inline-block mt-1 text-[11px] px-1.5 py-0.5 rounded-full bg-primary/20 text-primary font-medium">Custom</span>
           )}
         </div>
         {agent.custom && onEdit && (
           <button
             onClick={onEdit}
-            className="flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-medium rounded-lg bg-secondary/50 hover:bg-secondary/70 text-foreground transition-colors"
+            className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium rounded-lg bg-secondary/50 hover:bg-secondary/70 text-foreground transition-colors"
           >
             <Pencil className="w-3 h-3" /> Edit
           </button>
@@ -47,17 +47,17 @@ const AgentDetail = ({ agent, localPersona, allTools, onEdit }: AgentDetailProps
 
       {/* Tools */}
       <div>
-        <h4 className="text-[10px] font-display uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1">
+        <h4 className="text-[11px] font-display uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1">
           <Wrench className="w-3 h-3" /> Tools ({agentTools.length})
         </h4>
         {agentTools.length === 0 ? (
-          <p className="text-[10px] text-muted-foreground italic">No tools assigned</p>
+          <p className="text-[11px] text-muted-foreground italic">No tools assigned</p>
         ) : (
           <div className="flex flex-wrap gap-1.5">
             {agentTools.map(t => (
               <span
                 key={t.name}
-                className="text-[10px] px-2 py-1 rounded-lg bg-muted/50 border border-border/30 text-foreground"
+                className="text-[11px] px-2 py-1 rounded-lg bg-muted/50 border border-border/30 text-foreground"
                 title={t.description}
               >
                 {t.name}
@@ -70,10 +70,10 @@ const AgentDetail = ({ agent, localPersona, allTools, onEdit }: AgentDetailProps
       {/* Suggested Commands */}
       {agent.suggestedCommands && agent.suggestedCommands.length > 0 && (
         <div>
-          <h4 className="text-[10px] font-display uppercase tracking-wider text-muted-foreground mb-2">Commands</h4>
+          <h4 className="text-[11px] font-display uppercase tracking-wider text-muted-foreground mb-2">Commands</h4>
           <div className="flex flex-wrap gap-1.5">
             {agent.suggestedCommands.map(cmd => (
-              <span key={cmd} className="text-[10px] px-2 py-1 rounded-lg bg-accent/30 text-accent-foreground font-mono">
+              <span key={cmd} className="text-[11px] px-2 py-1 rounded-lg bg-accent/30 text-accent-foreground font-mono">
                 /{cmd}
               </span>
             ))}
@@ -84,10 +84,10 @@ const AgentDetail = ({ agent, localPersona, allTools, onEdit }: AgentDetailProps
       {/* Workspace Affinity */}
       {agent.workspaceAffinity && agent.workspaceAffinity.length > 0 && (
         <div>
-          <h4 className="text-[10px] font-display uppercase tracking-wider text-muted-foreground mb-2">Best For</h4>
+          <h4 className="text-[11px] font-display uppercase tracking-wider text-muted-foreground mb-2">Best For</h4>
           <div className="flex flex-wrap gap-1.5">
             {agent.workspaceAffinity.map(w => (
-              <span key={w} className="text-[10px] px-2 py-1 rounded-lg bg-secondary/50 text-foreground capitalize">{w}</span>
+              <span key={w} className="text-[11px] px-2 py-1 rounded-lg bg-secondary/50 text-foreground capitalize">{w}</span>
             ))}
           </div>
         </div>

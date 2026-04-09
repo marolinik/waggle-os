@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Bot, Plus, Search, Loader2, Users, X, AlertCircle, RefreshCw } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
 import { PERSONAS } from '@/lib/personas';
 import type { BackendPersona, AgentGroup, ToolDef, GroupExecState, MemberExecState } from './agents/types';
@@ -172,10 +173,13 @@ const AgentsApp = () => {
         <div className="flex items-center gap-2">
           <Bot className="w-4 h-4 text-primary" />
           <h2 className="text-sm font-display font-bold text-foreground">Agents</h2>
-          <div className="flex items-center gap-0.5 ml-2 bg-secondary/30 rounded-lg p-0.5">
+          <div className="flex items-center gap-0.5 ml-2 bg-secondary/30 rounded-lg p-0.5" role="tablist" aria-label="Agent sections">
             <button
               onClick={() => resetSelections('agents')}
-              className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-colors ${
+              role="tab"
+              aria-selected={tab === 'agents'}
+              tabIndex={tab === 'agents' ? 0 : -1}
+              className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors ${
                 tab === 'agents' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
@@ -183,7 +187,10 @@ const AgentsApp = () => {
             </button>
             <button
               onClick={() => resetSelections('groups')}
-              className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-colors ${
+              role="tab"
+              aria-selected={tab === 'groups'}
+              tabIndex={tab === 'groups' ? 0 : -1}
+              className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors ${
                 tab === 'groups' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
@@ -218,23 +225,23 @@ const AgentsApp = () => {
         <div className="flex items-center gap-2 p-2 rounded-lg bg-destructive/10 text-destructive text-xs">
           <AlertCircle className="w-3.5 h-3.5 shrink-0" />
           {error}
-          <button onClick={() => { setError(null); loadData(); }} className="ml-auto flex items-center gap-1 text-[10px] text-primary hover:text-primary/80 mr-2">
+          <button onClick={() => { setError(null); loadData(); }} className="ml-auto flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 mr-2">
             <RefreshCw className="w-3 h-3" /> Retry
           </button>
           <button onClick={() => setError(null)}><X className="w-3 h-3" /></button>
         </div>
       )}
 
-      <div className="flex gap-3 flex-1 min-h-0">
+      <div className="flex gap-3 flex-1 min-h-0" role="tabpanel">
         {/* Left sidebar */}
         <div className="w-60 shrink-0 flex flex-col gap-2">
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-            <input
+            <Input
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder={tab === 'agents' ? 'Search agents...' : 'Search groups...'}
-              className="w-full text-xs bg-secondary/30 border border-border/30 rounded-lg pl-8 pr-3 py-2 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
+              className="w-full text-xs bg-secondary/30 pl-8 pr-3"
             />
           </div>
           <div className="flex-1 overflow-y-auto scrollbar-thin space-y-1.5">
@@ -250,7 +257,7 @@ const AgentsApp = () => {
                     onDelete={agent.custom ? () => handleDelete(agent.id) : undefined}
                   />
                 ))}
-                {filtered.length === 0 && <p className="text-[10px] text-muted-foreground text-center py-6">No agents found</p>}
+                {filtered.length === 0 && <p className="text-[11px] text-muted-foreground text-center py-6">No agents found</p>}
               </AnimatePresence>
             ) : (
               <AnimatePresence>
@@ -264,7 +271,7 @@ const AgentsApp = () => {
                     onDelete={() => handleDeleteGroup(group.id)}
                   />
                 ))}
-                {filteredGroups.length === 0 && <p className="text-[10px] text-muted-foreground text-center py-6">No groups yet</p>}
+                {filteredGroups.length === 0 && <p className="text-[11px] text-muted-foreground text-center py-6">No groups yet</p>}
               </AnimatePresence>
             )}
           </div>
@@ -293,7 +300,7 @@ const AgentsApp = () => {
                 <div className="text-center">
                   <Bot className="w-8 h-8 mx-auto mb-2 opacity-30" />
                   <p className="text-xs">Select an agent to view details</p>
-                  <p className="text-[10px] mt-1">or create a new one with AI</p>
+                  <p className="text-[11px] mt-1">or create a new one with AI</p>
                 </div>
               </div>
             )
@@ -324,7 +331,7 @@ const AgentsApp = () => {
                 <div className="text-center">
                   <Users className="w-8 h-8 mx-auto mb-2 opacity-30" />
                   <p className="text-xs">Select a group to view details</p>
-                  <p className="text-[10px] mt-1">or create a new collaborative workflow</p>
+                  <p className="text-[11px] mt-1">or create a new collaborative workflow</p>
                 </div>
               </div>
             )

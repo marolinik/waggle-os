@@ -3,6 +3,7 @@ import {
   Lock, Plus, Trash2, Eye, EyeOff, Loader2, Key, Plug, ExternalLink,
   Shield, ChevronDown, ChevronRight, RefreshCw, CheckCircle2, User, Pencil,
 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
 import { useToast } from '@/hooks/use-toast';
 
@@ -212,21 +213,24 @@ const VaultApp = () => {
   return (
     <div className="flex h-full">
       {/* Tab sidebar */}
-      <div className="w-36 border-r border-border/50 p-2 space-y-0.5 shrink-0">
+      <div className="w-36 border-r border-border/50 p-2 space-y-0.5 shrink-0" role="tablist" aria-label="Vault sections">
         <button onClick={() => setTab('secrets')}
+          role="tab"
+          aria-selected={tab === 'secrets'}
+          tabIndex={tab === 'secrets' ? 0 : -1}
           className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors ${
             tab === 'secrets' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
           }`}>
           <Key className="w-3.5 h-3.5" /> Secrets
-          <span className="ml-auto text-[9px] text-muted-foreground">{secrets.length}</span>
+          <span className="ml-auto text-[11px] text-muted-foreground">{secrets.length}</span>
         </button>
         <div className="mt-3 pt-3 border-t border-border/30 px-2">
-          <p className="text-[9px] text-muted-foreground">Service connections moved to the <strong>Connectors</strong> app on the dock.</p>
+          <p className="text-[11px] text-muted-foreground">Service connections moved to the <strong>Connectors</strong> app on the dock.</p>
         </div>
       </div>
 
       {/* Content */}
-      <div className="flex-1 p-4 overflow-auto">
+      <div className="flex-1 p-4 overflow-auto" role="tabpanel">
 
         {/* ═══ SECRETS ═══ */}
         {tab === 'secrets' && (
@@ -239,7 +243,7 @@ const VaultApp = () => {
                 <RefreshCw className="w-3.5 h-3.5 text-muted-foreground" />
               </button>
             </div>
-            <p className="text-[10px] text-muted-foreground">AES-256-GCM encrypted. Values never sent to UI unless explicitly revealed (auto-hides after 10s).</p>
+            <p className="text-[11px] text-muted-foreground">AES-256-GCM encrypted. Values never sent to UI unless explicitly revealed (auto-hides after 10s).</p>
 
             {/* Secrets list */}
             <div className="space-y-1">
@@ -252,14 +256,14 @@ const VaultApp = () => {
                       <div className="min-w-0">
                         <p className="text-xs text-foreground truncate">{s.name}</p>
                         <div className="flex items-center gap-1.5">
-                          <span className={`px-1.5 py-0 rounded text-[8px] font-medium ${badge.color}`}>{badge.label}</span>
-                          {s.updatedAt && <span className="text-[9px] text-muted-foreground">{new Date(s.updatedAt).toLocaleDateString()}</span>}
+                          <span className={`px-1.5 py-0 rounded text-[11px] font-medium ${badge.color}`}>{badge.label}</span>
+                          {s.updatedAt && <span className="text-[11px] text-muted-foreground">{new Date(s.updatedAt).toLocaleDateString()}</span>}
                         </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       {revealedSecret === s.name && (
-                        <span className="text-[10px] text-foreground font-mono mr-2 max-w-[180px] truncate">{revealedValue}</span>
+                        <span className="text-[11px] text-foreground font-mono mr-2 max-w-[180px] truncate">{revealedValue}</span>
                       )}
                       <button onClick={() => { setNewName(s.name); setNewType(s.type ?? 'api_key'); setNewValue(''); }} className="p-1 rounded hover:bg-muted/50" title="Update value">
                         <Pencil className="w-3 h-3 text-muted-foreground" />
@@ -284,10 +288,10 @@ const VaultApp = () => {
               {/* Name field with suggestion dropdown */}
               <div className="relative">
                 <div className="flex gap-2">
-                  <input value={newName} onChange={e => setNewName(e.target.value)}
+                  <Input value={newName} onChange={e => setNewName(e.target.value)}
                     onFocus={() => setShowSuggestions(true)}
                     placeholder="Select or type secret name"
-                    className="flex-1 bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-xs text-foreground outline-none focus:border-primary/50" />
+                    className="flex-1 bg-muted/50 text-xs h-auto py-1.5" />
                   <button onClick={() => setShowSuggestions(!showSuggestions)}
                     className="px-2 py-1.5 rounded-lg bg-muted/50 border border-border/50 hover:bg-muted transition-colors">
                     <ChevronDown className="w-3 h-3 text-muted-foreground" />
@@ -299,12 +303,12 @@ const VaultApp = () => {
                   <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-card border border-border rounded-xl shadow-lg max-h-60 overflow-auto">
                     {suggestedSecrets.map(cat => (
                       <div key={cat.category}>
-                        <p className="px-3 py-1.5 text-[9px] font-display font-semibold text-muted-foreground uppercase tracking-wider bg-muted/30">{cat.category}</p>
+                        <p className="px-3 py-1.5 text-[11px] font-display font-semibold text-muted-foreground uppercase tracking-wider bg-muted/30">{cat.category}</p>
                         {cat.items.map(item => (
                           <button key={item.name} onClick={() => handleSelectSuggestion(item)}
                             className="w-full text-left px-3 py-1.5 text-xs text-foreground hover:bg-muted/50 transition-colors flex items-center justify-between">
                             <span>{item.label}</span>
-                            <span className={`px-1.5 rounded text-[8px] ${(TYPE_BADGES[item.type] ?? TYPE_BADGES.api_key).color}`}>
+                            <span className={`px-1.5 rounded text-[11px] ${(TYPE_BADGES[item.type] ?? TYPE_BADGES.api_key).color}`}>
                               {(TYPE_BADGES[item.type] ?? TYPE_BADGES.api_key).label}
                             </span>
                           </button>
@@ -317,7 +321,7 @@ const VaultApp = () => {
 
               {/* Type selector */}
               <select value={newType} onChange={e => setNewType(e.target.value)}
-                className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-xs text-foreground outline-none">
+                className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
                 <option value="api_key">API Key</option>
                 <option value="bearer">Bearer Token</option>
                 <option value="oauth2">OAuth2 Token</option>
@@ -328,15 +332,15 @@ const VaultApp = () => {
               {newType === 'basic' && (
                 <div className="flex items-center gap-2">
                   <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                  <input value={newUsername} onChange={e => setNewUsername(e.target.value)} placeholder="Username or email"
-                    className="flex-1 bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-xs text-foreground outline-none" />
+                  <Input value={newUsername} onChange={e => setNewUsername(e.target.value)} placeholder="Username or email"
+                    className="flex-1 bg-muted/50 text-xs h-auto py-1.5" />
                 </div>
               )}
 
               {/* Value / password field */}
-              <input type="password" value={newValue} onChange={e => setNewValue(e.target.value)}
+              <Input type="password" value={newValue} onChange={e => setNewValue(e.target.value)}
                 placeholder={newType === 'basic' ? 'Password or API token' : 'Secret value'}
-                className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-xs text-foreground outline-none" />
+                className="w-full bg-muted/50 text-xs h-auto py-1.5" />
 
               <button onClick={handleAddSecret} disabled={!newName.trim() || !newValue.trim() || adding}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-50 transition-colors">

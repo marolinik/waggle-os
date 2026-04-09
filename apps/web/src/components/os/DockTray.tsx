@@ -35,7 +35,7 @@ const DockTray = ({ items, onSelect, onClose, anchorRect }: DockTrayProps) => {
               className="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-muted/50 transition-colors min-w-[64px]"
             >
               <Icon className={`w-5 h-5 ${item.color}`} />
-              <span className="text-[10px] font-display text-muted-foreground whitespace-nowrap">
+              <span className="text-[11px] font-display text-muted-foreground whitespace-nowrap">
                 {item.label}
               </span>
             </button>

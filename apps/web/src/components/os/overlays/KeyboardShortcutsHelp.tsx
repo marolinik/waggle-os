@@ -71,7 +71,7 @@ const KeyboardShortcutsHelp = ({ open, onClose }: KeyboardShortcutsHelpProps) =>
                       <span className="text-xs text-foreground">{item.action}</span>
                       <div className="flex items-center gap-1">
                         {item.keys.map((key, i) => (
-                          <kbd key={i} className="px-1.5 py-0.5 text-[10px] rounded bg-muted text-muted-foreground font-display min-w-[20px] text-center">
+                          <kbd key={i} className="px-1.5 py-0.5 text-[11px] rounded bg-muted text-muted-foreground font-display min-w-[20px] text-center">
                             {key}
                           </kbd>
                         ))}

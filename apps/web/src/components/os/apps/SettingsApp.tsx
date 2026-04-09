@@ -4,19 +4,22 @@ import {
   Download, Upload, Link2, Building, Wrench, DollarSign, Key, Lock, BarChart3, Trash2,
 } from 'lucide-react';
 import { useFeatureGate } from '@/hooks/useFeatureGate';
+import { useBilling } from '@/hooks/useBilling';
 import LockedFeature from '@/components/os/LockedFeature';
 import { adapter } from '@/lib/adapter';
+import { Input } from '@/components/ui/input';
 import { useProviders } from '@/hooks/useProviders';
 import { useOnboarding } from '@/hooks/useOnboarding';
 import type { UserTier } from '@/lib/dock-tiers';
 import ModelSelector from '@/components/os/ModelSelector';
 import ModelPilotCard from '@/components/os/ModelPilotCard';
 
-type SettingsTab = 'general' | 'models' | 'permissions' | 'team' | 'backup' | 'enterprise' | 'advanced';
+type SettingsTab = 'general' | 'models' | 'billing' | 'permissions' | 'team' | 'backup' | 'enterprise' | 'advanced';
 
 const tabs: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
   { id: 'general', label: 'General', icon: Palette },
   { id: 'models', label: 'Models', icon: Cpu },
+  { id: 'billing', label: 'Billing', icon: DollarSign },
   { id: 'permissions', label: 'Permissions', icon: Shield },
   { id: 'team', label: 'Team', icon: Users },
   { id: 'backup', label: 'Backup', icon: Database },
@@ -40,6 +43,9 @@ const SettingsApp = () => {
 
   // Dock tier
   const { state: onboardingState, update: updateOnboarding } = useOnboarding();
+
+  // Billing
+  const billing = useBilling();
 
   // Feature gating
   const { isEnabled } = useFeatureGate();
@@ -119,13 +125,16 @@ const SettingsApp = () => {
   return (
     <div className="flex h-full">
       {/* Tab sidebar */}
-      <div className="w-36 border-r border-border/50 p-2 space-y-0.5 shrink-0 overflow-auto">
+      <div className="w-36 border-r border-border/50 p-2 space-y-0.5 shrink-0 overflow-auto" role="tablist" aria-label="Settings sections">
         {tabs.map(tab => {
           const locked = LOCKED_TABS[tab.id];
           return (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              tabIndex={activeTab === tab.id ? 0 : -1}
               className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors ${
                 activeTab === tab.id ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
               }`}
@@ -139,7 +148,7 @@ const SettingsApp = () => {
       </div>
 
       {/* Content */}
-      <div className="flex-1 p-4 overflow-auto">
+      <div className="flex-1 p-4 overflow-auto" role="tabpanel">
 
         {/* ═══ GENERAL ═══ */}
         {activeTab === 'general' && (
@@ -151,9 +160,9 @@ const SettingsApp = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs font-display font-medium text-foreground">Tier</p>
-                  <p className="text-[10px] text-muted-foreground capitalize">{tier} plan</p>
+                  <p className="text-[11px] text-muted-foreground capitalize">{tier} plan</p>
                 </div>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-display bg-primary/20 text-primary capitalize">{tier}</span>
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-display bg-primary/20 text-primary capitalize">{tier}</span>
               </div>
             </div>
 
@@ -163,13 +172,13 @@ const SettingsApp = () => {
               <select
                 value={onboardingState.tier || 'simple'}
                 onChange={(e) => updateOnboarding({ tier: e.target.value as UserTier })}
-                className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none focus:border-primary/50"
+                className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 <option value="simple">Simple — essentials only</option>
                 <option value="professional">Professional — full workspace tools</option>
                 <option value="power">Full Control — everything visible</option>
               </select>
-              <p className="text-[10px] text-muted-foreground mt-1.5">Controls which apps appear in the dock. All apps remain accessible via Ctrl+K.</p>
+              <p className="text-[11px] text-muted-foreground mt-1.5">Controls which apps appear in the dock. All apps remain accessible via Ctrl+K.</p>
             </div>
 
             {/* Theme */}
@@ -186,7 +195,7 @@ const SettingsApp = () => {
                 </button>
                 <button className="flex-1 p-4 rounded-xl bg-[hsl(40,20%,92%)] border border-border/30 text-center opacity-40 cursor-not-allowed">
                   <p className="text-xs font-display text-[hsl(30,6%,8%)] mb-1">Light</p>
-                  <p className="text-[9px] text-[hsl(30,6%,30%)]">Coming soon</p>
+                  <p className="text-[11px] text-[hsl(30,6%,30%)]">Coming soon</p>
                 </button>
               </div>
             </div>
@@ -197,13 +206,13 @@ const SettingsApp = () => {
                 <BarChart3 className="w-3.5 h-3.5 text-muted-foreground" />
                 Privacy & Telemetry
               </h3>
-              <p className="text-[10px] text-muted-foreground leading-relaxed">
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
                 Help improve Waggle by tracking anonymous usage patterns. All data stays on your machine — nothing is sent to any server. No message content, file paths, or personal info is ever recorded.
               </p>
               <div className="flex items-center justify-between p-3 rounded-xl bg-secondary/30 border border-border/30">
                 <div>
                   <p className="text-xs font-display font-medium text-foreground">Enable anonymous telemetry</p>
-                  <p className="text-[10px] text-muted-foreground">{telemetryCount} events collected</p>
+                  <p className="text-[11px] text-muted-foreground">{telemetryCount} events collected</p>
                 </div>
                 <button
                   onClick={async () => {
@@ -223,7 +232,7 @@ const SettingsApp = () => {
                     await adapter.clearTelemetry();
                     setTelemetryCount(0);
                   }}
-                  className="flex items-center gap-1.5 text-[10px] text-destructive hover:text-destructive/80 transition-colors"
+                  className="flex items-center gap-1.5 text-[11px] text-destructive hover:text-destructive/80 transition-colors"
                 >
                   <Trash2 className="w-3 h-3" />
                   Delete all data
@@ -264,9 +273,9 @@ const SettingsApp = () => {
               <label className="text-xs text-muted-foreground block mb-1">
                 <DollarSign className="w-3 h-3 inline mr-1" />Daily Budget (USD)
               </label>
-              <input value={dailyBudget} onChange={e => setDailyBudget(e.target.value)} placeholder="No limit"
+              <Input value={dailyBudget} onChange={e => setDailyBudget(e.target.value)} placeholder="No limit"
                 type="number" min="0" step="1"
-                className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none focus:border-primary/50" />
+                className="w-full bg-muted/50 h-auto py-1.5" />
             </div>
 
             <button onClick={handleSaveModel} disabled={saving}
@@ -277,7 +286,7 @@ const SettingsApp = () => {
             {/* Provider key status */}
             <div className="border-t border-border/30 pt-4">
               <h4 className="text-xs font-display font-semibold text-foreground mb-3">Provider API Keys</h4>
-              <p className="text-[10px] text-muted-foreground mb-3">Keys are encrypted in the Vault. Click <Lock className="w-3 h-3 inline" /> to manage keys.</p>
+              <p className="text-[11px] text-muted-foreground mb-3">Keys are encrypted in the Vault. Click <Lock className="w-3 h-3 inline" /> to manage keys.</p>
 
               <div className="space-y-1.5">
                 {providers.filter(p => p.requiresKey).map(p => (
@@ -285,21 +294,21 @@ const SettingsApp = () => {
                     <div className="flex items-center gap-2">
                       <div className={`w-2 h-2 rounded-full ${p.hasKey ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
                       <span className="text-xs text-foreground">{p.name}</span>
-                      {p.badge && <span className="text-[9px] text-primary/60">({p.badge})</span>}
-                      <span className="text-[10px] text-muted-foreground">{p.models.length} models</span>
+                      {p.badge && <span className="text-[11px] text-primary/60">({p.badge})</span>}
+                      <span className="text-[11px] text-muted-foreground">{p.models.length} models</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                       {p.hasKey ? (
-                        <span className="text-[10px] text-emerald-400">✓ Key configured</span>
+                        <span className="text-[11px] text-emerald-400">✓ Key configured</span>
                       ) : (
-                        <span className="text-[10px] text-amber-400">No key</span>
+                        <span className="text-[11px] text-amber-400">No key</span>
                       )}
                     </div>
                   </div>
                 ))}
               </div>
 
-              <p className="text-[10px] text-muted-foreground mt-3">
+              <p className="text-[11px] text-muted-foreground mt-3">
                 <Key className="w-3 h-3 inline mr-1" />
                 To add or update API keys, open the <strong>Vault</strong> app from the dock.
               </p>
@@ -308,19 +317,141 @@ const SettingsApp = () => {
             {/* Search provider status */}
             <div className="border-t border-border/30 pt-4">
               <h4 className="text-xs font-display font-semibold text-foreground mb-2">Search Providers</h4>
-              <p className="text-[10px] text-muted-foreground mb-2">Active: <strong>{activeSearch}</strong> (highest priority with a key)</p>
+              <p className="text-[11px] text-muted-foreground mb-2">Active: <strong>{activeSearch}</strong> (highest priority with a key)</p>
               <div className="space-y-1">
                 {search.map(s => (
                   <div key={s.id} className="flex items-center gap-2 text-xs">
-                    <span className="text-[10px] text-muted-foreground w-4">#{s.priority}</span>
+                    <span className="text-[11px] text-muted-foreground w-4">#{s.priority}</span>
                     <div className={`w-1.5 h-1.5 rounded-full ${s.hasKey ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
                     <span className={s.hasKey ? 'text-foreground' : 'text-muted-foreground'}>{s.name}</span>
-                    {!s.hasKey && s.id !== 'duckduckgo' && <span className="text-[9px] text-amber-400">No key</span>}
-                    {s.id === 'duckduckgo' && <span className="text-[9px] text-muted-foreground">(free, always available)</span>}
+                    {!s.hasKey && s.id !== 'duckduckgo' && <span className="text-[11px] text-amber-400">No key</span>}
+                    {s.id === 'duckduckgo' && <span className="text-[11px] text-muted-foreground">(free, always available)</span>}
                   </div>
                 ))}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ═══ BILLING ═══ */}
+        {activeTab === 'billing' && (
+          <div className="space-y-5">
+            <h3 className="text-sm font-display font-semibold text-foreground">Billing & Subscription</h3>
+
+            {/* Current tier badge */}
+            <div className="p-4 rounded-xl bg-secondary/30 border border-border/30">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-display font-medium text-foreground">Current Plan</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {billing.tier === 'SOLO' && 'Free tier — upgrade to unlock all features'}
+                    {billing.tier === 'BASIC' && '$15/mo — all individual features unlocked'}
+                    {billing.tier === 'TEAMS' && '$79/mo per seat — team features and shared context'}
+                    {billing.tier === 'ENTERPRISE' && 'Enterprise — KVARK sovereign deployment'}
+                  </p>
+                </div>
+                <span className={`px-3 py-1 rounded-full text-xs font-display font-semibold ${
+                  billing.tier === 'SOLO' ? 'bg-muted text-muted-foreground' :
+                  billing.tier === 'BASIC' ? 'bg-primary/20 text-primary' :
+                  billing.tier === 'TEAMS' ? 'bg-violet-500/20 text-violet-400' :
+                  'bg-amber-500/20 text-amber-400'
+                }`}>
+                  {billing.tier}
+                </span>
+              </div>
+            </div>
+
+            {/* Error display */}
+            {billing.error && (
+              <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                <p className="text-[11px] text-destructive">{billing.error}</p>
+              </div>
+            )}
+
+            {/* Syncing indicator */}
+            {billing.syncing && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/10 border border-primary/20">
+                <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                <p className="text-[11px] text-primary">Confirming your payment...</p>
+              </div>
+            )}
+
+            {/* Upgrade buttons for SOLO users */}
+            {billing.tier === 'SOLO' && (
+              <div className="space-y-2">
+                <p className="text-xs font-display font-medium text-foreground">Upgrade</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => billing.startCheckout('BASIC')}
+                    className="p-4 rounded-xl bg-primary/10 border border-primary/30 text-left hover:bg-primary/20 transition-colors"
+                  >
+                    <p className="text-xs font-display font-semibold text-primary">Basic</p>
+                    <p className="text-[11px] text-muted-foreground mt-1">$15/mo</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Unlimited workspaces, agents, and custom skills</p>
+                  </button>
+                  <button
+                    onClick={() => billing.startCheckout('TEAMS')}
+                    className="p-4 rounded-xl bg-violet-500/10 border border-violet-500/30 text-left hover:bg-violet-500/20 transition-colors"
+                  >
+                    <p className="text-xs font-display font-semibold text-violet-400">Teams</p>
+                    <p className="text-[11px] text-muted-foreground mt-1">$79/mo per seat</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Shared context, team skills, cloud sync</p>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Upgrade to Teams for BASIC users */}
+            {billing.tier === 'BASIC' && (
+              <div className="space-y-3">
+                <button
+                  onClick={() => billing.startCheckout('TEAMS')}
+                  className="w-full p-4 rounded-xl bg-violet-500/10 border border-violet-500/30 text-left hover:bg-violet-500/20 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-display font-semibold text-violet-400">Upgrade to Teams</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">$79/mo per seat — shared context, governance, KVARK funnel</p>
+                    </div>
+                    <span className="text-violet-400 text-xs">&#8594;</span>
+                  </div>
+                </button>
+              </div>
+            )}
+
+            {/* Manage Subscription for paid users */}
+            {(billing.tier === 'BASIC' || billing.tier === 'TEAMS') && (
+              <div className="pt-2 border-t border-border/30">
+                <button
+                  onClick={() => billing.openPortal()}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-secondary/50 text-foreground hover:bg-secondary/70 transition-colors"
+                >
+                  <DollarSign className="w-3 h-3" />
+                  Manage Subscription
+                </button>
+                <p className="text-[11px] text-muted-foreground mt-2">
+                  Update payment method, view invoices, or cancel your subscription via the Stripe customer portal.
+                </p>
+              </div>
+            )}
+
+            {/* Enterprise CTA */}
+            {billing.tier !== 'ENTERPRISE' && (
+              <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/20">
+                <p className="text-xs font-display font-medium text-amber-400">Enterprise</p>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Need sovereign deployment, audit trail, and KVARK integration?
+                </p>
+                <a
+                  href="https://www.kvark.ai"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block mt-2 text-[11px] text-amber-400 hover:text-amber-300 underline"
+                >
+                  Contact sales at kvark.ai
+                </a>
+              </div>
+            )}
           </div>
         )}
 
@@ -344,22 +475,22 @@ const SettingsApp = () => {
             {/* External gates */}
             <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
               <p className="text-xs font-display font-medium text-foreground mb-2">Mutation Gates</p>
-              <p className="text-[10px] text-muted-foreground mb-2">Operations that always require approval (even in auto-approve mode)</p>
+              <p className="text-[11px] text-muted-foreground mb-2">Operations that always require approval (even in auto-approve mode)</p>
               <div className="space-y-1 mb-2">
                 {externalGates.map((gate, i) => (
                   <div key={i} className="flex items-center justify-between px-2 py-1 rounded bg-muted/30">
                     <span className="text-[11px] text-foreground font-mono">{gate}</span>
                     <button onClick={() => setExternalGates(prev => prev.filter((_, idx) => idx !== i))}
-                      className="text-[10px] text-destructive hover:text-destructive/80">Remove</button>
+                      className="text-[11px] text-destructive hover:text-destructive/80">Remove</button>
                   </div>
                 ))}
               </div>
               <div className="flex gap-1.5">
-                <input value={newGate} onChange={e => setNewGate(e.target.value)} placeholder="e.g., git push, rm -rf"
-                  className="flex-1 bg-muted/50 border border-border/50 rounded-lg px-2 py-1 text-xs text-foreground outline-none"
+                <Input value={newGate} onChange={e => setNewGate(e.target.value)} placeholder="e.g., git push, rm -rf"
+                  className="flex-1 bg-muted/50 text-xs h-auto py-1"
                   onKeyDown={e => { if (e.key === 'Enter' && newGate.trim()) { setExternalGates(prev => [...prev, newGate.trim()]); setNewGate(''); } }} />
                 <button onClick={() => { if (newGate.trim()) { setExternalGates(prev => [...prev, newGate.trim()]); setNewGate(''); } }}
-                  className="px-2 py-1 text-[10px] rounded-lg bg-secondary text-foreground hover:bg-secondary/70">Add</button>
+                  className="px-2 py-1 text-[11px] rounded-lg bg-secondary text-foreground hover:bg-secondary/70">Add</button>
               </div>
             </div>
           </div>
@@ -379,18 +510,18 @@ const SettingsApp = () => {
               </div>
               {!teamConnected && (
                 <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                  <p className="text-[10px] text-amber-400">Connecting to a team server will share workspace data. Ensure you trust the server.</p>
+                  <p className="text-[11px] text-amber-400">Connecting to a team server will share workspace data. Ensure you trust the server.</p>
                 </div>
               )}
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">Team Server URL</label>
-                <input value={teamUrl} onChange={e => setTeamUrl(e.target.value)} placeholder="https://team.waggle.ai"
-                  className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none" />
+                <Input value={teamUrl} onChange={e => setTeamUrl(e.target.value)} placeholder="https://team.waggle.ai"
+                  className="w-full bg-muted/50 h-auto py-1.5" />
               </div>
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">Auth Token</label>
-                <input type="password" value={teamToken} onChange={e => setTeamToken(e.target.value)}
-                  className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none" />
+                <Input type="password" value={teamToken} onChange={e => setTeamToken(e.target.value)}
+                  className="w-full bg-muted/50 h-auto py-1.5" />
               </div>
               <div className="flex gap-2">
                 {!teamConnected ? (
@@ -434,21 +565,21 @@ const SettingsApp = () => {
               <Download className="w-4 h-4 text-primary" />
               <div>
                 <p className="text-xs font-display font-medium text-foreground">Export Data</p>
-                <p className="text-[10px] text-muted-foreground">Download all workspaces, sessions, and memory as a zip</p>
+                <p className="text-[11px] text-muted-foreground">Download all workspaces, sessions, and memory as a zip</p>
               </div>
             </button>
             <button className="flex items-center gap-2 w-full p-3 rounded-xl bg-secondary/30 border border-border/30 text-left hover:bg-secondary/50 transition-colors">
               <Upload className="w-4 h-4 text-primary" />
               <div>
                 <p className="text-xs font-display font-medium text-foreground">Import Data</p>
-                <p className="text-[10px] text-muted-foreground">Import from ChatGPT or Claude export</p>
+                <p className="text-[11px] text-muted-foreground">Import from ChatGPT or Claude export</p>
               </div>
             </button>
 
             {/* Encrypted Backup/Restore */}
             <div className="pt-4 border-t border-border/30">
               <h3 className="text-sm font-display font-semibold text-foreground mb-2">Encrypted Backup</h3>
-              <p className="text-[10px] text-muted-foreground mb-3">
+              <p className="text-[11px] text-muted-foreground mb-3">
                 Create an AES-256-GCM encrypted backup of all data. Restore on any machine with the same vault key.
               </p>
               <div className="flex gap-2">
@@ -506,18 +637,18 @@ const SettingsApp = () => {
             <div className="space-y-3">
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">KVARK Server URL</label>
-                <input value={kvarkUrl} onChange={e => setKvarkUrl(e.target.value)} placeholder="https://kvark.company.com"
-                  className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none" />
+                <Input value={kvarkUrl} onChange={e => setKvarkUrl(e.target.value)} placeholder="https://kvark.company.com"
+                  className="w-full bg-muted/50 h-auto py-1.5" />
               </div>
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">API Token</label>
-                <input type="password" value={kvarkToken} onChange={e => setKvarkToken(e.target.value)}
-                  className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none" />
+                <Input type="password" value={kvarkToken} onChange={e => setKvarkToken(e.target.value)}
+                  className="w-full bg-muted/50 h-auto py-1.5" />
               </div>
               <button disabled className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-secondary text-muted-foreground opacity-50 cursor-not-allowed">
                 <Building className="w-3 h-3" /> Test Connection
               </button>
-              <p className="text-[10px] text-muted-foreground">Requires Enterprise tier. Contact sales for access.</p>
+              <p className="text-[11px] text-muted-foreground">Requires Enterprise tier. Contact sales for access.</p>
             </div>
           </div>
         )}
@@ -529,15 +660,15 @@ const SettingsApp = () => {
             <div className="space-y-3">
               <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
                 <p className="text-xs font-display font-medium text-foreground mb-1">Server URL</p>
-                <p className="text-[10px] text-muted-foreground font-mono mb-2">{adapter.getServerUrl()}</p>
+                <p className="text-[11px] text-muted-foreground font-mono mb-2">{adapter.getServerUrl()}</p>
               </div>
               <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
                 <p className="text-xs font-display font-medium text-foreground mb-1">Data Directory</p>
-                <p className="text-[10px] text-muted-foreground font-mono">~/.waggle/</p>
+                <p className="text-[11px] text-muted-foreground font-mono">~/.waggle/</p>
               </div>
               <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
                 <p className="text-xs font-display font-medium text-foreground mb-1">Debug Logging</p>
-                <p className="text-[10px] text-muted-foreground">Verbose logging for troubleshooting agent behavior</p>
+                <p className="text-[11px] text-muted-foreground">Verbose logging for troubleshooting agent behavior</p>
               </div>
             </div>
           </div>
@@ -545,7 +676,7 @@ const SettingsApp = () => {
 
         {/* Save status toast */}
         {saveMsg && (
-          <div className="mt-3 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-400 inline-block">
+          <div className="mt-3 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-400 inline-block">
             {saveMsg}
           </div>
         )}

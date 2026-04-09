@@ -30,7 +30,7 @@ const WaggleDanceApp = () => {
           <Zap className="w-4 h-4 text-amber-400" />
           <span className="text-sm font-display font-semibold">Waggle Dance</span>
           {unacknowledgedCount > 0 && (
-            <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4">
+            <Badge variant="destructive" className="text-[11px] px-1.5 py-0 h-4">
               {unacknowledgedCount}
             </Badge>
           )}
@@ -71,7 +71,7 @@ const WaggleDanceApp = () => {
               <div className="flex flex-col items-center gap-2 py-8 text-muted-foreground">
                 <Zap className="w-8 h-8 opacity-30" />
                 <p className="text-xs">No waggle dance signals yet</p>
-                <p className="text-[10px] opacity-70">Signals appear when agents share findings across workspaces</p>
+                <p className="text-[11px] opacity-70">Signals appear when agents share findings across workspaces</p>
               </div>
             )}
             {signals.map(signal => {
@@ -92,21 +92,21 @@ const WaggleDanceApp = () => {
                       <div className="flex items-center gap-1.5">
                         <span className="text-xs font-semibold truncate">{signal.title}</span>
                         {signal.priority === 'critical' && (
-                          <Badge variant="destructive" className="text-[9px] px-1 py-0 h-3.5">CRITICAL</Badge>
+                          <Badge variant="destructive" className="text-[11px] px-1 py-0 h-3.5">CRITICAL</Badge>
                         )}
                         {signal.priority === 'high' && (
-                          <Badge className="text-[9px] px-1 py-0 h-3.5 bg-amber-500/20 text-amber-400 border-amber-500/30">HIGH</Badge>
+                          <Badge className="text-[11px] px-1 py-0 h-3.5 bg-amber-500/20 text-amber-400 border-amber-500/30">HIGH</Badge>
                         )}
                       </div>
                       <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">{signal.content}</p>
                       <div className="flex items-center gap-2 mt-1">
-                        <span className="text-[10px] text-muted-foreground/70">
+                        <span className="text-[11px] text-muted-foreground/70">
                           {signal.sourceWorkspaceName || signal.sourceWorkspaceId}
                         </span>
                         {signal.sourceUser && (
-                          <span className="text-[10px] text-muted-foreground/70">· {signal.sourceUser}</span>
+                          <span className="text-[11px] text-muted-foreground/70">· {signal.sourceUser}</span>
                         )}
-                        <span className="text-[10px] text-muted-foreground/50 ml-auto">
+                        <span className="text-[11px] text-muted-foreground/50 ml-auto">
                           {new Date(signal.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>
@@ -128,9 +128,9 @@ const WaggleDanceApp = () => {
                   const Icon = cfg.icon;
                   return <Icon className={`w-5 h-5 ${cfg.color}`} />;
                 })()}
-                <Badge variant="outline" className="text-[10px]">{typeConfig[selectedSignal.type].label}</Badge>
+                <Badge variant="outline" className="text-[11px]">{typeConfig[selectedSignal.type].label}</Badge>
                 {selectedSignal.priority && selectedSignal.priority !== 'normal' && selectedSignal.priority !== 'low' && (
-                  <Badge variant={selectedSignal.priority === 'critical' ? 'destructive' : 'outline'} className="text-[10px]">
+                  <Badge variant={selectedSignal.priority === 'critical' ? 'destructive' : 'outline'} className="text-[11px]">
                     {selectedSignal.priority.toUpperCase()}
                   </Badge>
                 )}
@@ -148,8 +148,8 @@ const WaggleDanceApp = () => {
 
               {selectedSignal.metadata && Object.keys(selectedSignal.metadata).length > 0 && (
                 <div className="mt-3">
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground/70 mb-1">Metadata</p>
-                  <pre className="text-[10px] bg-muted/30 rounded p-2 overflow-auto max-h-32">
+                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground/70 mb-1">Metadata</p>
+                  <pre className="text-[11px] bg-muted/30 rounded p-2 overflow-auto max-h-32">
                     {JSON.stringify(selectedSignal.metadata, null, 2)}
                   </pre>
                 </div>

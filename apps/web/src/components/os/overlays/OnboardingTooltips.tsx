@@ -114,7 +114,7 @@ const OnboardingTooltips = ({ templateId, onDismiss }: OnboardingTooltipsProps) 
               <div className="flex items-center gap-3">
                 <button
                   onClick={handleDismissAll}
-                  className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                  className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Dismiss all
                 </button>

@@ -1,17 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  ChevronRight, Brain, Layers, Wrench, Upload,
-  Target, Microscope, Laptop, Megaphone, Rocket, Scale, Building, Plus,
-  PenLine, BarChart3, Code, ClipboardList, Mail,
-  Key, Check, Loader2, ExternalLink, Hexagon, Sparkles, FileJson,
-  Zap, Crown, HeadphonesIcon, Settings, Database, Users, Palette, DollarSign, Briefcase,
-} from 'lucide-react';
 import type { UserTier } from '@/lib/dock-tiers';
-import waggleLogo from '@/assets/waggle-logo.jpeg';
 import { adapter } from '@/lib/adapter';
-import { getProviders } from '@/lib/providers';
 import type { OnboardingState } from '@/hooks/useOnboarding';
+import { TEMPLATES, TEMPLATE_PERSONA } from './onboarding/constants';
+import {
+  WelcomeStep,
+  WhyWaggleStep,
+  TierStep,
+  ImportStep,
+  TemplateStep,
+  PersonaStep,
+  ApiKeyStep,
+  ReadyStep,
+} from './onboarding';
 
 /* ─── Props ─── */
 interface OnboardingWizardProps {
@@ -23,137 +25,19 @@ interface OnboardingWizardProps {
   onFinish: (workspaceId: string, firstMessage: string) => void;
 }
 
-/* ─── Constants ─── */
-const TEMPLATES = [
-  { id: 'sales-pipeline', name: 'Sales Pipeline', icon: Target, hint: 'Research the top 5 competitors in my industry', desc: 'Track deals and prospects' },
-  { id: 'research-project', name: 'Research Hub', icon: Microscope, hint: 'Help me design a literature review on my topic', desc: 'Deep dive into any subject' },
-  { id: 'code-review', name: 'Engineering', icon: Laptop, hint: 'Read my project and tell me what you see', desc: 'Code, review, and ship' },
-  { id: 'marketing-campaign', name: 'Marketing & Content', icon: Megaphone, hint: 'Draft a campaign brief for my product launch', desc: 'Campaigns, copy, and SEO' },
-  { id: 'product-launch', name: 'Product Management', icon: Rocket, hint: 'Help me write a PRD for my next feature', desc: 'Specs, roadmaps, and launches' },
-  { id: 'legal-review', name: 'Legal & Compliance', icon: Scale, hint: 'Draft a standard NDA template', desc: 'Contracts, compliance, and risk' },
-  { id: 'agency-consulting', name: 'Consulting', icon: Building, hint: 'Set up client workspaces for my biggest accounts', desc: 'Client delivery and strategy' },
-  { id: 'customer-support', name: 'Customer Support', icon: HeadphonesIcon, hint: 'Help me draft a response to this customer issue', desc: 'Tickets, KB, and escalation' },
-  { id: 'finance-accounting', name: 'Finance', icon: DollarSign, hint: 'Prepare a variance analysis for this month', desc: 'Budgets, reports, and close' },
-  { id: 'hr-people', name: 'HR & People', icon: Users, hint: 'Draft a job description for a senior engineer', desc: 'Hiring, policy, and onboarding' },
-  { id: 'operations-center', name: 'Operations', icon: Settings, hint: 'Create an SOP for our onboarding process', desc: 'Processes, SOPs, and vendors' },
-  { id: 'data-analytics', name: 'Data & Analytics', icon: Database, hint: 'Write a SQL query to find our top customers', desc: 'SQL, dashboards, and insights' },
-  { id: 'recruiting-pipeline', name: 'Recruiting', icon: Briefcase, hint: 'Write a job description and screening scorecard', desc: 'Source, screen, and hire' },
-  { id: 'design-studio', name: 'Design Studio', icon: Palette, hint: 'Write a creative brief for our rebrand', desc: 'Briefs, feedback, and brand' },
-  { id: 'blank', name: 'Blank Workspace', icon: Plus, hint: 'Hello! What can you help me with?', desc: 'Start from scratch' },
-] as const;
-
-const TEMPLATE_PERSONA: Record<string, string> = {
-  'sales-pipeline': 'sales-rep',
-  'research-project': 'researcher',
-  'code-review': 'coder',
-  'marketing-campaign': 'marketer',
-  'product-launch': 'product-manager-senior',
-  'legal-review': 'legal-professional',
-  'agency-consulting': 'consultant',
-  'customer-support': 'support-agent',
-  'finance-accounting': 'finance-owner',
-  'hr-people': 'hr-manager',
-  'operations-center': 'ops-manager',
-  'data-analytics': 'data-engineer',
-  'recruiting-pipeline': 'recruiter',
-  'design-studio': 'creative-director',
-  'blank': 'general-purpose',
-};
-
-const ALL_ONBOARDING_PERSONAS = [
-  { id: 'general-purpose', name: 'General Purpose', icon: Brain, desc: 'Adapts to any task', tier: 'universal' as const },
-  { id: 'researcher', name: 'Researcher', icon: Microscope, desc: 'Deep research & synthesis', tier: 'knowledge' as const },
-  { id: 'writer', name: 'Writer', icon: PenLine, desc: 'Drafting & editing', tier: 'knowledge' as const },
-  { id: 'analyst', name: 'Analyst', icon: BarChart3, desc: 'Data analysis & decisions', tier: 'knowledge' as const },
-  { id: 'coder', name: 'Coder', icon: Code, desc: 'Code & architecture', tier: 'knowledge' as const },
-  { id: 'project-manager', name: 'Project Manager', icon: ClipboardList, desc: 'Planning & coordination', tier: 'domain' as const },
-  { id: 'executive-assistant', name: 'Exec Assistant', icon: Mail, desc: 'Email & scheduling', tier: 'domain' as const },
-  { id: 'sales-rep', name: 'Sales Rep', icon: Target, desc: 'Prospecting & outreach', tier: 'domain' as const },
-  { id: 'marketer', name: 'Marketer', icon: Megaphone, desc: 'Campaigns & copy', tier: 'domain' as const },
-  { id: 'product-manager-senior', name: 'Senior PM', icon: Rocket, desc: 'PRDs & roadmaps', tier: 'domain' as const },
-  { id: 'hr-manager', name: 'HR Manager', icon: Users, desc: 'Policy & compliance', tier: 'domain' as const },
-  { id: 'legal-professional', name: 'Legal Counsel', icon: Scale, desc: 'Contracts & compliance', tier: 'domain' as const },
-  { id: 'finance-owner', name: 'Business Finance', icon: DollarSign, desc: 'Budgets & reporting', tier: 'domain' as const },
-  { id: 'consultant', name: 'Consultant', icon: Building, desc: 'Strategy & deliverables', tier: 'domain' as const },
-  { id: 'support-agent', name: 'Support Agent', icon: HeadphonesIcon, desc: 'Tickets & KB articles', tier: 'domain' as const },
-  { id: 'ops-manager', name: 'Ops Manager', icon: Settings, desc: 'SOPs & processes', tier: 'domain' as const },
-  { id: 'data-engineer', name: 'Data Engineer', icon: Database, desc: 'SQL & dashboards', tier: 'domain' as const },
-  { id: 'recruiter', name: 'Recruiter', icon: Briefcase, desc: 'Sourcing & hiring', tier: 'domain' as const },
-  { id: 'creative-director', name: 'Creative Director', icon: Palette, desc: 'Briefs & brand', tier: 'domain' as const },
-] as const;
-
-/** Get personas relevant to the selected template — recommended first, then others */
-function getPersonasForTemplate(templateId: string) {
-  const recommended = TEMPLATE_PERSONA[templateId];
-  const universal = ALL_ONBOARDING_PERSONAS.filter(p => p.tier === 'universal');
-  const knowledge = ALL_ONBOARDING_PERSONAS.filter(p => p.tier === 'knowledge');
-  const domain = ALL_ONBOARDING_PERSONAS.filter(p => p.tier === 'domain');
-  return [
-    ...domain.filter(p => p.id === recommended),
-    ...universal,
-    ...knowledge,
-    ...domain.filter(p => p.id !== recommended),
-  ];
-}
-
-// Use shared provider registry — single source of truth
-const PROVIDERS = getProviders().map(p => ({
-  id: p.id,
-  name: p.name,
-  prefix: p.keyPrefix ?? '',
-  badge: p.badge,
-  keyUrl: p.keyUrl ?? '',
-}));
-
-const TIER_OPTIONS = [
-  {
-    id: 'simple' as UserTier,
-    name: 'Simple',
-    icon: Hexagon,
-    color: 'text-sky-400',
-    desc: 'Clean and focused. Just the essentials — chat, files, and home.',
-  },
-  {
-    id: 'professional' as UserTier,
-    name: 'Professional',
-    icon: Zap,
-    color: 'text-amber-400',
-    desc: 'Agents, memory, and workspace tools. The full knowledge-worker kit.',
-  },
-  {
-    id: 'power' as UserTier,
-    name: 'Full Control',
-    icon: Crown,
-    color: 'text-violet-400',
-    desc: 'Everything. Ops console, scheduled jobs, marketplace.',
-  },
-];
-
-const VALUE_PROPS = [
-  { icon: Brain, title: 'Remembers everything', desc: 'Persistent memory across all sessions' },
-  { icon: Layers, title: 'Workspace-native', desc: 'One brain per project, fully isolated' },
-  { icon: Wrench, title: 'Real tools', desc: 'Search, draft, code, plan — not just chat' },
-];
-
-/* ─── Transition variants ─── */
-const fadeSlide = {
-  initial: { opacity: 0, y: 12 },
-  animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -12 },
-  transition: { duration: 0.2 },
-};
-
 /* ─── M2-7: Fire-and-forget telemetry via adapter ─── */
 function trackTelemetry(_serverBaseUrl: string, event: string, properties?: Record<string, unknown>) {
   adapter.trackTelemetry(event, properties);
 }
 
-/* ─── Main Component ─── */
+const STEP_NAMES = ['welcome', 'why-waggle', 'tier', 'memory-import', 'template', 'persona', 'api-key', 'ready'];
+
+/* ─── Main Component (shell) ─── */
 const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismiss, onFinish }: OnboardingWizardProps) => {
   const [step, setStep] = useState(state.step);
   const autoTimer = useRef<ReturnType<typeof setTimeout>>();
 
-  // Step-local state
+  /* ── Step-local state ── */
   const [selectedTier, setSelectedTier] = useState<UserTier>(state.tier || 'professional');
   const [selectedTemplate, setSelectedTemplate] = useState(state.templateId || '');
   const [workspaceName, setWorkspaceName] = useState('');
@@ -178,20 +62,19 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
-  // Connect on mount (silent) + track onboarding start
+  /* ── Connect on mount + track start ── */
   useEffect(() => {
     adapter.connect().catch(() => {});
     trackTelemetry(serverBaseUrl, 'onboarding_start');
   }, []);
 
-  const STEP_NAMES = ['welcome', 'why-waggle', 'tier', 'memory-import', 'template', 'persona', 'api-key', 'ready'];
   const goToStep = useCallback((n: number) => {
     setStep(n);
     onUpdate({ step: n });
     trackTelemetry(serverBaseUrl, 'onboarding_step', { step: n, stepName: STEP_NAMES[n] ?? `step-${n}` });
   }, [onUpdate, serverBaseUrl]);
 
-  // Auto-advance for step 0 only (3s)
+  /* ── Auto-advance for step 0 (3s) ── */
   useEffect(() => {
     if (step === 0) {
       autoTimer.current = setTimeout(() => goToStep(1), 3000);
@@ -199,7 +82,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
     }
   }, [step, goToStep]);
 
-  // Template -> persona auto-mapping
+  /* ── Template -> persona auto-mapping ── */
   useEffect(() => {
     if (selectedTemplate && TEMPLATE_PERSONA[selectedTemplate]) {
       setSelectedPersona(TEMPLATE_PERSONA[selectedTemplate]);
@@ -240,13 +123,25 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
       });
       setSelectedPersona(persona.id || customPersonaName.toLowerCase().replace(/\s+/g, '-'));
     } catch {
-      // Use local ID if backend is offline
       setSelectedPersona(customPersonaName.toLowerCase().replace(/\s+/g, '-'));
     }
     finally {
       setCreatingPersona(false);
       setShowCustomPersona(false);
     }
+  };
+
+  const handleSelectProvider = (id: string) => {
+    setSelectedProvider(id);
+    setApiKey('');
+    setKeyValid(null);
+    setKeySaved(false);
+  };
+
+  const handleApiKeyChange = (key: string) => {
+    setApiKey(key);
+    setKeyValid(null);
+    setKeySaved(false);
   };
 
   const handleValidateKey = async () => {
@@ -260,7 +155,6 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
       setKeySaved(true);
       onUpdate({ apiKeySet: true });
     } catch {
-      // Key couldn't be validated but we can still proceed
       setKeyValid(false);
       setKeySaved(false);
     } finally {
@@ -268,12 +162,22 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
     }
   };
 
+  const handleSelectTemplate = (id: string, name: string) => {
+    setSelectedTemplate(id);
+    setWorkspaceName(name);
+  };
+
+  const handleSelectTier = (tier: UserTier) => {
+    onUpdate({ tier });
+    setSelectedTier(tier);
+  };
+
   const handleFinish = async () => {
     setCreatingWorkspace(true);
     try {
       const template = TEMPLATES.find(t => t.id === selectedTemplate);
       const wsName = workspaceName || template?.name || 'Default Workspace';
-      
+
       let wsId: string;
       try {
         const ws = await adapter.createWorkspace({
@@ -285,11 +189,10 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
         wsId = ws.id;
         setCreateError(null);
       } catch {
-        // Show error but allow proceeding with local workspace
         setCreateError('Could not connect to server — workspace created locally. Connect to sync later.');
         wsId = `local-${Date.now()}`;
       }
-      
+
       onUpdate({
         workspaceId: wsId,
         templateId: selectedTemplate,
@@ -315,7 +218,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
     onFinish(wsId, hint);
   }, [serverBaseUrl, onComplete, onFinish, state.workspaceId, state.templateId, selectedTemplate]);
 
-  // Auto-finish step 7 after 2s
+  /* ── Auto-finish step 7 after 2s ── */
   useEffect(() => {
     if (step === 7) {
       autoTimer.current = setTimeout(handleLetsGo, 2000);
@@ -375,568 +278,80 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
         </button>
       </div>
 
-      {/* Content area */}
+      {/* Content area — renders current step */}
       <div className="flex-1 flex items-center justify-center px-6 overflow-y-auto">
         <div className="w-full max-w-2xl">
           <AnimatePresence mode="wait">
-            {/* ═══ STEP 0: Welcome ═══ */}
             {step === 0 && (
-              <motion.div
-                key="step-0"
-                {...fadeSlide}
-                className="text-center cursor-pointer"
-                onClick={() => { clearTimeout(autoTimer.current); goToStep(1); }}
-              >
-                <div className="relative w-24 h-24 mx-auto mb-6">
-                  <img
-                    src={waggleLogo}
-                    alt="Waggle"
-                    className="w-24 h-24 rounded-2xl"
-                    style={{
-                      boxShadow: '0 0 60px hsl(38 92% 50% / 0.3)',
-                    }}
-                  />
-                </div>
-                <span className="inline-block text-[11px] font-display font-semibold tracking-[0.3em] uppercase text-primary mb-4">
-                  Your AI Operating System
-                </span>
-                <h1 className="text-4xl font-display font-bold text-foreground mb-3">
-                  Welcome to the Hive
-                </h1>
-                <p className="text-muted-foreground text-sm max-w-md mx-auto mb-8">
-                  Persistent memory. Workspace-native. Built for knowledge work.
-                </p>
-                <span className="text-xs text-muted-foreground/60 animate-pulse">
-                  Click anywhere to continue
-                </span>
-              </motion.div>
+              <WelcomeStep
+                goToStep={goToStep}
+                onClickAnywhere={() => { clearTimeout(autoTimer.current); goToStep(1); }}
+              />
             )}
-
-            {/* ═══ STEP 1: Why Waggle ═══ */}
-            {step === 1 && (
-              <motion.div key="step-1" {...fadeSlide} className="text-center">
-                <Hexagon className="w-10 h-10 text-primary mx-auto mb-4" />
-                <h2 className="text-2xl font-display font-bold text-foreground mb-2">
-                  Why Waggle?
-                </h2>
-                <p className="text-sm text-muted-foreground mb-8">
-                  Not just another chatbot. A full operating system for your AI.
-                </p>
-
-                <div className="grid grid-cols-3 gap-4 mb-8">
-                  {VALUE_PROPS.map((vp) => (
-                    <div
-                      key={vp.title}
-                      className="glass-strong rounded-xl p-5 text-left"
-                    >
-                      <vp.icon className="w-5 h-5 text-primary mb-3" />
-                      <h3 className="text-sm font-display font-semibold text-foreground mb-1">
-                        {vp.title}
-                      </h3>
-                      <p className="text-xs text-muted-foreground">{vp.desc}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <button
-                  onClick={() => goToStep(2)}
-                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-primary text-primary-foreground font-display text-sm font-semibold hover:bg-primary/80 transition-colors"
-                >
-                  Continue <ChevronRight className="w-4 h-4" />
-                </button>
-              </motion.div>
-            )}
-
-            {/* ═══ STEP 2: Choose Your Experience ═══ */}
+            {step === 1 && <WhyWaggleStep goToStep={goToStep} />}
             {step === 2 && (
-              <motion.div key="step-2" {...fadeSlide} className="text-center">
-                <Sparkles className="w-10 h-10 text-primary mx-auto mb-4" />
-                <h2 className="text-2xl font-display font-bold text-foreground mb-2">
-                  Choose Your Experience
-                </h2>
-                <p className="text-sm text-muted-foreground mb-8">
-                  You can change this anytime in Settings.
-                </p>
-
-                <div className="grid grid-cols-3 gap-4 mb-8">
-                  {TIER_OPTIONS.map((t) => (
-                    <button
-                      key={t.id}
-                      onClick={() => {
-                        onUpdate({ tier: t.id });
-                        setSelectedTier(t.id);
-                      }}
-                      className={`glass-strong rounded-xl p-5 text-left transition-all ${
-                        selectedTier === t.id
-                          ? 'ring-2 ring-primary bg-primary/10'
-                          : 'hover:bg-muted/30'
-                      }`}
-                    >
-                      <t.icon className={`w-6 h-6 mb-3 ${t.color}`} />
-                      <div className="text-sm font-display font-semibold text-foreground mb-1">
-                        {t.name}
-                      </div>
-                      <div className="text-xs text-muted-foreground leading-relaxed">
-                        {t.desc}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-
-                <button
-                  onClick={() => goToStep(3)}
-                  disabled={!selectedTier}
-                  className="px-6 py-2.5 rounded-lg bg-primary text-primary-foreground font-display text-sm font-semibold disabled:opacity-40 hover:bg-primary/80 transition-colors"
-                >
-                  Continue <ChevronRight className="inline w-4 h-4 ml-1" />
-                </button>
-              </motion.div>
+              <TierStep
+                selectedTier={selectedTier}
+                onSelectTier={handleSelectTier}
+                goToStep={goToStep}
+              />
             )}
-
-            {/* ═══ STEP 3: Memory Import ═══ */}
             {step === 3 && (
-              <motion.div key="step-3" {...fadeSlide}>
-                <div className="text-center mb-6">
-                  <Brain className="w-10 h-10 text-primary mx-auto mb-3" />
-                  <h2 className="text-2xl font-display font-bold text-foreground mb-2">
-                    Bring your AI memories
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    Import conversation history from other AI assistants
-                  </p>
-                </div>
-
-                {!importSource && !importDone && (
-                  <div className="grid grid-cols-2 gap-4 mb-6">
-                    {[
-                      { id: 'chatgpt' as const, name: 'ChatGPT Export', desc: 'Import from OpenAI' },
-                      { id: 'claude' as const, name: 'Claude Export', desc: 'Import from Anthropic' },
-                    ].map((src) => (
-                      <label
-                        key={src.id}
-                        className="glass-strong rounded-xl p-5 cursor-pointer hover:border-primary/40 transition-colors text-left group"
-                      >
-                        <FileJson className="w-5 h-5 text-primary mb-2" />
-                        <h3 className="text-sm font-display font-semibold text-foreground mb-1">
-                          {src.name}
-                        </h3>
-                        <p className="text-xs text-muted-foreground mb-3">{src.desc}</p>
-                        <div className="flex items-center gap-1.5 text-xs text-primary group-hover:text-primary/80">
-                          <Upload className="w-3 h-3" /> Choose .json file
-                        </div>
-                        <input
-                          type="file"
-                          accept=".json"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) handleFileImport(file, src.id);
-                          }}
-                        />
-                      </label>
-                    ))}
-                  </div>
-                )}
-
-                {importPreview.length > 0 && !importDone && (
-                  <div className="glass-strong rounded-xl p-4 mb-6">
-                    <h3 className="text-sm font-display font-semibold text-foreground mb-2">
-                      Preview — {importPreview.length} items found
-                    </h3>
-                    <div className="max-h-32 overflow-y-auto space-y-1 mb-3">
-                      {importPreview.slice(0, 10).map((item: any, i) => (
-                        <div key={i} className="text-xs text-muted-foreground truncate">
-                          • {item.title || item.content || JSON.stringify(item).slice(0, 60)}
-                        </div>
-                      ))}
-                      {importPreview.length > 10 && (
-                        <div className="text-xs text-muted-foreground/60">
-                          …and {importPreview.length - 10} more
-                        </div>
-                      )}
-                    </div>
-                    <button
-                      onClick={handleImportCommit}
-                      disabled={importing}
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-display font-semibold hover:bg-primary/80 disabled:opacity-50 transition-colors"
-                    >
-                      {importing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-                      Import {importPreview.length} items
-                    </button>
-                  </div>
-                )}
-
-                {importDone && (
-                  <div className="glass-strong rounded-xl p-4 mb-6 text-center">
-                    <Check className="w-6 h-6 text-primary mx-auto mb-2" />
-                    <p className="text-sm text-foreground font-display">Memories imported!</p>
-                  </div>
-                )}
-
-                <div className="flex items-center justify-center gap-4">
-                  <button
-                    onClick={() => goToStep(2)}
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors font-display"
-                  >
-                    Back
-                  </button>
-                  <button
-                    onClick={() => goToStep(4)}
-                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {importDone ? 'Continue' : 'Skip this step'}
-                  </button>
-                </div>
-              </motion.div>
+              <ImportStep
+                importSource={importSource}
+                importPreview={importPreview}
+                importDone={importDone}
+                importing={importing}
+                onFileImport={handleFileImport}
+                onImportCommit={handleImportCommit}
+                goToStep={goToStep}
+              />
             )}
-
-            {/* ═══ STEP 4: Choose Template ═══ */}
             {step === 4 && (
-              <motion.div key="step-4" {...fadeSlide}>
-                <div className="text-center mb-6">
-                  <Sparkles className="w-10 h-10 text-primary mx-auto mb-3" />
-                  <h2 className="text-2xl font-display font-bold text-foreground mb-2">
-                    What are you working on?
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    Choose a template to pre-configure your first workspace
-                  </p>
-                </div>
-
-                {/* Agent explainer tip */}
-                <div className="mb-5 flex items-start gap-3 px-4 py-3 rounded-xl bg-primary/5 border border-primary/20">
-                  <Sparkles className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-xs font-display font-medium text-foreground mb-0.5">Template = What your agent knows</p>
-                    <p className="text-[11px] text-muted-foreground leading-relaxed">
-                      This sets the <span className="text-foreground font-medium">domain, tools, and goals</span> for your workspace. 
-                      In the next step, you'll choose <span className="text-foreground font-medium">how</span> the agent works — its personality and style. Together, they define your agent.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-5 gap-2 mb-5">
-                  {TEMPLATES.map((t) => {
-                    const Icon = t.icon;
-                    const selected = selectedTemplate === t.id;
-                    return (
-                      <button
-                        key={t.id}
-                        onClick={() => {
-                          setSelectedTemplate(t.id);
-                          setWorkspaceName(t.id === 'blank' ? '' : t.name);
-                        }}
-                        className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all text-center ${
-                          selected
-                            ? 'border-primary/60 bg-primary/10'
-                            : 'border-border/40 bg-secondary/20 hover:border-border'
-                        }`}
-                      >
-                        <Icon className={`w-5 h-5 ${selected ? 'text-primary' : 'text-muted-foreground'}`} />
-                        <span className={`text-xs font-display font-medium ${selected ? 'text-foreground' : 'text-muted-foreground'}`}>
-                          {t.name}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {selectedTemplate && (
-                  <div className="mb-5">
-                    <label className="text-xs font-display text-muted-foreground mb-1.5 block">Workspace name</label>
-                    <input
-                      value={workspaceName}
-                      onChange={e => setWorkspaceName(e.target.value)}
-                      placeholder="My workspace"
-                      className="w-full bg-muted/30 border border-border/40 rounded-xl px-4 py-2.5 text-sm text-foreground outline-none focus:border-primary/50 transition-colors"
-                    />
-                  </div>
-                )}
-
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => goToStep(3)}
-                    className="px-4 py-2.5 rounded-xl text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    Back
-                  </button>
-                  <button
-                    onClick={() => goToStep(5)}
-                    disabled={!selectedTemplate}
-                    className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-primary-foreground font-display text-sm font-semibold hover:bg-primary/80 disabled:opacity-40 transition-colors"
-                  >
-                    Continue <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </motion.div>
+              <TemplateStep
+                selectedTemplate={selectedTemplate}
+                workspaceName={workspaceName}
+                onSelectTemplate={handleSelectTemplate}
+                onWorkspaceNameChange={setWorkspaceName}
+                goToStep={goToStep}
+              />
             )}
-
-            {/* ═══ STEP 5: Choose Persona ═══ */}
             {step === 5 && (
-              <motion.div key="step-5" {...fadeSlide}>
-                <div className="text-center mb-6">
-                  <h2 className="text-2xl font-display font-bold text-foreground mb-2">
-                    How should I work?
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    Choose a working style for your agent
-                  </p>
-                </div>
-
-                {/* Agent explainer tip */}
-                <div className="mb-4 flex items-start gap-3 px-4 py-3 rounded-xl bg-primary/5 border border-primary/20">
-                  <Brain className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-xs font-display font-medium text-foreground mb-0.5">Persona = How your agent thinks</p>
-                    <p className="text-[11px] text-muted-foreground leading-relaxed">
-                      This sets the agent's <span className="text-foreground font-medium">tone, reasoning style, and specialization</span>. 
-                      Combined with the template you chose ({selectedTemplate ? TEMPLATES.find(t => t.id === selectedTemplate)?.name : 'Blank'}), this creates your unique agent.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-4 gap-2 max-h-[280px] overflow-y-auto scrollbar-thin mb-4">
-                  {getPersonasForTemplate(selectedTemplate).map((p) => {
-                    const Icon = p.icon;
-                    const selected = selectedPersona === p.id;
-                    const isRecommended = TEMPLATE_PERSONA[selectedTemplate] === p.id;
-                    return (
-                      <button
-                        key={p.id}
-                        onClick={() => { setSelectedPersona(p.id); setShowCustomPersona(false); }}
-                        className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all relative ${
-                          selected
-                            ? 'border-primary/60 bg-primary/10'
-                            : 'border-border/40 bg-secondary/20 hover:border-border'
-                        }`}
-                      >
-                        {isRecommended && (
-                          <span className="absolute -top-1.5 -right-1.5 text-[8px] bg-primary text-primary-foreground px-1.5 py-0.5 rounded-full font-bold">
-                            REC
-                          </span>
-                        )}
-                        <Icon className={`w-5 h-5 ${selected ? 'text-primary' : 'text-muted-foreground'}`} />
-                        <span className={`text-[11px] font-display font-medium leading-tight ${selected ? 'text-foreground' : 'text-muted-foreground'}`}>
-                          {p.name}
-                        </span>
-                        <span className="text-[9px] text-muted-foreground/70 leading-tight">{p.desc}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {!showCustomPersona ? (
-                  <button
-                    onClick={() => setShowCustomPersona(true)}
-                    className="w-full p-3 rounded-xl border border-dashed border-border/50 text-xs text-muted-foreground hover:text-foreground hover:border-border transition-colors font-display"
-                  >
-                    + Create Custom Persona
-                  </button>
-                ) : (
-                  <div className="glass-strong rounded-xl p-4 space-y-3">
-                    <input
-                      value={customPersonaName}
-                      onChange={e => setCustomPersonaName(e.target.value)}
-                      placeholder="Persona name"
-                      className="w-full bg-muted/30 border border-border/40 rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
-                    />
-                    <textarea
-                      value={customPersonaDesc}
-                      onChange={e => setCustomPersonaDesc(e.target.value)}
-                      placeholder="Describe how this persona should work…"
-                      rows={3}
-                      className="w-full bg-muted/30 border border-border/40 rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50 resize-none"
-                    />
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setShowCustomPersona(false)}
-                        className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={handleCreateCustomPersona}
-                        disabled={!customPersonaName.trim() || creatingPersona}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-display font-semibold hover:bg-primary/80 disabled:opacity-50 transition-colors"
-                      >
-                        {creatingPersona ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                        Create Persona
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-center gap-3 mt-5">
-                  <button
-                    onClick={() => goToStep(4)}
-                    className="px-4 py-2.5 rounded-xl text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    Back
-                  </button>
-                  <button
-                    onClick={() => goToStep(6)}
-                    disabled={!selectedPersona}
-                    className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-primary-foreground font-display text-sm font-semibold hover:bg-primary/80 disabled:opacity-40 transition-colors"
-                  >
-                    Continue <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </motion.div>
+              <PersonaStep
+                selectedTemplate={selectedTemplate}
+                selectedPersona={selectedPersona}
+                onSelectPersona={setSelectedPersona}
+                showCustomPersona={showCustomPersona}
+                onToggleCustomPersona={setShowCustomPersona}
+                customPersonaName={customPersonaName}
+                customPersonaDesc={customPersonaDesc}
+                onCustomPersonaNameChange={setCustomPersonaName}
+                onCustomPersonaDescChange={setCustomPersonaDesc}
+                onCreateCustomPersona={handleCreateCustomPersona}
+                creatingPersona={creatingPersona}
+                goToStep={goToStep}
+              />
             )}
-
-            {/* ═══ STEP 6: API Key ═══ */}
             {step === 6 && (
-              <motion.div key="step-6" {...fadeSlide}>
-                <div className="text-center mb-6">
-                  <Key className="w-10 h-10 text-primary mx-auto mb-3" />
-                  <h2 className="text-2xl font-display font-bold text-foreground mb-2">
-                    Connect your AI brain
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    Add an API key to power your agent
-                  </p>
-                </div>
-
-                {/* Provider tabs */}
-                <div className="flex flex-wrap gap-1.5 mb-5">
-                  {PROVIDERS.map((prov) => (
-                    <button
-                      key={prov.id}
-                      onClick={() => { setSelectedProvider(prov.id); setApiKey(''); setKeyValid(null); setKeySaved(false); }}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-display transition-colors ${
-                        selectedProvider === prov.id
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-secondary/50 text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      {prov.name}
-                      {prov.badge && (
-                        <span className="ml-1.5 text-[9px] opacity-75">({prov.badge})</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="glass-strong rounded-xl p-5">
-                  {selectedProvider === 'ollama' ? (
-                    <div className="text-center py-4">
-                      <p className="text-sm text-foreground mb-2">No API key needed</p>
-                      <p className="text-xs text-muted-foreground mb-4">
-                        Make sure Ollama is running locally on your machine.
-                      </p>
-                      <a
-                        href="https://ollama.ai/download"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors"
-                      >
-                        <ExternalLink className="w-3 h-3" /> Download Ollama
-                      </a>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      <div>
-                        <input
-                          type="password"
-                          value={apiKey}
-                          onChange={e => { setApiKey(e.target.value); setKeyValid(null); setKeySaved(false); }}
-                          placeholder={PROVIDERS.find(p => p.id === selectedProvider)?.prefix ? `${PROVIDERS.find(p => p.id === selectedProvider)?.prefix}…` : 'Paste your API key'}
-                          className="w-full bg-muted/30 border border-border/40 rounded-xl px-4 py-2.5 text-sm text-foreground outline-none focus:border-primary/50 transition-colors font-mono"
-                        />
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={handleValidateKey}
-                          disabled={apiKey.length < 10 || validating}
-                          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-display font-semibold hover:bg-primary/80 disabled:opacity-40 transition-colors"
-                        >
-                          {validating ? <Loader2 className="w-3 h-3 animate-spin" /> : keySaved ? <Check className="w-3 h-3" /> : <Key className="w-3 h-3" />}
-                          {keySaved ? 'Key saved!' : 'Validate & save'}
-                        </button>
-
-                        {keyValid === false && (
-                          <span className="text-xs text-primary/80">
-                            Could not verify — you can still continue
-                          </span>
-                        )}
-                      </div>
-
-                      <a
-                        href={PROVIDERS.find(p => p.id === selectedProvider)?.keyUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        <ExternalLink className="w-3 h-3" />
-                        Get a {PROVIDERS.find(p => p.id === selectedProvider)?.name} API key
-                      </a>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-3 mt-5">
-                  <button
-                    onClick={() => goToStep(5)}
-                    className="px-4 py-2.5 rounded-xl text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    Back
-                  </button>
-                  <button
-                    onClick={handleFinish}
-                    disabled={creatingWorkspace}
-                    className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-primary-foreground font-display text-sm font-semibold hover:bg-primary/80 disabled:opacity-50 transition-colors glow-primary"
-                  >
-                    {creatingWorkspace ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
-                    {creatingWorkspace ? 'Creating workspace…' : 'Create Workspace'}
-                  </button>
-                </div>
-
-                <div className="text-center mt-3">
-                  <button
-                    onClick={handleFinish}
-                    disabled={creatingWorkspace}
-                    className="text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors"
-                  >
-                    Skip — I'll add a key later
-                  </button>
-                </div>
-              </motion.div>
+              <ApiKeyStep
+                selectedProvider={selectedProvider}
+                apiKey={apiKey}
+                validating={validating}
+                keyValid={keyValid}
+                keySaved={keySaved}
+                creatingWorkspace={creatingWorkspace}
+                onSelectProvider={handleSelectProvider}
+                onApiKeyChange={handleApiKeyChange}
+                onValidateKey={handleValidateKey}
+                onFinish={handleFinish}
+                goToStep={goToStep}
+              />
             )}
-
-            {/* ═══ STEP 7: Celebration ═══ */}
             {step === 7 && (
-              <motion.div key="step-7" {...fadeSlide} className="text-center">
-                <motion.div
-                  initial={{ scale: 0.8, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ type: 'spring', damping: 12 }}
-                >
-                  <div className="relative w-20 h-20 mx-auto mb-5">
-                    <img
-                      src={waggleLogo}
-                      alt="Waggle"
-                      className="w-20 h-20 rounded-2xl"
-                      style={{ boxShadow: '0 0 60px hsl(38 92% 50% / 0.4)' }}
-                    />
-                  </div>
-                  {createError && (
-                    <p className="text-xs text-amber-400 mb-3 text-center">{createError}</p>
-                  )}
-                  <h2 className="text-3xl font-display font-bold text-foreground mb-2">
-                    Your hive is ready ⬡
-                  </h2>
-                  <p className="text-sm text-muted-foreground mb-6">
-                    Your workspace is ready. Let's get to work.
-                  </p>
-                  <button
-                    onClick={handleLetsGo}
-                    className="inline-flex items-center gap-2 px-8 py-3 rounded-xl bg-primary text-primary-foreground font-display text-sm font-semibold hover:bg-primary/80 transition-colors glow-primary"
-                  >
-                    🐝 Let's go!
-                  </button>
-                </motion.div>
-              </motion.div>
+              <ReadyStep
+                createError={createError}
+                onLetsGo={handleLetsGo}
+              />
             )}
           </AnimatePresence>
         </div>

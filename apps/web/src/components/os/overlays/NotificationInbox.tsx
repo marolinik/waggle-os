@@ -53,7 +53,7 @@ const NotificationInbox = ({ open, onClose, notifications, onMarkRead, onMarkAll
               <div className="py-8 text-center">
                 <CheckCircle2 className="w-8 h-8 text-emerald-400/40 mx-auto mb-2" />
                 <p className="text-xs text-foreground font-display font-medium">All caught up</p>
-                <p className="text-[10px] text-muted-foreground mt-1">No new notifications</p>
+                <p className="text-[11px] text-muted-foreground mt-1">No new notifications</p>
               </div>
             )}
             {notifications.map(n => (
@@ -67,8 +67,8 @@ const NotificationInbox = ({ open, onClose, notifications, onMarkRead, onMarkAll
                   <span className="text-sm mt-0.5">{typeIcons[n.type] || '📌'}</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-display font-medium text-foreground">{n.title}</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">{n.body}</p>
-                    <p className="text-[9px] text-muted-foreground mt-1">{new Date(n.timestamp).toLocaleString()}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">{n.body}</p>
+                    <p className="text-[11px] text-muted-foreground mt-1">{new Date(n.timestamp).toLocaleString()}</p>
                   </div>
                   {!n.read && (
                     <button onClick={() => onMarkRead(n.id)} className="p-1 text-muted-foreground hover:text-primary transition-colors">

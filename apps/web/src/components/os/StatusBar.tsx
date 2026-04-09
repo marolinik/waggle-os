@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Wifi, WifiOff, Battery, Volume2, Search, Bell } from "lucide-react";
+import { Wifi, WifiOff, Search, Bell } from "lucide-react";
 import waggleLogo from "@/assets/waggle-logo.jpeg";
 
 interface StatusBarProps {
@@ -33,24 +33,24 @@ const StatusBar = ({ workspaceName, model, tokensUsed, costUsd, offline, unreadN
         <span className="text-xs font-display font-semibold text-foreground">Waggle AI</span>
         {workspaceName && (
           <>
-            <span className="text-muted-foreground text-[10px]">·</span>
-            <span className="text-[10px] text-muted-foreground">{workspaceName}</span>
+            <span className="text-muted-foreground text-[11px]">·</span>
+            <span className="text-[11px] text-muted-foreground">{workspaceName}</span>
           </>
         )}
         {model && (
           <>
-            <span className="text-muted-foreground text-[10px]">·</span>
-            <span className="text-[10px] text-primary/80 font-display">{model}</span>
+            <span className="text-muted-foreground text-[11px]">·</span>
+            <span className="text-[11px] text-primary/80 font-display">{model}</span>
           </>
         )}
         {tokensUsed !== undefined && tokensUsed > 0 && (
           <>
-            <span className="text-muted-foreground text-[10px]">·</span>
-            <span className="text-[10px] text-muted-foreground">{tokensUsed.toLocaleString()} tok</span>
+            <span className="text-muted-foreground text-[11px]">·</span>
+            <span className="text-[11px] text-muted-foreground">{tokensUsed.toLocaleString()} tok</span>
           </>
         )}
         {costUsd !== undefined && costUsd > 0 && (
-          <span className="text-[10px] text-muted-foreground">${costUsd.toFixed(4)}</span>
+          <span className="text-[11px] text-muted-foreground">${costUsd.toFixed(4)}</span>
         )}
       </div>
 
@@ -61,7 +61,7 @@ const StatusBar = ({ workspaceName, model, tokensUsed, costUsd, offline, unreadN
         <button onClick={onNotificationClick} className="relative text-muted-foreground hover:text-primary transition-colors" aria-label="Notifications">
           <Bell className="w-3.5 h-3.5" />
           {unreadNotifications > 0 && (
-            <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-destructive text-[7px] text-destructive-foreground flex items-center justify-center font-bold">
+            <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] rounded-full bg-destructive text-[9px] leading-none text-destructive-foreground flex items-center justify-center font-bold px-0.5">
               {unreadNotifications > 9 ? '9+' : unreadNotifications}
             </span>
           )}
@@ -71,8 +71,6 @@ const StatusBar = ({ workspaceName, model, tokensUsed, costUsd, offline, unreadN
         ) : (
           <Wifi className="w-3.5 h-3.5 text-emerald-400" />
         )}
-        <Volume2 className="w-3.5 h-3.5 text-muted-foreground" />
-        <Battery className="w-3.5 h-3.5 text-muted-foreground" />
         <span className="text-xs text-muted-foreground">{formatDate(time)}</span>
         <span className="text-xs text-foreground font-medium">{formatTime(time)}</span>
       </div>

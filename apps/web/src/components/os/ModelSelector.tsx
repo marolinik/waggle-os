@@ -45,13 +45,13 @@ const ModelSelector = ({ value, onChange, providers, variant = 'dropdown', onlyA
         {filtered.map(provider => (
           <div key={provider.id}>
             <div className="flex items-center gap-1.5 mb-1.5">
-              <span className="text-[10px] font-display font-semibold text-muted-foreground uppercase tracking-wider">{provider.name}</span>
+              <span className="text-[11px] font-display font-semibold text-muted-foreground uppercase tracking-wider">{provider.name}</span>
               {!provider.hasKey && provider.requiresKey && (
-                <span className="flex items-center gap-0.5 text-[9px] text-amber-400">
+                <span className="flex items-center gap-0.5 text-[11px] text-amber-400">
                   <AlertTriangle className="w-2.5 h-2.5" /> No key
                 </span>
               )}
-              {provider.badge && <span className="text-[9px] text-primary/70">({provider.badge})</span>}
+              {provider.badge && <span className="text-[11px] text-primary/70">({provider.badge})</span>}
             </div>
             <div className="flex flex-wrap gap-1.5">
               {provider.models.map(m => (
@@ -70,7 +70,7 @@ const ModelSelector = ({ value, onChange, providers, variant = 'dropdown', onlyA
                 </button>
               ))}
               {provider.models.length === 0 && !provider.requiresKey && (
-                <span className="text-[10px] text-muted-foreground">Configure in Ollama</span>
+                <span className="text-[11px] text-muted-foreground">Configure in Ollama</span>
               )}
             </div>
           </div>
@@ -100,14 +100,14 @@ const ModelSelector = ({ value, onChange, providers, variant = 'dropdown', onlyA
           {filtered.map(provider => (
             <div key={provider.id}>
               <div className="px-3 py-1.5 bg-muted/30 flex items-center gap-1.5">
-                <span className="text-[9px] font-display font-semibold text-muted-foreground uppercase tracking-wider">{provider.name}</span>
+                <span className="text-[11px] font-display font-semibold text-muted-foreground uppercase tracking-wider">{provider.name}</span>
                 {!provider.hasKey && provider.requiresKey && (
-                  <span className="flex items-center gap-0.5 text-[9px] text-amber-400">
+                  <span className="flex items-center gap-0.5 text-[11px] text-amber-400">
                     <Key className="w-2.5 h-2.5" /> No key
                   </span>
                 )}
-                {provider.hasKey && <span className="text-[9px] text-emerald-400">✓</span>}
-                {provider.badge && <span className="text-[9px] text-primary/60">{provider.badge}</span>}
+                {provider.hasKey && <span className="text-[11px] text-emerald-400">✓</span>}
+                {provider.badge && <span className="text-[11px] text-primary/60">{provider.badge}</span>}
               </div>
               {provider.models.map(m => (
                 <button key={m.id}
@@ -121,14 +121,14 @@ const ModelSelector = ({ value, onChange, providers, variant = 'dropdown', onlyA
                         : 'text-muted-foreground/40 cursor-not-allowed'
                   }`}>
                   <span>{m.name}</span>
-                  <span className="flex items-center gap-1.5 text-[10px]">
+                  <span className="flex items-center gap-1.5 text-[11px]">
                     <span className={COST_COLORS[m.cost] ?? ''}>{m.cost}</span>
                     <span>{SPEED_LABELS[m.speed] ?? ''}</span>
                   </span>
                 </button>
               ))}
               {provider.models.length === 0 && (
-                <div className="px-3 py-1.5 text-[10px] text-muted-foreground">No models — configure locally</div>
+                <div className="px-3 py-1.5 text-[11px] text-muted-foreground">No models — configure locally</div>
               )}
             </div>
           ))}

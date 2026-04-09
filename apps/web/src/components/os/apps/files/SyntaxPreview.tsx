@@ -123,7 +123,7 @@ export const SyntaxPreview = ({ content, fileName }: { content: string; fileName
 
   if (ext === 'md') {
     return (
-      <div className="text-[10px] font-mono leading-relaxed space-y-1">
+      <div className="text-[11px] font-mono leading-relaxed space-y-1">
         {content.split('\n').map((line, i) => {
           if (line.startsWith('# ')) return <div key={i} className="text-sm font-bold text-foreground mt-2">{line.slice(2)}</div>;
           if (line.startsWith('## ')) return <div key={i} className="text-xs font-bold text-foreground mt-1.5">{line.slice(3)}</div>;
@@ -140,7 +140,7 @@ export const SyntaxPreview = ({ content, fileName }: { content: string; fileName
 
   if (isPlainText) {
     return (
-      <pre className="text-[10px] font-mono text-foreground/90 whitespace-pre-wrap break-words leading-relaxed">
+      <pre className="text-[11px] font-mono text-foreground/90 whitespace-pre-wrap break-words leading-relaxed">
         {content}
       </pre>
     );
@@ -149,7 +149,7 @@ export const SyntaxPreview = ({ content, fileName }: { content: string; fileName
   const lines = content.split('\n');
 
   return (
-    <div className="text-[10px] font-mono leading-relaxed">
+    <div className="text-[11px] font-mono leading-relaxed">
       {lines.map((line, lineIdx) => {
         const tokens = tokenizeLine(line, lang);
         return (

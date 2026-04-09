@@ -112,16 +112,16 @@ const LaneDropdown = ({
       {providers.map(provider => (
         <div key={provider.id}>
           <div className="px-3 py-1 bg-muted/30 flex items-center gap-1.5 sticky top-0">
-            <span className="text-[9px] font-display font-semibold text-muted-foreground uppercase tracking-wider">
+            <span className="text-[11px] font-display font-semibold text-muted-foreground uppercase tracking-wider">
               {provider.name}
             </span>
             {!provider.hasKey && provider.requiresKey && (
-              <span className="flex items-center gap-0.5 text-[9px] text-amber-400">
+              <span className="flex items-center gap-0.5 text-[11px] text-amber-400">
                 <Key className="w-2.5 h-2.5" /> No key
               </span>
             )}
             {provider.hasKey && (
-              <span className="text-[9px] text-emerald-400">&#10003;</span>
+              <span className="text-[11px] text-emerald-400">&#10003;</span>
             )}
           </div>
           {provider.models.map(m => {
@@ -143,12 +143,12 @@ const LaneDropdown = ({
                 <span className="flex items-center gap-1.5">
                   {m.name}
                   {isFree && (
-                    <span className="px-1 py-0.5 rounded text-[8px] font-display font-bold bg-emerald-500/20 text-emerald-400 leading-none">
+                    <span className="px-1 py-0.5 rounded text-[11px] font-display font-bold bg-emerald-500/20 text-emerald-400 leading-none">
                       FREE
                     </span>
                   )}
                 </span>
-                <span className="flex items-center gap-1.5 text-[10px]">
+                <span className="flex items-center gap-1.5 text-[11px]">
                   {disabled ? (
                     <span className="text-muted-foreground/40">Add key in Vault</span>
                   ) : (
@@ -255,7 +255,7 @@ const ModelPilotCard = ({
         </div>
         <button
           onClick={toggleSingleMode}
-          className="flex items-center gap-1.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+          className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
           title={singleMode ? 'Enable fallback chain' : 'Use single model only'}
         >
           {singleMode ? (
@@ -269,7 +269,7 @@ const ModelPilotCard = ({
 
       {/* Info tooltip */}
       {showInfo && (
-        <div className="p-2.5 rounded-lg bg-primary/5 border border-primary/10 text-[10px] text-muted-foreground leading-relaxed">
+        <div className="p-2.5 rounded-lg bg-primary/5 border border-primary/10 text-[11px] text-muted-foreground leading-relaxed">
           <strong className="text-foreground">Model Pilot</strong> automatically routes your requests through a fallback chain.
           If your primary model is unavailable (rate limit, outage), it falls back to your secondary.
           The budget saver activates when your daily spend crosses the threshold, switching to a cheaper model
@@ -293,10 +293,10 @@ const ModelPilotCard = ({
                   <div className={`w-2 h-2 rounded-full shrink-0 ${lane.dotColor}`} />
                   <lane.icon className={`w-3.5 h-3.5 shrink-0 ${lane.color}`} />
                   <div className="min-w-0">
-                    <p className={`text-[10px] font-display font-semibold ${lane.color}`}>
+                    <p className={`text-[11px] font-display font-semibold ${lane.color}`}>
                       {lane.label}
                     </p>
-                    <p className="text-[9px] text-muted-foreground truncate">{lane.description}</p>
+                    <p className="text-[11px] text-muted-foreground truncate">{lane.description}</p>
                   </div>
                 </div>
 
@@ -309,14 +309,14 @@ const ModelPilotCard = ({
                     <div className="flex items-center justify-end gap-1">
                       {cost && (
                         <span
-                          className={`text-[9px] ${COST_COLORS[cost] ?? ''}`}
+                          className={`text-[11px] ${COST_COLORS[cost] ?? ''}`}
                           title={COST_TOOLTIPS[cost] ?? ''}
                         >
                           {cost}
                         </span>
                       )}
                       {isFree && (
-                        <span className="px-1 rounded text-[8px] font-display font-bold bg-emerald-500/20 text-emerald-400 leading-none">
+                        <span className="px-1 rounded text-[11px] font-display font-bold bg-emerald-500/20 text-emerald-400 leading-none">
                           FREE
                         </span>
                       )}
@@ -326,7 +326,7 @@ const ModelPilotCard = ({
                   {/* Change button */}
                   <button
                     onClick={() => setOpenLane(isOpen ? null : lane.key)}
-                    className="flex items-center gap-0.5 px-2 py-1 rounded-md text-[10px] font-display bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    className="flex items-center gap-0.5 px-2 py-1 rounded-md text-[11px] font-display bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                   >
                     Change
                     <ChevronDown className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
@@ -352,10 +352,10 @@ const ModelPilotCard = ({
       {!singleMode && dailyBudget != null && dailyBudget > 0 && (
         <div className="pt-2 border-t border-border/20">
           <div className="flex items-center justify-between mb-1.5">
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-[11px] text-muted-foreground">
               Budget saver activates at <strong className="text-foreground">{Math.round(budgetThreshold * 100)}%</strong> of daily budget
             </p>
-            <p className="text-[10px] text-muted-foreground font-mono">
+            <p className="text-[11px] text-muted-foreground font-mono">
               ${(dailyBudget * budgetThreshold).toFixed(2)} / ${dailyBudget.toFixed(2)}
             </p>
           </div>
@@ -368,7 +368,7 @@ const ModelPilotCard = ({
             onChange={(e) => onUpdate({ budgetThreshold: parseFloat(e.target.value) })}
             className="w-full h-1.5 rounded-full appearance-none bg-muted/50 accent-sky-400 cursor-pointer"
           />
-          <div className="flex justify-between text-[9px] text-muted-foreground mt-0.5">
+          <div className="flex justify-between text-[11px] text-muted-foreground mt-0.5">
             <span>10%</span>
             <span>50%</span>
             <span>100%</span>
@@ -377,7 +377,7 @@ const ModelPilotCard = ({
       )}
 
       {/* Cost legend */}
-      <div className="flex items-center gap-3 pt-1 text-[9px] text-muted-foreground">
+      <div className="flex items-center gap-3 pt-1 text-[11px] text-muted-foreground">
         {Object.entries(COST_TOOLTIPS).map(([tier, tooltip]) => (
           <span key={tier} className="flex items-center gap-0.5">
             <span className={COST_COLORS[tier]}>{tier}</span> {tooltip}

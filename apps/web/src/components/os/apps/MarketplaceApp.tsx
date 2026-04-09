@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Store, Search, Download, Trash2, Loader2, Shield, Package, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
 import { useToast } from '@/hooks/use-toast';
 
@@ -122,15 +123,18 @@ const MarketplaceApp = () => {
         <div className="flex items-center gap-3 mb-3">
           <Store className="w-5 h-5" style={{ color: 'var(--honey-500)' }} />
           <h2 className="text-sm font-display font-semibold text-foreground">Marketplace</h2>
-          <span className="text-[10px] text-muted-foreground ml-auto">{total} packages available</span>
+          <span className="text-[11px] text-muted-foreground ml-auto">{total} packages available</span>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 mb-3">
+        <div className="flex gap-1 mb-3" role="tablist" aria-label="Marketplace sections">
           {(['search', 'installed'] as Tab[]).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
+              role="tab"
+              aria-selected={tab === t}
+              tabIndex={tab === t ? 0 : -1}
               className={`px-3 py-1 text-xs font-display rounded-lg transition-colors ${
                 tab === t ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground'
               }`}
@@ -144,11 +148,11 @@ const MarketplaceApp = () => {
         {tab === 'search' && (
           <div className="flex items-center gap-2 bg-muted/30 rounded-lg px-3 py-1.5">
             <Search className="w-3.5 h-3.5 text-muted-foreground" />
-            <input
+            <Input
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search skills, plugins, connectors..."
-              className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+              className="flex-1 bg-transparent text-sm border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0"
             />
             {loading && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
           </div>
@@ -156,7 +160,7 @@ const MarketplaceApp = () => {
       </div>
 
       {/* Package list */}
-      <div className="flex-1 overflow-auto p-3 space-y-2">
+      <div className="flex-1 overflow-auto p-3 space-y-2" role="tabpanel">
         {loading && displayList.length === 0 && (
           <div className="text-center py-8">
             <Loader2 className="w-6 h-6 text-muted-foreground/40 mx-auto mb-2 animate-spin" />
@@ -185,18 +189,18 @@ const MarketplaceApp = () => {
                 {scanBadge(pkg)}
                 {pkg.installed && <CheckCircle2 className="w-3 h-3 text-emerald-400" />}
               </div>
-              <p className="text-[10px] text-muted-foreground line-clamp-2 mt-0.5">{pkg.description}</p>
+              <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">{pkg.description}</p>
               <div className="flex items-center gap-2 mt-1">
-                {pkg.type && <span className="text-[9px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">{pkg.type}</span>}
-                {pkg.category && <span className="text-[9px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">{pkg.category}</span>}
-                {pkg.source && <span className="text-[9px] text-muted-foreground/60">{pkg.source}</span>}
+                {pkg.type && <span className="text-[11px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">{pkg.type}</span>}
+                {pkg.category && <span className="text-[11px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">{pkg.category}</span>}
+                {pkg.source && <span className="text-[11px] text-muted-foreground/60">{pkg.source}</span>}
               </div>
             </div>
             <div className="shrink-0">
               {pkg.installed ? (
                 <button
                   onClick={() => handleUninstall(pkg)}
-                  className="flex items-center gap-1 px-2 py-1 text-[10px] rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
+                  className="flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
                 >
                   <Trash2 className="w-3 h-3" /> Remove
                 </button>
@@ -204,7 +208,7 @@ const MarketplaceApp = () => {
                 <button
                   onClick={() => handleInstall(pkg)}
                   disabled={installing === pkg.id}
-                  className="flex items-center gap-1 px-2 py-1 text-[10px] rounded-lg text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+                  className="flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
                 >
                   {installing === pkg.id
                     ? <Loader2 className="w-3 h-3 animate-spin" />

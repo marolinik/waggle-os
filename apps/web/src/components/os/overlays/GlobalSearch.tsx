@@ -4,6 +4,7 @@ import {
   LayoutDashboard, Bot, FolderOpen, Activity, Package, Plug,
   Store, Mic, Sparkles,
 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
 import { motion, AnimatePresence } from 'framer-motion';
 import { fuzzyMatch } from '@/lib/fuzzy-match';
@@ -209,16 +210,16 @@ const GlobalSearch = ({ open, onClose, onNavigate }: GlobalSearchProps) => {
           {/* Search input */}
           <div className="flex items-center gap-3 px-4 py-3" style={{ borderBottom: '1px solid var(--hive-700)' }}>
             <Search className="w-5 h-5" style={{ color: 'var(--hive-400)' }} />
-            <input
+            <Input
               ref={inputRef}
               value={query}
               onChange={e => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Search workspaces, memories, commands..."
-              className="flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+              className="flex-1 bg-transparent text-sm border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0"
             />
             {memoryLoading && <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'var(--honey-500)' }} />}
-            <kbd className="px-1.5 py-0.5 text-[10px] rounded font-display" style={{ backgroundColor: 'var(--hive-800)', color: 'var(--hive-400)' }}>ESC</kbd>
+            <kbd className="px-1.5 py-0.5 text-[11px] rounded font-display" style={{ backgroundColor: 'var(--hive-800)', color: 'var(--hive-400)' }}>ESC</kbd>
           </div>
 
           {/* Results */}
@@ -233,7 +234,7 @@ const GlobalSearch = ({ open, onClose, onNavigate }: GlobalSearchProps) => {
               <div key={sec.category}>
                 {/* Category header */}
                 <p
-                  className="text-[10px] font-display font-semibold uppercase tracking-wider px-3 pt-3 pb-1"
+                  className="text-[11px] font-display font-semibold uppercase tracking-wider px-3 pt-3 pb-1"
                   style={{ color: 'var(--hive-400)' }}
                 >
                   {CATEGORY_LABELS[sec.category]}
@@ -264,7 +265,7 @@ const GlobalSearch = ({ open, onClose, onNavigate }: GlobalSearchProps) => {
                           <span className="text-xs truncate block" style={{ color: 'var(--hive-400)' }}>{item.subtitle}</span>
                         )}
                       </div>
-                      <span className="text-[10px] capitalize shrink-0" style={{ color: 'var(--hive-500)' }}>{item.category}</span>
+                      <span className="text-[11px] capitalize shrink-0" style={{ color: 'var(--hive-500)' }}>{item.category}</span>
                     </button>
                   );
                 })}
@@ -273,7 +274,7 @@ const GlobalSearch = ({ open, onClose, onNavigate }: GlobalSearchProps) => {
           </div>
 
           {/* Footer hints */}
-          <div className="px-4 py-2 flex items-center gap-4 text-[10px]" style={{ borderTop: '1px solid var(--hive-700)', color: 'var(--hive-500)' }}>
+          <div className="px-4 py-2 flex items-center gap-4 text-[11px]" style={{ borderTop: '1px solid var(--hive-700)', color: 'var(--hive-500)' }}>
             <span>{'\u2191\u2193'} Navigate</span>
             <span>{'\u21B5'} Open</span>
             <span>{'\u2318'}K Toggle</span>

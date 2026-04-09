@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Brain, Search, Clock, Trash2, Edit3, Filter, Network, ChevronDown, X, Eye, Copy, Loader2 } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
+import { Input } from '@/components/ui/input';
 import type { MemoryFrame, KGNode, KGEdge } from '@/lib/types';
 import { renderSimpleMarkdown } from '@/lib/render-markdown';
 import ContextMenu, { type ContextMenuItem } from '@/components/os/ContextMenu';
@@ -71,7 +72,7 @@ const KGViewer = ({ nodes, edges }: { nodes: KGNode[]; edges: KGEdge[] }) => {
           return (
             <g key={node.id}>
               <circle cx={x} cy={y} r={6} fill="hsl(38, 92%, 50%)" fillOpacity={0.6} />
-              <text x={x} y={y + 16} textAnchor="middle" fill="hsl(40, 20%, 92%)" fontSize={8} opacity={0.7}>
+              <text x={x} y={y + 16} textAnchor="middle" fill="hsl(40, 20%, 92%)" fontSize={10} opacity={0.7}>
                 {node.label.slice(0, 12)}
               </text>
             </g>
@@ -121,15 +122,15 @@ const MemoryApp = ({
         <div className="p-2 border-b border-border/30">
           <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg px-2 py-1">
             <Search className="w-3 h-3 text-muted-foreground" />
-            <input
+            <Input
               value={searchQuery}
               onChange={e => onSearchChange(e.target.value)}
               placeholder="Search memories..."
-              className="flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
+              className="flex-1 bg-transparent text-xs h-auto border-0 p-0 focus-visible:ring-0 focus-visible:ring-offset-0"
             />
           </div>
           <div className="flex items-center justify-between mt-1.5">
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-[11px] text-muted-foreground">
               {stats.filtered} of {stats.total} frames
               {(stats.entities ?? 0) > 0 && <span> · {stats.entities} entities</span>}
               {(stats.relations ?? 0) > 0 && <span> · {stats.relations} relations</span>}
@@ -152,13 +153,13 @@ const MemoryApp = ({
           {showFilters && (
             <div className="mt-2 space-y-2 border-t border-border/30 pt-2">
               <div>
-                <p className="text-[10px] text-muted-foreground mb-1">Type</p>
+                <p className="text-[11px] text-muted-foreground mb-1">Type</p>
                 <div className="flex flex-wrap gap-1">
                   {FRAME_TYPES.map(t => (
                     <button
                       key={t}
                       onClick={() => toggleTypeFilter(t)}
-                      className={`px-1.5 py-0.5 rounded text-[9px] transition-colors ${
+                      className={`px-1.5 py-0.5 rounded text-[11px] transition-colors ${
                         typeFilters.includes(t) ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
                       }`}
                     >
@@ -168,7 +169,7 @@ const MemoryApp = ({
                 </div>
               </div>
               <div>
-                <p className="text-[10px] text-muted-foreground mb-1">Min Importance: {minImportance}</p>
+                <p className="text-[11px] text-muted-foreground mb-1">Min Importance: {minImportance}</p>
                 <input
                   type="range"
                   min={0} max={5} value={minImportance}
@@ -193,7 +194,7 @@ const MemoryApp = ({
                 <span>{frameTypeIcons[f.type] || '📄'}</span>
                 <span className="font-display font-medium text-foreground truncate flex-1">{f.title}</span>
               </div>
-              <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground">
+              <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
                 <span className={importanceColors[Math.min(f.importance, 5)]}> {'●'.repeat(Math.min(f.importance, 5))}</span>
                 <span className="flex items-center gap-0.5"><Clock className="w-2.5 h-2.5" />{new Date(f.timestamp).toLocaleDateString()}</span>
               </div>
@@ -250,7 +251,7 @@ const MemoryApp = ({
             {selectedFrame.metadata && Object.keys(selectedFrame.metadata).length > 0 && (
               <div className="mt-4 p-3 rounded-lg bg-secondary/30 border border-border/30">
                 <p className="text-xs font-display font-medium text-muted-foreground mb-1">Metadata</p>
-                <pre className="text-[10px] text-muted-foreground overflow-x-auto">
+                <pre className="text-[11px] text-muted-foreground overflow-x-auto">
                   {JSON.stringify(selectedFrame.metadata, null, 2)}
                 </pre>
               </div>

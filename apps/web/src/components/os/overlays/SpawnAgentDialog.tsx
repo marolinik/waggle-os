@@ -196,7 +196,7 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
                   {showPersona ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
                   <span>Persona override</span>
                   {form.persona && (
-                    <span className="text-[10px] text-primary ml-1">({PERSONAS.find(p => p.id === form.persona)?.name})</span>
+                    <span className="text-[11px] text-primary ml-1">({PERSONAS.find(p => p.id === form.persona)?.name})</span>
                   )}
                 </button>
                 {showPersona && (
@@ -213,7 +213,7 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
                         }`}
                       >
                         <img src={p.avatar} alt={p.name} className="w-8 h-8 rounded-full object-cover" />
-                        <span className="text-[10px] text-foreground font-medium leading-tight truncate w-full">{p.name}</span>
+                        <span className="text-[11px] text-foreground font-medium leading-tight truncate w-full">{p.name}</span>
                       </button>
                     ))}
                   </div>
@@ -228,7 +228,7 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <span className="text-[10px] text-muted-foreground cursor-help border-b border-dotted border-muted-foreground/50">
+                          <span className="text-[11px] text-muted-foreground cursor-help border-b border-dotted border-muted-foreground/50">
                             inherited from {workspaces.find(w => w.id === activeWorkspaceId)?.name}
                           </span>
                         </TooltipTrigger>
@@ -281,22 +281,22 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
             <div className="space-y-3 py-2">
               <div className="rounded-xl bg-secondary/30 border border-border/30 p-4 space-y-3">
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Workspace</p>
+                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Workspace</p>
                   <p className="text-sm text-foreground font-display">
                     {form.workspaceMode === 'new' ? `${targetWorkspaceName} (new)` : targetWorkspaceName}
                   </p>
                 </div>
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Task</p>
+                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Task</p>
                   <p className="text-sm text-foreground leading-relaxed">{form.task}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Model</p>
+                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Model</p>
                   <p className="text-sm text-foreground font-mono">{form.model}</p>
                 </div>
                 {selectedPersona && (
                   <div>
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Persona</p>
+                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Persona</p>
                     <div className="flex items-center gap-2">
                       <img src={selectedPersona.avatar} alt={selectedPersona.name} className="w-6 h-6 rounded-full object-cover" />
                       <span className="text-sm text-foreground">{selectedPersona.name}</span>
@@ -306,7 +306,7 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
 
                 {/* Estimated cost */}
                 <div className="border-t border-border/20 pt-3 mt-3">
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">Estimated Budget</p>
+                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5">Estimated Budget</p>
                   {(() => {
                     const mp = pricing.find(p => p.model === form.model);
                     if (!mp) {
@@ -325,18 +325,18 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
                               ~{(tokensMin / 1000).toFixed(0)}k–{(tokensMax / 1000).toFixed(0)}k tokens
                             </span>
                           </div>
-                          <div className="text-[10px] text-muted-foreground">
+                          <div className="text-[11px] text-muted-foreground">
                             ≈ ${costMin.toFixed(2)}–${costMax.toFixed(2)}
                           </div>
                         </div>
-                        <div className="flex gap-3 mt-1.5 text-[10px] text-muted-foreground/80">
+                        <div className="flex gap-3 mt-1.5 text-[11px] text-muted-foreground/80">
                           <span>Input: ${mp.inputCostPer1k.toFixed(4)}/1k</span>
                           <span>Output: ${mp.outputCostPer1k.toFixed(4)}/1k</span>
                         </div>
                       </>
                     );
                   })()}
-                  <p className="text-[10px] text-muted-foreground/60 mt-1">Estimates vary based on task complexity and tool usage</p>
+                  <p className="text-[11px] text-muted-foreground/60 mt-1">Estimates vary based on task complexity and tool usage</p>
                 </div>
               </div>
             </div>

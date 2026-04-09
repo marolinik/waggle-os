@@ -114,11 +114,11 @@ const Dock = ({ tier, onOpenApp, openApps, minimizedApps = [], onSpawnAgent, wag
             >
               <Icon className={`w-6 h-6 ${entry.color}`} />
               {entry.appId === 'waggle-dance' && waggleBadgeCount > 0 && (
-                <span className="absolute -top-1 -right-0.5 min-w-[16px] h-4 flex items-center justify-center text-[9px] font-bold bg-destructive text-destructive-foreground rounded-full px-1">
+                <span className="absolute -top-1 -right-0.5 min-w-[16px] h-4 flex items-center justify-center text-[11px] font-bold bg-destructive text-destructive-foreground rounded-full px-1">
                   {waggleBadgeCount > 99 ? '99+' : waggleBadgeCount}
                 </span>
               )}
-              <span className="absolute -top-7 text-[10px] text-foreground bg-card px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap font-display">
+              <span className="absolute -top-7 text-[11px] text-foreground bg-card px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap font-display">
                 {entry.label}
               </span>
               {(isOpen || hasOpenChild) && (
@@ -141,7 +141,7 @@ const Dock = ({ tier, onOpenApp, openApps, minimizedApps = [], onSpawnAgent, wag
               transition={{ type: 'spring', stiffness: 400, damping: 17 }}
             >
               <Rocket className="w-6 h-6 text-primary" />
-              <span className="absolute -top-7 text-[10px] text-foreground bg-card px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap font-display">
+              <span className="absolute -top-7 text-[11px] text-foreground bg-card px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap font-display">
                 Spawn Agent
               </span>
             </motion.button>

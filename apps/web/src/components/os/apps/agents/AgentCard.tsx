@@ -31,7 +31,7 @@ const AgentCard = ({ agent, localPersona, selected, onSelect, onDelete }: AgentC
     </Avatar>
     <div className="min-w-0 flex-1">
       <p className="text-xs font-display font-semibold text-foreground truncate">{agent.name}</p>
-      <p className="text-[10px] text-muted-foreground truncate">{agent.description}</p>
+      <p className="text-[11px] text-muted-foreground truncate">{agent.description}</p>
     </div>
     {agent.custom && onDelete && (
       <button

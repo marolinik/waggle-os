@@ -49,11 +49,11 @@ const GroupExecutionPanel = ({ exec, agents, strategy, onDismiss, onCancel }: Gr
         <span className="text-[11px] font-display font-bold text-foreground flex-1">
           {exec.status === 'cancelled' ? 'Cancelled' : isFinished ? 'Execution Complete' : 'Running…'}
         </span>
-        <span className="text-[10px] font-mono text-muted-foreground">{elapsed.toFixed(1)}s</span>
+        <span className="text-[11px] font-mono text-muted-foreground">{elapsed.toFixed(1)}s</span>
         {isRunning && (
           <button
             onClick={onCancel}
-            className="ml-1 flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive transition-colors"
+            className="ml-1 flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive transition-colors"
           >
             <StopCircle className="w-3 h-3" /> Cancel
           </button>
@@ -77,7 +77,7 @@ const GroupExecutionPanel = ({ exec, agents, strategy, onDismiss, onCancel }: Gr
 
       {/* Task */}
       <div className="px-3 py-2 border-b border-border/10">
-        <p className="text-[10px] text-muted-foreground truncate">
+        <p className="text-[11px] text-muted-foreground truncate">
           <span className="font-medium text-foreground">Task:</span> {exec.task}
         </p>
       </div>
@@ -108,26 +108,26 @@ const GroupExecutionPanel = ({ exec, agents, strategy, onDismiss, onCancel }: Gr
               }`}
             >
               {strategy === 'sequential' && (
-                <span className="text-[9px] font-mono text-muted-foreground w-3 text-center">{idx + 1}</span>
+                <span className="text-[11px] font-mono text-muted-foreground w-3 text-center">{idx + 1}</span>
               )}
               <Avatar className="w-6 h-6 shrink-0">
                 {persona?.avatar ? (
                   <AvatarImage src={persona.avatar} />
                 ) : (
-                  <AvatarFallback className="text-[9px] bg-primary/20">{agent?.icon || agent?.name?.[0] || '?'}</AvatarFallback>
+                  <AvatarFallback className="text-[11px] bg-primary/20">{agent?.icon || agent?.name?.[0] || '?'}</AvatarFallback>
                 )}
               </Avatar>
               <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-medium text-foreground truncate">{agent?.name ?? memberExec.agentId}</p>
+                <p className="text-[11px] font-medium text-foreground truncate">{agent?.name ?? memberExec.agentId}</p>
                 {memberExec.status === 'done' && memberExec.result && (
-                  <p className="text-[9px] text-muted-foreground truncate mt-0.5">{memberExec.result.slice(0, 120)}</p>
+                  <p className="text-[11px] text-muted-foreground truncate mt-0.5">{memberExec.result.slice(0, 120)}</p>
                 )}
                 {memberExec.status === 'failed' && memberExec.error && (
-                  <p className="text-[9px] text-destructive truncate mt-0.5">{memberExec.error}</p>
+                  <p className="text-[11px] text-destructive truncate mt-0.5">{memberExec.error}</p>
                 )}
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
-                {memberElapsed && <span className="text-[9px] font-mono text-muted-foreground">{memberElapsed}s</span>}
+                {memberElapsed && <span className="text-[11px] font-mono text-muted-foreground">{memberElapsed}s</span>}
                 {STATUS_ICON[memberExec.status]}
               </div>
             </motion.div>
@@ -145,10 +145,10 @@ const GroupExecutionPanel = ({ exec, agents, strategy, onDismiss, onCancel }: Gr
           ) : (
             <XCircle className="w-4 h-4 text-destructive" />
           )}
-          <span className="text-[10px] text-foreground font-medium">
+          <span className="text-[11px] text-foreground font-medium">
             {doneCount}/{total} succeeded{failCount > 0 ? `, ${failCount} failed` : ''}
           </span>
-          <span className="text-[10px] text-muted-foreground ml-auto">{elapsed.toFixed(1)}s total</span>
+          <span className="text-[11px] text-muted-foreground ml-auto">{elapsed.toFixed(1)}s total</span>
         </div>
       )}
 
@@ -156,10 +156,10 @@ const GroupExecutionPanel = ({ exec, agents, strategy, onDismiss, onCancel }: Gr
       {isFinished && exec.output && (
         <div className="px-3 py-2 border-t border-border/10">
           <details className="group">
-            <summary className="text-[10px] font-medium text-muted-foreground cursor-pointer hover:text-foreground">
+            <summary className="text-[11px] font-medium text-muted-foreground cursor-pointer hover:text-foreground">
               View output
             </summary>
-            <pre className="mt-1.5 text-[9px] text-muted-foreground bg-secondary/20 rounded-lg p-2 max-h-32 overflow-auto whitespace-pre-wrap font-mono">
+            <pre className="mt-1.5 text-[11px] text-muted-foreground bg-secondary/20 rounded-lg p-2 max-h-32 overflow-auto whitespace-pre-wrap font-mono">
               {JSON.stringify(exec.output, null, 2)}
             </pre>
           </details>

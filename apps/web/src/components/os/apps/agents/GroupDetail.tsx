@@ -5,6 +5,7 @@ import {
   CheckCircle2, XCircle, Clock,
 } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { Input } from '@/components/ui/input';
 import { PERSONAS } from '@/lib/personas';
 import { adapter } from '@/lib/adapter';
 import GroupExecutionPanel from './GroupExecutionPanel';
@@ -104,17 +105,17 @@ const GroupDetail = ({ group, agents, onRun, onEdit, onDuplicate }: GroupDetailP
         <div className="flex items-center gap-2 mb-1">
           <Users className="w-5 h-5 text-primary" />
           <h3 className="text-sm font-display font-bold text-foreground flex-1">{group.name}</h3>
-          <button onClick={onDuplicate} className="flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-medium rounded-lg bg-secondary/50 hover:bg-secondary/70 text-foreground transition-colors">
+          <button onClick={onDuplicate} className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium rounded-lg bg-secondary/50 hover:bg-secondary/70 text-foreground transition-colors">
             <Copy className="w-3 h-3" /> Duplicate
           </button>
-          <button onClick={onEdit} className="flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-medium rounded-lg bg-secondary/50 hover:bg-secondary/70 text-foreground transition-colors">
+          <button onClick={onEdit} className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium rounded-lg bg-secondary/50 hover:bg-secondary/70 text-foreground transition-colors">
             <Pencil className="w-3 h-3" /> Edit
           </button>
         </div>
         {group.description && <p className="text-xs text-muted-foreground">{group.description}</p>}
         <div className="mt-2 flex items-center gap-2">
-          <span className={`text-[10px] px-2 py-1 rounded-full ${strat.color}`}>{strat.label}</span>
-          <span className="text-[10px] text-muted-foreground">{strat.description}</span>
+          <span className={`text-[11px] px-2 py-1 rounded-full ${strat.color}`}>{strat.label}</span>
+          <span className="text-[11px] text-muted-foreground">{strat.description}</span>
         </div>
       </div>
 
@@ -142,7 +143,7 @@ const GroupDetail = ({ group, agents, onRun, onEdit, onDuplicate }: GroupDetailP
 
       {/* Members */}
       <div>
-        <h4 className="text-[10px] font-display uppercase tracking-wider text-muted-foreground mb-2">Members ({sortedMembers.length})</h4>
+        <h4 className="text-[11px] font-display uppercase tracking-wider text-muted-foreground mb-2">Members ({sortedMembers.length})</h4>
         <div className="space-y-2">
           {sortedMembers.map((member, idx) => {
             const agent = agents.find(a => a.id === member.agentId);
@@ -159,28 +160,28 @@ const GroupDetail = ({ group, agents, onRun, onEdit, onDuplicate }: GroupDetailP
                 }`}
               >
                 {group.strategy === 'sequential' && (
-                  <span className="text-[10px] font-mono text-muted-foreground w-4 text-center">{idx + 1}</span>
+                  <span className="text-[11px] font-mono text-muted-foreground w-4 text-center">{idx + 1}</span>
                 )}
                 <Avatar className="w-7 h-7 shrink-0">
                   {persona?.avatar ? <AvatarImage src={persona.avatar} /> : (
-                    <AvatarFallback className="text-[10px] bg-primary/20">{agent?.icon || agent?.name?.[0] || '?'}</AvatarFallback>
+                    <AvatarFallback className="text-[11px] bg-primary/20">{agent?.icon || agent?.name?.[0] || '?'}</AvatarFallback>
                   )}
                 </Avatar>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[10px] font-medium text-foreground truncate">{agent?.name ?? member.agentId}</p>
-                  <p className="text-[9px] text-muted-foreground truncate">{agent?.description ?? ''}</p>
+                  <p className="text-[11px] font-medium text-foreground truncate">{agent?.name ?? member.agentId}</p>
+                  <p className="text-[11px] text-muted-foreground truncate">{agent?.description ?? ''}</p>
                 </div>
                 {memberExec ? (
                   <div className="flex items-center gap-1">
                     {STATUS_ICON[memberExec.status]}
-                    <span className="text-[9px] text-muted-foreground">{STATUS_LABEL[memberExec.status]}</span>
+                    <span className="text-[11px] text-muted-foreground">{STATUS_LABEL[memberExec.status]}</span>
                   </div>
                 ) : member.roleInGroup === 'lead' ? (
-                  <span className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400">
+                  <span className="flex items-center gap-0.5 text-[11px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400">
                     <Crown className="w-2.5 h-2.5" /> Lead
                   </span>
                 ) : (
-                  <span className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-secondary/50 text-muted-foreground">
+                  <span className="flex items-center gap-0.5 text-[11px] px-1.5 py-0.5 rounded-full bg-secondary/50 text-muted-foreground">
                     <Cog className="w-2.5 h-2.5" /> Worker
                   </span>
                 )}
@@ -192,13 +193,13 @@ const GroupDetail = ({ group, agents, onRun, onEdit, onDuplicate }: GroupDetailP
 
       {/* Run task */}
       <div className="mt-auto pt-3 border-t border-border/20">
-        <h4 className="text-[10px] font-display uppercase tracking-wider text-muted-foreground mb-2">Run a Task</h4>
+        <h4 className="text-[11px] font-display uppercase tracking-wider text-muted-foreground mb-2">Run a Task</h4>
         <div className="flex gap-2">
-          <input
+          <Input
             value={task}
             onChange={e => setTask(e.target.value)}
             placeholder="Describe the task for this group..."
-            className="flex-1 text-xs bg-secondary/30 border border-border/30 rounded-lg px-3 py-2 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
+            className="flex-1 text-xs bg-secondary/30"
             onKeyDown={e => e.key === 'Enter' && handleRun()}
             disabled={execState?.status === 'running' || execState?.status === 'queued'}
           />

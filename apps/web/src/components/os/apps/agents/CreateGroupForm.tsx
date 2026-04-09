@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, X, Users, GripVertical, ChevronUp, ChevronDown } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import type { AgentGroupMember, BackendPersona } from './types';
 import { STRATEGY_CONFIG } from './types';
 
@@ -62,28 +63,28 @@ const CreateGroupForm = ({ agents, onSave, onCancel, initialData, editMode }: Cr
       className="flex-1 flex flex-col gap-3 overflow-y-auto scrollbar-thin"
     >
       <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 items-center">
-        <label className="text-[10px] text-muted-foreground font-display uppercase tracking-wider">Name</label>
-        <input value={name} onChange={e => setName(e.target.value)} placeholder="Team name" className="text-xs bg-secondary/30 border border-border/30 rounded-lg px-3 py-2 text-foreground focus:outline-none focus:border-primary/50" />
-        <label className="text-[10px] text-muted-foreground font-display uppercase tracking-wider">Description</label>
-        <input value={description} onChange={e => setDescription(e.target.value)} placeholder="What does this team do?" className="text-xs bg-secondary/30 border border-border/30 rounded-lg px-3 py-2 text-foreground focus:outline-none focus:border-primary/50" />
+        <label className="text-[11px] text-muted-foreground font-display uppercase tracking-wider">Name</label>
+        <Input value={name} onChange={e => setName(e.target.value)} placeholder="Team name" className="text-xs bg-secondary/30" />
+        <label className="text-[11px] text-muted-foreground font-display uppercase tracking-wider">Description</label>
+        <Input value={description} onChange={e => setDescription(e.target.value)} placeholder="What does this team do?" className="text-xs bg-secondary/30" />
       </div>
 
       {/* Strategy */}
       <div>
-        <h4 className="text-[10px] font-display uppercase tracking-wider text-muted-foreground mb-2">Execution Strategy</h4>
+        <h4 className="text-[11px] font-display uppercase tracking-wider text-muted-foreground mb-2">Execution Strategy</h4>
         <div className="flex gap-2">
           {Object.entries(STRATEGY_CONFIG).map(([key, cfg]) => (
             <button
               key={key}
               onClick={() => setStrategy(key as typeof strategy)}
-              className={`flex-1 p-2 rounded-lg text-center text-[10px] border transition-all ${
+              className={`flex-1 p-2 rounded-lg text-center text-[11px] border transition-all ${
                 strategy === key
                   ? 'border-primary/50 bg-primary/10 text-foreground'
                   : 'border-border/30 bg-secondary/20 text-muted-foreground hover:bg-secondary/40'
               }`}
             >
               <p className="font-semibold">{cfg.label}</p>
-              <p className="text-[9px] mt-0.5 opacity-70">{cfg.description}</p>
+              <p className="text-[11px] mt-0.5 opacity-70">{cfg.description}</p>
             </button>
           ))}
         </div>
@@ -91,7 +92,7 @@ const CreateGroupForm = ({ agents, onSave, onCancel, initialData, editMode }: Cr
 
       {/* Members */}
       <div>
-        <h4 className="text-[10px] font-display uppercase tracking-wider text-muted-foreground mb-2">Members ({members.length})</h4>
+        <h4 className="text-[11px] font-display uppercase tracking-wider text-muted-foreground mb-2">Members ({members.length})</h4>
         {members.length > 0 && (
           <div className="space-y-1.5 mb-3">
             {members.map((m, idx) => {
@@ -107,8 +108,8 @@ const CreateGroupForm = ({ agents, onSave, onCancel, initialData, editMode }: Cr
                   className="flex items-center gap-2 p-2 rounded-lg bg-secondary/20 border border-border/20 cursor-grab active:cursor-grabbing hover:bg-secondary/30 transition-colors"
                 >
                   <GripVertical className="w-3 h-3 text-muted-foreground/50 shrink-0" />
-                  <span className="text-[10px] font-mono text-muted-foreground w-4 text-center">{m.executionOrder + 1}</span>
-                  <span className="text-[10px] font-medium text-foreground flex-1 truncate">{agent?.name ?? m.agentId}</span>
+                  <span className="text-[11px] font-mono text-muted-foreground w-4 text-center">{m.executionOrder + 1}</span>
+                  <span className="text-[11px] font-medium text-foreground flex-1 truncate">{agent?.name ?? m.agentId}</span>
                   <div className="flex items-center gap-0.5">
                     <button onClick={() => moveMember(idx, idx - 1)} disabled={idx === 0} className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-20 transition-opacity" title="Move up">
                       <ChevronUp className="w-3 h-3" />
@@ -119,7 +120,7 @@ const CreateGroupForm = ({ agents, onSave, onCancel, initialData, editMode }: Cr
                   </div>
                   <button
                     onClick={() => toggleRole(m.agentId)}
-                    className={`text-[9px] px-1.5 py-0.5 rounded-full transition-colors ${
+                    className={`text-[11px] px-1.5 py-0.5 rounded-full transition-colors ${
                       m.roleInGroup === 'lead' ? 'bg-amber-500/20 text-amber-400' : 'bg-secondary/50 text-muted-foreground hover:bg-secondary/70'
                     }`}
                   >
@@ -139,11 +140,11 @@ const CreateGroupForm = ({ agents, onSave, onCancel, initialData, editMode }: Cr
               <button
                 key={a.id}
                 onClick={() => addMember(a.id)}
-                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-[10px] hover:bg-secondary/40 text-muted-foreground transition-colors"
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-[11px] hover:bg-secondary/40 text-muted-foreground transition-colors"
               >
                 <Plus className="w-3 h-3 shrink-0" />
                 <span className="truncate">{a.name}</span>
-                <span className="text-[9px] ml-auto opacity-60 truncate">{a.description}</span>
+                <span className="text-[11px] ml-auto opacity-60 truncate">{a.description}</span>
               </button>
             ))}
           </div>

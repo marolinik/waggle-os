@@ -10,6 +10,7 @@ import {
   Loader2, ExternalLink, Trash2, RefreshCw, Server, Plus, Zap,
   AlertTriangle,
 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
 
 type ConnTab = 'services' | 'mcp';
@@ -137,15 +138,21 @@ const ConnectorsApp = () => {
   return (
     <div className="flex h-full bg-background">
       {/* Sidebar */}
-      <div className="w-36 border-r border-border/50 p-2 space-y-0.5 shrink-0">
+      <div className="w-36 border-r border-border/50 p-2 space-y-0.5 shrink-0" role="tablist" aria-label="Connector sections">
         <button onClick={() => setTab('services')}
+          role="tab"
+          aria-selected={tab === 'services'}
+          tabIndex={tab === 'services' ? 0 : -1}
           className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors ${
             tab === 'services' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
           }`}>
           <Plug className="w-3.5 h-3.5" /> Services
-          <span className="ml-auto text-[9px] text-emerald-400">{connectedCount}</span>
+          <span className="ml-auto text-[11px] text-emerald-400">{connectedCount}</span>
         </button>
         <button onClick={() => setTab('mcp')}
+          role="tab"
+          aria-selected={tab === 'mcp'}
+          tabIndex={tab === 'mcp' ? 0 : -1}
           className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors ${
             tab === 'mcp' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
           }`}>
@@ -153,10 +160,10 @@ const ConnectorsApp = () => {
         </button>
 
         <div className="pt-3 mt-3 border-t border-border/30">
-          <p className="text-[9px] text-muted-foreground px-2 mb-1.5">Filter</p>
+          <p className="text-[11px] text-muted-foreground px-2 mb-1.5">Filter</p>
           {['all', 'connected', 'available'].map(f => (
             <button key={f} onClick={() => setFilter(f)}
-              className={`w-full text-left px-2 py-1 text-[10px] rounded transition-colors capitalize ${
+              className={`w-full text-left px-2 py-1 text-[11px] rounded transition-colors capitalize ${
                 filter === f ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground'
               }`}>{f}</button>
           ))}
@@ -164,7 +171,7 @@ const ConnectorsApp = () => {
       </div>
 
       {/* Content */}
-      <div className="flex-1 p-4 overflow-auto">
+      <div className="flex-1 p-4 overflow-auto" role="tabpanel">
 
         {/* ═══ SERVICES ═══ */}
         {tab === 'services' && (
@@ -172,14 +179,14 @@ const ConnectorsApp = () => {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-display font-semibold text-foreground">Service Connectors</h3>
-                <p className="text-[10px] text-muted-foreground">{connectedCount} of {connectors.length} connected — the agent can use connected services as tools</p>
+                <p className="text-[11px] text-muted-foreground">{connectedCount} of {connectors.length} connected — the agent can use connected services as tools</p>
               </div>
               <button onClick={loadConnectors} className="p-1 rounded hover:bg-muted/50"><RefreshCw className="w-3.5 h-3.5 text-muted-foreground" /></button>
             </div>
 
             {filteredCategories.map(group => (
               <div key={group.category}>
-                <p className="text-[10px] font-display font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">{group.category}</p>
+                <p className="text-[11px] font-display font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">{group.category}</p>
                 <div className="space-y-1.5">
                   {group.items.map(conn => {
                     const isExpanded = expanded === conn.id;
@@ -195,7 +202,7 @@ const ConnectorsApp = () => {
                             <div className={`w-2 h-2 rounded-full shrink-0 ${isConnected ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
                             <div className="text-left">
                               <span className="text-xs font-display font-medium text-foreground">{conn.name}</span>
-                              {conn.description && <p className="text-[9px] text-muted-foreground line-clamp-1">{conn.description}</p>}
+                              {conn.description && <p className="text-[11px] text-muted-foreground line-clamp-1">{conn.description}</p>}
                             </div>
                           </div>
                           <div className="flex items-center gap-1.5">
@@ -210,7 +217,7 @@ const ConnectorsApp = () => {
                             {conn.capabilities && conn.capabilities.length > 0 && (
                               <div className="flex flex-wrap gap-1">
                                 {conn.capabilities.map(cap => (
-                                  <span key={cap} className="px-1.5 py-0.5 text-[8px] rounded bg-primary/10 text-primary">{cap}</span>
+                                  <span key={cap} className="px-1.5 py-0.5 text-[11px] rounded bg-primary/10 text-primary">{cap}</span>
                                 ))}
                               </div>
                             )}
@@ -219,11 +226,11 @@ const ConnectorsApp = () => {
                             {hint && !isConnected && (
                               <div className="space-y-1">
                                 {hint.steps?.map((step, i) => (
-                                  <p key={i} className="text-[10px] text-muted-foreground"><span className="text-primary font-medium">{i + 1}.</span> {step}</p>
+                                  <p key={i} className="text-[11px] text-muted-foreground"><span className="text-primary font-medium">{i + 1}.</span> {step}</p>
                                 ))}
                                 {hint.url && (
                                   <a href={hint.url} target="_blank" rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 text-[10px] text-primary hover:text-primary/80">
+                                    className="inline-flex items-center gap-1 text-[11px] text-primary hover:text-primary/80">
                                     <ExternalLink className="w-3 h-3" /> Open {conn.name}
                                   </a>
                                 )}
@@ -232,22 +239,22 @@ const ConnectorsApp = () => {
 
                             {isConnected ? (
                               <div className="flex items-center gap-2">
-                                <span className="text-[10px] text-emerald-400 flex items-center gap-1"><Zap className="w-3 h-3" /> Connected — agent can use {conn.name} tools</span>
+                                <span className="text-[11px] text-emerald-400 flex items-center gap-1"><Zap className="w-3 h-3" /> Connected — agent can use {conn.name} tools</span>
                                 <button onClick={() => handleDisconnect(conn.id)}
-                                  className="ml-auto flex items-center gap-1 px-2 py-1 text-[10px] rounded-lg text-destructive hover:bg-destructive/10 transition-colors">
+                                  className="ml-auto flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg text-destructive hover:bg-destructive/10 transition-colors">
                                   <Trash2 className="w-3 h-3" /> Disconnect
                                 </button>
                               </div>
                             ) : (
                               <div className="space-y-1.5">
                                 {needsEmail && (
-                                  <input value={emailInput} onChange={e => setEmailInput(e.target.value)} placeholder="Your Atlassian email"
-                                    className="w-full bg-muted/50 border border-border/50 rounded-lg px-2 py-1 text-xs text-foreground outline-none" />
+                                  <Input value={emailInput} onChange={e => setEmailInput(e.target.value)} placeholder="Your Atlassian email"
+                                    className="w-full bg-muted/50 text-xs h-auto py-1" />
                                 )}
                                 <div className="flex gap-2">
-                                  <input type="password" value={tokenInput} onChange={e => setTokenInput(e.target.value)}
+                                  <Input type="password" value={tokenInput} onChange={e => setTokenInput(e.target.value)}
                                     placeholder={hint?.placeholder ?? 'Paste token or API key'}
-                                    className="flex-1 bg-muted/50 border border-border/50 rounded-lg px-2 py-1 text-xs text-foreground outline-none font-mono" />
+                                    className="flex-1 bg-muted/50 text-xs h-auto py-1 font-mono" />
                                   <button onClick={() => handleConnect(conn.id)} disabled={!tokenInput.trim() || connecting}
                                     className="flex items-center gap-1 px-3 py-1 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-50 transition-colors">
                                     {connecting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plug className="w-3 h-3" />} Connect
@@ -270,7 +277,7 @@ const ConnectorsApp = () => {
         {tab === 'mcp' && (
           <div className="space-y-4">
             <h3 className="text-sm font-display font-semibold text-foreground">MCP Servers</h3>
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-[11px] text-muted-foreground">
               Model Context Protocol servers extend the agent with external tools.
               Install from the marketplace or configure custom servers.
             </p>
@@ -278,10 +285,10 @@ const ConnectorsApp = () => {
             <div className="p-4 rounded-xl bg-secondary/30 border border-border/30 text-center">
               <Server className="w-8 h-8 text-primary/30 mx-auto mb-2" />
               <p className="text-xs text-foreground mb-1">No MCP servers configured</p>
-              <p className="text-[10px] text-muted-foreground mb-3">
+              <p className="text-[11px] text-muted-foreground mb-3">
                 MCP servers provide specialized tools like database access, file systems, and API integrations.
               </p>
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground">
                 Browse available servers in the <strong>Skills</strong> app → Marketplace tab.
               </p>
             </div>

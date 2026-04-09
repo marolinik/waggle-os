@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Package, Download, CheckCircle2, Shield, Star, Search, Loader2, Store, Grid3X3, List, Trash2, FlaskConical, X } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
 import type { SkillPack } from '@/lib/types';
 
@@ -123,26 +124,26 @@ const CapabilitiesApp = () => {
                 key={s}
                 onClick={(e) => { e.stopPropagation(); handleTestSkill(s); }}
                 disabled={testing === s}
-                className="px-1.5 py-0.5 rounded text-[9px] bg-muted text-muted-foreground hover:bg-primary/20 hover:text-primary transition-colors"
+                className="px-1.5 py-0.5 rounded text-[11px] bg-muted text-muted-foreground hover:bg-primary/20 hover:text-primary transition-colors"
                 title={`Test skill: ${s}`}
               >
                 {testing === s ? '...' : s}
               </button>
             ))}
-            {pack.skills.length > 3 && <span className="text-[9px] text-muted-foreground">+{pack.skills.length - 3}</span>}
+            {pack.skills.length > 3 && <span className="text-[11px] text-muted-foreground">+{pack.skills.length - 3}</span>}
           </div>
         )}
         <div className="flex items-center justify-between">
-          <span className={`px-2 py-0.5 rounded text-[10px] font-display capitalize ${categoryColors[pack.category] || 'bg-muted text-muted-foreground'}`}>
+          <span className={`px-2 py-0.5 rounded text-[11px] font-display capitalize ${categoryColors[pack.category] || 'bg-muted text-muted-foreground'}`}>
             {pack.category}
           </span>
           {pack.installed ? (
-            <span className="text-[10px] text-emerald-400 flex items-center gap-0.5"><CheckCircle2 className="w-3 h-3" /> Installed</span>
+            <span className="text-[11px] text-emerald-400 flex items-center gap-0.5"><CheckCircle2 className="w-3 h-3" /> Installed</span>
           ) : (
             <button
               onClick={() => onInstall(pack.id || pack.name)}
               disabled={installing === (pack.id || pack.name)}
-              className="flex items-center gap-1 px-2 py-1 text-[10px] rounded-lg bg-primary/20 text-primary hover:bg-primary/30 disabled:opacity-50 transition-colors"
+              className="flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg bg-primary/20 text-primary hover:bg-primary/30 disabled:opacity-50 transition-colors"
             >
               {installing === pack.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
               Install
@@ -174,11 +175,14 @@ const CapabilitiesApp = () => {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-4 p-0.5 rounded-lg bg-muted/50 w-fit">
+      <div className="flex gap-1 mb-4 p-0.5 rounded-lg bg-muted/50 w-fit" role="tablist" aria-label="Capability sections">
         {(['installed', 'starter', 'marketplace', 'tools'] as const).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
+            role="tab"
+            aria-selected={tab === t}
+            tabIndex={tab === t ? 0 : -1}
             className={`px-3 py-1.5 text-xs rounded-md font-display transition-colors capitalize ${
               tab === t ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
             }`}
@@ -191,11 +195,11 @@ const CapabilitiesApp = () => {
 
       <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg px-2 py-1.5 mb-4">
         <Search className="w-3.5 h-3.5 text-muted-foreground" />
-        <input
+        <Input
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search capabilities..."
-          className="flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
+          className="flex-1 bg-transparent text-xs border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0"
         />
       </div>
 
@@ -226,7 +230,7 @@ const CapabilitiesApp = () => {
       {/* Tools tab — read-only overview of all agent capabilities */}
       {tab === 'tools' && (
         <div className="space-y-3">
-          <p className="text-[10px] text-muted-foreground mb-3">These are the built-in tools the agent can use. They work automatically — no setup needed.</p>
+          <p className="text-[11px] text-muted-foreground mb-3">These are the built-in tools the agent can use. They work automatically — no setup needed.</p>
           {[
             { category: 'File Operations', tools: ['read_file', 'write_file', 'edit_file', 'list_directory', 'find_files', 'delete_path'], desc: 'Read, write, search, and manage files in workspace' },
             { category: 'Code & Shell', tools: ['bash', 'search_content', 'create_directory'], desc: 'Execute commands, search code, manage directories' },
@@ -244,12 +248,12 @@ const CapabilitiesApp = () => {
             <div key={group.category} className="p-2.5 rounded-lg bg-secondary/30 border border-border/30">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs font-display font-medium text-foreground">{group.category}</span>
-                <span className="text-[9px] text-muted-foreground">{group.tools.length} tool{group.tools.length > 1 ? 's' : ''}</span>
+                <span className="text-[11px] text-muted-foreground">{group.tools.length} tool{group.tools.length > 1 ? 's' : ''}</span>
               </div>
-              <p className="text-[10px] text-muted-foreground mb-1.5">{group.desc}</p>
+              <p className="text-[11px] text-muted-foreground mb-1.5">{group.desc}</p>
               <div className="flex flex-wrap gap-1">
                 {group.tools.map(t => (
-                  <span key={t} className="px-1.5 py-0.5 text-[8px] rounded bg-muted/50 text-muted-foreground font-mono">{t}</span>
+                  <span key={t} className="px-1.5 py-0.5 text-[11px] rounded bg-muted/50 text-muted-foreground font-mono">{t}</span>
                 ))}
               </div>
             </div>
@@ -268,7 +272,7 @@ const CapabilitiesApp = () => {
               <X className="w-3 h-3 text-muted-foreground" />
             </button>
           </div>
-          <pre className="text-[10px] font-mono text-muted-foreground whitespace-pre-wrap leading-relaxed">{testResult.preview.slice(0, 500)}{testResult.preview.length > 500 ? '...' : ''}</pre>
+          <pre className="text-[11px] font-mono text-muted-foreground whitespace-pre-wrap leading-relaxed">{testResult.preview.slice(0, 500)}{testResult.preview.length > 500 ? '...' : ''}</pre>
         </div>
       )}
     </div>

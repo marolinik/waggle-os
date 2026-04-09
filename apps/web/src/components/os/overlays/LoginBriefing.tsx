@@ -137,7 +137,7 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-display font-medium text-foreground">{ws.name}</span>
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">{ws.group}</span>
+                      <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">{ws.group}</span>
                     </div>
                     <ChevronRight className="w-3 h-3 text-muted-foreground group-hover:text-primary transition-colors" />
                   </div>
@@ -146,7 +146,7 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
                     <p className="text-[11px] text-muted-foreground mb-1.5 line-clamp-2">{ws.summary}</p>
                   )}
 
-                  <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+                  <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
                     <span><Brain className="w-2.5 h-2.5 inline mr-0.5" />{ws.memoryCount}</span>
                     <span><MessageSquare className="w-2.5 h-2.5 inline mr-0.5" />{ws.sessionCount}</span>
                     {ws.lastActive && (
@@ -163,7 +163,7 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
 
           {/* Footer */}
           <div className="mt-4 pt-3 border-t border-border/30 flex justify-between items-center">
-            <p className="text-[10px] text-muted-foreground">Waggle remembers everything important.</p>
+            <p className="text-[11px] text-muted-foreground">Waggle remembers everything important.</p>
             <button onClick={onDismiss}
               className="px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 transition-colors font-display">
               Start Working

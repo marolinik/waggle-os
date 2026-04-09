@@ -105,7 +105,7 @@ const MissionControlApp = ({ onSpawnOpen }: MissionControlAppProps) => {
                   <div className="flex items-center gap-2">
                     <div className={`w-2 h-2 rounded-full ${s.status === 'active' ? 'bg-emerald-400 animate-pulse' : s.status === 'paused' ? 'bg-amber-400' : 'bg-muted-foreground'}`} />
                     <span className="text-sm font-display font-medium text-foreground">{s.workspaceName}</span>
-                    <span className={`text-[10px] capitalize ${statusColors[s.status]}`}>{s.status}</span>
+                    <span className={`text-[11px] capitalize ${statusColors[s.status]}`}>{s.status}</span>
                   </div>
                   <div className="flex items-center gap-1">
                     {s.status === 'active' && (
@@ -123,7 +123,7 @@ const MissionControlApp = ({ onSpawnOpen }: MissionControlAppProps) => {
                     </button>
                   </div>
                 </div>
-                <div className="flex items-center gap-4 text-[10px] text-muted-foreground">
+                <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
                   <span className="flex items-center gap-0.5"><Clock className="w-2.5 h-2.5" />{Math.round(s.duration / 60)}m</span>
                   <span className="flex items-center gap-0.5"><Zap className="w-2.5 h-2.5" />{s.toolCount} tools</span>
                   <span>{s.model}</span>
@@ -148,7 +148,7 @@ const MissionControlApp = ({ onSpawnOpen }: MissionControlAppProps) => {
             <div key={m.id} className="flex items-center gap-3 p-3 rounded-xl bg-secondary/30 border border-border/30">
               <div className={`w-2 h-2 rounded-full ${m.status === 'online' ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
               <span className="text-sm text-foreground flex-1">{m.name}</span>
-              <span className="text-[10px] text-muted-foreground capitalize">{m.status}</span>
+              <span className="text-[11px] text-muted-foreground capitalize">{m.status}</span>
             </div>
           ))}
         </div>
@@ -165,7 +165,7 @@ const MissionControlApp = ({ onSpawnOpen }: MissionControlAppProps) => {
             <div key={a.id} className="flex items-center gap-3 p-2 rounded-lg bg-secondary/20 border border-border/20">
               <span className="text-xs text-foreground font-display">{a.user}</span>
               <span className="text-xs text-muted-foreground flex-1">{a.action}</span>
-              <span className="text-[10px] text-muted-foreground">{new Date(a.timestamp).toLocaleTimeString()}</span>
+              <span className="text-[11px] text-muted-foreground">{new Date(a.timestamp).toLocaleTimeString()}</span>
             </div>
           ))}
         </div>

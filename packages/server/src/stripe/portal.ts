@@ -34,9 +34,13 @@ export const portalRoutes: FastifyPluginAsync = async (server) => {
     }
 
     try {
+      const origin = request.headers['origin']
+        ?? process.env['APP_URL']
+        ?? 'http://localhost:1420';
+
       const session = await stripe.billingPortal.sessions.create({
         customer: customerId,
-        return_url: 'waggle://settings',
+        return_url: `${origin}/settings`,
       });
       return { url: session.url };
     } catch (err) {

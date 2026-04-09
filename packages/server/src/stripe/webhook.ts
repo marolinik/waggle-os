@@ -15,10 +15,11 @@ import { type Tier, parseTier, getCapabilities } from '@waggle/shared';
 import { getStripe, tierFromPriceId } from './index.js';
 
 /**
- * Update the user's tier in config.json.
- * This is the same storage used by readTierFromRequest() in the tier middleware.
+ * Update the user's tier (and optionally Stripe customer ID) in config.json.
+ * This is the same storage used by readTierFromRequest() in the tier middleware
+ * and by the portal route to read stripe_customer_id.
  */
-function updateUserTier(dataDir: string, tier: Tier): void {
+function updateUserTier(dataDir: string, tier: Tier, customerId?: string): void {
   const configPath = path.join(dataDir, 'config.json');
   let raw: Record<string, unknown> = {};
   try {
@@ -26,8 +27,8 @@ function updateUserTier(dataDir: string, tier: Tier): void {
       raw = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
     }
   } catch { /* fresh config */ }
-  raw.tier = tier;
-  fs.writeFileSync(configPath, JSON.stringify(raw, null, 2), 'utf-8');
+  const updated = { ...raw, tier, ...(customerId ? { stripe_customer_id: customerId } : {}) };
+  fs.writeFileSync(configPath, JSON.stringify(updated, null, 2), 'utf-8');
 }
 
 export const webhookRoutes: FastifyPluginAsync = async (server) => {
@@ -70,26 +71,28 @@ export const webhookRoutes: FastifyPluginAsync = async (server) => {
 
     switch (event.type) {
       case 'checkout.session.completed': {
-        const session = event.data.object as { metadata?: Record<string, string> };
+        const session = event.data.object as { metadata?: Record<string, string>; customer?: string };
         const tierRaw = session.metadata?.tier;
         if (tierRaw) {
           const parsed = parseTier(tierRaw);
           if (parsed) {
-            updateUserTier(dataDir, parsed);
-            server.log.info({ event: 'checkout_completed', tier: parsed });
+            const customerId = typeof session.customer === 'string' ? session.customer : undefined;
+            updateUserTier(dataDir, parsed, customerId);
+            server.log.info({ event: 'checkout_completed', tier: parsed, customerId });
           }
         }
         break;
       }
 
       case 'customer.subscription.updated': {
-        const subscription = event.data.object as { items?: { data?: Array<{ price?: { id?: string } }> } };
+        const subscription = event.data.object as { customer?: string; items?: { data?: Array<{ price?: { id?: string } }> } };
         const priceId = subscription.items?.data?.[0]?.price?.id;
         if (priceId) {
           const newTier = tierFromPriceId(priceId);
           if (newTier) {
-            updateUserTier(dataDir, newTier);
-            server.log.info({ event: 'subscription_updated', tier: newTier });
+            const customerId = typeof subscription.customer === 'string' ? subscription.customer : undefined;
+            updateUserTier(dataDir, newTier, customerId);
+            server.log.info({ event: 'subscription_updated', tier: newTier, customerId });
           }
         }
         break;

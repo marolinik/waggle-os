@@ -1,26 +1,27 @@
+/**
+ * FilesApp — Layout shell for the file manager.
+ * Sub-components: FileTree, FilePreview, FileActions, FileUploadZone.
+ */
+
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import {
-  Folder, ChevronRight, ChevronDown, Upload, Plus,
-  Grid3X3, List, ArrowLeft, Home, MoreHorizontal, Download, Eye,
+  Folder, Upload, Download,
   Trash2, Copy, Scissors, ClipboardPaste, Edit, FolderPlus, X as XIcon,
-  RefreshCw, Search, X,
-  Info, Shield, MapPin, Clock, Hash, Lock, Unlock, CheckSquare, XSquare, FolderInput,
+  RefreshCw, CheckSquare, XSquare, FolderInput,
+  Info, Shield, MapPin, Clock, Hash, Lock, Unlock, FileText, HardDrive,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { FileEntry, StorageType } from '@/lib/types';
 import { adapter } from '@/lib/adapter';
 import { getFileIcon, formatSize, STORAGE_LABELS, MOCK_FILES } from './files/file-utils';
-import { SyntaxPreview } from './files/SyntaxPreview';
-
 import { useToast } from '@/hooks/use-toast';
 
-interface FilesAppProps {
-  workspaceId: string;
-  workspaceName?: string;
-  storageType?: StorageType;
-}
+import FileTree from './files/FileTree';
+import FilePreview from './files/FilePreview';
+import FileActions from './files/FileActions';
+import FileUploadZone from './files/FileUploadZone';
 
-/** Inline version history panel for file properties dialog */
+/* ── Inline version history panel ── */
 const VersionHistory = ({ workspaceId, fileName }: { workspaceId: string; fileName: string }) => {
   const [versions, setVersions] = useState<{ version: number; createdAt: string; sizeBytes: number }[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -29,20 +30,19 @@ const VersionHistory = ({ workspaceId, fileName }: { workspaceId: string; fileNa
     adapter.getDocumentVersions(workspaceId, fileName).then(v => { setVersions(v); setLoaded(true); }).catch(() => setLoaded(true));
   }, [workspaceId, fileName]);
 
-  if (!loaded) return null;
-  if (versions.length === 0) return null;
+  if (!loaded || versions.length === 0) return null;
 
   return (
     <>
       <div className="h-px bg-border/20" />
       <div>
-        <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Version History</h4>
+        <h4 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Version History</h4>
         <div className="space-y-1.5">
           {versions.map(v => (
             <div key={v.version} className="flex items-center justify-between text-xs">
               <span className="text-foreground">v{v.version}</span>
               <span className="text-muted-foreground">{formatSize(v.sizeBytes)}</span>
-              <span className="text-muted-foreground/60 text-[9px]">{new Date(v.createdAt).toLocaleDateString()}</span>
+              <span className="text-muted-foreground/60 text-[11px]">{new Date(v.createdAt).toLocaleDateString()}</span>
             </div>
           ))}
         </div>
@@ -50,6 +50,27 @@ const VersionHistory = ({ workspaceId, fileName }: { workspaceId: string; fileNa
     </>
   );
 };
+
+/* ── Helpers ── */
+const isPreviewable = (name: string) => {
+  const ext = name.split('.').pop()?.toLowerCase() || '';
+  return ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 'bmp',
+          'md', 'txt', 'log', 'csv', 'json', 'yaml', 'toml', 'xml',
+          'js', 'ts', 'py', 'rb', 'go', 'rs', 'java', 'c', 'cpp', 'h',
+          'html', 'css', 'sh', 'bash', 'env', 'ini', 'cfg'].includes(ext);
+};
+
+const isImageFile = (name: string) => {
+  const ext = name.split('.').pop()?.toLowerCase() || '';
+  return ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 'bmp'].includes(ext);
+};
+
+/* ── Props ── */
+interface FilesAppProps {
+  workspaceId: string;
+  workspaceName?: string;
+  storageType?: StorageType;
+}
 
 const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: FilesAppProps) => {
   const { toast } = useToast();
@@ -80,17 +101,10 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
 
   const storageMeta = STORAGE_LABELS[storageType];
 
-  // Get selected file objects
-  const selectedFileObjects = useMemo(() => {
-    return files.filter(f => selectedFiles.has(f.path));
-  }, [files, selectedFiles]);
-
+  const selectedFileObjects = useMemo(() => files.filter(f => selectedFiles.has(f.path)), [files, selectedFiles]);
   const selectedFileCount = selectedFiles.size;
-  const selectedTotalSize = useMemo(() => {
-    return selectedFileObjects.reduce((sum, f) => sum + (f.size || 0), 0);
-  }, [selectedFileObjects]);
+  const selectedTotalSize = useMemo(() => selectedFileObjects.reduce((sum, f) => sum + (f.size || 0), 0), [selectedFileObjects]);
 
-  // Breadcrumbs from path
   const breadcrumbs = useMemo(() => {
     const parts = currentPath.split('/').filter(Boolean);
     const crumbs = [{ label: 'Root', path: '/' }];
@@ -100,7 +114,6 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
     return crumbs;
   }, [currentPath]);
 
-  // Filtered files in current directory
   const visibleFiles = useMemo(() => {
     let filtered = files.filter(f => {
       const parentPath = f.path.substring(0, f.path.lastIndexOf('/')) || '/';
@@ -109,18 +122,15 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
     if (searchQuery) {
       filtered = filtered.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()));
     }
-    // Sort: dirs first, then alpha
     return filtered.sort((a, b) => {
       if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
       return a.name.localeCompare(b.name);
     });
   }, [files, currentPath, searchQuery]);
 
-  // Tree sidebar data
-  const treeDirs = useMemo(() => {
-    return files.filter(f => f.type === 'directory').sort((a, b) => a.path.localeCompare(b.path));
-  }, [files]);
+  const treeDirs = useMemo(() => files.filter(f => f.type === 'directory').sort((a, b) => a.path.localeCompare(b.path)), [files]);
 
+  /* ── Data fetching ── */
   const refreshFiles = useCallback(async () => {
     setLoading(true);
     try {
@@ -134,43 +144,32 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
     }
   }, [workspaceId, currentPath]);
 
-  // Auto-fetch files on mount and when path changes
   useEffect(() => { refreshFiles(); }, [refreshFiles]);
 
+  /* ── Navigation ── */
   const handleNavigate = (path: string) => {
     setCurrentPath(path);
     setSelectedFiles(new Set());
     setContextMenu(null);
   };
 
-  // Check if a file is previewable
-  const isPreviewable = (name: string) => {
-    const ext = name.split('.').pop()?.toLowerCase() || '';
-    return ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 'bmp',
-            'md', 'txt', 'log', 'csv', 'json', 'yaml', 'toml', 'xml',
-            'js', 'ts', 'py', 'rb', 'go', 'rs', 'java', 'c', 'cpp', 'h',
-            'html', 'css', 'sh', 'bash', 'env', 'ini', 'cfg'].includes(ext);
+  const goUp = () => {
+    const parent = currentPath.substring(0, currentPath.lastIndexOf('/')) || '/';
+    handleNavigate(parent);
   };
 
-  const isImageFile = (name: string) => {
-    const ext = name.split('.').pop()?.toLowerCase() || '';
-    return ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 'bmp'].includes(ext);
-  };
-
+  /* ── File operations ── */
   const openPreview = async (file: FileEntry) => {
     setPreviewFile(file);
     if (isImageFile(file.name)) {
-      // For images, we'll construct a URL — in offline mode show placeholder
       setPreviewContent(null);
     } else {
-      // For text files, fetch content
       setPreviewLoading(true);
       try {
         const blob = await adapter.downloadFile(workspaceId, file.path);
         const text = await blob.text();
         setPreviewContent(text);
       } catch {
-        // Offline mock
         setPreviewContent(`// Preview of ${file.name}\n// Content would load from backend\n\n# ${file.name}\n\nThis is a preview placeholder.\nConnect to the backend to see actual file contents.`);
       } finally {
         setPreviewLoading(false);
@@ -206,11 +205,7 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
   const handleUpload = async (uploadFiles: FileList | null) => {
     if (!uploadFiles) return;
     for (const file of Array.from(uploadFiles)) {
-      try {
-        await adapter.uploadFile(workspaceId, currentPath, file);
-      } catch {
-        // offline
-      }
+      try { await adapter.uploadFile(workspaceId, currentPath, file); } catch { /* offline */ }
       setFiles(prev => [...prev, {
         name: file.name,
         path: `${currentPath === '/' ? '' : currentPath}/${file.name}`,
@@ -264,29 +259,14 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
     refreshFiles();
   };
 
-  // Bulk actions
   const handleBulkDelete = () => {
     setFiles(prev => prev.filter(f => !selectedFiles.has(f.path) && !Array.from(selectedFiles).some(s => f.path.startsWith(s + '/'))));
     selectedFiles.forEach(path => adapter.deleteFile(workspaceId, path).catch(() => {}));
     setSelectedFiles(new Set());
   };
-
-  const handleBulkCopy = () => {
-    setClipboard({ files: selectedFileObjects, operation: 'copy' });
-    setSelectedFiles(new Set());
-  };
-
-  const handleBulkCut = () => {
-    setClipboard({ files: selectedFileObjects, operation: 'cut' });
-    setSelectedFiles(new Set());
-  };
-
-  const handleBulkDownload = () => {
-    selectedFileObjects.filter(f => f.type === 'file').forEach(f => {
-      adapter.downloadFile(workspaceId, f.path).catch(() => {});
-    });
-  };
-
+  const handleBulkCopy = () => { setClipboard({ files: selectedFileObjects, operation: 'copy' }); setSelectedFiles(new Set()); };
+  const handleBulkCut = () => { setClipboard({ files: selectedFileObjects, operation: 'cut' }); setSelectedFiles(new Set()); };
+  const handleBulkDownload = () => { selectedFileObjects.filter(f => f.type === 'file').forEach(f => { adapter.downloadFile(workspaceId, f.path).catch(() => {}); }); };
   const handleBulkMove = (destPath: string) => {
     selectedFileObjects.forEach(f => {
       const newPath = `${destPath === '/' ? '' : destPath}/${f.name}`;
@@ -296,68 +276,21 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
     setSelectedFiles(new Set());
     setShowMoveDialog(false);
   };
+  const handleSelectAll = () => { setSelectedFiles(new Set(visibleFiles.map(f => f.path))); };
 
-  const handleSelectAll = () => {
-    setSelectedFiles(new Set(visibleFiles.map(f => f.path)));
-  };
-
-  const goUp = () => {
-    const parent = currentPath.substring(0, currentPath.lastIndexOf('/')) || '/';
-    handleNavigate(parent);
-  };
-
-  // Keyboard shortcuts
+  /* ── Keyboard shortcuts ── */
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      // Skip if user is typing in an input
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-
       const mod = e.ctrlKey || e.metaKey;
 
-      // Ctrl+A — select all
-      if (mod && e.key === 'a') {
-        e.preventDefault();
-        handleSelectAll();
-        return;
-      }
-
-      // Delete / Backspace — delete selected
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedFiles.size > 0) {
-        e.preventDefault();
-        handleBulkDelete();
-        return;
-      }
-
-      // Ctrl+C — copy
-      if (mod && e.key === 'c' && selectedFiles.size > 0) {
-        e.preventDefault();
-        handleBulkCopy();
-        return;
-      }
-
-      // Ctrl+X — cut
-      if (mod && e.key === 'x' && selectedFiles.size > 0) {
-        e.preventDefault();
-        handleBulkCut();
-        return;
-      }
-
-      // Ctrl+V — paste
-      if (mod && e.key === 'v' && clipboard) {
-        e.preventDefault();
-        handlePaste();
-        return;
-      }
-
-      // Ctrl+D — download selected
-      if (mod && e.key === 'd' && selectedFiles.size > 0) {
-        e.preventDefault();
-        handleBulkDownload();
-        return;
-      }
-
-      // Escape — clear selection / close preview
+      if (mod && e.key === 'a') { e.preventDefault(); handleSelectAll(); return; }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedFiles.size > 0) { e.preventDefault(); handleBulkDelete(); return; }
+      if (mod && e.key === 'c' && selectedFiles.size > 0) { e.preventDefault(); handleBulkCopy(); return; }
+      if (mod && e.key === 'x' && selectedFiles.size > 0) { e.preventDefault(); handleBulkCut(); return; }
+      if (mod && e.key === 'v' && clipboard) { e.preventDefault(); handlePaste(); return; }
+      if (mod && e.key === 'd' && selectedFiles.size > 0) { e.preventDefault(); handleBulkDownload(); return; }
       if (e.key === 'Escape') {
         if (previewFile) { setPreviewFile(null); setPreviewContent(null); }
         else if (propertiesFile) setPropertiesFile(null);
@@ -365,8 +298,6 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
         else if (selectedFiles.size > 0) setSelectedFiles(new Set());
         return;
       }
-
-      // F2 — rename (single selection)
       if (e.key === 'F2' && selectedFiles.size === 1) {
         e.preventDefault();
         const path = Array.from(selectedFiles)[0];
@@ -374,53 +305,53 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
         if (file) { setRenaming(file.path); setRenameValue(file.name); }
         return;
       }
-
-      // Enter — open selected file/folder
       if (e.key === 'Enter' && selectedFiles.size === 1) {
         const path = Array.from(selectedFiles)[0];
         const file = files.find(f => f.path === path);
         if (file) handleFileClick(file);
-        return;
       }
     };
-
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [selectedFiles, clipboard, files, previewFile, propertiesFile, showMoveDialog, visibleFiles]);
 
-  const handleDragEnter = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounter.current++;
-    if (e.dataTransfer.types.includes('Files')) {
-      setIsDragging(true);
-    }
+  /* ── Drag & drop (external files) ── */
+  const handleDragEnter = (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); dragCounter.current++; if (e.dataTransfer.types.includes('Files')) setIsDragging(true); };
+  const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); dragCounter.current--; if (dragCounter.current === 0) setIsDragging(false); };
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); };
+  const handleDrop = (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); dragCounter.current = 0; if (e.dataTransfer.files?.length) handleUpload(e.dataTransfer.files); };
+
+  /* ── Breadcrumb drop ── */
+  const onBreadcrumbDragOver = (e: React.DragEvent, crumbPath: string) => {
+    if (internalDragPaths.current.length > 0) { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'move'; setBreadcrumbDropTarget(crumbPath); }
+  };
+  const onBreadcrumbDragLeave = () => setBreadcrumbDropTarget(null);
+  const onBreadcrumbDrop = (e: React.DragEvent, crumbPath: string) => {
+    e.preventDefault(); e.stopPropagation(); setBreadcrumbDropTarget(null);
+    const paths = internalDragPaths.current;
+    if (paths.length === 0) return;
+    const filesToMove = files.filter(f => paths.includes(f.path));
+    filesToMove.forEach(f => {
+      const newPath = `${crumbPath === '/' ? '' : crumbPath}/${f.name}`;
+      if (newPath !== f.path) {
+        adapter.moveFile(workspaceId, f.path, newPath).catch(() => {});
+        setFiles(prev => prev.map(pf => pf.path === f.path ? { ...pf, path: newPath } : pf));
+      }
+    });
+    setSelectedFiles(new Set());
+    internalDragPaths.current = [];
   };
 
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounter.current--;
-    if (dragCounter.current === 0) {
-      setIsDragging(false);
-    }
+  /* ── Internal row drag helpers ── */
+  const startInternalDrag = (e: React.DragEvent, file: FileEntry) => {
+    const paths = selectedFiles.has(file.path) && selectedFiles.size > 1 ? Array.from(selectedFiles) : [file.path];
+    internalDragPaths.current = paths;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', paths.join(','));
   };
+  const endInternalDrag = () => { internalDragPaths.current = []; };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-    dragCounter.current = 0;
-    if (e.dataTransfer.files?.length) {
-      handleUpload(e.dataTransfer.files);
-    }
-  };
-
+  /* ── Render ── */
   return (
     <div
       className="flex h-full bg-background/50 relative"
@@ -439,185 +370,43 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
 
       {/* Drag overlay */}
       <AnimatePresence>
-        {isDragging && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 z-[50] flex items-center justify-center bg-primary/5 backdrop-blur-sm border-2 border-dashed border-primary/40 rounded-xl pointer-events-none"
-          >
-            <div className="flex flex-col items-center gap-2">
-              <Upload className="w-10 h-10 text-primary animate-bounce" />
-              <p className="text-sm font-display text-primary">Drop files to upload</p>
-              <p className="text-[10px] text-muted-foreground">Files will be added to <span className="font-mono text-foreground">{currentPath}</span></p>
-            </div>
-          </motion.div>
-        )}
+        {isDragging && <FileUploadZone currentPath={currentPath} />}
       </AnimatePresence>
 
       {/* Tree sidebar */}
-      <div className="w-48 border-r border-border/30 flex flex-col">
-        <div className="p-2 border-b border-border/20">
-          <div className="flex items-center gap-1.5 px-2 py-1">
-            <storageMeta.icon className={`w-3.5 h-3.5 ${storageMeta.color}`} />
-            <span className="text-[10px] font-display text-muted-foreground">{storageMeta.label} Storage</span>
-          </div>
-        </div>
-        <div className="flex-1 overflow-auto p-1">
-          <button
-            onClick={() => handleNavigate('/')}
-            className={`w-full flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs transition-colors ${
-              currentPath === '/' ? 'bg-primary/15 text-primary' : 'text-foreground hover:bg-muted/50'
-            }`}
-          >
-            <Home className="w-3.5 h-3.5" />
-            <span className="truncate">{workspaceName || 'Root'}</span>
-          </button>
-          {treeDirs.map(dir => (
-            <button
-              key={dir.path}
-              onClick={() => handleNavigate(dir.path)}
-              className={`w-full flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs transition-colors ml-2 ${
-                currentPath === dir.path ? 'bg-primary/15 text-primary' : 'text-foreground hover:bg-muted/50'
-              }`}
-            >
-              {currentPath === dir.path ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-              <Folder className="w-3.5 h-3.5 text-amber-400" />
-              <span className="truncate">{dir.name}</span>
-            </button>
-          ))}
-        </div>
-      </div>
+      <FileTree
+        treeDirs={treeDirs}
+        currentPath={currentPath}
+        workspaceName={workspaceName}
+        storageType={storageType}
+        onNavigate={handleNavigate}
+      />
 
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Toolbar */}
-        <div className="flex items-center gap-1 px-3 py-1.5 border-b border-border/30">
-          <button onClick={goUp} disabled={currentPath === '/'} className="p-1 rounded hover:bg-muted/50 disabled:opacity-30">
-            <ArrowLeft className="w-3.5 h-3.5" />
-          </button>
-          <button onClick={refreshFiles} className={`p-1 rounded hover:bg-muted/50 ${loading ? 'animate-spin' : ''}`}>
-            <RefreshCw className="w-3.5 h-3.5" />
-          </button>
-
-          {/* Storage type badge */}
-          {(() => {
-            const meta = STORAGE_LABELS[storageType];
-            const Icon = meta.icon;
-            return (
-              <span className={`flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded ${meta.color}`} style={{ backgroundColor: 'var(--hive-800)', border: '1px solid var(--hive-700)' }}>
-                <Icon className="w-2.5 h-2.5" />{meta.label}
-              </span>
-            );
-          })()}
-
-          {/* Breadcrumbs */}
-          <div className="flex items-center gap-0.5 ml-1 flex-1 min-w-0 overflow-hidden">
-            {breadcrumbs.map((crumb, i) => (
-              <span key={crumb.path} className="flex items-center gap-0.5">
-                {i > 0 && <ChevronRight className="w-3 h-3 text-muted-foreground/50" />}
-                <button
-                  onClick={() => handleNavigate(crumb.path)}
-                  onDragOver={e => {
-                    if (internalDragPaths.current.length > 0) {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      e.dataTransfer.dropEffect = 'move';
-                      setBreadcrumbDropTarget(crumb.path);
-                    }
-                  }}
-                  onDragLeave={() => setBreadcrumbDropTarget(null)}
-                  onDrop={e => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setBreadcrumbDropTarget(null);
-                    const paths = internalDragPaths.current;
-                    if (paths.length === 0) return;
-                    const filesToMove = files.filter(f => paths.includes(f.path));
-                    filesToMove.forEach(f => {
-                      const newPath = `${crumb.path === '/' ? '' : crumb.path}/${f.name}`;
-                      if (newPath !== f.path) {
-                        adapter.moveFile(workspaceId, f.path, newPath).catch(() => {});
-                        setFiles(prev => prev.map(pf => pf.path === f.path ? { ...pf, path: newPath } : pf));
-                      }
-                    });
-                    setSelectedFiles(new Set());
-                    internalDragPaths.current = [];
-                  }}
-                  className={`text-[11px] transition-colors truncate max-w-[100px] px-1.5 py-0.5 rounded-md ${
-                    breadcrumbDropTarget === crumb.path
-                      ? 'bg-primary/20 text-primary ring-1 ring-primary/40'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {crumb.label}
-                </button>
-              </span>
-            ))}
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center gap-0.5">
-            {showSearch ? (
-              <div className="flex items-center gap-1 bg-muted/50 rounded-lg px-2 py-0.5">
-                <Search className="w-3 h-3 text-muted-foreground" />
-                <input
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  placeholder="Filter..."
-                  className="bg-transparent text-xs outline-none w-24"
-                  autoFocus
-                />
-                <button onClick={() => { setShowSearch(false); setSearchQuery(''); }}>
-                  <X className="w-3 h-3 text-muted-foreground" />
-                </button>
-              </div>
-            ) : (
-              <button onClick={() => setShowSearch(true)} className="p-1 rounded hover:bg-muted/50">
-                <Search className="w-3.5 h-3.5" />
-              </button>
-            )}
-            <button onClick={() => setCreating('folder')} className="p-1 rounded hover:bg-muted/50" title="New Folder">
-              <FolderPlus className="w-3.5 h-3.5" />
-            </button>
-            <button onClick={() => fileInputRef.current?.click()} className="p-1 rounded hover:bg-muted/50" title="Upload">
-              <Upload className="w-3.5 h-3.5" />
-            </button>
-            <input ref={fileInputRef} type="file" multiple className="hidden" onChange={e => handleUpload(e.target.files)} />
-            <div className="w-px h-4 bg-border/30 mx-0.5" />
-            <button onClick={() => setViewMode('list')} className={`p-1 rounded ${viewMode === 'list' ? 'bg-muted' : 'hover:bg-muted/50'}`}>
-              <List className="w-3.5 h-3.5" />
-            </button>
-            <button onClick={() => setViewMode('grid')} className={`p-1 rounded ${viewMode === 'grid' ? 'bg-muted' : 'hover:bg-muted/50'}`}>
-              <Grid3X3 className="w-3.5 h-3.5" />
-            </button>
-            <div className="w-px h-4 bg-border/30 mx-0.5" />
-            <div className="relative group">
-              <button className="p-1 rounded hover:bg-muted/50" title="Keyboard Shortcuts">
-                <Info className="w-3.5 h-3.5 text-muted-foreground" />
-              </button>
-              <div className="absolute right-0 top-full mt-1 w-56 rounded-lg border border-border/40 bg-popover p-3 text-popover-foreground shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity z-50">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Keyboard Shortcuts</p>
-                {[
-                  ['Ctrl+A', 'Select all'],
-                  ['Delete', 'Delete selected'],
-                  ['Ctrl+C', 'Copy'],
-                  ['Ctrl+X', 'Cut'],
-                  ['Ctrl+V', 'Paste'],
-                  ['Ctrl+D', 'Download'],
-                  ['F2', 'Rename'],
-                  ['Enter', 'Open'],
-                  ['Esc', 'Clear selection'],
-                ].map(([key, desc]) => (
-                  <div key={key} className="flex items-center justify-between py-0.5">
-                    <span className="text-[11px] text-foreground/80">{desc}</span>
-                    <kbd className="text-[10px] font-mono bg-muted text-muted-foreground rounded px-1.5 py-0.5">{key}</kbd>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
+        <FileActions
+          currentPath={currentPath}
+          storageType={storageType}
+          breadcrumbs={breadcrumbs}
+          viewMode={viewMode}
+          loading={loading}
+          showSearch={showSearch}
+          searchQuery={searchQuery}
+          onGoUp={goUp}
+          onRefresh={refreshFiles}
+          onNavigate={handleNavigate}
+          onSetViewMode={setViewMode}
+          onSetShowSearch={setShowSearch}
+          onSetSearchQuery={setSearchQuery}
+          onCreateFolder={() => setCreating('folder')}
+          fileInputRef={fileInputRef}
+          onBreadcrumbDragOver={onBreadcrumbDragOver}
+          onBreadcrumbDragLeave={onBreadcrumbDragLeave}
+          onBreadcrumbDrop={onBreadcrumbDrop}
+          breadcrumbDropTarget={breadcrumbDropTarget}
+        />
+        <input ref={fileInputRef} type="file" multiple className="hidden" onChange={e => handleUpload(e.target.files)} />
 
         {/* New folder input */}
         <AnimatePresence>
@@ -630,11 +419,11 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
                   onChange={e => setNewName(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') handleCreateFolder(); if (e.key === 'Escape') { setCreating(null); setNewName(''); } }}
                   placeholder="New folder name..."
-                  className="flex-1 bg-transparent text-xs outline-none"
+                  className="flex-1 bg-transparent text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                   autoFocus
                 />
-                <button onClick={handleCreateFolder} className="text-[10px] px-2 py-0.5 rounded bg-primary text-primary-foreground">Create</button>
-                <button onClick={() => { setCreating(null); setNewName(''); }} className="text-[10px] px-2 py-0.5 rounded text-muted-foreground hover:text-foreground">Cancel</button>
+                <button onClick={handleCreateFolder} className="text-[11px] px-2 py-0.5 rounded bg-primary text-primary-foreground">Create</button>
+                <button onClick={() => { setCreating(null); setNewName(''); }} className="text-[11px] px-2 py-0.5 rounded text-muted-foreground hover:text-foreground">Cancel</button>
               </div>
             </motion.div>
           )}
@@ -646,14 +435,14 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2">
               <Folder className="w-10 h-10 opacity-30" />
               <p className="text-xs">Empty directory</p>
-              <button onClick={() => fileInputRef.current?.click()} className="text-[10px] px-3 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors">
+              <button onClick={() => fileInputRef.current?.click()} className="text-[11px] px-3 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors">
                 Upload files
               </button>
             </div>
           ) : viewMode === 'list' ? (
             <table className="w-full">
               <thead>
-                <tr className="text-[10px] text-muted-foreground border-b border-border/20">
+                <tr className="text-[11px] text-muted-foreground border-b border-border/20">
                   <th className="text-left font-normal pb-1 pl-1">Name</th>
                   <th className="text-right font-normal pb-1 w-20">Size</th>
                   <th className="text-right font-normal pb-1 w-28 pr-1">Modified</th>
@@ -667,20 +456,12 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
                     <tr
                       key={file.path}
                       draggable
-                      onDragStart={e => {
-                        const paths = selectedFiles.has(file.path) && selectedFiles.size > 1
-                          ? Array.from(selectedFiles) : [file.path];
-                        internalDragPaths.current = paths;
-                        e.dataTransfer.effectAllowed = 'move';
-                        e.dataTransfer.setData('text/plain', paths.join(','));
-                      }}
-                      onDragEnd={() => { internalDragPaths.current = []; }}
+                      onDragStart={e => startInternalDrag(e, file)}
+                      onDragEnd={endInternalDrag}
                       onClick={e => { e.ctrlKey || e.metaKey ? handleFileSelect(file, true) : handleFileClick(file); }}
                       onDoubleClick={() => file.type === 'directory' && handleNavigate(file.path)}
                       onContextMenu={e => handleContextMenu(e, file)}
-                      className={`group text-xs cursor-pointer transition-colors ${
-                        isSelected ? 'bg-primary/15' : 'hover:bg-muted/30'
-                      }`}
+                      className={`group text-xs cursor-pointer transition-colors ${isSelected ? 'bg-primary/15' : 'hover:bg-muted/30'}`}
                     >
                       <td className="py-1 pl-1 flex items-center gap-2">
                         <Icon className={`w-4 h-4 ${file.type === 'directory' ? 'text-amber-400' : 'text-muted-foreground'}`} />
@@ -690,7 +471,7 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
                             onChange={e => setRenameValue(e.target.value)}
                             onKeyDown={e => { if (e.key === 'Enter') handleRename(file); if (e.key === 'Escape') setRenaming(null); }}
                             onBlur={() => handleRename(file)}
-                            className="bg-muted/50 rounded px-1 text-xs outline-none"
+                            className="bg-muted/50 rounded px-1 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                             autoFocus
                             onClick={e => e.stopPropagation()}
                           />
@@ -698,10 +479,8 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
                           <span className="truncate">{file.name}</span>
                         )}
                       </td>
-                      <td className="py-1 text-right text-muted-foreground text-[10px]">{file.type === 'file' ? formatSize(file.size) : '—'}</td>
-                      <td className="py-1 text-right text-muted-foreground text-[10px] pr-1">
-                        {file.modifiedAt ? new Date(file.modifiedAt).toLocaleDateString() : '—'}
-                      </td>
+                      <td className="py-1 text-right text-muted-foreground text-[11px]">{file.type === 'file' ? formatSize(file.size) : '\u2014'}</td>
+                      <td className="py-1 text-right text-muted-foreground text-[11px] pr-1">{file.modifiedAt ? new Date(file.modifiedAt).toLocaleDateString() : '\u2014'}</td>
                     </tr>
                   );
                 })}
@@ -716,24 +495,16 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
                   <button
                     key={file.path}
                     draggable
-                    onDragStart={e => {
-                      const paths = selectedFiles.has(file.path) && selectedFiles.size > 1
-                        ? Array.from(selectedFiles) : [file.path];
-                      internalDragPaths.current = paths;
-                      e.dataTransfer.effectAllowed = 'move';
-                      e.dataTransfer.setData('text/plain', paths.join(','));
-                    }}
-                    onDragEnd={() => { internalDragPaths.current = []; }}
+                    onDragStart={e => startInternalDrag(e, file)}
+                    onDragEnd={endInternalDrag}
                     onClick={e => { e.ctrlKey || e.metaKey ? handleFileSelect(file, true) : handleFileClick(file); }}
                     onDoubleClick={() => file.type === 'directory' && handleNavigate(file.path)}
                     onContextMenu={e => handleContextMenu(e, file)}
-                    className={`flex flex-col items-center gap-1 p-3 rounded-xl transition-colors ${
-                      isSelected ? 'bg-primary/15 border border-primary/30' : 'hover:bg-muted/30 border border-transparent'
-                    }`}
+                    className={`flex flex-col items-center gap-1 p-3 rounded-xl transition-colors ${isSelected ? 'bg-primary/15 border border-primary/30' : 'hover:bg-muted/30 border border-transparent'}`}
                   >
                     <Icon className={`w-8 h-8 ${file.type === 'directory' ? 'text-amber-400' : 'text-muted-foreground'}`} />
-                    <span className="text-[10px] text-foreground truncate w-full text-center">{file.name}</span>
-                    {file.type === 'file' && <span className="text-[9px] text-muted-foreground">{formatSize(file.size)}</span>}
+                    <span className="text-[11px] text-foreground truncate w-full text-center">{file.name}</span>
+                    {file.type === 'file' && <span className="text-[11px] text-muted-foreground">{formatSize(file.size)}</span>}
                   </button>
                 );
               })}
@@ -744,83 +515,31 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
         {/* Bulk actions toolbar */}
         <AnimatePresence>
           {selectedFileCount > 1 && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-              className="overflow-hidden border-t border-primary/20"
-            >
+            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 30 }} className="overflow-hidden border-t border-primary/20">
               <div className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/5">
                 <div className="flex items-center gap-1.5 mr-2">
                   <CheckSquare className="w-3.5 h-3.5 text-primary" />
                   <span className="text-[11px] font-medium text-primary">{selectedFileCount} selected</span>
-                  <span className="text-[10px] text-muted-foreground">({formatSize(selectedTotalSize)})</span>
+                  <span className="text-[11px] text-muted-foreground">({formatSize(selectedTotalSize)})</span>
                 </div>
-
                 <div className="h-4 w-px bg-border/30" />
-
-                <button
-                  onClick={handleBulkDownload}
-                  className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] text-foreground hover:bg-muted/50 transition-colors"
-                  title="Download selected files"
-                >
-                  <Download className="w-3 h-3" /> Download
-                </button>
-                <button
-                  onClick={handleBulkCopy}
-                  className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] text-foreground hover:bg-muted/50 transition-colors"
-                  title="Copy selected"
-                >
-                  <Copy className="w-3 h-3" /> Copy
-                </button>
-                <button
-                  onClick={handleBulkCut}
-                  className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] text-foreground hover:bg-muted/50 transition-colors"
-                  title="Cut selected"
-                >
-                  <Scissors className="w-3 h-3" /> Cut
-                </button>
-                <button
-                  onClick={() => setShowMoveDialog(true)}
-                  className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] text-foreground hover:bg-muted/50 transition-colors"
-                  title="Move selected to folder"
-                >
-                  <FolderInput className="w-3 h-3" /> Move
-                </button>
-
+                <button onClick={handleBulkDownload} className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-foreground hover:bg-muted/50 transition-colors" title="Download selected files"><Download className="w-3 h-3" /> Download</button>
+                <button onClick={handleBulkCopy} className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-foreground hover:bg-muted/50 transition-colors" title="Copy selected"><Copy className="w-3 h-3" /> Copy</button>
+                <button onClick={handleBulkCut} className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-foreground hover:bg-muted/50 transition-colors" title="Cut selected"><Scissors className="w-3 h-3" /> Cut</button>
+                <button onClick={() => setShowMoveDialog(true)} className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-foreground hover:bg-muted/50 transition-colors" title="Move selected to folder"><FolderInput className="w-3 h-3" /> Move</button>
                 <div className="h-4 w-px bg-border/30" />
-
-                <button
-                  onClick={handleBulkDelete}
-                  className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] text-destructive hover:bg-destructive/10 transition-colors"
-                  title="Delete selected"
-                >
-                  <Trash2 className="w-3 h-3" /> Delete
-                </button>
-
+                <button onClick={handleBulkDelete} className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-destructive hover:bg-destructive/10 transition-colors" title="Delete selected"><Trash2 className="w-3 h-3" /> Delete</button>
                 <div className="flex-1" />
-
-                <button
-                  onClick={handleSelectAll}
-                  className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Select all
-                </button>
-                <button
-                  onClick={() => setSelectedFiles(new Set())}
-                  className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <XSquare className="w-3 h-3" /> Clear
-                </button>
+                <button onClick={handleSelectAll} className="text-[11px] text-muted-foreground hover:text-foreground transition-colors">Select all</button>
+                <button onClick={() => setSelectedFiles(new Set())} className="flex items-center gap-0.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"><XSquare className="w-3 h-3" /> Clear</button>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
 
         {/* Status bar */}
-        <div className="flex items-center justify-between px-3 py-1 border-t border-border/20 text-[10px] text-muted-foreground">
-          <span>{visibleFiles.length} items{selectedFiles.size > 0 && ` · ${selectedFiles.size} selected`}</span>
+        <div className="flex items-center justify-between px-3 py-1 border-t border-border/20 text-[11px] text-muted-foreground">
+          <span>{visibleFiles.length} items{selectedFiles.size > 0 && ` \u00b7 ${selectedFiles.size} selected`}</span>
           <span className="flex items-center gap-1">
             <storageMeta.icon className={`w-3 h-3 ${storageMeta.color}`} />
             {storageMeta.label}
@@ -831,51 +550,24 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
       {/* Move dialog */}
       <AnimatePresence>
         {showMoveDialog && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 backdrop-blur-sm"
-            onClick={() => setShowMoveDialog(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-              className="w-[300px] bg-background border border-border/40 rounded-2xl shadow-2xl overflow-hidden"
-              onClick={e => e.stopPropagation()}
-            >
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowMoveDialog(false)}>
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 30 }} className="w-[300px] bg-background border border-border/40 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
               <div className="px-4 py-3 border-b border-border/20 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-foreground">Move {selectedFileCount} items to…</h3>
-                <button onClick={() => setShowMoveDialog(false)} className="p-0.5 rounded hover:bg-muted/50">
-                  <XIcon className="w-4 h-4 text-muted-foreground" />
-                </button>
+                <h3 className="text-sm font-semibold text-foreground">Move {selectedFileCount} items to...</h3>
+                <button onClick={() => setShowMoveDialog(false)} className="p-0.5 rounded hover:bg-muted/50"><XIcon className="w-4 h-4 text-muted-foreground" /></button>
               </div>
               <div className="p-2 max-h-[250px] overflow-auto space-y-0.5">
-                <button
-                  onClick={() => handleBulkMove('/')}
-                  className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs hover:bg-muted/50 transition-colors ${currentPath === '/' ? 'opacity-40 pointer-events-none' : ''}`}
-                >
-                  <Home className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span>Root</span>
+                <button onClick={() => handleBulkMove('/')} className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs hover:bg-muted/50 transition-colors ${currentPath === '/' ? 'opacity-40 pointer-events-none' : ''}`}>
+                  <Folder className="w-3.5 h-3.5 text-muted-foreground" /><span>Root</span>
                 </button>
-                {treeDirs
-                  .filter(d => !selectedFiles.has(d.path))
-                  .map(dir => (
-                    <button
-                      key={dir.path}
-                      onClick={() => handleBulkMove(dir.path)}
-                      className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs hover:bg-muted/50 transition-colors ${dir.path === currentPath ? 'opacity-40 pointer-events-none' : ''}`}
-                    >
-                      <Folder className="w-3.5 h-3.5 text-amber-400" />
-                      <span>{dir.name}</span>
-                      <span className="text-[10px] text-muted-foreground ml-auto font-mono">{dir.path}</span>
-                    </button>
-                  ))}
-                {treeDirs.length === 0 && (
-                  <p className="text-xs text-muted-foreground text-center py-4">No folders available</p>
-                )}
+                {treeDirs.filter(d => !selectedFiles.has(d.path)).map(dir => (
+                  <button key={dir.path} onClick={() => handleBulkMove(dir.path)} className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs hover:bg-muted/50 transition-colors ${dir.path === currentPath ? 'opacity-40 pointer-events-none' : ''}`}>
+                    <Folder className="w-3.5 h-3.5 text-amber-400" />
+                    <span>{dir.name}</span>
+                    <span className="text-[11px] text-muted-foreground ml-auto font-mono">{dir.path}</span>
+                  </button>
+                ))}
+                {treeDirs.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No folders available</p>}
               </div>
             </motion.div>
           </motion.div>
@@ -885,147 +577,52 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
       {/* Preview panel */}
       <AnimatePresence>
         {previewFile && (
-          <motion.div
-            initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 280, opacity: 1 }}
-            exit={{ width: 0, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            className="border-l border-border/30 flex flex-col overflow-hidden"
-          >
-            {/* Preview header */}
-            <div className="flex items-center justify-between px-3 py-2 border-b border-border/20">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <Eye className="w-3.5 h-3.5 text-primary shrink-0" />
-                <span className="text-[11px] font-display text-foreground truncate">{previewFile.name}</span>
-              </div>
-              <button onClick={() => { setPreviewFile(null); setPreviewContent(null); }} className="p-0.5 rounded hover:bg-muted/50">
-                <XIcon className="w-3.5 h-3.5 text-muted-foreground" />
-              </button>
-            </div>
-
-            {/* Preview content */}
-            <div className="flex-1 overflow-auto p-3">
-              {previewLoading ? (
-                <div className="flex items-center justify-center h-full">
-                  <RefreshCw className="w-5 h-5 text-muted-foreground animate-spin" />
-                </div>
-              ) : isImageFile(previewFile.name) ? (
-                <div className="flex flex-col items-center gap-3">
-                  <div className="w-full aspect-square rounded-lg bg-muted/30 border border-border/20 flex items-center justify-center overflow-hidden">
-                    <Image className="w-12 h-12 text-muted-foreground/30" />
-                  </div>
-                  <p className="text-[10px] text-muted-foreground text-center">
-                    Image preview loads from backend
-                  </p>
-                </div>
-              ) : previewContent ? (
-                <SyntaxPreview content={previewContent} fileName={previewFile.name} />
-              ) : (
-                <p className="text-xs text-muted-foreground text-center mt-8">No preview available</p>
-              )}
-            </div>
-
-            {/* Preview footer with file info */}
-            <div className="border-t border-border/20 px-3 py-2 space-y-1">
-              <div className="flex justify-between text-[10px]">
-                <span className="text-muted-foreground">Size</span>
-                <span className="text-foreground">{formatSize(previewFile.size)}</span>
-              </div>
-              {previewFile.mimeType && (
-                <div className="flex justify-between text-[10px]">
-                  <span className="text-muted-foreground">Type</span>
-                  <span className="text-foreground font-mono">{previewFile.mimeType}</span>
-                </div>
-              )}
-              {previewFile.modifiedAt && (
-                <div className="flex justify-between text-[10px]">
-                  <span className="text-muted-foreground">Modified</span>
-                  <span className="text-foreground">{new Date(previewFile.modifiedAt).toLocaleString()}</span>
-                </div>
-              )}
-              <div className="pt-1.5 flex gap-1">
-                <button onClick={() => handleDownload(previewFile)} className="flex-1 flex items-center justify-center gap-1 text-[10px] py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors">
-                  <Download className="w-3 h-3" /> Download
-                </button>
-              </div>
-            </div>
-          </motion.div>
+          <FilePreview
+            file={previewFile}
+            content={previewContent}
+            loading={previewLoading}
+            isImage={isImageFile(previewFile.name)}
+            onClose={() => { setPreviewFile(null); setPreviewContent(null); }}
+            onDownload={handleDownload}
+          />
         )}
       </AnimatePresence>
+
+      {/* Context menu */}
       <AnimatePresence>
         {contextMenu && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="fixed z-[200] glass-strong rounded-xl shadow-2xl py-1 min-w-[160px]"
-            style={{ left: contextMenu.x, top: contextMenu.y }}
-            onClick={e => e.stopPropagation()}
-          >
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="fixed z-[200] glass-strong rounded-xl shadow-2xl py-1 min-w-[160px]" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={e => e.stopPropagation()}>
             {contextMenu.file ? (
               <>
                 {contextMenu.file.type === 'file' && (
-                  <button onClick={() => handleDownload(contextMenu.file!)} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors">
-                    <Download className="w-3.5 h-3.5" /> Download
-                  </button>
+                  <button onClick={() => handleDownload(contextMenu.file!)} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"><Download className="w-3.5 h-3.5" /> Download</button>
                 )}
-                <button onClick={() => { setRenaming(contextMenu.file!.path); setRenameValue(contextMenu.file!.name); setContextMenu(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors">
-                  <Edit className="w-3.5 h-3.5" /> Rename
-                </button>
-                <button onClick={() => { setClipboard({ files: [contextMenu.file!], operation: 'copy' }); setContextMenu(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors">
-                  <Copy className="w-3.5 h-3.5" /> Copy
-                </button>
-                <button onClick={() => { setClipboard({ files: [contextMenu.file!], operation: 'cut' }); setContextMenu(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors">
-                  <Scissors className="w-3.5 h-3.5" /> Cut
-                </button>
-                <button onClick={() => { setPropertiesFile(contextMenu.file!); setContextMenu(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors">
-                  <Info className="w-3.5 h-3.5" /> Properties
-                </button>
+                <button onClick={() => { setRenaming(contextMenu.file!.path); setRenameValue(contextMenu.file!.name); setContextMenu(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"><Edit className="w-3.5 h-3.5" /> Rename</button>
+                <button onClick={() => { setClipboard({ files: [contextMenu.file!], operation: 'copy' }); setContextMenu(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"><Copy className="w-3.5 h-3.5" /> Copy</button>
+                <button onClick={() => { setClipboard({ files: [contextMenu.file!], operation: 'cut' }); setContextMenu(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"><Scissors className="w-3.5 h-3.5" /> Cut</button>
+                <button onClick={() => { setPropertiesFile(contextMenu.file!); setContextMenu(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"><Info className="w-3.5 h-3.5" /> Properties</button>
                 <div className="h-px bg-border/30 my-0.5" />
-                <button onClick={() => handleDelete(contextMenu.file!)} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10 transition-colors">
-                  <Trash2 className="w-3.5 h-3.5" /> Delete
-                </button>
+                <button onClick={() => handleDelete(contextMenu.file!)} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10 transition-colors"><Trash2 className="w-3.5 h-3.5" /> Delete</button>
               </>
             ) : (
               <>
-                <button onClick={() => { setCreating('folder'); setContextMenu(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors">
-                  <FolderPlus className="w-3.5 h-3.5" /> New Folder
-                </button>
-                <button onClick={() => { fileInputRef.current?.click(); setContextMenu(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors">
-                  <Upload className="w-3.5 h-3.5" /> Upload Files
-                </button>
+                <button onClick={() => { setCreating('folder'); setContextMenu(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"><FolderPlus className="w-3.5 h-3.5" /> New Folder</button>
+                <button onClick={() => { fileInputRef.current?.click(); setContextMenu(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"><Upload className="w-3.5 h-3.5" /> Upload Files</button>
                 {clipboard && (
-                  <button onClick={() => { handlePaste(); setContextMenu(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors">
-                    <ClipboardPaste className="w-3.5 h-3.5" /> Paste
-                  </button>
+                  <button onClick={() => { handlePaste(); setContextMenu(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"><ClipboardPaste className="w-3.5 h-3.5" /> Paste</button>
                 )}
-                <button onClick={() => { refreshFiles(); setContextMenu(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors">
-                  <RefreshCw className="w-3.5 h-3.5" /> Refresh
-                </button>
+                <button onClick={() => { refreshFiles(); setContextMenu(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"><RefreshCw className="w-3.5 h-3.5" /> Refresh</button>
               </>
             )}
           </motion.div>
         )}
       </AnimatePresence>
+
       {/* Properties dialog */}
       <AnimatePresence>
         {propertiesFile && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 backdrop-blur-sm"
-            onClick={() => setPropertiesFile(null)}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-              className="w-[360px] max-h-[80vh] bg-background border border-border/40 rounded-2xl shadow-2xl overflow-hidden"
-              onClick={e => e.stopPropagation()}
-            >
-              {/* Header */}
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setPropertiesFile(null)}>
+            <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} transition={{ type: 'spring', stiffness: 400, damping: 30 }} className="w-[360px] max-h-[80vh] bg-background border border-border/40 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
               <div className="flex items-center gap-3 px-5 py-4 border-b border-border/20 bg-muted/20">
                 {(() => {
                   const Icon = propertiesFile.type === 'directory' ? Folder : getFileIcon(propertiesFile.name);
@@ -1033,137 +630,52 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
                 })()}
                 <div className="min-w-0 flex-1">
                   <h3 className="text-sm font-semibold text-foreground truncate">{propertiesFile.name}</h3>
-                  <p className="text-[10px] text-muted-foreground font-mono truncate">{propertiesFile.path}</p>
+                  <p className="text-[11px] text-muted-foreground font-mono truncate">{propertiesFile.path}</p>
                 </div>
-                <button onClick={() => setPropertiesFile(null)} className="p-1 rounded-lg hover:bg-muted/50 transition-colors">
-                  <XIcon className="w-4 h-4 text-muted-foreground" />
-                </button>
+                <button onClick={() => setPropertiesFile(null)} className="p-1 rounded-lg hover:bg-muted/50 transition-colors"><XIcon className="w-4 h-4 text-muted-foreground" /></button>
               </div>
-
-              {/* Content */}
               <div className="px-5 py-4 space-y-4 overflow-auto max-h-[60vh]">
-                {/* General section */}
                 <div>
-                  <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">General</h4>
+                  <h4 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">General</h4>
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-xs">
-                      <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                      <span className="text-muted-foreground w-20">Name</span>
-                      <span className="text-foreground truncate flex-1">{propertiesFile.name}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs">
-                      <Hash className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                      <span className="text-muted-foreground w-20">Type</span>
-                      <span className="text-foreground">
-                        {propertiesFile.type === 'directory' ? 'Directory' : (propertiesFile.mimeType || propertiesFile.name.split('.').pop()?.toUpperCase() + ' File' || 'File')}
-                      </span>
-                    </div>
+                    <div className="flex items-center gap-2 text-xs"><FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" /><span className="text-muted-foreground w-20">Name</span><span className="text-foreground truncate flex-1">{propertiesFile.name}</span></div>
+                    <div className="flex items-center gap-2 text-xs"><Hash className="w-3.5 h-3.5 text-muted-foreground shrink-0" /><span className="text-muted-foreground w-20">Type</span><span className="text-foreground">{propertiesFile.type === 'directory' ? 'Directory' : (propertiesFile.mimeType || propertiesFile.name.split('.').pop()?.toUpperCase() + ' File' || 'File')}</span></div>
                     {propertiesFile.type === 'file' && (
-                      <div className="flex items-center gap-2 text-xs">
-                        <HardDrive className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                        <span className="text-muted-foreground w-20">Size</span>
-                        <span className="text-foreground">{formatSize(propertiesFile.size)}{propertiesFile.size ? ` (${propertiesFile.size.toLocaleString()} bytes)` : ''}</span>
-                      </div>
+                      <div className="flex items-center gap-2 text-xs"><HardDrive className="w-3.5 h-3.5 text-muted-foreground shrink-0" /><span className="text-muted-foreground w-20">Size</span><span className="text-foreground">{formatSize(propertiesFile.size)}{propertiesFile.size ? ` (${propertiesFile.size.toLocaleString()} bytes)` : ''}</span></div>
                     )}
                   </div>
                 </div>
-
                 <div className="h-px bg-border/20" />
-
-                {/* Dates section */}
                 <div>
-                  <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Dates</h4>
+                  <h4 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Dates</h4>
                   <div className="space-y-2">
-                    {propertiesFile.modifiedAt && (
-                      <div className="flex items-center gap-2 text-xs">
-                        <Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                        <span className="text-muted-foreground w-20">Modified</span>
-                        <span className="text-foreground">{new Date(propertiesFile.modifiedAt).toLocaleString()}</span>
-                      </div>
-                    )}
-                    {propertiesFile.createdAt && (
-                      <div className="flex items-center gap-2 text-xs">
-                        <Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                        <span className="text-muted-foreground w-20">Created</span>
-                        <span className="text-foreground">{new Date(propertiesFile.createdAt).toLocaleString()}</span>
-                      </div>
-                    )}
-                    {!propertiesFile.modifiedAt && !propertiesFile.createdAt && (
-                      <p className="text-[10px] text-muted-foreground/60 italic">No date information available</p>
-                    )}
+                    {propertiesFile.modifiedAt && <div className="flex items-center gap-2 text-xs"><Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0" /><span className="text-muted-foreground w-20">Modified</span><span className="text-foreground">{new Date(propertiesFile.modifiedAt).toLocaleString()}</span></div>}
+                    {propertiesFile.createdAt && <div className="flex items-center gap-2 text-xs"><Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0" /><span className="text-muted-foreground w-20">Created</span><span className="text-foreground">{new Date(propertiesFile.createdAt).toLocaleString()}</span></div>}
+                    {!propertiesFile.modifiedAt && !propertiesFile.createdAt && <p className="text-[11px] text-muted-foreground/60 italic">No date information available</p>}
                   </div>
                 </div>
-
                 <div className="h-px bg-border/20" />
-
-                {/* Storage location */}
                 <div>
-                  <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Storage</h4>
+                  <h4 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Storage</h4>
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-xs">
-                      <storageMeta.icon className={`w-3.5 h-3.5 ${storageMeta.color} shrink-0`} />
-                      <span className="text-muted-foreground w-20">Provider</span>
-                      <span className="text-foreground">{storageMeta.label} Storage</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs">
-                      <MapPin className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                      <span className="text-muted-foreground w-20">Path</span>
-                      <span className="text-foreground font-mono text-[10px] truncate flex-1">{propertiesFile.path}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs">
-                      <Folder className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                      <span className="text-muted-foreground w-20">Workspace</span>
-                      <span className="text-foreground">{workspaceName || workspaceId}</span>
-                    </div>
+                    <div className="flex items-center gap-2 text-xs"><storageMeta.icon className={`w-3.5 h-3.5 ${storageMeta.color} shrink-0`} /><span className="text-muted-foreground w-20">Provider</span><span className="text-foreground">{storageMeta.label} Storage</span></div>
+                    <div className="flex items-center gap-2 text-xs"><MapPin className="w-3.5 h-3.5 text-muted-foreground shrink-0" /><span className="text-muted-foreground w-20">Path</span><span className="text-foreground font-mono text-[11px] truncate flex-1">{propertiesFile.path}</span></div>
+                    <div className="flex items-center gap-2 text-xs"><Folder className="w-3.5 h-3.5 text-muted-foreground shrink-0" /><span className="text-muted-foreground w-20">Workspace</span><span className="text-foreground">{workspaceName || workspaceId}</span></div>
                   </div>
                 </div>
-
                 <div className="h-px bg-border/20" />
-
-                {/* Permissions section */}
                 <div>
-                  <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Permissions</h4>
+                  <h4 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Permissions</h4>
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-xs">
-                      <Shield className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                      <span className="text-muted-foreground w-20">Access</span>
-                      <span className="text-foreground">
-                        {storageType === 'team' ? 'Team (shared)' : storageType === 'local' ? 'Local (private)' : 'Virtual (session)'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs">
-                      {storageType === 'team' ? (
-                        <Unlock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                      ) : (
-                        <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                      )}
-                      <span className="text-muted-foreground w-20">Visibility</span>
-                      <span className="text-foreground">{storageType === 'team' ? 'Shared with team' : 'Only you'}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs">
-                      <Edit className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                      <span className="text-muted-foreground w-20">Writable</span>
-                      <span className="inline-flex items-center gap-1 text-emerald-400 text-[10px]">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Yes
-                      </span>
-                    </div>
+                    <div className="flex items-center gap-2 text-xs"><Shield className="w-3.5 h-3.5 text-muted-foreground shrink-0" /><span className="text-muted-foreground w-20">Access</span><span className="text-foreground">{storageType === 'team' ? 'Team (shared)' : storageType === 'local' ? 'Local (private)' : 'Virtual (session)'}</span></div>
+                    <div className="flex items-center gap-2 text-xs">{storageType === 'team' ? <Unlock className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> : <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />}<span className="text-muted-foreground w-20">Visibility</span><span className="text-foreground">{storageType === 'team' ? 'Shared with team' : 'Only you'}</span></div>
+                    <div className="flex items-center gap-2 text-xs"><Edit className="w-3.5 h-3.5 text-muted-foreground shrink-0" /><span className="text-muted-foreground w-20">Writable</span><span className="inline-flex items-center gap-1 text-emerald-400 text-[11px]"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Yes</span></div>
                   </div>
                 </div>
-
-                {/* Version History (loaded on demand from /api/workspaces/:id/documents) */}
-                {propertiesFile.type === 'file' && (
-                  <VersionHistory workspaceId={workspaceId} fileName={propertiesFile.name} />
-                )}
+                {propertiesFile.type === 'file' && <VersionHistory workspaceId={workspaceId} fileName={propertiesFile.name} />}
               </div>
-
-              {/* Footer */}
               <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border/20 bg-muted/10">
-                <button
-                  onClick={() => setPropertiesFile(null)}
-                  className="text-xs px-4 py-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-                >
-                  Close
-                </button>
+                <button onClick={() => setPropertiesFile(null)} className="text-xs px-4 py-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">Close</button>
               </div>
             </motion.div>
           </motion.div>

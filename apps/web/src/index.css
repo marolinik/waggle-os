@@ -4,52 +4,186 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Import Hive DS theme aliases and utility classes */
+@import "./waggle-theme.css";
+
 @layer base {
   :root {
-    --background: 30 6% 8%;
-    --foreground: 40 20% 92%;
+    /* ── shadcn Core Variables ────────────────────────────────────────── */
+    --background: 222 20% 4%;
+    --foreground: 228 12% 92%;
 
-    --card: 30 8% 12%;
-    --card-foreground: 40 20% 92%;
+    --card: 222 18% 8%;
+    --card-foreground: 228 12% 92%;
 
-    --popover: 30 8% 10%;
-    --popover-foreground: 40 20% 92%;
+    --popover: 222 18% 8%;
+    --popover-foreground: 228 12% 92%;
 
-    --primary: 38 92% 50%;
-    --primary-foreground: 30 6% 8%;
+    --primary: 40 100% 45%;
+    --primary-foreground: 222 20% 4%;
 
-    --secondary: 30 8% 16%;
-    --secondary-foreground: 40 20% 80%;
+    --secondary: 222 16% 10%;
+    --secondary-foreground: 228 12% 92%;
 
-    --muted: 30 6% 18%;
-    --muted-foreground: 30 10% 55%;
+    --muted: 222 16% 10%;
+    --muted-foreground: 225 12% 65%;
 
-    --accent: 38 92% 50%;
-    --accent-foreground: 30 6% 8%;
+    --accent: 270 60% 68%;
+    --accent-foreground: 228 12% 92%;
 
-    --destructive: 0 72% 51%;
+    --destructive: 0 72% 63%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 30 8% 20%;
-    --input: 30 8% 18%;
-    --ring: 38 92% 50%;
+    --border: 222 14% 16%;
+    --input: 222 14% 16%;
+    --ring: 40 100% 45%;
 
     --radius: 0.75rem;
 
-    --glass: 30 8% 14% / 0.7;
-    --glass-border: 38 40% 30% / 0.3;
-    --glow: 38 92% 50%;
+    /* ── Chart colors ─────────────────────────────────────────────────── */
+    --chart-1: 40 100% 45%;
+    --chart-2: 270 60% 68%;
+    --chart-3: 160 51% 49%;
+    --chart-4: 45 93% 56%;
+    --chart-5: 0 72% 63%;
 
-    --sidebar-background: 30 6% 8%;
-    --sidebar-foreground: 40 20% 92%;
-    --sidebar-primary: 38 92% 50%;
-    --sidebar-primary-foreground: 30 6% 8%;
-    --sidebar-accent: 30 8% 16%;
-    --sidebar-accent-foreground: 40 20% 92%;
-    --sidebar-border: 30 8% 20%;
-    --sidebar-ring: 38 92% 50%;
+    /* ── Glass (web-specific) ─────────────────────────────────────────── */
+    --glass: 222 18% 8% / 0.7;
+    --glass-border: 40 40% 30% / 0.3;
+    --glow: 40 100% 45%;
+
+    /* ── Sidebar ──────────────────────────────────────────────────────── */
+    --sidebar-background: 222 20% 4%;
+    --sidebar-foreground: 228 12% 92%;
+    --sidebar-primary: 40 100% 45%;
+    --sidebar-primary-foreground: 222 20% 4%;
+    --sidebar-accent: 222 16% 10%;
+    --sidebar-accent-foreground: 228 12% 92%;
+    --sidebar-border: 222 14% 16%;
+    --sidebar-ring: 40 100% 45%;
+
+    /* ═══════════════════════════════════════════════════════════════════
+     * Hive DS Extended Palette
+     * Ported from app/src/styles/globals.css — canonical Hive Design System
+     * ═══════════════════════════════════════════════════════════════════ */
+
+    /* ── Hive grays (cold undertone scale) ────────────────────────────── */
+    --hive-950: #08090c;
+    --hive-900: #0c0e14;
+    --hive-850: #11141c;
+    --hive-800: #171b26;
+    --hive-700: #1f2433;
+    --hive-600: #2a3044;
+    --hive-500: #3d4560;
+    --hive-400: #5a6380;
+    --hive-300: #7d869e;
+    --hive-200: #b0b7cc;
+    --hive-100: #dce0eb;
+    --hive-50:  #f0f2f7;
+
+    /* ── Honey scale ──────────────────────────────────────────────────── */
+    --honey-600: #b87a00;
+    --honey-500: #e5a000;
+    --honey-400: #f5b731;
+    --honey-300: #fcd34d;
+    --honey-200: #fde68a;
+    --honey-100: #fef3c7;
+    --honey-50:  #fffbeb;
+    --honey-glow: rgba(229, 160, 0, 0.12);
+    --honey-pulse: rgba(229, 160, 0, 0.06);
+
+    /* ── Status colors ────────────────────────────────────────────────── */
+    --status-healthy: #34d399;
+    --status-warning: #fbbf24;
+    --status-error: #f87171;
+    --status-info: #60a5fa;
+    --status-ai: #a78bfa;
+
+    /* ── Semantic surfaces ────────────────────────────────────────────── */
+    --surface-card: var(--hive-850);
+    --surface-panel: var(--hive-800);
+    --surface-overlay: rgba(8, 9, 12, 0.88);
+    --surface-hover: var(--honey-pulse);
+    --surface-selected: var(--honey-glow);
+
+    /* ── Shadows ──────────────────────────────────────────────────────── */
+    --shadow-card: 0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
+    --shadow-elevated: 0 4px 16px rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.3);
+    --shadow-overlay: 0 8px 32px rgba(0,0,0,0.7);
+    --shadow-honey: 0 0 24px rgba(229,160,0,0.12), 0 0 4px rgba(229,160,0,0.08);
+    --shadow-focus: 0 0 0 2px var(--honey-500), 0 0 8px rgba(229,160,0,0.2);
+
+    /* ── Type Scale ───────────────────────────────────────────────────── */
+    --text-micro: 11px;
+    --text-caption: 12px;
+    --text-body-sm: 13px;
+    --text-body: 14px;
+    --text-title: 16px;
+    --text-heading: 20px;
+    --text-display: 24px;
 
     font-family: 'DM Sans', sans-serif;
+  }
+
+  /* ── Light theme ───────────────────────────────────────────────────── */
+  :root[data-theme="light"] {
+    --background: 40 18% 97%;
+    --foreground: 36 12% 10%;
+    --card: 40 12% 93%;
+    --card-foreground: 36 12% 10%;
+    --popover: 40 12% 93%;
+    --popover-foreground: 36 12% 10%;
+
+    --primary: 37 100% 39%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 40 10% 89%;
+    --secondary-foreground: 36 12% 10%;
+    --muted: 40 10% 89%;
+    --muted-foreground: 36 8% 40%;
+
+    --accent: 270 60% 68%;
+    --accent-foreground: 36 12% 10%;
+
+    --destructive: 0 72% 63%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 40 8% 81%;
+    --input: 40 8% 81%;
+    --ring: 37 100% 39%;
+
+    /* Light hive scale */
+    --hive-950: #fdfcf9;
+    --hive-900: #f8f6f0;
+    --hive-850: #f0ede4;
+    --hive-800: #e8e4d9;
+    --hive-700: #d9d4c5;
+    --hive-600: #c4bfae;
+    --hive-500: #9b9585;
+    --hive-400: #736d60;
+    --hive-300: #57524a;
+    --hive-200: #3a3630;
+    --hive-100: #1f1c18;
+    --hive-50:  #0e0d0a;
+
+    /* Honey adjusts for contrast on light bg */
+    --honey-600: #a06800;
+    --honey-500: #c78500;
+    --honey-400: #e5a000;
+    --honey-glow: rgba(199, 133, 0, 0.08);
+    --honey-pulse: rgba(199, 133, 0, 0.04);
+
+    /* Semantic surfaces */
+    --surface-card: var(--hive-850);
+    --surface-panel: var(--hive-800);
+    --surface-overlay: rgba(253, 252, 249, 0.92);
+    --surface-hover: rgba(199, 133, 0, 0.04);
+    --surface-selected: rgba(199, 133, 0, 0.08);
+
+    /* Light shadows */
+    --shadow-card: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-elevated: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
+    --shadow-honey: 0 0 16px rgba(199,133,0,0.08), 0 0 4px rgba(199,133,0,0.04);
   }
 }
 
@@ -76,7 +210,7 @@
   }
 
   .glass-strong {
-    background: hsla(30, 8%, 12%, 0.85);
+    background: hsla(222, 18%, 8%, 0.85);
     backdrop-filter: blur(30px);
     -webkit-backdrop-filter: blur(30px);
     border: 1px solid hsla(var(--glass-border));
@@ -93,4 +227,114 @@
   .font-display {
     font-family: 'Space Grotesk', sans-serif;
   }
+
+  /* ── Honeycomb background pattern (the hex mesh) ────────────────────── */
+  .honeycomb-bg {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9z' fill='%23e5a000' fill-opacity='0.03'/%3E%3C/svg%3E");
+  }
+
+  /* ── Hex avatar clip path ───────────────────────────────────────────── */
+  .hex-avatar {
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  }
+}
+
+/* ── Selection ────────────────────────────────────────────────────────── */
+::selection {
+  background: rgba(229, 160, 0, 0.3);
+  color: hsl(var(--foreground));
+}
+
+/* ── Scrollbar — thin, minimal ────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--hive-600);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--hive-500);
+}
+
+/* ── Hive Animations ──────────────────────────────────────────────────── */
+
+/* Honey pulse — memory save, badge update */
+@keyframes honey-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(229, 160, 0, 0); }
+  50% { box-shadow: 0 0 12px 4px rgba(229, 160, 0, 0.3); }
+}
+.honey-pulse {
+  animation: honey-pulse 0.6s ease-in-out;
+}
+
+/* Health heartbeat — green dot 2s pulse */
+@keyframes heartbeat {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(0.9); }
+}
+.heartbeat {
+  animation: heartbeat 2s ease-in-out infinite;
+}
+
+/* Float — bee mascot gentle hover */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+.float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* Honey streaming cursor */
+@keyframes blink-hex {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.hex-cursor::after {
+  content: '\2B21';
+  color: var(--honey-500);
+  animation: blink-hex 1s step-end infinite;
+  margin-left: 1px;
+}
+
+/* Fade-in for streaming tokens */
+@keyframes token-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.token-stream > * {
+  animation: token-fade 0.04s ease-in forwards;
+}
+
+/* Send satisfaction — input border flash */
+@keyframes send-flash {
+  0% { border-color: var(--honey-500); box-shadow: var(--shadow-honey); }
+  100% { border-color: var(--hive-700); box-shadow: none; }
+}
+.send-flash {
+  animation: send-flash 0.3s ease-out;
+}
+
+/* Spin — loading hex */
+@keyframes hex-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.hex-spin {
+  animation: hex-spin 2s linear infinite;
+}
+
+/* Offline indicator pulse */
+@keyframes waggle-offline-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* Card entrance */
+@keyframes card-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.card-enter {
+  animation: card-enter 0.2s ease-out;
 }

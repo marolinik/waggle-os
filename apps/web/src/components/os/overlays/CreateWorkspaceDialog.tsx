@@ -7,6 +7,7 @@ import {
   ClipboardList, Mail, Plug, Terminal, Pencil, Trash2, Copy, Filter, Search,
 } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { Input } from '@/components/ui/input';
 import { PERSONAS } from '@/lib/personas';
 import { motion, AnimatePresence } from 'framer-motion';
 import { adapter } from '@/lib/adapter';
@@ -107,7 +108,7 @@ function Tooltip({ text, children }: { text: string; children: React.ReactNode }
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 4 }}
-            className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2.5 py-1.5 rounded-lg bg-popover border border-border text-[10px] text-popover-foreground whitespace-nowrap z-50 shadow-lg max-w-[200px] text-center"
+            className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2.5 py-1.5 rounded-lg bg-popover border border-border text-[11px] text-popover-foreground whitespace-nowrap z-50 shadow-lg max-w-[200px] text-center"
             style={{ whiteSpace: 'normal' }}
           >
             {text}
@@ -143,7 +144,7 @@ function ChipPicker({ options, selected, onChange, label }: {
               <button
                 type="button"
                 onClick={() => toggle(opt.id)}
-                className={`px-2.5 py-1 rounded-lg text-[10px] font-medium transition-all border ${
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all border ${
                   isActive
                     ? 'bg-primary/20 border-primary/50 text-foreground'
                     : 'bg-secondary/30 border-transparent text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
@@ -269,7 +270,7 @@ function FolderPickerModal({ open, storageType, currentPath, onSelect, onClose }
             <span key={crumb.path} className="flex items-center gap-0.5 shrink-0">
               {i > 0 && <ChevronRight className="w-3 h-3 text-muted-foreground/50" />}
               <button onClick={() => handleNavigate(crumb.path)}
-                className={`text-[10px] px-1.5 py-0.5 rounded transition-colors ${browsePath === crumb.path ? 'text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'}`}>
+                className={`text-[11px] px-1.5 py-0.5 rounded transition-colors ${browsePath === crumb.path ? 'text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'}`}>
                 {i === 0 ? <Home className="w-3 h-3" /> : crumb.label}
               </button>
             </span>
@@ -295,20 +296,20 @@ function FolderPickerModal({ open, storageType, currentPath, onSelect, onClose }
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
                 className="flex items-center gap-1.5 overflow-hidden">
                 <FolderPlus className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="New folder name…"
-                  className="flex-1 bg-muted/50 border border-border/50 rounded-lg px-2 py-1 text-[11px] text-foreground outline-none focus:border-primary/50" autoFocus
+                <Input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="New folder name…"
+                  className="flex-1 bg-muted/50 text-[11px] h-auto py-1" autoFocus
                   onKeyDown={e => { if (e.key === 'Enter') handleCreateFolder(); if (e.key === 'Escape') { setShowNewFolder(false); setNewFolderName(''); } }} />
                 <button onClick={handleCreateFolder} disabled={!newFolderName.trim() || creatingFolder}
-                  className="px-2 py-1 text-[10px] rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-40 transition-colors">
+                  className="px-2 py-1 text-[11px] rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-40 transition-colors">
                   {creatingFolder ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Create'}
                 </button>
                 <button onClick={() => { setShowNewFolder(false); setNewFolderName(''); }}
-                  className="px-1.5 py-1 text-[10px] rounded-lg text-muted-foreground hover:text-foreground transition-colors"><X className="w-3 h-3" /></button>
+                  className="px-1.5 py-1 text-[11px] rounded-lg text-muted-foreground hover:text-foreground transition-colors"><X className="w-3 h-3" /></button>
               </motion.div>
             )}
           </AnimatePresence>
           <div className="flex items-center gap-2 bg-muted/30 rounded-lg px-3 py-1.5">
-            <span className="text-[9px] text-muted-foreground shrink-0">Path:</span>
+            <span className="text-[11px] text-muted-foreground shrink-0">Path:</span>
             <span className="text-[11px] font-mono text-foreground truncate">{browsePath}</span>
           </div>
           <div className="flex justify-between">
@@ -446,16 +447,16 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
         <div className="mx-5 mt-3 space-y-2">
           <div className="flex items-start gap-2 bg-primary/10 border border-primary/20 rounded-xl px-3 py-2">
             <Sparkles className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
-            <p className="text-[10px] text-muted-foreground leading-relaxed">
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
               Describe your use case and AI will auto-fill all fields, or fill them manually below.
             </p>
           </div>
           <div className="flex gap-2">
-            <input
+            <Input
               value={aiPrompt}
               onChange={e => setAiPrompt(e.target.value)}
               placeholder="e.g. I need a workspace for managing customer support tickets via Slack and email"
-              className="flex-1 bg-muted/50 border border-border/50 rounded-xl px-3 py-2 text-[11px] text-foreground outline-none focus:border-primary/50"
+              className="flex-1 bg-muted/50 rounded-xl text-[11px] h-auto py-2"
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAiGenerate(); } }}
               disabled={generating}
             />
@@ -479,8 +480,8 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
               <label className="text-[11px] text-muted-foreground font-medium">Template Name</label>
               <Tooltip text="A short name for this template (e.g. 'Customer Support', 'Data Pipeline')"><Info className="w-3 h-3 text-primary/60 cursor-help" /></Tooltip>
             </div>
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Customer Support Hub"
-              className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2 text-[11px] text-foreground outline-none focus:border-primary/50" />
+            <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Customer Support Hub"
+              className="w-full bg-muted/50 rounded-xl text-[11px] h-auto py-2" />
           </div>
 
           {/* Description */}
@@ -503,7 +504,7 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
             <div className="flex flex-wrap gap-1.5">
               {TEMPLATE_CATEGORIES.filter(c => c.id !== 'all').map(cat => (
                 <button key={cat.id} onClick={() => setCategory(cat.id as TemplateCategory)}
-                  className={`px-2.5 py-1 rounded-lg text-[10px] font-medium transition-all border ${
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all border ${
                     category === cat.id
                       ? 'bg-primary/20 border-primary/50 text-foreground'
                       : 'bg-secondary/30 border-transparent text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
@@ -529,7 +530,7 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
                       isSelected ? 'bg-primary/20 border border-primary/50' : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
                     }`}>
                     <Icon className={`w-4 h-4 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
-                    <span className="text-[8px] text-muted-foreground text-center leading-tight">{p.name}</span>
+                    <span className="text-[11px] text-muted-foreground text-center leading-tight">{p.name}</span>
                   </button>
                 );
               })}
@@ -568,7 +569,7 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
           </div>
         </div>
 
-        {error && <div className="mx-5 mb-2 text-[10px] text-destructive">{error}</div>}
+        {error && <div className="mx-5 mb-2 text-[11px] text-destructive">{error}</div>}
 
         {/* Footer */}
         <div className="flex justify-end gap-2 px-5 py-3 border-t border-border/30">
@@ -723,7 +724,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                   </Tooltip>
                 </div>
                 <button onClick={() => setShowTemplateCreator(true)}
-                  className="flex items-center gap-1 text-[10px] text-primary hover:text-primary/80 transition-colors">
+                  className="flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 transition-colors">
                   <Plus className="w-3 h-3" /> New Template
                 </button>
               </div>
@@ -732,7 +733,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
               <div className="flex flex-wrap gap-1 mb-1.5">
                 {TEMPLATE_CATEGORIES.map(cat => (
                   <button key={cat.id} onClick={() => setCategoryFilter(cat.id)}
-                    className={`px-2 py-0.5 rounded-lg text-[9px] font-medium transition-all border ${
+                    className={`px-2 py-0.5 rounded-lg text-[11px] font-medium transition-all border ${
                       categoryFilter === cat.id
                         ? 'bg-primary/20 border-primary/50 text-foreground'
                         : 'bg-secondary/30 border-transparent text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
@@ -745,11 +746,11 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
               {/* Search input */}
               <div className="relative mb-1.5">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
-                <input
+                <Input
                   value={templateSearch}
                   onChange={e => setTemplateSearch(e.target.value)}
                   placeholder="Search templates…"
-                  className="w-full bg-muted/50 border border-border/50 rounded-xl pl-7 pr-3 py-1.5 text-[10px] text-foreground outline-none focus:border-primary/50 placeholder:text-muted-foreground"
+                  className="w-full bg-muted/50 rounded-xl pl-7 pr-3 text-[11px] h-auto py-1.5"
                 />
               </div>
 
@@ -769,11 +770,11 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                       selectedTemplate === null ? 'bg-primary/20 border border-primary/50' : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
                     }`}>
                     <FileText className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-[8px] text-muted-foreground text-center leading-tight">Blank</span>
+                    <span className="text-[11px] text-muted-foreground text-center leading-tight">Blank</span>
                   </button>
                   )}
                   {filtered.length === 0 && (
-                    <div className="col-span-4 py-3 text-center text-[10px] text-muted-foreground">No templates in this category</div>
+                    <div className="col-span-4 py-3 text-center text-[11px] text-muted-foreground">No templates in this category</div>
                   )}
                   {filtered.map(tmpl => {
                     const Icon = TEMPLATE_ICONS[tmpl.id] || LayoutTemplate;
@@ -786,10 +787,10 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                               isSelected ? 'bg-primary/20 border border-primary/50' : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
                             }`}>
                             <Icon className={`w-4 h-4 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
-                            <span className="text-[8px] text-muted-foreground text-center leading-tight truncate w-full">
+                            <span className="text-[11px] text-muted-foreground text-center leading-tight truncate w-full">
                               {tmpl.name.length > 12 ? tmpl.name.split(' ')[0] : tmpl.name}
                             </span>
-                            {!tmpl.builtIn && <span className="text-[7px] text-primary/60">custom</span>}
+                            {!tmpl.builtIn && <span className="text-[11px] text-primary/60">custom</span>}
                           </button>
                         </Tooltip>
                         <div className="absolute top-0.5 right-0.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -842,7 +843,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                   <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
                     className="mt-2 p-2.5 bg-primary/5 border border-primary/20 rounded-xl">
                     <div className="flex items-start justify-between mb-1">
-                      <p className="text-[10px] text-foreground font-medium">{tmpl.name}</p>
+                      <p className="text-[11px] text-foreground font-medium">{tmpl.name}</p>
                       <div className="flex gap-1">
                         <button onClick={() => { setDuplicatingTemplate(tmpl); setEditingTemplate(null); setShowTemplateCreator(true); }}
                           className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors" title="Duplicate">
@@ -869,16 +870,16 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                         )}
                       </div>
                     </div>
-                    <p className="text-[9px] text-muted-foreground mb-1.5">{tmpl.description}</p>
+                    <p className="text-[11px] text-muted-foreground mb-1.5">{tmpl.description}</p>
                     <div className="flex flex-wrap gap-1">
                       {tmpl.connectors.map(c => (
-                        <span key={c} className="px-1.5 py-0.5 rounded bg-secondary/50 text-[8px] text-muted-foreground">{c}</span>
+                        <span key={c} className="px-1.5 py-0.5 rounded bg-secondary/50 text-[11px] text-muted-foreground">{c}</span>
                       ))}
                       {tmpl.suggestedCommands.slice(0, 4).map(cmd => (
-                        <span key={cmd} className="px-1.5 py-0.5 rounded bg-primary/10 text-[8px] text-primary font-mono">{cmd}</span>
+                        <span key={cmd} className="px-1.5 py-0.5 rounded bg-primary/10 text-[11px] text-primary font-mono">{cmd}</span>
                       ))}
                     </div>
-                    <p className="text-[8px] text-muted-foreground/60 mt-1">Persona: {tmpl.persona}</p>
+                    <p className="text-[11px] text-muted-foreground/60 mt-1">Persona: {tmpl.persona}</p>
                   </motion.div>
                 );
               })()}
@@ -887,8 +888,8 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
             {/* ── Workspace Name ── */}
             <div>
               <label className="text-xs text-muted-foreground block mb-1.5">Workspace Name</label>
-              <input value={name} onChange={e => setName(e.target.value)} placeholder="My Workspace"
-                className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
+              <Input value={name} onChange={e => setName(e.target.value)} placeholder="My Workspace"
+                className="w-full bg-muted/50 rounded-xl"
                 autoFocus onKeyDown={e => e.key === 'Enter' && handleCreate()} />
             </div>
 
@@ -915,8 +916,8 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                       storageType === opt.type ? 'bg-primary/20 border border-primary/50' : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
                     }`}>
                     <opt.icon className={`w-5 h-5 ${opt.color}`} />
-                    <span className="text-[10px] font-display text-foreground">{opt.label}</span>
-                    <span className="text-[8px] text-muted-foreground">{opt.desc}</span>
+                    <span className="text-[11px] font-display text-foreground">{opt.label}</span>
+                    <span className="text-[11px] text-muted-foreground">{opt.desc}</span>
                   </button>
                 ))}
               </div>
@@ -934,9 +935,9 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                 </div>
               ) : (
                 <div className="flex items-center gap-1.5">
-                  <input value={storagePath} onChange={e => setStoragePath(e.target.value)}
+                  <Input value={storagePath} onChange={e => setStoragePath(e.target.value)}
                     placeholder={storageType === 'local' ? '/home/user/projects/my-workspace' : 'my-bucket/workspace-prefix'}
-                    className="flex-1 bg-muted/50 border border-border/50 rounded-xl px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50 font-mono text-[11px]" />
+                    className="flex-1 bg-muted/50 rounded-xl font-mono text-[11px]" />
                   <button onClick={() => setShowFolderPicker(true)}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-secondary/50 border border-border/40 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/70 transition-colors shrink-0"
                     title={storageType === 'local' ? 'Browse local folders' : 'Browse remote storage'}>
@@ -944,7 +945,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                   </button>
                 </div>
               )}
-              <p className="text-[9px] text-muted-foreground/60 mt-1">
+              <p className="text-[11px] text-muted-foreground/60 mt-1">
                 {storageType === 'virtual' && 'Managed automatically — files stored in server-managed storage.'}
                 {storageType === 'local' && 'Select or type the local directory where workspace files will be stored.'}
                 {storageType === 'team' && 'Browse or type the S3/MinIO bucket and prefix for shared storage.'}
@@ -958,7 +959,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
               <div className="flex gap-1 mb-2 p-0.5 rounded-lg bg-secondary/30">
                 <button
                   onClick={() => { setAgentMode('single'); setSelectedGroupId(undefined); }}
-                  className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-md text-[10px] font-medium transition-colors ${
+                  className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-md text-[11px] font-medium transition-colors ${
                     agentMode === 'single' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
@@ -966,7 +967,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                 </button>
                 <button
                   onClick={() => { setAgentMode('group'); setSelectedPersona(undefined); }}
-                  className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-md text-[10px] font-medium transition-colors ${
+                  className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-md text-[11px] font-medium transition-colors ${
                     agentMode === 'group' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
@@ -983,16 +984,16 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                       }`}>
                       <Avatar className="w-8 h-8">
                         <AvatarImage src={p.avatar} />
-                        <AvatarFallback className="text-[8px] bg-primary/20">{p.name[0]}</AvatarFallback>
+                        <AvatarFallback className="text-[11px] bg-primary/20">{p.name[0]}</AvatarFallback>
                       </Avatar>
-                      <span className="text-[9px] text-muted-foreground truncate w-full text-center">{p.name.split(' ')[0]}</span>
+                      <span className="text-[11px] text-muted-foreground truncate w-full text-center">{p.name.split(' ')[0]}</span>
                     </button>
                   ))}
                 </div>
               ) : (
                 <div className="space-y-1.5">
                   {agentGroups.length === 0 ? (
-                    <p className="text-[10px] text-muted-foreground text-center py-4">No agent groups created yet. Create one in the Agents app.</p>
+                    <p className="text-[11px] text-muted-foreground text-center py-4">No agent groups created yet. Create one in the Agents app.</p>
                   ) : (
                     agentGroups.map(g => (
                       <button
@@ -1009,7 +1010,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-[11px] font-medium text-foreground truncate">{g.name}</p>
-                          <p className="text-[9px] text-muted-foreground">
+                          <p className="text-[11px] text-muted-foreground">
                             {g.strategy} · {g.memberCount} agent{g.memberCount !== 1 ? 's' : ''}
                           </p>
                         </div>
@@ -1028,7 +1029,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
               <Users className="w-4 h-4 text-sky-400" />
               <div>
                 <p className="text-xs font-display text-foreground">Share with team</p>
-                <p className="text-[10px] text-muted-foreground">Make visible to all team members</p>
+                <p className="text-[11px] text-muted-foreground">Make visible to all team members</p>
               </div>
             </div>
             <button onClick={() => setShared(!shared)}

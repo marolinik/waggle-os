@@ -4,6 +4,7 @@ import {
   Upload, Sparkles, CheckCircle2, Globe, Clock, MessageSquare,
   FileText, Presentation, FileSpreadsheet, FileDown,
 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
 
 type ProfileTab = 'identity' | 'style' | 'brand' | 'interests';
@@ -145,9 +146,12 @@ const UserProfileApp = () => {
   return (
     <div className="flex h-full">
       {/* Sidebar */}
-      <div className="w-36 border-r border-border/50 p-2 space-y-0.5 shrink-0">
+      <div className="w-36 border-r border-border/50 p-2 space-y-0.5 shrink-0" role="tablist" aria-label="Profile sections">
         {tabs.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
+            role="tab"
+            aria-selected={tab === t.id}
+            tabIndex={tab === t.id ? 0 : -1}
             className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors ${
               tab === t.id ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
             }`}>
@@ -156,7 +160,7 @@ const UserProfileApp = () => {
         ))}
         {profile?.questionnaireCompleted && (
           <div className="mt-3 pt-3 border-t border-border/30 px-2">
-            <div className="flex items-center gap-1.5 text-[10px] text-emerald-400">
+            <div className="flex items-center gap-1.5 text-[11px] text-emerald-400">
               <CheckCircle2 className="w-3 h-3" /> Profile set up
             </div>
           </div>
@@ -164,34 +168,34 @@ const UserProfileApp = () => {
       </div>
 
       {/* Content */}
-      <div className="flex-1 p-4 overflow-auto">
+      <div className="flex-1 p-4 overflow-auto" role="tabpanel">
 
         {/* ═══ IDENTITY ═══ */}
         {tab === 'identity' && (
           <div className="space-y-4 max-w-lg">
             <h3 className="text-sm font-display font-semibold text-foreground">Who Are You?</h3>
-            <p className="text-[10px] text-muted-foreground">This helps the agent personalize responses and remember you across workspaces.</p>
+            <p className="text-[11px] text-muted-foreground">This helps the agent personalize responses and remember you across workspaces.</p>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">Name</label>
-                <input value={name} onChange={e => setName(e.target.value)} placeholder="Marko Markovic"
-                  className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none focus:border-primary/50" />
+                <Input value={name} onChange={e => setName(e.target.value)} placeholder="Marko Markovic"
+                  className="w-full bg-muted/50 h-auto py-1.5" />
               </div>
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">Role</label>
-                <input value={role} onChange={e => setRole(e.target.value)} placeholder="Partner, Strategy Consultant"
-                  className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none focus:border-primary/50" />
+                <Input value={role} onChange={e => setRole(e.target.value)} placeholder="Partner, Strategy Consultant"
+                  className="w-full bg-muted/50 h-auto py-1.5" />
               </div>
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">Company</label>
-                <input value={company} onChange={e => setCompany(e.target.value)} placeholder="Egzakta Advisory"
-                  className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none focus:border-primary/50" />
+                <Input value={company} onChange={e => setCompany(e.target.value)} placeholder="Egzakta Advisory"
+                  className="w-full bg-muted/50 h-auto py-1.5" />
               </div>
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">Industry</label>
                 <select value={industry} onChange={e => setIndustry(e.target.value)}
-                  className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none">
+                  className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
                   <option value="">Select...</option>
                   {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
                 </select>
@@ -201,7 +205,7 @@ const UserProfileApp = () => {
             <div>
               <label className="text-xs text-muted-foreground block mb-1">Bio</label>
               <textarea value={bio} onChange={e => setBio(e.target.value)} rows={3} placeholder="Brief professional bio..."
-                className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-2 text-sm text-foreground outline-none resize-none focus:border-primary/50" />
+                className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-2 text-sm text-foreground resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background" />
             </div>
 
             <div className="flex gap-2">
@@ -221,11 +225,11 @@ const UserProfileApp = () => {
         {tab === 'style' && (
           <div className="space-y-4 max-w-lg">
             <h3 className="text-sm font-display font-semibold text-foreground">Writing Style</h3>
-            <p className="text-[10px] text-muted-foreground">Paste a sample of your writing (email, report, article) and the AI will analyze your style. This shapes how the agent writes for you.</p>
+            <p className="text-[11px] text-muted-foreground">Paste a sample of your writing (email, report, article) and the AI will analyze your style. This shapes how the agent writes for you.</p>
 
             <textarea value={styleSample} onChange={e => setStyleSample(e.target.value)} rows={6}
               placeholder="Paste at least 50 characters of your writing here... An email, report excerpt, article paragraph, or any text that represents how you naturally write."
-              className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-2 text-sm text-foreground outline-none resize-none focus:border-primary/50" />
+              className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-2 text-sm text-foreground resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background" />
 
             <button onClick={handleAnalyzeStyle} disabled={analyzing || styleSample.length < 50}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-50 transition-colors">
@@ -241,7 +245,7 @@ const UserProfileApp = () => {
                   <div><span className="text-muted-foreground">Vocabulary:</span> <span className="text-foreground capitalize">{ws.vocabulary}</span></div>
                   <div><span className="text-muted-foreground">Structure:</span> <span className="text-foreground capitalize">{ws.structure}</span></div>
                 </div>
-                <p className="text-[10px] text-muted-foreground mt-1">The agent will match this style when drafting content for you.</p>
+                <p className="text-[11px] text-muted-foreground mt-1">The agent will match this style when drafting content for you.</p>
               </div>
             )}
 
@@ -265,7 +269,7 @@ const UserProfileApp = () => {
         {tab === 'brand' && (
           <div className="space-y-4 max-w-lg">
             <h3 className="text-sm font-display font-semibold text-foreground">Brand & Document Templates</h3>
-            <p className="text-[10px] text-muted-foreground">Define your brand colors and fonts. These are applied when the agent generates documents.</p>
+            <p className="text-[11px] text-muted-foreground">Define your brand colors and fonts. These are applied when the agent generates documents.</p>
 
             {/* Color pickers */}
             <div className="grid grid-cols-3 gap-3">
@@ -273,24 +277,24 @@ const UserProfileApp = () => {
                 <label className="text-xs text-muted-foreground block mb-1">Primary</label>
                 <div className="flex gap-2 items-center">
                   <input type="color" value={primaryColor} onChange={e => setPrimaryColor(e.target.value)} className="w-8 h-8 rounded border-0 cursor-pointer" />
-                  <input value={primaryColor} onChange={e => setPrimaryColor(e.target.value)}
-                    className="flex-1 bg-muted/50 border border-border/50 rounded-lg px-2 py-1 text-xs text-foreground outline-none font-mono" />
+                  <Input value={primaryColor} onChange={e => setPrimaryColor(e.target.value)}
+                    className="flex-1 bg-muted/50 text-xs h-auto py-1 font-mono" />
                 </div>
               </div>
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">Secondary</label>
                 <div className="flex gap-2 items-center">
                   <input type="color" value={secondaryColor} onChange={e => setSecondaryColor(e.target.value)} className="w-8 h-8 rounded border-0 cursor-pointer" />
-                  <input value={secondaryColor} onChange={e => setSecondaryColor(e.target.value)}
-                    className="flex-1 bg-muted/50 border border-border/50 rounded-lg px-2 py-1 text-xs text-foreground outline-none font-mono" />
+                  <Input value={secondaryColor} onChange={e => setSecondaryColor(e.target.value)}
+                    className="flex-1 bg-muted/50 text-xs h-auto py-1 font-mono" />
                 </div>
               </div>
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">Accent</label>
                 <div className="flex gap-2 items-center">
                   <input type="color" value={accentColor} onChange={e => setAccentColor(e.target.value)} className="w-8 h-8 rounded border-0 cursor-pointer" />
-                  <input value={accentColor} onChange={e => setAccentColor(e.target.value)}
-                    className="flex-1 bg-muted/50 border border-border/50 rounded-lg px-2 py-1 text-xs text-foreground outline-none font-mono" />
+                  <Input value={accentColor} onChange={e => setAccentColor(e.target.value)}
+                    className="flex-1 bg-muted/50 text-xs h-auto py-1 font-mono" />
                 </div>
               </div>
             </div>
@@ -299,13 +303,13 @@ const UserProfileApp = () => {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">Heading Font</label>
-                <input value={fontHeading} onChange={e => setFontHeading(e.target.value)} placeholder="Inter"
-                  className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none" />
+                <Input value={fontHeading} onChange={e => setFontHeading(e.target.value)} placeholder="Inter"
+                  className="w-full bg-muted/50 h-auto py-1.5" />
               </div>
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">Body Font</label>
-                <input value={fontBody} onChange={e => setFontBody(e.target.value)} placeholder="Inter"
-                  className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none" />
+                <Input value={fontBody} onChange={e => setFontBody(e.target.value)} placeholder="Inter"
+                  className="w-full bg-muted/50 h-auto py-1.5" />
               </div>
             </div>
 
@@ -319,7 +323,7 @@ const UserProfileApp = () => {
               <h4 className="text-xs font-display font-semibold text-foreground mb-2">Auto-Extract from Brand Guide</h4>
               <textarea value={brandDesc} onChange={e => setBrandDesc(e.target.value)} rows={3}
                 placeholder="Paste your brand guidelines text here, or describe your brand (colors, fonts, style)..."
-                className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-2 text-xs text-foreground outline-none resize-none" />
+                className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-2 text-xs text-foreground resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background" />
               <button onClick={handleAnalyzeBrand} disabled={analyzing || !brandDesc}
                 className="mt-2 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-secondary text-foreground hover:bg-secondary/70 disabled:opacity-50 transition-colors">
                 {analyzing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />} Extract Brand
@@ -341,7 +345,7 @@ const UserProfileApp = () => {
                       <d.icon className="w-3 h-3 text-primary" />
                       <span className="text-[11px] font-display font-medium text-foreground">{d.label}</span>
                     </div>
-                    <p className="text-[9px] text-muted-foreground">{d.desc}</p>
+                    <p className="text-[11px] text-muted-foreground">{d.desc}</p>
                     <div className="flex gap-1 mt-1.5">
                       <div className="w-3 h-3 rounded" style={{ backgroundColor: primaryColor }} />
                       <div className="w-3 h-3 rounded" style={{ backgroundColor: secondaryColor }} />
@@ -358,7 +362,7 @@ const UserProfileApp = () => {
         {tab === 'interests' && (
           <div className="space-y-4 max-w-lg">
             <h3 className="text-sm font-display font-semibold text-foreground">Interests & Preferences</h3>
-            <p className="text-[10px] text-muted-foreground">Select topics you work with. The agent uses these to prioritize relevant information.</p>
+            <p className="text-[11px] text-muted-foreground">Select topics you work with. The agent uses these to prioritize relevant information.</p>
 
             <div className="flex flex-wrap gap-2">
               {INTEREST_OPTIONS.map(i => (
@@ -376,7 +380,7 @@ const UserProfileApp = () => {
             <div>
               <label className="text-xs text-muted-foreground block mb-1">Language</label>
               <select value={language} onChange={e => setLanguage(e.target.value)}
-                className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground outline-none">
+                className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
                 <option value="en">English</option>
                 <option value="sr">Serbian</option>
                 <option value="de">German</option>
@@ -395,7 +399,7 @@ const UserProfileApp = () => {
         )}
 
         {saveMsg && (
-          <div className="mt-3 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-400 inline-block">
+          <div className="mt-3 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-400 inline-block">
             {saveMsg}
           </div>
         )}

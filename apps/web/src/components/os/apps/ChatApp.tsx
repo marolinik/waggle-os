@@ -85,7 +85,7 @@ const ToolCard = ({ tool }: { tool: ToolExecution }) => {
         </button>
       </div>
       {tool.output && !showRaw && (
-        <div className="mt-1 text-[10px] text-muted-foreground bg-background/50 rounded p-1.5 overflow-x-auto max-h-24">
+        <div className="mt-1 text-[11px] text-muted-foreground bg-background/50 rounded p-1.5 overflow-x-auto max-h-24">
           {typeof tool.output === 'string' ? tool.output : (
             <div className="space-y-0.5">
               {Object.entries(tool.output as Record<string, unknown>).slice(0, 5).map(([k, v]) => (
@@ -99,7 +99,7 @@ const ToolCard = ({ tool }: { tool: ToolExecution }) => {
         </div>
       )}
       {showRaw && (
-        <pre className="mt-1 text-[10px] text-muted-foreground bg-background/50 rounded p-1.5 overflow-x-auto max-h-32">
+        <pre className="mt-1 text-[11px] text-muted-foreground bg-background/50 rounded p-1.5 overflow-x-auto max-h-32">
           {JSON.stringify({ input: tool.input, output: tool.output }, null, 2)}
         </pre>
       )}
@@ -155,7 +155,7 @@ const FeedbackButtons = ({ messageId, messageIndex, sessionId, feedback }: {
             <button
               key={r.id}
               onClick={() => handleVote('down', r.id)}
-              className="w-full text-left px-3 py-1.5 text-[10px] text-foreground hover:bg-muted/50 transition-colors"
+              className="w-full text-left px-3 py-1.5 text-[11px] text-foreground hover:bg-muted/50 transition-colors"
             >
               {r.label}
             </button>
@@ -177,7 +177,7 @@ const ApprovalGate = ({ request, onRespond }: { request: ApprovalRequest; onResp
       <p className="text-xs text-muted-foreground mb-1">{request.description}</p>
       <p className="text-xs text-muted-foreground mb-2">Tool: <span className="text-foreground">{request.toolName}</span></p>
       {showJson && request.rawJson && (
-        <pre className="text-[10px] text-muted-foreground bg-background/50 rounded p-2 mb-2 overflow-auto max-h-24">{request.rawJson}</pre>
+        <pre className="text-[11px] text-muted-foreground bg-background/50 rounded p-2 mb-2 overflow-auto max-h-24">{request.rawJson}</pre>
       )}
       <div className="flex gap-2">
         <button onClick={() => onRespond(request.requestId, true)} className="px-3 py-1 text-xs rounded-lg bg-emerald-600 text-foreground hover:bg-emerald-500 transition-colors">Approve</button>
@@ -197,7 +197,7 @@ const FileDropZone = ({ onDrop, active }: { onDrop: (files: File[]) => void; act
       <div className="text-center">
         <Upload className="w-8 h-8 text-primary mx-auto mb-2" />
         <p className="text-sm font-display text-primary">Drop files here</p>
-        <p className="text-[10px] text-muted-foreground">PDF, CSV, TXT, images</p>
+        <p className="text-[11px] text-muted-foreground">PDF, CSV, TXT, images</p>
       </div>
     </div>
   );
@@ -403,7 +403,7 @@ const ChatApp = ({
                   {s.title}
                 </span>
                 {(s.messageCount != null || s.lastActive) && (
-                  <span className="text-[9px] text-muted-foreground/60">
+                  <span className="text-[11px] text-muted-foreground/60">
                     {s.messageCount != null && `${s.messageCount} msgs`}
                     {s.messageCount != null && s.lastActive && ' · '}
                     {s.lastActive && new Date(s.lastActive).toLocaleDateString()}
@@ -434,14 +434,14 @@ const ChatApp = ({
                 <>
                   <Avatar className="w-5 h-5">
                     <AvatarImage src={persona.avatar} />
-                    <AvatarFallback className="text-[8px] bg-primary/20">{persona.name[0]}</AvatarFallback>
+                    <AvatarFallback className="text-[11px] bg-primary/20">{persona.name[0]}</AvatarFallback>
                   </Avatar>
-                  <span className="text-[10px] font-display text-muted-foreground">{persona.name}</span>
+                  <span className="text-[11px] font-display text-muted-foreground">{persona.name}</span>
                 </>
               ) : (
                 <>
                   <Bot className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span className="text-[10px] text-muted-foreground">Persona</span>
+                  <span className="text-[11px] text-muted-foreground">Persona</span>
                 </>
               )}
               <ChevronDown className="w-3 h-3 text-muted-foreground" />
@@ -458,11 +458,11 @@ const ChatApp = ({
                   >
                     <Avatar className="w-5 h-5 shrink-0">
                       <AvatarImage src={p.avatar} />
-                      <AvatarFallback className="text-[8px] bg-primary/20">{p.name[0]}</AvatarFallback>
+                      <AvatarFallback className="text-[11px] bg-primary/20">{p.name[0]}</AvatarFallback>
                     </Avatar>
                     <div className="min-w-0">
                       <div className="font-display text-foreground truncate">{p.name}</div>
-                      <div className="text-[10px] text-muted-foreground truncate">{p.description}</div>
+                      <div className="text-[11px] text-muted-foreground truncate">{p.description}</div>
                     </div>
                   </button>
                 ))}
@@ -478,17 +478,17 @@ const ChatApp = ({
                   <div key={m.id} className="relative group">
                     <Avatar className="w-5 h-5 border-2 border-card">
                       {m.avatar ? <AvatarImage src={m.avatar} /> : null}
-                      <AvatarFallback className="text-[7px] bg-sky-500/20 text-sky-400">{m.name[0]}</AvatarFallback>
+                      <AvatarFallback className="text-[11px] bg-sky-500/20 text-sky-400">{m.name[0]}</AvatarFallback>
                     </Avatar>
                     <div className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-card ${m.status === 'online' ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
-                    <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[9px] text-foreground bg-card px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-30 shadow-lg">
+                    <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[11px] text-foreground bg-card px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-30 shadow-lg">
                       {m.name}
                     </span>
                   </div>
                 ))}
               </div>
               {teamPresence.length > 4 && (
-                <span className="text-[9px] text-muted-foreground ml-1">+{teamPresence.length - 4}</span>
+                <span className="text-[11px] text-muted-foreground ml-1">+{teamPresence.length - 4}</span>
               )}
             </div>
           )}
@@ -500,7 +500,7 @@ const ChatApp = ({
               className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-muted/50 transition-colors"
             >
               <Cpu className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="text-[10px] font-display text-muted-foreground truncate max-w-[120px]">
+              <span className="text-[11px] font-display text-muted-foreground truncate max-w-[120px]">
                 {currentModel || 'Model'}
               </span>
               <ChevronDown className="w-3 h-3 text-muted-foreground" />
@@ -531,7 +531,7 @@ const ChatApp = ({
         <div className="shrink-0">
           <button
             onClick={() => setShowAgentProfile(p => !p)}
-            className="w-full flex items-center gap-2 px-3 py-1.5 text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors border-b border-border/20"
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors border-b border-border/20"
           >
             <Layers className="w-3 h-3 text-primary" />
             <span className="font-display font-medium">Agent Profile</span>
@@ -543,36 +543,36 @@ const ChatApp = ({
                 {persona && (
                   <Avatar className="w-9 h-9 shrink-0">
                     <AvatarImage src={persona.avatar} />
-                    <AvatarFallback className="text-[10px] bg-primary/20">{persona.name[0]}</AvatarFallback>
+                    <AvatarFallback className="text-[11px] bg-primary/20">{persona.name[0]}</AvatarFallback>
                   </Avatar>
                 )}
                 <div className="min-w-0">
                   <p className="text-xs font-display font-semibold text-foreground">{persona?.name || 'Default Agent'}</p>
-                  <p className="text-[10px] text-muted-foreground">{persona?.description || 'General-purpose assistant'}</p>
+                  <p className="text-[11px] text-muted-foreground">{persona?.description || 'General-purpose assistant'}</p>
                 </div>
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {templateId && templateId !== 'blank' && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-display">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary text-[11px] font-display">
                     <Sparkles className="w-2.5 h-2.5" />
                     {TEMPLATE_DISPLAY[templateId]?.label || templateId}
                   </span>
                 )}
                 {currentPersona && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-accent/50 text-accent-foreground text-[10px] font-display">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-accent/50 text-accent-foreground text-[11px] font-display">
                     <Bot className="w-2.5 h-2.5" />
                     {persona?.name || currentPersona}
                   </span>
                 )}
                 {currentModel && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-secondary text-secondary-foreground text-[10px] font-display">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-secondary text-secondary-foreground text-[11px] font-display">
                     <Cpu className="w-2.5 h-2.5" />
                     {currentModel.split('/').pop()}
                   </span>
                 )}
               </div>
               {templateId && TEMPLATE_DISPLAY[templateId] && (
-                <p className="text-[10px] text-muted-foreground/70 leading-relaxed">
+                <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
                   <span className="text-muted-foreground font-medium">Domain:</span> {TEMPLATE_DISPLAY[templateId].desc} · 
                   <span className="text-muted-foreground font-medium"> Style:</span> {persona?.description || 'General'}
                 </p>
@@ -585,7 +585,7 @@ const ChatApp = ({
         {/* Pins bar */}
         {pins.length > 0 && (
           <div className="px-3 py-1.5 border-b border-border/30 flex items-center gap-2">
-            <button onClick={() => setShowPins(p => !p)} className="flex items-center gap-1.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
+            <button onClick={() => setShowPins(p => !p)} className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors">
               <Pin className="w-3 h-3" style={{ color: 'var(--honey-500)' }} />
               <span>{pins.length} pinned</span>
               <ChevronDown className={`w-3 h-3 transition-transform ${showPins ? 'rotate-180' : ''}`} />
@@ -625,7 +625,7 @@ const ChatApp = ({
               {msg.role === 'assistant' && persona && (
                 <Avatar className="w-6 h-6 mt-1 shrink-0">
                   <AvatarImage src={persona.avatar} />
-                  <AvatarFallback className="text-[8px] bg-primary/20">{persona.name[0]}</AvatarFallback>
+                  <AvatarFallback className="text-[11px] bg-primary/20">{persona.name[0]}</AvatarFallback>
                 </Avatar>
               )}
               <div className={`max-w-[80%]`}>
@@ -713,7 +713,7 @@ const ChatApp = ({
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
               placeholder="Message Waggle... (/ for commands)"
-              className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none resize-none min-h-[20px] max-h-[120px]"
+              className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground resize-none min-h-[20px] max-h-[120px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               rows={1}
             />
             <button
