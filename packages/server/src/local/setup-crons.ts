@@ -27,4 +27,10 @@ export function seedDefaultCrons(cronStore: CronStore): void {
   ensure('Prompt optimization', '0 2 * * *', 'prompt_optimization', undefined, false);
   ensure('Monthly assessment', '0 6 1 * *', 'monthly_assessment');
   ensure('Index reconciliation', '0 4 * * 0', 'memory_consolidation', { action: 'index_reconcile' });
+
+  // Phase 7: Memory Harvest sync — scan local sources (Claude Code, Cursor) for new data
+  ensure('Harvest sync', '0 5 * * *', 'memory_consolidation', { action: 'harvest_sync' });
+
+  // Phase 9a: Memory compaction — prune temporary/deprecated frames, merge stale P-frames
+  ensure('Memory compaction', '30 3 * * *', 'memory_consolidation', { action: 'memory_compact' });
 }

@@ -36,6 +36,11 @@ export { filterToolsForContext, filterAvailableTools, filterOfflineTools, getOff
 export { needsConfirmation, ConfirmationGate, getApprovalClass, type ConfirmationGateConfig, type ApprovalClass } from './confirmation.js';
 export { createAuditTools } from './audit-tools.js';
 export { createDocumentTools } from './document-tools.js';
+export { createSpreadsheetTools } from './spreadsheet-tools.js';
+export { createPresentationTools } from './presentation-tools.js';
+export { createPdfTools } from './pdf-tools.js';
+export { createInsightsTools, type InsightsDeps } from './insights-tools.js';
+export { extractEntitiesWithLLM, type LLMCallFn as EntityLLMCallFn } from './entity-extractor.js';
 export { createSkillTools, type SkillToolsDeps } from './skill-tools.js';
 export { SkillRecommender, type SkillRecommendation, type SkillRecommenderDeps } from './skill-recommender.js';
 export { createSubAgentTools, ROLE_TOOL_PRESETS, type SubAgentToolsDeps, type SubAgentDef, type SubAgentResult } from './subagent-tools.js';

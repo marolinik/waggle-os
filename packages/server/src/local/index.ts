@@ -15,6 +15,9 @@ import {
   createPlanTools,
   createGitTools,
   createDocumentTools,
+  createSpreadsheetTools,
+  createPresentationTools,
+  createPdfTools,
   createSkillTools,
   createSubAgentTools,
   createWorkflowTools,
@@ -406,7 +409,12 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   const systemTools = createSystemTools(defaultWorkspace);
   const planTools = createPlanTools();
   const gitTools = createGitTools(defaultWorkspace);
-  const documentTools = createDocumentTools(defaultWorkspace);
+  const documentTools = [
+    ...createDocumentTools(defaultWorkspace),
+    ...createSpreadsheetTools(defaultWorkspace),
+    ...createPresentationTools(defaultWorkspace),
+    ...createPdfTools(defaultWorkspace),
+  ];
 
   // Skill management tools — let the agent discover, install, create, and acquire skills
   const starterSkillsDir = getStarterSkillsDir();
@@ -623,6 +631,9 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
       ...createPlanTools(),
       ...createGitTools(wsPath),
       ...createDocumentTools(wsPath),
+      ...createSpreadsheetTools(wsPath),
+      ...createPresentationTools(wsPath),
+      ...createPdfTools(wsPath),
       ...skillTools,
       ...cronTools,
       ...searchTools,

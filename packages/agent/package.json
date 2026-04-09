@@ -14,7 +14,12 @@
   "dependencies": {
     "@waggle/core": "*",
     "docx": "^9.6.1",
-    "glob": "^13.0.6"
+    "glob": "^13.0.6",
+    "pdfmake": "^0.3.7",
+    "pptxgenjs": "^4.0.1"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@types/pdfmake": "^0.3.2"
+  }
 }
