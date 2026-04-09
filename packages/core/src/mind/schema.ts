@@ -146,6 +146,42 @@ CREATE TABLE IF NOT EXISTS procedures (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_procedures_name_model ON procedures (name, model);
+
+-- Layer 7: AI Interactions (EU AI Act Art. 12 — automatic event logging)
+CREATE TABLE IF NOT EXISTS ai_interactions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+  workspace_id TEXT,
+  session_id TEXT,
+  model TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  input_tokens INTEGER NOT NULL DEFAULT 0,
+  output_tokens INTEGER NOT NULL DEFAULT 0,
+  cost_usd REAL NOT NULL DEFAULT 0,
+  tools_called TEXT NOT NULL DEFAULT '[]',
+  human_action TEXT CHECK (human_action IN ('approved', 'denied', 'modified', 'none')),
+  risk_context TEXT,
+  imported_from TEXT,
+  persona TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_interactions_workspace ON ai_interactions (workspace_id, timestamp);
+CREATE INDEX IF NOT EXISTS idx_interactions_timestamp ON ai_interactions (timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_interactions_model ON ai_interactions (model);
+
+-- Layer 8: Harvest Sources (Memory Harvest sync tracking)
+CREATE TABLE IF NOT EXISTS harvest_sources (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source TEXT NOT NULL UNIQUE,
+  display_name TEXT NOT NULL,
+  source_path TEXT,
+  last_synced_at TEXT,
+  items_imported INTEGER NOT NULL DEFAULT 0,
+  frames_created INTEGER NOT NULL DEFAULT 0,
+  auto_sync INTEGER NOT NULL DEFAULT 0,
+  sync_interval_hours INTEGER NOT NULL DEFAULT 24,
+  last_content_hash TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `;
 
 export const VEC_TABLE_SQL = `

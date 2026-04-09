@@ -938,6 +938,49 @@ class LocalAdapter {
     await this.fetch('/api/import/commit', { method: 'POST', body: JSON.stringify({ data, source }) });
   }
 
+  // --- Harvest ---
+  async harvestPreview(data: unknown, source: string): Promise<any> {
+    const res = await this.fetch('/api/harvest/preview', { method: 'POST', body: JSON.stringify({ data, source }) });
+    return res.json();
+  }
+
+  async harvestCommit(data: unknown, source: string): Promise<any> {
+    const res = await this.fetch('/api/harvest/commit', { method: 'POST', body: JSON.stringify({ data, source }) });
+    return res.json();
+  }
+
+  async getHarvestSources(): Promise<{ sources: any[] }> {
+    const res = await this.fetch('/api/harvest/sources');
+    return res.json();
+  }
+
+  async scanClaudeCode(): Promise<any> {
+    const res = await this.fetch('/api/harvest/scan-claude-code', { method: 'POST' });
+    return res.json();
+  }
+
+  // --- Compliance ---
+  async getComplianceStatus(workspaceId?: string): Promise<any> {
+    const url = workspaceId ? `/api/compliance/status?workspaceId=${workspaceId}` : '/api/compliance/status';
+    const res = await this.fetch(url);
+    return res.json();
+  }
+
+  async exportComplianceReport(request: any): Promise<any> {
+    const res = await this.fetch('/api/compliance/export', { method: 'POST', body: JSON.stringify(request) });
+    return res.json();
+  }
+
+  async getComplianceInteractions(limit?: number): Promise<any> {
+    const res = await this.fetch(`/api/compliance/interactions?limit=${limit ?? 20}`);
+    return res.json();
+  }
+
+  async getComplianceModels(): Promise<any> {
+    const res = await this.fetch('/api/compliance/models');
+    return res.json();
+  }
+
   // --- WebSocket ---
   connectWebSocket(onMessage: (data: unknown) => void): () => void {
     const wsUrl = this.baseUrl.replace('http', 'ws') + `/ws?token=${this.authToken}`;

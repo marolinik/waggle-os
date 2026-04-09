@@ -92,6 +92,8 @@ import { profileRoutes } from './routes/profile.js';
 import { telemetryRoutes } from './routes/telemetry.js';
 import { stripeRoutes } from '../stripe/index.js';
 import { agentGroupRoutes } from './routes/agent-groups.js';
+import { harvestRoutes } from './routes/harvest.js';
+import { complianceRoutes } from './routes/compliance.js';
 import { OfflineManager } from './offline-manager.js';
 import { log, createLogger } from './logger.js';
 import { seedDefaultCrons } from './setup-crons.js';
@@ -1354,6 +1356,8 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(telemetryRoutes);
   await server.register(agentGroupRoutes);
   await server.register(stripeRoutes);
+  await server.register(harvestRoutes);
+  await server.register(complianceRoutes);
 
   // ── Static file serving for web mode ──────────────────────────
   // When WAGGLE_FRONTEND_DIR is set (or app/dist exists), serve the React frontend

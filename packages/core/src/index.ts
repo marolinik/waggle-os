@@ -65,3 +65,29 @@ export {
   OptimizationLogStore, OPTIMIZATION_LOG_TABLE_SQL,
   type OptimizationLogEntry, type CreateOptimizationLogInput,
 } from './optimization-log.js';
+
+// ── Harvest (Memory Harvest) ──
+export { HarvestSourceStore } from './harvest/source-store.js';
+export { ChatGPTAdapter } from './harvest/chatgpt-adapter.js';
+export { ClaudeAdapter } from './harvest/claude-adapter.js';
+export { ClaudeCodeAdapter } from './harvest/claude-code-adapter.js';
+export { GeminiAdapter } from './harvest/gemini-adapter.js';
+export { UniversalAdapter } from './harvest/universal-adapter.js';
+export { HarvestPipeline, type LLMCallFn, type PipelineOptions } from './harvest/pipeline.js';
+export { dedup } from './harvest/dedup.js';
+export type {
+  ImportSourceType, ImportItemType, UniversalImportItem, DistilledKnowledge,
+  HarvestPipelineResult, HarvestSource, SourceAdapter, FilesystemAdapter,
+  ClassifiedItem, ExtractedContent, KnowledgeProvenance,
+} from './harvest/types.js';
+
+// ── Compliance (AI Act) ──
+export { InteractionStore } from './compliance/interaction-store.js';
+export { ComplianceStatusChecker } from './compliance/status-checker.js';
+export { ReportGenerator, type ReportGeneratorDeps } from './compliance/report-generator.js';
+export { TEMPLATE_RISK_MAP } from './compliance/types.js';
+export type {
+  AIActRiskLevel, HumanAction, AIInteraction, RecordInteractionInput,
+  ComplianceStatus, ArticleStatus, AuditReport, AuditReportRequest,
+  ModelInventoryEntry, OversightLogEntry, HarvestProvenanceEntry,
+} from './compliance/types.js';

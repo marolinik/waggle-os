@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Brain, Search, Clock, Trash2, Edit3, Filter, Network, ChevronDown, X, Eye, Copy, Loader2 } from 'lucide-react';
+import { Brain, Search, Clock, Trash2, Edit3, Filter, Network, ChevronDown, X, Eye, Copy, Loader2, Download } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { Input } from '@/components/ui/input';
 import type { MemoryFrame, KGNode, KGEdge } from '@/lib/types';
 import { renderSimpleMarkdown } from '@/lib/render-markdown';
 import ContextMenu, { type ContextMenuItem } from '@/components/os/ContextMenu';
 import KnowledgeGraphViewer from './memory/KnowledgeGraphViewer';
+import HarvestTab from './memory/HarvestTab';
 
 const frameTypeIcons: Record<string, string> = {
   fact: '📋', event: '📅', insight: '💡', decision: '⚖️', task: '✅', entity: '🏷️',
@@ -39,7 +40,7 @@ const MemoryApp = ({
   minImportance = 0, onMinImportanceChange,
   knowledgeGraph, onRefreshKG,
 }: MemoryAppProps) => {
-  const [view, setView] = useState<'timeline' | 'graph'>('timeline');
+  const [view, setView] = useState<'timeline' | 'graph' | 'harvest'>('timeline');
   const [showFilters, setShowFilters] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ position: { x: number; y: number }; items: ContextMenuItem[] } | null>(null);
 
@@ -93,10 +94,18 @@ const MemoryApp = ({
                 <Filter className="w-3 h-3" />
               </button>
               <button
-                onClick={() => setView(view === 'timeline' ? 'graph' : 'timeline')}
+                onClick={() => setView(view === 'graph' ? 'timeline' : 'graph')}
                 className={`p-1 rounded transition-colors ${view === 'graph' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                title="Knowledge Graph"
               >
                 <Network className="w-3 h-3" />
+              </button>
+              <button
+                onClick={() => setView(view === 'harvest' ? 'timeline' : 'harvest')}
+                className={`p-1 rounded transition-colors ${view === 'harvest' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                title="Memory Harvest"
+              >
+                <Download className="w-3 h-3" />
               </button>
             </div>
           </div>
@@ -167,7 +176,9 @@ const MemoryApp = ({
 
       {/* Main content area */}
       <div className="flex-1 overflow-auto">
-        {view === 'graph' ? (
+        {view === 'harvest' ? (
+          <HarvestTab />
+        ) : view === 'graph' ? (
           <KnowledgeGraphViewer nodes={knowledgeGraph?.nodes || []} edges={knowledgeGraph?.edges || []} />
         ) : selectedFrame ? (
           <div className="p-4">

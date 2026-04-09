@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Activity, Server, DollarSign, Clock, Plug, RefreshCw, Timer, Brain, Shield, Network, FileText, ChevronDown, AlertTriangle } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import type { CronJob } from '@/lib/types';
+import ComplianceDashboard from './cockpit/ComplianceDashboard';
 
 interface CockpitData {
   health?: { status: string; uptime: number; services: { name: string; status: string }[] };
@@ -301,6 +302,8 @@ const CockpitApp = () => {
           </div>
         </div>
       )}
+      {/* AI Act Compliance */}
+      <ComplianceDashboard />
     </div>
   );
 };
