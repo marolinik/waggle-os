@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import type { MemoryFrame, KGNode, KGEdge } from '@/lib/types';
 import { renderSimpleMarkdown } from '@/lib/render-markdown';
 import ContextMenu, { type ContextMenuItem } from '@/components/os/ContextMenu';
+import KnowledgeGraphViewer from './memory/KnowledgeGraphViewer';
 
 const frameTypeIcons: Record<string, string> = {
   fact: '📋', event: '📅', insight: '💡', decision: '⚖️', task: '✅', entity: '🏷️',
@@ -31,57 +32,6 @@ interface MemoryAppProps {
   onRefreshKG?: () => void;
 }
 
-const KGViewer = ({ nodes, edges }: { nodes: KGNode[]; edges: KGEdge[] }) => {
-  if (nodes.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full text-center p-4">
-        <Network className="w-10 h-10 text-muted-foreground/20 mb-3" />
-        <p className="text-xs text-muted-foreground">No knowledge graph data</p>
-      </div>
-    );
-  }
-
-  // Simple circular layout
-  const cx = 250, cy = 180, radius = 140;
-  return (
-    <div className="h-full w-full overflow-auto p-2">
-      <svg viewBox="0 0 500 360" className="w-full h-full">
-        {edges.map((edge, i) => {
-          const si = nodes.findIndex(n => n.id === edge.source);
-          const ti = nodes.findIndex(n => n.id === edge.target);
-          if (si < 0 || ti < 0) return null;
-          const sa = (2 * Math.PI * si) / nodes.length;
-          const ta = (2 * Math.PI * ti) / nodes.length;
-          return (
-            <line
-              key={i}
-              x1={cx + radius * Math.cos(sa)}
-              y1={cy + radius * Math.sin(sa)}
-              x2={cx + radius * Math.cos(ta)}
-              y2={cy + radius * Math.sin(ta)}
-              stroke="hsl(38, 92%, 50%)"
-              strokeOpacity={0.2}
-              strokeWidth={1}
-            />
-          );
-        })}
-        {nodes.map((node, i) => {
-          const angle = (2 * Math.PI * i) / nodes.length;
-          const x = cx + radius * Math.cos(angle);
-          const y = cy + radius * Math.sin(angle);
-          return (
-            <g key={node.id}>
-              <circle cx={x} cy={y} r={6} fill="hsl(38, 92%, 50%)" fillOpacity={0.6} />
-              <text x={x} y={y + 16} textAnchor="middle" fill="hsl(40, 20%, 92%)" fontSize={10} opacity={0.7}>
-                {node.label.slice(0, 12)}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
-    </div>
-  );
-};
 
 const MemoryApp = ({
   frames, selectedFrame, onSelectFrame, searchQuery, onSearchChange,
@@ -218,7 +168,7 @@ const MemoryApp = ({
       {/* Main content area */}
       <div className="flex-1 overflow-auto">
         {view === 'graph' ? (
-          <KGViewer nodes={knowledgeGraph?.nodes || []} edges={knowledgeGraph?.edges || []} />
+          <KnowledgeGraphViewer nodes={knowledgeGraph?.nodes || []} edges={knowledgeGraph?.edges || []} />
         ) : selectedFrame ? (
           <div className="p-4">
             <div className="flex items-center justify-between mb-3">
