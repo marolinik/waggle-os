@@ -20,32 +20,37 @@ import {
   // Databases
   siPostgresql, siSqlite, siMysql, siMongodb, siRedis, siNeo4j, siSupabase,
   siQdrant, siTurso, siPlanetscale, siClickhouse,
+  siGooglebigquery, siSnowflake, siDuckdb, siCouchbase, siTidb,
   // Files
   siGoogledrive, siBox, siDropbox, siMinio, siGooglecloud,
   // Web
-  siBrave, siPuppeteer, siFirefox,
+  siBrave, siPuppeteer, siFirefox, siPerplexity, siKagi, siSearxng,
   // Code / DevTools
   siGithub, siGitlab, siSentry, siDocker, siKubernetes, siVercel, siNpm,
   siGrafana, siDatadog, siCircleci, siTerraform, siCloudflare,
+  siGit, siPostman, siPulumi, siGitkraken,
   // Communication
-  siDiscord, siGmail, siTelegram, siWhatsapp,
+  siDiscord, siGmail, siTelegram, siWhatsapp, siBluesky,
   // Productivity
   siNotion, siLinear, siJira, siConfluence, siAsana, siTodoist,
   siGooglecalendar, siGoogledocs, siGooglesheets, siObsidian, siClickup,
+  siAtlassian, siMake,
   // Business
   siStripe, siShopify, siAirtable, siIntercom, siZendesk, siHubspot,
+  siGoogleads, siFacebook, siGooglemaps,
   // Cloud
   siFlydotio, siRailway, siRender, siDigitalocean, siHetzner,
   // AI & ML
   siHuggingface, siReplicate, siLangchain, siOllama,
   // Analytics
   siPosthog, siMixpanel, siPlausibleanalytics, siPrometheus, siGoogleanalytics,
+  siVictoriametrics,
   // Security
-  siVault, siSnyk, si1password, siBitwarden,
+  siVault, siSnyk, si1password, siBitwarden, siKeycloak,
   // Media
-  siFigma, siYoutube, siSpotify, siUnsplash,
+  siFigma, siYoutube, siSpotify, siUnsplash, siApacheecharts,
   // Utilities
-  siAnthropic,
+  siAnthropic, siXcode,
 } from 'simple-icons';
 
 export interface BrandIdentity {
@@ -111,6 +116,13 @@ const REGISTRY: Record<string, BrandIdentity> = {
   'turso': si(siTurso, 'TS'),
   'planetscale': si(siPlanetscale, 'PS'),
   'clickhouse': si(siClickhouse, 'CH'),
+  'bigquery': si(siGooglebigquery, 'BQ'),
+  'snowflake': si(siSnowflake, 'SF'),
+  'duckdb': si(siDuckdb, 'DD'),
+  'couchbase': si(siCouchbase, 'CB'),
+  'tidb': si(siTidb, 'TI'),
+  'excel': brand('217346', 'XL'),
+  'nocodb': brand('00B8F4', 'NC'),
 
   // Files & Storage ─────────────────────────────────────────────────────────
   'filesystem': brand('6B7280', 'FS'),
@@ -133,6 +145,10 @@ const REGISTRY: Record<string, BrandIdentity> = {
   'serper': brand('4285F4', 'SR'),
   'browserbase': brand('111827', 'BB'),
   'jina': brand('FBCFE8', 'JI'),
+  'perplexity': si(siPerplexity, 'PX'),
+  'kagi': si(siKagi, 'KG'),
+  'searxng': si(siSearxng, 'SX'),
+  'apify': brand('00B0FF', 'AF'),
 
   // Code & DevTools ─────────────────────────────────────────────────────────
   'github-mcp': si(siGithub, 'GH'),
@@ -147,6 +163,13 @@ const REGISTRY: Record<string, BrandIdentity> = {
   'circleci': si(siCircleci, 'CI'),
   'terraform': si(siTerraform, 'TF'),
   'cloudflare': si(siCloudflare, 'CF'),
+  'git': si(siGit, 'GT'),
+  'postman': si(siPostman, 'PM'),
+  'pulumi': si(siPulumi, 'PU'),
+  'gitkraken': si(siGitkraken, 'GK'),
+  'semgrep': brand('1B1B1B', 'SG'),
+  'e2b': brand('111827', 'E2'),
+  'skyvern': brand('6366F1', 'SK'),
 
   // Communication ───────────────────────────────────────────────────────────
   'slack-mcp': brand('4A154B', 'SL'),
@@ -157,6 +180,7 @@ const REGISTRY: Record<string, BrandIdentity> = {
   'whatsapp': si(siWhatsapp, 'WA'),
   'twilio': brand('F22F46', 'TW'),
   'sendgrid': brand('1A82E2', 'SG'),
+  'bluesky': si(siBluesky, 'BS'),
 
   // Productivity ────────────────────────────────────────────────────────────
   'notion-mcp': si(siNotion, 'NO'),
@@ -171,6 +195,10 @@ const REGISTRY: Record<string, BrandIdentity> = {
   'obsidian-mcp': si(siObsidian, 'OB'),
   'monday-mcp': brand('FF3D57', 'MD'),
   'clickup': si(siClickup, 'CU'),
+  'atlassian': si(siAtlassian, 'AT'),
+  'make': si(siMake, 'MK'),
+  'pipedream': brand('5E37FF', 'PD'),
+  'microsoft-365': brand('D83B01', 'M3'),
 
   // Business & CRM ──────────────────────────────────────────────────────────
   'stripe-mcp': si(siStripe, 'ST'),
@@ -181,6 +209,10 @@ const REGISTRY: Record<string, BrandIdentity> = {
   'intercom': si(siIntercom, 'IC'),
   'zendesk': si(siZendesk, 'ZD'),
   'freshdesk': brand('25C16F', 'FD'),
+  'chargebee': brand('F63D68', 'CB'),
+  'google-ads': si(siGoogleads, 'AD'),
+  'facebook-ads': si(siFacebook, 'FB'),
+  'google-maps': si(siGooglemaps, 'GM'),
 
   // Cloud & Infrastructure ──────────────────────────────────────────────────
   'aws': brand('FF9900', 'AW'),
@@ -191,6 +223,7 @@ const REGISTRY: Record<string, BrandIdentity> = {
   'render': si(siRender, 'RN'),
   'digitalocean': si(siDigitalocean, 'DO'),
   'hetzner': si(siHetzner, 'HZ'),
+  'edgeone': brand('0052D9', 'EO'),
 
   // AI & ML ─────────────────────────────────────────────────────────────────
   'openai-mcp': brand('10A37F', 'AI'),
@@ -201,6 +234,9 @@ const REGISTRY: Record<string, BrandIdentity> = {
   'pinecone': brand('111827', 'PC'),
   'weaviate': brand('00C4B4', 'WV'),
   'elevenlabs-mcp': brand('000000', '11'),
+  'llamacloud': brand('EC4899', 'LC'),
+  'fastmcp': brand('7C3AED', 'FM'),
+  'opik': brand('6B47F2', 'OP'),
 
   // Analytics ───────────────────────────────────────────────────────────────
   'posthog': si(siPosthog, 'PH'),
@@ -209,12 +245,15 @@ const REGISTRY: Record<string, BrandIdentity> = {
   'plausible': si(siPlausibleanalytics, 'PL'),
   'prometheus': si(siPrometheus, 'PM'),
   'google-analytics': si(siGoogleanalytics, 'GA'),
+  'tinybird': brand('F64F64', 'TB'),
+  'victoriametrics': si(siVictoriametrics, 'VM'),
 
   // Security ────────────────────────────────────────────────────────────────
   'vault': si(siVault, 'HV'),
   'snyk': si(siSnyk, 'SN'),
   'onepassword': si(si1password, '1P'),
   'bitwarden': si(siBitwarden, 'BW'),
+  'keycloak': si(siKeycloak, 'KC'),
 
   // Media ───────────────────────────────────────────────────────────────────
   'figma': si(siFigma, 'FG'),
@@ -223,6 +262,8 @@ const REGISTRY: Record<string, BrandIdentity> = {
   'spotify': si(siSpotify, 'SP'),
   'unsplash': si(siUnsplash, 'UN'),
   'dall-e': brand('412991', 'DE'),
+  'videodb': brand('F472B6', 'VD'),
+  'echarts': si(siApacheecharts, 'EC'),
 
   // Utilities ───────────────────────────────────────────────────────────────
   'memory-mcp': brand('E5A000', 'ME'),
@@ -233,6 +274,8 @@ const REGISTRY: Record<string, BrandIdentity> = {
   'mcp-shell': brand('374151', 'SH'),
   'everything': brand('E5A000', 'EV'),
   'calculator': brand('38BDF8', 'CA'),
+  'gitingest': brand('0EA5E9', 'GI'),
+  'xcode': si(siXcode, 'XC'),
 };
 
 // ────────────────────────────────────────────────────────────────────────────

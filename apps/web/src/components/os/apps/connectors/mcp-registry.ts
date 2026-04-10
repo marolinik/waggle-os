@@ -1,10 +1,15 @@
 /**
- * MCP Server Registry — curated catalog of 100+ community MCP servers.
+ * MCP Server Registry — curated catalog of community MCP servers.
  *
- * Sources:
+ * Sources cross-referenced:
  * - modelcontextprotocol/servers (official Anthropic reference)
- * - punkpeye/awesome-mcp-servers (community, 77K stars)
+ * - punkpeye/awesome-mcp-servers (77K stars)
+ * - appcypher/awesome-mcp-servers
  * - tolkonepiu/best-of-mcp-servers (450 ranked, 34 categories)
+ *
+ * Deduplication is enforced at module load time via `assertCatalogUnique`
+ * at the bottom of this file — adding a server with a colliding normalized
+ * id or url will crash the build.
  *
  * Organized by category for the ConnectorsApp MCP tab.
  */
@@ -61,6 +66,13 @@ export const MCP_CATALOG: McpServer[] = [
   { id: 'turso', name: 'Turso', description: 'Edge SQLite database (libSQL)', author: 'Community', category: 'Database', url: 'https://github.com/turso-extended/mcp-server-turso', installCmd: 'npx mcp-server-turso', capabilities: ['query', 'schema'] },
   { id: 'planetscale', name: 'PlanetScale', description: 'MySQL-compatible serverless database', author: 'Community', category: 'Database', url: 'https://github.com/planetscale/mcp-server', installCmd: 'npx @planetscale/mcp-server', capabilities: ['query', 'schema', 'branches'] },
   { id: 'clickhouse', name: 'ClickHouse', description: 'Analytics database — fast SQL queries', author: 'Community', category: 'Database', url: 'https://github.com/ClickHouse/mcp-server', installCmd: 'npx @clickhouse/mcp-server', capabilities: ['query', 'tables', 'analytics'] },
+  { id: 'bigquery', name: 'BigQuery', description: 'Google BigQuery — serverless data warehouse and analytics', author: 'Community', category: 'Database', url: 'https://github.com/LucasHild/mcp-server-bigquery', installCmd: 'npx mcp-server-bigquery', capabilities: ['query', 'schema', 'datasets'] },
+  { id: 'snowflake', name: 'Snowflake', description: 'Cloud data warehouse — read/write with insight tracking', author: 'Community', category: 'Database', url: 'https://github.com/Snowflake-Labs/mcp', installCmd: 'uvx mcp-snowflake', capabilities: ['query', 'schema', 'warehouses'] },
+  { id: 'duckdb', name: 'DuckDB', description: 'In-process analytical SQL database', author: 'Community', category: 'Database', url: 'https://github.com/ktanaka101/mcp-server-duckdb', installCmd: 'uvx mcp-server-duckdb', capabilities: ['query', 'schema', 'analytics'] },
+  { id: 'couchbase', name: 'Couchbase', description: 'Distributed NoSQL — natural language querying', author: 'Community', category: 'Database', url: 'https://github.com/Couchbase-Ecosystem/mcp-server-couchbase', installCmd: 'npx mcp-server-couchbase', capabilities: ['query', 'buckets', 'n1ql'] },
+  { id: 'tidb', name: 'TiDB', description: 'Distributed MySQL-compatible serverless database', author: 'Community', category: 'Database', url: 'https://github.com/pingcap/pytidb', installCmd: 'uvx pytidb-mcp', capabilities: ['query', 'schema', 'vector_search'] },
+  { id: 'excel', name: 'Microsoft Excel', description: 'Read/write Excel workbooks — cells, worksheets, charts', author: 'Community', category: 'Database', url: 'https://github.com/haris-musa/excel-mcp-server', installCmd: 'uvx excel-mcp-server', capabilities: ['read', 'write', 'charts', 'pivot'] },
+  { id: 'nocodb', name: 'NocoDB', description: 'Open-source Airtable alternative — records, tables, views', author: 'Community', category: 'Database', url: 'https://github.com/edwinbernadus/nocodb-mcp-server', installCmd: 'npx nocodb-mcp-server', capabilities: ['read', 'write', 'tables'] },
 
   // ═══════════════════════════════════════════════════════════════════
   // FILES & STORAGE (8)
@@ -87,6 +99,10 @@ export const MCP_CATALOG: McpServer[] = [
   { id: 'serper', name: 'Serper', description: 'Google Search API results', author: 'Community', category: 'Web', url: 'https://github.com/nichochar/mcp-server-serper', installCmd: 'npx mcp-server-serper', capabilities: ['search', 'news', 'images'] },
   { id: 'browserbase', name: 'Browserbase', description: 'Cloud browser automation platform', author: 'Community', category: 'Web', url: 'https://github.com/browserbase/mcp-server', installCmd: 'npx @browserbase/mcp-server', capabilities: ['navigate', 'screenshot', 'session'] },
   { id: 'jina', name: 'Jina Reader', description: 'Extract content from any URL as clean text', author: 'Community', category: 'Web', url: 'https://github.com/jina-ai/mcp-server', installCmd: 'npx mcp-server-jina', capabilities: ['read', 'extract', 'summarize'] },
+  { id: 'perplexity', name: 'Perplexity', description: 'Perplexity AI — real-time web search with citations', author: 'Community', category: 'Web', url: 'https://github.com/ppl-ai/modelcontextprotocol', installCmd: 'npx @perplexity-ai/mcp-server', capabilities: ['search', 'ask', 'citations'] },
+  { id: 'kagi', name: 'Kagi Search', description: 'Privacy-focused premium search engine', author: 'Community', category: 'Web', url: 'https://github.com/kagisearch/kagimcp', installCmd: 'uvx kagimcp', capabilities: ['search', 'summarize', 'universal'] },
+  { id: 'searxng', name: 'SearXNG', description: 'Self-hosted privacy-respecting metasearch engine', author: 'Community', category: 'Web', url: 'https://github.com/ihor-sokoliuk/mcp-searxng', installCmd: 'npx mcp-searxng', capabilities: ['search', 'images', 'news'] },
+  { id: 'apify', name: 'Apify', description: 'Web scraping platform — run 4000+ pre-built actors', author: 'Community', category: 'Web', url: 'https://github.com/apify/actors-mcp-server', installCmd: 'npx @apify/actors-mcp-server', capabilities: ['scrape', 'crawl', 'actors'] },
 
   // ═══════════════════════════════════════════════════════════════════
   // CODE & DEVTOOLS (12)
@@ -103,6 +119,13 @@ export const MCP_CATALOG: McpServer[] = [
   { id: 'circleci', name: 'CircleCI', description: 'Pipelines, jobs, artifacts', author: 'Community', category: 'DevTools', url: 'https://github.com/CircleCI-Public/mcp-server-circleci', installCmd: 'npx mcp-server-circleci', capabilities: ['pipelines', 'jobs', 'artifacts'] },
   { id: 'terraform', name: 'Terraform', description: 'Infrastructure as code — plan, apply, state', author: 'Community', category: 'DevTools', url: 'https://github.com/hashicorp/mcp-server-terraform', installCmd: 'npx mcp-server-terraform', capabilities: ['plan', 'state', 'modules'] },
   { id: 'cloudflare', name: 'Cloudflare', description: 'Workers, DNS, KV, R2, analytics', author: 'Community', category: 'DevTools', url: 'https://github.com/cloudflare/mcp-server-cloudflare', installCmd: 'npx @cloudflare/mcp-server', capabilities: ['workers', 'dns', 'kv', 'r2'] },
+  { id: 'git', name: 'Git', description: 'Read, search, and manipulate local Git repositories', author: 'MCP', category: 'Code', url: 'https://github.com/modelcontextprotocol/servers/tree/main/src/git', installCmd: 'uvx mcp-server-git', capabilities: ['log', 'diff', 'status', 'blame'], official: true },
+  { id: 'postman', name: 'Postman', description: 'API development — collections, requests, environments', author: 'Community', category: 'DevTools', url: 'https://github.com/shannonlal/mcp-postman', installCmd: 'npx mcp-postman', capabilities: ['collections', 'requests', 'environments'] },
+  { id: 'pulumi', name: 'Pulumi', description: 'Infrastructure as code with real languages — preview, up, state', author: 'Community', category: 'DevTools', url: 'https://github.com/pulumi/mcp-server', installCmd: 'npx @pulumi/mcp-server', capabilities: ['preview', 'up', 'state', 'stacks'] },
+  { id: 'gitkraken', name: 'GitKraken', description: 'Git client — workspaces, PRs, issues across platforms', author: 'Community', category: 'DevTools', url: 'https://github.com/gitkraken/gk-cli', installCmd: 'gk mcp', capabilities: ['workspaces', 'prs', 'issues', 'focus'] },
+  { id: 'semgrep', name: 'Semgrep', description: 'Static analysis — security and code quality scans', author: 'Community', category: 'DevTools', url: 'https://github.com/semgrep/mcp', installCmd: 'uvx semgrep-mcp', capabilities: ['scan', 'rules', 'findings'] },
+  { id: 'e2b', name: 'E2B', description: 'Secure cloud sandboxes — run untrusted code in isolated containers', author: 'Community', category: 'DevTools', url: 'https://github.com/e2b-dev/mcp-server', installCmd: 'npx @e2b/mcp-server', capabilities: ['run', 'files', 'sandbox'] },
+  { id: 'skyvern', name: 'Skyvern', description: 'Browser automation powered by LLMs — navigate, fill forms, scrape', author: 'Community', category: 'DevTools', url: 'https://github.com/Skyvern-AI/skyvern/tree/main/integrations/mcp', installCmd: 'uvx skyvern-mcp', capabilities: ['navigate', 'fill', 'scrape', 'vision'] },
 
   // ═══════════════════════════════════════════════════════════════════
   // COMMUNICATION (8)
@@ -115,6 +138,7 @@ export const MCP_CATALOG: McpServer[] = [
   { id: 'whatsapp', name: 'WhatsApp', description: 'Send WhatsApp messages via Business API', author: 'Community', category: 'Communication', url: 'https://github.com/nichochar/mcp-server-whatsapp', installCmd: 'npx mcp-server-whatsapp', capabilities: ['send', 'templates'] },
   { id: 'twilio', name: 'Twilio', description: 'SMS, voice calls, WhatsApp messaging', author: 'Community', category: 'Communication', url: 'https://github.com/twilio/mcp-server', installCmd: 'npx @twilio/mcp-server', capabilities: ['sms', 'voice', 'whatsapp'] },
   { id: 'sendgrid', name: 'SendGrid', description: 'Transactional and marketing email', author: 'Community', category: 'Communication', url: 'https://github.com/sendgrid/mcp-server', installCmd: 'npx mcp-server-sendgrid', capabilities: ['send', 'templates', 'stats'] },
+  { id: 'bluesky', name: 'Bluesky', description: 'Post, read, and search the Bluesky social network (AT Protocol)', author: 'Community', category: 'Communication', url: 'https://github.com/semioz/bluesky-mcp', installCmd: 'npx bluesky-mcp', capabilities: ['post', 'feed', 'search', 'follow'] },
 
   // ═══════════════════════════════════════════════════════════════════
   // PRODUCTIVITY (12)
@@ -131,6 +155,10 @@ export const MCP_CATALOG: McpServer[] = [
   { id: 'obsidian-mcp', name: 'Obsidian', description: 'Read and search Obsidian vaults', author: 'Community', category: 'Productivity', url: 'https://github.com/obsidian-community/mcp-server', installCmd: 'npx mcp-server-obsidian', capabilities: ['read', 'search', 'backlinks'] },
   { id: 'monday-mcp', name: 'monday.com', description: 'Boards, items, updates, automations', author: 'Community', category: 'Productivity', url: 'https://github.com/mondaycom/mcp-server', installCmd: 'npx mcp-server-monday', capabilities: ['boards', 'items', 'updates'] },
   { id: 'clickup', name: 'ClickUp', description: 'Tasks, spaces, lists, docs', author: 'Community', category: 'Productivity', url: 'https://github.com/clickup/mcp-server', installCmd: 'npx mcp-server-clickup', capabilities: ['tasks', 'spaces', 'docs'] },
+  { id: 'atlassian', name: 'Atlassian', description: 'Unified Jira + Confluence access across Cloud and Server', author: 'Community', category: 'Productivity', url: 'https://github.com/sooperset/mcp-atlassian', installCmd: 'uvx mcp-atlassian', capabilities: ['jira', 'confluence', 'search', 'issues'] },
+  { id: 'make', name: 'Make', description: 'Run Make.com (Integromat) scenarios — automation orchestration', author: 'Community', category: 'Productivity', url: 'https://github.com/integromat/make-mcp-server', installCmd: 'npx @make/mcp-server', capabilities: ['scenarios', 'triggers', 'webhooks'] },
+  { id: 'pipedream', name: 'Pipedream', description: 'Workflow automation with 2000+ integrations', author: 'Community', category: 'Productivity', url: 'https://github.com/PipedreamHQ/pipedream/tree/master/modelcontextprotocol', installCmd: 'npx @pipedream/mcp-server', capabilities: ['workflows', 'apps', 'triggers'] },
+  { id: 'microsoft-365', name: 'Microsoft 365', description: 'Full M365 suite via Graph API — mail, files, calendar, Excel', author: 'Community', category: 'Productivity', url: 'https://github.com/softeria/ms-365-mcp-server', installCmd: 'npx ms-365-mcp-server', capabilities: ['mail', 'files', 'calendar', 'excel'] },
 
   // ═══════════════════════════════════════════════════════════════════
   // BUSINESS & CRM (8)
@@ -143,6 +171,10 @@ export const MCP_CATALOG: McpServer[] = [
   { id: 'intercom', name: 'Intercom', description: 'Customer messaging, tickets, articles', author: 'Community', category: 'Business', url: 'https://github.com/intercom/mcp-server', installCmd: 'npx mcp-server-intercom', capabilities: ['conversations', 'contacts', 'articles'] },
   { id: 'zendesk', name: 'Zendesk', description: 'Support tickets, users, organizations', author: 'Community', category: 'Business', url: 'https://github.com/zendesk/mcp-server', installCmd: 'npx mcp-server-zendesk', capabilities: ['tickets', 'users', 'search'] },
   { id: 'freshdesk', name: 'Freshdesk', description: 'Help desk — tickets, contacts, knowledge base', author: 'Community', category: 'Business', url: 'https://github.com/nichochar/mcp-server-freshdesk', installCmd: 'npx mcp-server-freshdesk', capabilities: ['tickets', 'contacts', 'kb'] },
+  { id: 'chargebee', name: 'Chargebee', description: 'Subscription billing — customers, invoices, plans', author: 'Community', category: 'Business', url: 'https://github.com/chargebee/agentkit/tree/main/modelcontextprotocol', installCmd: 'npx @chargebee/mcp-server', capabilities: ['subscriptions', 'invoices', 'customers'] },
+  { id: 'google-ads', name: 'Google Ads', description: 'Campaigns, keywords, performance reports', author: 'Community', category: 'Business', url: 'https://github.com/gomarble-ai/google-ads-mcp-server', installCmd: 'npx google-ads-mcp', capabilities: ['campaigns', 'keywords', 'reports'] },
+  { id: 'facebook-ads', name: 'Facebook Ads', description: 'Meta ad accounts, campaigns, creatives, insights', author: 'Community', category: 'Business', url: 'https://github.com/gomarble-ai/facebook-ads-mcp-server', installCmd: 'npx facebook-ads-mcp', capabilities: ['campaigns', 'creatives', 'insights'] },
+  { id: 'google-maps', name: 'Google Maps', description: 'Geocoding, places, directions, distance matrix', author: 'Community', category: 'Business', url: 'https://github.com/cablate/mcp-google-map', installCmd: 'npx mcp-google-map', capabilities: ['geocode', 'places', 'directions'] },
 
   // ═══════════════════════════════════════════════════════════════════
   // CLOUD & INFRASTRUCTURE (8)
@@ -155,6 +187,7 @@ export const MCP_CATALOG: McpServer[] = [
   { id: 'render', name: 'Render', description: 'Web services, databases, cron jobs', author: 'Community', category: 'Cloud', url: 'https://github.com/render-oss/mcp-server', installCmd: 'npx mcp-server-render', capabilities: ['services', 'databases', 'deploys'] },
   { id: 'digitalocean', name: 'DigitalOcean', description: 'Droplets, databases, Kubernetes', author: 'Community', category: 'Cloud', url: 'https://github.com/digitalocean/mcp-server', installCmd: 'npx mcp-server-digitalocean', capabilities: ['droplets', 'databases', 'k8s'] },
   { id: 'hetzner', name: 'Hetzner', description: 'Servers, networks, firewalls', author: 'Community', category: 'Cloud', url: 'https://github.com/nichochar/mcp-server-hetzner', installCmd: 'npx mcp-server-hetzner', capabilities: ['servers', 'networks', 'firewalls'] },
+  { id: 'edgeone', name: 'EdgeOne Pages', description: 'Tencent EdgeOne — deploy static sites to global edge', author: 'Community', category: 'Cloud', url: 'https://github.com/TencentEdgeOne/edgeone-pages-mcp', installCmd: 'npx edgeone-pages-mcp', capabilities: ['deploy', 'domains', 'edge'] },
 
   // ═══════════════════════════════════════════════════════════════════
   // AI & ML (8)
@@ -167,6 +200,9 @@ export const MCP_CATALOG: McpServer[] = [
   { id: 'pinecone', name: 'Pinecone', description: 'Vector database for embeddings search', author: 'Community', category: 'AI & ML', url: 'https://github.com/pinecone-io/mcp-server', installCmd: 'npx mcp-server-pinecone', capabilities: ['upsert', 'query', 'namespaces'] },
   { id: 'weaviate', name: 'Weaviate', description: 'Vector search engine with ML models', author: 'Community', category: 'AI & ML', url: 'https://github.com/weaviate/mcp-server', installCmd: 'npx mcp-server-weaviate', capabilities: ['search', 'objects', 'schema'] },
   { id: 'elevenlabs-mcp', name: 'ElevenLabs', description: 'Text-to-speech, voice cloning', author: 'Community', category: 'AI & ML', url: 'https://github.com/elevenlabs/mcp-server', installCmd: 'npx mcp-server-elevenlabs', capabilities: ['tts', 'voices', 'clone'] },
+  { id: 'llamacloud', name: 'LlamaCloud', description: 'LlamaIndex managed RAG — parse, index, query documents', author: 'Community', category: 'AI & ML', url: 'https://github.com/run-llama/mcp-server-llamacloud', installCmd: 'npx mcp-server-llamacloud', capabilities: ['parse', 'index', 'query'] },
+  { id: 'fastmcp', name: 'FastMCP', description: 'Framework for building MCP servers in Python — meta server', author: 'Community', category: 'AI & ML', url: 'https://github.com/jlowin/fastmcp', installCmd: 'uvx fastmcp', capabilities: ['framework', 'tools', 'prompts'] },
+  { id: 'opik', name: 'Opik', description: 'Comet ML — LLM observability, traces, evals', author: 'Community', category: 'AI & ML', url: 'https://github.com/comet-ml/opik-mcp', installCmd: 'npx @comet/opik-mcp', capabilities: ['traces', 'evals', 'datasets'] },
 
   // ═══════════════════════════════════════════════════════════════════
   // ANALYTICS (6)
@@ -177,6 +213,8 @@ export const MCP_CATALOG: McpServer[] = [
   { id: 'plausible', name: 'Plausible', description: 'Privacy-focused web analytics', author: 'Community', category: 'Analytics', url: 'https://github.com/plausible/mcp-server', installCmd: 'npx mcp-server-plausible', capabilities: ['stats', 'pages', 'sources'] },
   { id: 'prometheus', name: 'Prometheus', description: 'Metrics, alerts, targets', author: 'Community', category: 'Analytics', url: 'https://github.com/prometheus/mcp-server', installCmd: 'npx mcp-server-prometheus', capabilities: ['query', 'alerts', 'targets'] },
   { id: 'google-analytics', name: 'Google Analytics', description: 'GA4 reports, realtime, audiences', author: 'Community', category: 'Analytics', url: 'https://github.com/nichochar/mcp-server-ga4', installCmd: 'npx mcp-server-ga4', capabilities: ['reports', 'realtime', 'audiences'] },
+  { id: 'tinybird', name: 'Tinybird', description: 'Real-time analytics — ClickHouse-powered data pipelines', author: 'Community', category: 'Analytics', url: 'https://github.com/tinybirdco/mcp-tinybird', installCmd: 'npx @tinybird/mcp-server', capabilities: ['query', 'pipes', 'data_sources'] },
+  { id: 'victoriametrics', name: 'VictoriaMetrics', description: 'High-performance time-series database — queries, alerts', author: 'Community', category: 'Analytics', url: 'https://github.com/VictoriaMetrics-Community/mcp-victoriametrics', installCmd: 'npx mcp-victoriametrics', capabilities: ['query', 'metrics', 'alerts'] },
 
   // ═══════════════════════════════════════════════════════════════════
   // SECURITY (4)
@@ -185,6 +223,7 @@ export const MCP_CATALOG: McpServer[] = [
   { id: 'snyk', name: 'Snyk', description: 'Security scanning — vulnerabilities, licenses', author: 'Community', category: 'Security', url: 'https://github.com/snyk/mcp-server', installCmd: 'npx @snyk/mcp-server', capabilities: ['scan', 'vulnerabilities', 'licenses'] },
   { id: 'onepassword', name: '1Password', description: 'Password and secret management', author: 'Community', category: 'Security', url: 'https://github.com/1Password/mcp-server', installCmd: 'npx mcp-server-1password', capabilities: ['items', 'vaults', 'secrets'] },
   { id: 'bitwarden', name: 'Bitwarden', description: 'Password manager — items, folders, organizations', author: 'Community', category: 'Security', url: 'https://github.com/bitwarden/mcp-server', installCmd: 'npx mcp-server-bitwarden', capabilities: ['items', 'folders', 'generate'] },
+  { id: 'keycloak', name: 'Keycloak', description: 'Identity and access management — users, roles, realms', author: 'Community', category: 'Security', url: 'https://github.com/idoyudha/mcp-keycloak', installCmd: 'npx mcp-keycloak', capabilities: ['users', 'roles', 'realms', 'sso'] },
 
   // ═══════════════════════════════════════════════════════════════════
   // MEDIA (6)
@@ -195,6 +234,8 @@ export const MCP_CATALOG: McpServer[] = [
   { id: 'spotify', name: 'Spotify', description: 'Search tracks, playlists, playback control', author: 'Community', category: 'Media', url: 'https://github.com/nichochar/mcp-server-spotify', installCmd: 'npx mcp-server-spotify', capabilities: ['search', 'playlists', 'playback'] },
   { id: 'unsplash', name: 'Unsplash', description: 'Search and download stock photos', author: 'Community', category: 'Media', url: 'https://github.com/nichochar/mcp-server-unsplash', installCmd: 'npx mcp-server-unsplash', capabilities: ['search', 'download', 'collections'] },
   { id: 'dall-e', name: 'DALL-E', description: 'AI image generation via OpenAI', author: 'Community', category: 'Media', url: 'https://github.com/nichochar/mcp-server-dalle', installCmd: 'npx mcp-server-dalle', capabilities: ['generate', 'edit', 'variations'] },
+  { id: 'videodb', name: 'VideoDB', description: 'Serverless video database — index, search, stream, auto-edit', author: 'Community', category: 'Media', url: 'https://github.com/video-db/agent-toolkit/tree/main/modelcontextprotocol', installCmd: 'npx @videodb/mcp-server', capabilities: ['index', 'search', 'stream', 'edit'] },
+  { id: 'echarts', name: 'Apache ECharts', description: 'Generate charts from data — bar, line, pie, heatmap, radar', author: 'Community', category: 'Media', url: 'https://github.com/hustcc/mcp-echarts', installCmd: 'npx mcp-echarts', capabilities: ['charts', 'visualization', 'export'] },
 
   // ═══════════════════════════════════════════════════════════════════
   // UTILITIES (8)
@@ -207,4 +248,72 @@ export const MCP_CATALOG: McpServer[] = [
   { id: 'mcp-shell', name: 'Shell', description: 'Safe shell command runner with allowlists', author: 'Community', category: 'Utilities', url: 'https://github.com/nichochar/mcp-server-shell', installCmd: 'npx mcp-server-shell', capabilities: ['run', 'scripts'] },
   { id: 'everything', name: 'Everything', description: 'MCP protocol test server — all resource types', author: 'MCP', category: 'Utilities', url: 'https://github.com/modelcontextprotocol/servers/tree/main/src/everything', installCmd: 'npx @modelcontextprotocol/server-everything', capabilities: ['resources', 'tools', 'prompts'], official: true },
   { id: 'calculator', name: 'Calculator', description: 'Math operations, unit conversions', author: 'Community', category: 'Utilities', url: 'https://github.com/nichochar/mcp-server-calculator', installCmd: 'npx mcp-server-calculator', capabilities: ['math', 'convert', 'statistics'] },
+  { id: 'gitingest', name: 'GitIngest', description: 'Turn any Git repo into prompt-friendly context summaries', author: 'Community', category: 'Utilities', url: 'https://github.com/cyclotruc/gitingest', installCmd: 'uvx gitingest-mcp', capabilities: ['summarize', 'ingest', 'context'] },
+  { id: 'xcode', name: 'Xcode', description: 'Drive Xcode builds, simulators, and iOS/macOS projects', author: 'Community', category: 'Utilities', url: 'https://github.com/ShenghaiWang/xcodebuild', installCmd: 'npx xcodebuild-mcp', capabilities: ['build', 'test', 'simulator'] },
 ];
+
+// ═══════════════════════════════════════════════════════════════════════
+// Dedup guard — normalize ids + url check, fires at module load time.
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Normalize an MCP server identifier or name to a canonical dedup key.
+ * Strips common MCP affixes, npm scopes, and punctuation so that
+ * "GitHub" / "github-mcp" / "mcp-server-github" / "@modelcontextprotocol/server-github"
+ * all collapse to the same key ("github").
+ *
+ * Used both by the internal dedup guard and by any caller that needs to
+ * match a server name against an external source (awesome-list, composio, etc).
+ */
+export function normalizeMcpId(raw: string): string {
+  return raw
+    .toLowerCase()
+    .replace(/^@[^/]+\//, '')          // strip npm scope
+    .replace(/[.()[\]/,]/g, ' ')       // punctuation → space
+    .replace(/\s+/g, ' ')
+    .replace(/\bmcp[- ]?server\b/g, '')
+    .replace(/\bserver[- ]?mcp\b/g, '')
+    .replace(/\bmcp\b/g, '')
+    .replace(/^server[- ]/, '')        // leading "server-" (post-scope)
+    .replace(/[- ]server$/, '')        // trailing "-server"
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .trim();
+}
+
+/**
+ * Enforces catalog uniqueness. Throws a descriptive error if two servers
+ * collide on either:
+ *   1. normalized id (catches "github-mcp" + "github" + "mcp-server-github")
+ *   2. repository url (catches accidental copy-paste of an existing entry)
+ *
+ * Runs once at module load so Vite / tsc builds fail fast when a contributor
+ * adds a duplicate. O(n) with early exit.
+ */
+function assertCatalogUnique(catalog: readonly McpServer[]): void {
+  const seenIds = new Map<string, string>();
+  const seenUrls = new Map<string, string>();
+  for (const server of catalog) {
+    const normalizedId = normalizeMcpId(server.id);
+    const existingId = seenIds.get(normalizedId);
+    if (existingId && existingId !== server.id) {
+      throw new Error(
+        `[mcp-registry] duplicate server id: "${server.id}" collides with ` +
+        `"${existingId}" (normalized: "${normalizedId}"). ` +
+        `If these are genuinely different servers, rename one so their ` +
+        `normalized keys don't collide.`
+      );
+    }
+    seenIds.set(normalizedId, server.id);
+    const existingUrl = seenUrls.get(server.url);
+    if (existingUrl && existingUrl !== server.id) {
+      throw new Error(
+        `[mcp-registry] duplicate repository url: ` +
+        `"${server.id}" and "${existingUrl}" both point at ${server.url}`
+      );
+    }
+    seenUrls.set(server.url, server.id);
+  }
+}
+
+assertCatalogUnique(MCP_CATALOG);
