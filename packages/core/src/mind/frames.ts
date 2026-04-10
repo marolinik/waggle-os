@@ -186,15 +186,26 @@ export class FrameStore {
    * L1: Check for duplicate content before inserting.
    * Returns the existing frame if content hash matches, null otherwise.
    * If a duplicate is found, updates its access_count instead of creating a new frame.
+   *
+   * Comparison is trim-stable — we compare the SHA-256 of `content.trim()`
+   * (JS trim, strips all Unicode whitespace) against the SHA-256 of every
+   * stored frame's JS-trimmed content. No SQL `length()` pre-filter is
+   * used because SQLite's built-in `trim()` only strips the ASCII space
+   * character (0x20), which would mis-compare any content with trailing
+   * newlines, tabs, or carriage returns.
+   *
+   * NOTE: Only the last 500 frames are inspected as a cost bound. This is
+   * deliberate — hash-based dedup across an unbounded table would need a
+   * separate content_hash column with its own index. If a duplicate check
+   * matters beyond the recency window, callers should add their own
+   * gop_id-scoped guard.
    */
   findDuplicate(content: string): MemoryFrame | null {
     const hash = createHash('sha256').update(content.trim()).digest('hex');
-    // Check recent frames (last 500) for content hash match
     const existing = this.db.getDatabase().prepare(`
       SELECT * FROM memory_frames
-      WHERE length(content) = length(?)
       ORDER BY id DESC LIMIT 500
-    `).all(content.trim()) as MemoryFrame[];
+    `).all() as MemoryFrame[];
 
     for (const frame of existing) {
       const frameHash = createHash('sha256').update(frame.content.trim()).digest('hex');
