@@ -1,0 +1,94 @@
+{
+  "report": {
+    "version": "1.0",
+    "generatedAt": "2026-04-10T10:05:22.216Z",
+    "period": {
+      "from": "2026-01-01T00:00:00Z",
+      "to": "2026-04-10T10:05:22.215Z"
+    },
+    "generatedBy": "Waggle OS"
+  },
+  "workspace": null,
+  "complianceStatus": {
+    "overall": "warning",
+    "art12Logging": {
+      "status": "warning",
+      "detail": "No interactions logged yet. Logging activates automatically on first AI interaction.",
+      "totalInteractions": 0
+    },
+    "art14Oversight": {
+      "status": "compliant",
+      "detail": "Human oversight capabilities available (approval gates, tool deny lists). No oversight actions recorded yet.",
+      "humanActions": 0,
+      "approvalRate": 0
+    },
+    "art19Retention": {
+      "status": "compliant",
+      "detail": "No logs to retain yet. Retention policy is permanent by default.",
+      "oldestLogDate": null,
+      "retentionDays": 0
+    },
+    "art26Monitoring": {
+      "status": "compliant",
+      "detail": "4 active monitors: cost, tools, model ID, persona.",
+      "activeMonitors": [
+        "cost_tracking",
+        "tool_logging",
+        "model_identification",
+        "persona_tracking"
+      ]
+    },
+    "art50Transparency": {
+      "status": "compliant",
+      "detail": "Model identification active. Models will be disclosed on first interaction.",
+      "modelsDisclosed": false
+    }
+  },
+  "modelInventory": [],
+  "humanOversightLog": [],
+  "harvestProvenance": [
+    {
+      "source": "Claude Code (~/.claude)",
+      "importedAt": "2026-04-10 09:24:54",
+      "itemsImported": 468,
+      "framesCreated": 468
+    }
+  ],
+  "interactionCount": 0,
+  "harvestAudit": {
+    "scan": {
+      "totalHarvestFrames": 156,
+      "framesContainingPii": 7,
+      "piiFindings": {
+        "email": 5,
+        "phone": 8,
+        "creditCard": 0,
+        "ssn": 0,
+        "apiKeyLike": 0,
+        "jwt": 0,
+        "url": 47
+      },
+      "piiSamples": {
+        "email": [
+          "alice@ex...",
+          "marolini..."
+        ],
+        "apiKeyLike": [],
+        "jwt": []
+      }
+    },
+    "dataMinimization": {
+      "truncationCapChars": 4000,
+      "framesAtCap": 28,
+      "minFrameSize": 268,
+      "maxFrameSize": 4078
+    },
+    "sourceAuditability": {
+      "allHavePath": true,
+      "allHaveSync": true
+    },
+    "retention": {
+      "normal": 156
+    }
+  }
+}
