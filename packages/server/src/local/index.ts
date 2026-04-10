@@ -6,7 +6,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
-import { MindDB, MultiMind, WorkspaceManager, WaggleConfig, createEmbeddingProvider, type EmbeddingProviderConfig, type EmbeddingProviderInstance, FrameStore, SessionStore, InstallAuditStore, CronStore, AwarenessLayer, VaultStore, SkillHashStore, OptimizationLogStore, reconcileIndexes, TeamSync, TelemetryStore, TELEMETRY_EVENTS } from '@waggle/core';
+import { MindDB, MultiMind, WorkspaceManager, WaggleConfig, createEmbeddingProvider, type EmbeddingProviderConfig, type EmbeddingProviderInstance, FrameStore, SessionStore, InstallAuditStore, CronStore, AwarenessLayer, VaultStore, SkillHashStore, OptimizationLogStore, ImprovementSignalStore, HarvestSourceStore, ClaudeCodeAdapter, reconcileIndexes, TeamSync, TelemetryStore, TELEMETRY_EVENTS } from '@waggle/core';
 import { ALLOWED_ORIGINS } from './cors-config.js';
 import { MemoryWeaver } from '@waggle/weaver';
 import {
@@ -36,6 +36,7 @@ import {
   createBrowserTools,
   createLspTools,
   createCliTools,
+  createInsightsTools,
   McpRuntime,
   isWithinBudget,
   getRecentLogs,
@@ -478,8 +479,81 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   // Dynamic connector tools (initial — regenerated per workspace in buildToolsForWorkspace)
   const defaultConnectorTools = connectorRegistry.generateTools();
 
+  // Insights tools — self-analytics so the agent can reflect on its own performance.
+  // Aggregates optimization logs + improvement signals across the personal mind and
+  // every workspace so the agent sees a complete picture regardless of where it runs.
+  const insightsTools = createInsightsTools({
+    getOptimizationLogs: (limit: number) => {
+      const rows: Array<{
+        tools_used: string;
+        was_correction: number;
+        input_tokens: number;
+        output_tokens: number;
+        timestamp: string;
+      }> = [];
+      try {
+        rows.push(...new OptimizationLogStore(multiMind.personal).getRecent(limit));
+      } catch { /* personal store unavailable — keep going */ }
+      for (const ws of wsManager.list()) {
+        const wsDb = getWorkspaceMindDb(ws.id);
+        if (!wsDb) continue;
+        try {
+          rows.push(...new OptimizationLogStore(wsDb).getRecent(limit));
+        } catch { /* workspace store unavailable — skip */ }
+      }
+      rows.sort((a, b) => (b.timestamp ?? '').localeCompare(a.timestamp ?? ''));
+      return rows.slice(0, limit).map(row => {
+        let toolNames = '';
+        try {
+          const parsed = JSON.parse(row.tools_used ?? '[]');
+          if (Array.isArray(parsed)) toolNames = parsed.join(',');
+        } catch { /* malformed — leave empty */ }
+        return {
+          model: undefined,
+          tool_names: toolNames,
+          total_tokens: (row.input_tokens ?? 0) + (row.output_tokens ?? 0),
+          estimated_cost: 0,
+          was_correction: row.was_correction,
+          created_at: row.timestamp,
+        };
+      });
+    },
+    getImprovementSignals: () => {
+      const collectFrom = (db: MindDB) => {
+        const store = new ImprovementSignalStore(db);
+        return [
+          ...store.getByCategory('capability_gap'),
+          ...store.getByCategory('correction'),
+          ...store.getByCategory('workflow_pattern'),
+        ];
+      };
+      const all: Array<{
+        category: string;
+        pattern_key: string;
+        detail: string;
+        count: number;
+        first_seen: string;
+        last_seen: string;
+      }> = [];
+      try { all.push(...collectFrom(multiMind.personal)); } catch { /* skip */ }
+      for (const ws of wsManager.list()) {
+        const wsDb = getWorkspaceMindDb(ws.id);
+        if (!wsDb) continue;
+        try { all.push(...collectFrom(wsDb)); } catch { /* skip */ }
+      }
+      return all.map(s => ({
+        category: s.category,
+        pattern_key: s.pattern_key,
+        detail: s.detail,
+        count: s.count,
+        first_seen: s.first_seen,
+        last_seen: s.last_seen,
+      }));
+    },
+  });
+
   // Collect all non-subagent tools first (sub-agent tools need the full list)
-  const baseTools = [...mindTools, ...systemTools, ...planTools, ...gitTools, ...documentTools, ...skillTools, ...cronTools, ...searchTools, ...browserTools, ...lspTools, ...cliTools, ...defaultConnectorTools];
+  const baseTools = [...mindTools, ...systemTools, ...planTools, ...gitTools, ...documentTools, ...skillTools, ...cronTools, ...searchTools, ...browserTools, ...lspTools, ...cliTools, ...insightsTools, ...defaultConnectorTools];
 
   // Sub-agent tools — let the main agent spawn specialist sub-agents
   const subAgentTools = createSubAgentTools({
@@ -935,6 +1009,75 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
             log.info(`[cron] Marketplace sync: ${totalAdded} added across ${results.length} sources`);
           } catch (err) {
             log.warn(`[cron] Marketplace sync failed: ${(err as Error).message}`);
+          }
+        } else if (mcJobConfig.action === 'harvest_sync') {
+          // Phase 7: Memory Harvest — scan registered filesystem sources for new data.
+          // Only filesystem-based sources (currently claude-code) can auto-sync; API-based
+          // sources like chatgpt/gemini require user-uploaded exports.
+          try {
+            const harvestStore = new HarvestSourceStore(multiMind.personal);
+            const personalFrames = new FrameStore(multiMind.personal);
+            const stale = harvestStore.getStale();
+            let totalItems = 0;
+            let totalFrames = 0;
+            let sourcesScanned = 0;
+            for (const src of stale) {
+              if (src.source !== 'claude-code' || !src.sourcePath) continue;
+              try {
+                const adapter = new ClaudeCodeAdapter();
+                const items = adapter.scan(src.sourcePath);
+                let saved = 0;
+                for (const item of items) {
+                  const label = `[Harvest:${item.source}] ${item.title}`;
+                  const content = item.content.slice(0, 4000);
+                  personalFrames.createIFrame('harvest', `${label}\n\n${content}`, 'normal', 'import');
+                  saved++;
+                }
+                harvestStore.recordSync(src.source, items.length, saved);
+                totalItems += items.length;
+                totalFrames += saved;
+                sourcesScanned++;
+              } catch (innerErr) {
+                log.warn(`[cron] Harvest sync: source "${src.source}" failed: ${(innerErr as Error).message}`);
+              }
+            }
+            if (sourcesScanned > 0) {
+              log.info(`[cron] Harvest sync: ${totalFrames} frames from ${totalItems} items across ${sourcesScanned} source(s)`);
+            }
+          } catch (err) {
+            log.warn(`[cron] Harvest sync failed: ${(err as Error).message}`);
+          }
+        } else if (mcJobConfig.action === 'memory_compact') {
+          // Phase 9a: Memory compaction — prune temporary/deprecated frames, merge stale P-frames.
+          // Runs across personal mind and every workspace mind.
+          try {
+            const personalResult = new FrameStore(multiMind.personal).compact();
+            let wsTempPruned = 0;
+            let wsDepPruned = 0;
+            let wsMerged = 0;
+            for (const ws of wsManager.list()) {
+              const wsDb = getWorkspaceMindDb(ws.id);
+              if (!wsDb) continue;
+              try {
+                const r = new FrameStore(wsDb).compact();
+                wsTempPruned += r.temporaryPruned;
+                wsDepPruned += r.deprecatedPruned;
+                wsMerged += r.pframesMerged;
+              } catch (innerErr) {
+                log.warn(`[cron] Memory compaction: workspace "${ws.name}" failed: ${(innerErr as Error).message}`);
+              }
+            }
+            const total =
+              personalResult.temporaryPruned + personalResult.deprecatedPruned + personalResult.pframesMerged +
+              wsTempPruned + wsDepPruned + wsMerged;
+            if (total > 0) {
+              log.info(
+                `[cron] Memory compaction: personal(temp=${personalResult.temporaryPruned}, dep=${personalResult.deprecatedPruned}, merged=${personalResult.pframesMerged}) ` +
+                `workspaces(temp=${wsTempPruned}, dep=${wsDepPruned}, merged=${wsMerged})`
+              );
+            }
+          } catch (err) {
+            log.warn(`[cron] Memory compaction failed: ${(err as Error).message}`);
           }
         } else {
           // Normal memory consolidation
