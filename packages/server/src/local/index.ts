@@ -37,6 +37,7 @@ import {
   createLspTools,
   createCliTools,
   createInsightsTools,
+  createConnectorSearchTools,
   McpRuntime,
   isWithinBudget,
   getRecentLogs,
@@ -552,8 +553,13 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     },
   });
 
+  // Connector search tools — give the agent natural-language discovery over
+  // the 148-entry MCP catalog (find_connector, list_connector_categories).
+  // Static data, zero I/O, no deps — cheap to always-include.
+  const connectorSearchTools = createConnectorSearchTools();
+
   // Collect all non-subagent tools first (sub-agent tools need the full list)
-  const baseTools = [...mindTools, ...systemTools, ...planTools, ...gitTools, ...documentTools, ...skillTools, ...cronTools, ...searchTools, ...browserTools, ...lspTools, ...cliTools, ...insightsTools, ...defaultConnectorTools];
+  const baseTools = [...mindTools, ...systemTools, ...planTools, ...gitTools, ...documentTools, ...skillTools, ...cronTools, ...searchTools, ...browserTools, ...lspTools, ...cliTools, ...insightsTools, ...connectorSearchTools, ...defaultConnectorTools];
 
   // Sub-agent tools — let the main agent spawn specialist sub-agents
   const subAgentTools = createSubAgentTools({
