@@ -1,18 +1,20 @@
 /**
  * ConnectorsApp — Dedicated dock app for managing service connections.
- * Shows all 29 connectors with status, setup guides, available actions.
- * Also manages MCP servers.
+ * Shows every native connector with status, setup guides, and available
+ * actions. Also hosts the MCP Servers catalog tab.
  */
 
 import { useState, useEffect } from 'react';
 import {
-  Plug, ChevronDown, ChevronRight, CheckCircle2, XCircle, Clock,
-  Loader2, ExternalLink, Trash2, RefreshCw, Server, Plus, Zap,
+  Plug, ChevronDown, ChevronRight, CheckCircle2,
+  Loader2, ExternalLink, Trash2, RefreshCw, Server, Zap,
   AlertTriangle,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
 import McpCatalog from './connectors/McpCatalog';
+import BrandTile from './connectors/BrandTile';
+import { getBrandIdentity } from './connectors/brand-identity';
 
 type ConnTab = 'services' | 'mcp';
 
@@ -213,21 +215,29 @@ const ConnectorsApp = () => {
                     const isConnected = conn.status === 'connected';
                     const hint = SETUP_HINTS[conn.id];
                     const needsEmail = conn.id === 'jira';
+                    const identity = getBrandIdentity(conn.id, conn.name, group.category);
 
                     return (
-                      <div key={conn.id} className="rounded-xl border border-border/30 overflow-hidden">
+                      <div key={conn.id} className="group rounded-xl border border-border/30 overflow-hidden transition-all hover:border-primary/30 hover:bg-secondary/10">
                         <button onClick={() => setExpanded(isExpanded ? null : conn.id)}
-                          className="w-full flex items-center justify-between p-2.5 hover:bg-secondary/20 transition-colors">
-                          <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full shrink-0 ${isConnected ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
-                            <div className="text-left">
-                              <span className="text-xs font-display font-medium text-foreground">{conn.name}</span>
-                              {conn.description && <p className="text-[11px] text-muted-foreground line-clamp-1">{conn.description}</p>}
+                          className="w-full flex items-center justify-between gap-3 p-2.5 transition-colors">
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            <BrandTile identity={identity} size={36} connected={isConnected} />
+                            <div className="text-left min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-display font-semibold text-foreground truncate">{conn.name}</span>
+                                {isConnected && (
+                                  <span className="shrink-0 rounded-full bg-emerald-500/15 px-1.5 py-[1px] text-[9px] font-semibold uppercase tracking-wide text-emerald-400">
+                                    Connected
+                                  </span>
+                                )}
+                              </div>
+                              {conn.description && <p className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5">{conn.description}</p>}
                             </div>
                           </div>
-                          <div className="flex items-center gap-1.5">
-                            {isConnected && <CheckCircle2 className="w-3 h-3 text-emerald-400" />}
-                            {isExpanded ? <ChevronDown className="w-3 h-3 text-muted-foreground" /> : <ChevronRight className="w-3 h-3 text-muted-foreground" />}
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {isConnected && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
+                            {isExpanded ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />}
                           </div>
                         </button>
 

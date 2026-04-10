@@ -17,10 +17,27 @@ interface BrandTileProps {
   size?: number;
   /** Whether the tile is for an official MCP server — adds an honey ring. */
   official?: boolean;
+  /** Whether the corresponding service is actively connected — adds an emerald ring. */
+  connected?: boolean;
   className?: string;
 }
 
-const BrandTile = ({ identity, size = 48, official = false, className = '' }: BrandTileProps) => {
+/** Compose the box-shadow for a tile given its status flags. */
+function buildShadow(color: string, official: boolean, connected: boolean): string {
+  const dropShadow = `0 8px 24px -12px #${color}66`;
+  // Connected takes precedence over official because it's a stronger signal.
+  if (connected) return `${dropShadow}, 0 0 0 2px rgba(16, 185, 129, 0.55)`;
+  if (official) return `${dropShadow}, 0 0 0 2px rgba(229, 160, 0, 0.35)`;
+  return dropShadow;
+}
+
+const BrandTile = ({
+  identity,
+  size = 48,
+  official = false,
+  connected = false,
+  className = '',
+}: BrandTileProps) => {
   const { color, fg, svgPath, monogram } = identity;
 
   // The inner SVG mark sits in a 24x24 viewBox (simple-icons convention) —
@@ -35,9 +52,7 @@ const BrandTile = ({ identity, size = 48, official = false, className = '' }: Br
         width: size,
         height: size,
         backgroundColor: `#${color}`,
-        boxShadow: official
-          ? `0 8px 24px -10px #${color}66, 0 0 0 2px rgba(229, 160, 0, 0.35)`
-          : `0 8px 24px -12px #${color}66`,
+        boxShadow: buildShadow(color, official, connected),
       }}
       aria-hidden="true"
     >
@@ -91,6 +106,21 @@ const BrandTile = ({ identity, size = 48, official = false, className = '' }: Br
             'radial-gradient(120% 80% at 50% 0%, rgba(229, 160, 0, 0.18) 0%, transparent 60%)',
         }}
       />
+
+      {/* Connected indicator — tiny emerald dot in the bottom-right corner,
+          sized proportionally to the tile so it works at 28, 32, 48, 64px. */}
+      {connected && (
+        <div
+          className="pointer-events-none absolute rounded-full bg-emerald-400 ring-2 ring-background"
+          style={{
+            width: Math.max(6, Math.round(size * 0.18)),
+            height: Math.max(6, Math.round(size * 0.18)),
+            right: Math.max(2, Math.round(size * 0.06)),
+            bottom: Math.max(2, Math.round(size * 0.06)),
+            boxShadow: '0 0 8px rgba(16, 185, 129, 0.6)',
+          }}
+        />
+      )}
     </div>
   );
 };

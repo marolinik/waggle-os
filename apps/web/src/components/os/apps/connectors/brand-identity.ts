@@ -28,7 +28,9 @@ import {
   // Code / DevTools
   siGithub, siGitlab, siSentry, siDocker, siKubernetes, siVercel, siNpm,
   siGrafana, siDatadog, siCircleci, siTerraform, siCloudflare,
-  siGit, siPostman, siPulumi, siGitkraken,
+  siGit, siPostman, siPulumi, siGitkraken, siBitbucket,
+  // Native-only (Services tab)
+  siTrello,
   // Communication
   siDiscord, siGmail, siTelegram, siWhatsapp, siBluesky,
   // Productivity
@@ -276,6 +278,51 @@ const REGISTRY: Record<string, BrandIdentity> = {
   'calculator': brand('38BDF8', 'CA'),
   'gitingest': brand('0EA5E9', 'GI'),
   'xcode': si(siXcode, 'XC'),
+
+  // Native-only Services (not in MCP catalog) ──────────────────────────────
+  'bitbucket': si(siBitbucket, 'BB'),
+  'trello': si(siTrello, 'TR'),
+  'pipedrive': brand('17334E', 'PD'),
+  'outlook': brand('0078D4', 'OL'),
+  'email': brand('6B7280', '@'),
+  'composio': brand('8B5CF6', 'CM'),
+};
+
+// ────────────────────────────────────────────────────────────────────────────
+// ID aliases — lets native connector ids (github, slack, jira) resolve to
+// the same brand identity as their MCP-catalog equivalents (github-mcp,
+// slack-mcp, jira-mcp). Keeps the REGISTRY single-source-of-truth without
+// duplicating every brand twice.
+// ────────────────────────────────────────────────────────────────────────────
+
+const ID_ALIASES: Record<string, string> = {
+  // Code
+  'github': 'github-mcp',
+  'gitlab': 'gitlab-mcp',
+  // Communication
+  'slack': 'slack-mcp',
+  'discord': 'discord-mcp',
+  'ms-teams': 'teams-mcp',
+  'gmail': 'gmail-mcp',
+  // Productivity
+  'notion': 'notion-mcp',
+  'jira': 'jira-mcp',
+  'linear': 'linear-mcp',
+  'asana': 'asana-mcp',
+  'monday': 'monday-mcp',
+  'confluence': 'confluence-mcp',
+  'obsidian': 'obsidian-mcp',
+  'gcal': 'google-calendar',
+  'gdocs': 'google-docs',
+  'gsheets': 'google-sheets',
+  'gdrive': 'gdrive-mcp',
+  // Business
+  'salesforce': 'salesforce-mcp',
+  'hubspot': 'hubspot-mcp',
+  'airtable': 'airtable-mcp',
+  // Files
+  'dropbox': 'dropbox-mcp',
+  'onedrive': 'onedrive-mcp',
 };
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -302,18 +349,36 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 /**
- * Resolve a brand identity for an MCP server.
- * Always returns a valid identity — falls back to category color + monogram.
+ * Resolve a brand identity for any connector or MCP server.
+ *
+ * Lookup order:
+ *   1. Direct REGISTRY hit
+ *   2. ID_ALIASES mapping (native `github` → `github-mcp`)
+ *   3. With/without `-mcp` suffix variants
+ *   4. Category-hashed fallback with auto-monogram
+ *
+ * Always returns a valid identity — there is no null case.
  */
 export function getBrandIdentity(
   serverId: string,
   name: string,
   category: string,
 ): BrandIdentity {
-  const hit = REGISTRY[serverId];
-  if (hit) return hit;
+  // 1. Direct hit
+  const direct = REGISTRY[serverId];
+  if (direct) return direct;
 
-  // Fallback — category-derived color with first 2 letters of the brand name.
+  // 2. Explicit alias (native connector id → mcp catalog entry)
+  const aliased = ID_ALIASES[serverId];
+  if (aliased && REGISTRY[aliased]) return REGISTRY[aliased];
+
+  // 3. Try common suffix variants without duplicating REGISTRY entries
+  const withMcp = REGISTRY[`${serverId}-mcp`];
+  if (withMcp) return withMcp;
+  const stripped = REGISTRY[serverId.replace(/-mcp$/, '')];
+  if (stripped) return stripped;
+
+  // 4. Category-hashed fallback — first 1–2 letters of the brand name.
   const color = CATEGORY_COLORS[category] ?? 'E5A000';
   const monogram = name
     .replace(/[^a-zA-Z0-9]/g, '')
@@ -326,7 +391,19 @@ export function getBrandIdentity(
   };
 }
 
-/** Number of MCP servers that have a real brand SVG from simple-icons. */
+/**
+ * Number of catalog entries that resolve to a real brand SVG — counts both
+ * direct REGISTRY hits and alias hits so it stays accurate across both tabs.
+ */
 export function countWithRealLogos(ids: readonly string[]): number {
-  return ids.filter(id => REGISTRY[id]?.svgPath != null).length;
+  return ids.filter((id) => {
+    if (REGISTRY[id]?.svgPath != null) return true;
+    const aliased = ID_ALIASES[id];
+    if (aliased && REGISTRY[aliased]?.svgPath != null) return true;
+    const withMcp = REGISTRY[`${id}-mcp`];
+    if (withMcp?.svgPath != null) return true;
+    const stripped = REGISTRY[id.replace(/-mcp$/, '')];
+    if (stripped?.svgPath != null) return true;
+    return false;
+  }).length;
 }
