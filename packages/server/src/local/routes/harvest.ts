@@ -65,7 +65,13 @@ export async function harvestRoutes(fastify: FastifyInstance) {
       return reply.code(503).send({ error: 'Personal mind not available' });
     }
 
-    const { FrameStore } = await import('@waggle/core');
+    // Frames have a FK to sessions(gop_id) — ensure the stable `harvest`
+    // session row exists before creating any frames, otherwise the insert
+    // hits SQLITE_CONSTRAINT_FOREIGNKEY and nothing persists.
+    const { FrameStore, SessionStore } = await import('@waggle/core');
+    const sessionStore = new SessionStore(personalDb);
+    sessionStore.ensure('harvest', 'harvest', 'Imported memory from external sources');
+
     const frameStore = new FrameStore(personalDb);
     let saved = 0;
 

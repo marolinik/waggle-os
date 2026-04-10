@@ -1021,6 +1021,9 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
           // Only filesystem-based sources (currently claude-code) can auto-sync; API-based
           // sources like chatgpt/gemini require user-uploaded exports.
           try {
+            // Frames have a FK to sessions(gop_id) — ensure the stable
+            // `harvest` session row exists before creating any frames.
+            new SessionStore(multiMind.personal).ensure('harvest', 'harvest', 'Imported memory from external sources');
             const harvestStore = new HarvestSourceStore(multiMind.personal);
             const personalFrames = new FrameStore(multiMind.personal);
             const stale = harvestStore.getStale();

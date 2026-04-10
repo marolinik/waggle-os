@@ -59,4 +59,24 @@ export class SessionStore {
       'SELECT * FROM sessions WHERE gop_id = ?'
     ).get(gopId) as Session | undefined;
   }
+
+  /**
+   * Ensure a session with the given stable gop_id exists, creating it on
+   * first use. Used for long-lived logical sessions like `harvest` that
+   * group imported memory frames under a single parent across many runs.
+   *
+   * Unlike `create()`, which generates a timestamped id per call, this
+   * method is idempotent — calling it repeatedly with the same gop_id
+   * returns the same session.
+   */
+  ensure(gopId: string, projectId?: string, summary?: string): Session {
+    const existing = this.getByGopId(gopId);
+    if (existing) return existing;
+    const raw = this.db.getDatabase();
+    raw.prepare(`
+      INSERT INTO sessions (gop_id, project_id, status, summary, started_at)
+      VALUES (?, ?, 'active', ?, datetime('now'))
+    `).run(gopId, projectId ?? null, summary ?? null);
+    return this.getByGopId(gopId)!;
+  }
 }
