@@ -1,171 +1,252 @@
 /**
- * McpCatalog — searchable catalog of 100+ community MCP servers.
+ * McpCatalog — Zapier-style visual grid of every MCP server in the registry.
  *
- * Shows MCP servers organized by 14 categories with search,
- * install commands, and links to source repos.
+ * Every card shows a real brand logo (via simple-icons) on the authentic
+ * brand color, with search, category filtering, and a live distribution bar
+ * so users can see at a glance what the catalog actually contains.
+ *
+ * All counts rendered here are derived dynamically from MCP_CATALOG — there
+ * are no hardcoded totals.
  */
 
-import { useState } from 'react';
-import {
-  Server, Search, ExternalLink, Database,
-  FileText, Globe, Code, MessageSquare, BarChart3, Lock,
-  Briefcase, Image, Terminal, Wrench, Cloud, Cpu,
-} from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Search, Server, Sparkles, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { MCP_CATALOG, CATEGORY_EMOJI, type McpServer } from './mcp-registry';
+import { MCP_CATALOG } from './mcp-registry';
+import McpServerCard from './McpServerCard';
+import { countWithRealLogos } from './brand-identity';
 
-const CATEGORY_ICONS: Record<string, React.ElementType> = {
-  'Database': Database,
-  'Files': FileText,
-  'Web': Globe,
-  'Code': Code,
-  'Communication': MessageSquare,
-  'Productivity': Briefcase,
-  'Analytics': BarChart3,
-  'Cloud': Cloud,
-  'DevTools': Terminal,
-  'Business': Briefcase,
-  'AI & ML': Cpu,
-  'Security': Lock,
-  'Media': Image,
-  'Utilities': Wrench,
-};
+// Approximate count of third-party integrations reachable through Composio's
+// MCP gateway. Kept as a "+" approximation — update when Composio publishes
+// a new number.
+const COMPOSIO_GATEWAY_COUNT = 250;
 
 const McpCatalog = () => {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
-  const filtered = MCP_CATALOG.filter(s => {
-    const matchesSearch = !search || s.name.toLowerCase().includes(search.toLowerCase())
-      || s.description.toLowerCase().includes(search.toLowerCase())
-      || s.capabilities.some(c => c.toLowerCase().includes(search.toLowerCase()));
-    const matchesCat = !selectedCategory || s.category === selectedCategory;
-    return matchesSearch && matchesCat;
-  });
+  // All counts are derived from the registry at render time.
+  const stats = useMemo(() => {
+    const categories = Array.from(new Set(MCP_CATALOG.map((s) => s.category)));
+    const categoryCounts = categories
+      .map((cat) => ({
+        name: cat,
+        count: MCP_CATALOG.filter((s) => s.category === cat).length,
+      }))
+      .sort((a, b) => b.count - a.count);
+    return {
+      total: MCP_CATALOG.length,
+      officialCount: MCP_CATALOG.filter((s) => s.official).length,
+      categories,
+      categoryCounts,
+      realLogoCount: countWithRealLogos(MCP_CATALOG.map((s) => s.id)),
+    };
+  }, []);
 
-  const categories = Array.from(new Set(MCP_CATALOG.map(s => s.category)));
-  const officialCount = MCP_CATALOG.filter(s => s.official).length;
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return MCP_CATALOG.filter((s) => {
+      if (selectedCategory && s.category !== selectedCategory) return false;
+      if (!q) return true;
+      return (
+        s.name.toLowerCase().includes(q) ||
+        s.description.toLowerCase().includes(q) ||
+        s.author.toLowerCase().includes(q) ||
+        s.capabilities.some((c) => c.toLowerCase().includes(q))
+      );
+    });
+  }, [search, selectedCategory]);
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-display font-semibold text-foreground">MCP Server Catalog</h3>
-          <p className="text-[11px] text-muted-foreground">
-            {MCP_CATALOG.length} servers across {categories.length} categories ({officialCount} official)
-            {' '}+ 250+ via Composio gateway
-          </p>
+      {/* ── Hero header ──────────────────────────────────────────────── */}
+      <div className="space-y-2.5 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/[0.06] via-primary/[0.02] to-transparent p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <Sparkles className="h-3.5 w-3.5 text-primary" />
+              <h3 className="font-display text-sm font-semibold text-foreground">
+                MCP Connector Catalog
+              </h3>
+            </div>
+            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+              <span className="font-semibold text-foreground">{stats.total}</span> curated servers
+              across <span className="font-semibold text-foreground">{stats.categories.length}</span>{' '}
+              categories — <span className="text-primary">{stats.officialCount} official</span>,{' '}
+              <span className="text-foreground/80">{stats.realLogoCount} with brand logos</span> ·
+              +{COMPOSIO_GATEWAY_COUNT}+ more via the Composio gateway.
+            </p>
+          </div>
+        </div>
+
+        {/* Category distribution bar — a visual summary of the catalog shape. */}
+        <div
+          className="flex h-1.5 w-full overflow-hidden rounded-full bg-background/40 ring-1 ring-border/30"
+          role="img"
+          aria-label="Category distribution"
+        >
+          {stats.categoryCounts.map((cat, idx) => {
+            const pct = (cat.count / stats.total) * 100;
+            // Alternating honey intensities give the bar visual rhythm while
+            // staying inside Hive DS tokens.
+            const bg =
+              idx % 3 === 0
+                ? 'bg-primary'
+                : idx % 3 === 1
+                  ? 'bg-primary/70'
+                  : 'bg-primary/40';
+            return (
+              <button
+                key={cat.name}
+                onClick={() =>
+                  setSelectedCategory(selectedCategory === cat.name ? null : cat.name)
+                }
+                className={`${bg} relative h-full transition-all hover:brightness-125`}
+                style={{ width: `${pct}%` }}
+                title={`${cat.name} — ${cat.count} (${pct.toFixed(0)}%)`}
+                aria-label={`${cat.name}: ${cat.count} servers`}
+              />
+            );
+          })}
         </div>
       </div>
 
-      {/* Search */}
-      <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg px-2 py-1">
-        <Search className="w-3 h-3 text-muted-foreground" />
+      {/* ── Search ───────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-2 rounded-xl border border-border/40 bg-muted/30 px-3 py-1.5 transition-colors focus-within:border-primary/40">
+        <Search className="h-3.5 w-3.5 text-muted-foreground" />
         <Input
           value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search servers... (e.g. postgres, slack, stripe)"
-          className="flex-1 bg-transparent text-xs h-auto border-0 p-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder={`Search ${stats.total} connectors… (postgres, slack, stripe, anything)`}
+          className="h-auto flex-1 border-0 bg-transparent p-0 text-xs focus-visible:ring-0 focus-visible:ring-offset-0"
         />
         {search && (
-          <span className="text-[11px] text-muted-foreground">{filtered.length} results</span>
+          <button
+            onClick={() => setSearch('')}
+            className="rounded-md p-0.5 text-muted-foreground transition-colors hover:bg-background/50 hover:text-foreground"
+            aria-label="Clear search"
+          >
+            <X className="h-3 w-3" />
+          </button>
         )}
       </div>
 
-      {/* Category chips */}
+      {/* ── Category chips ───────────────────────────────────────────── */}
       <div className="flex flex-wrap gap-1.5">
         <button
           onClick={() => setSelectedCategory(null)}
-          className={`px-2 py-0.5 rounded-lg text-[11px] transition-colors ${
-            !selectedCategory ? 'bg-primary/20 text-primary' : 'bg-secondary/30 text-muted-foreground hover:text-foreground'
+          className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-all ${
+            !selectedCategory
+              ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/30'
+              : 'bg-secondary/40 text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
           }`}
         >
-          All ({MCP_CATALOG.length})
+          All · {stats.total}
         </button>
-        {categories.map(cat => {
-          const count = MCP_CATALOG.filter(s => s.category === cat).length;
-          const emoji = CATEGORY_EMOJI[cat] ?? '';
-          return (
-            <button
-              key={cat}
-              onClick={() => setSelectedCategory(selectedCategory === cat ? null : cat)}
-              className={`px-2 py-0.5 rounded-lg text-[11px] transition-colors flex items-center gap-1 ${
-                selectedCategory === cat ? 'bg-primary/20 text-primary' : 'bg-secondary/30 text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {emoji} {cat} ({count})
-            </button>
-          );
-        })}
+        {stats.categoryCounts.map((cat) => (
+          <button
+            key={cat.name}
+            onClick={() =>
+              setSelectedCategory(selectedCategory === cat.name ? null : cat.name)
+            }
+            className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-all ${
+              selectedCategory === cat.name
+                ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/30'
+                : 'bg-secondary/40 text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
+            }`}
+          >
+            {cat.name} · {cat.count}
+          </button>
+        ))}
       </div>
 
-      {/* Server list */}
-      <div className="space-y-1.5 max-h-[60vh] overflow-auto">
-        {filtered.map(server => {
-          const CatIcon = CATEGORY_ICONS[server.category] || Server;
-          return (
-            <div key={server.id} className="p-2.5 rounded-xl bg-secondary/30 border border-border/30 hover:border-primary/20 transition-colors">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-start gap-2 min-w-0">
-                  <CatIcon className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      {server.logo && (
-                        <span className="text-[9px] font-bold bg-primary/20 text-primary rounded px-1">{server.logo}</span>
-                      )}
-                      <span className="text-xs font-display font-semibold text-foreground">{server.name}</span>
-                      {server.official && (
-                        <span className="px-1 py-0 rounded text-[9px] bg-emerald-500/20 text-emerald-400 font-display">Official</span>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">{server.description}</p>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {server.capabilities.slice(0, 5).map(cap => (
-                        <span key={cap} className="px-1 py-0 rounded text-[11px] bg-muted/50 text-muted-foreground">{cap}</span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <a
-                  href={server.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="p-1 rounded text-muted-foreground hover:text-primary transition-colors shrink-0"
-                  title="View source"
-                >
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-              </div>
-              {/* Install command */}
-              <div className="mt-1.5 flex items-center gap-2 bg-background/50 rounded-lg px-2 py-1">
-                <Terminal className="w-2.5 h-2.5 text-muted-foreground shrink-0" />
-                <code className="text-[11px] text-foreground font-mono flex-1 truncate">{server.installCmd}</code>
-                <button
-                  onClick={() => navigator.clipboard.writeText(server.installCmd)}
-                  className="text-[11px] text-primary hover:text-primary/80 shrink-0"
-                >
-                  Copy
-                </button>
-              </div>
-            </div>
-          );
-        })}
+      {/* ── Result counter (only when filtering) ─────────────────────── */}
+      {(search || selectedCategory) && (
+        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+          <span>
+            Showing <span className="font-semibold text-foreground">{filtered.length}</span> of{' '}
+            {stats.total}
+            {selectedCategory && (
+              <>
+                {' '}
+                in <span className="font-semibold text-primary">{selectedCategory}</span>
+              </>
+            )}
+            {search && (
+              <>
+                {' '}
+                matching <span className="font-semibold text-foreground">“{search}”</span>
+              </>
+            )}
+          </span>
+          {(search || selectedCategory) && (
+            <button
+              onClick={() => {
+                setSearch('');
+                setSelectedCategory(null);
+              }}
+              className="text-primary transition-colors hover:text-primary/80"
+            >
+              Reset
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ── Grid ─────────────────────────────────────────────────────── */}
+      <div className="grid max-h-[58vh] grid-cols-1 gap-2 overflow-auto pr-1 md:grid-cols-2">
+        {filtered.map((server) => (
+          <McpServerCard key={server.id} server={server} />
+        ))}
 
         {filtered.length === 0 && (
-          <div className="text-center py-8">
-            <Server className="w-8 h-8 text-muted-foreground/20 mx-auto mb-2" />
-            <p className="text-xs text-muted-foreground">No servers match your search</p>
+          <div className="col-span-full flex flex-col items-center justify-center py-10 text-center">
+            <Server className="mb-2 h-8 w-8 text-muted-foreground/20" />
+            <p className="text-xs text-muted-foreground">No connectors match your search</p>
+            <button
+              onClick={() => {
+                setSearch('');
+                setSelectedCategory(null);
+              }}
+              className="mt-2 text-[11px] text-primary hover:text-primary/80"
+            >
+              Clear filters
+            </button>
           </div>
         )}
       </div>
 
-      {/* Footer links */}
-      <div className="flex items-center justify-between p-3 rounded-xl bg-primary/5 border border-primary/20">
-        <p className="text-[11px] text-muted-foreground">
-          Discover thousands more at{' '}
-          <a href="https://github.com/punkpeye/awesome-mcp-servers" target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80 underline">awesome-mcp-servers</a>
-          {' '}and{' '}
-          <a href="https://github.com/modelcontextprotocol/servers" target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80 underline">official MCP servers</a>
+      {/* ── Footer — discover more ───────────────────────────────────── */}
+      <div className="rounded-xl border border-border/30 bg-gradient-to-br from-primary/[0.04] to-transparent p-3">
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          Thousands more servers available — discover them at{' '}
+          <a
+            href="https://github.com/punkpeye/awesome-mcp-servers"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary"
+          >
+            awesome-mcp-servers
+          </a>
+          ,{' '}
+          <a
+            href="https://github.com/modelcontextprotocol/servers"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary"
+          >
+            official reference
+          </a>
+          , or stream live integrations from{' '}
+          <a
+            href="https://mcp.composio.dev"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary"
+          >
+            Composio
+          </a>
+          .
         </p>
       </div>
     </div>
