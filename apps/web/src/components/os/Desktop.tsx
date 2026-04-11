@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   MessageSquare, LayoutDashboard, Settings, Brain,
@@ -95,6 +95,11 @@ const Desktop = () => {
   // Window management (extracted hook)
   const wm = useWindowManager(workspaces);
 
+  // Phase B.1: the Files app has its own "active" workspace separate from
+  // the global activeWorkspace, so browsing another workspace's files
+  // doesn't disrupt the active chat. Null falls back to activeWorkspaceId.
+  const [filesViewWorkspaceId, setFilesViewWorkspaceId] = useState<string | null>(null);
+
   // Overlay state (extracted hook)
   const ov = useOverlayState();
 
@@ -174,9 +179,19 @@ const Desktop = () => {
       case 'waggle-dance': return <WaggleDanceApp />;
       case 'agents': return <AgentsApp />;
       case 'files': {
-        const wsId = activeWorkspaceId || 'local-default';
+        // Phase B.1: prefer the files-view's locally-chosen workspace,
+        // falling back to the global active one on first open.
+        const wsId = filesViewWorkspaceId ?? activeWorkspaceId ?? 'local-default';
         const ws = workspaces.find(w => w.id === wsId);
-        return <FilesApp workspaceId={wsId} workspaceName={ws?.name} storageType={ws?.storageType} />;
+        return (
+          <FilesApp
+            workspaceId={wsId}
+            workspaceName={ws?.name}
+            storageType={ws?.storageType}
+            workspaces={workspaces}
+            onSelectWorkspace={setFilesViewWorkspaceId}
+          />
+        );
       }
       case 'scheduled-jobs': return <ScheduledJobsApp />;
       case 'marketplace': return <MarketplaceApp />;

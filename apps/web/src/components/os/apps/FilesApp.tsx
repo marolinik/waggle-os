@@ -11,7 +11,7 @@ import {
   Info, Shield, MapPin, Clock, Hash, Lock, Unlock, FileText, HardDrive,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import type { FileEntry, StorageType } from '@/lib/types';
+import type { FileEntry, StorageType, Workspace } from '@/lib/types';
 import { adapter } from '@/lib/adapter';
 import { getFileIcon, formatSize, STORAGE_LABELS, MOCK_FILES } from './files/file-utils';
 import { useToast } from '@/hooks/use-toast';
@@ -20,6 +20,7 @@ import FileTree from './files/FileTree';
 import FilePreview from './files/FilePreview';
 import FileActions from './files/FileActions';
 import FileUploadZone from './files/FileUploadZone';
+import WorkspaceRail from './files/WorkspaceRail';
 
 /* ── Inline version history panel ── */
 const VersionHistory = ({ workspaceId, fileName }: { workspaceId: string; fileName: string }) => {
@@ -70,9 +71,22 @@ interface FilesAppProps {
   workspaceId: string;
   workspaceName?: string;
   storageType?: StorageType;
+  /**
+   * Phase B.1: when provided, renders a workspace rail on the left and
+   * lets the user switch which workspace's files are shown without
+   * leaving the Files app. Omit to keep single-workspace mode.
+   */
+  workspaces?: Workspace[];
+  onSelectWorkspace?: (workspaceId: string) => void;
 }
 
-const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: FilesAppProps) => {
+const FilesApp = ({
+  workspaceId,
+  workspaceName,
+  storageType = 'virtual',
+  workspaces,
+  onSelectWorkspace,
+}: FilesAppProps) => {
   const { toast } = useToast();
   const [currentPath, setCurrentPath] = useState('/');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
@@ -372,6 +386,22 @@ const FilesApp = ({ workspaceId, workspaceName, storageType = 'virtual' }: Files
       <AnimatePresence>
         {isDragging && <FileUploadZone currentPath={currentPath} />}
       </AnimatePresence>
+
+      {/* Phase B.1: workspace rail — shown when caller provides workspaces.
+          Lets the user switch workspaces without leaving the Files app. */}
+      {workspaces && workspaces.length > 0 && onSelectWorkspace && (
+        <WorkspaceRail
+          workspaces={workspaces}
+          activeWorkspaceId={workspaceId}
+          onSelect={onSelectWorkspace}
+          onDropFiles={(targetWorkspaceId) => {
+            toast({
+              title: 'Cross-workspace copy coming soon',
+              description: `Dropping files to "${workspaces.find(w => w.id === targetWorkspaceId)?.name ?? targetWorkspaceId}" will be wired up in Phase B.2.`,
+            });
+          }}
+        />
+      )}
 
       {/* Tree sidebar */}
       <FileTree
