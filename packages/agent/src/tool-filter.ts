@@ -8,6 +8,9 @@ const CODE_TOOLS = new Set([
 const RESEARCH_TOOLS = new Set([
   'web_search', 'web_fetch', 'search_memory', 'get_identity', 'get_awareness',
   'query_knowledge', 'read_file', 'search_files', 'search_content',
+  // Connector discovery is research-flavored — the agent needs it when
+  // the user asks what integrations exist or how to plug in a service.
+  'find_connector', 'list_connector_categories',
 ]);
 
 export type ToolContext = 'general' | 'code' | 'research';
