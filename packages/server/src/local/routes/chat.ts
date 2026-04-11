@@ -89,10 +89,13 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
   // Build the rich system prompt — behavioral specification, not just tool docs
   // Accepts the caller's orchestrator so per-session orchestrators get their own
   // workspace layers reflected in the prompt (Phase A.1 Option Y migration).
-  function buildSystemPrompt(orch: Orchestrator, workspacePath?: string, sessionId?: string, historyLength?: number, workspaceId?: string): string {
-    // Resolve workspace persona (if workspace has one set)
+  // Phase A.2: accepts an optional `personaOverride` so different chat windows
+  // on the same workspace can run different personas without touching the
+  // workspace record.
+  function buildSystemPrompt(orch: Orchestrator, workspacePath?: string, sessionId?: string, historyLength?: number, workspaceId?: string, personaOverride?: string): string {
+    // Resolve the active persona: per-window override > workspace default.
     const wsConfig = workspaceId ? server.workspaceManager?.get(workspaceId) : null;
-    const activePersonaId = wsConfig?.personaId ?? null;
+    const activePersonaId = personaOverride ?? wsConfig?.personaId ?? null;
 
     // Check cache: reuse if same session, workspace, workspaceId, skill count, and persona
     const cacheKey = sessionId ?? 'default';
@@ -244,10 +247,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
   // POST /api/chat — SSE streaming chat endpoint
   server.post<{
-    Body: { message: string; workspace?: string; workspaceId?: string; model?: string; session?: string; workspacePath?: string };
+    Body: { message: string; workspace?: string; workspaceId?: string; model?: string; session?: string; workspacePath?: string; persona?: string };
   }>('/api/chat', async (request, reply) => {
     // P0-4: Accept both 'workspace' and 'workspaceId' for backwards compat
-    const { message, workspace: _ws, workspaceId: _wsId, model, session, workspacePath: explicitWorkspacePath } = request.body ?? {};
+    // Phase A.2: `persona` is an optional per-window override — takes precedence
+    // over the workspace's default persona for this single request only.
+    const { message, workspace: _ws, workspaceId: _wsId, model, session, workspacePath: explicitWorkspacePath, persona: personaOverride } = request.body ?? {};
     const workspace = _ws ?? _wsId;
 
     // A2: Resolve workspace directory — use explicit path, workspace config, or virtual storage
@@ -641,7 +646,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
         const systemPrompt = hasCustomRunner
           ? 'You are a helpful AI assistant.'
-          : ambiguityPrefix + buildSystemPrompt(sessionOrch, workspacePath, sessionId, history.length, effectiveWorkspace) + templateContext + recalledContext;
+          : ambiguityPrefix + buildSystemPrompt(sessionOrch, workspacePath, sessionId, history.length, effectiveWorkspace, personaOverride) + templateContext + recalledContext;
 
         // Register a per-request pre:tool hook for confirmation gates
         // This fires during the agent loop and pauses until user approves/denies
@@ -735,9 +740,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           'acquire_capability', 'install_capability', 'compose_workflow', 'create_plan',
           'add_plan_step', 'execute_step', 'show_plan',
         ]);
-        // Resolve persona from workspace config (same source as buildSystemPrompt)
+        // Resolve persona: per-window override > workspace config (same
+        // resolution order as buildSystemPrompt for Phase A.2 consistency).
         const wsConfig = effectiveWorkspace ? server.workspaceManager?.get(effectiveWorkspace) : null;
-        const activePersonaId = wsConfig?.personaId ?? null;
+        const activePersonaId = personaOverride ?? wsConfig?.personaId ?? null;
         if (!hasCustomRunner && activePersonaId) {
           const persona = getPersona(activePersonaId);
           if (persona && persona.tools.length > 0) {

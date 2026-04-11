@@ -131,7 +131,15 @@ const Desktop = () => {
       case 'chat': {
         const wsId = win.workspaceId || activeWorkspaceId || 'local-default';
         const ws = workspaces.find(w => w.id === wsId);
-        return <ChatWindowInstance workspaceId={wsId} workspaceName={win.workspaceName} templateId={ws?.templateId} />;
+        return (
+          <ChatWindowInstance
+            workspaceId={wsId}
+            workspaceName={win.workspaceName}
+            templateId={ws?.templateId}
+            initialPersona={win.personaId}
+            onPersonaChange={(personaId) => wm.setWindowPersona(win.instanceId, personaId)}
+          />
+        );
       }
       case 'dashboard':
         return (
@@ -254,10 +262,27 @@ const Desktop = () => {
       {/* Overlays */}
       <GlobalSearch open={ov.showGlobalSearch} onClose={() => ov.setShowGlobalSearch(false)} onNavigate={handleSearchNavigate} />
       <CreateWorkspaceDialog open={ov.showCreateWorkspace} onClose={() => ov.setShowCreateWorkspace(false)} onCreate={createWorkspace} />
-      <PersonaSwitcher open={ov.showPersonaSwitcher} onClose={() => ov.setShowPersonaSwitcher(false)}
-        currentPersona={activeWorkspace?.persona} currentGroupId={activeWorkspace?.agentGroupId}
-        onSelect={(personaId) => { if (activeWorkspaceId) patchWorkspace(activeWorkspaceId, { persona: personaId, agentGroupId: undefined }); }}
-        onSelectGroup={(groupId) => { if (activeWorkspaceId) patchWorkspace(activeWorkspaceId, { agentGroupId: groupId, persona: undefined }); }} />
+      {(() => {
+        // Phase A.2: PersonaSwitcher operates on the focused chat window's
+        // persona when one is focused; otherwise falls back to patching
+        // the workspace as before. This lets two chat windows on the same
+        // workspace have independent personas.
+        const focusedWin = wm.windows.find(w => w.instanceId === wm.focusedInstanceId);
+        const focusedChatWin = focusedWin?.appId === 'chat' ? focusedWin : undefined;
+        const currentPersonaForSwitcher = focusedChatWin?.personaId ?? activeWorkspace?.persona;
+        return (
+          <PersonaSwitcher open={ov.showPersonaSwitcher} onClose={() => ov.setShowPersonaSwitcher(false)}
+            currentPersona={currentPersonaForSwitcher} currentGroupId={activeWorkspace?.agentGroupId}
+            onSelect={(personaId) => {
+              if (focusedChatWin) {
+                wm.setWindowPersona(focusedChatWin.instanceId, personaId);
+              } else if (activeWorkspaceId) {
+                patchWorkspace(activeWorkspaceId, { persona: personaId, agentGroupId: undefined });
+              }
+            }}
+            onSelectGroup={(groupId) => { if (activeWorkspaceId) patchWorkspace(activeWorkspaceId, { agentGroupId: groupId, persona: undefined }); }} />
+        );
+      })()}
       <WorkspaceSwitcher open={ov.showWorkspaceSwitcher} onClose={() => ov.setShowWorkspaceSwitcher(false)}
         workspaces={workspaces} activeWorkspaceId={activeWorkspaceId}
         onSelect={(id) => { selectWorkspace(id); const ws = workspaces.find(w => w.id === id); wm.openChatForWorkspace(id, ws?.name); }} />

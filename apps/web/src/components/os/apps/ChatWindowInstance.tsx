@@ -46,10 +46,25 @@ interface ChatWindowInstanceProps {
   workspaceName?: string;
   initialPersona?: string;
   templateId?: string;
+  /**
+   * Phase A.2: called when the user changes the persona inside this window.
+   * Should update the window's local persona state via useWindowManager.
+   * Takes precedence over the legacy workspace-patch path when provided.
+   */
+  onPersonaChange?: (personaId: string) => void;
 }
 
-const ChatWindowInstance = ({ workspaceId, workspaceName, initialPersona, templateId }: ChatWindowInstanceProps) => {
+const ChatWindowInstance = ({ workspaceId, workspaceName, initialPersona, templateId, onPersonaChange }: ChatWindowInstanceProps) => {
   const [currentPersona, setCurrentPersona] = useState(initialPersona || 'general-purpose');
+
+  // Sync the local persona state when the parent sends a new initialPersona
+  // (e.g. when PersonaSwitcher updates the window from outside ChatWindowInstance).
+  useEffect(() => {
+    if (initialPersona && initialPersona !== currentPersona) {
+      setCurrentPersona(initialPersona);
+    }
+  }, [initialPersona]);
+
   const { sessions, activeSessionId, setActiveSessionId, createSession } = useSessions(workspaceId);
   const { messages, isLoading, sendMessage, clearHistory, pendingApproval, approveAction } = useChat({
     workspaceId,
@@ -65,6 +80,14 @@ const ChatWindowInstance = ({ workspaceId, workspaceName, initialPersona, templa
 
   const handlePersonaChange = (personaId: string) => {
     setCurrentPersona(personaId);
+    // Phase A.2: per-window persona. Prefer the window-scoped callback if
+    // the parent wired it — otherwise fall back to the legacy workspace
+    // patch so older call sites keep working.
+    if (onPersonaChange) {
+      onPersonaChange(personaId);
+      toast({ title: 'Persona switched', description: `This window now uses ${personaId}` });
+      return;
+    }
     adapter.patchWorkspace(workspaceId, { persona: personaId })
       .then(() => toast({ title: 'Persona updated', description: `Switched to ${personaId}` }))
       .catch(() => toast({ title: 'Persona updated locally', description: 'Backend offline — will sync when connected', variant: 'destructive' }));

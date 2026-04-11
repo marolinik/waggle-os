@@ -7,11 +7,23 @@ export interface WindowState {
   appId: AppId;
   workspaceId?: string;
   workspaceName?: string;
+  /**
+   * Phase A.2: per-window persona override. Defaults to the workspace's
+   * persona at window creation, but changes inside this window do NOT
+   * bleed into the workspace record — every chat window on the same
+   * workspace can run a different persona simultaneously.
+   */
+  personaId?: string;
   personaLabel?: string;
   templateLabel?: string;
   zIndex: number;
   minimized: boolean;
   cascadeOffset: number;
+}
+
+function personaLabelFor(personaId?: string): string | undefined {
+  if (!personaId) return undefined;
+  return PERSONA_SHORT[personaId] || personaId;
 }
 
 const TEMPLATE_SHORT: Record<string, string> = {
@@ -62,17 +74,37 @@ export function useWindowManager(workspaces: Workspace[]) {
     });
   }, []);
 
-  const openChatForWorkspace = useCallback((workspaceId: string, workspaceName?: string) => {
+  /**
+   * Open a chat window for a workspace.
+   *
+   * Phase A.2: an optional `personaId` override seeds the new window with a
+   * specific persona. If omitted, the window inherits the workspace's current
+   * persona as its starting point. Either way, the persona lives on the
+   * window from here on — not on the workspace.
+   *
+   * Multiple windows on the same workspace are allowed ONLY when an explicit
+   * personaId is provided (the user deliberately wants a second specialist).
+   * Without a personaId override, the existing window is focused instead.
+   */
+  const openChatForWorkspace = useCallback((
+    workspaceId: string,
+    workspaceName?: string,
+    personaOverride?: string,
+  ) => {
     const ws = workspaces.find(w => w.id === workspaceId);
-    const personaLabel = ws?.persona ? (PERSONA_SHORT[ws.persona] || ws.persona) : undefined;
+    const initialPersonaId = personaOverride ?? ws?.persona ?? undefined;
     const templateLabel = ws?.templateId && ws.templateId !== 'blank' ? (TEMPLATE_SHORT[ws.templateId] || ws.templateId) : undefined;
 
     setWindows(prev => {
-      const existing = prev.find(w => w.appId === 'chat' && w.workspaceId === workspaceId);
-      if (existing) {
-        const z = nextZ();
-        setFocusedInstanceId(existing.instanceId);
-        return prev.map(w => w.instanceId === existing.instanceId ? { ...w, zIndex: z, minimized: false } : w);
+      // If the caller didn't explicitly ask for a persona override, reuse
+      // the existing window for this workspace (legacy behavior).
+      if (!personaOverride) {
+        const existing = prev.find(w => w.appId === 'chat' && w.workspaceId === workspaceId);
+        if (existing) {
+          const z = nextZ();
+          setFocusedInstanceId(existing.instanceId);
+          return prev.map(w => w.instanceId === existing.instanceId ? { ...w, zIndex: z, minimized: false } : w);
+        }
       }
       const offset = cascadeCounter.current;
       cascadeCounter.current = (cascadeCounter.current + 1) % 10;
@@ -81,11 +113,25 @@ export function useWindowManager(workspaces: Workspace[]) {
       setFocusedInstanceId(instanceId);
       return [...prev, {
         instanceId, appId: 'chat' as AppId,
-        workspaceId, workspaceName, personaLabel, templateLabel,
+        workspaceId, workspaceName,
+        personaId: initialPersonaId,
+        personaLabel: personaLabelFor(initialPersonaId),
+        templateLabel,
         zIndex: z, minimized: false, cascadeOffset: offset,
       }];
     });
   }, [workspaces]);
+
+  /**
+   * Phase A.2: update the persona on a specific window without touching
+   * the underlying workspace record. Used by PersonaSwitcher and by
+   * ChatWindowInstance's inline persona picker.
+   */
+  const setWindowPersona = useCallback((instanceId: string, personaId: string) => {
+    setWindows(prev => prev.map(w => w.instanceId === instanceId
+      ? { ...w, personaId, personaLabel: personaLabelFor(personaId) }
+      : w));
+  }, []);
 
   const closeApp = useCallback((instanceId: string) => {
     setWindows(prev => prev.filter(w => w.instanceId !== instanceId));
@@ -161,6 +207,7 @@ export function useWindowManager(workspaces: Workspace[]) {
   return {
     windows, focusedInstanceId,
     openApp, openChatForWorkspace, closeApp, minimizeApp, focusWindow,
+    setWindowPersona,
     closeTopWindow, minimizeTopWindow,
     openAppIds, minimizedAppIds, getWindowTitle,
   };
