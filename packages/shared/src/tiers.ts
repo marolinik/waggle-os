@@ -14,6 +14,16 @@
 export const TIERS = ['SOLO', 'BASIC', 'TEAMS', 'ENTERPRISE'] as const;
 export type Tier = typeof TIERS[number];
 
+/**
+ * Read an env var safely from either Node (`process.env`) or the browser
+ * (where `process` is undefined). Used by shared tier config so this module
+ * can be imported by both the sidecar and the web bundle.
+ */
+const readEnv = (key: string): string | null => {
+  const proc = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process;
+  return proc?.env?.[key] ?? null;
+};
+
 export type EmbeddingProviderType = 'inprocess' | 'ollama' | 'voyage' | 'openai' | 'litellm' | 'mock';
 export type ExportFormat = 'txt' | 'md' | 'pdf' | 'json';
 
@@ -80,7 +90,7 @@ export const TIER_CAPABILITIES: Record<Tier, TierCapabilities> = {
     managedModelPool: false,
     priorityModels: false,
     kvarkCta: 'subtle',
-    stripePriceId: process.env['STRIPE_PRICE_BASIC'] ?? null,
+    stripePriceId: readEnv('STRIPE_PRICE_BASIC'),
   },
   TEAMS: {
     connectorLimit: -1,
@@ -101,7 +111,7 @@ export const TIER_CAPABILITIES: Record<Tier, TierCapabilities> = {
     managedModelPool: true,
     priorityModels: true,
     kvarkCta: 'active',
-    stripePriceId: process.env['STRIPE_PRICE_TEAMS'] ?? null,
+    stripePriceId: readEnv('STRIPE_PRICE_TEAMS'),
   },
   ENTERPRISE: {
     connectorLimit: -1,
