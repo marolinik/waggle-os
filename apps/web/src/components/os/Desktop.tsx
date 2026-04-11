@@ -105,6 +105,19 @@ const Desktop = () => {
   // Overlay state (extracted hook)
   const ov = useOverlayState();
 
+  // Phase A.3 / bug #7: open a new chat window on the current workspace.
+  // Passes the active workspace's persona as a personaOverride, which is
+  // what useWindowManager.openChatForWorkspace uses to decide between
+  // "reuse existing chat window" and "spawn a new one". The user can then
+  // change the persona from the window header dropdown.
+  const handleNewChatWindow = useCallback(() => {
+    const wsId = activeWorkspaceId;
+    if (!wsId || wsId === 'local-default') return;
+    const ws = workspaces.find(w => w.id === wsId);
+    const seedPersona = ws?.persona || 'general-purpose';
+    wm.openChatForWorkspace(wsId, ws?.name, seedPersona);
+  }, [activeWorkspaceId, workspaces, wm.openChatForWorkspace]);
+
   // Keyboard shortcuts
   useKeyboardShortcuts({
     onOpenApp: wm.openApp,
@@ -114,6 +127,7 @@ const Desktop = () => {
     onToggleKeyboardHelp: ov.toggleKeyboardHelp,
     onCloseTopWindow: wm.closeTopWindow,
     onMinimizeTopWindow: wm.minimizeTopWindow,
+    onNewChatWindow: handleNewChatWindow,
   });
 
   // Navigation handlers

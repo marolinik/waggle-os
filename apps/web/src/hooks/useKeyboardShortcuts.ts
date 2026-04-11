@@ -9,6 +9,8 @@ interface UseKeyboardShortcutsOptions {
   onToggleKeyboardHelp: () => void;
   onCloseTopWindow?: () => void;
   onMinimizeTopWindow?: () => void;
+  /** Phase A.3 — open a new chat window on the active workspace. */
+  onNewChatWindow?: () => void;
 }
 
 const APP_SHORTCUTS: Record<string, AppId> = {
@@ -68,6 +70,15 @@ export const useKeyboardShortcuts = (options: UseKeyboardShortcutsOptions) => {
       if (ctrl && e.shiftKey && (e.key === 'R' || e.key === 'r')) {
         e.preventDefault();
         opts.onOpenApp('room');
+        return;
+      }
+
+      // Ctrl+Shift+N: New chat window on the active workspace (bug #7).
+      // Matches the cornerstone's Phase A.3 acceptance test flow:
+      //   "Cmd+Shift+N → pick Researcher → ..."
+      if (ctrl && e.shiftKey && (e.key === 'N' || e.key === 'n')) {
+        e.preventDefault();
+        opts.onNewChatWindow?.();
         return;
       }
 
