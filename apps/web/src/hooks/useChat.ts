@@ -49,13 +49,26 @@ function flattenBlocks(blocks: ContentBlock[]): string {
     .join('');
 }
 
+export type AutonomyLevel = 'normal' | 'trusted' | 'yolo';
+export interface AutonomyState {
+  level: AutonomyLevel;
+  /** Epoch ms after which the elevated level auto-reverts. null = until session end. */
+  expiresAt: number | null;
+}
+
 interface UseChatOptions {
   workspaceId: string | null;
   sessionId: string | null;
   persona?: string;
+  /**
+   * Phase B.5: per-window autonomy. When set to 'trusted' or 'yolo' (and not
+   * expired), the server's pre-tool gate skips confirmation for the matching
+   * tool set. The server owns the final check — client state is advisory.
+   */
+  autonomy?: AutonomyState;
 }
 
-export const useChat = ({ workspaceId, sessionId, persona }: UseChatOptions) => {
+export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOptions) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [pendingApproval, setPendingApproval] = useState<ApprovalRequest | null>(null);
@@ -104,7 +117,12 @@ export const useChat = ({ workspaceId, sessionId, persona }: UseChatOptions) => 
     abortRef.current = new AbortController();
 
     try {
-      for await (const event of adapter.sendMessage(workspaceId, content, sessionId || undefined, persona)) {
+      // Phase B.5: only forward autonomy when elevated — Normal is the
+      // server default, so passing `undefined` keeps the wire payload lean.
+      const autonomyPayload = autonomy && autonomy.level !== 'normal'
+        ? { level: autonomy.level, expiresAt: autonomy.expiresAt ?? undefined }
+        : undefined;
+      for await (const event of adapter.sendMessage(workspaceId, content, sessionId || undefined, persona, autonomyPayload)) {
         if (abortRef.current?.signal.aborted) break;
         const evt = event as StreamEvent;
         const data = evt.data as Record<string, unknown>;
@@ -255,7 +273,7 @@ export const useChat = ({ workspaceId, sessionId, persona }: UseChatOptions) => 
     } finally {
       setIsLoading(false);
     }
-  }, [workspaceId, sessionId, persona]);
+  }, [workspaceId, sessionId, persona, autonomy]);
 
   const clearHistory = useCallback(async () => {
     if (sessionId) {

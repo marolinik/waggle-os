@@ -144,6 +144,108 @@ export interface ConfirmationGateConfig {
   promptFn?: (toolName: string, args: Record<string, unknown>) => Promise<boolean>;
 }
 
+// ── Phase B.5: tiered autonomy ────────────────────────────────────────
+//
+// Power users hate getting prompted for every write. Three levels:
+//   - normal  = current behavior, gate everything needsConfirmation flags
+//   - trusted = auto-pass writes, edits, docx, read_other_workspace; still
+//               gate git push/commit/pr/merge, install_capability,
+//               cross-workspace writes, connector writes
+//   - yolo    = auto-pass everything except a hardcoded critical blacklist
+//
+// The critical blacklist below stays gated even at YOLO — these are the
+// "you meant to do this, right?" ops where a wrong keystroke is terminal.
+
+export type AutonomyLevel = 'normal' | 'trusted' | 'yolo';
+
+/** Tools Trusted auto-approves (in addition to anything Normal auto-approves). */
+const TRUSTED_AUTOPASS = new Set<string>([
+  'write_file',
+  'edit_file',
+  'generate_docx',
+  'read_other_workspace',
+]);
+
+/**
+ * Bash commands that NEVER auto-pass, even at YOLO. The autonomy toggle
+ * is a UX lever, not a permission to delete the user's home directory.
+ * Kept deliberately small — only truly terminal operations.
+ */
+const CRITICAL_NEVER_AUTOPASS: RegExp[] = [
+  /\brm\s+-[rf]+\s*[\/~]\s*(?:$|\s)/,             // rm -rf / or rm -rf ~
+  /\brm\s+-[rf]+\s+\$HOME/,                        // rm -rf $HOME
+  /\brm\s+-[rf]+\s+\/\*/,                          // rm -rf /*
+  /\bsudo\b/,                                      // any sudo
+  /\bformat\s+[a-z]:\b/i,                          // Windows format C:
+  /\bmkfs\b/,                                      // mkfs.*
+  /\breg\s+delete\b/i,                             // Windows registry delete
+  /\bdd\s+if=.*of=\/dev/,                          // dd if=* of=/dev/...
+  /\bgit\s+push\s+.*--force.*\b(main|master|production)\b/i,
+  /\b:(){\s*:\|:&\s*}\s*;:/,                       // fork bomb (defensive)
+];
+
+/**
+ * Returns true if the tool call would be critical/never-autopass EVEN at YOLO.
+ * Used by the autonomy gate to keep the safety net intact at the top level.
+ */
+export function isCriticalNeverAutopass(toolName: string, args?: Record<string, unknown>): boolean {
+  if (toolName === 'bash') {
+    const command = String(args?.command ?? '').trim();
+    for (const pat of CRITICAL_NEVER_AUTOPASS) {
+      if (pat.test(command)) return true;
+    }
+  }
+  if (toolName === 'install_capability') {
+    const risk = args?._riskLevel as string | undefined;
+    if (risk === 'high') return true;
+  }
+  if (toolName === 'git_push') {
+    // Force-push to main/master stays gated even at YOLO.
+    const force = args?.force as boolean | string | undefined;
+    const branch = String(args?.branch ?? '').toLowerCase();
+    if (force && (branch === 'main' || branch === 'master' || branch === 'production')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Autonomy-aware confirmation check. Wraps needsConfirmation with the
+ * autonomy level override. Returns true if the tool still needs confirmation
+ * at this autonomy level; false if it should pass silently.
+ *
+ * Invariants:
+ *   - Normal reproduces current behavior exactly.
+ *   - Trusted and YOLO ALWAYS respect isCriticalNeverAutopass.
+ *   - A tool that wouldn't need confirmation at Normal never gates at any level.
+ */
+export function needsConfirmationWithAutonomy(
+  toolName: string,
+  args: Record<string, unknown> | undefined,
+  level: AutonomyLevel = 'normal',
+): boolean {
+  const baseGates = needsConfirmation(toolName, args);
+  if (!baseGates) return false; // never gated anyway
+
+  if (level === 'normal') return true;
+
+  // Critical blacklist overrides everything — never auto-pass at any level.
+  if (isCriticalNeverAutopass(toolName, args ?? {})) return true;
+
+  if (level === 'yolo') return false;
+
+  // Trusted: pass the Trusted-specific set + bash (already filtered above),
+  // gate everything else.
+  if (level === 'trusted') {
+    if (TRUSTED_AUTOPASS.has(toolName)) return false;
+    if (toolName === 'bash') return false; // passed the blacklist check
+    return true; // git push, install, connector writes, cross-workspace writes still gate
+  }
+
+  return true;
+}
+
 export class ConfirmationGate {
   private interactive: boolean;
   private autoApprove: Set<string>;

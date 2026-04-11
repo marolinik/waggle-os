@@ -33,7 +33,11 @@ export { createPlanTools } from './plan-tools.js';
 export { createGitTools } from './git-tools.js';
 export { PermissionManager, READONLY_TOOLS } from './permissions.js';
 export { filterToolsForContext, filterAvailableTools, filterOfflineTools, getOfflineCapableToolNames, type ToolContext, type ToolFilterConfig } from './tool-filter.js';
-export { needsConfirmation, ConfirmationGate, getApprovalClass, type ConfirmationGateConfig, type ApprovalClass } from './confirmation.js';
+export {
+  needsConfirmation, needsConfirmationWithAutonomy, isCriticalNeverAutopass,
+  ConfirmationGate, getApprovalClass,
+  type ConfirmationGateConfig, type ApprovalClass, type AutonomyLevel,
+} from './confirmation.js';
 export { createAuditTools } from './audit-tools.js';
 export { createDocumentTools } from './document-tools.js';
 export { createSpreadsheetTools } from './spreadsheet-tools.js';

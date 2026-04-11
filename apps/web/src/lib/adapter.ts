@@ -216,10 +216,16 @@ class LocalAdapter {
   }
 
   // --- Chat ---
-  async *sendMessage(workspaceId: string, message: string, sessionId?: string, persona?: string): AsyncGenerator<StreamEvent> {
+  async *sendMessage(
+    workspaceId: string,
+    message: string,
+    sessionId?: string,
+    persona?: string,
+    autonomy?: { level: 'normal' | 'trusted' | 'yolo'; expiresAt?: number },
+  ): AsyncGenerator<StreamEvent> {
     const res = await this.fetch('/api/chat', {
       method: 'POST',
-      body: JSON.stringify({ workspaceId, message, sessionId, persona }),
+      body: JSON.stringify({ workspaceId, message, sessionId, persona, autonomy }),
     });
 
     if (!res.body) return;

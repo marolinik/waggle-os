@@ -31,6 +31,7 @@ export type AuditEventType =
   | 'approval_requested'
   | 'approval_granted'
   | 'approval_denied'
+  | 'approval_auto'
   | 'export'
   | 'cron_trigger';
 

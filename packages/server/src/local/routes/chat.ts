@@ -5,8 +5,8 @@ import path from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
-import { runAgentLoop, needsConfirmation, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture } from '@waggle/agent';
-import type { AgentLoopConfig, AgentResponse, Orchestrator } from '@waggle/agent';
+import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture } from '@waggle/agent';
+import type { AgentLoopConfig, AgentResponse, Orchestrator, AutonomyLevel } from '@waggle/agent';
 import type { WorkspaceSession } from '../workspace-sessions.js';
 import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
 import { formatWorkspaceStatePrompt } from '../workspace-state.js';
@@ -247,13 +247,44 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
   // POST /api/chat — SSE streaming chat endpoint
   server.post<{
-    Body: { message: string; workspace?: string; workspaceId?: string; model?: string; session?: string; workspacePath?: string; persona?: string };
+    Body: {
+      message: string;
+      workspace?: string;
+      workspaceId?: string;
+      model?: string;
+      session?: string;
+      workspacePath?: string;
+      persona?: string;
+      /**
+       * Phase B.5: tiered autonomy override. When absent or 'normal', the
+       * existing gate applies. 'trusted' or 'yolo' relax the gate per the
+       * rules in needsConfirmationWithAutonomy.
+       * `expiresAt` is a client-supplied deadline — if set and in the past,
+       * the server falls back to 'normal' for safety.
+       */
+      autonomy?: { level: AutonomyLevel; expiresAt?: number };
+    };
   }>('/api/chat', async (request, reply) => {
     // P0-4: Accept both 'workspace' and 'workspaceId' for backwards compat
     // Phase A.2: `persona` is an optional per-window override — takes precedence
     // over the workspace's default persona for this single request only.
-    const { message, workspace: _ws, workspaceId: _wsId, model, session, workspacePath: explicitWorkspacePath, persona: personaOverride } = request.body ?? {};
+    const {
+      message, workspace: _ws, workspaceId: _wsId, model, session,
+      workspacePath: explicitWorkspacePath, persona: personaOverride,
+      autonomy: autonomyRaw,
+    } = request.body ?? {};
     const workspace = _ws ?? _wsId;
+
+    // Phase B.5: resolve the effective autonomy level for this request.
+    // Expired grants fall back to 'normal' — the client may not have
+    // auto-reverted yet on its side, so the server owns the final say.
+    let autonomyLevel: AutonomyLevel = 'normal';
+    if (autonomyRaw && (autonomyRaw.level === 'trusted' || autonomyRaw.level === 'yolo')) {
+      const expiresAt = autonomyRaw.expiresAt;
+      if (!expiresAt || expiresAt > Date.now()) {
+        autonomyLevel = autonomyRaw.level;
+      }
+    }
 
     // A2: Resolve workspace directory — use explicit path, workspace config, or virtual storage
     // NEVER fall back to user homedir — use managed storage instead
@@ -654,7 +685,30 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // This fires during the agent loop and pauses until user approves/denies
         const autoApprove = process.env.WAGGLE_AUTO_APPROVE === '1' || process.env.WAGGLE_AUTO_APPROVE === 'true';
         const unregisterHook = hasCustomRunner ? undefined : hookRegistry.on('pre:tool', async (ctx) => {
-          if (!ctx.toolName || !needsConfirmation(ctx.toolName, (ctx.args ?? {}) as Record<string, unknown>)) return;
+          if (!ctx.toolName) return;
+          const args = (ctx.args ?? {}) as Record<string, unknown>;
+
+          // Phase B.5: autonomy-aware gate. If the user has Trusted or YOLO set
+          // for this session, the tool may auto-pass. Critical blacklist still
+          // blocks even at YOLO (see isCriticalNeverAutopass).
+          if (!needsConfirmationWithAutonomy(ctx.toolName, args, autonomyLevel)) {
+            // Surface an audit-visible step when elevated autonomy pre-approved
+            // so users can see WHY the tool ran without a prompt.
+            if (autonomyLevel !== 'normal' && needsConfirmation(ctx.toolName, args)) {
+              sendEvent('step', { content: `\u26a1 ${ctx.toolName} auto-approved (${autonomyLevel})` });
+              // Tag the audit input with the autonomy level so forensics can
+              // see WHY the tool was auto-approved.
+              emitAuditEvent(server, {
+                workspaceId: effectiveWorkspace,
+                eventType: 'approval_auto',
+                toolName: ctx.toolName,
+                input: JSON.stringify({ args, _autonomy: autonomyLevel }),
+                sessionId,
+                approved: true,
+              });
+            }
+            return;
+          }
 
           // H3: Auto-approve all tool requests when WAGGLE_AUTO_APPROVE=1 (testing only)
           if (autoApprove) {
@@ -665,7 +719,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // Phase B.3: check the persistent grant store — if the user previously
           // chose "Always allow" for this (tool, target) combination, skip the
           // approval prompt silently.
-          const args = (ctx.args ?? {}) as Record<string, unknown>;
           if (server.agentState.approvalGrantStore.has(ctx.toolName, args, effectiveWorkspace || null)) {
             sendEvent('step', { content: `\u2714 ${ctx.toolName} allowed by saved grant` });
             return;
