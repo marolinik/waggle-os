@@ -163,6 +163,8 @@ export interface AgentState {
   currentModel: string;
   litellmApiKey: string;
   pendingApprovals: Map<string, PendingApproval>;
+  /** Phase B.3: persistent "always allow" grant store for gated tools. */
+  approvalGrantStore: import('./approval-grants.js').ApprovalGrantStore;
   /**
    * Rebuild workspace-scoped tools (system, git, document) for a given directory.
    * Optional `orchForMindTools` replaces the shared-orchestrator mind tools with a
@@ -718,6 +720,11 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   // Pending approvals map for confirmation gates
   const pendingApprovals = new Map<string, PendingApproval>();
 
+  // Phase B.3: persistent "always allow" grant store — survives sessions
+  // so approved (tool, target) combinations don't re-prompt every time.
+  const { ApprovalGrantStore } = await import('./approval-grants.js');
+  const approvalGrantStore = new ApprovalGrantStore(fullConfig.dataDir);
+
   // Skill hot-reload callback (set after agentState is created)
   let reloadSkills: ((fresh: LoadedSkill[]) => void) | undefined;
 
@@ -1042,6 +1049,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     currentModel,
     litellmApiKey,
     pendingApprovals,
+    approvalGrantStore,
     buildToolsForWorkspace,
     createSessionOrchestrator,
     buildToolsForSession,

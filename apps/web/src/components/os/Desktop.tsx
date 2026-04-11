@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   MessageSquare, LayoutDashboard, Settings, Brain,
   Activity, Package, Radio, Zap, FolderOpen, Bot, Lock, UserCircle, Plug,
-  Clock, Store, Mic, Users,
+  Clock, Store, Mic, Users, Shield,
 } from "lucide-react";
 import type { UserTier } from "@/lib/dock-tiers";
 import type { AppId } from "@/lib/dock-tiers";
@@ -31,6 +31,7 @@ import ScheduledJobsApp from "./apps/ScheduledJobsApp";
 import MarketplaceApp from "./apps/MarketplaceApp";
 import VoiceApp from "./apps/VoiceApp";
 import RoomApp from "./apps/RoomApp";
+import ApprovalsApp from "./apps/ApprovalsApp";
 import GlobalSearch from "./overlays/GlobalSearch";
 import CreateWorkspaceDialog from "./overlays/CreateWorkspaceDialog";
 import PersonaSwitcher from "./overlays/PersonaSwitcher";
@@ -76,6 +77,7 @@ const appConfig: Record<string, { title: string; icon: React.ReactNode; pos: { x
   "marketplace": { title: "Marketplace", icon: <Store className="w-3.5 h-3.5 text-orange-400" />, pos: { x: 250, y: 80 }, size: { w: "640px", h: "500px" } },
   "voice": { title: "Voice", icon: <Mic className="w-3.5 h-3.5 text-rose-400" />, pos: { x: 300, y: 90 }, size: { w: "480px", h: "400px" } },
   "room": { title: "Room", icon: <Users className="w-3.5 h-3.5 text-violet-400" />, pos: { x: 260, y: 75 }, size: { w: "640px", h: "520px" } },
+  "approvals": { title: "Approvals", icon: <Shield className="w-3.5 h-3.5 text-amber-400" />, pos: { x: 280, y: 85 }, size: { w: "520px", h: "560px" } },
 };
 
 const Desktop = () => {
@@ -202,6 +204,7 @@ const Desktop = () => {
         for (const w of workspaces) wsNames[w.id] = w.name;
         return <RoomApp workspaceNames={wsNames} />;
       }
+      case 'approvals': return <ApprovalsApp />;
       default: return <div className="p-4 text-sm text-muted-foreground">Coming soon...</div>;
     }
   };

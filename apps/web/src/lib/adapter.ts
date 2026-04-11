@@ -528,13 +528,48 @@ class LocalAdapter {
   }
 
   // --- Approval ---
-  async getPendingApprovals(): Promise<unknown[]> {
+  async getPendingApprovals(): Promise<{ pending: Array<{ requestId: string; toolName: string; input: Record<string, unknown>; timestamp: number }>; count: number }> {
     const res = await this.fetch('/api/approval/pending');
     return res.json();
   }
 
-  async respondApproval(requestId: string, approved: boolean): Promise<void> {
-    await this.fetch(`/api/approval/${requestId}`, { method: 'POST', body: JSON.stringify({ approved }) });
+  async respondApproval(
+    requestId: string,
+    approved: boolean,
+    opts: { always?: boolean; sourceWorkspaceId?: string | null } = {},
+  ): Promise<void> {
+    await this.fetch(`/api/approval/${requestId}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        approved,
+        always: opts.always === true,
+        sourceWorkspaceId: opts.sourceWorkspaceId ?? null,
+      }),
+    });
+  }
+
+  async getApprovalGrants(): Promise<{
+    grants: Array<{
+      id: string;
+      toolName: string;
+      targetKey: string;
+      sourceWorkspaceId: string | null;
+      description: string;
+      grantedAt: string;
+      expiresAt: string | null;
+    }>;
+    count: number;
+  }> {
+    const res = await this.fetch('/api/approval/grants');
+    return res.json();
+  }
+
+  async revokeApprovalGrant(id: string): Promise<void> {
+    await this.fetch(`/api/approval/grants/${id}`, { method: 'DELETE' });
+  }
+
+  async clearApprovalGrants(): Promise<void> {
+    await this.fetch('/api/approval/grants/clear', { method: 'POST' });
   }
 
   // --- Settings ---

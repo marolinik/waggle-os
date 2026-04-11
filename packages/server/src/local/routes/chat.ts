@@ -662,6 +662,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             return;
           }
 
+          // Phase B.3: check the persistent grant store — if the user previously
+          // chose "Always allow" for this (tool, target) combination, skip the
+          // approval prompt silently.
+          const args = (ctx.args ?? {}) as Record<string, unknown>;
+          if (server.agentState.approvalGrantStore.has(ctx.toolName, args, effectiveWorkspace || null)) {
+            sendEvent('step', { content: `\u2714 ${ctx.toolName} allowed by saved grant` });
+            return;
+          }
+
           const requestId = crypto.randomUUID();
           const toolName = ctx.toolName;
           const input = (ctx.args ?? {}) as Record<string, unknown>;
@@ -688,8 +697,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             } catch { /* trust enrichment is best-effort */ }
           }
 
-          // Send approval_required SSE event to the client
-          sendEvent('approval_required', { requestId, toolName, input, ...trustMeta });
+          // Send approval_required SSE event to the client.
+          // Phase B.3: includes sourceWorkspaceId so the frontend can send it
+          // back verbatim when the user clicks "Always allow" — keeps the grant
+          // store scoped correctly.
+          sendEvent('approval_required', {
+            requestId, toolName, input,
+            sourceWorkspaceId: effectiveWorkspace || null,
+            ...trustMeta,
+          });
             // F2: Audit trail — approval requested
             emitAuditEvent(server, {
               workspaceId: effectiveWorkspace,

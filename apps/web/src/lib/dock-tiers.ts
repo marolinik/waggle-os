@@ -1,7 +1,7 @@
 import type { ElementType } from 'react';
 import {
   LayoutDashboard, MessageSquare, FolderOpen, Settings, Bot, Brain,
-  Zap, Activity, Radio, Clock, Package, Plug, Store, Lock, Users,
+  Zap, Activity, Radio, Clock, Package, Plug, Store, Lock, Users, Shield,
 } from 'lucide-react';
 
 export type AppId =
@@ -9,7 +9,7 @@ export type AppId =
   | 'capabilities' | 'connectors' | 'cockpit' | 'mission-control'
   | 'settings' | 'vault' | 'profile' | 'terminal' | 'calculator'
   | 'notes' | 'waggle-dance' | 'files' | 'agents'
-  | 'scheduled-jobs' | 'marketplace' | 'voice' | 'room';
+  | 'scheduled-jobs' | 'marketplace' | 'voice' | 'room' | 'approvals';
 
 export type UserTier = 'simple' | 'professional' | 'power' | 'admin';
 
@@ -51,6 +51,7 @@ const POWER_CONFIG: DockEntry[] = [
     ],
   },
   { type: 'separator', key: 'sep-2', label: '' },
+  { type: 'app', key: 'approvals', appId: 'approvals', icon: Shield, label: 'Approvals', color: 'text-amber-400' },
   { type: 'app', key: 'vault', appId: 'vault', icon: Lock, label: 'API Keys', color: 'text-amber-400' },
   { type: 'app', key: 'system', appId: 'settings', icon: Settings, label: 'Settings', color: 'text-muted-foreground' },
 ];
