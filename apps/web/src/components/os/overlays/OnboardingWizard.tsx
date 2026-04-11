@@ -22,7 +22,7 @@ interface OnboardingWizardProps {
   onUpdate: (updates: Partial<OnboardingState>) => void;
   onComplete: (serverBaseUrl: string) => void;
   onDismiss: () => void;
-  onFinish: (workspaceId: string, firstMessage: string) => void;
+  onFinish: (workspaceId: string, workspaceName: string, firstMessage: string) => void;
 }
 
 /* ─── M2-7: Fire-and-forget telemetry via adapter ─── */
@@ -67,6 +67,37 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
     adapter.connect().catch(() => {});
     trackTelemetry(serverBaseUrl, 'onboarding_start');
   }, []);
+
+  /* ── Bug #3: detect existing API key in vault on mount, so we don't
+       re-prompt the user for a key they already configured. Any secret
+       whose name matches the selected provider (case-insensitive match
+       on either `anthropic` or `ANTHROPIC_API_KEY`) counts. ── */
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const vault = await adapter.getVault() as { secrets?: Array<{ name: string }> };
+        if (cancelled) return;
+        const wantedNames = [
+          selectedProvider.toLowerCase(),
+          `${selectedProvider.toUpperCase()}_API_KEY`,
+        ];
+        const alreadyHasKey = vault?.secrets?.some(s =>
+          wantedNames.some(w => s.name.toLowerCase() === w.toLowerCase())
+        );
+        if (alreadyHasKey) {
+          console.info(`[OnboardingWizard] vault already has ${selectedProvider} key — marking step 6 complete`);
+          setKeyValid(true);
+          setKeySaved(true);
+          onUpdate({ apiKeySet: true });
+        }
+      } catch {
+        /* sidecar not ready or no vault — leave the step in its default state */
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProvider]);
 
   const goToStep = useCallback((n: number) => {
     setStep(n);
@@ -215,8 +246,23 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
     const template = TEMPLATES.find(t => t.id === (state.templateId || selectedTemplate));
     const hint = template?.hint || 'Hello! What can you help me with?';
     const wsId = state.workspaceId || `local-${Date.now()}`;
-    onFinish(wsId, hint);
-  }, [serverBaseUrl, onComplete, onFinish, state.workspaceId, state.templateId, selectedTemplate]);
+    // Bug #4: pass the workspace name through so the chat window doesn't
+    // open with an empty title. We prefer the user-entered name, fall back
+    // to the template name, and finally to a readable default.
+    const wsName = workspaceName || template?.name || 'My Workspace';
+    onFinish(wsId, wsName, hint);
+  }, [serverBaseUrl, onComplete, onFinish, state.workspaceId, state.templateId, selectedTemplate, workspaceName]);
+
+  /* ── Bug #3: if the vault pre-check already saved a key before the
+       user reaches step 6, auto-advance straight past the API-key
+       screen. No re-prompting for a key they already configured. ── */
+  useEffect(() => {
+    if (step !== 6) return;
+    if (!keySaved) return;
+    if (creatingWorkspace) return;
+    handleFinish();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, keySaved]);
 
   /* ── Auto-finish step 7 after 2s ── */
   useEffect(() => {

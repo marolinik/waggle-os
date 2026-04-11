@@ -82,7 +82,7 @@ const appConfig: Record<string, { title: string; icon: React.ReactNode; pos: { x
 
 const Desktop = () => {
   // Domain hooks
-  const { workspaces, activeWorkspace, activeWorkspaceId, selectWorkspace, createWorkspace, patchWorkspace } = useWorkspaces();
+  const { workspaces, activeWorkspace, activeWorkspaceId, selectWorkspace, createWorkspace, patchWorkspace, refresh: refreshWorkspaces } = useWorkspaces();
   const memory = useMemory(activeWorkspaceId);
   const events = useEvents(activeWorkspaceId);
   const agentStatus = useAgentStatus();
@@ -128,11 +128,15 @@ const Desktop = () => {
   }, [wm.openApp, selectWorkspace, wm.openChatForWorkspace, workspaces]);
 
   const handleOnboardingComplete = useCallback((_serverBaseUrl: string) => { completeOnboarding(); }, [completeOnboarding]);
-  const handleOnboardingFinish = useCallback((workspaceId: string) => {
+  // Bug #4 + #8: open the wizard-created workspace with the name the user
+  // typed. The wizard now passes the name directly so we don't have to find
+  // it in the workspaces list (the hook's state may not have seen the new
+  // workspace yet). Also kick a refresh so subsequent operations see it.
+  const handleOnboardingFinish = useCallback((workspaceId: string, workspaceName: string) => {
     selectWorkspace(workspaceId);
-    const ws = workspaces.find(w => w.id === workspaceId);
-    wm.openChatForWorkspace(workspaceId, ws?.name);
-  }, [selectWorkspace, workspaces, wm.openChatForWorkspace]);
+    wm.openChatForWorkspace(workspaceId, workspaceName);
+    refreshWorkspaces();
+  }, [selectWorkspace, wm.openChatForWorkspace, refreshWorkspaces]);
 
   // Render app content inside windows
   const renderAppContent = (win: WindowState) => {

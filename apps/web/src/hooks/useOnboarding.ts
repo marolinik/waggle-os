@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { UserTier } from '@/lib/dock-tiers';
+import { adapter } from '@/lib/adapter';
 
 export interface OnboardingState {
   completed: boolean;
@@ -65,6 +66,43 @@ export const useOnboarding = () => {
     const handler = () => setState(loadState());
     window.addEventListener('waggle:onboarding-sync', handler);
     return () => window.removeEventListener('waggle:onboarding-sync', handler);
+  }, []);
+
+  // Bug #2: auto-complete onboarding for returning users.
+  // The localStorage flag is per-webview, so a fresh Tauri webview (or a
+  // browser switch) always looks "new" even when the sidecar has existing
+  // memory and workspaces. Check the sidecar on mount — if there's already
+  // workspace data, this is clearly a returning user and we should not
+  // re-run the wizard.
+  useEffect(() => {
+    if (state.completed) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const workspaces = await adapter.getWorkspaces();
+        if (cancelled) return;
+        if (Array.isArray(workspaces) && workspaces.length > 0) {
+          console.info(
+            `[useOnboarding] returning user detected (${workspaces.length} workspaces on server) — auto-completing wizard`
+          );
+          const next: OnboardingState = {
+            ...defaultState,
+            completed: true,
+            step: 7,
+            tier: state.tier || 'power',
+            tooltipsDismissed: true,
+            apiKeySet: true,
+          };
+          saveState(next);
+          setState(next);
+        }
+      } catch {
+        /* sidecar unreachable — stay on the wizard so a truly new user can set up */
+      }
+    })();
+    return () => { cancelled = true; };
+    // Run once on mount — we intentionally don't re-run on state changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const update = useCallback((updates: Partial<OnboardingState>) => {
