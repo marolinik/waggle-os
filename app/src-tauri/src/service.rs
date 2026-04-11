@@ -57,12 +57,103 @@ fn resolve_node_path() -> String {
     "node".to_string()
 }
 
+/// Build the Command used to spawn the sidecar process.
+/// Shared by both the sync auto-start path and the async `ensure_service` tauri command.
+fn build_service_command(port: u16) -> Result<Command, String> {
+    let node_path = resolve_node_path();
+
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()));
+
+    let service_script = if cfg!(debug_assertions) {
+        let app_dir = std::env::current_dir().map_err(|e| e.to_string())?;
+        let script = app_dir
+            .parent()
+            .ok_or("no parent")?
+            .parent()
+            .ok_or("no grandparent")?
+            .join("packages")
+            .join("server")
+            .join("src")
+            .join("local")
+            .join("service.ts");
+        script.to_string_lossy().to_string()
+    } else {
+        exe_dir
+            .as_ref()
+            .map(|d| d.join("resources").join("service.js").to_string_lossy().to_string())
+            .unwrap_or_else(|| "resources/service.js".to_string())
+    };
+
+    let mut cmd = if cfg!(debug_assertions) {
+        let mut c = Command::new(&node_path);
+        c.arg("--import").arg("tsx").arg(&service_script);
+        c
+    } else {
+        let mut c = Command::new(&node_path);
+        c.arg(&service_script);
+        c
+    };
+
+    cmd.env("WAGGLE_PORT", port.to_string());
+
+    // Production-only environment setup
+    if !cfg!(debug_assertions) {
+        cmd.env("WAGGLE_SKIP_LITELLM", "1");
+
+        if let Some(ref dir) = exe_dir {
+            let resources_dir = dir.join("resources");
+            let native_dir = resources_dir.join("native");
+
+            cmd.env("NODE_PATH", native_dir.to_string_lossy().as_ref());
+
+            let vec_ext = if cfg!(windows) {
+                native_dir.join("vec0.dll")
+            } else if cfg!(target_os = "macos") {
+                native_dir.join("vec0.dylib")
+            } else {
+                native_dir.join("vec0.so")
+            };
+            if vec_ext.exists() {
+                cmd.env("WAGGLE_SQLITE_VEC_PATH", vec_ext.to_string_lossy().as_ref());
+            }
+
+            let ort_dir = native_dir.join("onnxruntime");
+            if ort_dir.exists() {
+                cmd.env("ONNXRUNTIME_NODE_BINDING_PATH", ort_dir.to_string_lossy().as_ref());
+            }
+        }
+    }
+
+    Ok(cmd)
+}
+
+/// Synchronously spawn the sidecar process if not already running. Does not wait
+/// for the health check. Safe to call from Tauri's synchronous `.setup()` callback.
+pub fn spawn_service_sync(port: u16, process: &Mutex<Option<Child>>) -> Result<(), String> {
+    {
+        let proc = process.lock().map_err(|e| e.to_string())?;
+        if proc.is_some() {
+            return Ok(());
+        }
+    }
+
+    let mut cmd = build_service_command(port)?;
+    let child = cmd
+        .spawn()
+        .map_err(|e| format!("Failed to start service: {}", e))?;
+
+    let mut proc = process.lock().map_err(|e| e.to_string())?;
+    *proc = Some(child);
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn ensure_service(state: State<'_, ServiceState>) -> Result<String, String> {
     let port = state.port;
     let health_url = format!("http://127.0.0.1:{}/health", port);
 
-    // Check if service is already running via health check
     match reqwest::get(&health_url).await {
         Ok(resp) if resp.status().is_success() => {
             return Ok("Service already running".to_string());
@@ -70,88 +161,8 @@ pub async fn ensure_service(state: State<'_, ServiceState>) -> Result<String, St
         _ => {}
     }
 
-    // Start the agent service — scope the MutexGuard so it's dropped before await
-    {
-        let mut proc = state.process.lock().map_err(|e| e.to_string())?;
+    spawn_service_sync(port, &state.process)?;
 
-        let node_path = resolve_node_path();
-
-        let exe_dir = std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|d| d.to_path_buf()));
-
-        let service_script = if cfg!(debug_assertions) {
-            let app_dir = std::env::current_dir().map_err(|e| e.to_string())?;
-            let script = app_dir
-                .parent()
-                .ok_or("no parent")?
-                .parent()
-                .ok_or("no grandparent")?
-                .join("packages")
-                .join("server")
-                .join("src")
-                .join("local")
-                .join("service.ts");
-            script.to_string_lossy().to_string()
-        } else {
-            exe_dir
-                .as_ref()
-                .map(|d| d.join("resources").join("service.js").to_string_lossy().to_string())
-                .unwrap_or_else(|| "resources/service.js".to_string())
-        };
-
-        let mut cmd = if cfg!(debug_assertions) {
-            let mut c = Command::new(&node_path);
-            c.arg("--import").arg("tsx").arg(&service_script);
-            c
-        } else {
-            let mut c = Command::new(&node_path);
-            c.arg(&service_script);
-            c
-        };
-
-        cmd.env("WAGGLE_PORT", port.to_string());
-
-        // Production-only environment setup
-        if !cfg!(debug_assertions) {
-            // Skip LiteLLM — desktop users don't have it
-            cmd.env("WAGGLE_SKIP_LITELLM", "1");
-
-            // Set up native module paths for bundled dependencies
-            if let Some(ref dir) = exe_dir {
-                let resources_dir = dir.join("resources");
-                let native_dir = resources_dir.join("native");
-
-                // NODE_PATH for native module resolution
-                cmd.env("NODE_PATH", native_dir.to_string_lossy().as_ref());
-
-                // sqlite-vec extension path
-                let vec_ext = if cfg!(windows) {
-                    native_dir.join("vec0.dll")
-                } else if cfg!(target_os = "macos") {
-                    native_dir.join("vec0.dylib")
-                } else {
-                    native_dir.join("vec0.so")
-                };
-                if vec_ext.exists() {
-                    cmd.env("WAGGLE_SQLITE_VEC_PATH", vec_ext.to_string_lossy().as_ref());
-                }
-
-                // onnxruntime library path
-                let ort_dir = native_dir.join("onnxruntime");
-                if ort_dir.exists() {
-                    cmd.env("ONNXRUNTIME_NODE_BINDING_PATH", ort_dir.to_string_lossy().as_ref());
-                }
-            }
-        }
-
-        let child = cmd
-            .spawn()
-            .map_err(|e| format!("Failed to start service: {}", e))?;
-        *proc = Some(child);
-    } // MutexGuard dropped here
-
-    // Wait for health check (up to 30 seconds)
     for _ in 0..30 {
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         match reqwest::get(&health_url).await {
@@ -181,7 +192,7 @@ pub async fn get_service_port(state: State<'_, ServiceState>) -> Result<u16, Str
 }
 
 pub fn start_watchdog(app: AppHandle, port: u16) {
-    tokio::spawn(async move {
+    tauri::async_runtime::spawn(async move {
         let health_url = format!("http://127.0.0.1:{}/health", port);
         let mut consecutive_failures: u32 = 0;
         let mut restart_count: u32 = 0;

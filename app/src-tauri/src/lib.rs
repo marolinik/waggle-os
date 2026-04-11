@@ -68,14 +68,22 @@ pub fn run() {
             let shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyW);
             app.global_shortcut().register(shortcut)?;
 
+            // Auto-start the sidecar service before the webview loads so the
+            // React app finds it already healthy on localhost:3333.
+            let service_state = app.state::<ServiceState>();
+            let port = service_state.port;
+            match service::spawn_service_sync(port, &service_state.process) {
+                Ok(()) => eprintln!("[waggle] Sidecar spawn initiated on port {}", port),
+                Err(e) => eprintln!("[waggle] Failed to auto-start sidecar: {}", e),
+            }
+
             // Start service watchdog
             let app_handle_watchdog = app.handle().clone();
-            let port = app.state::<ServiceState>().port;
             service::start_watchdog(app_handle_watchdog, port);
 
             // 9D-7: Check for updates on startup (non-blocking)
             let app_handle_update = app.handle().clone();
-            tokio::spawn(async move {
+            tauri::async_runtime::spawn(async move {
                 // Wait 5s for UI to load before checking
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;
 
