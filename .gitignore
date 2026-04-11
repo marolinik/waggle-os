@@ -22,6 +22,9 @@ dist-ssr
 *.mind
 marketplace.db
 
+# Local scratch parking lot — see .scratch/README if any
+.scratch/
+
 # Build artifacts
 *.tsbuildinfo
 
