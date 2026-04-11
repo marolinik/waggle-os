@@ -34,6 +34,17 @@ export interface SubAgentResult {
   completedAt: number;
 }
 
+export interface SubAgentStatusEvent {
+  agentId: string;
+  name: string;
+  role: string;
+  status: 'running' | 'done' | 'error';
+  task: string;
+  toolsUsed: string[];
+  startedAt: number;
+  completedAt?: number;
+}
+
 export interface SubAgentToolsDeps {
   /** All available tools the main agent has (sub-agents get a filtered subset) */
   availableTools: ToolDefinition[];
@@ -48,6 +59,14 @@ export interface SubAgentToolsDeps {
   /** Optional callback for streaming sub-agent progress */
   onSubAgentToken?: (agentId: string, token: string) => void;
   onSubAgentTool?: (agentId: string, name: string, input: Record<string, unknown>) => void;
+  /**
+   * Emitted on sub-agent lifecycle transitions (start / complete / error).
+   * The server wires this to emitSubagentStatus so the Room canvas
+   * (`/api/notifications/stream` → `subagent_status`) can render live tiles
+   * for sub-agents spawned via spawn_agent, not just via orchestrate_workflow.
+   * Bug #9.
+   */
+  onSubAgentStatus?: (event: SubAgentStatusEvent) => void;
   /** Hook registry — passed to sub-agent loops so approval gates and memory validation apply */
   hooks?: HookRegistry;
 }
@@ -185,6 +204,16 @@ ${task}
 
         // Run the sub-agent loop
         const startTime = Date.now();
+        // Bug #9: emit running status so the Room canvas can render a live tile.
+        deps.onSubAgentStatus?.({
+          agentId: id,
+          name,
+          role,
+          status: 'running',
+          task,
+          toolsUsed: [],
+          startedAt: startTime,
+        });
         try {
           const result = await runLoop({
             litellmUrl,
@@ -219,11 +248,36 @@ ${task}
           evictOldestResult();
           activeAgents.delete(id);
 
+          // Bug #9: emit done status so the Room canvas moves the tile to completed.
+          deps.onSubAgentStatus?.({
+            agentId: id,
+            name,
+            role,
+            status: 'done',
+            task,
+            toolsUsed: result.toolsUsed,
+            startedAt: startTime,
+            completedAt: Date.now(),
+          });
+
           return `## Sub-Agent Result: ${name}\n**Role:** ${role}\n**Duration:** ${(duration / 1000).toFixed(1)}s\n**Tools used:** ${result.toolsUsed.join(', ') || 'none'}\n**Tokens:** ${result.usage.inputTokens + result.usage.outputTokens} total\n\n---\n\n${result.content}`;
         } catch (err) {
           const duration = Date.now() - startTime;
           activeAgents.delete(id);
           const errMsg = err instanceof Error ? err.message : String(err);
+
+          // Bug #9: emit error status so the Room canvas marks the tile failed.
+          deps.onSubAgentStatus?.({
+            agentId: id,
+            name,
+            role,
+            status: 'error',
+            task,
+            toolsUsed: [],
+            startedAt: startTime,
+            completedAt: Date.now(),
+          });
+
           return `## Sub-Agent Error: ${name}\n**Duration:** ${(duration / 1000).toFixed(1)}s\n**Error:** ${errMsg}`;
         }
       },

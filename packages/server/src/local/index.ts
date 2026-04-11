@@ -584,13 +584,31 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   // Collect all non-subagent tools first (sub-agent tools need the full list)
   const baseTools = [...mindTools, ...systemTools, ...planTools, ...gitTools, ...documentTools, ...skillTools, ...cronTools, ...searchTools, ...browserTools, ...lspTools, ...cliTools, ...insightsTools, ...connectorSearchTools, ...defaultConnectorTools];
 
-  // Sub-agent tools — let the main agent spawn specialist sub-agents
+  // Sub-agent tools — let the main agent spawn specialist sub-agents.
+  // onSubAgentStatus relays start/done/error transitions to the notifications
+  // SSE stream so the Room canvas can render live tiles for sub-agents
+  // spawned via spawn_agent (bug #9). Without this wiring, sub-agents ran
+  // silently and Room stayed empty.
   const subAgentTools = createSubAgentTools({
     availableTools: baseTools,
     runLoop: runAgentLoop,
     litellmUrl: fullConfig.litellmUrl,
     litellmApiKey: litellmApiKey,
     defaultModel: 'claude-sonnet-4-6',
+    onSubAgentStatus: (event) => {
+      emitSubagentStatus(server, server.agentState.activeWorkspaceId ?? 'default', [{
+        id: event.agentId,
+        name: event.name,
+        role: event.role,
+        // emitSubagentStatus uses the workflow-orchestrator vocabulary
+        // ('failed' vs our internal 'error'); map at the boundary.
+        status: event.status === 'error' ? 'failed' : event.status,
+        task: event.task,
+        toolsUsed: event.toolsUsed,
+        startedAt: event.startedAt,
+        completedAt: event.completedAt,
+      }]);
+    },
   });
 
   // Workflow tools — multi-agent workflow templates (research, review, plan-execute)
@@ -768,6 +786,18 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
       litellmUrl: fullConfig.litellmUrl,
       litellmApiKey: litellmApiKey,
       defaultModel: 'claude-sonnet-4-6',
+      onSubAgentStatus: (event) => {
+        emitSubagentStatus(server, server.agentState.activeWorkspaceId ?? 'default', [{
+          id: event.agentId,
+          name: event.name,
+          role: event.role,
+          status: event.status === 'error' ? 'failed' : event.status,
+          task: event.task,
+          toolsUsed: event.toolsUsed,
+          startedAt: event.startedAt,
+          completedAt: event.completedAt,
+        }]);
+      },
     });
     const wsWorkflow = createWorkflowTools({
       availableTools: wsBase,
