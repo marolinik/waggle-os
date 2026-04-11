@@ -1,0 +1,1037 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Waggle OS — Mental Model</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  :root {
+    --bg: #0a0a0d;
+    --panel: #121217;
+    --panel-2: #181820;
+    --border: #26262f;
+    --text: #e7e7ec;
+    --muted: #8b8b97;
+    --honey: #e5a000;
+    --accent: #a78bfa;
+    --emerald: #34d399;
+    --sky: #60a5fa;
+    --rose: #f87171;
+    --amber: #fbbf24;
+    --green: #4ade80;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 13px; line-height: 1.45;
+    overflow: hidden;
+    height: 100vh;
+  }
+  .app {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    grid-template-rows: 48px 1fr 160px;
+    grid-template-areas:
+      "header   header"
+      "canvas   sidebar"
+      "prompt   prompt";
+    height: 100vh;
+    gap: 0;
+  }
+  header {
+    grid-area: header;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  header h1 {
+    margin: 0; font-size: 14px; font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  header h1 .dot {
+    display: inline-block; width: 8px; height: 8px;
+    background: var(--honey); border-radius: 50%;
+    margin-right: 8px; vertical-align: middle;
+    box-shadow: 0 0 10px var(--honey);
+  }
+  header .subtitle {
+    color: var(--muted); font-size: 12px;
+  }
+  .canvas-wrap {
+    grid-area: canvas;
+    position: relative;
+    overflow: hidden;
+    background: var(--bg);
+    background-image:
+      radial-gradient(circle at 50% 50%, rgba(167, 139, 250, 0.05), transparent 60%),
+      radial-gradient(circle at 20% 80%, rgba(229, 160, 0, 0.04), transparent 50%);
+  }
+  svg#graph {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+  }
+  svg#graph.dragging { cursor: grabbing; }
+  .layer-band {
+    fill: rgba(255, 255, 255, 0.015);
+    stroke: rgba(255, 255, 255, 0.04);
+  }
+  .layer-label {
+    fill: var(--muted);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    pointer-events: none;
+    user-select: none;
+  }
+  .edge {
+    stroke: rgba(139, 139, 151, 0.4);
+    stroke-width: 1.3;
+    fill: none;
+  }
+  .edge-label {
+    fill: var(--muted);
+    font-size: 9px;
+    font-style: italic;
+    pointer-events: none;
+    user-select: none;
+    opacity: 0;
+    transition: opacity 120ms ease;
+  }
+  .edge-group:hover .edge-label { opacity: 1; }
+  .edge-group:hover .edge { stroke: var(--honey); }
+
+  .node-group { cursor: pointer; }
+  .node-circle {
+    stroke-width: 2;
+    transition: opacity 160ms ease, transform 160ms ease;
+  }
+  .node-group.dim .node-circle { opacity: 0.18; }
+  .node-group.dim .node-label { opacity: 0.3; }
+  .node-label {
+    fill: var(--text);
+    font-size: 11px;
+    font-weight: 500;
+    pointer-events: none;
+    user-select: none;
+    text-anchor: middle;
+  }
+
+  .k-ring {
+    fill: none;
+    stroke-width: 2.5;
+    pointer-events: none;
+  }
+  .k-ring.fuzzy   { stroke: var(--amber);   stroke-dasharray: 4 3; }
+  .k-ring.know    { stroke: var(--green);   stroke-dasharray: none; }
+  .k-ring.unknown { stroke: var(--rose);    stroke-dasharray: 2 4; }
+
+  #tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: rgba(18, 18, 23, 0.96);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    max-width: 280px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    transition: opacity 120ms ease;
+    z-index: 10;
+  }
+  #tooltip.visible { opacity: 1; }
+  #tooltip .tt-layer {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  #tooltip .tt-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  #tooltip .tt-metric {
+    display: inline-block;
+    background: rgba(229, 160, 0, 0.15);
+    color: var(--honey);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-top: 6px;
+    font-variant-numeric: tabular-nums;
+  }
+  aside {
+    grid-area: sidebar;
+    border-left: 1px solid var(--border);
+    background: var(--panel);
+    overflow-y: auto;
+    padding: 16px;
+  }
+  aside h2 {
+    margin: 14px 0 8px; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted);
+  }
+  aside h2:first-child { margin-top: 0; }
+  .legend-row {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; margin: 4px 0;
+  }
+  .legend-swatch {
+    width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+  }
+  .legend-ring {
+    width: 12px; height: 12px; border-radius: 50%;
+    border: 2px solid; flex-shrink: 0;
+  }
+  .legend-ring.fuzzy { border-color: var(--amber); border-style: dashed; }
+  .legend-ring.know { border-color: var(--green); border-style: solid; }
+  .legend-ring.unknown { border-color: var(--rose); border-style: dashed; }
+
+  .preset-btn, .action-btn {
+    display: block; width: 100%; text-align: left;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    cursor: pointer;
+    margin-bottom: 6px;
+    transition: background 120ms ease, border-color 120ms ease;
+    font-family: inherit;
+  }
+  .preset-btn:hover, .action-btn:hover {
+    background: #1e1e28;
+    border-color: #30303c;
+  }
+  .preset-btn.active {
+    background: rgba(229, 160, 0, 0.1);
+    border-color: var(--honey);
+    color: var(--honey);
+  }
+  .preset-desc {
+    color: var(--muted); font-size: 11px;
+    margin-top: 2px; font-weight: 400;
+  }
+
+  .node-list {
+    display: flex; flex-direction: column; gap: 3px;
+    max-height: none;
+  }
+  .node-list-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 8px;
+    background: var(--panel-2);
+    border: 1px solid transparent;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 120ms ease;
+  }
+  .node-list-item:hover { background: #1e1e28; }
+  .node-list-item .cycle-ring {
+    width: 12px; height: 12px; border-radius: 50%;
+    border: 2px solid; flex-shrink: 0;
+  }
+  .node-list-item .cycle-ring.fuzzy { border-color: var(--amber); border-style: dashed; }
+  .node-list-item .cycle-ring.know { border-color: var(--green); border-style: solid; }
+  .node-list-item .cycle-ring.unknown { border-color: var(--rose); border-style: dashed; }
+  .node-list-item .dot-color {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+  .node-list-item .name {
+    flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  .prompt-area {
+    grid-area: prompt;
+    border-top: 1px solid var(--border);
+    background: var(--panel);
+    padding: 14px 20px 12px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .prompt-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .prompt-header .label {
+    font-size: 10px; text-transform: uppercase; font-weight: 600;
+    letter-spacing: 0.08em; color: var(--muted);
+  }
+  .prompt-header .hint {
+    font-size: 11px; color: var(--muted);
+  }
+  .copy-btn {
+    background: var(--honey); color: #0a0a0d;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 120ms ease;
+  }
+  .copy-btn:hover { background: #f2b200; }
+  .copy-btn.copied {
+    background: var(--green); color: #0a0a0d;
+  }
+  #prompt {
+    flex: 1;
+    font-family: "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    font-size: 11.5px;
+    line-height: 1.55;
+    color: #c8c8d0;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header>
+    <h1><span class="dot"></span>Waggle OS — Mental Model</h1>
+    <div class="subtitle">Click a node to cycle Know / Fuzzy / Unknown · Drag to rearrange · Hover for product description</div>
+  </header>
+
+  <div class="canvas-wrap">
+    <svg id="graph" viewBox="0 0 1000 700" preserveAspectRatio="xMidYMid meet"></svg>
+    <div id="tooltip"></div>
+  </div>
+
+  <aside>
+    <h2>Knowledge Legend</h2>
+    <div class="legend-row"><div class="legend-ring fuzzy"></div> Fuzzy — I've heard of it</div>
+    <div class="legend-row"><div class="legend-ring know"></div> Know — I understand it</div>
+    <div class="legend-row"><div class="legend-ring unknown"></div> Unknown — no idea</div>
+
+    <h2>Layer Legend</h2>
+    <div class="legend-row"><div class="legend-swatch" style="background:#e5a000"></div> User-facing (what you see)</div>
+    <div class="legend-row"><div class="legend-swatch" style="background:#a78bfa"></div> Intelligence (how it thinks)</div>
+    <div class="legend-row"><div class="legend-swatch" style="background:#34d399"></div> Memory (what it remembers)</div>
+    <div class="legend-row"><div class="legend-swatch" style="background:#60a5fa"></div> Commerce / Compliance</div>
+
+    <h2>Presets</h2>
+    <button class="preset-btn active" data-preset="all">Everything
+      <div class="preset-desc">See the whole system at once</div></button>
+    <button class="preset-btn" data-preset="path-to-prod">Critical Path to Production
+      <div class="preset-desc">Tiers, compliance, KVARK funnel</div></button>
+    <button class="preset-btn" data-preset="remembers">How It Remembers
+      <div class="preset-desc">Memory, Knowledge Graph, Harvest</div></button>
+    <button class="preset-btn" data-preset="thinks">How It Thinks
+      <div class="preset-desc">Agent loop, personas, tools</div></button>
+    <button class="preset-btn" data-preset="first-run">First-Run User Journey
+      <div class="preset-desc">Onboarding → workspace → chat</div></button>
+
+    <h2>Nodes — click to cycle knowledge</h2>
+    <div class="node-list" id="node-list"></div>
+
+    <h2>Actions</h2>
+    <button class="action-btn" id="reset-layout">Reset layout</button>
+    <button class="action-btn" id="mark-all-know">Mark everything as "Know"</button>
+    <button class="action-btn" id="mark-all-fuzzy">Mark everything as "Fuzzy"</button>
+  </aside>
+
+  <div class="prompt-area">
+    <div class="prompt-header">
+      <div>
+        <span class="label">Learning prompt · </span>
+        <span class="hint">Copy this back to Claude to get a targeted explanation</span>
+      </div>
+      <button class="copy-btn" id="copy-btn">Copy to clipboard</button>
+    </div>
+    <pre id="prompt"></pre>
+  </div>
+</div>
+
+<script>
+// ── NODES — product-level, not code-level ──────────────────────────────
+//
+// Layers:
+//   1 = User-facing  (what you click)    → honey
+//   2 = Intelligence (how it thinks)     → accent
+//   3 = Memory       (what it remembers) → emerald
+//   4 = Commerce     (what makes it sold)→ sky
+//
+// Each node has a product description a non-coder can act on.
+// The metric field is current-state so the mental model is grounded in
+// today's reality — 156 harvest frames, 2696 entities, 148 MCPs, etc.
+
+const LAYER_COLORS = {
+  1: '#e5a000',
+  2: '#a78bfa',
+  3: '#34d399',
+  4: '#60a5fa',
+};
+const LAYER_NAMES = {
+  1: 'User-facing',
+  2: 'Intelligence',
+  3: 'Memory',
+  4: 'Commerce / Compliance',
+};
+
+const NODE_DATA = [
+  // ── Layer 1 — User-facing (8 nodes) ───────────────────────────────
+  { id: 'desktop-app',    layer: 1, label: 'Desktop App',
+    desc: "The Tauri binary (~120MB) that ships on Windows and macOS. A single window hosts the whole Waggle OS UI. It's the thing users launch.",
+    metric: '1 binary · Win + macOS' },
+  { id: 'onboarding',     layer: 1, label: 'Onboarding',
+    desc: "Seven-step first-run wizard: welcome → why Waggle → import memory → template → persona → API key → ready. The only moment Waggle introduces itself before the user is expected to use it.",
+    metric: '7 steps · 15 templates' },
+  { id: 'workspace',      layer: 1, label: 'Workspace',
+    desc: "A project space with its own memory, tasks, and chat history. Users can have many. Think of it like a Slack channel crossed with a Notion page — scoped context for one project.",
+    metric: 'Many per user' },
+  { id: 'chat',           layer: 1, label: 'Chat',
+    desc: "The main conversation surface. You type, the AI replies, it can call tools, save memories, spawn sub-agents. Every persona is a different flavor of chat.",
+    metric: 'Main surface' },
+  { id: 'personas',       layer: 1, label: 'Personas',
+    desc: "Named AI modes: researcher, coder, planner, writer, analyst, sales-rep, HR, legal, finance, consultant. Each has its own system prompt, tool allowlist, and suggested workflow. Picking a persona is how a user tells Waggle what job to do.",
+    metric: '13 built-in → 17 target' },
+  { id: 'memory-app',     layer: 1, label: 'Memory',
+    desc: "The browser for everything the workspace remembers. Three tabs: Timeline (list of memories), Graph (entities and relationships), Harvest (import from AI history).",
+    metric: '3 tabs' },
+  { id: 'cockpit',        layer: 1, label: 'Cockpit',
+    desc: "The control room. Shows cost, tool usage, compliance status, active monitors, audit trail, harvested data. The place you check when you want to see what Waggle is doing and at what cost.",
+    metric: 'Cost + Compliance + Audit' },
+  { id: 'connectors-app', layer: 1, label: 'Connectors',
+    desc: "The marketplace of 148 MCP integrations — Slack, Postgres, Notion, Stripe, Linear, GitHub. Click one to install it into the Tool Pool so the agent can use it.",
+    metric: '148 in catalog' },
+  { id: 'marketplace',    layer: 1, label: 'Marketplace',
+    desc: "The storefront where Connectors AND Skills live together. One place where the user browses installable capabilities — integrations, procedures, workflows — and adds them to their workspace. It is the App Store for the agent's abilities, the biggest platform lever beyond memory.",
+    metric: 'Connectors + Skills + future' },
+
+  // ── Layer 2 — Intelligence (6 nodes) ──────────────────────────────
+  { id: 'agent-loop',     layer: 2, label: 'Agent Loop',
+    desc: "The reasoning engine. On every message, it runs: RECALL, ASSESS, ACT, LEARN, RESPOND. It decides which tools to call and what to save to memory. This is the heart of Waggle.",
+    metric: '5-step loop' },
+  { id: 'behavioral-spec', layer: 2, label: 'Behavioral Spec',
+    desc: "The rulebook the agent reads before every response. Defines memory-first thinking, anti-hallucination discipline, when to save memories, when to add disclaimers. It is how we make every persona feel consistent.",
+    metric: 'v3.0 · 5 sections' },
+  { id: 'tool-pool',      layer: 2, label: 'Tool Pool',
+    desc: "The set of skills the agent has: web search, read/write files, search memory, save memory, find connector, git, documents, skills, sub-agents. Different personas see different subsets.",
+    metric: '~30 built-in tools' },
+  { id: 'sub-agents',     layer: 2, label: 'Sub-Agents',
+    desc: "Specialized workers the main agent can spawn: researcher, coder, reviewer, planner. They run autonomously and return results, keeping the main loop focused. It is how Waggle handles complex multi-part tasks.",
+    metric: 'On-demand' },
+  { id: 'workflows',      layer: 2, label: 'Workflows',
+    desc: "Multi-phase templates like research, compare, draft, or plan, execute, review. The agent picks a workflow when a task has distinct phases instead of doing everything in one shot.",
+    metric: 'Templates' },
+  { id: 'skills',         layer: 2, label: 'Skills',
+    desc: "Installable expertise. Not actions (that is the Tool Pool) but procedures and judgment: how to build a DCF, how to run a sprint-planning meeting, how to review a contract for missing clauses, how to critique a pitch deck against brand guidelines. Persona is the cook, Tool Pool is the kitchen, Skill is the recipe book.",
+    metric: 'Installable know-how' },
+
+  // ── Layer 3 — Memory (5 nodes) ────────────────────────────────────
+  { id: 'personal-mind',  layer: 3, label: 'Personal Mind',
+    desc: "Cross-workspace memory. Your identity, preferences, communication style, corrections about Waggle itself. Follows you everywhere. Loaded on every session.",
+    metric: '199 frames live' },
+  { id: 'workspace-mind', layer: 3, label: 'Workspace Mind',
+    desc: "Per-project memory. Decisions, task progress, meeting notes, domain knowledge. Each workspace has its own so projects stay isolated.",
+    metric: 'One per workspace' },
+  { id: 'frame-store',    layer: 3, label: 'Frame Store',
+    desc: "The database under both minds. SQLite plus vector embeddings. Every memory is a frame with title, content, importance, tags, timestamp. Searchable by keyword OR meaning.",
+    metric: 'SQLite + sqlite-vec' },
+  { id: 'knowledge-graph', layer: 3, label: 'Knowledge Graph',
+    desc: "Extracted entities (people, projects, tools, places) and their relationships. Lets you ask questions like who works on Mixpost and get real answers, not guesses.",
+    metric: '2,696 entities live' },
+  { id: 'harvest',        layer: 3, label: 'Memory Harvest',
+    desc: "Imports your AI history from 20+ platforms — Claude Code, ChatGPT, Gemini, Cursor, Perplexity. Turns a year of scattered chat into permanent, searchable memory. The wow moment for new users.",
+    metric: '156 frames imported' },
+
+  // ── Layer 4 — Commerce / Compliance (3 nodes) ─────────────────────
+  { id: 'ai-act',         layer: 4, label: 'AI Act Compliance',
+    desc: "EU AI Act readiness built in from day one. Dashboard shows Art. 12 (logging), 14 (oversight), 19 (retention), 26 (monitoring), 50 (transparency). The August 2026 deadline is the differentiator for enterprise sales.",
+    metric: 'Aug 2026 deadline' },
+  { id: 'tiers',          layer: 4, label: 'Tiers + Billing',
+    desc: "Solo (free), Basic ($15/mo), Teams ($79/mo), Enterprise. Solo teaches individuals what AI-native work feels like. Basic unlocks unlimited agents. Teams unlocks shared context and governance. Stripe-gated.",
+    metric: '4 tiers · Stripe pending' },
+  { id: 'kvark',          layer: 4, label: 'KVARK (Enterprise)',
+    desc: "Egzakta's sovereign variant. Same Waggle, on the customer's infrastructure, full data governance, audit trail, zero data leaves their perimeter. Top of the funnel — Teams tier is the bridge that qualifies prospects for KVARK.",
+    metric: '€1.2M contracted' },
+];
+
+// ── EDGES — product-level relationships ───────────────────────────────
+const EDGE_DATA = [
+  // Desktop foundation
+  { from: 'desktop-app', to: 'workspace',      rel: 'hosts' },
+  { from: 'desktop-app', to: 'cockpit',        rel: 'hosts' },
+  { from: 'desktop-app', to: 'memory-app',     rel: 'hosts' },
+  { from: 'desktop-app', to: 'connectors-app', rel: 'hosts' },
+
+  // Onboarding flow
+  { from: 'onboarding',  to: 'workspace',      rel: 'creates' },
+  { from: 'onboarding',  to: 'personas',       rel: 'picks' },
+
+  // Chat flow
+  { from: 'workspace',   to: 'chat',           rel: 'contains' },
+  { from: 'chat',        to: 'agent-loop',     rel: 'sends to' },
+  { from: 'personas',    to: 'agent-loop',     rel: 'configures' },
+
+  // Agent internals
+  { from: 'behavioral-spec', to: 'agent-loop', rel: 'guides' },
+  { from: 'tool-pool',       to: 'agent-loop', rel: 'available to' },
+  { from: 'sub-agents',      to: 'agent-loop', rel: 'spawned by' },
+  { from: 'workflows',       to: 'agent-loop', rel: 'orchestrated by' },
+  { from: 'connectors-app',  to: 'tool-pool',  rel: 'installs into' },
+  { from: 'skills',          to: 'agent-loop', rel: 'teaches' },
+  { from: 'marketplace',     to: 'connectors-app', rel: 'distributes' },
+  { from: 'marketplace',     to: 'skills',     rel: 'distributes' },
+  { from: 'desktop-app',     to: 'marketplace', rel: 'hosts' },
+
+  // Memory reads/writes
+  { from: 'agent-loop',   to: 'frame-store',     rel: 'recalls / saves' },
+  { from: 'agent-loop',   to: 'knowledge-graph', rel: 'queries' },
+  { from: 'personal-mind', to: 'frame-store',    rel: 'stored in' },
+  { from: 'workspace-mind', to: 'frame-store',   rel: 'stored in' },
+  { from: 'harvest',      to: 'frame-store',     rel: 'populates' },
+  { from: 'frame-store',  to: 'knowledge-graph', rel: 'extracted from' },
+  { from: 'workspace',    to: 'workspace-mind',  rel: 'owns' },
+
+  // UI surfaces
+  { from: 'memory-app',   to: 'frame-store',     rel: 'browses' },
+  { from: 'memory-app',   to: 'knowledge-graph', rel: 'visualizes' },
+  { from: 'memory-app',   to: 'harvest',         rel: 'runs' },
+  { from: 'cockpit',      to: 'ai-act',          rel: 'shows' },
+  { from: 'cockpit',      to: 'tiers',           rel: 'shows cost by' },
+
+  // Commerce funnel
+  { from: 'tiers',        to: 'kvark',           rel: 'funnels to' },
+  { from: 'ai-act',       to: 'kvark',           rel: 'differentiates' },
+];
+
+// ── Pre-positioned layout (4 horizontal layers) ───────────────────────
+const LAYOUT = {
+  'desktop-app':    { x:  80, y:  90 },
+  'onboarding':     { x: 210, y:  90 },
+  'workspace':      { x: 340, y:  90 },
+  'chat':           { x: 470, y:  90 },
+  'personas':       { x: 600, y:  90 },
+  'memory-app':     { x: 730, y:  90 },
+  'cockpit':        { x: 860, y:  90 },
+  'connectors-app': { x: 860, y: 180 },
+  'marketplace':    { x: 730, y: 180 },
+
+  'agent-loop':      { x: 500, y: 270 },
+  'behavioral-spec': { x: 280, y: 270 },
+  'tool-pool':       { x: 700, y: 270 },
+  'skills':          { x: 880, y: 270 },
+  'sub-agents':      { x: 160, y: 360 },
+  'workflows':       { x: 840, y: 360 },
+
+  'frame-store':     { x: 500, y: 460 },
+  'personal-mind':   { x: 280, y: 460 },
+  'workspace-mind':  { x: 380, y: 540 },
+  'knowledge-graph': { x: 720, y: 460 },
+  'harvest':         { x: 620, y: 540 },
+
+  'ai-act':          { x: 280, y: 635 },
+  'tiers':           { x: 500, y: 635 },
+  'kvark':           { x: 720, y: 635 },
+};
+
+// ── State ─────────────────────────────────────────────────────────────
+const KNOWLEDGE_LEVELS = ['fuzzy', 'know', 'unknown'];
+const state = {
+  nodes: NODE_DATA.map(n => ({
+    ...n,
+    x: LAYOUT[n.id].x,
+    y: LAYOUT[n.id].y,
+    knowledge: 'fuzzy',
+  })),
+  edges: EDGE_DATA.map(e => ({ ...e })),
+  preset: 'all',
+  dimSet: new Set(),
+};
+const DEFAULT_POSITIONS = Object.fromEntries(
+  state.nodes.map(n => [n.id, { x: n.x, y: n.y }])
+);
+
+// ── Presets (dim sets) ────────────────────────────────────────────────
+const PRESETS = {
+  'all': new Set(),
+  'path-to-prod': new Set([
+    'agent-loop','behavioral-spec','tool-pool','skills','sub-agents','workflows',
+    'frame-store','personal-mind','workspace-mind','knowledge-graph','harvest',
+    'memory-app','connectors-app','marketplace','chat','personas','onboarding','workspace',
+    'desktop-app',
+  ]),
+  'remembers': new Set([
+    'onboarding','personas','connectors-app','marketplace','behavioral-spec','tool-pool',
+    'skills','sub-agents','workflows','tiers','kvark','ai-act','chat','cockpit',
+    'desktop-app','workspace',
+  ]),
+  'thinks': new Set([
+    'onboarding','harvest','personal-mind','workspace-mind','frame-store',
+    'knowledge-graph','tiers','kvark','ai-act','cockpit','desktop-app',
+    'memory-app','marketplace','workspace',
+  ]),
+  'first-run': new Set([
+    'cockpit','memory-app','connectors-app','marketplace','harvest','knowledge-graph',
+    'tool-pool','skills','sub-agents','workflows','behavioral-spec','frame-store',
+    'personal-mind','workspace-mind','tiers','kvark','ai-act',
+  ]),
+};
+
+// ── SVG helpers ───────────────────────────────────────────────────────
+const NS = 'http://www.w3.org/2000/svg';
+const svg = document.getElementById('graph');
+const tooltip = document.getElementById('tooltip');
+const canvasWrap = document.querySelector('.canvas-wrap');
+
+function clearEl(el) {
+  while (el.firstChild) el.firstChild.remove();
+}
+function svgEl(tag, attrs) {
+  const el = document.createElementNS(NS, tag);
+  if (attrs) {
+    for (const [k, v] of Object.entries(attrs)) {
+      el.setAttribute(k, v);
+    }
+  }
+  return el;
+}
+
+// ── Layers ────────────────────────────────────────────────────────────
+let edgeLayer, nodeLayer;
+
+function buildLayers() {
+  clearEl(svg);
+
+  // Defs with arrow marker
+  const defs = svgEl('defs');
+  const marker = svgEl('marker', {
+    id: 'arrow',
+    viewBox: '0 -5 10 10',
+    refX: '8',
+    refY: '0',
+    markerWidth: '6',
+    markerHeight: '6',
+    orient: 'auto',
+  });
+  marker.appendChild(svgEl('path', {
+    d: 'M0,-5L10,0L0,5',
+    fill: 'rgba(139,139,151,0.6)',
+  }));
+  defs.appendChild(marker);
+  svg.appendChild(defs);
+
+  // Layer bands
+  const bandY = { 1: 30, 2: 220, 3: 410, 4: 600 };
+  const bandH = { 1: 180, 2: 180, 3: 180, 4: 80 };
+  const bandLayer = svgEl('g');
+  [1,2,3,4].forEach(layer => {
+    const band = svgEl('rect', {
+      class: 'layer-band',
+      x: '10', y: String(bandY[layer]),
+      width: '980', height: String(bandH[layer]),
+      rx: '14',
+    });
+    bandLayer.appendChild(band);
+  });
+  svg.appendChild(bandLayer);
+
+  // Layer labels
+  const labelLayer = svgEl('g');
+  [1,2,3,4].forEach(layer => {
+    const lbl = svgEl('text', {
+      class: 'layer-label',
+      x: '24', y: String(bandY[layer] + 18),
+    });
+    lbl.textContent = LAYER_NAMES[layer];
+    labelLayer.appendChild(lbl);
+  });
+  svg.appendChild(labelLayer);
+
+  edgeLayer = svgEl('g');
+  svg.appendChild(edgeLayer);
+
+  nodeLayer = svgEl('g');
+  svg.appendChild(nodeLayer);
+}
+
+function nodeRadius() { return 32; }
+
+function findNode(id) { return state.nodes.find(n => n.id === id); }
+
+// ── Edge rendering ────────────────────────────────────────────────────
+function renderEdges() {
+  clearEl(edgeLayer);
+  state.edges.forEach((e) => {
+    const a = findNode(e.from);
+    const b = findNode(e.to);
+    if (!a || !b) return;
+
+    const g = svgEl('g', { class: 'edge-group' });
+
+    const r = nodeRadius();
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len;
+    const uy = dy / len;
+    const x1 = a.x + ux * r;
+    const y1 = a.y + uy * r;
+    const x2 = b.x - ux * (r + 4);
+    const y2 = b.y - uy * (r + 4);
+
+    const line = svgEl('line', {
+      class: 'edge',
+      x1: String(x1), y1: String(y1),
+      x2: String(x2), y2: String(y2),
+      'marker-end': 'url(#arrow)',
+    });
+    g.appendChild(line);
+
+    const mx = (x1 + x2) / 2;
+    const my = (y1 + y2) / 2;
+    const label = svgEl('text', {
+      class: 'edge-label',
+      x: String(mx), y: String(my - 4),
+      'text-anchor': 'middle',
+    });
+    label.textContent = e.rel;
+    g.appendChild(label);
+
+    const dimmed = state.dimSet.has(e.from) || state.dimSet.has(e.to);
+    g.style.opacity = dimmed ? '0.18' : '1';
+
+    edgeLayer.appendChild(g);
+  });
+}
+
+// ── Node rendering ────────────────────────────────────────────────────
+function renderNodes() {
+  clearEl(nodeLayer);
+  state.nodes.forEach(n => {
+    const g = svgEl('g', { class: 'node-group', 'data-id': n.id });
+    if (state.dimSet.has(n.id)) g.classList.add('dim');
+
+    const color = LAYER_COLORS[n.layer];
+
+    const ring = svgEl('circle', {
+      class: 'k-ring ' + n.knowledge,
+      cx: String(n.x), cy: String(n.y),
+      r: String(nodeRadius() + 6),
+    });
+    g.appendChild(ring);
+
+    const circle = svgEl('circle', {
+      class: 'node-circle',
+      cx: String(n.x), cy: String(n.y),
+      r: String(nodeRadius()),
+      fill: color, 'fill-opacity': '0.22',
+      stroke: color,
+    });
+    circle.style.color = color;
+    g.appendChild(circle);
+
+    const label = svgEl('text', {
+      class: 'node-label',
+      x: String(n.x), y: String(n.y + nodeRadius() + 16),
+    });
+    label.textContent = n.label;
+    g.appendChild(label);
+
+    g.addEventListener('mouseenter', e => showTooltip(e, n));
+    g.addEventListener('mousemove', e => moveTooltip(e));
+    g.addEventListener('mouseleave', hideTooltip);
+    g.addEventListener('pointerdown', e => startDrag(e, n));
+
+    nodeLayer.appendChild(g);
+  });
+}
+
+// ── Tooltip ───────────────────────────────────────────────────────────
+function showTooltip(evt, n) {
+  clearEl(tooltip);
+
+  const layerEl = document.createElement('div');
+  layerEl.className = 'tt-layer';
+  layerEl.style.color = LAYER_COLORS[n.layer];
+  layerEl.textContent = LAYER_NAMES[n.layer];
+  tooltip.appendChild(layerEl);
+
+  const titleEl = document.createElement('div');
+  titleEl.className = 'tt-title';
+  titleEl.textContent = n.label;
+  tooltip.appendChild(titleEl);
+
+  const descEl = document.createElement('div');
+  descEl.textContent = n.desc;
+  tooltip.appendChild(descEl);
+
+  const metricEl = document.createElement('div');
+  metricEl.className = 'tt-metric';
+  metricEl.textContent = n.metric;
+  tooltip.appendChild(metricEl);
+
+  tooltip.classList.add('visible');
+  moveTooltip(evt);
+}
+function moveTooltip(evt) {
+  const rect = canvasWrap.getBoundingClientRect();
+  let x = evt.clientX - rect.left + 14;
+  let y = evt.clientY - rect.top + 14;
+  const ttRect = tooltip.getBoundingClientRect();
+  if (x + ttRect.width > rect.width - 10) x = rect.width - ttRect.width - 10;
+  if (y + ttRect.height > rect.height - 10) y = evt.clientY - rect.top - ttRect.height - 14;
+  tooltip.style.left = x + 'px';
+  tooltip.style.top = y + 'px';
+}
+function hideTooltip() { tooltip.classList.remove('visible'); }
+
+// ── Drag & click-to-cycle ─────────────────────────────────────────────
+let dragState = null;
+
+function svgPoint(evt) {
+  const pt = svg.createSVGPoint();
+  pt.x = evt.clientX;
+  pt.y = evt.clientY;
+  return pt.matrixTransform(svg.getScreenCTM().inverse());
+}
+
+function startDrag(evt, n) {
+  evt.preventDefault();
+  evt.stopPropagation();
+  const pt = svgPoint(evt);
+  dragState = {
+    node: n,
+    offsetX: pt.x - n.x,
+    offsetY: pt.y - n.y,
+    startX: evt.clientX,
+    startY: evt.clientY,
+    startTime: Date.now(),
+    moved: false,
+  };
+  svg.classList.add('dragging');
+  hideTooltip();
+}
+
+svg.addEventListener('pointermove', evt => {
+  if (!dragState) return;
+  const dx = evt.clientX - dragState.startX;
+  const dy = evt.clientY - dragState.startY;
+  if (Math.hypot(dx, dy) > 4) dragState.moved = true;
+  if (!dragState.moved) return;
+  const pt = svgPoint(evt);
+  dragState.node.x = pt.x - dragState.offsetX;
+  dragState.node.y = pt.y - dragState.offsetY;
+  renderEdges();
+  renderNodes();
+});
+
+function endDrag() {
+  if (!dragState) return;
+  const elapsed = Date.now() - dragState.startTime;
+  const wasClick = !dragState.moved && elapsed < 400;
+  if (wasClick) {
+    cycleKnowledge(dragState.node.id);
+  }
+  dragState = null;
+  svg.classList.remove('dragging');
+}
+svg.addEventListener('pointerup', endDrag);
+svg.addEventListener('pointerleave', endDrag);
+
+// ── Knowledge cycling ─────────────────────────────────────────────────
+function cycleKnowledge(id) {
+  const n = findNode(id);
+  if (!n) return;
+  const i = KNOWLEDGE_LEVELS.indexOf(n.knowledge);
+  n.knowledge = KNOWLEDGE_LEVELS[(i + 1) % KNOWLEDGE_LEVELS.length];
+  renderNodeList();
+  renderNodes();
+  updatePrompt();
+}
+
+function setAllKnowledge(level) {
+  state.nodes.forEach(n => { n.knowledge = level; });
+  renderNodeList();
+  renderNodes();
+  updatePrompt();
+}
+
+// ── Sidebar: node list ────────────────────────────────────────────────
+const nodeListEl = document.getElementById('node-list');
+function renderNodeList() {
+  clearEl(nodeListEl);
+  [...state.nodes]
+    .sort((a, b) => a.layer - b.layer || a.label.localeCompare(b.label))
+    .forEach(n => {
+      const div = document.createElement('div');
+      div.className = 'node-list-item';
+
+      const ring = document.createElement('span');
+      ring.className = 'cycle-ring ' + n.knowledge;
+      div.appendChild(ring);
+
+      const dot = document.createElement('span');
+      dot.className = 'dot-color';
+      dot.style.background = LAYER_COLORS[n.layer];
+      div.appendChild(dot);
+
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = n.label;
+      div.appendChild(name);
+
+      div.onclick = () => cycleKnowledge(n.id);
+      nodeListEl.appendChild(div);
+    });
+}
+
+// ── Presets ───────────────────────────────────────────────────────────
+function applyPreset(key) {
+  state.preset = key;
+  state.dimSet = new Set(PRESETS[key] || []);
+  document.querySelectorAll('.preset-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.preset === key);
+  });
+  renderEdges();
+  renderNodes();
+  updatePrompt();
+}
+document.querySelectorAll('.preset-btn').forEach(b => {
+  b.addEventListener('click', () => applyPreset(b.dataset.preset));
+});
+
+// ── Reset layout ──────────────────────────────────────────────────────
+document.getElementById('reset-layout').onclick = () => {
+  state.nodes.forEach(n => {
+    const p = DEFAULT_POSITIONS[n.id];
+    n.x = p.x;
+    n.y = p.y;
+  });
+  renderEdges();
+  renderNodes();
+};
+document.getElementById('mark-all-know').onclick = () => setAllKnowledge('know');
+document.getElementById('mark-all-fuzzy').onclick = () => setAllKnowledge('fuzzy');
+
+// ── Prompt generation ─────────────────────────────────────────────────
+const promptEl = document.getElementById('prompt');
+function updatePrompt() {
+  const know = state.nodes.filter(n => n.knowledge === 'know').map(n => n.label);
+  const fuzzy = state.nodes.filter(n => n.knowledge === 'fuzzy').map(n => n.label);
+  const unknown = state.nodes.filter(n => n.knowledge === 'unknown').map(n => n.label);
+
+  // Only include edges that touch a fuzzy or unknown node — those are the
+  // relationships the user cares to learn about.
+  const learningLabels = new Set([...fuzzy, ...unknown]);
+  const learningIds = new Set(
+    state.nodes.filter(n => learningLabels.has(n.label)).map(n => n.id)
+  );
+  const relevantEdges = state.edges
+    .filter(e => learningIds.has(e.from) || learningIds.has(e.to))
+    .map(e => {
+      const a = findNode(e.from);
+      const b = findNode(e.to);
+      return (a && b) ? `${a.label} ${e.rel} ${b.label}` : null;
+    })
+    .filter(Boolean);
+
+  const lines = [];
+  lines.push("I'm the product owner of Waggle OS. I'm not a coder, so please explain things in PRODUCT terms — what the user sees, what it does for them, why it exists, and how it connects to what I already understand. No code, no file paths.");
+  lines.push('');
+
+  if (know.length > 0) {
+    lines.push('## What I already understand');
+    lines.push(know.map(k => `- ${k}`).join('\n'));
+    lines.push('');
+  }
+
+  if (fuzzy.length > 0) {
+    lines.push("## What I'm fuzzy on");
+    lines.push(fuzzy.map(k => `- ${k}`).join('\n'));
+    lines.push('');
+  }
+
+  if (unknown.length > 0) {
+    lines.push('## What I have no idea about');
+    lines.push(unknown.map(k => `- ${k}`).join('\n'));
+    lines.push('');
+  }
+
+  if (relevantEdges.length > 0 && relevantEdges.length <= 15) {
+    lines.push('## Relationships I want to understand');
+    lines.push(relevantEdges.map(r => `- ${r}`).join('\n'));
+    lines.push('');
+  } else if (relevantEdges.length > 15) {
+    lines.push('## Relationships');
+    lines.push(`There are ${relevantEdges.length} relationships touching the fuzzy/unknown parts. Pick the most important and explain those first.`);
+    lines.push('');
+  }
+
+  if (state.preset !== 'all') {
+    const presetLabels = {
+      'path-to-prod': 'Critical Path to Production (tiers, compliance, KVARK funnel)',
+      'remembers': 'How It Remembers (memory, knowledge graph, harvest)',
+      'thinks': 'How It Thinks (agent loop, personas, tools)',
+      'first-run': 'First-Run User Journey',
+    };
+    lines.push('## Focus');
+    lines.push(`I'm currently focused on: ${presetLabels[state.preset]}. Prioritize this subsystem in your explanation.`);
+    lines.push('');
+  }
+
+  lines.push('## How I want the answer');
+  lines.push('- Walk me through the fuzzy and unknown concepts in the order they make sense as a story.');
+  lines.push('- For each one: (1) what it is in one sentence, (2) what it does for the user, (3) why it exists, (4) what breaks if it is missing.');
+  lines.push('- When you reference one of the concepts I already understand, say so explicitly so I can build on it.');
+  lines.push('- At the end, give me the ONE most important thing to know about this subsystem for the path to production.');
+
+  promptEl.textContent = lines.join('\n');
+}
+
+// ── Copy ──────────────────────────────────────────────────────────────
+const copyBtn = document.getElementById('copy-btn');
+copyBtn.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(promptEl.textContent);
+    copyBtn.classList.add('copied');
+    copyBtn.textContent = 'Copied';
+    setTimeout(() => {
+      copyBtn.classList.remove('copied');
+      copyBtn.textContent = 'Copy to clipboard';
+    }, 1600);
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = promptEl.textContent;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  }
+});
+
+// ── Init ──────────────────────────────────────────────────────────────
+buildLayers();
+renderEdges();
+renderNodes();
+renderNodeList();
+updatePrompt();
+</script>
+
+</body>
+</html>

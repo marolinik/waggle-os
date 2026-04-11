@@ -162,9 +162,28 @@ export interface AgentState {
   currentModel: string;
   litellmApiKey: string;
   pendingApprovals: Map<string, PendingApproval>;
-  /** Rebuild workspace-scoped tools (system, git, document) for a given directory */
-  buildToolsForWorkspace: (workspacePath: string) => ToolDefinition[];
-  /** Activate workspace mind for the given workspace ID. Returns true if switched. */
+  /**
+   * Rebuild workspace-scoped tools (system, git, document) for a given directory.
+   * Optional `orchForMindTools` replaces the shared-orchestrator mind tools with a
+   * session-specific orchestrator's tools so concurrent sessions don't collide.
+   */
+  buildToolsForWorkspace: (workspacePath: string, orchForMindTools?: Orchestrator) => ToolDefinition[];
+  /**
+   * Create a fresh Orchestrator for a workspace session with the given mind mounted.
+   * Each session gets its own instance (Option Y fix from docs/plans/phase-a-the-room.md §9).
+   */
+  createSessionOrchestrator: (workspaceMind: import('@waggle/core').MindDB) => Orchestrator;
+  /**
+   * Build the full tool pool for a session, using the session's orchestrator for mind tools.
+   * Thin wrapper over buildToolsForWorkspace with the orchForMindTools argument threaded in.
+   */
+  buildToolsForSession: (sessionOrch: Orchestrator, workspacePath: string) => ToolDefinition[];
+  /**
+   * Activate workspace mind for the given workspace ID. Returns true if switched.
+   * @deprecated — use `sessionManager.getOrCreate()` with `createSessionOrchestrator`
+   * and `buildToolsForSession` instead. This legacy path uses a shared orchestrator
+   * singleton and is unsafe for concurrent sessions. Being migrated per Phase A.1.
+   */
   activateWorkspaceMind: (workspaceId: string) => boolean;
   /** Get a cached workspace MindDB (opens on demand). Returns null if workspace not found. */
   getWorkspaceMindDb: (workspaceId: string) => import('@waggle/core').MindDB | null;
@@ -700,13 +719,25 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   // Skill hot-reload callback (set after agentState is created)
   let reloadSkills: ((fresh: LoadedSkill[]) => void) | undefined;
 
-  // Factory to rebuild workspace-scoped tools for a given directory
-  const buildToolsForWorkspace = (wsPath: string): ToolDefinition[] => {
+  // Factory to rebuild workspace-scoped tools for a given directory.
+  // Optional `orchForMindTools` replaces the shared-orchestrator mind tools with
+  // a session-specific orchestrator's tools (Option Y fix from Phase A.1 plan).
+  const buildToolsForWorkspace = (
+    wsPath: string,
+    orchForMindTools?: Orchestrator,
+  ): ToolDefinition[] => {
     // Dynamic connector tools (only for connected connectors)
     const connectorTools = connectorRegistry.generateTools();
 
+    // Resolve which mind tools to use — per-session (if provided) or the shared default.
+    // Per-session is required for concurrent multi-workspace chat; the shared default
+    // is kept for legacy call sites that are still being migrated.
+    const mindToolsForRequest = orchForMindTools
+      ? orchForMindTools.getTools()
+      : mindTools;
+
     const wsBase = [
-      ...mindTools,
+      ...mindToolsForRequest,
       ...createSystemTools(wsPath),
       ...createPlanTools(),
       ...createGitTools(wsPath),
@@ -753,9 +784,43 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   };
 
   // ── Workspace Session Manager ────────────────────────────────────
-  // Manages concurrent workspace sessions (max 3) with independent minds and tools.
+  // Manages concurrent workspace sessions with independent minds, orchestrators,
+  // and tools. Default cap: 3 (Solo tier). Cap is raised via sessionManager.setMaxSessions()
+  // at startup once the user's tier is resolved (Basic=5, Teams=10, Enterprise=unbounded).
   const sessionManager = new WorkspaceSessionManager(3);
   server.decorate('sessionManager', sessionManager);
+
+  /**
+   * Create a fresh Orchestrator for a workspace session.
+   *
+   * Each session gets its own instance so concurrent sessions on different
+   * workspaces cannot corrupt each other's workspace layers via setWorkspaceMind().
+   * Pointer to the shared personal mind is safe — better-sqlite3 WAL mode handles
+   * concurrent reads and serializes writes through SQLite's internal lock.
+   *
+   * See docs/plans/phase-a-the-room.md §9 for the Option X vs Option Y decision.
+   */
+  const createSessionOrchestrator = (workspaceMind: MindDB): Orchestrator => {
+    const sessionOrch = new Orchestrator({
+      db: multiMind.personal,
+      embedder,
+      mode: 'local',
+      version: '0.4',
+    });
+    sessionOrch.setWorkspaceMind(workspaceMind);
+    return sessionOrch;
+  };
+
+  /**
+   * Build the tool pool for a workspace session using the session's own orchestrator
+   * for mind tools. Thin wrapper over buildToolsForWorkspace.
+   */
+  const buildToolsForSession = (
+    sessionOrch: Orchestrator,
+    wsPath: string,
+  ): ToolDefinition[] => {
+    return buildToolsForWorkspace(wsPath, sessionOrch);
+  };
 
   // ── Workspace mind cache (legacy — being replaced by sessionManager) ──
   // Kept for backward compatibility during transition.
@@ -944,6 +1009,8 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     litellmApiKey,
     pendingApprovals,
     buildToolsForWorkspace,
+    createSessionOrchestrator,
+    buildToolsForSession,
     activateWorkspaceMind: activateWorkspaceMindWithWeaver,
     getWorkspaceMindDb,
     closeWorkspaceMind,
