@@ -6,11 +6,15 @@ import { adapter } from '@/lib/adapter';
 import ChatApp from './ChatApp';
 import type { TeamMember } from './ChatApp';
 
-// Fallback models shown when backend is offline — latest flagships from top providers
+// Fallback models shown when backend is offline — latest flagships from top providers.
+// IMPORTANT: the first entry is used as the default selected model when the sidecar
+// /api/agent/model fetch fails (e.g. boot race). Keep this in sync with the sidecar's
+// real default (claude-sonnet-4-6) so users don't see a misleading Opus label on
+// first render. Bug #1.
 const FALLBACK_MODELS = [
-  // Anthropic
-  'anthropic/claude-opus-4.6',
+  // Anthropic (sonnet first — matches sidecar default)
   'anthropic/claude-sonnet-4.6',
+  'anthropic/claude-opus-4.6',
   'anthropic/claude-haiku-4.6',
   // OpenAI
   'openai/gpt-5.4',
@@ -112,40 +116,71 @@ const ChatWindowInstance = ({
   };
 
   useEffect(() => {
-    // Try fetching models from the backend (litellm models filtered by vault keys)
+    let cancelled = false;
+    let modelsLanded = false;
+    let currentLanded = false;
+
+    // Try fetching models from the backend (litellm models filtered by vault keys).
+    // Retries every 2s for up to 20s so the sidecar boot race (bug #1) doesn't
+    // leave the dropdown stuck on the fallback list.
     const fetchModels = async () => {
       try {
         const models = await adapter.getModels();
+        if (cancelled) return;
         if (models && models.length > 0) {
           setAvailableModels(models);
+          modelsLanded = true;
         } else {
           setAvailableModels(FALLBACK_MODELS);
         }
       } catch (err) {
         console.error('[ChatWindowInstance] fetch models failed:', err);
-        setAvailableModels(FALLBACK_MODELS);
+        if (!cancelled) setAvailableModels(FALLBACK_MODELS);
       }
     };
 
-    // Try fetching current active model from settings/agent
+    // Try fetching the current active model from the sidecar. Also retries on
+    // transient failure — the initial render may race the sidecar spawning.
     const fetchCurrentModel = async () => {
       try {
         const model = await adapter.getModel();
+        if (cancelled) return;
         if (typeof model === 'string' && model) {
           setCurrentModel(model);
+          currentLanded = true;
+          return;
+        }
+        const settings = await adapter.getSettings();
+        if (cancelled) return;
+        const fromSettings = (settings as { defaultModel?: string; model?: string }).defaultModel
+          ?? (settings as { model?: string }).model;
+        if (fromSettings) {
+          setCurrentModel(fromSettings);
+          currentLanded = true;
         } else {
-          // Try from settings
-          const settings = await adapter.getSettings();
-          setCurrentModel(settings.model || FALLBACK_MODELS[0]);
+          setCurrentModel(FALLBACK_MODELS[0]);
         }
       } catch (err) {
         console.error('[ChatWindowInstance] fetch current model failed:', err);
-        setCurrentModel(FALLBACK_MODELS[0]);
+        if (!cancelled) setCurrentModel(FALLBACK_MODELS[0]);
       }
     };
 
     fetchModels();
     fetchCurrentModel();
+
+    // Retry loop for the first 20 seconds of a window's life. Stops as soon as
+    // both the model list and the current model have landed from the server.
+    let tries = 0;
+    const retryInterval = setInterval(() => {
+      tries += 1;
+      if (cancelled || (modelsLanded && currentLanded) || tries > 10) {
+        clearInterval(retryInterval);
+        return;
+      }
+      if (!modelsLanded) fetchModels();
+      if (!currentLanded) fetchCurrentModel();
+    }, 2000);
 
     // Fetch team members for presence display
     const fetchTeam = async () => {
@@ -159,7 +194,11 @@ const ChatWindowInstance = ({
     };
     fetchTeam();
     const teamInterval = setInterval(fetchTeam, 10000);
-    return () => clearInterval(teamInterval);
+    return () => {
+      cancelled = true;
+      clearInterval(teamInterval);
+      clearInterval(retryInterval);
+    };
   }, []);
 
   const handleModelChange = (model: string) => {
