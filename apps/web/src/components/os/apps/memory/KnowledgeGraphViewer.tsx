@@ -75,6 +75,19 @@ const MIN_ZOOM = 0.2;
 const MAX_ZOOM = 4;
 const ZOOM_STEP = 0.2;
 
+type NodeLimit = 50 | 100 | 200 | 500 | 'all';
+const LIMIT_OPTIONS: NodeLimit[] = [50, 100, 200, 500, 'all'];
+// d3-force ticks at ~60fps; state updates on every tick drown the renderer
+// when there are hundreds of SVG nodes. Batching every Nth tick halves the
+// React work while keeping motion visible.
+const TICK_RENDER_EVERY = 2;
+
+function chooseDefaultLimit(total: number): NodeLimit {
+  if (total <= 100) return 'all';
+  if (total <= 300) return 200;
+  return 200;
+}
+
 const KnowledgeGraphViewer = ({ nodes, edges, onNodeClick }: KnowledgeGraphViewerProps) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -88,9 +101,13 @@ const KnowledgeGraphViewer = ({ nodes, edges, onNodeClick }: KnowledgeGraphViewe
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
 
+  // Scaling controls: hide noisy types, cap rendered node count at top-N
+  // most-connected (by full-graph centrality, not filtered graph).
+  const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(() => new Set());
+  const [nodeLimit, setNodeLimit] = useState<NodeLimit>(() => chooseDefaultLimit(nodes.length));
+
   // Drag state
   const [dragging, setDragging] = useState<string | null>(null);
-  const dragOffset = useRef({ x: 0, y: 0 });
 
   // Pan state
   const [panning, setPanning] = useState(false);
@@ -101,7 +118,8 @@ const KnowledgeGraphViewer = ({ nodes, edges, onNodeClick }: KnowledgeGraphViewe
   const [simLinks, setSimLinks] = useState<SimLink[]>([]);
   const simulationRef = useRef<ReturnType<typeof forceSimulation<SimNode>> | null>(null);
 
-  // Count connections per node
+  // Count connections per node — derived from the FULL edge set so top-N
+  // selection reflects real graph centrality, not the filtered subgraph.
   const connectionCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const edge of edges) {
@@ -111,11 +129,52 @@ const KnowledgeGraphViewer = ({ nodes, edges, onNodeClick }: KnowledgeGraphViewe
     return counts;
   }, [edges]);
 
-  // Unique types for legend
-  const uniqueTypes = useMemo(() => {
-    const types = new Set(nodes.map(n => n.type.toLowerCase()));
-    return Array.from(types).sort();
+  // Type → count breakdown for legend chips. Derived from full nodes.
+  const typeCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const n of nodes) {
+      const t = n.type.toLowerCase();
+      counts[t] = (counts[t] ?? 0) + 1;
+    }
+    return counts;
   }, [nodes]);
+
+  // Unique types sorted by descending count (most common first).
+  const uniqueTypes = useMemo(() => {
+    return Object.keys(typeCounts).sort((a, b) => typeCounts[b] - typeCounts[a]);
+  }, [typeCounts]);
+
+  // Visible subgraph = (not hidden by type) ∧ (top-N by connection count).
+  const visibleNodes = useMemo(() => {
+    const filtered = hiddenTypes.size === 0
+      ? nodes
+      : nodes.filter(n => !hiddenTypes.has(n.type.toLowerCase()));
+    const sorted = [...filtered].sort(
+      (a, b) => (connectionCounts[b.id] ?? 0) - (connectionCounts[a.id] ?? 0),
+    );
+    return nodeLimit === 'all' ? sorted : sorted.slice(0, nodeLimit);
+  }, [nodes, hiddenTypes, connectionCounts, nodeLimit]);
+
+  const visibleNodeIds = useMemo(
+    () => new Set(visibleNodes.map(n => n.id)),
+    [visibleNodes],
+  );
+
+  const visibleEdges = useMemo(
+    () => edges.filter(e => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target)),
+    [edges, visibleNodeIds],
+  );
+
+  const toggleHideType = useCallback((type: string) => {
+    setHiddenTypes(prev => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      return next;
+    });
+  }, []);
+
+  const resetHiddenTypes = useCallback(() => setHiddenTypes(new Set()), []);
 
   // Search filtering
   const searchLower = searchQuery.toLowerCase();
@@ -127,11 +186,12 @@ const KnowledgeGraphViewer = ({ nodes, edges, onNodeClick }: KnowledgeGraphViewe
     [searchQuery, searchLower],
   );
 
-  // Initialize simulation
+  // Initialize simulation — runs on visible subgraph, not full graph.
+  // When limits/filters change, a new simulation is created for the new set.
   useEffect(() => {
-    if (nodes.length === 0) return;
+    if (visibleNodes.length === 0) return;
 
-    const simNodesInit: SimNode[] = nodes.map(n => ({
+    const simNodesInit: SimNode[] = visibleNodes.map(n => ({
       id: n.id,
       label: n.label,
       type: n.type,
@@ -140,7 +200,7 @@ const KnowledgeGraphViewer = ({ nodes, edges, onNodeClick }: KnowledgeGraphViewe
 
     const nodeIndex = new Map(simNodesInit.map(n => [n.id, n]));
 
-    const simLinksInit: SimLink[] = edges
+    const simLinksInit: SimLink[] = visibleEdges
       .filter(e => nodeIndex.has(e.source) && nodeIndex.has(e.target))
       .map(e => ({
         source: e.source,
@@ -156,7 +216,15 @@ const KnowledgeGraphViewer = ({ nodes, edges, onNodeClick }: KnowledgeGraphViewe
       .alpha(1)
       .alphaDecay(0.02);
 
+    let tick = 0;
     sim.on('tick', () => {
+      tick++;
+      if (tick % TICK_RENDER_EVERY !== 0) return;
+      setSimNodes([...simNodesInit]);
+      setSimLinks([...simLinksInit]);
+    });
+    // Ensure final positions land even if the last tick was skipped.
+    sim.on('end', () => {
       setSimNodes([...simNodesInit]);
       setSimLinks([...simLinksInit]);
     });
@@ -167,7 +235,7 @@ const KnowledgeGraphViewer = ({ nodes, edges, onNodeClick }: KnowledgeGraphViewe
       sim.stop();
       simulationRef.current = null;
     };
-  }, [nodes, edges, connectionCounts]);
+  }, [visibleNodes, visibleEdges, connectionCounts]);
 
   // Node radius based on connection count
   const nodeRadius = (node: SimNode) => {
@@ -296,6 +364,7 @@ const KnowledgeGraphViewer = ({ nodes, edges, onNodeClick }: KnowledgeGraphViewe
   }
 
   const selectedNodeData = selectedNode ? simNodes.find(n => n.id === selectedNode) : null;
+  const hiddenCount = nodes.length - visibleNodes.length;
 
   return (
     <div ref={containerRef} className="h-full w-full flex flex-col bg-background relative">
@@ -307,11 +376,36 @@ const KnowledgeGraphViewer = ({ nodes, edges, onNodeClick }: KnowledgeGraphViewe
             Knowledge Graph
           </span>
           <span className="text-[11px] text-muted-foreground">
-            {nodes.length} nodes · {edges.length} edges
+            {visibleNodes.length.toLocaleString()} / {nodes.length.toLocaleString()} nodes
+            · {visibleEdges.length.toLocaleString()} / {edges.length.toLocaleString()} edges
           </span>
+          {hiddenCount > 0 && (
+            <span className="text-[11px] text-amber-400">
+              · {hiddenCount.toLocaleString()} hidden
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-1.5">
+          {/* Limit selector */}
+          <div className="flex items-center gap-0.5 bg-muted/50 rounded-md px-1 py-0.5">
+            <span className="text-[10px] text-muted-foreground px-1">Show top</span>
+            {LIMIT_OPTIONS.map(opt => (
+              <button
+                key={String(opt)}
+                onClick={() => setNodeLimit(opt)}
+                className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${
+                  nodeLimit === opt
+                    ? 'bg-primary/20 text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                title={opt === 'all' ? `Show all ${nodes.length.toLocaleString()} nodes` : `Show top ${opt} by connections`}
+              >
+                {opt === 'all' ? 'All' : opt}
+              </button>
+            ))}
+          </div>
+
           {/* Search */}
           <div className="flex items-center gap-1 bg-muted/50 rounded-md px-1.5 py-0.5">
             <Search className="w-3 h-3 text-muted-foreground" />
@@ -468,21 +562,49 @@ const KnowledgeGraphViewer = ({ nodes, edges, onNodeClick }: KnowledgeGraphViewe
           </g>
         </svg>
 
-        {/* Type legend */}
-        <div className="absolute bottom-3 left-3 bg-background/80 backdrop-blur-sm border border-border/30 rounded-lg px-3 py-2">
-          <p className="text-[11px] font-display font-medium text-muted-foreground mb-1.5">Entity Types</p>
-          <div className="flex flex-wrap gap-x-3 gap-y-1">
-            {uniqueTypes.map(type => (
-              <div key={type} className="flex items-center gap-1.5">
-                <div
-                  className="w-2.5 h-2.5 rounded-full"
-                  style={{ backgroundColor: getNodeColor(type) }}
-                />
-                <span className="text-[11px] text-muted-foreground capitalize">
-                  {getNodeLabel(type)}
-                </span>
-              </div>
-            ))}
+        {/* Type legend — interactive. Click a chip to toggle visibility. */}
+        <div className="absolute bottom-3 left-3 bg-background/80 backdrop-blur-sm border border-border/30 rounded-lg px-3 py-2 max-w-[22rem]">
+          <div className="flex items-center justify-between gap-3 mb-1.5">
+            <p className="text-[11px] font-display font-medium text-muted-foreground">
+              Entity Types
+            </p>
+            {hiddenTypes.size > 0 && (
+              <button
+                onClick={resetHiddenTypes}
+                className="text-[11px] text-primary hover:text-primary/80 transition-colors"
+                title="Reset all type filters"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-x-2 gap-y-1">
+            {uniqueTypes.map(type => {
+              const hidden = hiddenTypes.has(type);
+              return (
+                <button
+                  key={type}
+                  onClick={() => toggleHideType(type)}
+                  className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded transition-colors ${
+                    hidden
+                      ? 'opacity-40 hover:opacity-70'
+                      : 'hover:bg-muted/60'
+                  }`}
+                  title={hidden ? `Show ${getNodeLabel(type)}` : `Hide ${getNodeLabel(type)}`}
+                >
+                  <div
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: getNodeColor(type) }}
+                  />
+                  <span className="text-[11px] text-muted-foreground capitalize">
+                    {getNodeLabel(type)}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground/60">
+                    {typeCounts[type].toLocaleString()}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
