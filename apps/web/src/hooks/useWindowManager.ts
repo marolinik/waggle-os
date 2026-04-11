@@ -123,20 +123,45 @@ export function useWindowManager(workspaces: Workspace[]) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // When the workspaces list loads, drop restored chat windows that point at
-  // a workspace that no longer exists. Runs once, after workspaces becomes
-  // non-empty (avoids dropping everything during the async fetch).
+  // When the REAL workspaces list arrives, reconcile restored chat windows:
+  //   1. Skip running against the fake placeholder list (pre-fetch state
+  //      where useWorkspaces only has the `local-default` entry).
+  //   2. Migrate chat windows bound to the `local-default` placeholder
+  //      onto the first real workspace — this handles the race where a
+  //      user clicked the dock Chat button before the sidecar fetch
+  //      completed and the window got stamped with the placeholder id.
+  //   3. Never delete a chat window just because its workspaceId isn't
+  //      in the current list. Log a warning and leave it in place — if
+  //      the workspace is truly gone, the next send will fail visibly
+  //      and the user can close the window themselves. Deleting state
+  //      here destroyed Phase A.4 restoration repeatedly.
   useEffect(() => {
     if (validatedRef.current) return;
     if (workspaces.length === 0) return;
+    // Pre-fetch placeholder — skip until the real list arrives.
+    if (workspaces.length === 1 && workspaces[0].id === 'local-default') return;
     validatedRef.current = true;
+
+    const firstReal = workspaces[0];
     setWindows(prev => {
-      const validated = prev.filter(w => {
-        if (w.appId !== 'chat') return true;
-        if (!w.workspaceId) return false;
-        return workspaces.some(ws => ws.id === w.workspaceId);
+      let changed = false;
+      const next = prev.map(w => {
+        if (w.appId !== 'chat') return w;
+        if (w.workspaceId === 'local-default') {
+          changed = true;
+          console.info(
+            `[useWindowManager] migrating chat ${w.instanceId} from 'local-default' to '${firstReal.id}'`
+          );
+          return { ...w, workspaceId: firstReal.id, workspaceName: firstReal.name };
+        }
+        if (w.workspaceId && !workspaces.some(ws => ws.id === w.workspaceId)) {
+          console.warn(
+            `[useWindowManager] chat ${w.instanceId} references missing workspace '${w.workspaceId}' — keeping window, next send will fail visibly`
+          );
+        }
+        return w;
       });
-      return validated.length === prev.length ? prev : validated;
+      return changed ? next : prev;
     });
   }, [workspaces]);
 
