@@ -2,6 +2,10 @@ import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import type { AppId } from '@/lib/dock-tiers';
 import type { Workspace } from '@/lib/types';
 
+// Phase A.4 — full window-list persistence. localStorage key is versioned
+// so schema changes can drop the stored state safely.
+const WINDOW_STATE_KEY = 'waggle-window-state-v1';
+
 export interface WindowState {
   instanceId: string;
   appId: AppId;
@@ -26,6 +30,38 @@ function personaLabelFor(personaId?: string): string | undefined {
   return PERSONA_SHORT[personaId] || personaId;
 }
 
+function loadPersistedWindows(): WindowState[] {
+  if (typeof window === 'undefined' || !window.localStorage) return [];
+  try {
+    const raw = window.localStorage.getItem(WINDOW_STATE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as { version?: number; windows?: WindowState[] };
+    if (parsed.version !== 1 || !Array.isArray(parsed.windows)) return [];
+    // Shallow validation — drop entries missing required fields
+    return parsed.windows.filter((w): w is WindowState =>
+      typeof w?.instanceId === 'string'
+      && typeof w?.appId === 'string'
+      && typeof w?.zIndex === 'number'
+      && typeof w?.minimized === 'boolean'
+      && typeof w?.cascadeOffset === 'number'
+    );
+  } catch {
+    return [];
+  }
+}
+
+function savePersistedWindows(windows: WindowState[]): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    window.localStorage.setItem(
+      WINDOW_STATE_KEY,
+      JSON.stringify({ version: 1, windows }),
+    );
+  } catch {
+    // Quota exceeded / Safari private mode — non-fatal, skip save
+  }
+}
+
 const TEMPLATE_SHORT: Record<string, string> = {
   'sales-pipeline': 'Sales',
   'research-project': 'Research',
@@ -48,10 +84,51 @@ const PERSONA_SHORT: Record<string, string> = {
 };
 
 export function useWindowManager(workspaces: Workspace[]) {
-  const [windows, setWindows] = useState<WindowState[]>([]);
+  // Phase A.4: restore the window list synchronously on first render so there
+  // is no empty-desktop flicker between mount and the restoration effect.
+  const [windows, setWindows] = useState<WindowState[]>(() => loadPersistedWindows());
   const topZRef = useRef(10);
   const cascadeCounter = useRef(0);
   const [focusedInstanceId, setFocusedInstanceId] = useState<string | null>(null);
+  // Tracks whether the "drop stale chat windows" sweep has run once the
+  // workspaces prop becomes available. Runs exactly once per session.
+  const validatedRef = useRef(false);
+
+  // Bump the zIndex counter past any restored windows so new windows always
+  // land on top. Runs once at mount.
+  useEffect(() => {
+    if (windows.length > 0) {
+      const maxZ = Math.max(...windows.map(w => w.zIndex));
+      if (maxZ >= topZRef.current) topZRef.current = maxZ + 1;
+      // Focus the window with the highest zIndex so keyboard shortcuts target
+      // a sensible default after restoration.
+      const top = windows.reduce((a, b) => (a.zIndex > b.zIndex ? a : b));
+      setFocusedInstanceId(top.instanceId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // When the workspaces list loads, drop restored chat windows that point at
+  // a workspace that no longer exists. Runs once, after workspaces becomes
+  // non-empty (avoids dropping everything during the async fetch).
+  useEffect(() => {
+    if (validatedRef.current) return;
+    if (workspaces.length === 0) return;
+    validatedRef.current = true;
+    setWindows(prev => {
+      const validated = prev.filter(w => {
+        if (w.appId !== 'chat') return true;
+        if (!w.workspaceId) return false;
+        return workspaces.some(ws => ws.id === w.workspaceId);
+      });
+      return validated.length === prev.length ? prev : validated;
+    });
+  }, [workspaces]);
+
+  // Persist the full window list on every change.
+  useEffect(() => {
+    savePersistedWindows(windows);
+  }, [windows]);
 
   const nextZ = () => { topZRef.current += 1; return topZRef.current; };
 
