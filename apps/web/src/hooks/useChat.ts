@@ -225,6 +225,9 @@ export const useChat = ({ workspaceId, sessionId, persona }: UseChatOptions) => 
             }
 
             case 'approval_request':
+            case 'approval_required':
+              // Backend emits `approval_required` as the SSE event name;
+              // legacy clients sent `approval_request`. Accept both.
               setPendingApproval(data as unknown as ApprovalRequest);
               return msgs; // Don't update blocks for approval
           }
@@ -263,10 +266,23 @@ export const useChat = ({ workspaceId, sessionId, persona }: UseChatOptions) => 
     }
   }, [sessionId]);
 
-  const approveAction = useCallback(async (requestId: string, approved: boolean) => {
-    try { await adapter.respondApproval(requestId, approved); } catch (err) { console.error('[useChat] approval response failed:', err); }
+  const approveAction = useCallback(async (
+    requestId: string,
+    approved: boolean,
+    opts: { always?: boolean } = {},
+  ) => {
+    try {
+      await adapter.respondApproval(requestId, approved, {
+        always: opts.always,
+        // Phase B.3: echo the source workspace we received on the SSE event
+        // back to the backend so the grant stays scoped to this workspace.
+        sourceWorkspaceId: pendingApproval?.sourceWorkspaceId ?? null,
+      });
+    } catch (err) {
+      console.error('[useChat] approval response failed:', err);
+    }
     setPendingApproval(null);
-  }, []);
+  }, [pendingApproval]);
 
   return { messages, isLoading, sendMessage, clearHistory, pendingApproval, approveAction };
 };

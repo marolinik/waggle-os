@@ -21,7 +21,7 @@ interface ChatAppProps {
   onSendMessage: (content: string) => void;
   onClearHistory: () => void;
   pendingApproval: ApprovalRequest | null;
-  onApprove: (id: string, approved: boolean) => void;
+  onApprove: (id: string, approved: boolean, opts?: { always?: boolean }) => void;
   currentPersona?: string;
   onPersonaChange?: (personaId: string) => void;
   currentModel?: string;
@@ -166,24 +166,69 @@ const FeedbackButtons = ({ messageId, messageIndex, sessionId, feedback }: {
   );
 };
 
-const ApprovalGate = ({ request, onRespond }: { request: ApprovalRequest; onRespond: (id: string, approved: boolean) => void }) => {
+const ApprovalGate = ({
+  request,
+  onRespond,
+}: {
+  request: ApprovalRequest;
+  onRespond: (id: string, approved: boolean, opts?: { always?: boolean }) => void;
+}) => {
   const [showJson, setShowJson] = useState(false);
+  // Build a one-line summary of the most relevant input field so users can
+  // see WHAT the agent wants to do without opening the raw JSON.
+  const input = request.input ?? {};
+  const inputSummary =
+    (input.path as string) ||
+    (input.file_path as string) ||
+    (input.target_workspace_id as string) ||
+    (typeof input.command === 'string' ? (input.command as string).slice(0, 80) : '') ||
+    (typeof input.query === 'string' ? (input.query as string).slice(0, 80) : '');
+
   return (
     <div className="my-2 rounded-xl border-2 border-amber-500/50 bg-amber-500/10 p-3">
       <div className="flex items-center gap-2 mb-2">
         <AlertTriangle className="w-4 h-4 text-amber-400" />
-        <span className="text-sm font-display font-semibold text-foreground">Approval Required</span>
+        <span className="text-sm font-display font-semibold text-foreground">Approval required</span>
       </div>
-      <p className="text-xs text-muted-foreground mb-1">{request.description}</p>
-      <p className="text-xs text-muted-foreground mb-2">Tool: <span className="text-foreground">{request.toolName}</span></p>
-      {showJson && request.rawJson && (
-        <pre className="text-[11px] text-muted-foreground bg-background/50 rounded p-2 mb-2 overflow-auto max-h-24">{request.rawJson}</pre>
+      {request.description && (
+        <p className="text-xs text-muted-foreground mb-1">{request.description}</p>
       )}
-      <div className="flex gap-2">
-        <button onClick={() => onRespond(request.requestId, true)} className="px-3 py-1 text-xs rounded-lg bg-emerald-600 text-foreground hover:bg-emerald-500 transition-colors">Approve</button>
-        <button onClick={() => onRespond(request.requestId, false)} className="px-3 py-1 text-xs rounded-lg bg-destructive text-foreground hover:bg-destructive/80 transition-colors">Deny</button>
-        <button onClick={() => setShowJson(!showJson)} className="px-3 py-1 text-xs rounded-lg bg-secondary text-foreground hover:bg-secondary/70 transition-colors">
-          {showJson ? 'Hide' : 'Raw'} JSON
+      <p className="text-xs text-muted-foreground mb-1">
+        Tool: <span className="text-foreground font-mono">{request.toolName}</span>
+      </p>
+      {inputSummary && (
+        <p className="text-[11px] text-muted-foreground mb-2 font-mono truncate">→ {inputSummary}</p>
+      )}
+      {showJson && (
+        <pre className="text-[11px] text-muted-foreground bg-background/50 rounded p-2 mb-2 overflow-auto max-h-32">
+          {request.rawJson ?? JSON.stringify(request.input, null, 2)}
+        </pre>
+      )}
+      <div className="flex flex-wrap gap-1.5">
+        <button
+          onClick={() => onRespond(request.requestId, true)}
+          className="px-3 py-1 text-xs rounded-lg bg-emerald-600 text-foreground hover:bg-emerald-500 transition-colors"
+        >
+          Allow once
+        </button>
+        <button
+          onClick={() => onRespond(request.requestId, true, { always: true })}
+          className="px-3 py-1 text-xs rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition-colors"
+          title="Save this decision and skip the prompt next time for this tool + target."
+        >
+          Always allow
+        </button>
+        <button
+          onClick={() => onRespond(request.requestId, false)}
+          className="px-3 py-1 text-xs rounded-lg bg-destructive text-foreground hover:bg-destructive/80 transition-colors"
+        >
+          Deny
+        </button>
+        <button
+          onClick={() => setShowJson(!showJson)}
+          className="px-3 py-1 text-xs rounded-lg bg-secondary text-foreground hover:bg-secondary/70 transition-colors ml-auto"
+        >
+          {showJson ? 'Hide' : 'Show'} details
         </button>
       </div>
     </div>

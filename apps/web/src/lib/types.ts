@@ -111,6 +111,8 @@ export interface ApprovalRequest {
   description: string;
   input: Record<string, unknown>;
   rawJson?: string;
+  /** Phase B.3: the source workspace so "Always allow" grants stay scoped. */
+  sourceWorkspaceId?: string | null;
 }
 
 export interface MemoryFrame {
@@ -258,7 +260,7 @@ export interface Connector {
 }
 
 export interface StreamEvent {
-  type: 'token' | 'step' | 'tool_start' | 'tool_end' | 'done' | 'error' | 'approval_request' | 'model_switch' | 'notification';
+  type: 'token' | 'step' | 'tool_start' | 'tool_end' | 'done' | 'error' | 'approval_request' | 'approval_required' | 'model_switch' | 'notification';
   data: unknown;
 }
 
