@@ -470,6 +470,44 @@ class LocalAdapter {
     return this.subscribeSSE('/api/notifications/stream', (data) => onNotification(data as Notification));
   }
 
+  /**
+   * Phase A.3: subscribe to sub-agent status events on the notifications stream.
+   *
+   * The server emits these as NAMED SSE events (`event: subagent_status`), so
+   * the default `onmessage` used by subscribeNotifications doesn't catch them.
+   * We open a dedicated EventSource with `addEventListener('subagent_status')`.
+   */
+  subscribeSubagentStatus(
+    onEvent: (event: {
+      type: 'subagent_status';
+      workspaceId: string;
+      agents: Array<{
+        id: string;
+        name: string;
+        role: string;
+        status: 'pending' | 'running' | 'done' | 'failed';
+        task: string;
+        toolsUsed: string[];
+        startedAt?: number;
+        completedAt?: number;
+      }>;
+      timestamp: string;
+    }) => void,
+  ): () => void {
+    if (!this._connected) return () => {};
+    const url = `${this.baseUrl}/api/notifications/stream`;
+    const es = new EventSource(url);
+    const handler = (e: MessageEvent) => {
+      try { onEvent(JSON.parse(e.data)); } catch { /* skip malformed */ }
+    };
+    es.addEventListener('subagent_status', handler as EventListener);
+    es.onerror = () => { es.close(); };
+    return () => {
+      es.removeEventListener('subagent_status', handler as EventListener);
+      es.close();
+    };
+  }
+
   async getNotificationHistory(): Promise<Notification[]> {
     const res = await this.fetch('/api/notifications/history');
     return unwrapArray(await res.json()).map((n: any) => ({

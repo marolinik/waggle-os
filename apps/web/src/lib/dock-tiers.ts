@@ -1,7 +1,7 @@
 import type { ElementType } from 'react';
 import {
   LayoutDashboard, MessageSquare, FolderOpen, Settings, Bot, Brain,
-  Zap, Activity, Radio, Clock, Package, Plug, Store, Lock,
+  Zap, Activity, Radio, Clock, Package, Plug, Store, Lock, Users,
 } from 'lucide-react';
 
 export type AppId =
@@ -9,7 +9,7 @@ export type AppId =
   | 'capabilities' | 'connectors' | 'cockpit' | 'mission-control'
   | 'settings' | 'vault' | 'profile' | 'terminal' | 'calculator'
   | 'notes' | 'waggle-dance' | 'files' | 'agents'
-  | 'scheduled-jobs' | 'marketplace' | 'voice';
+  | 'scheduled-jobs' | 'marketplace' | 'voice' | 'room';
 
 export type UserTier = 'simple' | 'professional' | 'power' | 'admin';
 
@@ -29,6 +29,7 @@ const POWER_CONFIG: DockEntry[] = [
   { type: 'app', key: 'home', appId: 'dashboard', icon: LayoutDashboard, label: 'Home', color: 'text-sky-400' },
   { type: 'separator', key: 'sep-0', label: '' },
   { type: 'app', key: 'chat', appId: 'chat', icon: MessageSquare, label: 'Chat', color: 'text-primary' },
+  { type: 'app', key: 'room', appId: 'room', icon: Users, label: 'Room', color: 'text-violet-400' },
   { type: 'app', key: 'agents', appId: 'agents', icon: Bot, label: 'Agents', color: 'text-orange-400' },
   { type: 'app', key: 'files', appId: 'files', icon: FolderOpen, label: 'Files', color: 'text-amber-300' },
   { type: 'app', key: 'dance', appId: 'waggle-dance', icon: Zap, label: 'Waggle Dance', color: 'text-amber-400' },

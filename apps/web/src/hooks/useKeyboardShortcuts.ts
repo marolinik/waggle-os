@@ -64,6 +64,13 @@ export const useKeyboardShortcuts = (options: UseKeyboardShortcutsOptions) => {
         return;
       }
 
+      // Ctrl+Shift+R: Open the Room (Phase A.3 — sub-agent visibility canvas)
+      if (ctrl && e.shiftKey && (e.key === 'R' || e.key === 'r')) {
+        e.preventDefault();
+        opts.onOpenApp('room');
+        return;
+      }
+
       // Ctrl+Shift+0-9: Open apps
       if (ctrl && e.shiftKey && APP_SHORTCUTS[e.key]) {
         e.preventDefault();
