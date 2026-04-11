@@ -6,7 +6,8 @@ import type { FastifyPluginAsync } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
 import { runAgentLoop, needsConfirmation, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture } from '@waggle/agent';
-import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
+import type { AgentLoopConfig, AgentResponse, Orchestrator } from '@waggle/agent';
+import type { WorkspaceSession } from '../workspace-sessions.js';
 import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
 import { formatWorkspaceStatePrompt } from '../workspace-state.js';
 import { emitNotification } from './notifications.js';
@@ -86,7 +87,9 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
   const dismissedCaptureSuggestions = new Set<string>();
 
   // Build the rich system prompt — behavioral specification, not just tool docs
-  function buildSystemPrompt(workspacePath?: string, sessionId?: string, historyLength?: number, workspaceId?: string): string {
+  // Accepts the caller's orchestrator so per-session orchestrators get their own
+  // workspace layers reflected in the prompt (Phase A.1 Option Y migration).
+  function buildSystemPrompt(orch: Orchestrator, workspacePath?: string, sessionId?: string, historyLength?: number, workspaceId?: string): string {
     // Resolve workspace persona (if workspace has one set)
     const wsConfig = workspaceId ? server.workspaceManager?.get(workspaceId) : null;
     const activePersonaId = wsConfig?.personaId ?? null;
@@ -109,7 +112,7 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
     }
 
     // Orchestrator's built prompt (identity + self-awareness + preloaded context)
-    prompt += orchestrator.buildSystemPrompt();
+    prompt += orch.buildSystemPrompt();
 
     // Inject user profile context
     try {
@@ -210,7 +213,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
     // W3.3: Inject actionable correction signals — user corrections from prior sessions
     try {
-      const signalStore = orchestrator.getImprovementSignals();
+      const signalStore = orch.getImprovementSignals();
       if (signalStore) {
         const actionable = signalStore.getActionable();
         if (actionable.length > 0) {
@@ -378,6 +381,32 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       history.push({ role: 'user', content: message });
       persistMessage(server.localConfig.dataDir, effectiveWorkspace, sessionId, { role: 'user', content: message });
 
+      // ── Workspace session (Phase A.1 — Option Y per-session orchestrator) ──
+      // Create or reuse a WorkspaceSession so this chat call's orchestrator
+      // operates on its own workspace-mind instance, never the shared singleton.
+      // Non-workspace chats (no workspace set, or 'default') fall back to the
+      // shared orchestrator (personal mind only). Failures are non-fatal and
+      // also fall back to the shared orchestrator.
+      let sessionOrch: Orchestrator = orchestrator;
+      let wsSession: WorkspaceSession | undefined;
+      if (!hasCustomRunner && workspace && workspace !== 'default') {
+        try {
+          const mind = server.agentState.getWorkspaceMindDb(effectiveWorkspace);
+          if (mind) {
+            wsSession = server.sessionManager.getOrCreate(
+              effectiveWorkspace,
+              () => mind,
+              (m) => server.agentState.createSessionOrchestrator(m),
+              (m, o) => server.agentState.buildToolsForSession(o, workspacePath ?? effectiveWorkspace),
+              server.workspaceManager?.get(effectiveWorkspace)?.personaId ?? undefined,
+            );
+            sessionOrch = wsSession.orchestrator;
+          }
+        } catch (err) {
+          log.warn(`[session] Failed to create workspace session for "${effectiveWorkspace}": ${(err as Error).message}`);
+        }
+      }
+
       // Check if LiteLLM is available — if not, use echo mode
       // F2 fix: When using the built-in Anthropic proxy, the /health/liveliness
       // endpoint doesn't exist — so the HTTP probe always fails, dropping into
@@ -416,7 +445,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           sessionId,
           searchMemory: async (query: string): Promise<string> => {
             try {
-              const recall = await orchestrator.recallMemory(query);
+              const recall = await sessionOrch.recallMemory(query);
               if (recall.count === 0) return 'No relevant memories found.';
               const items = (recall.recalled ?? []).slice(0, 5);
               return items.map((item: string, i: number) => `${i + 1}. ${item}`).join('\n');
@@ -520,8 +549,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           }
         }
 
-        // ── Activate workspace mind (A2: guard against silent fallback) ──
-        if (!hasCustomRunner && workspace) {
+        // ── Workspace mind activation ────────────────────────────
+        // With the Phase A.1 session migration, the per-session orchestrator
+        // created above already has the workspace mind mounted. This legacy
+        // shared-orchestrator activation only fires as a fallback when
+        // session creation failed (wsSession is undefined) — matches the
+        // old behavior for default/personal-only chats and broken workspaces.
+        if (!hasCustomRunner && workspace && !wsSession) {
           const activated = server.agentState.activateWorkspaceMind(effectiveWorkspace);
           if (!activated) {
             sendEvent('step', { content: `Warning: could not activate workspace memory for "${effectiveWorkspace}". Using personal memory only.` });
@@ -534,7 +568,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             sendEvent('step', { content: 'Recalling relevant memories...' });
             sendEvent('tool', { name: 'auto_recall', input: { query: agentMessage } });
             const recallStart = Date.now();
-            const recall = await orchestrator.recallMemory(agentMessage);
+            const recall = await sessionOrch.recallMemory(agentMessage);
             const recallDuration = Date.now() - recallStart;
             if (recall.count > 0) {
               recalledContext = '\n\n' + recall.text;
@@ -607,7 +641,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
         const systemPrompt = hasCustomRunner
           ? 'You are a helpful AI assistant.'
-          : ambiguityPrefix + buildSystemPrompt(workspacePath, sessionId, history.length, effectiveWorkspace) + templateContext + recalledContext;
+          : ambiguityPrefix + buildSystemPrompt(sessionOrch, workspacePath, sessionId, history.length, effectiveWorkspace) + templateContext + recalledContext;
 
         // Register a per-request pre:tool hook for confirmation gates
         // This fires during the agent loop and pauses until user approves/denies
@@ -988,7 +1022,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           const agentAlreadySaved = (result.toolsUsed ?? []).includes('save_memory');
           if (!agentAlreadySaved) {
             try {
-              const saved = await orchestrator.autoSaveFromExchange(message, result.content);
+              const saved = await sessionOrch.autoSaveFromExchange(message, result.content);
               if (saved.length > 0) {
                 sendEvent('step', { content: `Auto-saved ${saved.length} memor${saved.length === 1 ? 'y' : 'ies'} from this exchange.` });
               }
@@ -1004,7 +1038,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // Non-blocking — KG enrichment never fails the response.
         if (!hasCustomRunner && result.content && result.content.length > 100) {
           try {
-            const knowledge = orchestrator.getKnowledge();
+            const knowledge = sessionOrch.getKnowledge();
             const entities = extractEntities(result.content);
             if (entities.length > 0) {
               const now = new Date().toISOString();
@@ -1027,7 +1061,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // Non-blocking — detection failure shouldn't affect the response.
         if (!hasCustomRunner) {
           try {
-            const signalStore = orchestrator.getImprovementSignals();
+            const signalStore = sessionOrch.getImprovementSignals();
             analyzeAndRecordCorrection(signalStore, message);
 
             // Record capability gaps from tool-not-found events
