@@ -147,6 +147,9 @@ const Desktop = () => {
             templateId={ws?.templateId}
             initialPersona={win.personaId}
             onPersonaChange={(personaId) => wm.setWindowPersona(win.instanceId, personaId)}
+            autonomyLevel={win.autonomyLevel ?? 'normal'}
+            autonomyExpiresAt={win.autonomyExpiresAt ?? null}
+            onAutonomyChange={(level, ttlMinutes) => wm.setWindowAutonomy(win.instanceId, level, ttlMinutes)}
           />
         );
       }

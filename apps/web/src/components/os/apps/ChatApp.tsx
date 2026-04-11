@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ChevronUp, ThumbsUp, ThumbsDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Upload, Code, FileText, Users, X, Bot, Cpu, Layers, Pin, PinOff } from 'lucide-react';
+import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ChevronUp, ThumbsUp, ThumbsDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Upload, Code, FileText, Users, X, Bot, Cpu, Layers, Pin, PinOff, Shield, Zap } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getPersonaById, PERSONAS } from '@/lib/personas';
@@ -14,6 +14,8 @@ export interface TeamMember {
   status: string;
   avatar?: string;
 }
+
+type AutonomyLevel = 'normal' | 'trusted' | 'yolo';
 
 interface ChatAppProps {
   messages: ChatMessage[];
@@ -34,6 +36,12 @@ interface ChatAppProps {
   onNewSession?: () => void;
   workspaceId?: string | null;
   templateId?: string;
+  /** Phase B.5: current autonomy level for this chat window. */
+  autonomyLevel?: AutonomyLevel;
+  /** Phase B.5: expiry of the current elevated autonomy, if any. */
+  autonomyExpiresAt?: number | null;
+  /** Phase B.5: change autonomy level + optional TTL. */
+  onAutonomyChange?: (level: AutonomyLevel, ttlMinutes: number | null) => void;
 }
 
 const TEMPLATE_DISPLAY: Record<string, { label: string; desc: string }> = {
@@ -235,6 +243,129 @@ const ApprovalGate = ({
   );
 };
 
+/**
+ * Phase B.5: autonomy toggle — three-level chip in the chat header with a
+ * dropdown for TTL. Shows a countdown when elevated. Click to cycle through
+ * Normal → Trusted → YOLO → Normal, or pick from the dropdown for specific TTLs.
+ */
+const AUTONOMY_CONFIG: Record<AutonomyLevel, { label: string; color: string; bg: string; border: string; icon: React.ComponentType<{ className?: string }>; tagline: string }> = {
+  normal:  { label: 'Normal',  color: 'text-muted-foreground', bg: 'bg-muted/30',         border: 'border-border/40',      icon: Shield, tagline: 'Every write gated' },
+  trusted: { label: 'Trusted', color: 'text-sky-300',          bg: 'bg-sky-500/10',       border: 'border-sky-500/40',     icon: Shield, tagline: 'Writes pass, git/install gate' },
+  yolo:    { label: 'YOLO',    color: 'text-amber-300',        bg: 'bg-amber-500/10',     border: 'border-amber-500/40',   icon: Zap,    tagline: 'Everything passes (except critical ops)' },
+};
+
+const TTL_OPTIONS: Array<{ label: string; minutes: number | null }> = [
+  { label: '15 min',        minutes: 15 },
+  { label: '30 min',        minutes: 30 },
+  { label: '1 hour',        minutes: 60 },
+  { label: 'Until I close', minutes: null },
+];
+
+function formatCountdown(ms: number): string {
+  if (ms <= 0) return 'expired';
+  const mins = Math.round(ms / 60_000);
+  if (mins < 1) return '<1m';
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  const rem = mins % 60;
+  return rem ? `${hrs}h ${rem}m` : `${hrs}h`;
+}
+
+const AutonomyToggle = ({
+  level,
+  expiresAt,
+  onChange,
+}: {
+  level: AutonomyLevel;
+  expiresAt: number | null;
+  onChange: (level: AutonomyLevel, ttlMinutes: number | null) => void;
+}) => {
+  const [open, setOpen] = useState(false);
+  const [now, setNow] = useState(Date.now());
+
+  // Refresh the countdown every 10s so "12m" visually drifts toward 0.
+  useEffect(() => {
+    if (level === 'normal' || !expiresAt) return;
+    const id = setInterval(() => setNow(Date.now()), 10_000);
+    return () => clearInterval(id);
+  }, [level, expiresAt]);
+
+  const config = AUTONOMY_CONFIG[level];
+  const Icon = config.icon;
+  const countdown = level !== 'normal' && expiresAt ? formatCountdown(expiresAt - now) : null;
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-display border ${config.bg} ${config.color} ${config.border} hover:brightness-110 transition`}
+        title={config.tagline}
+      >
+        <Icon className="w-3 h-3" />
+        <span>{config.label}</span>
+        {countdown && <span className="opacity-60">· {countdown}</span>}
+        <ChevronDown className="w-3 h-3" />
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full mt-1 z-50 w-64 bg-background border border-border/40 rounded-xl shadow-2xl overflow-hidden">
+            <div className="px-3 py-2 border-b border-border/20">
+              <p className="text-[11px] font-display font-semibold text-muted-foreground uppercase tracking-wider">Autonomy</p>
+              <p className="text-[10px] text-muted-foreground/70 mt-0.5">Skip approvals for trusted operations. Critical ops always gate.</p>
+            </div>
+
+            {(Object.keys(AUTONOMY_CONFIG) as AutonomyLevel[]).map(lv => {
+              const cfg = AUTONOMY_CONFIG[lv];
+              const LevelIcon = cfg.icon;
+              const isActive = level === lv;
+              return (
+                <div key={lv} className={`px-3 py-2 border-b border-border/10 ${isActive ? 'bg-muted/20' : ''}`}>
+                  <button
+                    onClick={() => {
+                      if (lv === 'normal') {
+                        onChange('normal', null);
+                        setOpen(false);
+                      }
+                    }}
+                    className="w-full flex items-center justify-between gap-2 text-left"
+                  >
+                    <div className="flex items-center gap-2">
+                      <LevelIcon className={`w-3.5 h-3.5 ${cfg.color}`} />
+                      <div>
+                        <p className={`text-xs font-display font-medium ${cfg.color}`}>{cfg.label}</p>
+                        <p className="text-[10px] text-muted-foreground/70">{cfg.tagline}</p>
+                      </div>
+                    </div>
+                    {isActive && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
+                  </button>
+                  {lv !== 'normal' && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {TTL_OPTIONS.map(opt => (
+                        <button
+                          key={opt.label}
+                          onClick={() => {
+                            onChange(lv, opt.minutes);
+                            setOpen(false);
+                          }}
+                          className="px-2 py-0.5 rounded text-[10px] bg-muted/40 hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
 const FileDropZone = ({ onDrop, active }: { onDrop: (files: File[]) => void; active: boolean }) => {
   if (!active) return null;
   return (
@@ -255,6 +386,7 @@ const ChatApp = ({
   teamPresence,
   sessions, activeSessionId, onSelectSession, onNewSession,
   workspaceId, templateId,
+  autonomyLevel = 'normal', autonomyExpiresAt = null, onAutonomyChange,
 }: ChatAppProps) => {
   const [input, setInput] = useState('');
   const [showSlash, setShowSlash] = useState(false);
@@ -538,8 +670,19 @@ const ChatApp = ({
             </div>
           )}
 
+          {/* Phase B.5: autonomy toggle — only render when the parent wired a handler */}
+          {onAutonomyChange && (
+            <div className="ml-auto">
+              <AutonomyToggle
+                level={autonomyLevel}
+                expiresAt={autonomyExpiresAt}
+                onChange={onAutonomyChange}
+              />
+            </div>
+          )}
+
           {/* Model picker */}
-          <div className="relative ml-auto" ref={modelPickerRef}>
+          <div className={`relative ${onAutonomyChange ? '' : 'ml-auto'}`} ref={modelPickerRef}>
             <button
               onClick={() => { setShowModelPicker(p => !p); setShowPersonaPicker(false); }}
               className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-muted/50 transition-colors"

@@ -6,6 +6,8 @@ import type { Workspace } from '@/lib/types';
 // so schema changes can drop the stored state safely.
 const WINDOW_STATE_KEY = 'waggle-window-state-v1';
 
+export type AutonomyLevel = 'normal' | 'trusted' | 'yolo';
+
 export interface WindowState {
   instanceId: string;
   appId: AppId;
@@ -20,6 +22,19 @@ export interface WindowState {
   personaId?: string;
   personaLabel?: string;
   templateLabel?: string;
+  /**
+   * Phase B.5: per-window autonomy override. Controls how hard the
+   * approval gate hits — 'normal' gates every write, 'trusted' lets
+   * writes through but still gates git/install/cross-workspace,
+   * 'yolo' passes everything except a critical blacklist.
+   * Defaults to 'normal' on every new window.
+   */
+  autonomyLevel?: AutonomyLevel;
+  /**
+   * Epoch ms after which an elevated autonomy auto-reverts to 'normal'.
+   * null = until window closes. Undefined when autonomy is 'normal'.
+   */
+  autonomyExpiresAt?: number | null;
   zIndex: number;
   minimized: boolean;
   cascadeOffset: number;
@@ -210,6 +225,47 @@ export function useWindowManager(workspaces: Workspace[]) {
       : w));
   }, []);
 
+  /**
+   * Phase B.5: update autonomy on a specific window. Elevated levels
+   * (trusted / yolo) auto-revert to 'normal' after `ttlMinutes` unless
+   * ttlMinutes is null (meaning "until this window closes").
+   */
+  const setWindowAutonomy = useCallback((
+    instanceId: string,
+    level: AutonomyLevel,
+    ttlMinutes: number | null = 30,
+  ) => {
+    const expiresAt = level === 'normal' || ttlMinutes === null
+      ? null
+      : Date.now() + ttlMinutes * 60_000;
+    setWindows(prev => prev.map(w => w.instanceId === instanceId
+      ? { ...w, autonomyLevel: level, autonomyExpiresAt: expiresAt }
+      : w));
+  }, []);
+
+  // Phase B.5: auto-revert expired autonomy grants. Runs every 10 seconds
+  // so the elevated banner in ChatApp's header always reflects reality.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setWindows(prev => {
+        let changed = false;
+        const next = prev.map(w => {
+          if (
+            w.autonomyLevel && w.autonomyLevel !== 'normal'
+            && w.autonomyExpiresAt && w.autonomyExpiresAt < now
+          ) {
+            changed = true;
+            return { ...w, autonomyLevel: 'normal' as AutonomyLevel, autonomyExpiresAt: null };
+          }
+          return w;
+        });
+        return changed ? next : prev;
+      });
+    }, 10_000);
+    return () => clearInterval(interval);
+  }, []);
+
   const closeApp = useCallback((instanceId: string) => {
     setWindows(prev => prev.filter(w => w.instanceId !== instanceId));
   }, []);
@@ -284,7 +340,7 @@ export function useWindowManager(workspaces: Workspace[]) {
   return {
     windows, focusedInstanceId,
     openApp, openChatForWorkspace, closeApp, minimizeApp, focusWindow,
-    setWindowPersona,
+    setWindowPersona, setWindowAutonomy,
     closeTopWindow, minimizeTopWindow,
     openAppIds, minimizedAppIds, getWindowTitle,
   };

@@ -41,6 +41,8 @@ const FALLBACK_MODELS = [
   'xai/grok-3',
 ];
 
+type AutonomyLevel = 'normal' | 'trusted' | 'yolo';
+
 interface ChatWindowInstanceProps {
   workspaceId: string;
   workspaceName?: string;
@@ -52,9 +54,24 @@ interface ChatWindowInstanceProps {
    * Takes precedence over the legacy workspace-patch path when provided.
    */
   onPersonaChange?: (personaId: string) => void;
+  /** Phase B.5: current autonomy level for this window. */
+  autonomyLevel?: AutonomyLevel;
+  /** Phase B.5: expiry of the current elevated autonomy, if any. */
+  autonomyExpiresAt?: number | null;
+  /** Phase B.5: change autonomy from inside ChatApp's header. */
+  onAutonomyChange?: (level: AutonomyLevel, ttlMinutes: number | null) => void;
 }
 
-const ChatWindowInstance = ({ workspaceId, workspaceName, initialPersona, templateId, onPersonaChange }: ChatWindowInstanceProps) => {
+const ChatWindowInstance = ({
+  workspaceId,
+  workspaceName,
+  initialPersona,
+  templateId,
+  onPersonaChange,
+  autonomyLevel = 'normal',
+  autonomyExpiresAt = null,
+  onAutonomyChange,
+}: ChatWindowInstanceProps) => {
   const [currentPersona, setCurrentPersona] = useState(initialPersona || 'general-purpose');
 
   // Sync the local persona state when the parent sends a new initialPersona
@@ -70,6 +87,7 @@ const ChatWindowInstance = ({ workspaceId, workspaceName, initialPersona, templa
     workspaceId,
     sessionId: activeSessionId,
     persona: currentPersona,
+    autonomy: { level: autonomyLevel, expiresAt: autonomyExpiresAt },
   });
 
   const [currentModel, setCurrentModel] = useState<string>('');
@@ -172,6 +190,9 @@ const ChatWindowInstance = ({ workspaceId, workspaceName, initialPersona, templa
       onNewSession={createSession}
       workspaceId={workspaceId}
       templateId={templateId}
+      autonomyLevel={autonomyLevel}
+      autonomyExpiresAt={autonomyExpiresAt}
+      onAutonomyChange={onAutonomyChange}
     />
   );
 };
