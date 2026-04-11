@@ -38,6 +38,7 @@ import {
   createCliTools,
   createInsightsTools,
   createConnectorSearchTools,
+  createCrossWorkspaceTools,
   McpRuntime,
   isWithinBudget,
   getRecentLogs,
@@ -57,7 +58,7 @@ import { settingsRoutes } from './routes/settings.js';
 import { sessionRoutes, findUndistilledSessions, markSessionDistilled } from './routes/sessions.js';
 import { knowledgeRoutes } from './routes/knowledge.js';
 import { litellmRoutes } from './routes/litellm.js';
-import { ingestRoutes } from './routes/ingest.js';
+import { ingestRoutes, readFileRegistry } from './routes/ingest.js';
 import { mindRoutes } from './routes/mind.js';
 import { agentRoutes } from './routes/agent.js';
 import { skillRoutes } from './routes/skills.js';
@@ -175,9 +176,10 @@ export interface AgentState {
   createSessionOrchestrator: (workspaceMind: import('@waggle/core').MindDB) => Orchestrator;
   /**
    * Build the full tool pool for a session, using the session's orchestrator for mind tools.
-   * Thin wrapper over buildToolsForWorkspace with the orchForMindTools argument threaded in.
+   * When `sourceWorkspaceId` is provided, also injects Phase B.2 cross-workspace read tools
+   * (read_other_workspace, list_workspaces, list_workspace_files) scoped to that source.
    */
-  buildToolsForSession: (sessionOrch: Orchestrator, workspacePath: string) => ToolDefinition[];
+  buildToolsForSession: (sessionOrch: Orchestrator, workspacePath: string, sourceWorkspaceId?: string) => ToolDefinition[];
   /**
    * Activate workspace mind for the given workspace ID. Returns true if switched.
    * @deprecated — use `sessionManager.getOrCreate()` with `createSessionOrchestrator`
@@ -813,13 +815,45 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
 
   /**
    * Build the tool pool for a workspace session using the session's own orchestrator
-   * for mind tools. Thin wrapper over buildToolsForWorkspace.
+   * for mind tools. Includes cross-workspace read tools (Phase B.2) that capture
+   * the source workspace as a closure so cross-workspace citations identify both
+   * sides of the access.
    */
   const buildToolsForSession = (
     sessionOrch: Orchestrator,
     wsPath: string,
+    sourceWorkspaceId?: string,
   ): ToolDefinition[] => {
-    return buildToolsForWorkspace(wsPath, sessionOrch);
+    const base = buildToolsForWorkspace(wsPath, sessionOrch);
+    if (!sourceWorkspaceId) return base;
+
+    const crossTools = createCrossWorkspaceTools({
+      sourceWorkspaceId,
+      embedder,
+      getMindForWorkspace: (id) => workspaceMindCache.get(id) ?? getWorkspaceMindDb(id),
+      listWorkspaces: () => wsManager.list().map(w => ({ id: w.id, name: w.name })),
+      listWorkspaceFiles: async (id, subPath) => {
+        try {
+          const entries = readFileRegistry(fullConfig.dataDir, id);
+          // FileRegistryEntry only has name/type/summary/sizeBytes/ingestedAt —
+          // there's no real path hierarchy for virtual storage, so we filter by
+          // name prefix when a subPath is provided.
+          const filtered = subPath
+            ? entries.filter(e => e.name.startsWith(subPath))
+            : entries;
+          return filtered.map(e => ({
+            name: e.name,
+            type: 'file' as const,
+            size: e.sizeBytes,
+            modifiedAt: e.ingestedAt,
+          }));
+        } catch {
+          return [];
+        }
+      },
+    });
+
+    return [...base, ...crossTools];
   };
 
   // ── Workspace mind cache (legacy — being replaced by sessionManager) ──

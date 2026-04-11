@@ -41,6 +41,7 @@ export { createPresentationTools } from './presentation-tools.js';
 export { createPdfTools } from './pdf-tools.js';
 export { createInsightsTools, type InsightsDeps } from './insights-tools.js';
 export { createConnectorSearchTools } from './connector-search.js';
+export { createCrossWorkspaceTools, type CrossWorkspaceToolDeps } from './cross-workspace-tools.js';
 export { extractEntitiesWithLLM, type LLMCallFn as EntityLLMCallFn } from './entity-extractor.js';
 export { createSkillTools, type SkillToolsDeps } from './skill-tools.js';
 export { SkillRecommender, type SkillRecommendation, type SkillRecommenderDeps } from './skill-recommender.js';

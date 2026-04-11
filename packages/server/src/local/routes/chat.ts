@@ -402,7 +402,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               effectiveWorkspace,
               () => mind,
               (m) => server.agentState.createSessionOrchestrator(m),
-              (m, o) => server.agentState.buildToolsForSession(o, workspacePath ?? effectiveWorkspace),
+              // Phase B.2: pass effectiveWorkspace as the source workspace ID
+              // so cross-workspace read tools scope their grants correctly.
+              (m, o) => server.agentState.buildToolsForSession(o, workspacePath ?? effectiveWorkspace, effectiveWorkspace),
               server.workspaceManager?.get(effectiveWorkspace)?.personaId ?? undefined,
             );
             sessionOrch = wsSession.orchestrator;

@@ -5,8 +5,18 @@
  * Only commands that modify state need user approval.
  */
 
-// Tools that ALWAYS need confirmation (they modify state)
-const ALWAYS_CONFIRM = new Set(['write_file', 'edit_file', 'generate_docx', 'git_commit', 'git_push', 'git_pr', 'git_merge', 'install_capability']);
+// Tools that ALWAYS need confirmation.
+// Write tools modify state. Cross-workspace reads don't modify state but
+// reach into another workspace's private memory, which is a privacy
+// surface enterprise buyers care about — so they're gated too.
+// Phase B.3 will add persistent "always allow" grants per pair.
+const ALWAYS_CONFIRM = new Set([
+  'write_file', 'edit_file', 'generate_docx',
+  'git_commit', 'git_push', 'git_pr', 'git_merge',
+  'install_capability',
+  // Cross-workspace reads (Phase B.2)
+  'read_other_workspace', 'list_workspace_files',
+]);
 
 // Connector action name patterns that indicate write operations
 const CONNECTOR_WRITE_PATTERNS = /_(create|update|delete|send|post|transition|remove|add|set|put)_/;
