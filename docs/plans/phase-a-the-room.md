@@ -324,15 +324,15 @@ Plus: `createMindTools()` inside `Orchestrator` (line 90) captures `getWorkspace
 ### Revised A.1 task breakdown under Option Y
 
 - [x] **A1.1** — orchestrator.ts read, decision Y recorded (this section).
-- [ ] **A1.2** — `workspace-sessions.ts`: add `orchestrator: Orchestrator` field to `WorkspaceSession`, add `orchestratorFactory` parameter to `create()` and `getOrCreate()`, add `setMaxSessions(n)` method, update `close()` to clear the orchestrator reference.
-- [ ] **A1.3** — `index.ts`: provide an `orchestratorFactory` helper that creates a new `Orchestrator` for a given workspace mind, wire it through `agentState`. Add `@deprecated` JSDoc + console warning to `activateWorkspaceMind`.
-- [ ] **A1.4** — `chat.ts`: replace 4 call sites (`buildSystemPrompt`, `recallMemory` × 2, `autoSaveFromExchange`) with `session.orchestrator.X()`. Remove the `activateWorkspaceMind` call at line 525 (replaced by session creation).
-- [ ] **A1.5** — `commands.ts`: replace 1 call site (`recallMemory`) with `session.orchestrator.recallMemory()`.
-- [ ] **A1.6** — rolled into A1.3 (deprecation warning on `activateWorkspaceMind`).
-- [ ] **A1.7** — `packages/server/tests/concurrent-chat.test.ts`: new concurrency test.
-- [ ] **A1.8** — verification: tsc clean on agent + server + web, all tests pass.
+- [x] **A1.2** — `workspace-sessions.ts`: added `orchestrator` field on `WorkspaceSession`, `setMaxSessions`/`getMaxSessions`, updated `create()` and `getOrCreate()` signatures to accept orchestrator (or factory). Commit `303750c`.
+- [x] **A1.3** — `index.ts`: added `createSessionOrchestrator(mind)` and `buildToolsForSession(orch, wsPath)` helpers, `buildToolsForWorkspace` gained optional `orchForMindTools` parameter, `AgentState` interface updated, `activateWorkspaceMind` marked `@deprecated`. Commit `303750c`.
+- [x] **A1.4** — `chat.ts`: 7 call sites migrated. `buildSystemPrompt()` takes an explicit `Orchestrator` parameter; handler creates a `WorkspaceSession` right after history persistence; `recallMemory`, `autoSaveFromExchange`, `getKnowledge`, `getImprovementSignals` all routed through `sessionOrch`. Legacy `activateWorkspaceMind` kept as fallback when session creation fails. Commit `714ac00`.
+- [x] **A1.5** — `commands.ts`: replaced shared orchestrator with a per-request orchestrator (prefers existing chat session if one is open, else creates one-off via `createSessionOrchestrator`). Legacy `activateWorkspaceMind` call removed. Commit `714ac00`.
+- [x] **A1.6** — `@deprecated` JSDoc landed in A1.3. No runtime warning (would be spammy); IDE surfacing is sufficient.
+- [x] **A1.7** — `packages/server/tests/workspace-sessions-concurrency.test.ts` with 9 tests covering: per-session orchestrator isolation, default cap enforcement, `setMaxSessions` raise/lower, invalid value rejection, `pause`/`resume` per-session, `close` one session leaves others, `getOrCreate` lazy factories, `closeAll`, and two concurrent recalls on different workspace minds.
+- [x] **A1.8** — verification green: server tsc clean, agent tsc clean, orchestrator tests 22/22, tool-filter 10/10, connector-search 9/9, new concurrency test 9/9.
 
-**Revised time estimate:** 2-3 days for A.1 (down from 4). Phase A total: **8-10 days** (down from 10-12).
+**Phase A.1 complete on 2026-04-11.** Actual time: ~1 working day (vs revised 2-3 day estimate) due to the cornerstone + plan work already having identified every call site.
 
 ---
 
