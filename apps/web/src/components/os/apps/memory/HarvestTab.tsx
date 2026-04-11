@@ -7,10 +7,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Upload, FolderSearch, RefreshCw, Clock, CheckCircle2, AlertCircle,
+  Upload, RefreshCw, Clock, CheckCircle2, AlertCircle,
   Loader2, Plus, Zap, Brain,
 } from 'lucide-react';
-import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
 
 interface HarvestSource {
@@ -50,17 +49,42 @@ const SOURCE_ICONS: Record<string, string> = {
   'unknown': 'Other',
 };
 
+function formatRelative(iso: string | null): string {
+  if (!iso) return 'never';
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return 'unknown';
+  const diffMs = Date.now() - then;
+  if (diffMs < 0) return 'just now';
+  const sec = Math.round(diffMs / 1000);
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.round(hr / 24);
+  if (day < 30) return `${day}d ago`;
+  const mo = Math.round(day / 30);
+  if (mo < 12) return `${mo}mo ago`;
+  return `${Math.round(mo / 12)}y ago`;
+}
+
 const HarvestTab = () => {
   const [sources, setSources] = useState<HarvestSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [claudeCodeDetected, setClaudeCodeDetected] = useState<{ found: boolean; itemCount: number; path: string } | null>(null);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
-  const [importResult, setImportResult] = useState<{ saved: number; message: string } | null>(null);
+  // Raw parsed input held between preview and commit. The preview response is
+  // a summary shape the server can't re-parse, so we must retain the original
+  // data (file JSON, pasted object, or paste string) here for commit.
+  const [pendingData, setPendingData] = useState<unknown>(null);
+  const [importResult, setImportResult] = useState<{ saved: number; itemCount?: number; message: string } | null>(null);
   const [selectedSource, setSelectedSource] = useState<string>('chatgpt');
   const [pasteMode, setPasteMode] = useState(false);
   const [pasteContent, setPasteContent] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  const claudeCodeSource = sources.find(s => s.source === 'claude-code') ?? null;
 
   // Fetch sources on mount
   const fetchSources = useCallback(async () => {
@@ -94,11 +118,14 @@ const HarvestTab = () => {
 
     try {
       const text = await file.text();
-      const data = JSON.parse(text);
+      // Try JSON first; fall back to raw text so non-JSON exports
+      // (markdown, plain text) still reach the UniversalAdapter.
+      let data: unknown;
+      try { data = JSON.parse(text); } catch { data = text; }
 
-      // Preview first
       const previewData = await adapter.harvestPreview(data, selectedSource);
       setPreview(previewData);
+      setPendingData(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to parse file');
     }
@@ -115,21 +142,25 @@ const HarvestTab = () => {
 
       const previewData = await adapter.harvestPreview(data, selectedSource);
       setPreview(previewData);
+      setPendingData(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to parse content');
     }
   };
 
-  // Commit import
-  const handleCommit = async (data: unknown, source: string) => {
+  // Commit import — always uses the retained pendingData, never the preview
+  // shape (server cannot re-parse the preview response).
+  const handleCommit = async () => {
+    if (pendingData === null) return;
     setImporting(true);
     setError(null);
 
     try {
-      const result = await adapter.harvestCommit(data, source);
+      const result = await adapter.harvestCommit(pendingData, selectedSource);
       setImportResult(result);
       setPreview(null);
-      fetchSources();
+      setPendingData(null);
+      await fetchSources();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Import failed');
     } finally {
@@ -137,15 +168,25 @@ const HarvestTab = () => {
     }
   };
 
-  // Harvest Claude Code
+  const handleCancelPreview = () => {
+    setPreview(null);
+    setPendingData(null);
+  };
+
+  // Harvest Claude Code — filesystem scan mode; server handles `{ scanLocal: true }`
+  // via FilesystemAdapter.scan() rather than SourceAdapter.parse().
   const handleClaudeCodeHarvest = async () => {
     setImporting(true);
     setError(null);
+    setImportResult(null);
 
     try {
       const result = await adapter.harvestCommit({ scanLocal: true }, 'claude-code');
       setImportResult(result);
-      fetchSources();
+      await fetchSources();
+      // Refresh the detect banner so "Found N items" reflects the
+      // current state (already-harvested vs. pending).
+      await detectClaudeCode();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Claude Code harvest failed');
     } finally {
@@ -183,22 +224,39 @@ const HarvestTab = () => {
       {/* Claude Code auto-detect banner */}
       {claudeCodeDetected?.found && (
         <div className="p-3 rounded-xl bg-primary/10 border border-primary/30">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Zap className="w-4 h-4 text-primary" />
-              <div>
-                <p className="text-xs font-display font-medium text-foreground">Claude Code Detected</p>
-                <p className="text-[11px] text-muted-foreground">
-                  Found {claudeCodeDetected.itemCount} items (memories, rules, plans) at {claudeCodeDetected.path}
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <Zap className="w-4 h-4 text-primary shrink-0" />
+              <div className="min-w-0">
+                <p className="text-xs font-display font-medium text-foreground">
+                  Claude Code Detected
+                  {claudeCodeSource && (
+                    <span className="ml-2 text-[11px] text-emerald-400">
+                      · {claudeCodeSource.framesCreated} frames harvested
+                    </span>
+                  )}
+                </p>
+                <p className="text-[11px] text-muted-foreground truncate">
+                  {claudeCodeSource ? (
+                    <>Last run {formatRelative(claudeCodeSource.lastSyncedAt)} · {claudeCodeDetected.itemCount} items available at {claudeCodeDetected.path}</>
+                  ) : (
+                    <>Found {claudeCodeDetected.itemCount} items (memories, rules, plans) at {claudeCodeDetected.path}</>
+                  )}
                 </p>
               </div>
             </div>
             <button
               onClick={handleClaudeCodeHarvest}
               disabled={importing}
-              className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-display hover:bg-primary/90 transition-colors disabled:opacity-50"
+              className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-display hover:bg-primary/90 transition-colors disabled:opacity-50 shrink-0"
             >
-              {importing ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Harvest'}
+              {importing ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : claudeCodeSource ? (
+                'Re-harvest'
+              ) : (
+                'Harvest'
+              )}
             </button>
           </div>
         </div>
@@ -212,12 +270,19 @@ const HarvestTab = () => {
         </div>
       )}
 
-      {/* Import result */}
+      {/* Import result — amber when zero items saved, emerald otherwise. */}
       {importResult && (
-        <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-start gap-2">
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 mt-0.5 shrink-0" />
-          <p className="text-[11px] text-emerald-400">{importResult.message}</p>
-        </div>
+        importResult.saved > 0 ? (
+          <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-start gap-2">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 mt-0.5 shrink-0" />
+            <p className="text-[11px] text-emerald-400">{importResult.message}</p>
+          </div>
+        ) : (
+          <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-start gap-2">
+            <AlertCircle className="w-3.5 h-3.5 text-amber-400 mt-0.5 shrink-0" />
+            <p className="text-[11px] text-amber-400">{importResult.message}</p>
+          </div>
+        )
       )}
 
       {/* Connected sources */}
@@ -233,7 +298,7 @@ const HarvestTab = () => {
                     <p className="text-xs font-display text-foreground">{s.displayName}</p>
                     <p className="text-[11px] text-muted-foreground">
                       {s.itemsImported} items · {s.framesCreated} frames
-                      {s.lastSyncedAt && <> · Last: {new Date(s.lastSyncedAt).toLocaleDateString()}</>}
+                      {s.lastSyncedAt && <> · {formatRelative(s.lastSyncedAt)}</>}
                     </p>
                   </div>
                 </div>
@@ -350,16 +415,17 @@ const HarvestTab = () => {
             </div>
             <div className="flex gap-2">
               <button
-                onClick={() => handleCommit(pasteContent || preview, selectedSource)}
-                disabled={importing}
+                onClick={handleCommit}
+                disabled={importing || pendingData === null}
                 className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-display hover:bg-primary/90 transition-colors disabled:opacity-50"
               >
                 {importing ? <Loader2 className="w-3 h-3 animate-spin inline mr-1" /> : null}
                 Import {preview.itemCount} Items
               </button>
               <button
-                onClick={() => setPreview(null)}
-                className="px-3 py-1.5 rounded-lg bg-secondary text-foreground text-xs hover:bg-secondary/70 transition-colors"
+                onClick={handleCancelPreview}
+                disabled={importing}
+                className="px-3 py-1.5 rounded-lg bg-secondary text-foreground text-xs hover:bg-secondary/70 transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>

@@ -14,16 +14,36 @@ import path from 'node:path';
 import {
   HarvestSourceStore, ChatGPTAdapter, ClaudeAdapter,
   ClaudeCodeAdapter, GeminiAdapter, UniversalAdapter,
-  type ImportSourceType, type UniversalImportItem, type SourceAdapter,
+  type ImportSourceType, type UniversalImportItem,
+  type SourceAdapter, type FilesystemAdapter,
 } from '@waggle/core';
 
 function getAdapter(source: ImportSourceType): SourceAdapter {
   switch (source) {
     case 'chatgpt': return new ChatGPTAdapter();
     case 'claude': case 'claude-desktop': return new ClaudeAdapter();
+    case 'claude-code': return new ClaudeCodeAdapter();
     case 'gemini': case 'google-ai-studio': return new GeminiAdapter();
     default: return new UniversalAdapter();
   }
+}
+
+function isFilesystemAdapter(adapter: SourceAdapter): adapter is FilesystemAdapter {
+  return typeof (adapter as FilesystemAdapter).scan === 'function';
+}
+
+function getDefaultLocalDir(source: ImportSourceType): string | null {
+  switch (source) {
+    case 'claude-code': return path.join(os.homedir(), '.claude');
+    default: return null;
+  }
+}
+
+function isScanLocalRequest(data: unknown): boolean {
+  return (
+    typeof data === 'object' && data !== null &&
+    'scanLocal' in data && (data as { scanLocal?: unknown }).scanLocal === true
+  );
 }
 
 export async function harvestRoutes(fastify: FastifyInstance) {
@@ -53,10 +73,35 @@ export async function harvestRoutes(fastify: FastifyInstance) {
     }
 
     const adapter = getAdapter(source);
-    const items = adapter.parse(data);
+
+    // Local filesystem scan mode (Claude Code, etc.) — clients send
+    // `{ scanLocal: true }` instead of a parsed payload. Route these through
+    // the adapter's scan() method against the source's default local dir.
+    let items: UniversalImportItem[];
+    if (isScanLocalRequest(data)) {
+      if (!isFilesystemAdapter(adapter)) {
+        return reply.code(400).send({
+          error: `Source '${source}' does not support local scan`,
+        });
+      }
+      const dir = getDefaultLocalDir(source);
+      if (!dir) {
+        return reply.code(400).send({
+          error: `No default local directory configured for source '${source}'`,
+        });
+      }
+      items = adapter.scan(dir);
+    } else {
+      items = adapter.parse(data);
+    }
 
     if (items.length === 0) {
-      return { source, itemCount: 0, saved: 0, message: 'No items found in input' };
+      return {
+        source,
+        itemCount: 0,
+        saved: 0,
+        message: `No items found for ${source}. Check that the export file or local directory contains content the adapter recognizes.`,
+      };
     }
 
     // Save raw items as I-frames (lightweight mode — full pipeline requires LLM keys)
