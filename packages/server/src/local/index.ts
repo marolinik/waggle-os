@@ -970,6 +970,47 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   weaverTimers.push(setInterval(runPersonalConsolidation, 60 * 60 * 1000)); // hourly
   weaverTimers.push(setInterval(runPersonalDecay, 24 * 60 * 60 * 1000));    // daily
 
+  // ── Harvest auto-sync — poll stale sources every 30 min ──
+  const runHarvestAutoSync = async () => {
+    try {
+      const harvestStore = new HarvestSourceStore(multiMind.personal);
+      const stale = harvestStore.getStale();
+      if (stale.length === 0) return;
+
+      const { ClaudeCodeAdapter: CCA } = await import('@waggle/core');
+      const personalSessionStore = new SessionStore(multiMind.personal);
+      personalSessionStore.ensure('harvest', 'harvest', 'Imported memory from external sources');
+      const personalFrameStore = new FrameStore(multiMind.personal);
+
+      for (const src of stale) {
+        try {
+          // Only auto-sync filesystem-scannable sources
+          if (src.source !== 'claude-code') continue;
+          const homedir = (await import('node:os')).default.homedir();
+          const scanDir = (await import('node:path')).default.join(homedir, '.claude');
+          const adapter = new CCA();
+          const items = adapter.scan(scanDir);
+          if (items.length === 0) continue;
+
+          let saved = 0;
+          for (const item of items) {
+            const label = `[Harvest:${item.source}] ${item.title}`;
+            const content = item.content.slice(0, 4000);
+            personalFrameStore.createIFrame('harvest', `${label}\n\n${content}`, 'normal', 'import');
+            saved++;
+          }
+          harvestStore.recordSync(src.source, items.length, saved);
+          log.info(`[harvest-auto-sync] ${src.source}: imported ${saved} items`);
+        } catch (err) {
+          log.debug(`[harvest-auto-sync] ${src.source} failed:`, err);
+        }
+      }
+    } catch (err) {
+      log.debug('[harvest-auto-sync] skipped:', err);
+    }
+  };
+  weaverTimers.push(setInterval(runHarvestAutoSync, 30 * 60 * 1000)); // every 30 min
+
   // Extend activateWorkspaceMind to also start a weaver for the workspace
   // and distill any undistilled sessions into durable memory frames.
   const baseActivateWorkspaceMind = activateWorkspaceMind;

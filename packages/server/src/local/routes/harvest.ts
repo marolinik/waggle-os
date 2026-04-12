@@ -46,6 +46,13 @@ function isScanLocalRequest(data: unknown): boolean {
   );
 }
 
+function emitHarvestProgress(data: { phase: string; current: number; total: number; source: string }) {
+  const listeners = (globalThis as any).__harvestProgressListeners as Set<(e: Event) => void> | undefined;
+  if (!listeners || listeners.size === 0) return;
+  const event = new CustomEvent('harvest-progress', { detail: data });
+  for (const fn of listeners) fn(event);
+}
+
 export async function harvestRoutes(fastify: FastifyInstance) {
   // POST /api/harvest/preview — parse and show extraction preview
   fastify.post('/api/harvest/preview', async (request, reply) => {
@@ -120,11 +127,15 @@ export async function harvestRoutes(fastify: FastifyInstance) {
     const frameStore = new FrameStore(personalDb);
     let saved = 0;
 
+    emitHarvestProgress({ phase: 'saving', current: 0, total: items.length, source });
     for (const item of items) {
       const label = `[Harvest:${item.source}] ${item.title}`;
       const content = item.content.slice(0, 4000);
       frameStore.createIFrame('harvest', `${label}\n\n${content}`, 'normal', 'import');
       saved++;
+      if (saved % 10 === 0 || saved === items.length) {
+        emitHarvestProgress({ phase: 'saving', current: saved, total: items.length, source });
+      }
     }
 
     // Update harvest source tracking
@@ -198,6 +209,26 @@ export async function harvestRoutes(fastify: FastifyInstance) {
       return { source: store.getBySource(request.params.source as ImportSourceType) };
     },
   );
+
+  // GET /api/harvest/progress — SSE stream for import progress
+  fastify.get('/api/harvest/progress', async (request, reply) => {
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    });
+
+    const listener = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      reply.raw.write(`data: ${JSON.stringify(detail)}\n\n`);
+    };
+    (globalThis as any).__harvestProgressListeners ??= new Set();
+    (globalThis as any).__harvestProgressListeners.add(listener);
+
+    request.raw.on('close', () => {
+      (globalThis as any).__harvestProgressListeners?.delete(listener);
+    });
+  });
 
   // POST /api/harvest/scan-claude-code — scan local Claude Code directory
   fastify.post('/api/harvest/scan-claude-code', async (_request, reply) => {
