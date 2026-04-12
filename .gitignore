@@ -50,3 +50,11 @@ app/src-tauri/resources/native/
 .playwright-mcp/
 .superpowers/
 docs/~$$*
+
+# Test artifacts
+playwright-report/
+test-results/
+tests/screenshots/
+s*.png
+screen*.png
+tmp_bench_results.json
