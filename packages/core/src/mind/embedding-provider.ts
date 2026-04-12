@@ -240,7 +240,7 @@ async function probeProvider(
 export async function createEmbeddingProvider(config?: EmbeddingProviderConfig): Promise<EmbeddingProviderInstance> {
   const cfg: EmbeddingProviderConfig = { provider: 'auto', targetDimensions: 1024, ...config };
   const dims = cfg.targetDimensions ?? 1024;
-  const userTier: Tier = cfg.userTier ?? 'SOLO';
+  const userTier: Tier = cfg.userTier ?? 'FREE';
   const userId = cfg.userId ?? 'local';
   const quotaDb = cfg.quotaDb ?? null;
   const tierEnforced = cfg.userTier !== undefined; // Only enforce tier when explicitly set

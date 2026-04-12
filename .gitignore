@@ -46,3 +46,7 @@ app/src-tauri/resources/native/
 *.njsproj
 *.sln
 *.sw?
+.claude/
+.playwright-mcp/
+.superpowers/
+docs/~$$*

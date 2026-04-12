@@ -16,6 +16,10 @@
  */
 
 import { defineConfig, devices } from '@playwright/test';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   testDir: './tests',
@@ -55,5 +59,9 @@ export default defineConfig({
     timeout: 30_000,
     stdout: 'pipe',
     stderr: 'pipe',
+    env: {
+      ...process.env,
+      WAGGLE_FRONTEND_DIR: path.resolve(__dirname, 'apps/web/dist'),
+    },
   },
 });
