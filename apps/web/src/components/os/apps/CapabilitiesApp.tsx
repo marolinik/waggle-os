@@ -1,8 +1,40 @@
 import { useState, useEffect } from 'react';
-import { Package, Download, CheckCircle2, Shield, Star, Search, Loader2, Store, Grid3X3, List, Trash2, FlaskConical, X } from 'lucide-react';
+import { Package, Download, CheckCircle2, Shield, Star, Search, Loader2, Store, Grid3X3, List, Trash2, FlaskConical, X, Clock } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
 import type { SkillPack } from '@/lib/types';
+
+interface AuditEntry { id: number; name: string; source: string; outcome: string; timestamp: string }
+
+const AuditTab = ({ log, onLoad }: { log: AuditEntry[]; onLoad: (entries: AuditEntry[]) => void }) => {
+  const [loading, setLoading] = useState(log.length === 0);
+
+  useEffect(() => {
+    if (log.length > 0) return;
+    adapter.fetch('/api/audit/installs').then(r => r.json())
+      .then(data => { onLoad(Array.isArray(data) ? data : data.installs ?? []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>;
+  if (log.length === 0) return <p className="text-sm text-muted-foreground text-center py-8">No install history yet.</p>;
+
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[11px] text-muted-foreground mb-2">Recent skill and pack installations with trust source and outcome.</p>
+      {log.map(entry => (
+        <div key={entry.id} className="flex items-center gap-3 p-2 rounded-lg bg-secondary/30 border border-border/30">
+          {entry.outcome === 'success' ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> : <X className="w-3.5 h-3.5 text-destructive shrink-0" />}
+          <div className="flex-1 min-w-0">
+            <span className="text-xs text-foreground font-display truncate block">{entry.name}</span>
+            <span className="text-[11px] text-muted-foreground">{entry.source}</span>
+          </div>
+          <span className="text-[10px] text-muted-foreground shrink-0">{new Date(entry.timestamp).toLocaleDateString()}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
 
 const trustBadges: Record<string, { color: string; icon: React.ElementType }> = {
   verified: { color: 'text-emerald-400', icon: CheckCircle2 },
@@ -24,7 +56,8 @@ const CapabilitiesApp = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [installing, setInstalling] = useState<string | null>(null);
-  const [tab, setTab] = useState<'installed' | 'marketplace' | 'starter' | 'tools'>('installed');
+  const [tab, setTab] = useState<'installed' | 'marketplace' | 'starter' | 'tools' | 'audit'>('installed');
+  const [auditLog, setAuditLog] = useState<Array<{ id: number; name: string; source: string; outcome: string; timestamp: string }>>([]);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [testResult, setTestResult] = useState<{ name: string; preview: string; metadata?: Record<string, unknown> } | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
@@ -176,7 +209,7 @@ const CapabilitiesApp = () => {
 
       {/* Tabs */}
       <div className="flex gap-1 mb-4 p-0.5 rounded-lg bg-muted/50 w-fit" role="tablist" aria-label="Capability sections">
-        {(['installed', 'starter', 'marketplace', 'tools'] as const).map(t => (
+        {(['installed', 'starter', 'marketplace', 'tools', 'audit'] as const).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -260,6 +293,11 @@ const CapabilitiesApp = () => {
           ))}
         </div>
       )}
+      {/* Audit tab — install history */}
+      {tab === 'audit' && (
+        <AuditTab log={auditLog} onLoad={setAuditLog} />
+      )}
+
       {/* Skill Test Preview */}
       {testResult && (
         <div className="border-t border-border/30 p-3 max-h-48 overflow-auto" style={{ backgroundColor: 'var(--hive-850)' }}>

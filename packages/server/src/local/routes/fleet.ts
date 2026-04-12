@@ -34,19 +34,19 @@ export async function fleetRoutes(fastify: FastifyInstance) {
       };
     });
 
-    // Tier-based maxSessions: SOLO=3, BASIC=10, TEAMS=25, ENTERPRISE=100
+    // Tier-based maxSessions: FREE=3, PRO=10, TEAMS=25, ENTERPRISE/TRIAL=100
     const tierRaw = (fastify as any).localConfig?.tier ?? '';
-    const tier = parseTier(String(tierRaw)) ?? 'SOLO';
+    const tier = parseTier(String(tierRaw)) ?? 'FREE';
     const caps = getCapabilities(tier);
-    const maxSessions = tier === 'SOLO' ? 3 : tier === 'BASIC' ? 10 : tier === 'TEAMS' ? 25 : 100;
+    const maxSessions = tier === 'FREE' ? 3 : tier === 'PRO' ? 10 : tier === 'TEAMS' ? 25 : 100;
 
     return { sessions, count: sessions.length, maxSessions };
   });
 
-  // POST /api/fleet/spawn — spawn a new agent session (BASIC+ tier required for sub-agents)
+  // POST /api/fleet/spawn — spawn a new agent session (free for all tiers — agents generate memory)
   fastify.post<{
     Body: { task: string; persona?: string; model?: string; parentWorkspaceId?: string };
-  }>('/api/fleet/spawn', { preHandler: [requireTier('BASIC')] }, async (request, reply) => {
+  }>('/api/fleet/spawn', async (request, reply) => {
     const { task, persona, model, parentWorkspaceId } = request.body;
     if (!task) return reply.code(400).send({ error: 'task is required' });
 

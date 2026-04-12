@@ -22,7 +22,7 @@ export const personaRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   // POST /api/personas — create custom persona (BASIC+ tier required)
-  fastify.post('/api/personas', { preHandler: [requireTier('BASIC')] }, async (request, reply) => {
+  fastify.post('/api/personas', { preHandler: [requireTier('PRO')] }, async (request, reply) => {
     const dataDir = fastify.localConfig.dataDir;
     const body = request.body as Partial<AgentPersona>;
     if (!body.name || !body.systemPrompt) {
@@ -90,7 +90,7 @@ export const personaRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   // POST /api/personas/generate — AI-generate a persona from a prompt (BASIC+ tier required)
-  fastify.post('/api/personas/generate', { preHandler: [requireTier('BASIC')] }, async (request, reply) => {
+  fastify.post('/api/personas/generate', { preHandler: [requireTier('PRO')] }, async (request, reply) => {
     const body = request.body as { prompt?: string } | undefined;
     if (!body?.prompt) {
       return reply.code(400).send({ error: 'prompt is required' });

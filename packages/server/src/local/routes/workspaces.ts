@@ -142,7 +142,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
     try {
       const configPath = path.join(server.localConfig.dataDir, 'config.json');
       const tierRaw = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, 'utf-8')).tier : '';
-      const tier = parseTier(String(tierRaw ?? '')) ?? 'SOLO';
+      const tier = parseTier(String(tierRaw ?? '')) ?? 'FREE';
       const caps = getCapabilities(tier);
       if (caps.workspaceLimit > 0) {
         const currentCount = server.workspaceManager.list().length;

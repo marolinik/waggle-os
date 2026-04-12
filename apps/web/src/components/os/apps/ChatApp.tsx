@@ -36,6 +36,7 @@ interface ChatAppProps {
   onNewSession?: () => void;
   workspaceId?: string | null;
   templateId?: string;
+  storageType?: 'virtual' | 'local' | 'team';
   /** Phase B.5: current autonomy level for this chat window. */
   autonomyLevel?: AutonomyLevel;
   /** Phase B.5: expiry of the current elevated autonomy, if any. */
@@ -385,7 +386,7 @@ const ChatApp = ({
   onPersonaChange, currentModel, onModelChange, availableModels,
   teamPresence,
   sessions, activeSessionId, onSelectSession, onNewSession,
-  workspaceId, templateId,
+  workspaceId, templateId, storageType,
   autonomyLevel = 'normal', autonomyExpiresAt = null, onAutonomyChange,
 }: ChatAppProps) => {
   const [input, setInput] = useState('');
@@ -647,6 +648,16 @@ const ChatApp = ({
             )}
           </div>
 
+          {storageType && (
+            <span className={`text-[10px] px-1.5 py-0.5 rounded font-display ${
+              storageType === 'local' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+              : storageType === 'team' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/30'
+              : 'bg-violet-500/10 text-violet-400 border border-violet-500/30'
+            }`}>
+              {storageType === 'local' ? 'Linked' : storageType === 'team' ? 'Team' : 'Virtual'}
+            </span>
+          )}
+
           {/* Team presence */}
           {teamPresence && teamPresence.length > 0 && (
             <div className="flex items-center gap-1 mx-1">
@@ -791,6 +802,13 @@ const ChatApp = ({
                 </button>
               </div>
             ))}
+          </div>
+        )}
+
+        {isLoading && (
+          <div className="shrink-0 h-0.5 w-full bg-muted/30 overflow-hidden">
+            <div className="h-full w-1/3 bg-primary/60 animate-pulse rounded-full"
+              style={{ animation: 'shimmer 1.5s ease-in-out infinite', transformOrigin: 'left' }} />
           </div>
         )}
 

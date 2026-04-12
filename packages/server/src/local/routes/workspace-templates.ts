@@ -13,7 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
 
-export type TemplateCategory = 'sales' | 'research' | 'engineering' | 'marketing' | 'operations' | 'legal' | 'custom';
+export type TemplateCategory = 'sales' | 'research' | 'engineering' | 'marketing' | 'operations' | 'legal' | 'design' | 'custom';
 
 /** Shape of a workspace template. */
 export interface WorkspaceTemplate {
@@ -29,7 +29,7 @@ export interface WorkspaceTemplate {
   category?: TemplateCategory;
 }
 
-/** The 6 built-in workspace templates. */
+/** The 15 built-in workspace templates. */
 export const BUILT_IN_TEMPLATES: WorkspaceTemplate[] = [
   {
     id: 'sales-pipeline',
@@ -134,6 +134,121 @@ export const BUILT_IN_TEMPLATES: WorkspaceTemplate[] = [
     ],
     builtIn: true,
     category: 'operations',
+  },
+  {
+    id: 'customer-support',
+    name: 'Customer Support',
+    description: 'Triage tickets, draft responses, build knowledge base articles, and manage escalations.',
+    persona: 'support-agent',
+    connectors: ['slack', 'email'],
+    suggestedCommands: ['/draft', '/research', '/catchup', '/memory'],
+    starterMemory: [
+      'This workspace handles customer support tickets and knowledge management.',
+      'Key workflow: triage incoming ticket -> research issue -> draft response -> update KB.',
+      'Use /draft for response templates, /research for troubleshooting guides, /memory for past resolutions.',
+    ],
+    builtIn: true,
+    category: 'operations',
+  },
+  {
+    id: 'finance-accounting',
+    name: 'Finance & Accounting',
+    description: 'Budgets, variance analysis, financial reporting, and close management.',
+    persona: 'finance-owner',
+    connectors: ['email'],
+    suggestedCommands: ['/draft', '/research', '/plan', '/memory'],
+    starterMemory: [
+      'This workspace manages financial reporting and analysis.',
+      'Key workflow: gather data -> run variance analysis -> draft reports -> track close items.',
+      'Use /draft for financial memos, /research for benchmarking, /plan for close checklists.',
+    ],
+    builtIn: true,
+    category: 'operations',
+  },
+  {
+    id: 'hr-people',
+    name: 'HR & People',
+    description: 'Job descriptions, policy drafting, onboarding plans, and compensation analysis.',
+    persona: 'hr-manager',
+    connectors: ['email', 'slack'],
+    suggestedCommands: ['/draft', '/research', '/plan', '/catchup'],
+    starterMemory: [
+      'This workspace handles HR and people operations.',
+      'Key workflow: identify need -> research best practices -> draft policy/JD -> review and publish.',
+      'Use /draft for job descriptions, /research for compensation benchmarks, /plan for onboarding.',
+    ],
+    builtIn: true,
+    category: 'operations',
+  },
+  {
+    id: 'operations-center',
+    name: 'Operations Center',
+    description: 'SOPs, process documentation, vendor management, and operational workflows.',
+    persona: 'ops-manager',
+    connectors: ['slack', 'email'],
+    suggestedCommands: ['/plan', '/draft', '/status', '/catchup'],
+    starterMemory: [
+      'This workspace manages operational processes and documentation.',
+      'Key workflow: identify process -> document SOP -> assign owners -> track compliance.',
+      'Use /plan for process design, /draft for SOPs, /status for operational metrics.',
+    ],
+    builtIn: true,
+    category: 'operations',
+  },
+  {
+    id: 'data-analytics',
+    name: 'Data & Analytics',
+    description: 'SQL queries, dashboard design, data exploration, and statistical analysis.',
+    persona: 'data-engineer',
+    connectors: ['github'],
+    suggestedCommands: ['/research', '/draft', '/plan', '/memory'],
+    starterMemory: [
+      'This workspace handles data analysis and insights generation.',
+      'Key workflow: define question -> write query -> analyze results -> build dashboard.',
+      'Use /research for data exploration, /draft for analysis reports, /memory for schema knowledge.',
+    ],
+    builtIn: true,
+    category: 'engineering',
+  },
+  {
+    id: 'recruiting-pipeline',
+    name: 'Recruiting Pipeline',
+    description: 'Source candidates, write job descriptions, build screening scorecards, and track pipeline.',
+    persona: 'recruiter',
+    connectors: ['email', 'slack'],
+    suggestedCommands: ['/draft', '/research', '/plan', '/catchup'],
+    starterMemory: [
+      'This workspace manages recruiting and talent acquisition.',
+      'Key workflow: define role -> source candidates -> screen -> interview -> offer.',
+      'Use /draft for JDs and scorecards, /research for talent market data, /plan for interview loops.',
+    ],
+    builtIn: true,
+    category: 'operations',
+  },
+  {
+    id: 'design-studio',
+    name: 'Design Studio',
+    description: 'Creative briefs, design feedback, brand guidelines, and asset management.',
+    persona: 'creative-director',
+    connectors: ['slack'],
+    suggestedCommands: ['/draft', '/research', '/review', '/memory'],
+    starterMemory: [
+      'This workspace manages design projects and brand assets.',
+      'Key workflow: define brief -> research references -> create -> review feedback -> finalize.',
+      'Use /draft for creative briefs, /research for inspiration, /review for design critique.',
+    ],
+    builtIn: true,
+    category: 'marketing',
+  },
+  {
+    id: 'blank',
+    name: 'Blank Workspace',
+    description: 'Start from scratch with a general-purpose agent. No preset configuration.',
+    persona: 'general-purpose',
+    connectors: [],
+    suggestedCommands: ['/research', '/draft', '/plan', '/memory'],
+    starterMemory: [],
+    builtIn: true,
   },
 ];
 

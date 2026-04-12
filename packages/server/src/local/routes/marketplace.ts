@@ -167,7 +167,7 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
   //   LOW      → install proceeds, logged to audit trail
   //   CLEAN    → install proceeds immediately
 
-  fastify.post('/api/marketplace/install', { preHandler: [requireTier('BASIC')] }, async (request, reply) => {
+  fastify.post('/api/marketplace/install', { preHandler: [requireTier('PRO')] }, async (request, reply) => {
     const db = requireDb(reply);
     if (!db) return;
 
@@ -672,7 +672,7 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
   // Reads the skill from ~/.waggle/skills/, validates frontmatter,
   // runs SecurityGate scan, then upserts into the marketplace DB.
 
-  fastify.post('/api/marketplace/publish', { preHandler: [requireTier('BASIC')] }, async (request, reply) => {
+  fastify.post('/api/marketplace/publish', { preHandler: [requireTier('PRO')] }, async (request, reply) => {
     const db = requireDb(reply);
     if (!db) return;
 

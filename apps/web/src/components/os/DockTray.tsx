@@ -9,7 +9,7 @@ interface DockTrayProps {
 }
 
 const DockTray = ({ items, onSelect, onClose, anchorRect }: DockTrayProps) => {
-  const trayWidth = items.length * 80 + 16;
+  const trayWidth = items.length * 90 + 24;
   let left = anchorRect.left + anchorRect.width / 2 - trayWidth / 2;
   left = Math.max(8, Math.min(left, window.innerWidth - trayWidth - 8));
   const bottom = window.innerHeight - anchorRect.top + 8;

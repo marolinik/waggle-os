@@ -52,6 +52,7 @@ interface ChatWindowInstanceProps {
   workspaceName?: string;
   initialPersona?: string;
   templateId?: string;
+  storageType?: 'virtual' | 'local' | 'team';
   /**
    * Phase A.2: called when the user changes the persona inside this window.
    * Should update the window's local persona state via useWindowManager.
@@ -71,6 +72,7 @@ const ChatWindowInstance = ({
   workspaceName,
   initialPersona,
   templateId,
+  storageType,
   onPersonaChange,
   autonomyLevel = 'normal',
   autonomyExpiresAt = null,
@@ -229,6 +231,7 @@ const ChatWindowInstance = ({
       onNewSession={createSession}
       workspaceId={workspaceId}
       templateId={templateId}
+      storageType={storageType}
       autonomyLevel={autonomyLevel}
       autonomyExpiresAt={autonomyExpiresAt}
       onAutonomyChange={onAutonomyChange}
