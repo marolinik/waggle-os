@@ -16,6 +16,17 @@ import { useWorkspaces } from '@/hooks/useWorkspaces';
 import LockedFeature from '@/components/os/LockedFeature';
 import type { StorageType, WorkspaceTemplate, Connector, TemplateCategory } from '@/lib/types';
 
+/** Use native OS folder picker when running inside Tauri, falls back to custom browse modal. */
+async function pickFolderNative(): Promise<string | null> {
+  try {
+    const { open } = await import('@tauri-apps/plugin-dialog');
+    const selected = await open({ directory: true, multiple: false, title: 'Choose workspace directory' });
+    return typeof selected === 'string' ? selected : null;
+  } catch {
+    return null; // Not in Tauri — fallback to custom picker
+  }
+}
+
 /* ── Shared constants ─────────────────────────────────────────────── */
 
 interface AgentGroupOption {
@@ -938,7 +949,13 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                   <Input value={storagePath} onChange={e => setStoragePath(e.target.value)}
                     placeholder={storageType === 'local' ? '/home/user/projects/my-workspace' : 'my-bucket/workspace-prefix'}
                     className="flex-1 bg-muted/50 rounded-xl font-mono text-[11px]" />
-                  <button onClick={() => setShowFolderPicker(true)}
+                  <button onClick={async () => {
+                      if (storageType === 'local') {
+                        const native = await pickFolderNative();
+                        if (native) { setStoragePath(native); return; }
+                      }
+                      setShowFolderPicker(true);
+                    }}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-secondary/50 border border-border/40 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/70 transition-colors shrink-0"
                     title={storageType === 'local' ? 'Browse local folders' : 'Browse remote storage'}>
                     <FolderOpen className="w-3.5 h-3.5" /><span className="text-[11px]">Browse</span>
