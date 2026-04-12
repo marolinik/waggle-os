@@ -12,7 +12,7 @@ import { requireTier } from '../middleware/assert-tier.js';
 import { getStripe } from './index.js';
 
 export const portalRoutes: FastifyPluginAsync = async (server) => {
-  server.post('/api/stripe/create-portal-session', { preHandler: [requireTier('BASIC')] }, async (request, reply) => {
+  server.post('/api/stripe/create-portal-session', { preHandler: [requireTier('PRO')] }, async (request, reply) => {
     const stripe = getStripe();
     if (!stripe) {
       return reply.code(503).send({ error: 'STRIPE_NOT_CONFIGURED' });

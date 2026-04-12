@@ -69,6 +69,15 @@ export const webhookRoutes: FastifyPluginAsync = async (server) => {
       return reply.code(500).send({ error: 'SERVER_MISCONFIGURED' });
     }
 
+    // Idempotency: skip already-processed events
+    const processedPath = path.join(dataDir, '.stripe-processed-events.json');
+    let processedIds: string[] = [];
+    try { processedIds = JSON.parse(fs.readFileSync(processedPath, 'utf-8')); } catch { /* first run */ }
+    if (processedIds.includes(event.id)) {
+      server.log.info({ event: 'webhook_duplicate_skipped', eventId: event.id });
+      return reply.send({ received: true, duplicate: true });
+    }
+
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as { metadata?: Record<string, string>; customer?: string };
@@ -99,7 +108,7 @@ export const webhookRoutes: FastifyPluginAsync = async (server) => {
       }
 
       case 'customer.subscription.deleted': {
-        updateUserTier(dataDir, 'SOLO');
+        updateUserTier(dataDir, 'FREE');
         server.log.info({ event: 'subscription_cancelled' });
         break;
       }
@@ -108,6 +117,11 @@ export const webhookRoutes: FastifyPluginAsync = async (server) => {
         // Unknown event types are silently acknowledged
         break;
     }
+
+    // Mark event as processed (keep last 500 IDs to avoid unbounded growth)
+    processedIds.push(event.id);
+    if (processedIds.length > 500) processedIds.splice(0, processedIds.length - 500);
+    try { fs.writeFileSync(processedPath, JSON.stringify(processedIds)); } catch { /* best effort */ }
 
     return { received: true };
   });

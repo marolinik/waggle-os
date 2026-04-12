@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
 import { WaggleConfig } from '@waggle/core';
-import { type Tier, TIERS, TIER_CAPABILITIES, parseTier, getCapabilities } from '@waggle/shared';
+import { type Tier, TIERS, TIER_CAPABILITIES, parseTier, getCapabilities, getEffectiveTier, trialDaysRemaining } from '@waggle/shared';
 import { requireTier } from '../../middleware/assert-tier.js';
 
 function maskApiKey(key: string): string {
@@ -252,26 +252,32 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
   // Legacy lowercase names are auto-migrated via parseTier().
   // Will be replaced by Stripe webhook in Prompt 04.
 
-  function readTier(dataDir: string): Tier {
+  function readTierConfig(dataDir: string): { tier: Tier; trialStartedAt: string | null } {
     try {
       const configPath = path.join(dataDir, 'config.json');
       if (fs.existsSync(configPath)) {
         const raw = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
         const parsed = parseTier(String(raw.tier ?? ''));
-        if (parsed) return parsed;
+        if (parsed) return { tier: parsed, trialStartedAt: raw.trialStartedAt ?? null };
       }
     } catch { /* ignore */ }
-    return 'SOLO';
+    return { tier: 'FREE', trialStartedAt: null };
   }
 
   // GET /api/tier — authoritative tier source for frontend
   server.get('/api/tier', async () => {
-    const tier = readTier(server.localConfig.dataDir);
+    const { tier: rawTier, trialStartedAt } = readTierConfig(server.localConfig.dataDir);
+    const tier = getEffectiveTier(rawTier, trialStartedAt);
     const caps = getCapabilities(tier);
+    const daysRemaining = trialDaysRemaining(trialStartedAt);
     // Usage counts for limit display
     const workspaceCount = server.workspaceManager?.list().length ?? 0;
     return {
       tier,
+      rawTier,
+      trialStartedAt,
+      trialDaysRemaining: daysRemaining,
+      trialExpired: rawTier === 'TRIAL' && tier === 'FREE',
       capabilities: caps,
       teamsServerUrl: process.env.DATABASE_URL
         ? `http://127.0.0.1:${process.env.TEAMS_SERVER_PORT ?? '3101'}`
@@ -283,15 +289,15 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
       // Legacy shape — kept for backward compatibility with existing frontend
       limits: {
         maxWorkspaces: caps.workspaceLimit,
-        maxSessions: tier === 'SOLO' ? 3 : tier === 'BASIC' ? 10 : 25,
+        maxSessions: tier === 'FREE' ? 3 : tier === 'PRO' ? 10 : 25,
         maxMembers: caps.teamMembersLimit,
         features: {
           teams: caps.sharedWorkspaces,
-          marketplace: tier !== 'SOLO',
+          marketplace: tier !== 'FREE',
           budgetControls: caps.adminPanel,
           kvark: tier === 'ENTERPRISE',
           governance: tier === 'ENTERPRISE',
-          customModels: tier !== 'SOLO',
+          customModels: tier !== 'FREE',
         },
       },
     };
@@ -324,7 +330,7 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
   // ── Cloud Sync ────────────────────────────────────────────────────
 
   server.get('/api/cloud-sync', async () => {
-    const tier = readTier(server.localConfig.dataDir);
+    const { tier } = readTierConfig(server.localConfig.dataDir);
     const caps = getCapabilities(tier);
     const configPath = path.join(server.localConfig.dataDir, 'config.json');
     let raw: Record<string, unknown> = {};

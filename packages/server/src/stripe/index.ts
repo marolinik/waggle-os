@@ -46,13 +46,14 @@ export function getStripe(): import('stripe').default | null {
 
 /**
  * Map a Stripe price ID back to a canonical Tier.
- * Reads STRIPE_PRICE_BASIC and STRIPE_PRICE_TEAMS from env.
+ * Reads STRIPE_PRICE_PRO and STRIPE_PRICE_TEAMS from env.
+ * Also checks legacy STRIPE_PRICE_BASIC for backward compatibility.
  */
 export function tierFromPriceId(priceId: string): Tier | null {
-  const basicPrice = process.env['STRIPE_PRICE_BASIC'];
+  const proPrice = process.env['STRIPE_PRICE_PRO'] ?? process.env['STRIPE_PRICE_BASIC'];
   const teamsPrice = process.env['STRIPE_PRICE_TEAMS'];
 
-  if (basicPrice && priceId === basicPrice) return 'BASIC';
+  if (proPrice && priceId === proPrice) return 'PRO';
   if (teamsPrice && priceId === teamsPrice) return 'TEAMS';
   return null;
 }

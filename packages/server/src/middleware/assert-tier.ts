@@ -2,7 +2,7 @@
  * Tier enforcement middleware for Fastify routes.
  *
  * Usage:
- *   server.post('/api/personas', { preHandler: [requireTier('BASIC')] }, handler)
+ *   server.post('/api/personas', { preHandler: [requireTier('PRO')] }, handler)
  *
  * Reads the current tier from config.json (same source as GET /api/tier).
  * Returns 403 with structured error when tier is insufficient.
@@ -11,7 +11,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyRequest, FastifyReply } from 'fastify';
-import { type Tier, assertTierCapability, TierError, parseTier } from '@waggle/shared';
+import { type Tier, assertTierCapability, TierError, parseTier, getEffectiveTier } from '@waggle/shared';
 
 /**
  * Read the current tier from the server's data directory.
@@ -20,15 +20,15 @@ import { type Tier, assertTierCapability, TierError, parseTier } from '@waggle/s
 export function readTierFromRequest(request: FastifyRequest): Tier {
   try {
     const dataDir = (request.server as any).localConfig?.dataDir;
-    if (!dataDir) return 'SOLO';
+    if (!dataDir) return 'FREE';
     const configPath = path.join(dataDir, 'config.json');
     if (fs.existsSync(configPath)) {
       const raw = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
       const parsed = parseTier(String(raw.tier ?? ''));
-      if (parsed) return parsed;
+      if (parsed) return getEffectiveTier(parsed, raw.trialStartedAt ?? null);
     }
   } catch { /* default to SOLO */ }
-  return 'SOLO';
+  return 'FREE';
 }
 
 /**

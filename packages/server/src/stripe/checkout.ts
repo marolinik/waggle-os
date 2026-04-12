@@ -2,7 +2,7 @@
  * Stripe Checkout — creates a checkout session for tier upgrades.
  *
  * POST /api/stripe/create-checkout-session
- * Body: { tier: 'BASIC' | 'TEAMS', billingPeriod?: 'monthly' | 'annual' }
+ * Body: { tier: 'PRO' | 'TEAMS', billingPeriod?: 'monthly' | 'annual' }
  * Returns: { url: string }
  */
 
@@ -22,8 +22,8 @@ export const checkoutRoutes: FastifyPluginAsync = async (server) => {
     const { tier, billingPeriod } = request.body ?? {};
 
     // Only BASIC and TEAMS have Stripe prices
-    if (tier !== 'BASIC' && tier !== 'TEAMS') {
-      return reply.code(400).send({ error: 'INVALID_TIER', message: 'Only BASIC and TEAMS tiers support Stripe checkout.' });
+    if (tier !== 'PRO' && tier !== 'TEAMS') {
+      return reply.code(400).send({ error: 'INVALID_TIER', message: 'Only PRO and TEAMS tiers support Stripe checkout.' });
     }
 
     const capabilities = TIER_CAPABILITIES[tier as Tier];
