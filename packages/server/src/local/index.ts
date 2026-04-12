@@ -1057,16 +1057,36 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
       if (wsConfig?.teamId) {
         const sync = getTeamSync(workspaceId, wsConfig, new WaggleConfig(fullConfig.dataDir));
         if (sync) {
-          sync.pullFrames().then(frames => {
-            if (frames.length > 0) {
-              // Insert pulled frames into local workspace mind
-              // Use the mind's frame store to create I-frames from pulled content
-              log.info(` TeamSync: pulled ${frames.length} frames for workspace ${workspaceId}`);
-            }
-          }).catch(err => {
-            log.warn(` TeamSync pull failed:`, err.message);
-          });
+          // Set TeamSync on the orchestrator for push-on-write
+          orchestrator.setTeamSync(sync);
+
+          // Pull team frames into local workspace mind
+          const wsDb = mindCache.get(workspaceId);
+          if (wsDb) {
+            const wsSessionStore = new SessionStore(wsDb);
+            wsSessionStore.ensure('team-sync', 'team-sync', 'Frames synced from team server');
+            const wsFrameStore = new FrameStore(wsDb);
+
+            sync.pullFrames(sync.getLastSyncTimestamp() ?? undefined).then(pulled => {
+              if (pulled.length === 0) return;
+              let inserted = 0;
+              for (const f of pulled) {
+                try {
+                  wsFrameStore.createIFrame('team-sync', `[Team:${f.authorName}] ${f.content}`, f.importance, 'team_sync');
+                  inserted++;
+                } catch { /* duplicate or constraint — skip */ }
+              }
+              if (inserted > 0) {
+                log.info(`TeamSync: pulled ${inserted} new frames for workspace ${workspaceId}`);
+              }
+            }).catch(err => {
+              log.warn(`TeamSync pull failed:`, err.message);
+            });
+          }
         }
+      } else {
+        // Non-team workspace — clear TeamSync
+        orchestrator.setTeamSync(null);
       }
     }
 

@@ -57,6 +57,9 @@ export class Orchestrator {
   /** Workspace-specific layers (null when no workspace is active) */
   private workspaceLayers: WorkspaceLayers | null = null;
 
+  /** Team sync client — set for team workspaces, null for personal */
+  private teamSync: import('@waggle/core').TeamSync | null = null;
+
   /**
    * Section cache — stores computed values and their inputs.
    * Cached sections are recomputed only when their input changes.
@@ -128,6 +131,11 @@ export class Orchestrator {
    */
   clearWorkspaceMind(): void {
     this.workspaceLayers = null;
+  }
+
+  /** Set the TeamSync client for push-on-write to team server. */
+  setTeamSync(sync: import('@waggle/core').TeamSync | null): void {
+    this.teamSync = sync;
   }
 
   /** Whether a workspace mind is currently active */
@@ -446,6 +454,15 @@ export class Orchestrator {
         }
       }
       saved.push(content.slice(0, 80));
+
+      // Push-on-write: also push to team server for team workspaces
+      if (this.teamSync && useWorkspace) {
+        const gopId = sessions.getActive()[0]?.gop_id ?? 'unknown';
+        const frame = frames.getLatestIFrame(gopId) ?? frames.getRecent(1)[0];
+        if (frame) {
+          this.teamSync.pushFrame(frame).catch(() => { /* non-blocking */ });
+        }
+      }
     };
 
     // Skip trivial exchanges — very short messages are rarely worth memorizing

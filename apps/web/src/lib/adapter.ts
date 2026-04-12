@@ -345,6 +345,16 @@ class LocalAdapter {
     return unwrapArray(await res.json()).map(normalizeFrame);
   }
 
+  async searchTeamMemory(query: string, limit = 20): Promise<Array<{ id: string; content: string; authorId: string; authorName: string; importance: string; timestamp: string }>> {
+    try {
+      const res = await this.fetch(`/api/team/memory/search?q=${encodeURIComponent(query)}&limit=${limit}`);
+      const data = await res.json();
+      return data.results ?? [];
+    } catch {
+      return [];
+    }
+  }
+
   async getKnowledgeGraph(workspaceId: string, scope?: 'current' | 'personal' | 'all'): Promise<{ nodes: KGNode[]; edges: KGEdge[] }> {
     const params = new URLSearchParams();
     if (scope === 'all') {

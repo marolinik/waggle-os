@@ -3,7 +3,7 @@ import type { MindDB } from './db.js';
 
 export type FrameType = 'I' | 'P' | 'B';
 export type Importance = 'critical' | 'important' | 'normal' | 'temporary' | 'deprecated';
-export type FrameSource = 'user_stated' | 'tool_verified' | 'agent_inferred' | 'import' | 'system' | 'personal' | 'workspace';
+export type FrameSource = 'user_stated' | 'tool_verified' | 'agent_inferred' | 'import' | 'system' | 'personal' | 'workspace' | 'team_sync';
 
 export interface MemoryFrame {
   id: number;

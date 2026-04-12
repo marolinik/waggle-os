@@ -729,6 +729,57 @@ export async function teamRoutes(fastify: FastifyInstance) {
       return { items: [], teamId: team.id };
     }
   });
+
+  // GET /api/team/memory/search?q=query — search team memory frames
+  fastify.get<{ Querystring: { q?: string; limit?: string } }>(
+    '/api/team/memory/search',
+    async (request, reply) => {
+      const config = new WaggleConfig(fastify.localConfig.dataDir);
+      const teamServer = config.getTeamServer();
+      if (!teamServer?.url || !teamServer?.token) {
+        return reply.code(400).send({ error: 'Not connected to team server' });
+      }
+
+      const { q, limit: limitStr } = request.query;
+      if (!q) return reply.code(400).send({ error: 'q parameter required' });
+      const limit = Math.min(parseInt(limitStr ?? '20', 10), 50);
+
+      try {
+        const url = `${teamServer.url}/api/entities?type=memory_frame&limit=${limit}`;
+        const res = await fetch(url, {
+          headers: { 'Authorization': `Bearer ${teamServer.token}` },
+        });
+        if (!res.ok) return { results: [], count: 0 };
+
+        const entities = await res.json() as Array<{
+          id: string; name: string;
+          properties: Record<string, unknown>;
+          sharedBy?: string; createdAt: string;
+        }>;
+
+        // Client-side keyword filter (team server doesn't have FTS yet)
+        const terms = q.toLowerCase().split(/\s+/).filter(t => t.length > 1);
+        const matched = entities.filter(e => {
+          const content = ((e.properties?.content as string) ?? '').toLowerCase();
+          return terms.some(t => content.includes(t));
+        });
+
+        const results = matched.slice(0, limit).map(e => ({
+          id: e.id,
+          content: (e.properties?.content as string) ?? '',
+          authorId: (e.properties?.authorId as string) ?? e.sharedBy ?? '',
+          authorName: (e.properties?.authorName as string) ?? 'Team member',
+          importance: (e.properties?.importance as string) ?? 'normal',
+          timestamp: e.createdAt,
+          source: 'team',
+        }));
+
+        return { results, count: results.length };
+      } catch {
+        return { results: [], count: 0 };
+      }
+    },
+  );
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────
