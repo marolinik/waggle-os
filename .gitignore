@@ -49,7 +49,7 @@ app/src-tauri/resources/native/
 .claude/
 .playwright-mcp/
 .superpowers/
-docs/~$$*
+~$*
 
 # Test artifacts
 playwright-report/
