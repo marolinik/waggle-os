@@ -50,6 +50,7 @@ import LoginBriefing from "./overlays/LoginBriefing";
 import ContextRail from "./overlays/ContextRail";
 import type { ContextRailTarget } from "./overlays/ContextRail";
 import UpgradeModal from "./overlays/UpgradeModal";
+import TrialExpiredModal from "./overlays/TrialExpiredModal";
 import { adapter } from "@/lib/adapter";
 import { getSavedPosition } from "@/lib/window-positions";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
@@ -108,9 +109,11 @@ const Desktop = () => {
 
   // Trial info from backend
   const [trialInfo, setTrialInfo] = useState<{ trialDaysRemaining?: number; trialExpired?: boolean }>({});
+  const [showTrialExpired, setShowTrialExpired] = useState(false);
   useEffect(() => {
     adapter.getTier().then(data => {
       setTrialInfo({ trialDaysRemaining: data.trialDaysRemaining, trialExpired: data.trialExpired });
+      if (data.trialExpired) setShowTrialExpired(true);
     }).catch(() => {});
   }, []);
 
@@ -164,7 +167,10 @@ const Desktop = () => {
     else if (type === 'memory') wm.openApp('memory');
   }, [wm.openApp, selectWorkspace, wm.openChatForWorkspace, workspaces]);
 
-  const handleOnboardingComplete = useCallback((_serverBaseUrl: string) => { completeOnboarding(); }, [completeOnboarding]);
+  const handleOnboardingComplete = useCallback((_serverBaseUrl: string) => {
+    completeOnboarding();
+    adapter.updateSettings({ tier: 'TRIAL', trialStartedAt: new Date().toISOString() } as any).catch(() => {});
+  }, [completeOnboarding]);
   // Bug #4 + #8: open the wizard-created workspace with the name the user
   // typed. The wizard now passes the name directly so we don't have to find
   // it in the workspaces list (the hook's state may not have seen the new
@@ -392,6 +398,15 @@ const Desktop = () => {
           adapter.createCheckoutSession(tier === 'TEAMS' ? 'TEAMS' : 'PRO').catch(() => {
             wm.open('settings');
           });
+        }}
+      />
+
+      <TrialExpiredModal
+        open={showTrialExpired}
+        onDismiss={() => setShowTrialExpired(false)}
+        onUpgrade={(tier) => {
+          setShowTrialExpired(false);
+          adapter.createCheckoutSession(tier).catch(() => { wm.open('settings'); });
         }}
       />
     </div>
