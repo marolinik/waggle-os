@@ -8,7 +8,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Upload, RefreshCw, Clock, CheckCircle2, AlertCircle,
-  Loader2, Plus, Zap, Brain,
+  Loader2, Plus, Zap, Brain, Trash2, Pause, Play,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 
@@ -292,21 +292,38 @@ const HarvestTab = () => {
           <div className="space-y-1.5">
             {sources.map(s => (
               <div key={s.id} className="flex items-center justify-between p-2.5 rounded-lg bg-secondary/30 border border-border/30">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                  <div>
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                  <div className="min-w-0">
                     <p className="text-xs font-display text-foreground">{s.displayName}</p>
-                    <p className="text-[11px] text-muted-foreground">
+                    <p className="text-[11px] text-muted-foreground truncate">
                       {s.itemsImported} items · {s.framesCreated} frames
                       {s.lastSyncedAt && <> · {formatRelative(s.lastSyncedAt)}</>}
                     </p>
                   </div>
                 </div>
-                {s.autoSync && (
-                  <span className="text-[11px] text-primary flex items-center gap-1">
-                    <Clock className="w-2.5 h-2.5" /> Auto
-                  </span>
-                )}
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={async () => {
+                      await adapter.toggleHarvestAutoSync(s.source, !s.autoSync);
+                      fetchSources();
+                    }}
+                    className={`p-1 rounded transition-colors ${s.autoSync ? 'text-primary hover:text-primary/70' : 'text-muted-foreground hover:text-foreground'}`}
+                    title={s.autoSync ? 'Pause auto-sync' : 'Enable auto-sync'}
+                  >
+                    {s.autoSync ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                  </button>
+                  <button
+                    onClick={async () => {
+                      await adapter.removeHarvestSource(s.source);
+                      fetchSources();
+                    }}
+                    className="p-1 rounded text-muted-foreground hover:text-destructive transition-colors"
+                    title="Remove source"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
               </div>
             ))}
           </div>

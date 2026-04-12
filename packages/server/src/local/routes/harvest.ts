@@ -176,6 +176,29 @@ export async function harvestRoutes(fastify: FastifyInstance) {
     return { source: store.getBySource(source) ?? entry };
   });
 
+  // DELETE /api/harvest/sources/:source — remove a registered source
+  fastify.delete<{ Params: { source: string } }>('/api/harvest/sources/:source', async (request, reply) => {
+    const personalDb = (fastify as any).multiMind?.personal;
+    if (!personalDb) return reply.code(503).send({ error: 'Personal mind not available' });
+    const store = new HarvestSourceStore(personalDb);
+    store.remove(request.params.source as ImportSourceType);
+    return { ok: true };
+  });
+
+  // PATCH /api/harvest/sources/:source — toggle auto-sync
+  fastify.patch<{ Params: { source: string }; Body: { autoSync?: boolean; syncIntervalHours?: number } }>(
+    '/api/harvest/sources/:source', async (request, reply) => {
+      const personalDb = (fastify as any).multiMind?.personal;
+      if (!personalDb) return reply.code(503).send({ error: 'Personal mind not available' });
+      const store = new HarvestSourceStore(personalDb);
+      const { autoSync, syncIntervalHours } = request.body ?? {};
+      if (autoSync !== undefined) {
+        store.setAutoSync(request.params.source as ImportSourceType, autoSync, syncIntervalHours);
+      }
+      return { source: store.getBySource(request.params.source as ImportSourceType) };
+    },
+  );
+
   // POST /api/harvest/scan-claude-code — scan local Claude Code directory
   fastify.post('/api/harvest/scan-claude-code', async (_request, reply) => {
     const claudeDir = path.join(os.homedir(), '.claude');

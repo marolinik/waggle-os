@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Brain, Search, Clock, Trash2, Edit3, Filter, Network, ChevronDown, X, Eye, Copy, Loader2, Download } from 'lucide-react';
+import { Brain, Search, Clock, Trash2, Edit3, Filter, Network, ChevronDown, X, Eye, Copy, Loader2, Download, Activity } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { Input } from '@/components/ui/input';
 import type { MemoryFrame, KGNode, KGEdge } from '@/lib/types';
@@ -7,6 +7,7 @@ import { renderSimpleMarkdown } from '@/lib/render-markdown';
 import ContextMenu, { type ContextMenuItem } from '@/components/os/ContextMenu';
 import KnowledgeGraphViewer from './memory/KnowledgeGraphViewer';
 import HarvestTab from './memory/HarvestTab';
+import WeaverPanel from './memory/WeaverPanel';
 
 const frameTypeIcons: Record<string, string> = {
   fact: '📋', event: '📅', insight: '💡', decision: '⚖️', task: '✅', entity: '🏷️',
@@ -31,6 +32,7 @@ interface MemoryAppProps {
   onMinImportanceChange?: (val: number) => void;
   knowledgeGraph?: { nodes: KGNode[]; edges: KGEdge[] };
   onRefreshKG?: () => void;
+  onContextRail?: (target: { type: 'frame' | 'entity'; id: string; label: string }) => void;
 }
 
 
@@ -38,9 +40,9 @@ const MemoryApp = ({
   frames, selectedFrame, onSelectFrame, searchQuery, onSearchChange,
   onDeleteFrame, loading, stats, typeFilters = [], onTypeFiltersChange,
   minImportance = 0, onMinImportanceChange,
-  knowledgeGraph, onRefreshKG,
+  knowledgeGraph, onRefreshKG, onContextRail,
 }: MemoryAppProps) => {
-  const [view, setView] = useState<'timeline' | 'graph' | 'harvest'>('timeline');
+  const [view, setView] = useState<'timeline' | 'graph' | 'harvest' | 'weaver'>('timeline');
   const [showFilters, setShowFilters] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ position: { x: number; y: number }; items: ContextMenuItem[] } | null>(null);
 
@@ -106,6 +108,13 @@ const MemoryApp = ({
                 title="Memory Harvest"
               >
                 <Download className="w-3 h-3" />
+              </button>
+              <button
+                onClick={() => setView(view === 'weaver' ? 'timeline' : 'weaver')}
+                className={`p-1 rounded transition-colors ${view === 'weaver' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                title="Memory Weaver (Distillation)"
+              >
+                <Activity className="w-3 h-3" />
               </button>
             </div>
           </div>
@@ -176,10 +185,16 @@ const MemoryApp = ({
 
       {/* Main content area */}
       <div className="flex-1 overflow-auto">
-        {view === 'harvest' ? (
+        {view === 'weaver' ? (
+          <WeaverPanel />
+        ) : view === 'harvest' ? (
           <HarvestTab />
         ) : view === 'graph' ? (
-          <KnowledgeGraphViewer nodes={knowledgeGraph?.nodes || []} edges={knowledgeGraph?.edges || []} />
+          <KnowledgeGraphViewer nodes={knowledgeGraph?.nodes || []} edges={knowledgeGraph?.edges || []}
+            onNodeClick={(nodeId) => {
+              const node = knowledgeGraph?.nodes.find(n => n.id === nodeId);
+              if (node && onContextRail) onContextRail({ type: 'entity', id: nodeId, label: node.label ?? nodeId });
+            }} />
         ) : selectedFrame ? (
           <div className="p-4">
             <div className="flex items-center justify-between mb-3">
