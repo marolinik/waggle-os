@@ -59,6 +59,7 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
       dataDir: server.localConfig.dataDir,
       litellmUrl: server.localConfig.litellmUrl,
       dailyBudget: config.getDailyBudget(),
+      budgetHardCap: config.getBudgetHardCap(),
       onboardingCompleted,
     };
   });
@@ -69,13 +70,14 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
       defaultModel?: string;
       providers?: Record<string, unknown>;
       dailyBudget?: number | null;
+      budgetHardCap?: boolean;
       fallbackModel?: string | null;
       budgetModel?: string | null;
       budgetThreshold?: number;
     };
   }>('/api/settings', async (request) => {
     const config = new WaggleConfig(server.localConfig.dataDir);
-    const { defaultModel, providers, dailyBudget, fallbackModel, budgetModel, budgetThreshold } = request.body;
+    const { defaultModel, providers, dailyBudget, budgetHardCap, fallbackModel, budgetModel, budgetThreshold } = request.body;
 
     if (defaultModel) {
       config.setDefaultModel(defaultModel);
@@ -84,6 +86,13 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
     // F8: Update daily cost budget
     if (dailyBudget !== undefined) {
       config.setDailyBudget(dailyBudget);
+    }
+    if (budgetHardCap !== undefined) {
+      config.setBudgetHardCap(budgetHardCap);
+      server.agentState.costTracker.setBudget(
+        config.getDailyBudget(),
+        budgetHardCap ? 'hard' : 'soft',
+      );
     }
 
     // Model Pilot fields

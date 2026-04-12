@@ -29,13 +29,52 @@ export const DEFAULT_MODEL_PRICING: Record<string, ModelPricing> = {
   'claude-3-5-sonnet-20241022': { inputPer1k: 0.003, outputPer1k: 0.015 },
 };
 
+export type BudgetMode = 'soft' | 'hard';
+
+export class BudgetExceededError extends Error {
+  public readonly budgetUsd: number;
+  public readonly currentUsd: number;
+  constructor(budgetUsd: number, currentUsd: number) {
+    super(`Daily budget exceeded: $${currentUsd.toFixed(4)} / $${budgetUsd.toFixed(2)} (hard cap)`);
+    this.name = 'BudgetExceededError';
+    this.budgetUsd = budgetUsd;
+    this.currentUsd = currentUsd;
+  }
+}
+
 export class CostTracker {
   private pricing: Record<string, ModelPricing>;
   private usage: UsageEntry[] = [];
+  private dailyBudgetUsd: number | null = null;
+  private budgetMode: BudgetMode = 'soft';
 
   constructor(pricing: Record<string, ModelPricing> = {}) {
-    // Merge user pricing with defaults (user pricing takes precedence)
     this.pricing = { ...DEFAULT_MODEL_PRICING, ...pricing };
+  }
+
+  setBudget(dailyUsd: number | null, mode: BudgetMode = 'soft'): void {
+    this.dailyBudgetUsd = dailyUsd;
+    this.budgetMode = mode;
+  }
+
+  getBudget(): { dailyBudgetUsd: number | null; mode: BudgetMode } {
+    return { dailyBudgetUsd: this.dailyBudgetUsd, mode: this.budgetMode };
+  }
+
+  /**
+   * Check if daily budget allows proceeding. Returns true if OK.
+   * In hard mode, throws BudgetExceededError. In soft mode, returns false but doesn't throw.
+   */
+  checkBudget(): boolean {
+    if (this.dailyBudgetUsd === null) return true;
+    const current = this.getDailyTotal();
+    if (current >= this.dailyBudgetUsd) {
+      if (this.budgetMode === 'hard') {
+        throw new BudgetExceededError(this.dailyBudgetUsd, current);
+      }
+      return false;
+    }
+    return true;
   }
 
   addUsage(model: string, inputTokens: number, outputTokens: number, workspaceId?: string): void {

@@ -30,6 +30,7 @@ export default function WeaverPanel() {
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState(false);
   const [lastResult, setLastResult] = useState<TriggerResult | null>(null);
+  const [wsNames, setWsNames] = useState<Record<string, string>>({});
 
   const fetchStatus = async () => {
     try {
@@ -39,7 +40,14 @@ export default function WeaverPanel() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchStatus(); }, []);
+  useEffect(() => {
+    fetchStatus();
+    adapter.getWorkspaces().then(wsList => {
+      const map: Record<string, string> = {};
+      for (const w of wsList) map[w.id] = w.name;
+      setWsNames(map);
+    }).catch(() => {});
+  }, []);
 
   const triggerConsolidation = async () => {
     setTriggering(true);
@@ -119,7 +127,7 @@ export default function WeaverPanel() {
           <div className="space-y-1.5">
             {status.workspaces.map(ws => (
               <div key={ws.id} className="flex items-center justify-between rounded-lg border border-border/20 px-3 py-2">
-                <span className="text-xs text-foreground truncate max-w-[60%]">{ws.id}</span>
+                <span className="text-xs text-foreground truncate max-w-[60%]">{wsNames[ws.id] ?? ws.id}</span>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] text-muted-foreground">{timeAgo(ws.lastConsolidation)}</span>
                   <span className={`w-1.5 h-1.5 rounded-full ${ws.timerActive ? 'bg-emerald-400' : 'bg-muted-foreground/30'}`} />
@@ -137,7 +145,7 @@ export default function WeaverPanel() {
           </h4>
           {lastResult.results.map(r => (
             <div key={r.target} className="flex items-center gap-3 text-xs text-foreground">
-              <span className="text-muted-foreground truncate">{r.target}</span>
+              <span className="text-muted-foreground truncate">{wsNames[r.target] ?? r.target}</span>
               <span className="text-emerald-400">+{r.framesConsolidated} consolidated</span>
               <span className="text-amber-400">{r.framesDecayed} decayed</span>
               <span className="text-primary">{r.framesStrengthened} strengthened</span>

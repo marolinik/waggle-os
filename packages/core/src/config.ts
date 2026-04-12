@@ -23,6 +23,8 @@ interface ConfigData {
   teamServer?: TeamServerConfig;
   /** F8: Daily cost budget in dollars. null = no limit. */
   dailyBudget?: number | null;
+  /** When true, exceeding dailyBudget blocks agent. When false, warns only. */
+  budgetHardCap?: boolean;
   /** Model Pilot: fallback model when primary fails (429/500/timeout) */
   fallbackModel?: string;
   /** Model Pilot: budget-saver model when daily spend hits threshold */
@@ -118,6 +120,14 @@ export class WaggleConfig {
 
   setDailyBudget(budget: number | null): void {
     this.data.dailyBudget = budget;
+  }
+
+  getBudgetHardCap(): boolean {
+    return this.data.budgetHardCap ?? false;
+  }
+
+  setBudgetHardCap(enabled: boolean): void {
+    this.data.budgetHardCap = enabled;
   }
 
   // --- Model Pilot ---
