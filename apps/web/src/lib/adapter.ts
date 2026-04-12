@@ -345,10 +345,17 @@ class LocalAdapter {
     return unwrapArray(await res.json()).map(normalizeFrame);
   }
 
-  async getKnowledgeGraph(workspaceId: string): Promise<{ nodes: KGNode[]; edges: KGEdge[] }> {
-    const res = await this.fetch(`/api/memory/graph?workspace=${workspaceId}`);
+  async getKnowledgeGraph(workspaceId: string, scope?: 'current' | 'personal' | 'all'): Promise<{ nodes: KGNode[]; edges: KGEdge[] }> {
+    const params = new URLSearchParams();
+    if (scope === 'all') {
+      params.set('scope', 'all');
+    } else if (scope === 'personal') {
+      params.set('scope', 'personal');
+    } else {
+      params.set('workspace', workspaceId);
+    }
+    const res = await this.fetch(`/api/memory/graph?${params}`);
     const data = await res.json();
-    // Backend returns {entities, relations} — map to {nodes, edges}
     return {
       nodes: data.nodes ?? data.entities ?? [],
       edges: data.edges ?? data.relations ?? [],

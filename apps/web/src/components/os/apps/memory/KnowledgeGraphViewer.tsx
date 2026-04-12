@@ -11,7 +11,7 @@ import {
   forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide,
   type SimulationNodeDatum, type SimulationLinkDatum,
 } from 'd3-force';
-import { Network, ZoomIn, ZoomOut, Maximize2, Minimize2, RotateCcw, Search } from 'lucide-react';
+import { Network, ZoomIn, ZoomOut, Maximize2, Minimize2, RotateCcw, Search, Globe } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import type { KGNode, KGEdge } from '@/lib/types';
 
@@ -65,10 +65,14 @@ interface SimLink extends SimulationLinkDatum<SimNode> {
 
 // ── Component ──
 
+type KGScope = 'current' | 'personal' | 'all';
+
 interface KnowledgeGraphViewerProps {
   nodes: KGNode[];
   edges: KGEdge[];
   onNodeClick?: (nodeId: string) => void;
+  scope?: KGScope;
+  onScopeChange?: (scope: KGScope) => void;
 }
 
 const MIN_ZOOM = 0.2;
@@ -88,7 +92,7 @@ function chooseDefaultLimit(total: number): NodeLimit {
   return 200;
 }
 
-const KnowledgeGraphViewer = ({ nodes, edges, onNodeClick }: KnowledgeGraphViewerProps) => {
+const KnowledgeGraphViewer = ({ nodes, edges, onNodeClick, scope, onScopeChange }: KnowledgeGraphViewerProps) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -416,6 +420,22 @@ const KnowledgeGraphViewer = ({ nodes, edges, onNodeClick }: KnowledgeGraphViewe
               className="w-28 bg-transparent text-[11px] h-auto border-0 p-0 focus-visible:ring-0 focus-visible:ring-offset-0"
             />
           </div>
+
+          {/* Scope filter */}
+          {onScopeChange && (
+            <div className="flex items-center gap-1.5 ml-2 px-2 py-0.5 rounded-md bg-muted/30">
+              <Globe className="w-3 h-3 text-muted-foreground" />
+              <select
+                value={scope ?? 'current'}
+                onChange={e => onScopeChange(e.target.value as KGScope)}
+                className="bg-transparent text-[11px] text-foreground border-0 p-0 focus:ring-0 cursor-pointer"
+              >
+                <option value="current">Current workspace</option>
+                <option value="personal">Personal only</option>
+                <option value="all">All workspaces</option>
+              </select>
+            </div>
+          )}
 
           {/* Zoom controls */}
           <div className="flex items-center gap-0.5 ml-2">

@@ -32,6 +32,8 @@ interface MemoryAppProps {
   onMinImportanceChange?: (val: number) => void;
   knowledgeGraph?: { nodes: KGNode[]; edges: KGEdge[] };
   onRefreshKG?: () => void;
+  kgScope?: 'current' | 'personal' | 'all';
+  onKGScopeChange?: (scope: 'current' | 'personal' | 'all') => void;
   onContextRail?: (target: { type: 'frame' | 'entity'; id: string; label: string }) => void;
 }
 
@@ -40,7 +42,7 @@ const MemoryApp = ({
   frames, selectedFrame, onSelectFrame, searchQuery, onSearchChange,
   onDeleteFrame, loading, stats, typeFilters = [], onTypeFiltersChange,
   minImportance = 0, onMinImportanceChange,
-  knowledgeGraph, onRefreshKG, onContextRail,
+  knowledgeGraph, onRefreshKG, kgScope, onKGScopeChange, onContextRail,
 }: MemoryAppProps) => {
   const [view, setView] = useState<'timeline' | 'graph' | 'harvest' | 'weaver'>('timeline');
   const [showFilters, setShowFilters] = useState(false);
@@ -191,6 +193,7 @@ const MemoryApp = ({
           <HarvestTab />
         ) : view === 'graph' ? (
           <KnowledgeGraphViewer nodes={knowledgeGraph?.nodes || []} edges={knowledgeGraph?.edges || []}
+            scope={kgScope} onScopeChange={onKGScopeChange}
             onNodeClick={(nodeId) => {
               const node = knowledgeGraph?.nodes.find(n => n.id === nodeId);
               if (node && onContextRail) onContextRail({ type: 'entity', id: nodeId, label: node.label ?? nodeId });
