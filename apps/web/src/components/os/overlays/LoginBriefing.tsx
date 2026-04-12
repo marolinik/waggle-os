@@ -1,14 +1,14 @@
 /**
  * LoginBriefing — shown on desktop load after boot screen.
- * Displays a cross-workspace summary: where you are across all workspaces,
- * pending items, memory highlights, with links to each workspace.
+ * Displays memory highlights ("I remember...") and cross-workspace summary
+ * with links to each workspace. Feels like a colleague catching you up.
  */
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Brain, Clock, MessageSquare, Sparkles, ChevronRight,
-  Loader2, X, AlertTriangle,
+  Loader2, X, AlertTriangle, Lightbulb,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import type { Workspace } from '@/lib/types';
@@ -29,8 +29,33 @@ interface WorkspaceSummary {
   pendingTasks?: string[];
 }
 
+interface MemoryHighlight {
+  content: string;
+  workspace?: string;
+  timestamp: string;
+}
+
+function timeAgo(iso: string): string {
+  if (!iso) return '';
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return 'just now';
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `${days}d ago`;
+  return `${Math.floor(days / 7)}w ago`;
+}
+
+function truncateHighlight(content: string): string {
+  const firstLine = content.split('\n')[0].trim();
+  return firstLine.length > 120 ? firstLine.slice(0, 117) + '...' : firstLine;
+}
+
 const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
   const [summaries, setSummaries] = useState<WorkspaceSummary[]>([]);
+  const [highlights, setHighlights] = useState<MemoryHighlight[]>([]);
   const [loading, setLoading] = useState(true);
   const [greeting, setGreeting] = useState('');
 
@@ -45,8 +70,23 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
 
   const loadBriefing = async () => {
     try {
-      const workspaces = await adapter.getWorkspaces();
-      // Fetch context for top 5 most recent workspaces
+      const [workspaces, frames] = await Promise.all([
+        adapter.getWorkspaces(),
+        adapter.searchMemory('important decision project plan', 'global').catch(() => []),
+      ]);
+
+      // Memory highlights — top 3 recent high-importance frames
+      const topFrames = frames
+        .filter((f: any) => f.content && f.content.length > 20)
+        .slice(0, 3)
+        .map((f: any) => ({
+          content: truncateHighlight(f.content),
+          workspace: f.workspaceName,
+          timestamp: f.timestamp ?? '',
+        }));
+      setHighlights(topFrames);
+
+      // Workspace summaries
       const sorted = workspaces
         .filter((w: Workspace) => w.id !== 'default')
         .slice(0, 5);
@@ -105,10 +145,10 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-lg font-display font-bold text-foreground">{greeting}, Marko</h2>
+              <h2 className="text-lg font-display font-bold text-foreground">{greeting}</h2>
               <p className="text-xs text-muted-foreground">
                 <Brain className="w-3 h-3 inline mr-1" />
-                {totalMemories} memories across {summaries.length} workspaces
+                {totalMemories} memories across {summaries.length} workspace{summaries.length !== 1 ? 's' : ''}
                 {totalPending > 0 && <span className="text-amber-400 ml-2"><AlertTriangle className="w-3 h-3 inline mr-0.5" />{totalPending} pending</span>}
               </p>
             </div>
@@ -121,44 +161,76 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-5 h-5 animate-spin text-primary" />
             </div>
-          ) : summaries.length === 0 ? (
-            <div className="text-center py-8">
-              <Sparkles className="w-8 h-8 text-primary/50 mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">No active workspaces yet. Create one to get started!</p>
-            </div>
           ) : (
-            <div className="space-y-2 max-h-80 overflow-auto">
-              {summaries.map(ws => (
-                <button
-                  key={ws.id}
-                  onClick={() => { onOpenWorkspace(ws.id); onDismiss(); }}
-                  className="w-full text-left p-3 rounded-xl bg-secondary/30 border border-border/30 hover:bg-secondary/50 hover:border-primary/30 transition-all group"
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-display font-medium text-foreground">{ws.name}</span>
-                      <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">{ws.group}</span>
-                    </div>
-                    <ChevronRight className="w-3 h-3 text-muted-foreground group-hover:text-primary transition-colors" />
-                  </div>
+            <>
+              {/* Memory highlights — "I remember..." */}
+              {highlights.length > 0 && (
+                <div className="mb-4 space-y-1.5">
+                  <p className="text-[11px] font-display font-semibold text-primary/80 uppercase tracking-wider flex items-center gap-1.5">
+                    <Lightbulb className="w-3 h-3" /> I remember
+                  </p>
+                  {highlights.map((h, i) => (
+                    <motion.div
+                      key={i}
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.3 + i * 0.15 }}
+                      className="flex items-start gap-2 px-3 py-1.5 rounded-lg bg-primary/5 border border-primary/10"
+                    >
+                      <Sparkles className="w-3 h-3 text-primary/60 mt-0.5 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-[12px] text-foreground leading-relaxed">{h.content}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          {h.workspace && <span>{h.workspace} · </span>}
+                          {h.timestamp && timeAgo(h.timestamp)}
+                        </p>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
 
-                  {ws.summary && (
-                    <p className="text-[11px] text-muted-foreground mb-1.5 line-clamp-2">{ws.summary}</p>
-                  )}
+              {/* Workspace list */}
+              {summaries.length === 0 ? (
+                <div className="text-center py-6">
+                  <Sparkles className="w-8 h-8 text-primary/50 mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">No active workspaces yet. Create one to get started!</p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-60 overflow-auto">
+                  {summaries.map(ws => (
+                    <button
+                      key={ws.id}
+                      onClick={() => { onOpenWorkspace(ws.id); onDismiss(); }}
+                      className="w-full text-left p-3 rounded-xl bg-secondary/30 border border-border/30 hover:bg-secondary/50 hover:border-primary/30 transition-all group"
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-display font-medium text-foreground">{ws.name}</span>
+                          <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">{ws.group}</span>
+                        </div>
+                        <ChevronRight className="w-3 h-3 text-muted-foreground group-hover:text-primary transition-colors" />
+                      </div>
 
-                  <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                    <span><Brain className="w-2.5 h-2.5 inline mr-0.5" />{ws.memoryCount}</span>
-                    <span><MessageSquare className="w-2.5 h-2.5 inline mr-0.5" />{ws.sessionCount}</span>
-                    {ws.lastActive && (
-                      <span><Clock className="w-2.5 h-2.5 inline mr-0.5" />{new Date(ws.lastActive).toLocaleDateString()}</span>
-                    )}
-                    {ws.pendingTasks && ws.pendingTasks.length > 0 && (
-                      <span className="text-amber-400"><AlertTriangle className="w-2.5 h-2.5 inline mr-0.5" />{ws.pendingTasks.length} pending</span>
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
+                      {ws.summary && (
+                        <p className="text-[11px] text-muted-foreground mb-1.5 line-clamp-2">{ws.summary}</p>
+                      )}
+
+                      <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                        <span><Brain className="w-2.5 h-2.5 inline mr-0.5" />{ws.memoryCount}</span>
+                        <span><MessageSquare className="w-2.5 h-2.5 inline mr-0.5" />{ws.sessionCount}</span>
+                        {ws.lastActive && (
+                          <span><Clock className="w-2.5 h-2.5 inline mr-0.5" />{new Date(ws.lastActive).toLocaleDateString()}</span>
+                        )}
+                        {ws.pendingTasks && ws.pendingTasks.length > 0 && (
+                          <span className="text-amber-400"><AlertTriangle className="w-2.5 h-2.5 inline mr-0.5" />{ws.pendingTasks.length} pending</span>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
           )}
 
           {/* Footer */}

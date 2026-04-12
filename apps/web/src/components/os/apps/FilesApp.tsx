@@ -78,6 +78,7 @@ interface FilesAppProps {
    */
   workspaces?: Workspace[];
   onSelectWorkspace?: (workspaceId: string) => void;
+  onContextRail?: (target: { type: 'file'; id: string; label: string }) => void;
 }
 
 const FilesApp = ({
@@ -86,6 +87,7 @@ const FilesApp = ({
   storageType = 'virtual',
   workspaces,
   onSelectWorkspace,
+  onContextRail,
 }: FilesAppProps) => {
   const { toast } = useToast();
   const [currentPath, setCurrentPath] = useState('/');
@@ -199,6 +201,9 @@ const FilesApp = ({
       setSelectedFiles(new Set([file.path]));
     } else {
       setSelectedFiles(new Set([file.path]));
+    }
+    if (file.type !== 'directory' && onContextRail) {
+      onContextRail({ type: 'file', id: file.path, label: file.name });
     }
   };
 

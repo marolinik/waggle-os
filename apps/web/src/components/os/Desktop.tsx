@@ -255,6 +255,7 @@ const Desktop = () => {
             storageType={ws?.storageType}
             workspaces={workspaces}
             onSelectWorkspace={setFilesViewWorkspaceId}
+            onContextRail={(target) => setContextRailTarget({ ...target, workspaceId: wsId })}
           />
         );
       }

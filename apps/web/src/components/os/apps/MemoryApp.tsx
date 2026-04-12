@@ -154,7 +154,10 @@ const MemoryApp = ({
           {frames.map(f => (
             <button
               key={f.id}
-              onClick={() => onSelectFrame(f)}
+              onClick={() => {
+                onSelectFrame(f);
+                if (onContextRail) onContextRail({ type: 'frame', id: String(f.id), label: f.content?.split('\n')[0]?.slice(0, 60) ?? 'Frame' });
+              }}
               onContextMenu={e => handleFrameContextMenu(e, f)}
               className={`w-full text-left p-2 rounded-lg text-xs transition-colors ${
                 selectedFrame?.id === f.id ? 'bg-primary/20 border border-primary/30' : 'hover:bg-muted/50'
