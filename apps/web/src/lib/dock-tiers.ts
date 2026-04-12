@@ -9,7 +9,8 @@ export type AppId =
   | 'capabilities' | 'connectors' | 'cockpit' | 'mission-control'
   | 'settings' | 'vault' | 'profile' | 'terminal' | 'calculator'
   | 'notes' | 'waggle-dance' | 'files' | 'agents'
-  | 'scheduled-jobs' | 'marketplace' | 'voice' | 'room' | 'approvals';
+  | 'scheduled-jobs' | 'marketplace' | 'voice' | 'room' | 'approvals' | 'timeline'
+  | 'backup' | 'telemetry' | 'governance';
 
 export type UserTier = 'simple' | 'professional' | 'power' | 'admin';
 
@@ -38,6 +39,9 @@ const POWER_CONFIG: DockEntry[] = [
     type: 'zone-parent', key: 'ops', icon: Activity, label: 'Ops', color: 'text-emerald-400',
     children: [
       { type: 'app', key: 'cockpit', appId: 'cockpit', icon: Activity, label: 'Command Center', color: 'text-emerald-400' },
+      { type: 'app', key: 'timeline', appId: 'timeline', icon: Clock, label: 'Timeline', color: 'text-cyan-400' },
+      { type: 'app', key: 'telemetry', appId: 'telemetry', icon: Activity, label: 'Usage & Cost', color: 'text-sky-400' },
+      { type: 'app', key: 'backup', appId: 'backup', icon: Activity, label: 'Backup & Restore', color: 'text-emerald-400' },
       { type: 'app', key: 'events', appId: 'events', icon: Radio, label: 'Events & Logs', color: 'text-cyan-400' },
       { type: 'app', key: 'jobs', appId: 'scheduled-jobs', icon: Clock, label: 'Scheduled Jobs', color: 'text-amber-400' },
     ],
@@ -48,6 +52,7 @@ const POWER_CONFIG: DockEntry[] = [
       { type: 'app', key: 'skills', appId: 'capabilities', icon: Package, label: 'Skills & Apps', color: 'text-violet-400' },
       { type: 'app', key: 'connect', appId: 'connectors', icon: Plug, label: 'Connectors', color: 'text-emerald-400' },
       { type: 'app', key: 'market', appId: 'marketplace', icon: Store, label: 'Marketplace', color: 'text-orange-400' },
+      { type: 'app', key: 'governance', appId: 'governance', icon: Shield, label: 'Team Governance', color: 'text-violet-400' },
     ],
   },
   { type: 'separator', key: 'sep-2', label: '' },

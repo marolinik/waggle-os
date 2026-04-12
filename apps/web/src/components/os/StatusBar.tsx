@@ -9,11 +9,13 @@ interface StatusBarProps {
   costUsd?: number;
   offline?: boolean;
   unreadNotifications?: number;
+  trialDaysRemaining?: number;
+  trialExpired?: boolean;
   onSearchClick?: () => void;
   onNotificationClick?: () => void;
 }
 
-const StatusBar = ({ workspaceName, model, tokensUsed, costUsd, offline, unreadNotifications = 0, onSearchClick, onNotificationClick }: StatusBarProps) => {
+const StatusBar = ({ workspaceName, model, tokensUsed, costUsd, offline, unreadNotifications = 0, trialDaysRemaining: trialDays, trialExpired, onSearchClick, onNotificationClick }: StatusBarProps) => {
   const [time, setTime] = useState(new Date());
 
   useEffect(() => {
@@ -55,6 +57,16 @@ const StatusBar = ({ workspaceName, model, tokensUsed, costUsd, offline, unreadN
       </div>
 
       <div className="flex items-center gap-4">
+        {trialDays !== undefined && trialDays > 0 && (
+          <span className={`text-[10px] font-display font-semibold px-2 py-0.5 rounded-full ${trialDays <= 3 ? 'bg-destructive/20 text-destructive' : 'bg-primary/15 text-primary'}`}>
+            Trial: {trialDays}d left
+          </span>
+        )}
+        {trialExpired && (
+          <span className="text-[10px] font-display font-semibold px-2 py-0.5 rounded-full bg-destructive/20 text-destructive">
+            Trial expired
+          </span>
+        )}
         <button onClick={onSearchClick} className="text-muted-foreground hover:text-primary transition-colors" aria-label="Search" title="Search (⌘K)">
           <Search className="w-3.5 h-3.5" />
         </button>
@@ -66,11 +78,22 @@ const StatusBar = ({ workspaceName, model, tokensUsed, costUsd, offline, unreadN
             </span>
           )}
         </button>
-        {offline ? (
-          <WifiOff className="w-3.5 h-3.5 text-destructive" />
-        ) : (
-          <Wifi className="w-3.5 h-3.5 text-emerald-400" />
-        )}
+        <div className="relative group">
+          {offline ? (
+            <button className="flex items-center gap-1 text-destructive" title="Backend offline — messages will be queued">
+              <WifiOff className="w-3.5 h-3.5" />
+              <span className="text-[10px] font-display animate-pulse">Offline</span>
+            </button>
+          ) : (
+            <Wifi className="w-3.5 h-3.5 text-emerald-400" />
+          )}
+          {offline && (
+            <div className="absolute top-full right-0 mt-2 w-48 p-2.5 rounded-xl glass-strong border border-border/50 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+              <p className="text-[11px] font-display font-semibold text-foreground mb-1">Backend Unreachable</p>
+              <p className="text-[10px] text-muted-foreground">Messages will be queued and sent when the connection is restored.</p>
+            </div>
+          )}
+        </div>
         <span className="text-xs text-muted-foreground">{formatDate(time)}</span>
         <span className="text-xs text-foreground font-medium">{formatTime(time)}</span>
       </div>

@@ -93,7 +93,19 @@ class LocalAdapter {
     if (this.authToken) {
       headers['Authorization'] = `Bearer ${this.authToken}`;
     }
-    return fetchWithTimeout(`${this.baseUrl}${path}`, { ...init, headers });
+    const res = await fetchWithTimeout(`${this.baseUrl}${path}`, { ...init, headers });
+    if (res.status === 403) {
+      const clone = res.clone();
+      try {
+        const body = await clone.json();
+        if (body.error === 'TIER_INSUFFICIENT') {
+          window.dispatchEvent(new CustomEvent('waggle:tier-insufficient', {
+            detail: { required: body.required, actual: body.actual, message: body.message },
+          }));
+        }
+      } catch { /* not JSON — ignore */ }
+    }
+    return res;
   }
 
   // --- Workspaces ---
@@ -289,7 +301,7 @@ class LocalAdapter {
   }
 
   async renameSession(workspaceId: string, sessionId: string, title: string): Promise<void> {
-    await this.fetch(`/api/workspaces/${workspaceId}/sessions/${sessionId}`, {
+    await this.fetch(`/api/sessions/${sessionId}?workspace=${encodeURIComponent(workspaceId)}`, {
       method: 'PATCH', body: JSON.stringify({ title }),
     });
   }
@@ -355,6 +367,27 @@ class LocalAdapter {
       duration: e.duration,
       timestamp: e.timestamp ?? '',
       details: e.details ?? (e.output ? { output: e.output } : undefined),
+    }));
+  }
+
+  async getTimeline(workspaceId: string, since?: string, limit = 200): Promise<TimelineEvent[]> {
+    const params = new URLSearchParams({ workspaceId, limit: String(limit) });
+    if (since) params.set('from', since);
+    const res = await this.fetch(`/api/events?${params}`);
+    const json = await res.json();
+    const events = Array.isArray(json) ? json : json.events ?? [];
+    return events.map((e: Record<string, unknown>) => ({
+      id: e.id as number,
+      eventType: (e.event_type ?? e.eventType ?? 'unknown') as string,
+      toolName: (e.tool_name ?? e.toolName) as string | undefined,
+      input: e.input as string | undefined,
+      output: e.output as string | undefined,
+      model: e.model as string | undefined,
+      tokensUsed: e.tokens_used as number | undefined,
+      cost: e.cost as number | undefined,
+      sessionId: (e.session_id ?? e.sessionId) as string | undefined,
+      approved: e.approved as boolean | undefined,
+      timestamp: (e.timestamp ?? '') as string,
     }));
   }
 
@@ -987,7 +1020,7 @@ class LocalAdapter {
     return res.json();
   }
 
-  async createCheckoutSession(tier: 'BASIC' | 'TEAMS'): Promise<{ url: string }> {
+  async createCheckoutSession(tier: 'PRO' | 'TEAMS'): Promise<{ url: string }> {
     const res = await this.fetch('/api/stripe/create-checkout-session', {
       method: 'POST',
       body: JSON.stringify({ tier }),
@@ -1002,7 +1035,7 @@ class LocalAdapter {
     return res.json();
   }
 
-  async getTier(): Promise<{ tier: string; capabilities: Record<string, unknown>; usage: Record<string, unknown> }> {
+  async getTier(): Promise<{ tier: string; trialDaysRemaining?: number; trialExpired?: boolean; capabilities: Record<string, unknown>; usage: Record<string, unknown> }> {
     const res = await this.fetch('/api/tier');
     return res.json();
   }
@@ -1035,6 +1068,17 @@ class LocalAdapter {
 
   async scanClaudeCode(): Promise<any> {
     const res = await this.fetch('/api/harvest/scan-claude-code', { method: 'POST' });
+    return res.json();
+  }
+
+  async removeHarvestSource(source: string): Promise<void> {
+    await this.fetch(`/api/harvest/sources/${encodeURIComponent(source)}`, { method: 'DELETE' });
+  }
+
+  async toggleHarvestAutoSync(source: string, autoSync: boolean): Promise<any> {
+    const res = await this.fetch(`/api/harvest/sources/${encodeURIComponent(source)}`, {
+      method: 'PATCH', body: JSON.stringify({ autoSync }),
+    });
     return res.json();
   }
 

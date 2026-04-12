@@ -136,6 +136,20 @@ export interface AgentStep {
   details?: Record<string, unknown>;
 }
 
+export interface TimelineEvent {
+  id: number;
+  eventType: string;
+  toolName?: string;
+  input?: string;
+  output?: string;
+  model?: string;
+  tokensUsed?: number;
+  cost?: number;
+  sessionId?: string;
+  approved?: boolean;
+  timestamp: string;
+}
+
 // ── Content Block System ─────────────────────────────────────────────
 // Messages are composed of ordered blocks that interleave text, tool usage,
 // and agent activity — matching Claude.ai's visual rendering pattern.
