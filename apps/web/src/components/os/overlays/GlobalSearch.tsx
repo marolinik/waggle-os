@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Search, MessageSquare, Brain, Clock, Settings, Loader2,
   LayoutDashboard, Bot, FolderOpen, Activity, Package, Plug,
-  Store, Mic, Sparkles, Shield, Users, FileText,
+  Store, Mic, Sparkles, Shield, Users, FileText, Globe,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
@@ -66,6 +66,7 @@ const GlobalSearch = ({ open, onClose, onNavigate }: GlobalSearchProps) => {
   const [skills, setSkills] = useState<SearchResult[]>([]);
   const [memoryResults, setMemoryResults] = useState<SearchResult[]>([]);
   const [memoryLoading, setMemoryLoading] = useState(false);
+  const [globalScope, setGlobalScope] = useState(false);
   const [selected, setSelected] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -130,8 +131,8 @@ const GlobalSearch = ({ open, onClose, onNavigate }: GlobalSearchProps) => {
     setMemoryLoading(true);
     const timeout = setTimeout(async () => {
       try {
-        const frames = await adapter.searchMemory(query);
-        setMemoryResults(frames.slice(0, 5).map(f => ({
+        const frames = await adapter.searchMemory(query, globalScope ? 'global' : undefined);
+        setMemoryResults(frames.slice(0, 8).map(f => ({
           id: String(f.id),
           category: 'memory' as const,
           title: typeof f.content === 'string'
@@ -140,6 +141,7 @@ const GlobalSearch = ({ open, onClose, onNavigate }: GlobalSearchProps) => {
           subtitle: f.importance ?? f.type ?? undefined,
           icon: Brain,
           score: 50,
+          badge: (f as any).workspaceName ?? undefined,
         })));
       } catch {
         setMemoryResults([]);
@@ -147,7 +149,7 @@ const GlobalSearch = ({ open, onClose, onNavigate }: GlobalSearchProps) => {
       setMemoryLoading(false);
     }, 300);
     return () => clearTimeout(timeout);
-  }, [query]);
+  }, [query, globalScope]);
 
   // Build categorized flat list for keyboard nav
   const { flatItems, sections } = useMemo(() => {
@@ -252,6 +254,17 @@ const GlobalSearch = ({ open, onClose, onNavigate }: GlobalSearchProps) => {
               className="flex-1 bg-transparent text-sm border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0"
             />
             {memoryLoading && <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'var(--honey-500)' }} />}
+            <button
+              onClick={() => setGlobalScope(g => !g)}
+              title={globalScope ? 'Searching all workspaces' : 'Searching current workspace'}
+              className="p-1 rounded-md transition-colors"
+              style={{
+                backgroundColor: globalScope ? 'rgba(229,160,0,0.15)' : 'transparent',
+                color: globalScope ? 'var(--honey-500)' : 'var(--hive-500)',
+              }}
+            >
+              <Globe className="w-4 h-4" />
+            </button>
             <kbd className="px-1.5 py-0.5 text-[11px] rounded font-display" style={{ backgroundColor: 'var(--hive-800)', color: 'var(--hive-400)' }}>ESC</kbd>
           </div>
 

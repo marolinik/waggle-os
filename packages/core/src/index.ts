@@ -27,6 +27,7 @@ export { normalizeEntityName, findDuplicates } from './mind/entity-normalizer.js
 export { Ontology, validateEntity, type EntitySchema, type ValidationResult } from './mind/ontology.js';
 export { WaggleConfig, type ProviderEntry, type TeamServerConfig } from './config.js';
 export { MultiMind, type MultiMindSearchResult, type MindSource, type SearchScope } from './multi-mind.js';
+export { MultiMindCache, type MultiMindCacheConfig } from './multi-mind-cache.js';
 export { WorkspaceManager, type WorkspaceConfig, type CreateWorkspaceOptions } from './workspace-config.js';
 export { needsMigration, migrateToMultiMind } from './migration.js';
 export { TeamSync, frameToEntity, entityToSyncedFrame, type TeamSyncConfig, type SyncedFrame } from './team-sync.js';

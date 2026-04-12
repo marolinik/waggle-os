@@ -6,7 +6,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
-import { MindDB, MultiMind, WorkspaceManager, WaggleConfig, createEmbeddingProvider, type EmbeddingProviderConfig, type EmbeddingProviderInstance, FrameStore, SessionStore, InstallAuditStore, CronStore, AwarenessLayer, VaultStore, SkillHashStore, OptimizationLogStore, ImprovementSignalStore, HarvestSourceStore, ClaudeCodeAdapter, reconcileIndexes, TeamSync, TelemetryStore, TELEMETRY_EVENTS } from '@waggle/core';
+import { MindDB, MultiMind, MultiMindCache, WorkspaceManager, WaggleConfig, createEmbeddingProvider, type EmbeddingProviderConfig, type EmbeddingProviderInstance, FrameStore, SessionStore, InstallAuditStore, CronStore, AwarenessLayer, VaultStore, SkillHashStore, OptimizationLogStore, ImprovementSignalStore, HarvestSourceStore, ClaudeCodeAdapter, reconcileIndexes, TeamSync, TelemetryStore, TELEMETRY_EVENTS } from '@waggle/core';
 import { ALLOWED_ORIGINS } from './cors-config.js';
 import { MemoryWeaver } from '@waggle/weaver';
 import {
@@ -193,6 +193,8 @@ export interface AgentState {
   getWorkspaceMindDb: (workspaceId: string) => import('@waggle/core').MindDB | null;
   /** Close and remove a workspace MindDB from cache. Used before workspace deletion to prevent EBUSY. */
   closeWorkspaceMind: (workspaceId: string) => void;
+  /** List all workspaces (id + name). Used by global memory search. */
+  listWorkspaces: () => Array<{ id: string; name: string }>;
   /** Currently active workspace ID (null = personal only) */
   activeWorkspaceId: string | null;
   /** Current sub-agent orchestrator instance (set during workflow execution) */
@@ -867,7 +869,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     const crossTools = createCrossWorkspaceTools({
       sourceWorkspaceId,
       embedder,
-      getMindForWorkspace: (id) => workspaceMindCache.get(id) ?? getWorkspaceMindDb(id),
+      getMindForWorkspace: (id) => mindCache.getOrOpen(id),
       listWorkspaces: () => wsManager.list().map(w => ({ id: w.id, name: w.name })),
       listWorkspaceFiles: async (id, subPath) => {
         try {
@@ -893,9 +895,11 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     return [...base, ...crossTools];
   };
 
-  // ── Workspace mind cache (legacy — being replaced by sessionManager) ──
-  // Kept for backward compatibility during transition.
-  const workspaceMindCache = new Map<string, MindDB>();
+  // ── Workspace mind cache (LRU, max 20 open) ──
+  const mindCache = new MultiMindCache({
+    maxOpen: 20,
+    getMindPath: (id) => wsManager.getMindPath(id),
+  });
   let activeWorkspaceId: string | null = null;
 
   // ── TeamSync cache — one TeamSync instance per team workspace ──
@@ -925,18 +929,8 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   const activateWorkspaceMind = (workspaceId: string): boolean => {
     if (activeWorkspaceId === workspaceId) return true; // already active
 
-    const mindPath = wsManager.getMindPath(workspaceId);
-    if (!mindPath) return false;
-
-    let wsDb = workspaceMindCache.get(workspaceId);
-    if (!wsDb) {
-      try {
-        wsDb = new MindDB(mindPath);
-        workspaceMindCache.set(workspaceId, wsDb);
-      } catch {
-        return false;
-      }
-    }
+    const wsDb = mindCache.getOrOpen(workspaceId);
+    if (!wsDb) return false;
 
     orchestrator.setWorkspaceMind(wsDb);
     activeWorkspaceId = workspaceId;
@@ -987,7 +981,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     // and don't need to be duplicated into memory frames.
 
     if (result && !workspaceWeavers.has(workspaceId)) {
-      const wsDb = workspaceMindCache.get(workspaceId);
+      const wsDb = mindCache.get(workspaceId);
       if (wsDb) {
         const wsFrames = new FrameStore(wsDb);
         const wsSessions = new SessionStore(wsDb);
@@ -1041,12 +1035,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   // Helper: get a cached workspace MindDB (opens on demand)
   // A6: Close and remove workspace mind DB from cache before deletion
   const closeWorkspaceMind = (workspaceId: string): void => {
-    const wsDb = workspaceMindCache.get(workspaceId);
-    if (wsDb) {
-      try { wsDb.close(); } catch { /* already closed or never opened */ }
-      workspaceMindCache.delete(workspaceId);
-    }
-    // If this was the active workspace, clear it
+    mindCache.close(workspaceId);
     if (activeWorkspaceId === workspaceId) {
       orchestrator.clearWorkspaceMind();
       activeWorkspaceId = null;
@@ -1054,17 +1043,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   };
 
   const getWorkspaceMindDb = (workspaceId: string): MindDB | null => {
-    let wsDb = workspaceMindCache.get(workspaceId);
-    if (wsDb) return wsDb;
-    const mindPath = wsManager.getMindPath(workspaceId);
-    if (!mindPath) return null;
-    try {
-      wsDb = new MindDB(mindPath);
-      workspaceMindCache.set(workspaceId, wsDb);
-      return wsDb;
-    } catch {
-      return null;
-    }
+    return mindCache.getOrOpen(workspaceId);
   };
 
   // Decorate with shared agent state
@@ -1086,6 +1065,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     activateWorkspaceMind: activateWorkspaceMindWithWeaver,
     getWorkspaceMindDb,
     closeWorkspaceMind,
+    listWorkspaces: () => wsManager.list().map(w => ({ id: w.id, name: w.name })),
     activeWorkspaceId,
     weaverState,
     workspaceWeaverStatus,
@@ -2007,11 +1987,8 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
     // Close all workspace sessions (new concurrent model)
     sessionManager.closeAll();
 
-    // Close all cached workspace minds (legacy)
-    for (const [, wsDb] of workspaceMindCache) {
-      try { wsDb.close(); } catch { /* already closed */ }
-    }
-    workspaceMindCache.clear();
+    // Close all cached workspace minds
+    mindCache.closeAll();
     multiMind.close();
 
     // Close audit DB, teams DB, and telemetry

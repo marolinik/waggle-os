@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
-import type { SearchScope, Importance } from '@waggle/core';
+import type { SearchScope, Importance, MemoryFrame } from '@waggle/core';
 import { FrameStore, SessionStore, KnowledgeGraph } from '@waggle/core';
 import { extractEntities } from '@waggle/agent';
 import { emitAuditEvent } from './events.js';
@@ -52,6 +52,8 @@ function normalizeFrame(raw: Record<string, unknown>): Record<string, unknown> {
     // I3: Team attribution (present for synced frames)
     ...(raw.author_id || raw.authorId ? { authorId: raw.author_id ?? raw.authorId } : {}),
     ...(raw.author_name || raw.authorName ? { authorName: raw.author_name ?? raw.authorName } : {}),
+    // Global search: which workspace this frame belongs to
+    ...(raw._workspace_name ? { workspaceName: raw._workspace_name } : {}),
   };
 }
 
@@ -70,7 +72,49 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
     }
   }
 
-  // GET /api/memory/search?q=query&scope=all&workspace=wsId&since=ISO&until=ISO
+  function searchAllWorkspaces(srv: typeof server, query: string, limit: number): Array<MemoryFrame & { source?: string; _mind?: string; _workspace_name?: string }> {
+    const results: Array<MemoryFrame & { source?: string; _mind?: string; _workspace_name?: string }> = [];
+
+    // Search personal mind
+    const personalResults = srv.multiMind.search(query, 'personal', limit);
+    for (const r of personalResults) {
+      results.push({ ...r, _mind: 'personal' });
+    }
+
+    // Search each workspace mind via the cache
+    const workspaces = srv.agentState.listWorkspaces?.() ?? [];
+    for (const ws of workspaces) {
+      const wsDb = srv.agentState.getWorkspaceMindDb(ws.id);
+      if (!wsDb) continue;
+      try {
+        const db = wsDb.getDatabase();
+        const FTS_STOP_WORDS = new Set(['the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'to', 'of', 'in', 'for', 'on', 'with', 'at', 'by', 'from', 'as', 'this', 'that', 'it', 'its', 'and', 'or', 'but', 'not']);
+        const safeQuery = query
+          .split(/\s+/)
+          .map(w => w.replace(/[^\w]/g, ''))
+          .filter(w => w.length > 2 && !FTS_STOP_WORDS.has(w.toLowerCase()))
+          .map(w => `"${w.replace(/"/g, '')}"`)
+          .join(' OR ');
+        if (!safeQuery) continue;
+
+        const rows = db.prepare(`
+          SELECT mf.* FROM memory_frames_fts fts
+          JOIN memory_frames mf ON mf.id = fts.rowid
+          WHERE fts.content MATCH ?
+          ORDER BY rank LIMIT ?
+        `).all(safeQuery, Math.ceil(limit / 2)) as MemoryFrame[];
+
+        for (const r of rows) {
+          results.push({ ...r, _mind: 'workspace', _workspace_name: ws.name });
+        }
+      } catch { /* skip inaccessible workspace */ }
+    }
+
+    results.sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''));
+    return results.slice(0, limit);
+  }
+
+  // GET /api/memory/search?q=query&scope=all|global&workspace=wsId&since=ISO&until=ISO
   server.get<{
     Querystring: { q?: string; scope?: string; limit?: string; workspace?: string; workspaceId?: string; since?: string; until?: string };
   }>('/api/memory/search', async (request, reply) => {
@@ -81,8 +125,8 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
       return reply.status(400).send({ error: 'q (query) parameter is required' });
     }
 
-    const searchScope = (scope === 'personal' || scope === 'workspace' || scope === 'all')
-      ? scope as SearchScope
+    const searchScope = (scope === 'personal' || scope === 'workspace' || scope === 'all' || scope === 'global')
+      ? scope
       : 'all';
 
     // Ensure workspace mind is loaded for workspace/all scope searches
@@ -91,7 +135,14 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
     }
 
     const maxResults = limit ? parseInt(limit, 10) : 20;
-    let rawResults = server.multiMind.search(q, searchScope, maxResults);
+
+    let rawResults: Array<MemoryFrame & { source?: string }>;
+
+    if (searchScope === 'global') {
+      rawResults = searchAllWorkspaces(server, q, maxResults);
+    } else {
+      rawResults = server.multiMind.search(q, searchScope as SearchScope, maxResults);
+    }
 
     // F20: Temporal filtering — filter by since/until ISO date strings
     if (since || until) {
