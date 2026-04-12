@@ -107,6 +107,16 @@ const Desktop = () => {
   const waggleUnacknowledged = waggleSignals.filter(s => !s.acknowledged).length;
   const currentTier: UserTier = onboardingState.tier || 'simple';
 
+  // Theme reactivity — watch for data-theme mutations on <html>
+  const [theme, setTheme] = useState(() => document.documentElement.getAttribute('data-theme') ?? 'dark');
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setTheme(document.documentElement.getAttribute('data-theme') ?? 'dark');
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
+
   // Trial info from backend
   const [trialInfo, setTrialInfo] = useState<{ trialDaysRemaining?: number; trialExpired?: boolean }>({});
   const [showTrialExpired, setShowTrialExpired] = useState(false);
@@ -268,7 +278,7 @@ const Desktop = () => {
 
   return (
     <div className="relative w-screen h-screen overflow-hidden select-none">
-      <img src={document.documentElement.getAttribute('data-theme') === 'light' ? wallpaperLight : wallpaperDark} alt="" className="absolute inset-0 w-full h-full object-cover" width={1920} height={1080} />
+      <img src={theme === 'light' ? wallpaperLight : wallpaperDark} alt="" className="absolute inset-0 w-full h-full object-cover" width={1920} height={1080} />
       <div className="absolute inset-0 desktop-overlay" />
 
       {/* Desktop logo hero */}

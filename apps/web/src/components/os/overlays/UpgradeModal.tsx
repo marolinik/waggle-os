@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Zap, X, Check, Crown, Users } from 'lucide-react';
+import { TIER_CAPABILITIES } from '@waggle/shared/src/tiers';
 
 interface TierEvent {
   required: string;
@@ -8,17 +9,31 @@ interface TierEvent {
   message: string;
 }
 
-const TIER_FEATURES = [
-  { feature: 'Workspaces', free: '5', pro: 'Unlimited', teams: 'Unlimited' },
-  { feature: 'Agents', free: 'Yes', pro: 'Yes', teams: 'Yes' },
-  { feature: 'Memory & Harvest', free: 'Unlimited', pro: 'Unlimited', teams: 'Unlimited' },
-  { feature: 'Connectors', free: '5', pro: 'Unlimited', teams: 'Unlimited' },
-  { feature: 'Custom Skills', free: '—', pro: 'Yes', teams: 'Yes' },
-  { feature: 'Export Formats', free: 'txt, md', pro: 'All (+ PDF)', teams: 'All (+ PDF)' },
-  { feature: 'Shared Workspaces', free: '—', pro: '—', teams: 'Yes' },
-  { feature: 'Team Governance', free: '—', pro: '—', teams: 'Yes' },
-  { feature: 'Audit Log', free: '—', pro: 'Basic', teams: 'Full' },
+type CapKey = keyof typeof TIER_CAPABILITIES.FREE;
+
+const FEATURE_ROWS: Array<{ label: string; key: CapKey; format: (v: unknown) => string }> = [
+  { label: 'Workspaces', key: 'workspaceLimit', format: v => (v as number) === -1 ? 'Unlimited' : String(v) },
+  { label: 'Agents', key: 'spawnAgents', format: v => v ? 'Yes' : '—' },
+  { label: 'Connectors', key: 'connectorLimit', format: v => (v as number) === -1 ? 'Unlimited' : String(v) },
+  { label: 'Custom Skills', key: 'customSkills', format: v => v ? 'Yes' : '—' },
+  { label: 'Export Formats', key: 'exportFormats', format: v => {
+    const fmts = v as string[];
+    if (fmts.length <= 2) return fmts.join(', ');
+    return `All (${fmts.length})`;
+  }},
+  { label: 'Shared Workspaces', key: 'sharedWorkspaces', format: v => v ? 'Yes' : '—' },
+  { label: 'Team Governance', key: 'adminPanel', format: v => v ? 'Yes' : '—' },
+  { label: 'Audit Log', key: 'auditLog', format: v => {
+    if (v === 'none') return '—';
+    return String(v).charAt(0).toUpperCase() + String(v).slice(1);
+  }},
 ];
+
+function CellValue({ value, isBool }: { value: string; isBool: boolean }) {
+  if (value === 'Yes' && isBool) return <Check className="w-4 h-4 text-primary mx-auto" />;
+  if (value === '—') return <span className="text-muted-foreground/40">—</span>;
+  return <span className="text-foreground">{value}</span>;
+}
 
 interface UpgradeModalProps {
   onStartTrial?: () => void;
@@ -38,6 +53,10 @@ export default function UpgradeModal({ onStartTrial, onUpgrade }: UpgradeModalPr
   }, [handleTierInsufficient]);
 
   const close = () => setEvent(null);
+
+  const free = TIER_CAPABILITIES.FREE;
+  const pro = TIER_CAPABILITIES.PRO;
+  const teams = TIER_CAPABILITIES.TEAMS;
 
   return (
     <AnimatePresence>
@@ -95,22 +114,27 @@ export default function UpgradeModal({ onStartTrial, onUpgrade }: UpgradeModalPr
                     </tr>
                   </thead>
                   <tbody>
-                    {TIER_FEATURES.map(row => (
-                      <tr key={row.feature} className="border-b border-border/30 last:border-0">
-                        <td className="p-3 text-foreground">{row.feature}</td>
-                        <td className="p-3 text-center text-muted-foreground">{row.free}</td>
-                        <td className="p-3 text-center">
-                          {row.pro === 'Yes' ? <Check className="w-4 h-4 text-primary mx-auto" /> :
-                           row.pro === '—' ? <span className="text-muted-foreground/40">—</span> :
-                           <span className="text-foreground">{row.pro}</span>}
-                        </td>
-                        <td className="p-3 text-center">
-                          {row.teams === 'Yes' ? <Check className="w-4 h-4 text-primary mx-auto" /> :
-                           row.teams === '—' ? <span className="text-muted-foreground/40">—</span> :
-                           <span className="text-foreground">{row.teams}</span>}
-                        </td>
-                      </tr>
-                    ))}
+                    {FEATURE_ROWS.map(row => {
+                      const freeVal = row.format(free[row.key]);
+                      const proVal = row.format(pro[row.key]);
+                      const teamsVal = row.format(teams[row.key]);
+                      const isBool = typeof free[row.key] === 'boolean';
+                      return (
+                        <tr key={row.key} className="border-b border-border/30 last:border-0">
+                          <td className="p-3 text-foreground">{row.label}</td>
+                          <td className="p-3 text-center text-muted-foreground">{freeVal}</td>
+                          <td className="p-3 text-center"><CellValue value={proVal} isBool={isBool} /></td>
+                          <td className="p-3 text-center"><CellValue value={teamsVal} isBool={isBool} /></td>
+                        </tr>
+                      );
+                    })}
+                    {/* Memory row — always free, hardcoded as marketing highlight */}
+                    <tr className="border-b border-border/30 last:border-0">
+                      <td className="p-3 text-foreground">Memory & Harvest</td>
+                      <td className="p-3 text-center text-muted-foreground">Unlimited</td>
+                      <td className="p-3 text-center"><span className="text-foreground">Unlimited</span></td>
+                      <td className="p-3 text-center"><span className="text-foreground">Unlimited</span></td>
+                    </tr>
                   </tbody>
                 </table>
               </div>
