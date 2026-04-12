@@ -355,6 +355,27 @@ class LocalAdapter {
     }
   }
 
+  async getLocalInferenceHardware(): Promise<{ hardware: Record<string, unknown>; source: string }> {
+    const res = await this.fetch('/api/local-inference/hardware');
+    return res.json();
+  }
+
+  async getLocalInferenceModels(useCase?: string): Promise<{ models: Array<Record<string, unknown>>; source: string }> {
+    const url = useCase ? `/api/local-inference/models?useCase=${encodeURIComponent(useCase)}` : '/api/local-inference/models';
+    const res = await this.fetch(url);
+    return res.json();
+  }
+
+  async getLocalInferenceStatus(): Promise<{ servers: Array<Record<string, unknown>>; ollamaInstalled: boolean; totalLocalModels: number }> {
+    const res = await this.fetch('/api/local-inference/status');
+    return res.json();
+  }
+
+  async pullLocalModel(model: string): Promise<{ ok: boolean }> {
+    const res = await this.fetch('/api/local-inference/pull', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model }) });
+    return res.json();
+  }
+
   async getKnowledgeGraph(workspaceId: string, scope?: 'current' | 'personal' | 'all'): Promise<{ nodes: KGNode[]; edges: KGEdge[] }> {
     const params = new URLSearchParams();
     if (scope === 'all') {
