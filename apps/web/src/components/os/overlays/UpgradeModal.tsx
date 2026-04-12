@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Zap, X, Check, Crown, Users } from 'lucide-react';
-import { TIER_CAPABILITIES } from '@waggle/shared/src/tiers';
+import { TIER_CAPABILITIES } from '@waggle/shared';
 
 interface TierEvent {
   required: string;
