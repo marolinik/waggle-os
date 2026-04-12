@@ -251,7 +251,7 @@ function FolderPickerModal({ open, storageType, currentPath, onSelect, onClose }
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="fixed inset-0 z-[110] flex items-center justify-center" onClick={onClose}>
-      <div className="absolute inset-0 bg-background/40 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
       <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 10 }}
         className="relative w-full max-w-sm glass-strong rounded-2xl shadow-2xl overflow-hidden"
@@ -428,7 +428,7 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="fixed inset-0 z-[110] flex items-center justify-center" onClick={onClose}>
-      <div className="absolute inset-0 bg-background/40 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
       <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 10 }}
         className="relative w-full max-w-lg glass-strong rounded-2xl shadow-2xl overflow-hidden"
@@ -681,7 +681,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
       <AnimatePresence>
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           className="fixed inset-0 z-[100] flex items-center justify-center" onClick={onClose}>
-          <div className="absolute inset-0 bg-background/60 backdrop-blur-sm" />
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             className="relative w-full max-w-sm glass-strong rounded-2xl shadow-2xl overflow-hidden"
@@ -701,7 +701,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="fixed inset-0 z-[100] flex items-center justify-center" onClick={onClose}>
-        <div className="absolute inset-0 bg-background/60 backdrop-blur-sm" />
+        <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
         <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
           className="relative w-full max-w-md glass-strong rounded-2xl shadow-2xl p-6 max-h-[85vh] overflow-y-auto"

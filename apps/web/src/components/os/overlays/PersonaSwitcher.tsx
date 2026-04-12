@@ -117,7 +117,7 @@ const PersonaSwitcher = ({ open, onClose, currentPersona, currentGroupId, onSele
         className="fixed inset-0 z-[100] flex items-center justify-center"
         onClick={onClose}
       >
-        <div className="absolute inset-0 bg-background/60 backdrop-blur-sm" />
+        <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}

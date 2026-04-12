@@ -26,7 +26,7 @@ const NotificationInbox = ({ open, onClose, notifications, onMarkRead, onMarkAll
         className="fixed inset-0 z-[100]"
         onClick={onClose}
       >
-        <div className="absolute inset-0 bg-background/40 backdrop-blur-sm" />
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
         <motion.div
           initial={{ opacity: 0, x: 20, y: -10 }}
           animate={{ opacity: 1, x: 0, y: 0 }}

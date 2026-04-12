@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   MessageSquare, LayoutDashboard, Settings, Brain,
@@ -7,7 +7,8 @@ import {
 } from "lucide-react";
 import type { UserTier } from "@/lib/dock-tiers";
 import type { AppId } from "@/lib/dock-tiers";
-import wallpaper from "@/assets/wallpaper.jpg";
+import wallpaperDark from "@/assets/wallpaper.jpg";
+import wallpaperLight from "@/assets/wallpaper-light.jpg";
 import waggleLogo from "@/assets/waggle-logo.jpeg";
 import StatusBar from "./StatusBar";
 import Dock from "./Dock";
@@ -32,6 +33,10 @@ import MarketplaceApp from "./apps/MarketplaceApp";
 import VoiceApp from "./apps/VoiceApp";
 import RoomApp from "./apps/RoomApp";
 import ApprovalsApp from "./apps/ApprovalsApp";
+import TimelineApp from "./apps/TimelineApp";
+import BackupApp from "./apps/BackupApp";
+import TelemetryApp from "./apps/TelemetryApp";
+import TeamGovernanceApp from "./apps/TeamGovernanceApp";
 import GlobalSearch from "./overlays/GlobalSearch";
 import CreateWorkspaceDialog from "./overlays/CreateWorkspaceDialog";
 import PersonaSwitcher from "./overlays/PersonaSwitcher";
@@ -42,6 +47,9 @@ import KeyboardShortcutsHelp from "./overlays/KeyboardShortcutsHelp";
 import OnboardingWizard from "./overlays/OnboardingWizard";
 import OnboardingTooltips from "./overlays/OnboardingTooltips";
 import LoginBriefing from "./overlays/LoginBriefing";
+import ContextRail from "./overlays/ContextRail";
+import type { ContextRailTarget } from "./overlays/ContextRail";
+import UpgradeModal from "./overlays/UpgradeModal";
 import { adapter } from "@/lib/adapter";
 import { getSavedPosition } from "@/lib/window-positions";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
@@ -78,6 +86,10 @@ const appConfig: Record<string, { title: string; icon: React.ReactNode; pos: { x
   "voice": { title: "Voice", icon: <Mic className="w-3.5 h-3.5 text-rose-400" />, pos: { x: 300, y: 90 }, size: { w: "480px", h: "400px" } },
   "room": { title: "Room", icon: <Users className="w-3.5 h-3.5 text-violet-400" />, pos: { x: 260, y: 75 }, size: { w: "640px", h: "520px" } },
   "approvals": { title: "Approvals", icon: <Shield className="w-3.5 h-3.5 text-amber-400" />, pos: { x: 280, y: 85 }, size: { w: "520px", h: "560px" } },
+  "timeline": { title: "Timeline", icon: <Clock className="w-3.5 h-3.5 text-cyan-400" />, pos: { x: 240, y: 70 }, size: { w: "520px", h: "560px" } },
+  "backup": { title: "Backup & Restore", icon: <Activity className="w-3.5 h-3.5 text-emerald-400" />, pos: { x: 200, y: 80 }, size: { w: "520px", h: "480px" } },
+  "telemetry": { title: "Usage & Telemetry", icon: <Activity className="w-3.5 h-3.5 text-sky-400" />, pos: { x: 220, y: 60 }, size: { w: "560px", h: "500px" } },
+  "governance": { title: "Team Governance", icon: <Shield className="w-3.5 h-3.5 text-violet-400" />, pos: { x: 260, y: 90 }, size: { w: "480px", h: "520px" } },
 };
 
 const Desktop = () => {
@@ -94,6 +106,14 @@ const Desktop = () => {
   const waggleUnacknowledged = waggleSignals.filter(s => !s.acknowledged).length;
   const currentTier: UserTier = onboardingState.tier || 'simple';
 
+  // Trial info from backend
+  const [trialInfo, setTrialInfo] = useState<{ trialDaysRemaining?: number; trialExpired?: boolean }>({});
+  useEffect(() => {
+    adapter.getTier().then(data => {
+      setTrialInfo({ trialDaysRemaining: data.trialDaysRemaining, trialExpired: data.trialExpired });
+    }).catch(() => {});
+  }, []);
+
   // Window management (extracted hook)
   const wm = useWindowManager(workspaces);
 
@@ -104,6 +124,9 @@ const Desktop = () => {
 
   // Overlay state (extracted hook)
   const ov = useOverlayState();
+
+  // Phase C.1: Context Rail — right panel showing all context for a clicked item
+  const [contextRailTarget, setContextRailTarget] = useState<ContextRailTarget | null>(null);
 
   // Phase A.3 / bug #7: open a new chat window on the current workspace.
   // Passes the active workspace's persona as a personaOverride, which is
@@ -163,6 +186,7 @@ const Desktop = () => {
             workspaceId={wsId}
             workspaceName={win.workspaceName}
             templateId={ws?.templateId}
+            storageType={ws?.storageType}
             initialPersona={win.personaId}
             onPersonaChange={(personaId) => wm.setWindowPersona(win.instanceId, personaId)}
             autonomyLevel={win.autonomyLevel ?? 'normal'}
@@ -188,7 +212,8 @@ const Desktop = () => {
             onDeleteFrame={memory.deleteFrame} loading={memory.loading} stats={memory.stats}
             typeFilters={memory.filters.types} onTypeFiltersChange={(types) => memory.setFilters({ ...memory.filters, types })}
             minImportance={memory.filters.minImportance} onMinImportanceChange={(val) => memory.setFilters({ ...memory.filters, minImportance: val })}
-            knowledgeGraph={{ nodes: kg.nodes, edges: kg.edges }} onRefreshKG={kg.refresh} />
+            knowledgeGraph={{ nodes: kg.nodes, edges: kg.edges }} onRefreshKG={kg.refresh}
+            onContextRail={(target) => setContextRailTarget({ ...target, workspaceId: activeWorkspaceId ?? undefined })} />
         );
       case 'events':
         return (
@@ -226,32 +251,35 @@ const Desktop = () => {
         return <RoomApp workspaceNames={wsNames} />;
       }
       case 'approvals': return <ApprovalsApp />;
+      case 'timeline': return <TimelineApp workspaceId={activeWorkspaceId ?? undefined} workspaceName={activeWorkspace?.name} />;
+      case 'backup': return <BackupApp />;
+      case 'telemetry': return <TelemetryApp />;
+      case 'governance': return <TeamGovernanceApp />;
       default: return <div className="p-4 text-sm text-muted-foreground">Coming soon...</div>;
     }
   };
 
   return (
     <div className="relative w-screen h-screen overflow-hidden select-none">
-      <img src={wallpaper} alt="" className="absolute inset-0 w-full h-full object-cover" width={1920} height={1080} />
-      <div className="absolute inset-0 bg-background/20" />
+      <img src={document.documentElement.getAttribute('data-theme') === 'light' ? wallpaperLight : wallpaperDark} alt="" className="absolute inset-0 w-full h-full object-cover" width={1920} height={1080} />
+      <div className="absolute inset-0 desktop-overlay" />
 
       {/* Desktop logo hero */}
       {wm.windows.length === 0 && (
         <div className="absolute inset-0 flex flex-col items-center pointer-events-none z-[1]" style={{ paddingTop: "3vh" }}>
           <div className="relative w-40 h-40">
-            <img src={waggleLogo} alt="Waggle AI" className="w-40 h-40 mix-blend-screen"
+            <img src={waggleLogo} alt="Waggle AI" className="w-40 h-40"
               style={{ borderRadius: 0, background: "transparent",
                 maskImage: "radial-gradient(circle, rgba(0,0,0,0.8) 30%, rgba(0,0,0,0.3) 60%, transparent 80%)",
                 WebkitMaskImage: "radial-gradient(circle, rgba(0,0,0,0.8) 30%, rgba(0,0,0,0.3) 60%, transparent 80%)" }} />
           </div>
           <motion.h1 initial={{ opacity: 0, y: 14, letterSpacing: "0.35em" }} animate={{ opacity: 1, y: 0, letterSpacing: "0.15em" }}
-            transition={{ delay: 0.4, duration: 0.9, ease: "easeOut" }} className="mt-4 text-6xl font-display font-bold tracking-widest"
-            style={{ color: "hsl(40, 15%, 92%)", textShadow: "0 0 40px hsl(var(--primary) / 0.2), 0 2px 4px hsl(0 0% 0% / 0.8)" }}>
+            transition={{ delay: 0.4, duration: 0.9, ease: "easeOut" }} className="mt-4 text-6xl font-display font-bold tracking-widest text-foreground"
+            style={{ textShadow: "0 0 40px hsl(var(--primary) / 0.2)" }}>
             Waggle AI
           </motion.h1>
           <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 0.9, y: 0 }} transition={{ delay: 0.7, duration: 0.7 }}
-            className="text-sm font-display mt-2 tracking-[0.3em] uppercase"
-            style={{ color: "hsl(38, 50%, 65%)", textShadow: "0 1px 4px hsl(0 0% 0% / 0.8)" }}>
+            className="text-sm font-display mt-2 tracking-[0.3em] uppercase text-primary">
             Autonomous Agent OS
           </motion.p>
           <motion.div initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ delay: 0.95, duration: 0.8, ease: "easeOut" }}
@@ -279,6 +307,7 @@ const Desktop = () => {
         model={agentStatus.model !== 'unknown' ? agentStatus.model : activeWorkspace?.model}
         tokensUsed={agentStatus.tokensUsed} costUsd={agentStatus.costUsd} offline={offline}
         unreadNotifications={unreadCount}
+        trialDaysRemaining={trialInfo.trialDaysRemaining} trialExpired={trialInfo.trialExpired}
         onSearchClick={() => ov.setShowGlobalSearch(true)} onNotificationClick={ov.toggleNotifications} />
 
       <AnimatePresence>
@@ -351,6 +380,20 @@ const Desktop = () => {
         <LoginBriefing onDismiss={() => ov.setShowLoginBriefing(false)}
           onOpenWorkspace={(wsId) => { selectWorkspace(wsId); wm.openChatForWorkspace(wsId); ov.setShowLoginBriefing(false); }} />
       )}
+
+      {/* Phase C.1: Context Rail */}
+      <ContextRail target={contextRailTarget} onClose={() => setContextRailTarget(null)} />
+
+      <UpgradeModal
+        onStartTrial={() => {
+          adapter.updateSettings({ tier: 'TRIAL', trialStartedAt: new Date().toISOString() } as any).catch(() => {});
+        }}
+        onUpgrade={(tier) => {
+          adapter.createCheckoutSession(tier === 'TEAMS' ? 'TEAMS' : 'PRO').catch(() => {
+            wm.open('settings');
+          });
+        }}
+      />
     </div>
   );
 };

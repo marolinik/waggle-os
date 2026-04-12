@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Search, MessageSquare, Brain, Clock, Settings, Loader2,
   LayoutDashboard, Bot, FolderOpen, Activity, Package, Plug,
-  Store, Mic, Sparkles,
+  Store, Mic, Sparkles, Shield, Users, FileText,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { fuzzyMatch } from '@/lib/fuzzy-match';
 
 /* ── Types ── */
-type SearchCategory = 'command' | 'workspace' | 'memory' | 'session';
+type SearchCategory = 'command' | 'workspace' | 'memory' | 'session' | 'skill';
 
 interface SearchResult {
   id: string;
@@ -19,6 +19,7 @@ interface SearchResult {
   subtitle?: string;
   icon: React.ElementType;
   score: number;
+  badge?: string;
 }
 
 interface GlobalSearchProps {
@@ -40,6 +41,9 @@ const COMMANDS: SearchResult[] = [
   { category: 'command', id: 'scheduled-jobs', title: 'Scheduled Jobs', subtitle: 'Recurring tasks', icon: Clock, score: 0 },
   { category: 'command', id: 'marketplace', title: 'Marketplace', subtitle: 'Browse extensions', icon: Store, score: 0 },
   { category: 'command', id: 'voice', title: 'Voice', subtitle: 'Voice interface', icon: Mic, score: 0 },
+  { category: 'command', id: 'room', title: 'Room', subtitle: 'Sub-agent canvas', icon: Users, score: 0 },
+  { category: 'command', id: 'approvals', title: 'Approvals', subtitle: 'Pending approvals', icon: Shield, score: 0 },
+  { category: 'command', id: 'timeline', title: 'Timeline', subtitle: 'Workspace activity history', icon: Clock, score: 0 },
   { category: 'command', id: 'settings', title: 'Settings', subtitle: 'Configuration', icon: Settings, score: 0 },
 ];
 
@@ -49,21 +53,24 @@ const CATEGORY_LABELS: Record<SearchCategory, string> = {
   workspace: 'Workspaces',
   memory: 'Memories',
   session: 'Recent Sessions',
+  skill: 'Skills',
 };
 
-const CATEGORY_ORDER: SearchCategory[] = ['command', 'workspace', 'memory', 'session'];
+const CATEGORY_ORDER: SearchCategory[] = ['command', 'workspace', 'session', 'memory', 'skill'];
 
 /* ── Component ── */
 const GlobalSearch = ({ open, onClose, onNavigate }: GlobalSearchProps) => {
   const [query, setQuery] = useState('');
   const [workspaces, setWorkspaces] = useState<SearchResult[]>([]);
+  const [sessions, setSessions] = useState<SearchResult[]>([]);
+  const [skills, setSkills] = useState<SearchResult[]>([]);
   const [memoryResults, setMemoryResults] = useState<SearchResult[]>([]);
   const [memoryLoading, setMemoryLoading] = useState(false);
   const [selected, setSelected] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // Pre-fetch workspaces on open
+  // Pre-fetch workspaces, sessions, and skills on open
   useEffect(() => {
     if (!open) return;
     setQuery('');
@@ -71,13 +78,44 @@ const GlobalSearch = ({ open, onClose, onNavigate }: GlobalSearchProps) => {
     setSelected(0);
     setTimeout(() => inputRef.current?.focus(), 50);
 
-    adapter.getWorkspaces().then(wsList => {
+    adapter.getWorkspaces().then(async wsList => {
       setWorkspaces(wsList.map(w => ({
         id: w.id,
         category: 'workspace' as const,
         title: w.name,
         subtitle: w.group,
         icon: Sparkles,
+        score: 0,
+      })));
+
+      // Fetch recent sessions across all workspaces
+      const allSessions: SearchResult[] = [];
+      for (const ws of wsList.slice(0, 5)) {
+        try {
+          const wsSessions = await adapter.getSessions(ws.id);
+          for (const s of wsSessions.slice(0, 3)) {
+            allSessions.push({
+              id: `${ws.id}:${s.id}`,
+              category: 'session' as const,
+              title: s.title || `Session ${s.id.slice(0, 8)}`,
+              subtitle: ws.name,
+              icon: MessageSquare,
+              score: 0,
+              badge: ws.name,
+            });
+          }
+        } catch { /* skip */ }
+      }
+      setSessions(allSessions);
+    }).catch(() => {});
+
+    adapter.getSkills().then(skillsList => {
+      setSkills(skillsList.slice(0, 20).map(s => ({
+        id: s.id ?? s.name,
+        category: 'skill' as const,
+        title: s.name,
+        subtitle: s.description?.slice(0, 60),
+        icon: Package,
         score: 0,
       })));
     }).catch(() => {});
@@ -115,32 +153,27 @@ const GlobalSearch = ({ open, onClose, onNavigate }: GlobalSearchProps) => {
   const { flatItems, sections } = useMemo(() => {
     const q = query.trim();
     const grouped: Record<SearchCategory, SearchResult[]> = {
-      command: [], workspace: [], memory: [], session: [],
+      command: [], workspace: [], memory: [], session: [], skill: [],
     };
 
-    // Filter commands
-    if (q) {
-      for (const cmd of COMMANDS) {
-        const r = fuzzyMatch(q, cmd.title + ' ' + (cmd.subtitle ?? ''));
-        if (r.match) grouped.command.push({ ...cmd, score: r.score });
+    const matchAndSort = (items: SearchResult[], target: SearchCategory) => {
+      if (q) {
+        for (const item of items) {
+          const r = fuzzyMatch(q, item.title + ' ' + (item.subtitle ?? '') + ' ' + (item.badge ?? ''));
+          if (r.match) grouped[target].push({ ...item, score: r.score });
+        }
+        grouped[target].sort((a, b) => b.score - a.score);
+      } else {
+        grouped[target] = [...items];
       }
-      grouped.command.sort((a, b) => b.score - a.score);
-    } else {
-      grouped.command = [...COMMANDS];
-    }
+    };
 
-    // Filter workspaces
-    if (q) {
-      for (const ws of workspaces) {
-        const r = fuzzyMatch(q, ws.title + ' ' + (ws.subtitle ?? ''));
-        if (r.match) grouped.workspace.push({ ...ws, score: r.score });
-      }
-      grouped.workspace.sort((a, b) => b.score - a.score);
-    } else {
-      grouped.workspace = [...workspaces];
-    }
+    matchAndSort(COMMANDS, 'command');
+    matchAndSort(workspaces, 'workspace');
+    matchAndSort(sessions, 'session');
+    matchAndSort(skills, 'skill');
 
-    // Memory results from API
+    // Memory results from API (already filtered server-side)
     grouped.memory = memoryResults;
 
     // Build flat list + section metadata
@@ -155,7 +188,7 @@ const GlobalSearch = ({ open, onClose, onNavigate }: GlobalSearchProps) => {
     }
 
     return { flatItems: flat, sections: secs };
-  }, [query, workspaces, memoryResults]);
+  }, [query, workspaces, sessions, skills, memoryResults]);
 
   // Clamp selection when results change
   useEffect(() => {
@@ -198,7 +231,7 @@ const GlobalSearch = ({ open, onClose, onNavigate }: GlobalSearchProps) => {
         className="fixed inset-0 z-[100] flex items-start justify-center pt-[15vh]"
         onClick={onClose}
       >
-        <div className="absolute inset-0 bg-background/60 backdrop-blur-sm" />
+        <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
         <motion.div
           initial={{ opacity: 0, y: -20, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -215,7 +248,7 @@ const GlobalSearch = ({ open, onClose, onNavigate }: GlobalSearchProps) => {
               value={query}
               onChange={e => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Search workspaces, memories, commands..."
+              placeholder="Search everything — workspaces, memories, sessions, skills..."
               className="flex-1 bg-transparent text-sm border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0"
             />
             {memoryLoading && <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'var(--honey-500)' }} />}
@@ -265,6 +298,12 @@ const GlobalSearch = ({ open, onClose, onNavigate }: GlobalSearchProps) => {
                           <span className="text-xs truncate block" style={{ color: 'var(--hive-400)' }}>{item.subtitle}</span>
                         )}
                       </div>
+                      {item.badge && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full shrink-0"
+                          style={{ backgroundColor: 'var(--hive-800)', color: 'var(--honey-500)' }}>
+                          {item.badge}
+                        </span>
+                      )}
                       <span className="text-[11px] capitalize shrink-0" style={{ color: 'var(--hive-500)' }}>{item.category}</span>
                     </button>
                   );
