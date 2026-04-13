@@ -24,6 +24,7 @@ export { scanForInjection, type ScanResult } from './injection-scanner.js';
 export { CostTracker, DEFAULT_MODEL_PRICING, type ModelPricing, type UsageStats, type UsageEntry } from './cost-tracker.js';
 export { extractEntities, type ExtractedEntity } from './entity-extractor.js';
 export { CognifyPipeline, type CognifyConfig, type CognifyResult } from './cognify.js';
+export { AgentLearning, type LearnedBehavior, type PersonaEffectiveness, type LearningSnapshot } from './agent-learning.js';
 export { FeedbackHandler } from './feedback-handler.js';
 export { checkResponseQuality, type QualityIssue } from './quality-controller.js';
 export { HookRegistry, type HookEvent, type HookContext, type HookResult, type HookActivityEntry, type HookFn } from './hooks.js';
