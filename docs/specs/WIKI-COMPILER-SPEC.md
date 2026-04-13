@@ -1,0 +1,802 @@
+# Wiki Compiler: Waggle x Karpathy Synthesis Engine
+
+**Status:** Spec Draft
+**Author:** Marko Markovic / Egzakta Group
+**Date:** 2026-04-13
+**Codename:** Hive Mind Compiler (HMC)
+
+---
+
+## 1. Executive Summary
+
+Andrej Karpathy published the LLM Wiki pattern (April 2026) — a system where
+LLMs incrementally build and maintain a persistent, interlinked markdown wiki
+from raw sources. Within days it amassed massive community adoption, with
+GBrain (Garry Tan / YC, 5,400 stars in 24 hours), Rowboat, Basic Memory,
+and dozens of implementations following.
+
+**The thesis of this document:** Karpathy's wiki is the READ side of personal
+knowledge. Waggle's memory engine is the WRITE side. Neither is complete alone.
+Combined, they create the first full-cycle personal knowledge OS — a system
+where AI agents automatically accumulate structured memory AND compile it into
+a human-readable, interlinked, compounding wiki.
+
+**Dual-track delivery:**
+1. **Waggle Feature** — Wiki Compiler as a native workspace capability
+2. **Open-Source Product** — Standalone "Hive Mind" MCP server + CLI
+
+---
+
+## 2. Strategic Context
+
+### 2.1 Why This Matters for Waggle
+
+Waggle's memory engine (FrameStore + HybridSearch + KnowledgeGraph + Identity +
+Awareness) is technically superior to every competitor in the space. But it has
+a critical gap: **the memory is invisible to the user.** Frames in SQLite are
+powerful for agents, opaque to humans. Users can't see the state of what they
+know, how ideas connect, what's changed over time.
+
+The wiki compiler layer solves this. It gives users a window into their own
+knowledge — beautiful, browsable, interlinked markdown pages that update
+automatically as memory accumulates. This is the emotional hook that turns
+a technical feature into a product story.
+
+### 2.2 Why This Matters for KVARK
+
+Karpathy's gist explicitly mentions: *"Business/team: an internal wiki
+maintained by LLMs, fed by Slack threads, meeting transcripts, project
+documents."* This is the KVARK enterprise play:
+
+> Your institutional knowledge, automatically compiled from every conversation
+> your people have with AI, into a living wiki that both your agents and your
+> people can read. On your infrastructure, behind your perimeter.
+
+The Teams tier ($49/seat) + shared team memory already exists. The wiki compiler
+turns it into a visible, browsable institutional knowledge base — the thing
+enterprise buyers actually want to show their CFO.
+
+### 2.3 Marketing Hook
+
+The Karpathy signal is enormous. His gist spawned an entire ecosystem in days.
+Launching an open-source product that explicitly extends his thesis with
+production-grade infrastructure (real search, knowledge graph, team sharing,
+multi-workspace) rides this wave with technical credibility.
+
+Positioning: *"Karpathy showed you the pattern. We built the engine."*
+
+---
+
+## 3. Competitive Landscape (April 2026)
+
+| Product | Architecture | Search | KG | Team | Wiki Output | Scale |
+|---------|-------------|--------|----|----|-------------|-------|
+| **Karpathy's LLM Wiki** | Flat markdown files | index.md (breaks ~500 docs) | Backlinks only | No | Yes (IS the wiki) | ~100 sources |
+| **GBrain** (Garry Tan) | Markdown + PGLite/pgvector | Hybrid (pgvector + keyword) | Entity pages (markdown) | No | Compiled truth pages | 10k+ files |
+| **Mem0** | Vector + Graph store | Semantic + entity links | Yes (graph DB) | Cloud only | No | Large |
+| **Hindsight** | Embedded Postgres + pgvector | 4-strategy parallel + reranking | Entity graph | No | No | Medium |
+| **Zep / Graphiti** | Temporal knowledge graph | Entity + temporal queries | Yes (Neo4j/FalkorDB) | Cloud | No | Large |
+| **Cognee** | KG + Vector | Graph + vector combined | Yes (Kuzu) | No | No | Medium |
+| **Basic Memory** | Flat markdown files | MCP-based search | No | No | Yes (IS the store) | Small |
+| **Letta** | Tiered (core/archival/recall) | Agent-managed | No | No | No | Medium |
+| **Rowboat** | Typed MD entities + graph | Multi-source | Yes (typed entities) | No | Briefings | Medium |
+| **Waggle Memory** | SQLite + FTS5 + sqlite-vec | Hybrid (BM25 + vector + RRF) | Yes (typed entities + relations) | Yes (team sync) | **No** | Large |
+
+### Gap Analysis
+
+**Nobody** has all of:
+- Real hybrid search at scale (BM25 + vector + RRF)
+- Typed knowledge graph with confidence scoring
+- Multi-workspace isolation + cross-workspace search
+- Team memory sharing
+- Multi-source harvest (ChatGPT, Claude, Gemini, etc.)
+- Identity + Awareness layers
+- AND a compiled wiki output layer
+
+Waggle has everything except the wiki output. Adding it creates a category of one.
+
+### GBrain: Closest Competitor
+
+GBrain launched 3 days before this spec. It has:
+- Markdown storage + PGLite/pgvector
+- Hybrid search
+- Entity pages (compiled truth + timeline)
+- "Dream cycles" (overnight consolidation)
+- 37 operations, MCP server, CLI, HTTP
+
+But independent code review found that flagship features like compiled truth
+rewriting and dream cycles are **markdown instruction documents** that guide AI
+agents, not executable code. The search is pgvector-only (no FTS5/BM25). No
+team sharing. No workspace isolation. No temporal knowledge graph. No harvest
+pipeline. No awareness/identity layers.
+
+**Waggle's memory engine is genuinely deeper.** The wiki compiler would make
+that visible.
+
+---
+
+## 4. Architecture
+
+### 4.1 Layer Model
+
+```
+                     +----- HUMAN READS -----+
+                     |                        |
+Layer 6:  Wiki       |  Interlinked markdown  |  ← NEW: Wiki Compiler
+          Output     |  Entity/concept/topic  |
+                     |  pages, timelines,     |
+                     |  contradictions, gaps   |
+                     +------------------------+
+                              ↑ compiles from
+                     +------------------------+
+Layer 5:  Agent      |  Behavioral spec,      |  ← Waggle (exists)
+          Intel      |  personas, tool filter  |
+                     +------------------------+
+                              ↑ uses
+                     +------------------------+
+Layer 4:  Knowledge  |  Typed entities,       |  ← Waggle KG (exists)
+          Graph      |  typed relations,      |
+                     |  confidence scores     |
+                     +------------------------+
+                              ↑ extracted from
+                     +------------------------+
+Layer 3:  Indexed    |  FTS5 + sqlite-vec     |  ← Waggle HybridSearch
+          Memory     |  BM25 + vector + RRF   |     (exists)
+                     +------------------------+
+                              ↑ indexes
+                     +------------------------+
+Layer 2:  Raw        |  I/P/B-Frames          |  ← Waggle FrameStore
+          Memory     |  in SQLite             |     (exists)
+                     +------------------------+
+                              ↑ harvested from
+                     +------------------------+
+Layer 1:  Identity   |  Who you are, what     |  ← Waggle Identity +
+          & Context  |  you're doing now      |     Awareness (exists)
+                     +------------------------+
+                              ↑ derived from
+                     +------------------------+
+Layer 0:  Raw        |  Conversations, docs,  |  ← Harvest pipeline
+          Sources    |  exports, PDFs         |     (exists)
+                     +------------------------+
+```
+
+### 4.2 Wiki Compiler Core
+
+The compiler is a new module that reads from Layers 2-4 and writes Layer 6.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    WIKI COMPILER                         │
+│                                                         │
+│  Inputs:                                                │
+│    - FrameStore (all frames, with metadata)             │
+│    - KnowledgeGraph (entities, relations, confidence)   │
+│    - Identity + Awareness (context)                     │
+│    - Previous wiki state (for incremental updates)      │
+│    - Wiki Schema (compilation rules per workspace)      │
+│                                                         │
+│  Process:                                               │
+│    1. Identify what changed since last compilation      │
+│    2. Determine affected pages                          │
+│    3. For each affected page:                           │
+│       a. Gather relevant frames (via HybridSearch)      │
+│       b. Gather related entities (via KG traversal)     │
+│       c. Read current page content (if exists)          │
+│       d. LLM: synthesize/update the page               │
+│       e. LLM: update cross-references                  │
+│       f. Write page with frontmatter + citations        │
+│    4. Update index.md                                   │
+│    5. Update compilation log                            │
+│                                                         │
+│  Outputs:                                               │
+│    - Markdown files (entity pages, concept pages,       │
+│      topic summaries, timeline, contradictions)         │
+│    - index.md (navigable catalog)                       │
+│    - log.md (compilation history)                       │
+│    - health.md (gaps, orphans, stale claims)            │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 4.3 Page Types
+
+| Type | Content | Generated From | Update Trigger |
+|------|---------|---------------|----------------|
+| **Entity page** | Person, project, org, tech — compiled truth + timeline | KG entity + related frames | New frame mentioning entity |
+| **Concept page** | Topic synthesis — what we know, sources, evolution | Frames matching concept + KG relations | New frame on topic |
+| **Overview** | High-level summary of entire workspace knowledge | All frames + KG summary | Periodic / on-demand |
+| **Comparison** | Side-by-side analysis (e.g., Tool A vs Tool B) | Frames mentioning both + KG relations | On-demand or lint |
+| **Timeline** | Chronological evolution of knowledge | All frames ordered by time | Any new frame |
+| **Contradictions** | Claims that conflict across sources | KG confidence + frame comparison | Lint pass |
+| **Gaps** | Topics mentioned but under-documented | KG orphan analysis + frame coverage | Lint pass |
+| **Index** | Catalog of all pages with summaries | All pages | Every compilation |
+
+### 4.4 Page Format
+
+```markdown
+---
+type: entity
+entity_type: project
+name: "Project Alpha"
+confidence: 0.87
+sources: 14
+last_compiled: 2026-04-13T10:30:00Z
+frame_ids: [42, 67, 103, 155, 201, ...]
+related_entities: ["John Smith", "React", "Q2 Launch"]
+---
+
+# Project Alpha
+
+## Summary
+[LLM-generated synthesis of all knowledge about this entity]
+
+## Key Facts
+- **Started:** 2026-02-15 (from frame #42)
+- **Lead:** John Smith (from frame #67, confidence: 0.95)
+- **Stack:** React + Node.js (from frames #103, #155)
+- **Status:** In development, targeting Q2 launch (from frame #201)
+
+## Timeline
+| Date | Event | Source |
+|------|-------|--------|
+| 2026-02-15 | Project initiated | frame #42 |
+| 2026-03-01 | Architecture finalized | frame #67 |
+| 2026-03-20 | MVP complete | frame #155 |
+
+## Relations
+- [[John Smith]] — project lead (confidence: 0.95)
+- [[React]] — primary frontend framework
+- [[Q2 Launch]] — target milestone
+
+## Open Questions
+- Budget allocation not yet documented
+- No test strategy frames found
+
+## Contradictions
+- Frame #103 says "TypeScript only" but Frame #155 mentions "some JavaScript"
+  → Confidence: 0.6, needs resolution
+```
+
+### 4.5 Compilation Modes
+
+**1. Full Compilation**
+- Reads ALL frames + entire KG
+- Generates all pages from scratch
+- Expensive (many LLM calls), used for initial build or reset
+- Token budget: O(frames * avg_frame_size) for context, O(pages) for generation
+
+**2. Incremental Compilation**
+- Tracks `last_compiled_frame_id` watermark
+- Only processes frames newer than watermark
+- Determines affected entities/concepts from new frames
+- Updates only affected pages
+- 10-100x cheaper than full compilation
+
+**3. Lint Pass**
+- No new frames processed
+- Scans existing pages for:
+  - Contradictions (frames with conflicting claims on same entity)
+  - Stale claims (old frames superseded by newer ones)
+  - Orphan pages (no inbound links from other pages)
+  - Missing pages (entities in KG with no wiki page)
+  - Weak confidence (pages based on single low-confidence frame)
+  - Gap suggestions ("you should investigate X")
+- Writes health.md with findings
+
+**4. On-Demand Query Compilation**
+- User asks a question
+- System searches frames + KG for answer
+- If answer is substantial, offers to compile it as a new page
+- "This comparison could be useful later — save as wiki page?"
+- Karpathy's insight: answers should compound into the wiki
+
+### 4.6 Wiki Schema (Governance)
+
+Each workspace can have a `wiki-schema.md` that tells the compiler how to
+operate — analogous to Karpathy's CLAUDE.md governance file.
+
+```markdown
+# Wiki Schema: Sales Pipeline Workspace
+
+## Page conventions
+- Entity pages use "compiled truth + timeline" format
+- Concept pages start with a 2-sentence TL;DR
+- All claims must cite frame IDs
+- Confidence below 0.5 triggers a "Needs Verification" badge
+
+## Entity types to compile
+- person (always): full entity pages with relations
+- organization (always): entity pages
+- deal (always): entity pages with status tracking
+- technology (on-demand): only if 3+ frames mention it
+
+## Compilation schedule
+- Incremental: after every 10 new frames
+- Lint: weekly
+- Full: manual only
+
+## Output format
+- Obsidian-compatible markdown (wikilinks: [[Page Name]])
+- Frontmatter: YAML with type, confidence, sources, frame_ids
+- Images: reference from workspace files directory
+```
+
+---
+
+## 5. Dual-Track Delivery Plan
+
+### Track A: Waggle Feature (packages/wiki-compiler)
+
+The wiki compiler as a native Waggle workspace capability.
+
+**Integration points:**
+- New tab in MemoryApp: "Wiki" — browse compiled pages
+- New agent tool: `compile_wiki` — trigger compilation
+- New agent tool: `search_wiki` — search compiled pages
+- Settings: compilation schedule, schema editing
+- FilesApp: wiki pages appear as browsable markdown
+- Workspace export: "Export as Obsidian vault" (wiki + raw sources)
+
+**Technical implementation:**
+- New package: `packages/wiki-compiler/`
+- Depends on: `@waggle/core` (FrameStore, HybridSearch, KnowledgeGraph)
+- Output: markdown files in `~/.waggle/workspaces/{id}/wiki/`
+- LLM calls: via the existing agent infrastructure (orchestrator)
+- Compilation state: SQLite table tracking watermarks, page hashes
+
+**Waggle-specific advantages:**
+- Per-workspace wikis with workspace-specific schemas
+- Cross-workspace wiki search (leveraging MultiMindCache)
+- Team wiki (shared team memory → compiled team wiki)
+- Identity-aware compilation ("compile with context of who I am")
+- GEPA optimization for cheaper compilation with smaller models
+
+### Track B: Open-Source Product (hive-mind-mcp)
+
+A standalone MCP server + CLI that implements the full wiki compiler pattern
+independently of Waggle's desktop app.
+
+**Product name:** `hive-mind` (working title)
+
+**Positioning:** *"Karpathy showed you the pattern. GBrain gave you markdown
+files. Hive Mind gives you the engine — real search, knowledge graph, compiled
+wiki, team sharing. Open source."*
+
+**Architecture:**
+```
+hive-mind/
+├── packages/
+│   ├── core/          # Memory engine (extracted from @waggle/core)
+│   │   ├── frame-store.ts
+│   │   ├── hybrid-search.ts
+│   │   ├── knowledge-graph.ts
+│   │   ├── identity.ts
+│   │   ├── awareness.ts
+│   │   └── session-store.ts
+│   ├── compiler/      # Wiki compiler (NEW)
+│   │   ├── compiler.ts        # Core compilation loop
+│   │   ├── page-generators/   # Per-type page generators
+│   │   ├── linker.ts          # Cross-reference resolver
+│   │   ├── linter.ts          # Health check / contradiction finder
+│   │   └── schema-parser.ts   # Wiki schema governance
+│   ├── harvest/       # Source adapters
+│   │   ├── chatgpt.ts
+│   │   ├── claude.ts
+│   │   ├── gemini.ts
+│   │   └── universal.ts
+│   ├── mcp-server/    # MCP server (stdio transport)
+│   │   ├── tools/     # 20+ MCP tools
+│   │   └── resources/ # MCP resources
+│   └── cli/           # CLI interface
+│       ├── ingest.ts
+│       ├── compile.ts
+│       ├── search.ts
+│       ├── lint.ts
+│       └── export.ts
+├── schemas/           # Example wiki schemas for different domains
+│   ├── research.md
+│   ├── business.md
+│   ├── personal.md
+│   └── reading.md
+├── docs/
+└── README.md
+```
+
+**MCP Tools (exposed to Claude Code / Claude Desktop / any MCP client):**
+
+| Category | Tool | Description |
+|----------|------|-------------|
+| Memory | `save_memory` | Save a fact/decision/preference |
+| Memory | `recall_memory` | Hybrid search across all memory |
+| Knowledge | `search_entities` | Search knowledge graph |
+| Knowledge | `save_entity` | Create/update entity |
+| Knowledge | `create_relation` | Link entities |
+| Wiki | `compile_wiki` | Trigger incremental compilation |
+| Wiki | `compile_full` | Full wiki rebuild |
+| Wiki | `compile_page` | Compile a single page |
+| Wiki | `lint_wiki` | Run health check |
+| Wiki | `search_wiki` | Search compiled pages |
+| Wiki | `get_page` | Read a compiled wiki page |
+| Wiki | `file_answer` | Save a query answer as a wiki page |
+| Harvest | `harvest_import` | Import from AI systems |
+| Harvest | `harvest_sources` | List registered sources |
+| Identity | `get_identity` / `set_identity` | User profile |
+| Awareness | `get_awareness` / `set_awareness` | Current context |
+| Workspace | `list_workspaces` / `create_workspace` | Manage workspaces |
+| Export | `export_obsidian` | Export as Obsidian vault |
+
+**CLI Interface:**
+```bash
+# Initialize a new brain
+hive-mind init --schema research
+
+# Ingest a source
+hive-mind ingest paper.pdf --source research
+hive-mind ingest chatgpt-export.json --source chatgpt
+
+# Compile the wiki
+hive-mind compile              # incremental
+hive-mind compile --full       # full rebuild
+hive-mind compile --page "Project Alpha"  # single page
+
+# Search
+hive-mind search "what do we know about React performance"
+hive-mind search --entities "John Smith"
+
+# Health check
+hive-mind lint
+hive-mind lint --fix  # auto-fix what's possible
+
+# Export
+hive-mind export --format obsidian --output ./my-vault
+```
+
+**Why open source?**
+1. Rides the Karpathy wave with genuine technical depth
+2. Community adoption → contributors → ecosystem
+3. Every hive-mind user is a potential Waggle convert (needs desktop app for
+   full experience) or KVARK lead (needs team/enterprise features)
+4. MIT license, same as GBrain — no friction
+5. Memory engine quality speaks for itself vs. GBrain's markdown instructions
+
+---
+
+## 6. Implementation Phases
+
+### Phase 0: Foundation (1 session)
+- [ ] Extract wiki compiler interfaces from this spec
+- [ ] Define TypeScript types: `WikiPage`, `CompilationState`, `WikiSchema`,
+      `CompilationResult`, `LintFinding`
+- [ ] Create `packages/wiki-compiler/` with package.json, tsconfig
+- [ ] Wire to `@waggle/core` dependencies
+
+### Phase 1: Core Compiler (2-3 sessions)
+- [ ] Implement compilation state tracking (SQLite table: page hashes, frame
+      watermarks, last compiled timestamps)
+- [ ] Implement `compileEntityPage()` — given an entity ID, gather related
+      frames + KG relations, generate markdown page with frontmatter
+- [ ] Implement `compileConceptPage()` — given a topic string, search frames,
+      generate synthesis page
+- [ ] Implement `compileIndex()` — generate index.md from all pages
+- [ ] Implement incremental compilation loop (process new frames since watermark)
+- [ ] Wire to LLM (use existing orchestrator or direct API call with GEPA)
+
+### Phase 2: Linker + Linter (1-2 sessions)
+- [ ] Implement cross-reference resolver (scan pages for entity mentions,
+      insert wikilinks)
+- [ ] Implement contradiction finder (compare claims across pages, flag
+      confidence < threshold)
+- [ ] Implement orphan detector (pages with no inbound links)
+- [ ] Implement gap analyzer (entities in KG with no wiki page, concepts
+      mentioned but not covered)
+- [ ] Generate health.md with findings
+
+### Phase 3: MCP Integration (1 session)
+- [ ] Add wiki tools to memory-mcp server (`compile_wiki`, `search_wiki`,
+      `get_page`, `lint_wiki`, `file_answer`)
+- [ ] Add wiki resources (`memory://wiki/index`, `memory://wiki/page/{name}`,
+      `memory://wiki/health`)
+- [ ] Test with Claude Code: "compile my wiki" → "search wiki for X" →
+      "file this answer as a page"
+
+### Phase 4: Waggle UI (1-2 sessions)
+- [ ] New "Wiki" tab in MemoryApp
+- [ ] Wiki page viewer (markdown renderer with wikilink navigation)
+- [ ] Compilation trigger button + progress indicator
+- [ ] Health dashboard (contradictions, gaps, orphans)
+- [ ] Wiki settings (schema editor, compilation schedule)
+
+### Phase 5: Open-Source Package (1-2 sessions)
+- [ ] Extract into standalone `hive-mind` repo
+- [ ] CLI interface (`hive-mind init/ingest/compile/search/lint/export`)
+- [ ] README with Karpathy attribution and positioning
+- [ ] Example schemas for research, business, personal, reading
+- [ ] GitHub Actions CI
+- [ ] npm publish as `hive-mind-mcp`
+
+### Phase 6: Polish + Launch (1 session)
+- [ ] Obsidian export (proper vault structure with .obsidian config)
+- [ ] Dream cycles (scheduled overnight compilation, a la GBrain)
+- [ ] GEPA integration for cost-efficient compilation
+- [ ] Launch blog post / X thread
+- [ ] Product Hunt submission
+
+---
+
+## 7. Technical Decisions
+
+### 7.1 LLM for Compilation
+
+The compiler needs an LLM to synthesize frames into wiki pages. Options:
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| **Via Waggle orchestrator** | Reuses existing infrastructure, cost tracking, model routing | Coupled to Waggle |
+| **Direct API call** | Simple, standalone-friendly | Need own key management |
+| **GEPA-optimized** | Haiku/Sonnet quality at fraction of Opus cost | Needs GEPA implementation |
+| **Local (Ollama)** | Free, private, offline | Slower, lower quality |
+
+**Decision:** Support all four. Default to direct API call for standalone,
+orchestrator for Waggle integration. GEPA as optimization layer. Ollama as
+free fallback.
+
+### 7.2 Compilation Cost Model
+
+Rough estimates for a workspace with 500 frames, 50 entities:
+
+| Operation | LLM Calls | Input Tokens | Output Tokens | Cost (Haiku) |
+|-----------|-----------|-------------|---------------|-------------|
+| Full compile (50 pages) | 50 | ~500K | ~100K | ~$0.15 |
+| Incremental (5 pages) | 5 | ~50K | ~10K | ~$0.015 |
+| Lint pass | 10 | ~200K | ~20K | ~$0.04 |
+| File answer as page | 1 | ~10K | ~2K | ~$0.003 |
+
+**With GEPA (Haiku + prompt optimization):** 3-5x cheaper than raw Opus.
+This makes compilation economically viable even for free-tier users if we
+use Haiku with optimized prompts.
+
+### 7.3 Citation Chain
+
+Every claim in a wiki page MUST cite its source frame(s):
+
+```markdown
+- **Status:** In development (frame #201, 2026-03-20)
+```
+
+Frame IDs in frontmatter `frame_ids` array enable:
+- Click-through from wiki page → original frame
+- Confidence calculation (more frames = higher confidence)
+- Staleness detection (oldest frame age)
+- Contradiction detection (conflicting frames on same claim)
+
+### 7.4 Wikilink Format
+
+Use Obsidian-compatible wikilinks: `[[Page Name]]`
+
+Cross-references generated automatically by the linker:
+1. Scan page content for known entity names
+2. Insert wikilinks where entities are mentioned
+3. Maintain backlink index (which pages link to which)
+
+### 7.5 Storage Location
+
+```
+~/.waggle/workspaces/{id}/
+├── workspace.mind          # SQLite (frames, KG, search index)
+├── workspace.json          # Workspace config
+├── wiki/                   # Compiled wiki output (NEW)
+│   ├── index.md
+│   ├── log.md
+│   ├── health.md
+│   ├── entities/
+│   │   ├── john-smith.md
+│   │   ├── project-alpha.md
+│   │   └── ...
+│   ├── concepts/
+│   │   ├── react-performance.md
+│   │   └── ...
+│   ├── topics/
+│   │   ├── q2-launch-plan.md
+│   │   └── ...
+│   └── queries/            # Filed answers
+│       ├── comparison-react-vs-vue.md
+│       └── ...
+├── files/                  # Virtual filesystem
+└── sessions/
+```
+
+---
+
+## 8. Differentiation Matrix
+
+### vs. Karpathy's LLM Wiki
+
+| Dimension | Karpathy | Hive Mind |
+|-----------|----------|-----------|
+| Search | index.md (breaks ~500 docs) | FTS5 + sqlite-vec + RRF (10K+ docs) |
+| Knowledge structure | Backlinks between pages | Typed KG with confidence scores |
+| Source input | Manual (Obsidian Web Clipper) | Auto-harvest from 5+ AI systems |
+| Multi-topic | One wiki per folder | Multi-workspace with isolation |
+| Team | No | Team memory sync + team wiki |
+| Identity | No | Identity + Awareness layers |
+| Temporal | Pages updated in place | Frame timestamps + temporal queries |
+| Scale ceiling | ~100-500 sources | Thousands (SQLite + vector index) |
+| Output | Wiki IS the system | Wiki is a compiled VIEW of deeper memory |
+
+### vs. GBrain
+
+| Dimension | GBrain | Hive Mind |
+|-----------|--------|-----------|
+| Storage | PGLite + markdown files | SQLite + FTS5 + sqlite-vec |
+| Search | pgvector semantic only | Hybrid (BM25 + vector + RRF) |
+| KG | Entity pages (markdown) | Typed entities + relations + confidence |
+| Compilation | Markdown instructions for agents | Executable code with real compiler loop |
+| Dream cycles | Prompt instructions | Scheduled compilation with state tracking |
+| Team | No | Team memory sync |
+| Harvest | Gmail, Calendar integrations | ChatGPT, Claude, Gemini, universal |
+| Workspace isolation | No | Multi-workspace with cross-search |
+| Identity | No | Identity + Awareness layers |
+| Infrastructure | Requires Postgres (or PGLite WASM) | Zero external deps (embedded SQLite) |
+
+### vs. Mem0 / Zep / Hindsight
+
+| Dimension | Memory Frameworks | Hive Mind |
+|-----------|------------------|-----------|
+| Memory storage | Yes (various backends) | Yes (SQLite, embedded) |
+| Search | Yes (various strategies) | Yes (hybrid BM25 + vector + RRF) |
+| Knowledge graph | Some (Mem0, Zep) | Yes (typed, with confidence) |
+| **Wiki output** | **No** | **Yes** |
+| **Human-readable** | **No** | **Yes** |
+| **Compounding synthesis** | **No** | **Yes** |
+| Harvest pipeline | No | Yes (5+ AI systems) |
+| Team sharing | Mem0 Cloud only | Built-in (team sync) |
+
+The key differentiator: **no existing memory framework produces a human-readable
+compiled wiki.** They all store memory for agents to use. None compile it into
+something humans can browse, learn from, and build on.
+
+---
+
+## 9. Open-Source Launch Strategy
+
+### 9.1 Naming
+
+**Working title:** `hive-mind`
+**npm package:** `hive-mind-mcp`
+**GitHub:** `egzakta/hive-mind` (or `waggle-os/hive-mind`)
+
+Alternative names to consider:
+- `mind-compiler`
+- `wiki-mind`
+- `memory-wiki`
+- `second-brain-engine`
+
+### 9.2 Positioning
+
+**Tagline options:**
+- "Karpathy showed you the pattern. We built the engine."
+- "Your memory, compiled."
+- "The memory engine behind the wiki."
+- "From conversations to knowledge. Automatically."
+
+**README lead:**
+
+> Hive Mind is an open-source memory engine + wiki compiler for AI agents.
+> It extends [Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
+> with production-grade infrastructure: hybrid search (BM25 + vector + RRF),
+> typed knowledge graph with confidence scoring, multi-source harvest
+> (ChatGPT, Claude, Gemini), and automatic wiki compilation.
+>
+> Works as an MCP server (Claude Code, Claude Desktop), CLI tool, or
+> library. Your memory stays local. Your wiki stays current.
+
+### 9.3 Launch Sequence
+
+1. **Pre-launch (1 week before):**
+   - Ship working MCP server + CLI with at least compile, search, lint
+   - Record 2-minute demo video: ingest → compile → browse in Obsidian
+   - Write blog post: "Extending Karpathy's LLM Wiki with a Real Engine"
+
+2. **Launch day:**
+   - GitHub repo public (MIT license)
+   - npm publish
+   - X thread (tag Karpathy, reference his gist, show the extension)
+   - Hacker News post
+   - r/LocalLLaMA, r/ClaudeAI, r/ObsidianMD posts
+
+3. **Post-launch (week 1-2):**
+   - Product Hunt
+   - Dev.to article
+   - YouTube walkthrough
+   - Community Discord
+
+### 9.4 Funnel to Waggle / KVARK
+
+```
+Open-source hive-mind (free, MIT)
+  → "Want a desktop app?" → Waggle Free tier
+    → "Want unlimited agents?" → Waggle Pro ($19/mo)
+      → "Want team knowledge?" → Waggle Teams ($49/seat)
+        → "Want enterprise governance?" → KVARK (consultative sale)
+```
+
+The open-source product is the top of the funnel. Every `hive-mind` user who
+wants a GUI, team features, or enterprise governance flows toward Waggle/KVARK.
+
+---
+
+## 10. Risk Register
+
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| Compilation cost too high | Users hit budget limits | GEPA optimization, Haiku default, incremental-only |
+| Hallucinated synthesis | Wiki contains false claims | Citation chains, confidence scores, lint passes |
+| Wiki staleness | Pages drift from reality | Automated incremental compilation on frame count triggers |
+| GBrain captures the market first | Reduced differentiation window | Ship faster, emphasize technical depth (real search, real KG, real code vs. markdown instructions) |
+| Karpathy buzz fades | Smaller launch impact | Build product value independent of the reference — the wiki compiler is genuinely useful |
+| LLM quality variance | Inconsistent wiki quality | Schema governance + GEPA + model routing |
+| Token context limits | Can't fit all frames for large entities | Chunked compilation with summarization tiers |
+
+---
+
+## 11. Success Metrics
+
+### Open-Source (hive-mind)
+- GitHub stars: 1,000 in first week (GBrain did 5,400 in 24h — aspirational)
+- npm downloads: 500/week within first month
+- MCP server installs: tracked via Claude Code marketplace
+- Community PRs: at least 5 within first month
+
+### Waggle Feature
+- Wiki compilation triggered by 30%+ of active workspace users
+- Average wiki size: 20+ pages per active workspace
+- User retention uplift: measurable increase in DAU after wiki feature ships
+
+### KVARK Pipeline
+- At least 3 enterprise inquiries attributable to wiki/hive-mind within
+  first quarter
+- "Institutional knowledge wiki" becomes a slide in KVARK sales deck
+
+---
+
+## 12. Open Questions
+
+1. **Should the wiki replace FilesApp or live alongside it?** Current thinking:
+   alongside — wiki is a compiled view, files are user-managed documents.
+
+2. **Should compilation happen on the client or server?** For Waggle desktop:
+   client (sidecar). For Teams: server-side (team wiki needs central compilation).
+
+3. **How to handle conflicting compilations in team wikis?** If two team members'
+   agents compile simultaneously, need merge strategy. Git-style (markdown is
+   mergeable) or lock-based?
+
+4. **Should the wiki be editable by humans?** Karpathy says no — "the LLM owns
+   the wiki." But users will want to correct things. Allow human edits with a
+   "manually edited" flag that the compiler preserves?
+
+5. **What's the minimum viable wiki?** For launch: entity pages + index + lint.
+   Concept pages, timelines, comparisons can follow.
+
+6. **GEPA readiness?** The GEPA prompt optimization system (backlog item) would
+   dramatically reduce compilation cost. Should we prioritize GEPA before or
+   after the wiki compiler?
+
+---
+
+## References
+
+- [Karpathy's LLM Wiki Gist](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
+- [GBrain by Garry Tan](https://github.com/garrytan/gbrain)
+- [LLM Wiki v2 — agentmemory extensions](https://gist.github.com/rohitg00/2067ab416f7bbe447c1977edaaa681e2)
+- [Rowboat — typed entity approach](https://blog.dailydoseofds.com/p/the-next-step-after-karpathys-wiki)
+- [Enterprise analysis by Epsilla](https://www.epsilla.com/blogs/llm-wiki-kills-rag-karpathy-enterprise-semantic-graph)
+- [AI Agent Memory Frameworks Comparison](https://vectorize.io/articles/best-ai-agent-memory-systems)
+- [VentureBeat: Karpathy LLM Knowledge Base](https://venturebeat.com/data/karpathy-shares-llm-knowledge-base-architecture-that-bypasses-rag-with-an)
+- [OpenMemory MCP by Mem0](https://mem0.ai/openmemory)
+- [Hindsight MCP Memory Server](https://hindsight.vectorize.io/blog/2026/03/04/mcp-agent-memory)
+
+---
+
+*Spec by Marko Markovic / Egzakta Group. April 2026.*
+*This document is a strategic planning artifact, not a commitment to ship all features described.*
