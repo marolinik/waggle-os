@@ -548,6 +548,190 @@ Phase 2 captures the Obsidian/Karpathy community.
 Phase 3 enables the team/enterprise story.
 Phase 4 makes it live and always-current.
 
+### 5.9 Auto-Ingest via MCP Connectors — Zero-Effort Second Brain
+
+Waggle already has 148+ MCP servers in its connector catalog. The insight:
+**these aren't just tools for agents to use — they're live source feeds for
+the second brain.**
+
+Once a user connects their Gmail MCP, Slack MCP, Notion MCP, GitHub MCP, etc.,
+the source pipeline can **automatically** pull new content on a schedule and
+ingest it into the memory engine. No manual file drops. No export/import dance.
+Set up once, then everything flows in.
+
+```
+┌─── CONNECTED MCP SERVERS ──────────────────────────┐
+│                                                     │
+│  Gmail MCP ─────────────┐                           │
+│  Slack MCP ─────────────┤                           │
+│  Notion MCP ────────────┤    ┌───────────────────┐  │
+│  GitHub MCP ────────────┼───▶│ Auto-Ingest       │  │
+│  Linear MCP ────────────┤    │ Scheduler         │  │
+│  Google Calendar MCP ───┤    │                   │  │
+│  Confluence MCP ────────┤    │ Poll interval:    │  │
+│  Fireflies MCP ─────────┘    │ per-source config │  │
+│                              └────────┬──────────┘  │
+│                                       │             │
+└───────────────────────────────────────┼─────────────┘
+                                        │
+                                        ▼
+                              ┌──────────────────┐
+                              │ Universal Source  │
+                              │ Pipeline         │
+                              │                  │
+                              │ → Frames         │
+                              │ → KG entities    │
+                              │ → Vector index   │
+                              │ → Wiki compile   │
+                              └──────────────────┘
+```
+
+**How it works:**
+
+| MCP Server | What Gets Ingested | Schedule |
+|------------|-------------------|----------|
+| Gmail | New emails matching filter rules (important, starred, specific labels) | Every 30 min |
+| Slack | Messages in configured channels, DMs with AI tools | Every 15 min |
+| Notion | Updated pages in watched databases/workspaces | Every 1 hour |
+| GitHub | New issues, PR discussions, commit messages in watched repos | Every 1 hour |
+| Linear | Issue updates, project changes | Every 1 hour |
+| Google Calendar | Meeting events + linked transcripts | Every 30 min |
+| Confluence | Updated pages in watched spaces | Every 2 hours |
+| Fireflies/Granola | New meeting transcripts | After each meeting |
+
+**User configuration (Settings > Auto-Ingest):**
+```yaml
+auto_ingest:
+  gmail:
+    enabled: true
+    filter: "label:important OR is:starred"
+    interval_minutes: 30
+  slack:
+    enabled: true
+    channels: ["#engineering", "#product", "#ai-updates"]
+    interval_minutes: 15
+  github:
+    enabled: true
+    repos: ["waggle-os/waggle-os", "egzakta/kvark"]
+    types: ["issues", "pull_requests", "discussions"]
+    interval_minutes: 60
+  notion:
+    enabled: true
+    databases: ["Product Roadmap", "Meeting Notes"]
+    interval_minutes: 60
+```
+
+**The result:** Your second brain fills itself. You wake up, open Waggle, and
+your wiki has already been updated with yesterday's emails, Slack threads,
+meeting transcripts, and GitHub activity. Overnight compilation (dream cycles)
+synthesized it all into updated entity pages, timeline entries, and gap reports.
+
+**Enterprise scaling:** For Teams/KVARK, auto-ingest runs server-side. Every
+team member's connected sources feed into the shared team wiki. Institutional
+knowledge accumulates automatically — no one has to "maintain the wiki."
+
+---
+
+## 5A. EU AI Act Compliance Layer — The Second Brain as Audit Trail
+
+### 5A.1 The Insight
+
+The EU AI Act (full application: August 2, 2026) requires enterprises to
+maintain comprehensive audit trails, logging, transparency, and human oversight
+for AI systems. The penalties: up to EUR 35M or 7% of global revenue.
+
+**The second brain IS the compliance artifact.** The same system that makes
+you productive also makes you auditable. Every AI interaction, decision, and
+source — automatically captured, searchable, citation-linked, and compiled
+into a browsable wiki that auditors can review.
+
+Nobody else has this. Credo AI ($25K+/yr) and Holistic AI (six figures/yr)
+are bolt-on governance tools that track policies but not conversations. Claude's
+new Compliance API captures usage logs but not the knowledge context. Waggle
+IS the AI workspace AND the governance layer — compliance is native, not
+bolted on.
+
+### 5A.2 Article-by-Article Mapping
+
+| AI Act Article | Requirement | How Hive Mind / Waggle Satisfies It |
+|---------------|-------------|-------------------------------------|
+| **Art. 12: Record-keeping** | Automatic logging of all events, inputs, outputs over system lifetime | FrameStore captures every AI interaction as timestamped frames. HarvestSourceStore tracks all ingestion events. SessionStore groups frames by session. Wiki log.md provides human-readable chronological record. |
+| **Art. 13: Transparency** | Operations sufficiently transparent for deployers to interpret output | Compiled wiki IS the transparency layer. Every wiki page cites source frames. KG shows entity relationships. Identity layer shows who the user is. Model attribution per frame (which LLM generated what). |
+| **Art. 14: Human oversight** | Appropriate human-machine interface for effective oversight | Wiki = human-readable view of all AI knowledge. Health.md flags contradictions, gaps, stale claims. Approval gates for high-impact actions. Read-only personas prevent unauthorized changes. Lint operation = systematic oversight check. |
+| **Art. 19: Log retention** | Logs retained minimum 6 months | FrameStore retains permanently (SQLite). Wiki pages carry full history. Export capability for regulatory submission. |
+| **Art. 26: Deployer obligations** | Monitor operation, keep auto-generated logs, ensure input relevance | Auto-ingest captures all inputs. Cost tracking per interaction. Awareness layer tracks active context. Wiki timeline shows evolution over time. |
+| **Art. 50: Transparency (GPAI)** | AI-generated content must be machine-readable as such | Every frame tagged with source type (user_stated / tool_verified / agent_inferred / system). Wiki frontmatter identifies compilation as LLM-generated. KG confidence scores distinguish verified from inferred claims. |
+
+### 5A.3 Compliance Wiki Pages (Auto-Generated)
+
+The wiki compiler can generate compliance-specific page types:
+
+| Page Type | Content | AI Act Article |
+|-----------|---------|---------------|
+| **audit-log.md** | Chronological record of all AI interactions, decisions, model versions | Art. 12 |
+| **model-registry.md** | Which LLM models were used, when, for what, with what parameters | Art. 13, 50 |
+| **decision-trail.md** | For each significant decision: what was decided, what frames informed it, what alternatives existed | Art. 14 |
+| **data-provenance.md** | For each source: origin, ingest date, adapter used, frames generated, entity count | Art. 10 |
+| **risk-assessment.md** | Per-workspace risk classification (auto-suggested from template type) | Art. 9 |
+| **human-oversight-log.md** | All approval/denial/override events by human operators | Art. 14 |
+| **contradiction-report.md** | All detected contradictions between sources, resolution status | Art. 13 |
+
+### 5A.4 The Compliance Export
+
+For regulatory review, the system can export:
+
+```
+compliance-export-2026-Q2/
+├── audit-log.json              # Machine-readable full event log
+├── audit-log.pdf               # Human-readable formatted version
+├── model-registry.json         # All models used with metadata
+├── decision-trails/            # Per-decision evidence packages
+│   ├── decision-001.json
+│   └── decision-001.pdf
+├── data-provenance.json        # Complete source chain
+├── risk-assessment.pdf         # Current risk classification
+├── human-oversight-log.json    # Approval/deny/override events
+├── wiki/                       # Full compiled wiki snapshot
+│   ├── index.md
+│   ├── entities/
+│   ├── concepts/
+│   └── compliance/
+└── metadata.json               # Export metadata, timestamps, signatures
+```
+
+### 5A.5 The KVARK Enterprise Pitch
+
+This is where the funnel tightens to KVARK:
+
+> "Every AI interaction your organization has — across email, Slack, meetings,
+> code reviews, customer calls — automatically captured in a living knowledge
+> base. Your people get a second brain that makes them productive. Your
+> compliance team gets an audit trail that satisfies the AI Act. Your auditors
+> get a browsable wiki they can actually understand.
+>
+> And with KVARK, all of this runs on YOUR infrastructure. Your data never
+> leaves your perimeter. Full sovereign deployment. Complete governance."
+
+**Market timing:** August 2, 2026 deadline. Enterprises are scrambling.
+AI governance market: $340M (2025) → $492M (2026) → $1B+ (2030), 28% CAGR.
+Every company using AI in the EU needs this. Nobody else offers productivity
++ compliance in one system.
+
+### 5A.6 Compliance as a Feature, Not a Tax
+
+The critical UX principle: compliance should be **invisible to the user.**
+
+The user works normally — chats with AI, reads articles, attends meetings,
+writes code. The source pipeline captures everything. The wiki compiler
+synthesizes it. The compliance pages are generated automatically alongside
+the regular wiki. The user never thinks about compliance.
+
+Only when an auditor asks "show me your AI governance" does the user open
+the compliance tab and export. Everything is already there.
+
+**This is "compliance by default" — the second hook (alongside Memory Harvest)
+for enterprise adoption.**
+
 ---
 
 ## 6. Dual-Track Delivery Plan
