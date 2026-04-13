@@ -103,6 +103,61 @@ export class CognifyPipeline {
     };
   }
 
+  /**
+   * Cognify an existing frame — extract entities, build relations, re-index.
+   * Used for post-harvest processing of imported frames.
+   */
+  async cognifyFrame(frameId: number): Promise<CognifyResult | null> {
+    const frame = this.frames.getById(frameId);
+    if (!frame) return null;
+
+    const extracted = extractEntities(frame.content);
+    const entityIds = this.upsertEntities(extracted);
+    let relationsCreated = this.createCoOccurrenceRelations(entityIds);
+
+    const semanticRelations = extractRelations(frame.content, extracted);
+    for (const rel of semanticRelations) {
+      try {
+        const srcEntity = this.knowledge.getEntitiesByType('').find(e => e.name.toLowerCase() === rel.source.toLowerCase());
+        const tgtEntity = this.knowledge.getEntitiesByType('').find(e => e.name.toLowerCase() === rel.target.toLowerCase());
+        if (srcEntity && tgtEntity) {
+          const existing = this.knowledge.getRelationsFrom(srcEntity.id, rel.relationType);
+          if (!existing.some(r => r.target_id === tgtEntity.id)) {
+            this.knowledge.createRelation(srcEntity.id, tgtEntity.id, rel.relationType, rel.confidence, { source: 'semantic' });
+            relationsCreated++;
+          }
+        }
+      } catch { /* non-blocking */ }
+    }
+
+    // Re-index for search
+    try { await this.search.indexFrame(frame.id, frame.content); } catch { /* non-fatal */ }
+
+    return {
+      frameId: frame.id,
+      entitiesExtracted: entityIds.length,
+      relationsCreated,
+    };
+  }
+
+  /**
+   * Cognify a batch of existing frames. Returns summary stats.
+   */
+  async cognifyBatch(frameIds: number[]): Promise<{ processed: number; entities: number; relations: number }> {
+    let processed = 0;
+    let entities = 0;
+    let relations = 0;
+    for (const id of frameIds) {
+      const result = await this.cognifyFrame(id);
+      if (result) {
+        processed++;
+        entities += result.entitiesExtracted;
+        relations += result.relationsCreated;
+      }
+    }
+    return { processed, entities, relations };
+  }
+
   private ensureSession(): string {
     const active = this.sessions.getActive();
     if (active.length > 0) {

@@ -13,7 +13,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import type { FileEntry, StorageType, Workspace } from '@/lib/types';
 import { adapter } from '@/lib/adapter';
-import { getFileIcon, formatSize, STORAGE_LABELS, MOCK_FILES } from './files/file-utils';
+import { getFileIcon, formatSize, STORAGE_LABELS } from './files/file-utils';
 import { useToast } from '@/hooks/use-toast';
 
 import FileTree from './files/FileTree';
@@ -92,7 +92,7 @@ const FilesApp = ({
   const { toast } = useToast();
   const [currentPath, setCurrentPath] = useState('/');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
-  const [files, setFiles] = useState<FileEntry[]>(MOCK_FILES);
+  const [files, setFiles] = useState<FileEntry[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
@@ -186,7 +186,7 @@ const FilesApp = ({
         const text = await blob.text();
         setPreviewContent(text);
       } catch {
-        setPreviewContent(`// Preview of ${file.name}\n// Content would load from backend\n\n# ${file.name}\n\nThis is a preview placeholder.\nConnect to the backend to see actual file contents.`);
+        setPreviewContent(`# ${file.name}\n\nUnable to load file preview. The file may not be accessible or the backend may be offline.`);
       } finally {
         setPreviewLoading(false);
       }

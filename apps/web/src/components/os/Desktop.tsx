@@ -208,6 +208,7 @@ const Desktop = () => {
             autonomyLevel={win.autonomyLevel ?? 'normal'}
             autonomyExpiresAt={win.autonomyExpiresAt ?? null}
             onAutonomyChange={(level, ttlMinutes) => wm.setWindowAutonomy(win.instanceId, level, ttlMinutes)}
+            onContextRail={(target) => setContextRailTarget({ ...target, workspaceId: wsId })}
           />
         );
       }

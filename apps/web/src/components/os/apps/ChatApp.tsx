@@ -43,6 +43,8 @@ interface ChatAppProps {
   autonomyExpiresAt?: number | null;
   /** Phase B.5: change autonomy level + optional TTL. */
   onAutonomyChange?: (level: AutonomyLevel, ttlMinutes: number | null) => void;
+  /** ContextRail: triggered when user clicks a message to explore related context. */
+  onContextRail?: (target: { type: 'message'; id: string; label: string }) => void;
 }
 
 const TEMPLATE_DISPLAY: Record<string, { label: string; desc: string }> = {
@@ -388,6 +390,7 @@ const ChatApp = ({
   sessions, activeSessionId, onSelectSession, onNewSession,
   workspaceId, templateId, storageType,
   autonomyLevel = 'normal', autonomyExpiresAt = null, onAutonomyChange,
+  onContextRail,
 }: ChatAppProps) => {
   const [input, setInput] = useState('');
   const [showSlash, setShowSlash] = useState(false);
@@ -827,7 +830,12 @@ const ChatApp = ({
             </div>
           )}
           {messages.map((msg, msgIdx) => (
-            <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} gap-2`}>
+            <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} gap-2`}
+              onDoubleClick={() => {
+                if (onContextRail && msg.content) {
+                  onContextRail({ type: 'message', id: msg.id, label: msg.content.slice(0, 60) });
+                }
+              }}>
               {msg.role === 'assistant' && persona && (
                 <Avatar className="w-6 h-6 mt-1 shrink-0">
                   <AvatarImage src={persona.avatar} />

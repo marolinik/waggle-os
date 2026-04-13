@@ -65,6 +65,8 @@ interface ChatWindowInstanceProps {
   autonomyExpiresAt?: number | null;
   /** Phase B.5: change autonomy from inside ChatApp's header. */
   onAutonomyChange?: (level: AutonomyLevel, ttlMinutes: number | null) => void;
+  /** ContextRail: triggered when user double-clicks a message. */
+  onContextRail?: (target: { type: 'message'; id: string; label: string }) => void;
 }
 
 const ChatWindowInstance = ({
@@ -77,6 +79,7 @@ const ChatWindowInstance = ({
   autonomyLevel = 'normal',
   autonomyExpiresAt = null,
   onAutonomyChange,
+  onContextRail,
 }: ChatWindowInstanceProps) => {
   const [currentPersona, setCurrentPersona] = useState(initialPersona || 'general-purpose');
 
@@ -235,6 +238,7 @@ const ChatWindowInstance = ({
       autonomyLevel={autonomyLevel}
       autonomyExpiresAt={autonomyExpiresAt}
       onAutonomyChange={onAutonomyChange}
+      onContextRail={onContextRail}
     />
   );
 };

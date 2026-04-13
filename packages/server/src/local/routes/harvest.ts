@@ -143,11 +143,40 @@ export async function harvestRoutes(fastify: FastifyInstance) {
     harvestStore.upsert(source, adapter.displayName ?? source);
     harvestStore.recordSync(source, items.length, saved);
 
+    // Post-harvest cognify: extract entities + relations from imported frames
+    let cognifyStats = { processed: 0, entities: 0, relations: 0 };
+    try {
+      const { KnowledgeGraph, HybridSearch, createEmbeddingProvider } = await import('@waggle/core');
+      const { CognifyPipeline } = await import('@waggle/agent');
+      const embedder = await createEmbeddingProvider({ provider: 'mock' });
+      const cognify = new CognifyPipeline({
+        db: personalDb,
+        embedder,
+        frames: frameStore,
+        sessions: sessionStore,
+        knowledge: new KnowledgeGraph(personalDb),
+        search: new HybridSearch(personalDb, embedder),
+      });
+
+      // Cognify the most recent N frames (the ones we just imported)
+      const recentFrames = frameStore.getRecent(saved);
+      const frameIds = recentFrames.map(f => f.id);
+
+      emitHarvestProgress({ phase: 'cognifying', current: 0, total: frameIds.length, source });
+      cognifyStats = await cognify.cognifyBatch(frameIds);
+      emitHarvestProgress({ phase: 'cognifying', current: frameIds.length, total: frameIds.length, source });
+    } catch {
+      // Cognify failure is non-fatal — frames are already saved
+    }
+
     return {
       source,
       itemCount: items.length,
       saved,
-      message: `Imported ${saved} items from ${source}`,
+      cognified: cognifyStats.processed,
+      entitiesExtracted: cognifyStats.entities,
+      relationsCreated: cognifyStats.relations,
+      message: `Imported ${saved} items from ${source}, cognified ${cognifyStats.processed} frames`,
     };
   });
 
