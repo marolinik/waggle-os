@@ -632,10 +632,19 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           try {
             const optimizer = await getOptimizerService(server);
             if (optimizer) {
-              const intent = await optimizer.classify(agentMessage);
-              gepaExpanded = await optimizer.expandIfVague(agentMessage, intent);
-              if (gepaExpanded) {
+              const result = await optimizer.expandWithChoices(agentMessage);
+              if (result.isVague && result.expanded) {
+                gepaExpanded = result.expanded;
                 sendEvent('step', { content: `GEPA: Expanded prompt for better results` });
+                // Send expansion choices to frontend for ask-first mode
+                if (result.clarifyingQuestions && result.clarifyingQuestions.length > 0) {
+                  sendEvent('gepa_choices', {
+                    original: agentMessage,
+                    expanded: result.expanded,
+                    clarifyingQuestions: result.clarifyingQuestions,
+                    intent: result.intent,
+                  });
+                }
               }
             }
           } catch {

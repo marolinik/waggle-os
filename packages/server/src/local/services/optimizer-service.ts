@@ -18,9 +18,17 @@ import type { FastifyInstance } from 'fastify';
 let _optimizerInstance: OptimizerService | null = null;
 let _lastKeyHash: string | null = null;
 
+export interface GEPAExpansionResult {
+  expanded: string | null;
+  clarifyingQuestions: string[] | null;
+  intent: string;
+  isVague: boolean;
+}
+
 interface OptimizerService {
   classify(text: string): Promise<string>;
   expandIfVague(text: string, intent: string): Promise<string | null>;
+  expandWithChoices(text: string): Promise<GEPAExpansionResult>;
   summarize(text: string): Promise<string>;
 }
 
@@ -105,6 +113,36 @@ export async function getOptimizerService(server: FastifyInstance): Promise<Opti
         } catch {
           return null; // Graceful fallback — use original message
         }
+      },
+
+      async expandWithChoices(text: string): Promise<GEPAExpansionResult> {
+        const intent = await this.classify(text);
+        const isVague = intent !== 'greeting' && intent !== 'question' && text.length <= 100 && !text.startsWith('/');
+
+        if (!isVague) {
+          return { expanded: null, clarifyingQuestions: null, intent, isVague: false };
+        }
+
+        const expanded = await this.expandIfVague(text, intent);
+
+        // Generate clarifying questions using the optimizer's summarizer
+        // (repurposed — it's a cheap Haiku call that can handle short prompts)
+        let clarifyingQuestions: string[] | null = null;
+        try {
+          const questionsText = await optimizer.summarize(
+            `Generate 3 short clarifying questions for this vague request: "${text}". One question per line, no numbering.`,
+          );
+          clarifyingQuestions = questionsText
+            .split('\n')
+            .map((q: string) => q.trim())
+            .filter((q: string) => q.length > 5 && q.includes('?'))
+            .slice(0, 3);
+          if (clarifyingQuestions.length === 0) clarifyingQuestions = null;
+        } catch {
+          clarifyingQuestions = null;
+        }
+
+        return { expanded, clarifyingQuestions, intent, isVague: true };
       },
 
       async summarize(text: string): Promise<string> {
