@@ -49,8 +49,13 @@ const awareness = new AwarenessLayer(db);
 const sessions = new SessionStore(db);
 const wsManager = new WorkspaceManager(dataDir);
 
-// Use mock embedder for seeding (fast, no network)
-const embedder = await createEmbeddingProvider({ provider: 'mock' });
+// Use real embeddings if available: inprocess (local) > ollama > mock
+const embeddingProvider = process.env.WAGGLE_EMBEDDING_PROVIDER ?? 'inprocess';
+console.log(`📐 Embedder: ${embeddingProvider}`);
+const embedder = await createEmbeddingProvider({
+  provider: embeddingProvider,
+  inprocess: { cacheDir: path.join(dataDir, 'models') },
+});
 const search = new HybridSearch(db, embedder);
 
 // ── Step 1: Wipe test pollution ───────────────────────────────────

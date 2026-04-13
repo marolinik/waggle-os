@@ -68,12 +68,24 @@ try { raw.prepare('DELETE FROM wiki_watermark').run(); } catch {}
 
 // 4. Compile
 const frameStore = new FrameStore(db);
-const embedder = await createEmbeddingProvider({ provider: 'mock' });
+const embeddingProvider = process.env.WAGGLE_EMBEDDING_PROVIDER ?? 'inprocess';
+console.log('Embedder:', embeddingProvider);
+const embedder = await createEmbeddingProvider({
+  provider: embeddingProvider,
+  inprocess: { cacheDir: path.join(os.homedir(), '.waggle', 'models') },
+});
 const search = new HybridSearch(db, embedder);
 const state = new CompilationState(db);
 
-const compiler = new WikiCompiler(kg, frameStore, search, state, {
-  synthesize: async (prompt) => {
+// Use real LLM synthesizer if available, else echo
+let synthesize;
+try {
+  const { resolveSynthesizer } = await import('@waggle/wiki-compiler');
+  const synth = await resolveSynthesizer();
+  console.log('Synthesizer:', synth.provider, '(' + synth.model + ')');
+  synthesize = synth.synthesize;
+} catch {
+  synthesize = async (prompt) => {
     const fc = prompt.match(/\((\d+) total\)/)?.[1] ?? '?';
     const nm = prompt.match(/about "([^"]+)"/)?.[1] ?? prompt.match(/concept "([^"]+)"/)?.[1] ?? 'topic';
     const lines = (prompt.match(/\[Frame #\d+.*?\]: .+/g) || []);
@@ -84,8 +96,10 @@ const compiler = new WikiCompiler(kg, frameStore, search, state, {
     return `## Summary\nSynthesized from ${fc} frames about ${nm}.\n\n` +
       (facts.length > 0 ? `## Key Facts\n${facts.join('\n')}\n\n` : '') +
       `> *Connect LLM for deeper synthesis.*`;
-  },
-});
+  };
+}
+
+const compiler = new WikiCompiler(kg, frameStore, search, state, { synthesize });
 
 const concepts = ['Waggle OS', 'KVARK', 'Memory Harvest', 'Wiki Compiler', 'EU AI Act', 'Tier Strategy', 'Data Sovereignty'];
 const result = await compiler.compile({ incremental: false, concepts });

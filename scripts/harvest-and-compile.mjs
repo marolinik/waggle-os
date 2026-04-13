@@ -23,7 +23,7 @@ import {
   createEmbeddingProvider,
   normalizeEntityName,
 } from '@waggle/core';
-import { WikiCompiler, CompilationState } from '@waggle/wiki-compiler';
+import { WikiCompiler, CompilationState, resolveSynthesizer } from '@waggle/wiki-compiler';
 
 // ── Setup ─────────────────────────────────────────────────────────
 
@@ -39,7 +39,12 @@ const frameStore = new FrameStore(db);
 const kg = new KnowledgeGraph(db);
 const sessions = new SessionStore(db);
 const harvestStore = new HarvestSourceStore(db);
-const embedder = await createEmbeddingProvider({ provider: 'mock' });
+const embeddingProvider = process.env.WAGGLE_EMBEDDING_PROVIDER ?? 'inprocess';
+console.log(`📐 Embedder: ${embeddingProvider}`);
+const embedder = await createEmbeddingProvider({
+  provider: embeddingProvider,
+  inprocess: { cacheDir: path.join(dataDir, 'models') },
+});
 const search = new HybridSearch(db, embedder);
 const raw = db.getDatabase();
 
@@ -148,26 +153,12 @@ if (!fs.existsSync(claudeDir)) {
 
 console.log('\n📖 Step 3: Compiling wiki...');
 
+const synth = await resolveSynthesizer();
+console.log(`   Synthesizer: ${synth.provider} (${synth.model})`);
+
 const state = new CompilationState(db);
 const compiler = new WikiCompiler(kg, frameStore, search, state, {
-  synthesize: async (prompt) => {
-    // Echo synthesizer — extracts key info from prompt
-    const frameMatch = prompt.match(/## Source Frames \((\d+) total\)/);
-    const frameCount = frameMatch ? frameMatch[1] : '?';
-    const entityMatch = prompt.match(/about "([^"]+)"/);
-    const entityName = entityMatch ? entityMatch[1] : 'this topic';
-
-    return [
-      `## Summary`,
-      `Compiled from ${frameCount} source frames about ${entityName}.`,
-      '',
-      `## Key Facts`,
-      `- Data compiled from ${frameCount} memory frames`,
-      `- Cross-referenced with knowledge graph relations`,
-      '',
-      `> Connect an LLM provider for richer synthesis.`,
-    ].join('\n');
-  },
+  synthesize: synth.synthesize,
 });
 
 // Auto-detect concepts from KG

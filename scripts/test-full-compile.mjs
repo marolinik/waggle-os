@@ -7,7 +7,13 @@ const db = new MindDB(path.join(os.homedir(), '.waggle', 'personal.mind'));
 const synth = await resolveSynthesizer();
 console.log('Synthesizer:', synth.provider, '(' + synth.model + ')');
 
-const embedder = await createEmbeddingProvider({ provider: 'mock' });
+// Use real embeddings if available: inprocess (local 23MB model) > ollama > mock
+const embeddingProvider = process.env.WAGGLE_EMBEDDING_PROVIDER ?? 'inprocess';
+console.log('Embedder:', embeddingProvider);
+const embedder = await createEmbeddingProvider({
+  provider: embeddingProvider,
+  inprocess: { cacheDir: path.join(os.homedir(), '.waggle', 'models') },
+});
 const state = new CompilationState(db);
 const compiler = new WikiCompiler(
   new KnowledgeGraph(db), new FrameStore(db),
