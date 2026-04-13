@@ -1274,89 +1274,137 @@ hive-mind export --format obsidian --output ./my-vault
 
 ---
 
-## 7. Implementation Phases
+## 7. Revised Execution Plan (post-evaluation, April 13)
 
-### Phase 0: Foundation (1 session)
-- [ ] Extract wiki compiler interfaces from this spec
-- [ ] Define TypeScript types: `WikiPage`, `CompilationState`, `WikiSchema`,
-      `CompilationResult`, `LintFinding`, `SourceAdapter`, `SourceItem`
-- [ ] Create `packages/wiki-compiler/` with package.json, tsconfig
-- [ ] Wire to `@waggle/core` dependencies
+> **Key insight from live test:** The wiki compiler isn't the bottleneck —
+> data quality is. personal.mind has 80% test noise, the KG has 80%
+> misclassified entities, and only 8 relations across 2,734 entities.
+> Building a compiler on noisy data produces noisy pages. Fix the input first.
 
-### Phase 0.5: Universal Source Adapters — Tier 1 (1 session)
-- [ ] Define `SourceAdapter` interface and `SourceItem` type
-- [ ] Implement `markdown` adapter (parse .md → sections → frames)
-- [ ] Implement `plaintext` adapter (parse .txt → paragraphs → frames)
-- [ ] Implement `pdf` adapter (pdf-parse → pages → text → frames)
-- [ ] Implement `url` adapter (fetch → readability → markdown → frames)
-- [ ] Wire adapters into harvest pipeline (extend existing harvest_import tool)
-- [ ] Add `ingest_source` MCP tool (accepts file path or URL + adapter hint)
+### v1 — BUILD (3-4 sessions)
 
-### Phase 1: Core Compiler (2-3 sessions)
-- [ ] Implement compilation state tracking (SQLite table: page hashes, frame
-      watermarks, last compiled timestamps)
-- [ ] Implement `compileEntityPage()` — given an entity ID, gather related
-      frames + KG relations, generate markdown page with frontmatter
-- [ ] Implement `compileConceptPage()` — given a topic string, search frames,
-      generate synthesis page
-- [ ] Implement `compileIndex()` — generate index.md from all pages
-- [ ] Implement incremental compilation loop (process new frames since watermark)
-- [ ] Wire to LLM (use existing orchestrator or direct API call with GEPA)
+**Session A: Data Foundation**
+- [ ] Wipe personal.mind test pollution (E2E/benchmark frames + garbage entities)
+- [ ] KG cleanup: delete entities where name is common noun + type is "person"
+- [ ] KG dedup: merge entities with same normalized name + type
+- [ ] Improve Claude Code harvest adapter: extract DECISIONS and DIRECTIONS
+      from user messages in session JSONL, not just plans/rules
+- [ ] Add `markdown` + `pdf` + `url` source adapters to harvest pipeline
+- [ ] Add `ingest_source` MCP tool
 
-### Phase 2: Linker + Linter (1-2 sessions)
-- [ ] Implement cross-reference resolver (scan pages for entity mentions,
-      insert wikilinks)
-- [ ] Implement contradiction finder (compare claims across pages, flag
-      confidence < threshold)
-- [ ] Implement orphan detector (pages with no inbound links)
-- [ ] Implement gap analyzer (entities in KG with no wiki page, concepts
-      mentioned but not covered)
-- [ ] Generate health.md with findings
+**Session B: Core Compiler**
+- [ ] Create `packages/wiki-compiler/` with types + interfaces
+- [ ] Compilation state tracking (SQLite: watermarks, page hashes)
+- [ ] `compileEntityPage()` — entity → gather frames + KG → LLM synthesis → markdown
+- [ ] `compileConceptPage()` — topic → search → LLM synthesis → markdown
+- [ ] `compileSynthesisPage()` — cross-source pattern detection (the killer feature)
+- [ ] `compileIndex()` — navigable catalog with summaries
+- [ ] Incremental compilation (only new frames since watermark)
+- [ ] `compileHealth()` — contradictions, gaps, orphans, data quality
 
-### Phase 3: MCP Integration (1 session)
-- [ ] Add wiki tools to memory-mcp server (`compile_wiki`, `search_wiki`,
-      `get_page`, `lint_wiki`, `file_answer`)
-- [ ] Add wiki resources (`memory://wiki/index`, `memory://wiki/page/{name}`,
-      `memory://wiki/health`)
-- [ ] Test with Claude Code: "compile my wiki" → "search wiki for X" →
-      "file this answer as a page"
+**Session C: MCP + Wire**
+- [ ] Add wiki tools to memory-mcp: `compile_wiki`, `search_wiki`, `get_page`,
+      `lint_wiki`, `file_answer`
+- [ ] Add wiki resources: `memory://wiki/index`, `memory://wiki/page/{name}`
+- [ ] Wire compilation to LLM (Haiku default, Ollama fallback)
+- [ ] Test: "compile my wiki" → "search wiki for X" → browse pages
 
-### Phase 4: Waggle UI (1-2 sessions)
-- [ ] New "Wiki" tab in MemoryApp
-- [ ] Wiki page viewer (markdown renderer with wikilink navigation)
-- [ ] Compilation trigger button + progress indicator
-- [ ] Health dashboard (contradictions, gaps, orphans)
-- [ ] Wiki settings (schema editor, compilation schedule)
+### v1 — TEST (the real validation)
 
-### Phase 5: Source Adapters — Tier 2 + Obsidian (1-2 sessions)
-- [ ] Implement `obsidian-vault` adapter (bulk .md import, preserve wikilinks
-      as KG relations, parse frontmatter, parse tags)
-- [ ] Implement `epub` adapter (chapters → frames, characters/themes → entities)
-- [ ] Implement `youtube` adapter (transcript via API → frames)
-- [ ] LLM-assisted entity extraction pass (GEPA-optimized Haiku prompt)
-- [ ] Obsidian export (proper vault structure with .obsidian config)
-- [ ] Test: import existing Obsidian vault → compile wiki → export back
+**Test Protocol — Marko's Real Second Brain**
 
-### Phase 6: Open-Source Package (1-2 sessions)
+```
+PHASE 1: Clean Slate
+  - Wipe all E2E test data from personal.mind
+  - Verify: 0 frames, 0 entities, clean database
+  - Run Waggle OS normally for real work (not testing)
+  - After the build session(s), personal.mind will have REAL frames
+    from actual Waggle usage during development
+
+PHASE 2: Harvest All AI Accounts (Marko's real data)
+
+  Source                  Export Method                          Est. Data
+  ─────────────────────── ────────────────────────────────────── ──────────
+  Claude Code sessions    JSONL files (~200MB, 20+ sessions,     HIGH
+                          2-3 months of history)
+  Claude.ai (claude.com)  Settings > Account > Export data        HIGH
+  Claude Cowork           Export from Cowork interface             MEDIUM
+  ChatGPT                 Settings > Data controls > Export        MEDIUM
+  Perplexity              Settings > Privacy > Request data        MEDIUM
+                          (GDPR export → JSON)
+  X.AI (Grok)             Account data export                     LOW-MED
+  Google Gemini            Google Takeout                          MEDIUM
+  Google NotebookLM        Google Takeout                          LOW-MED
+  Genspark                 Account export / GDPR request           LOW
+
+  Total estimated: 500-2000 frames of REAL knowledge
+
+PHASE 3: Microsoft Graph (real business data)
+
+  Connect Marko's Microsoft 365 via Graph API:
+  - Outlook: filtered to important/starred emails
+  - Teams: key channels only (not noise)
+  - Calendar: meetings with notes
+  - OneDrive/SharePoint: key documents
+  - Apply PII filtering: redact mode for emails, flag for Teams
+
+PHASE 4: Compile + Evaluate
+
+  - Run full wiki compilation on all harvested data
+  - Generate entity pages, concept pages, synthesis pages
+  - Generate health report
+  - Evaluate:
+    [ ] Does the Waggle OS page match reality?
+    [ ] Does Marko's page capture real working patterns?
+    [ ] Do cross-session synthesis pages reveal new insights?
+    [ ] Are entity relations meaningful (not noise)?
+    [ ] Is the health report actionable?
+    [ ] Would Marko read this wiki daily?
+    [ ] Hit rate target: 80%+ pages are genuinely useful
+
+PHASE 5: Iterate
+
+  - Fix issues found in evaluation
+  - Re-compile
+  - If hit rate >= 80%: proceed to v2
+  - If hit rate < 80%: diagnose and fix before continuing
+```
+
+### v2 — SCALE (post-test, estimated 4-6 sessions)
+
+Only proceed after v1 test validates the output quality.
+
+**v2a: Waggle UI**
+- [ ] New "Wiki" tab in MemoryApp (markdown renderer + wikilink navigation)
+- [ ] Compile button + progress indicator
+- [ ] Health dashboard
+- [ ] "Open in Obsidian" export button
+
+**v2b: Additional Harvest Adapters**
+- [ ] Perplexity adapter (GDPR JSON export)
+- [ ] Microsoft Copilot adapter
+- [ ] GitHub Copilot Chat adapter (VS Code SQLite)
+- [ ] Cursor / Windsurf session adapters
+- [ ] Grok (X.AI) adapter
+- [ ] Genspark adapter
+
+**v2c: Auto-Ingest via MCP**
+- [ ] Microsoft Graph auto-ingest (Outlook, Teams, Calendar)
+- [ ] Gmail MCP auto-ingest
+- [ ] Slack MCP auto-ingest
+- [ ] Configurable poll intervals + filter rules
+- [ ] Privacy controls: per-source PII filtering, default OFF
+
+**v2d: Open-Source Package**
 - [ ] Extract into standalone `hive-mind` repo
-- [ ] CLI interface (`hive-mind init/ingest/compile/search/lint/export`)
-- [ ] README with Karpathy attribution and positioning
-- [ ] Example schemas for research, business, personal, reading
-- [ ] GitHub Actions CI
-- [ ] npm publish as `hive-mind-mcp`
+- [ ] CLI interface
+- [ ] README with Karpathy attribution
+- [ ] npm publish
 
-### Phase 7: Polish + Launch (1 session)
-- [ ] Dream cycles (scheduled overnight compilation, a la GBrain)
-- [ ] GEPA integration for cost-efficient compilation
-- [ ] Launch blog post / X thread
-- [ ] Product Hunt submission
-
-### Phase 8: Source Adapters — Tier 3 (post-launch)
-- [ ] `email-mbox` + `slack-export` + `notion-export` adapters
-- [ ] Live MCP connectors (Gmail, Slack, Notion, GitHub)
-- [ ] `meeting-transcript` adapter (Granola / Fireflies / Otter)
-- [ ] RSS feed poller (periodic ingest of subscribed feeds)
-- [ ] `kindle-highlights` + `zotero` adapters
+**v2e: Compliance Layer**
+- [ ] Auto-generated compliance pages (audit-log, model-registry, decision-trail)
+- [ ] Compliance export package (JSON + PDF)
+- [ ] Wire to Waggle Teams/KVARK tier
 
 ---
 
