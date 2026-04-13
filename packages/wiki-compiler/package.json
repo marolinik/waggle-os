@@ -1,0 +1,22 @@
+{
+  "name": "@waggle/wiki-compiler",
+  "version": "0.1.0",
+  "description": "Wiki Compiler — LLM-powered knowledge synthesis engine. Compiles memory frames + KG into interlinked wiki pages.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@waggle/core": "*",
+    "@waggle/shared": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.3"
+  },
+  "license": "MIT"
+}
