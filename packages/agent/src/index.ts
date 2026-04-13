@@ -36,6 +36,13 @@ export {
   type BuildOptions as EvalBuildOptions, type JudgeVerdict,
 } from './eval-dataset.js';
 export {
+  LLMJudge, DEFAULT_WEIGHTS, DEFAULT_RUBRIC,
+  buildPrompt as buildJudgePrompt,
+  parseJudgeResponse, computeLengthPenalty,
+  type JudgeLLMCall, type JudgeInput, type JudgeScore, type JudgeOptions,
+  type ParsedJudgeResponse,
+} from './judge.js';
+export {
   createHarnessRun, advancePhase, getCurrentPhaseInstruction,
   canRetry, getRunSummary, harnessEvents,
   type WorkflowHarness, type HarnessPhase, type PhaseGate, type GateResult,
