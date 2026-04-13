@@ -11,6 +11,9 @@
 import type { TaskShape, TaskShapeType, ComponentPhase } from './task-shape.js';
 import type { WorkflowTemplate, WorkflowStep } from './subagent-orchestrator.js';
 import type { LoadedSkill } from './prompt-loader.js';
+import type { WorkflowHarness } from './workflow-harness.js';
+import { matchHarness } from './builtin-harnesses.js';
+import { FEATURE_FLAGS } from './feature-flags.js';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -18,7 +21,8 @@ export type ExecutionMode =
   | 'direct'                  // Agent handles directly, no special structure
   | 'structured_single_agent' // Agent follows a structured plan, no sub-agents
   | 'skill_guided'            // Agent uses a loaded skill's workflow
-  | 'subagent_workflow';      // Multi-agent orchestration via SubagentOrchestrator
+  | 'subagent_workflow'       // Multi-agent orchestration via SubagentOrchestrator
+  | 'harnessed';              // State-machine harness with phase gates
 
 export interface WorkflowPlan {
   /** Recommended execution mode */
@@ -33,6 +37,8 @@ export interface WorkflowPlan {
   steps: PlanStep[];
   /** Full WorkflowTemplate — only present when executionMode is subagent_workflow */
   template?: WorkflowTemplate;
+  /** Harness to use when executionMode is 'harnessed' */
+  harness?: WorkflowHarness;
   /** Detected task shape that informed this plan */
   shape: TaskShape;
 }
@@ -62,11 +68,14 @@ export function composeWorkflow(
   task: string,
   context?: ComposerContext,
 ): WorkflowPlan {
-  const mode = selectExecutionMode(shape, context);
+  const mode = selectExecutionMode(shape, task, context);
   const steps = buildPlanSteps(shape, task, context);
   const explanation = buildExplanation(shape, steps, mode);
   const template = mode === 'subagent_workflow'
     ? buildTemplate(shape, task, steps)
+    : undefined;
+  const harness = mode === 'harnessed'
+    ? matchHarness(task)
     : undefined;
 
   return {
@@ -76,14 +85,21 @@ export function composeWorkflow(
     explanation,
     steps,
     template,
+    harness,
     shape,
   };
 }
 
 // ── Execution mode selection ─────────────────────────────────────────
 
-function selectExecutionMode(shape: TaskShape, context?: ComposerContext): ExecutionMode {
-  // Check for matching skill first
+function selectExecutionMode(shape: TaskShape, task?: string, context?: ComposerContext): ExecutionMode {
+  // Check for matching harness FIRST (opt-in via feature flag)
+  if (task && FEATURE_FLAGS.ADVANCED_WORKFLOWS) {
+    const harness = matchHarness(task);
+    if (harness) return 'harnessed';
+  }
+
+  // Check for matching skill
   if (context?.skills && context.skills.length > 0) {
     const matchingSkill = findMatchingSkill(shape, context.skills);
     if (matchingSkill) return 'skill_guided';
@@ -144,6 +160,8 @@ function explainModeChoice(mode: ExecutionMode, shape: TaskShape, context?: Comp
       return `Task has ${shape.type === 'mixed' ? 'multiple phases' : 'clear structure'} but can be handled in sequence without sub-agents.`;
     case 'subagent_workflow':
       return `Task is complex${shape.type === 'mixed' ? ` with ${shape.phases?.length ?? 3}+ phases` : ''} — parallel sub-agents will be more effective.`;
+    case 'harnessed':
+      return `Task matches a workflow harness with enforced phase gates — deterministic execution with validation.`;
   }
 }
 
@@ -157,6 +175,8 @@ function getEscalationTrigger(mode: ExecutionMode): string {
       return 'Escalate to sub-agent workflow if individual phases are each substantial enough to warrant parallel execution.';
     case 'subagent_workflow':
       return 'Already using the heaviest mode. Simplify if task turns out to be straightforward.';
+    case 'harnessed':
+      return 'Using deterministic harness. Escalate to sub-agent if phases need parallel execution.';
   }
 }
 
@@ -293,6 +313,9 @@ function buildExplanation(shape: TaskShape, steps: PlanStep[], mode: ExecutionMo
       break;
     case 'subagent_workflow':
       intro = `I'd run this as a ${stepCount}-step workflow with specialist agents`;
+      break;
+    case 'harnessed':
+      intro = `I'd execute this through a structured harness with ${stepCount} validated phase${stepCount > 1 ? 's' : ''}`;
       break;
   }
 

@@ -3,6 +3,11 @@ import { SubagentOrchestrator, type OrchestratorConfig, type WorkflowTemplate } 
 import { WORKFLOW_TEMPLATES, listWorkflowTemplates } from './workflow-templates.js';
 import { detectTaskShape } from './task-shape.js';
 import { composeWorkflow, validateTemplate, type ComposerContext } from './workflow-composer.js';
+import {
+  createHarnessRun, advancePhase, getCurrentPhaseInstruction,
+  getRunSummary, type PhaseOutput, type HarnessRunState,
+} from './workflow-harness.js';
+import { BUILTIN_HARNESSES, getHarnessById } from './builtin-harnesses.js';
 import type { HookRegistry } from './hooks.js';
 import type { LoadedSkill } from './prompt-loader.js';
 
@@ -200,5 +205,117 @@ export function createWorkflowTools(config: WorkflowToolsConfig): ToolDefinition
         return output;
       },
     },
+
+    // ── list_harnesses ──────────────────────────────────────────────
+    {
+      name: 'list_harnesses',
+      description:
+        'List available workflow harnesses — structured phase-gate workflows ' +
+        'that enforce completion criteria between phases. Use this to see ' +
+        'what deterministic harnesses are available.',
+      parameters: { type: 'object', properties: {}, required: [] },
+      execute: async () => {
+        let output = '## Available Harnesses\n\n';
+        for (const h of BUILTIN_HARNESSES) {
+          output += `### ${h.name} (\`${h.id}\`)\n`;
+          output += `Phases: ${h.phases.map(p => p.name).join(' → ')}\n`;
+          output += `Aggregation: ${h.aggregation}\n\n`;
+        }
+        return output;
+      },
+    },
+
+    // ── run_harness ─────────────────────────────────────────────────
+    {
+      name: 'run_harness',
+      description:
+        'Start or advance a workflow harness. First call with a harness_id ' +
+        'creates a new run and returns the first phase instruction. ' +
+        'Subsequent calls with phase_output advance through phases, ' +
+        'validating gates at each step. Returns next instruction or summary.',
+      parameters: {
+        type: 'object',
+        properties: {
+          harness_id: { type: 'string', description: 'Harness ID (e.g., "research-verify", "code-review-fix", "document-draft")' },
+          phase_output: {
+            type: 'object',
+            description: 'Output from the current phase (provide on subsequent calls to advance)',
+            properties: {
+              content: { type: 'string', description: 'The agent output text for this phase' },
+              tool_calls: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    tool: { type: 'string' },
+                    args: { type: 'object' },
+                    result: { type: 'string' },
+                  },
+                },
+                description: 'Tool calls made during this phase',
+              },
+              artifacts: { type: 'array', items: { type: 'string' }, description: 'Files created or modified' },
+            },
+          },
+        },
+        required: ['harness_id'],
+      },
+      execute: async (args: Record<string, unknown>) => {
+        const harnessId = args.harness_id as string;
+        const harness = getHarnessById(harnessId);
+        if (!harness) {
+          return `Harness "${harnessId}" not found. Available: ${BUILTIN_HARNESSES.map(h => h.id).join(', ')}`;
+        }
+
+        // Track active harness runs in closure
+        if (!activeHarnessRuns.has(harnessId)) {
+          // First call — create run
+          const run = createHarnessRun(harness);
+          activeHarnessRuns.set(harnessId, run);
+          const instruction = getCurrentPhaseInstruction(run, harness);
+          return `## Harness Started: ${harness.name}\n\n${instruction ?? 'No phases defined.'}`;
+        }
+
+        // Subsequent call — advance with output
+        const phaseOutput = args.phase_output as { content?: string; tool_calls?: unknown[]; artifacts?: string[] } | undefined;
+        if (!phaseOutput?.content) {
+          const run = activeHarnessRuns.get(harnessId)!;
+          const instruction = getCurrentPhaseInstruction(run, harness);
+          if (!instruction) {
+            const summary = getRunSummary(run, harness);
+            activeHarnessRuns.delete(harnessId);
+            return summary;
+          }
+          return instruction;
+        }
+
+        const currentRun = activeHarnessRuns.get(harnessId)!;
+        const currentPhase = harness.phases[currentRun.currentPhase];
+
+        const output: PhaseOutput = {
+          phaseId: currentPhase?.id ?? 'unknown',
+          content: phaseOutput.content,
+          toolCalls: (phaseOutput.tool_calls as PhaseOutput['toolCalls']) ?? [],
+          artifacts: phaseOutput.artifacts ?? [],
+          durationMs: 0,
+          tokens: { input: 0, output: 0 },
+        };
+
+        const newRun = await advancePhase(currentRun, harness, output);
+        activeHarnessRuns.set(harnessId, newRun);
+
+        if (newRun.completed || newRun.aborted) {
+          const summary = getRunSummary(newRun, harness);
+          activeHarnessRuns.delete(harnessId);
+          return summary;
+        }
+
+        const nextInstruction = getCurrentPhaseInstruction(newRun, harness);
+        return nextInstruction ?? getRunSummary(newRun, harness);
+      },
+    },
   ];
 }
+
+// Active harness runs — keyed by harness ID
+const activeHarnessRuns = new Map<string, HarnessRunState>();
