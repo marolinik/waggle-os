@@ -20,6 +20,8 @@ import { registerIdentityTools } from './tools/identity.js';
 import { registerAwarenessTools } from './tools/awareness.js';
 import { registerWorkspaceTools } from './tools/workspace.js';
 import { registerHarvestTools } from './tools/harvest.js';
+import { registerCleanupTools } from './tools/cleanup.js';
+import { registerIngestTools } from './tools/ingest.js';
 import { registerResources } from './resources/memory.js';
 
 // ── Server creation ─────────────────────────────────────────────────
@@ -58,6 +60,8 @@ registerIdentityTools(server);
 registerAwarenessTools(server);
 registerWorkspaceTools(server);
 registerHarvestTools(server);
+registerCleanupTools(server);
+registerIngestTools(server);
 
 // ── Register all resources ──────────────────────────────────────────
 

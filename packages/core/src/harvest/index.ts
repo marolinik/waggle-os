@@ -5,4 +5,8 @@ export { ClaudeAdapter } from './claude-adapter.js';
 export { ClaudeCodeAdapter } from './claude-code-adapter.js';
 export { GeminiAdapter } from './gemini-adapter.js';
 export { UniversalAdapter } from './universal-adapter.js';
+export { MarkdownAdapter } from './markdown-adapter.js';
+export { PlaintextAdapter } from './plaintext-adapter.js';
+export { UrlAdapter } from './url-adapter.js';
+export { PdfAdapter } from './pdf-adapter.js';
 export { HarvestPipeline } from './pipeline.js';

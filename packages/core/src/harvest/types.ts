@@ -9,11 +9,14 @@ export type ImportSourceType =
   | 'gemini' | 'google-ai-studio' | 'perplexity' | 'grok'
   | 'cursor' | 'copilot' | 'manus' | 'genspark'
   | 'qwen' | 'minimax' | 'z-ai' | 'openclaw' | 'cowork'
-  | 'elevenlabs' | 'google-flow' | 'unknown';
+  | 'elevenlabs' | 'google-flow'
+  | 'markdown' | 'plaintext' | 'pdf' | 'url'
+  | 'unknown';
 
 export type ImportItemType =
   | 'conversation' | 'memory' | 'instruction'
-  | 'preference' | 'artifact' | 'rule';
+  | 'preference' | 'artifact' | 'rule'
+  | 'decision' | 'document';
 
 // ── Universal Import Item (adapter output) ──
 

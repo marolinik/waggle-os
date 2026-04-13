@@ -24,6 +24,10 @@ import {
   ClaudeCodeAdapter,
   GeminiAdapter,
   UniversalAdapter,
+  MarkdownAdapter,
+  PlaintextAdapter,
+  UrlAdapter,
+  PdfAdapter,
   type EmbeddingProviderInstance,
   type EmbeddingProviderConfig,
 } from '@waggle/core';
@@ -65,6 +69,10 @@ const _claudeAdapter = new ClaudeAdapter();
 const _claudeCodeAdapter = new ClaudeCodeAdapter();
 const _geminiAdapter = new GeminiAdapter();
 const _universalAdapter = new UniversalAdapter();
+const _markdownAdapter = new MarkdownAdapter();
+const _plaintextAdapter = new PlaintextAdapter();
+const _urlAdapter = new UrlAdapter();
+const _pdfAdapter = new PdfAdapter();
 
 export function getAdapter(source: string) {
   switch (source) {
@@ -72,6 +80,10 @@ export function getAdapter(source: string) {
     case 'claude': return _claudeAdapter;
     case 'claude-code': return _claudeCodeAdapter;
     case 'gemini': return _geminiAdapter;
+    case 'markdown': return _markdownAdapter;
+    case 'plaintext': return _plaintextAdapter;
+    case 'url': return _urlAdapter;
+    case 'pdf': return _pdfAdapter;
     default: return _universalAdapter;
   }
 }

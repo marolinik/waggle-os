@@ -372,7 +372,7 @@ describe('VaultStore', () => {
       vault.set('test', 'value');
       expect(vault.get('test')!.value).toBe('value');
       expect(warnSpy).toHaveBeenCalledWith(
-        '[vault] Could not restrict key file permissions via icacls'
+        '[waggle:vault] Could not restrict key file permissions via icacls'
       );
     } finally {
       Object.defineProperty(process, 'platform', originalPlatform);

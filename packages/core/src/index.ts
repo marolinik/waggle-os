@@ -74,6 +74,10 @@ export { ClaudeAdapter } from './harvest/claude-adapter.js';
 export { ClaudeCodeAdapter } from './harvest/claude-code-adapter.js';
 export { GeminiAdapter } from './harvest/gemini-adapter.js';
 export { UniversalAdapter } from './harvest/universal-adapter.js';
+export { MarkdownAdapter } from './harvest/markdown-adapter.js';
+export { PlaintextAdapter } from './harvest/plaintext-adapter.js';
+export { UrlAdapter } from './harvest/url-adapter.js';
+export { PdfAdapter } from './harvest/pdf-adapter.js';
 export { HarvestPipeline, type LLMCallFn, type PipelineOptions } from './harvest/pipeline.js';
 export { dedup } from './harvest/dedup.js';
 export type {

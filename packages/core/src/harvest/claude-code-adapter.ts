@@ -6,6 +6,9 @@
  * - rules/**\/*.md files (coding standards, workflow rules)
  * - plans/*.md files (implementation plans)
  * - settings.json (model preferences, tool config)
+ * - CLAUDE.md project files (architectural decisions)
+ * - .mind/*.md session handoffs (decisions, directions)
+ * - Decision extraction from memory content (pattern matching)
  *
  * This is a FilesystemAdapter — it reads directly from disk.
  */
@@ -18,10 +21,27 @@ import type { FilesystemAdapter, UniversalImportItem, ImportItemType } from './t
 // Map Claude Code memory types to our import types
 const MEMORY_TYPE_MAP: Record<string, ImportItemType> = {
   user: 'preference',
-  feedback: 'preference',
+  feedback: 'decision',
   project: 'memory',
   reference: 'memory',
 };
+
+// Patterns that indicate user decisions in text
+const DECISION_PATTERNS = [
+  /\bwe (?:decided|chose|picked|went with|agreed|confirmed)\b/i,
+  /\blet'?s (?:go with|use|do|keep|drop|switch|move)\b/i,
+  /\bdecision:\s/i,
+  /\bconfirmed:\s/i,
+  /\bapproved:\s/i,
+  /\brejected:\s/i,
+  /\bwon'?t (?:do|use|implement|add|need)\b/i,
+  /\bmust (?:use|have|be|support|include)\b/i,
+  /\bnon-negotiable\b/i,
+  /\brequirement:\s/i,
+  /\bconstraint:\s/i,
+  /\bchose .+ (?:over|instead of|rather than)\b/i,
+  /\bdropped?\b.+\bin favo(?:u)?r of\b/i,
+];
 
 interface MemoryFrontmatter {
   name?: string;
@@ -158,7 +178,133 @@ export class ClaudeCodeAdapter implements FilesystemAdapter {
       } catch { /* skip */ }
     }
 
+    // 5. Scan CLAUDE.md files from project directories (architectural decisions)
+    if (fs.existsSync(projectsDir)) {
+      const projectEntries = fs.readdirSync(projectsDir, { withFileTypes: true });
+      for (const projEntry of projectEntries) {
+        if (!projEntry.isDirectory()) continue;
+        const claudeMdPath = path.join(projectsDir, projEntry.name, 'CLAUDE.md');
+        if (fs.existsSync(claudeMdPath)) {
+          try {
+            const content = fs.readFileSync(claudeMdPath, 'utf-8');
+            if (content.trim().length > 50) {
+              items.push({
+                id: randomUUID(),
+                source: 'claude-code',
+                type: 'artifact',
+                title: `Project CLAUDE.md (${projEntry.name})`,
+                content: content.slice(0, 4000),
+                timestamp: this.getFileMtime(claudeMdPath),
+                metadata: {
+                  filePath: `projects/${projEntry.name}/CLAUDE.md`,
+                  category: 'project-config',
+                },
+              });
+            }
+          } catch { /* skip */ }
+        }
+      }
+    }
+
+    // 6. Scan .mind/ directories for session handoffs and decisions
+    if (fs.existsSync(projectsDir)) {
+      const projectEntries = fs.readdirSync(projectsDir, { withFileTypes: true });
+      for (const projEntry of projectEntries) {
+        if (!projEntry.isDirectory()) continue;
+        const mindDir = path.join(projectsDir, projEntry.name, '.mind');
+        items.push(...this.scanMindDir(mindDir, projEntry.name));
+      }
+    }
+
+    // 7. Extract decisions from memory items that contain decision language
+    items.push(...this.extractDecisions(items));
+
     return items;
+  }
+
+  /** Scan .mind/ directory for session handoffs with decisions. */
+  private scanMindDir(mindDir: string, projectHash: string): UniversalImportItem[] {
+    if (!fs.existsSync(mindDir)) return [];
+    const items: UniversalImportItem[] = [];
+
+    try {
+      const files = fs.readdirSync(mindDir).filter(f => f.endsWith('.md'));
+      for (const file of files) {
+        const fullPath = path.join(mindDir, file);
+        try {
+          const content = fs.readFileSync(fullPath, 'utf-8');
+          if (content.trim().length < 50) continue;
+
+          // Determine type from filename
+          const lowerFile = file.toLowerCase();
+          const isDecision = lowerFile.includes('decision');
+          const isState = lowerFile.includes('state');
+
+          items.push({
+            id: randomUUID(),
+            source: 'claude-code',
+            type: isDecision ? 'decision' : 'artifact',
+            title: `${isDecision ? 'Decisions' : isState ? 'State' : 'Session'}: ${file.replace('.md', '')}`,
+            content: content.slice(0, 4000),
+            timestamp: this.getFileMtime(fullPath),
+            metadata: {
+              filePath: `projects/${projectHash}/.mind/${file}`,
+              category: isDecision ? 'decision' : 'session-handoff',
+            },
+          });
+        } catch { /* skip */ }
+      }
+    } catch { /* skip */ }
+
+    return items;
+  }
+
+  /**
+   * Extract decision items from existing memory/preference/artifact items.
+   * Scans content for decision patterns and creates separate decision items
+   * for statements that match. Avoids duplicating items already typed as 'decision'.
+   */
+  private extractDecisions(existingItems: readonly UniversalImportItem[]): UniversalImportItem[] {
+    const decisions: UniversalImportItem[] = [];
+
+    for (const item of existingItems) {
+      // Skip items already categorized as decisions
+      if (item.type === 'decision' || item.type === 'rule') continue;
+
+      const lines = item.content.split('\n');
+      const decisionLines: string[] = [];
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.length < 10) continue;
+
+        for (const pattern of DECISION_PATTERNS) {
+          if (pattern.test(trimmed)) {
+            decisionLines.push(trimmed);
+            break;
+          }
+        }
+      }
+
+      if (decisionLines.length > 0) {
+        decisions.push({
+          id: randomUUID(),
+          source: 'claude-code',
+          type: 'decision',
+          title: `Decisions from: ${item.title}`,
+          content: decisionLines.join('\n'),
+          timestamp: item.timestamp,
+          metadata: {
+            ...item.metadata,
+            category: 'decision',
+            extractedFrom: item.id,
+            decisionCount: decisionLines.length,
+          },
+        });
+      }
+    }
+
+    return decisions;
   }
 
   private scanMemoryDir(memoryDir: string, projectHash: string): UniversalImportItem[] {
