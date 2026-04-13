@@ -15,54 +15,36 @@ import {
   getSearch,
   getKnowledgeGraph,
 } from '../core/setup.js';
-import { WikiCompiler, CompilationState } from '@waggle/wiki-compiler';
-import type { LLMSynthesizeFn } from '@waggle/wiki-compiler';
+import {
+  WikiCompiler,
+  CompilationState,
+  resolveSynthesizer as resolveWikiSynthesizer,
+} from '@waggle/wiki-compiler';
+import type { LLMSynthesizeFn, ResolvedSynthesizer } from '@waggle/wiki-compiler';
 
-/**
- * Default synthesize function — echoes a structured summary when no LLM is configured.
- * In production, this is replaced by a real LLM call (Haiku/Ollama).
- */
-const echoSynthesizer: LLMSynthesizeFn = async (prompt: string) => {
-  // Extract the key information from the prompt for a basic summary
-  const frameMatch = prompt.match(/## Source Frames \((\d+) total\)/);
-  const frameCount = frameMatch ? frameMatch[1] : '?';
+// Cached synthesizer — resolved once on first compile_wiki call
+let _synthesizer: ResolvedSynthesizer | null = null;
 
-  const entityMatch = prompt.match(/about "([^"]+)"/);
-  const entityName = entityMatch ? entityMatch[1] : 'this topic';
-
-  return [
-    `## Summary`,
-    `Compiled from ${frameCount} source frames about ${entityName}.`,
-    '',
-    `## Key Facts`,
-    `- Data compiled from ${frameCount} memory frames`,
-    `- See individual frame citations below for details`,
-    '',
-    `> **Note:** This page was compiled without an LLM synthesizer.`,
-    `> Connect an LLM provider for richer synthesis.`,
-    `> Set WAGGLE_WIKI_LLM_PROVIDER in your environment.`,
-  ].join('\n');
-};
-
-/** Resolve the LLM synthesizer. Checks env for provider config. */
-function resolveSynthesizer(): LLMSynthesizeFn {
-  // For v1, use echo synthesizer. In production, this would be wired
-  // to the agent's LLM via the sidecar API or direct provider call.
-  // The compile_wiki tool accepts an optional synthesizer override.
-  return echoSynthesizer;
+async function getSynthesizer(): Promise<ResolvedSynthesizer> {
+  if (!_synthesizer) {
+    _synthesizer = await resolveWikiSynthesizer();
+    console.error(`[waggle-memory] Wiki synthesizer: ${_synthesizer.provider} (${_synthesizer.model})`);
+  }
+  return _synthesizer;
 }
 
-function getCompiler(synthesize?: LLMSynthesizeFn): { compiler: WikiCompiler; state: CompilationState } {
+async function getCompiler(): Promise<{ compiler: WikiCompiler; state: CompilationState; provider: string }> {
   const db = getPersonalDb();
   const state = new CompilationState(db);
+  const synth = await getSynthesizer();
   const compiler = new WikiCompiler(
     getKnowledgeGraph(),
     getFrameStore(),
     getSearch(),
     state,
-    { synthesize: synthesize ?? resolveSynthesizer() },
+    { synthesize: synth.synthesize },
   );
-  return { compiler, state };
+  return { compiler, state, provider: synth.provider };
 }
 
 export function registerWikiTools(server: McpServer): void {
@@ -78,7 +60,7 @@ export function registerWikiTools(server: McpServer): void {
         .describe('Optional list of concept names to compile pages for. Auto-detected if omitted.'),
     },
     async ({ mode, concepts }) => {
-      const { compiler } = getCompiler();
+      const { compiler, provider } = await getCompiler();
 
       try {
         const result = await compiler.compile({
@@ -91,6 +73,7 @@ export function registerWikiTools(server: McpServer): void {
             type: 'text' as const,
             text: JSON.stringify({
               mode,
+              llm_provider: provider,
               pages_created: result.pagesCreated,
               pages_updated: result.pagesUpdated,
               pages_unchanged: result.pagesUnchanged,
@@ -123,7 +106,7 @@ export function registerWikiTools(server: McpServer): void {
       slug: z.string().describe('Page slug (URL-safe name). Use "index" for the wiki index.'),
     },
     async ({ slug }) => {
-      const { state } = getCompiler();
+      const { state } = await getCompiler();
       const page = state.getPage(slug);
 
       if (!page) {
@@ -177,7 +160,7 @@ export function registerWikiTools(server: McpServer): void {
         .describe('Filter by page type'),
     },
     async ({ query, type }) => {
-      const { state } = getCompiler();
+      const { state } = await getCompiler();
 
       let pages = type
         ? state.getPagesByType(type)
@@ -223,7 +206,7 @@ export function registerWikiTools(server: McpServer): void {
     'Run a health check on the wiki. Reports contradictions, gaps, orphan entities, weak confidence pages, and data quality score.',
     {},
     async () => {
-      const { compiler } = getCompiler();
+      const { compiler } = await getCompiler();
       const report = compiler.compileHealth();
 
       return {

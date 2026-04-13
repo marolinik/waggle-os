@@ -1,5 +1,6 @@
 export { WikiCompiler } from './compiler.js';
 export { CompilationState, contentHash } from './state.js';
+export { resolveSynthesizer, type ResolvedSynthesizer, type SynthesizerConfig } from './synthesizer.js';
 export { entityPagePrompt, conceptPagePrompt, synthesisPagePrompt } from './prompts.js';
 export type {
   WikiPage,
