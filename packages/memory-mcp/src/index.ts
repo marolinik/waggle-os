@@ -22,6 +22,7 @@ import { registerWorkspaceTools } from './tools/workspace.js';
 import { registerHarvestTools } from './tools/harvest.js';
 import { registerCleanupTools } from './tools/cleanup.js';
 import { registerIngestTools } from './tools/ingest.js';
+import { registerWikiTools } from './tools/wiki.js';
 import { registerResources } from './resources/memory.js';
 
 // ── Server creation ─────────────────────────────────────────────────
@@ -46,6 +47,12 @@ const server = new McpServer(
       '3. Use search_entities to explore the knowledge graph',
       '4. Use get_identity / get_awareness for user context',
       '',
+      'Wiki compiler:',
+      '5. Use compile_wiki to build a personal wiki from your memories',
+      '6. Use search_wiki / get_page to browse compiled knowledge',
+      '7. Use compile_health to check data quality and find gaps',
+      '8. Use ingest_source to add documents, URLs, or files to memory',
+      '',
       'Memory is stored locally in ~/.waggle/ and persists across sessions.',
       'Workspaces provide isolated memory spaces for different projects.',
     ].join('\n'),
@@ -62,6 +69,7 @@ registerWorkspaceTools(server);
 registerHarvestTools(server);
 registerCleanupTools(server);
 registerIngestTools(server);
+registerWikiTools(server);
 
 // ── Register all resources ──────────────────────────────────────────
 
