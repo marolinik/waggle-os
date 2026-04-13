@@ -168,6 +168,27 @@ CREATE INDEX IF NOT EXISTS idx_interactions_workspace ON ai_interactions (worksp
 CREATE INDEX IF NOT EXISTS idx_interactions_timestamp ON ai_interactions (timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_interactions_model ON ai_interactions (model);
 
+-- Layer 9: Execution Traces (agent run history — foundation for self-evolution)
+CREATE TABLE IF NOT EXISTS execution_traces (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT,
+  persona_id TEXT,
+  workspace_id TEXT,
+  model TEXT,
+  task_shape TEXT,
+  outcome TEXT NOT NULL DEFAULT 'pending'
+    CHECK (outcome IN ('success', 'corrected', 'abandoned', 'verified', 'pending')),
+  trace_json TEXT NOT NULL DEFAULT '{}',
+  cost_usd REAL NOT NULL DEFAULT 0,
+  duration_ms INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  finalized_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_traces_session ON execution_traces (session_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_traces_persona ON execution_traces (persona_id, outcome);
+CREATE INDEX IF NOT EXISTS idx_traces_outcome ON execution_traces (outcome, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_traces_workspace ON execution_traces (workspace_id, created_at DESC);
+
 -- Layer 8: Harvest Sources (Memory Harvest sync tracking)
 CREATE TABLE IF NOT EXISTS harvest_sources (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

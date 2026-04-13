@@ -26,6 +26,10 @@ export { extractEntities, type ExtractedEntity } from './entity-extractor.js';
 export { CognifyPipeline, type CognifyConfig, type CognifyResult } from './cognify.js';
 export { AgentLearning, type LearnedBehavior, type PersonaEffectiveness, type LearningSnapshot } from './agent-learning.js';
 export {
+  TraceRecorder, truncate as truncateTraceText, scrubSecrets,
+  type TraceHandle, type FinalizeOptions as TraceFinalizeOptions,
+} from './trace-recorder.js';
+export {
   createHarnessRun, advancePhase, getCurrentPhaseInstruction,
   canRetry, getRunSummary, harnessEvents,
   type WorkflowHarness, type HarnessPhase, type PhaseGate, type GateResult,

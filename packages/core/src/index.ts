@@ -39,6 +39,12 @@ export {
   type ActionableThresholds,
 } from './mind/improvement-signals.js';
 export {
+  ExecutionTraceStore, EXECUTION_TRACES_TABLE_SQL,
+  type ExecutionTrace, type ParsedExecutionTrace, type TraceOutcome,
+  type TracePayload, type TraceToolCall, type TraceReasoningStep,
+  type StartTraceInput, type FinalizeTraceInput, type TraceQueryFilter,
+} from './mind/execution-traces.js';
+export {
   InstallAuditStore, INSTALL_AUDIT_TABLE_SQL,
   type InstallAuditEntry, type RecordAuditInput,
   type AuditAction, type AuditRiskLevel, type AuditTrustSource,
