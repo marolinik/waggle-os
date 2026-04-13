@@ -49,6 +49,7 @@ export interface PageRecord {
   pageType: WikiPageType;
   name: string;
   contentHash: string;
+  markdown: string;
   frameIds: string; // JSON array
   compiledAt: string;
   sourceCount: number;

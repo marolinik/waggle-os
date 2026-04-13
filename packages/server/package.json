@@ -24,6 +24,7 @@
     "@waggle/core": "*",
     "@waggle/shared": "*",
     "@waggle/waggle-dance": "*",
+    "@waggle/wiki-compiler": "*",
     "archiver": "^7.0.1",
     "bullmq": "^5.0.0",
     "cron-parser": "^4.9.0",

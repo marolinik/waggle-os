@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Brain, Search, Clock, Trash2, Edit3, Filter, Network, ChevronDown, X, Eye, Copy, Loader2, Download, Activity } from 'lucide-react';
+import { Brain, Search, Clock, Trash2, Edit3, Filter, Network, ChevronDown, X, Eye, Copy, Loader2, Download, Activity, BookOpen } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { Input } from '@/components/ui/input';
 import type { MemoryFrame, KGNode, KGEdge } from '@/lib/types';
@@ -8,6 +8,7 @@ import ContextMenu, { type ContextMenuItem } from '@/components/os/ContextMenu';
 import KnowledgeGraphViewer from './memory/KnowledgeGraphViewer';
 import HarvestTab from './memory/HarvestTab';
 import WeaverPanel from './memory/WeaverPanel';
+import WikiTab from './memory/WikiTab';
 
 const frameTypeIcons: Record<string, string> = {
   fact: '📋', event: '📅', insight: '💡', decision: '⚖️', task: '✅', entity: '🏷️',
@@ -44,7 +45,7 @@ const MemoryApp = ({
   minImportance = 0, onMinImportanceChange,
   knowledgeGraph, onRefreshKG, kgScope, onKGScopeChange, onContextRail,
 }: MemoryAppProps) => {
-  const [view, setView] = useState<'timeline' | 'graph' | 'harvest' | 'weaver'>('timeline');
+  const [view, setView] = useState<'timeline' | 'graph' | 'harvest' | 'weaver' | 'wiki'>('timeline');
   const [showFilters, setShowFilters] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ position: { x: number; y: number }; items: ContextMenuItem[] } | null>(null);
 
@@ -118,6 +119,13 @@ const MemoryApp = ({
               >
                 <Activity className="w-3 h-3" />
               </button>
+              <button
+                onClick={() => setView(view === 'wiki' ? 'timeline' : 'wiki')}
+                className={`p-1 rounded transition-colors ${view === 'wiki' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                title="Wiki (Compiled Knowledge)"
+              >
+                <BookOpen className="w-3 h-3" />
+              </button>
             </div>
           </div>
           {showFilters && (
@@ -190,7 +198,9 @@ const MemoryApp = ({
 
       {/* Main content area */}
       <div className="flex-1 overflow-auto">
-        {view === 'weaver' ? (
+        {view === 'wiki' ? (
+          <WikiTab />
+        ) : view === 'weaver' ? (
           <WeaverPanel />
         ) : view === 'harvest' ? (
           <HarvestTab />

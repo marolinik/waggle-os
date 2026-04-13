@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS wiki_pages (
   page_type TEXT NOT NULL,
   name TEXT NOT NULL,
   content_hash TEXT NOT NULL,
+  markdown TEXT NOT NULL DEFAULT '',
   frame_ids TEXT NOT NULL DEFAULT '[]',
   compiled_at TEXT NOT NULL DEFAULT (datetime('now')),
   source_count INTEGER NOT NULL DEFAULT 0
@@ -44,6 +45,12 @@ export class CompilationState {
     const raw = this.db.getDatabase();
     raw.prepare(PAGES_TABLE).run();
     raw.prepare(WATERMARK_TABLE).run();
+    // Migration: add markdown column if missing (for databases created before v1.1)
+    try {
+      raw.prepare("SELECT markdown FROM wiki_pages LIMIT 0").get();
+    } catch {
+      raw.prepare("ALTER TABLE wiki_pages ADD COLUMN markdown TEXT NOT NULL DEFAULT ''").run();
+    }
   }
 
   // ── Watermark ─────────────────────────────────────────────────
@@ -83,19 +90,19 @@ export class CompilationState {
 
   getPage(slug: string): PageRecord | undefined {
     return this.db.getDatabase().prepare(
-      'SELECT slug, page_type as pageType, name, content_hash as contentHash, frame_ids as frameIds, compiled_at as compiledAt, source_count as sourceCount FROM wiki_pages WHERE slug = ?',
+      'SELECT slug, page_type as pageType, name, content_hash as contentHash, markdown, frame_ids as frameIds, compiled_at as compiledAt, source_count as sourceCount FROM wiki_pages WHERE slug = ?',
     ).get(slug) as PageRecord | undefined;
   }
 
   getAllPages(): PageRecord[] {
     return this.db.getDatabase().prepare(
-      'SELECT slug, page_type as pageType, name, content_hash as contentHash, frame_ids as frameIds, compiled_at as compiledAt, source_count as sourceCount FROM wiki_pages ORDER BY name',
+      'SELECT slug, page_type as pageType, name, content_hash as contentHash, markdown, frame_ids as frameIds, compiled_at as compiledAt, source_count as sourceCount FROM wiki_pages ORDER BY name',
     ).all() as PageRecord[];
   }
 
   getPagesByType(pageType: WikiPageType): PageRecord[] {
     return this.db.getDatabase().prepare(
-      'SELECT slug, page_type as pageType, name, content_hash as contentHash, frame_ids as frameIds, compiled_at as compiledAt, source_count as sourceCount FROM wiki_pages WHERE page_type = ? ORDER BY name',
+      'SELECT slug, page_type as pageType, name, content_hash as contentHash, markdown, frame_ids as frameIds, compiled_at as compiledAt, source_count as sourceCount FROM wiki_pages WHERE page_type = ? ORDER BY name',
     ).all(pageType) as PageRecord[];
   }
 
@@ -106,6 +113,7 @@ export class CompilationState {
     hash: string,
     frameIds: number[],
     sourceCount: number,
+    markdown = '',
   ): { action: 'created' | 'updated' | 'unchanged' } {
     const raw = this.db.getDatabase();
     const existing = this.getPage(slug);
@@ -115,14 +123,15 @@ export class CompilationState {
     }
 
     raw.prepare(`
-      INSERT INTO wiki_pages (slug, page_type, name, content_hash, frame_ids, compiled_at, source_count)
-      VALUES (?, ?, ?, ?, ?, datetime('now'), ?)
+      INSERT INTO wiki_pages (slug, page_type, name, content_hash, markdown, frame_ids, compiled_at, source_count)
+      VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?)
       ON CONFLICT(slug) DO UPDATE SET
         content_hash = excluded.content_hash,
+        markdown = excluded.markdown,
         frame_ids = excluded.frame_ids,
         compiled_at = excluded.compiled_at,
         source_count = excluded.source_count
-    `).run(slug, pageType, name, hash, JSON.stringify(frameIds), sourceCount);
+    `).run(slug, pageType, name, hash, markdown, JSON.stringify(frameIds), sourceCount);
 
     return { action: existing ? 'updated' : 'created' };
   }

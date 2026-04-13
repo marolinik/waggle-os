@@ -99,6 +99,7 @@ import { telemetryRoutes } from './routes/telemetry.js';
 import { stripeRoutes } from '../stripe/index.js';
 import { agentGroupRoutes } from './routes/agent-groups.js';
 import { harvestRoutes } from './routes/harvest.js';
+import { wikiRoutes } from './routes/wiki.js';
 import { localInferenceRoutes } from './routes/local-inference.js';
 import { complianceRoutes } from './routes/compliance.js';
 import { OfflineManager } from './offline-manager.js';
@@ -1701,6 +1702,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(agentGroupRoutes);
   await server.register(stripeRoutes);
   await server.register(harvestRoutes);
+  await server.register(wikiRoutes);
   await server.register(localInferenceRoutes);
   await server.register(complianceRoutes);
 

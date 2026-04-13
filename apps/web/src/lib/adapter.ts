@@ -1120,6 +1120,40 @@ class LocalAdapter {
     return res.json();
   }
 
+  // --- Wiki ---
+  async getWikiPages(): Promise<any[]> {
+    const res = await this.fetch('/api/wiki/pages');
+    return res.json();
+  }
+
+  async getWikiPage(slug: string): Promise<any> {
+    const res = await this.fetch(`/api/wiki/pages/${encodeURIComponent(slug)}`);
+    return res.json();
+  }
+
+  async getWikiPageContent(slug: string): Promise<{ slug: string; markdown: string }> {
+    const res = await this.fetch(`/api/wiki/pages/${encodeURIComponent(slug)}/content`);
+    return res.json();
+  }
+
+  async compileWiki(mode: 'incremental' | 'full' = 'incremental', concepts?: string[]): Promise<any> {
+    const res = await this.fetch('/api/wiki/compile', {
+      method: 'POST',
+      body: JSON.stringify({ mode, ...(concepts && { concepts }) }),
+    });
+    return res.json();
+  }
+
+  async getWikiHealth(): Promise<any> {
+    const res = await this.fetch('/api/wiki/health');
+    return res.json();
+  }
+
+  async getWikiWatermark(): Promise<any> {
+    const res = await this.fetch('/api/wiki/watermark');
+    return res.json();
+  }
+
   // --- Compliance ---
   async getComplianceStatus(workspaceId?: string): Promise<any> {
     const url = workspaceId ? `/api/compliance/status?workspaceId=${workspaceId}` : '/api/compliance/status';

@@ -428,6 +428,7 @@ export class WikiCompiler {
         const result = this.state.upsertPage(
           page.slug, 'entity', entity.name,
           page.contentHash, page.frontmatter.frame_ids, page.frontmatter.sources,
+          page.markdown,
         );
         if (result.action === 'created') pagesCreated++;
         else if (result.action === 'updated') pagesUpdated++;
@@ -444,6 +445,7 @@ export class WikiCompiler {
         const result = this.state.upsertPage(
           page.slug, 'concept', concept,
           page.contentHash, page.frontmatter.frame_ids, page.frontmatter.sources,
+          page.markdown,
         );
         if (result.action === 'created') pagesCreated++;
         else if (result.action === 'updated') pagesUpdated++;
@@ -459,6 +461,7 @@ export class WikiCompiler {
         const result = this.state.upsertPage(
           page.slug, 'synthesis', `Synthesis: ${concept}`,
           page.contentHash, page.frontmatter.frame_ids, page.frontmatter.sources,
+          page.markdown,
         );
         if (result.action === 'created') pagesCreated++;
         else if (result.action === 'updated') pagesUpdated++;
@@ -469,7 +472,7 @@ export class WikiCompiler {
 
     // 4. Compile index
     const indexPage = this.compileIndex();
-    this.state.upsertPage('index', 'index', 'Wiki Index', indexPage.contentHash, [], 0);
+    this.state.upsertPage('index', 'index', 'Wiki Index', indexPage.contentHash, [], 0, indexPage.markdown);
 
     // 5. Update watermark
     const maxFrameId = this.state.getMaxFrameId();
