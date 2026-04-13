@@ -323,7 +323,234 @@ operate — analogous to Karpathy's CLAUDE.md governance file.
 
 ---
 
-## 5. Dual-Track Delivery Plan
+## 5. Universal Source Pipeline — The Full Second Brain
+
+### 5.1 The Gap
+
+Currently Waggle's harvest pipeline only ingests AI conversation exports
+(ChatGPT, Claude, Gemini JSON). Karpathy's system ingests **anything** —
+articles, papers, PDFs, podcast notes, journal entries, web clips, meeting
+transcripts, book chapters. GBrain adds Gmail, Calendar, and Twilio.
+
+To be a true second brain, the ingest layer must accept any knowledge source
+a human encounters. The wiki compiler then synthesizes ALL of it — not just
+what you said to AI, but what you read, heard, watched, and thought.
+
+### 5.2 Source Adapter Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│              UNIVERSAL SOURCE PIPELINE                    │
+│                                                         │
+│  Every adapter implements:                              │
+│    parse(input) → SourceItem[]                          │
+│                                                         │
+│  SourceItem = {                                         │
+│    title: string                                        │
+│    content: string          (extracted text, max 4000)  │
+│    source: string           (adapter ID)                │
+│    sourceUrl?: string       (original URL/path)         │
+│    createdAt?: string       (original date if known)    │
+│    metadata?: {                                         │
+│      entities?: { name, type }[]                        │
+│      tags?: string[]                                    │
+│      author?: string                                    │
+│      contentType: 'article' | 'paper' | 'transcript'   │
+│                   | 'note' | 'book' | 'conversation'   │
+│                   | 'email' | 'code' | 'image'         │
+│    }                                                    │
+│  }                                                      │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 5.3 Source Adapters — Full Catalog
+
+**Tier 1: Ship with v1 (extends existing harvest)**
+
+| Adapter | Input | What It Extracts |
+|---------|-------|-----------------|
+| `chatgpt` | JSON export | Conversations → frames (exists) |
+| `claude` | JSON export | Conversations → frames (exists) |
+| `claude-code` | Session JSON | Code sessions → frames (exists) |
+| `gemini` | JSON export | Conversations → frames (exists) |
+| `universal` | Generic JSON | Best-effort extraction (exists) |
+| `markdown` | .md file or folder | Sections → frames, headings → entities |
+| `plaintext` | .txt file | Paragraphs → frames |
+| `pdf` | .pdf file | Pages → text → frames (via pdf-parse) |
+| `url` | Web URL | Fetch → readability extract → markdown → frames |
+| `obsidian-vault` | Folder of .md files | Bulk import, preserve wikilinks as KG relations |
+
+**Tier 2: High-value integrations**
+
+| Adapter | Input | What It Extracts |
+|---------|-------|-----------------|
+| `epub` | .epub file | Chapters → frames, characters/themes → entities |
+| `youtube` | YouTube URL | Transcript → frames (via yt-dlp or API) |
+| `podcast` | Audio URL / file | Whisper transcription → frames |
+| `email-mbox` | .mbox export | Threads → frames, contacts → entities |
+| `notion-export` | Notion ZIP export | Pages → frames, databases → entities |
+| `confluence-export` | Confluence export | Pages → frames |
+| `slack-export` | Slack JSON export | Channels/threads → frames, users → entities |
+| `rss-feed` | RSS/Atom URL | Periodic poll → new articles → frames |
+| `zotero` | Zotero export | Papers + notes + annotations → frames |
+| `kindle-highlights` | Kindle export | Highlights + notes → frames per book |
+
+**Tier 3: Live connectors (via MCP or API)**
+
+| Adapter | Input | What It Extracts |
+|---------|-------|-----------------|
+| `gmail-mcp` | Gmail MCP server | Emails → frames (real-time via MCP) |
+| `calendar-mcp` | Google Calendar MCP | Events → awareness items |
+| `slack-mcp` | Slack MCP server | Messages → frames (real-time) |
+| `notion-mcp` | Notion MCP server | Page changes → frames (real-time) |
+| `github-mcp` | GitHub MCP server | Issues, PRs, discussions → frames |
+| `linear-mcp` | Linear MCP server | Issues, projects → frames |
+| `meeting-transcript` | Granola / Fireflies / Otter | Meeting notes → frames, action items → awareness |
+| `voice-memo` | Audio file | Whisper → text → frames |
+
+### 5.4 Ingest Flow
+
+```
+Raw Source
+    │
+    ▼
+┌──────────┐     ┌───────────┐     ┌──────────────┐
+│ Adapter  │────▶│ SourceItem│────▶│ Frame        │
+│ .parse() │     │ []        │     │ Store        │
+└──────────┘     └───────────┘     └──────┬───────┘
+                                          │
+                      ┌───────────────────┼───────────────────┐
+                      ▼                   ▼                   ▼
+               ┌────────────┐    ┌──────────────┐    ┌──────────────┐
+               │ HybridSearch│    │ KnowledgeGraph│    │ Wiki Compiler│
+               │ .indexFrame()│    │ .createEntity()│    │ (incremental)│
+               └────────────┘    └──────────────┘    └──────────────┘
+```
+
+For every source item:
+1. **Create I-Frame** in FrameStore (with dedup)
+2. **Index** in HybridSearch (FTS5 + vector)
+3. **Extract entities** → create/update in KnowledgeGraph
+4. **Trigger incremental wiki compilation** (if enabled)
+
+### 5.5 Smart Ingest: LLM-Assisted Entity Extraction
+
+For Tier 1, entity extraction is rule-based (headings, @mentions, etc.).
+For Tier 2+, the ingest pipeline optionally runs an LLM pass:
+
+```
+Source text → LLM prompt:
+  "Extract entities (people, organizations, projects, technologies,
+   concepts) and their relationships from this text. Return JSON."
+→ Entities + relations → KnowledgeGraph
+```
+
+This is where GEPA pays off — entity extraction is a perfect task for
+Haiku-class models with optimized prompts. Cost: ~$0.001 per source item.
+
+### 5.6 Obsidian Vault Import (Killer Onramp)
+
+Karpathy's audience uses Obsidian. Many already have vaults with hundreds of
+notes. The `obsidian-vault` adapter is the killer onramp:
+
+```bash
+hive-mind ingest ~/Documents/MyVault --source obsidian-vault
+```
+
+What it does:
+1. Walks the vault directory
+2. For each .md file:
+   - Parse YAML frontmatter → metadata
+   - Parse wikilinks `[[Page Name]]` → KG relations
+   - Parse sections → individual frames
+   - Parse tags `#tag` → frame metadata
+3. Preserve the vault's link graph as KG relations
+4. Result: user's existing Obsidian vault becomes searchable, KG-indexed,
+   and ready for wiki compilation
+
+This means: **import your existing second brain, get a better one back.**
+
+### 5.7 The Full Second Brain Vision
+
+With the universal source pipeline, the system becomes:
+
+```
+ ┌─── EVERYTHING YOU ENCOUNTER ───────────────────────┐
+ │                                                     │
+ │  AI conversations (ChatGPT, Claude, Gemini, etc.)  │
+ │  Articles you read (web clips, RSS)                 │
+ │  Papers you study (PDFs, Zotero)                    │
+ │  Books you read (Kindle, epub)                      │
+ │  Meetings you attend (transcripts)                  │
+ │  Emails you receive (Gmail, mbox)                   │
+ │  Code you write (GitHub, Claude Code)               │
+ │  Notes you take (Obsidian, Notion)                  │
+ │  Podcasts you listen to (transcripts)               │
+ │  Slack threads you participate in                   │
+ │  Voice memos you record                             │
+ │                                                     │
+ └──────────────────┬──────────────────────────────────┘
+                    │
+                    ▼
+ ┌─── UNIVERSAL SOURCE PIPELINE ──────────────────────┐
+ │  Adapters → SourceItems → Frames → KG → Vectors   │
+ └──────────────────┬──────────────────────────────────┘
+                    │
+                    ▼
+ ┌─── YOUR SECOND BRAIN ─────────────────────────────┐
+ │                                                     │
+ │  FrameStore: every fact, decision, insight          │
+ │  KnowledgeGraph: every person, project, concept     │
+ │  HybridSearch: find anything instantly              │
+ │  Identity: who you are evolves over time            │
+ │  Awareness: what you're focused on right now        │
+ │                                                     │
+ └──────────────────┬──────────────────────────────────┘
+                    │
+                    ▼
+ ┌─── COMPILED WIKI ─────────────────────────────────┐
+ │                                                     │
+ │  Entity pages: people, projects, orgs you know      │
+ │  Concept pages: topics you've explored              │
+ │  Timeline: how your knowledge evolved               │
+ │  Contradictions: where sources disagree             │
+ │  Gaps: what you should investigate next             │
+ │  Filed answers: insights you've generated           │
+ │                                                     │
+ │  Browsable in Obsidian, Waggle UI, or any editor   │
+ │                                                     │
+ └─────────────────────────────────────────────────────┘
+```
+
+**This is Vannevar Bush's Memex (1945), finally realized.**
+
+Bush imagined: *"a device in which an individual stores all his books, records,
+and communications, and which is mechanized so that it may be consulted with
+exceeding speed and flexibility."* He called the connections between documents
+"associative trails."
+
+Karpathy cited Bush explicitly. But Bush couldn't solve who does the
+maintenance. Karpathy said "the LLM handles that." We say: "the LLM handles
+that, AND the LLM itself uses it, AND it works across every source you
+encounter, AND it works for your whole team."
+
+### 5.8 Source Priority for Implementation
+
+| Phase | Sources | Rationale |
+|-------|---------|-----------|
+| **Phase 1** | Existing 5 AI adapters + `markdown` + `plaintext` + `pdf` + `url` | Covers 80% of Karpathy's use case |
+| **Phase 2** | `obsidian-vault` + `epub` + `youtube` | Killer onramp + high engagement sources |
+| **Phase 3** | `email-mbox` + `slack-export` + `notion-export` | Business/team sources |
+| **Phase 4** | Live MCP connectors (Gmail, Slack, Notion, GitHub) | Real-time second brain |
+
+Phase 1 turns hive-mind into a full second brain for researchers.
+Phase 2 captures the Obsidian/Karpathy community.
+Phase 3 enables the team/enterprise story.
+Phase 4 makes it live and always-current.
+
+---
+
+## 6. Dual-Track Delivery Plan
 
 ### Track A: Waggle Feature (packages/wiki-compiler)
 
@@ -461,14 +688,23 @@ hive-mind export --format obsidian --output ./my-vault
 
 ---
 
-## 6. Implementation Phases
+## 7. Implementation Phases
 
 ### Phase 0: Foundation (1 session)
 - [ ] Extract wiki compiler interfaces from this spec
 - [ ] Define TypeScript types: `WikiPage`, `CompilationState`, `WikiSchema`,
-      `CompilationResult`, `LintFinding`
+      `CompilationResult`, `LintFinding`, `SourceAdapter`, `SourceItem`
 - [ ] Create `packages/wiki-compiler/` with package.json, tsconfig
 - [ ] Wire to `@waggle/core` dependencies
+
+### Phase 0.5: Universal Source Adapters — Tier 1 (1 session)
+- [ ] Define `SourceAdapter` interface and `SourceItem` type
+- [ ] Implement `markdown` adapter (parse .md → sections → frames)
+- [ ] Implement `plaintext` adapter (parse .txt → paragraphs → frames)
+- [ ] Implement `pdf` adapter (pdf-parse → pages → text → frames)
+- [ ] Implement `url` adapter (fetch → readability → markdown → frames)
+- [ ] Wire adapters into harvest pipeline (extend existing harvest_import tool)
+- [ ] Add `ingest_source` MCP tool (accepts file path or URL + adapter hint)
 
 ### Phase 1: Core Compiler (2-3 sessions)
 - [ ] Implement compilation state tracking (SQLite table: page hashes, frame
@@ -506,7 +742,16 @@ hive-mind export --format obsidian --output ./my-vault
 - [ ] Health dashboard (contradictions, gaps, orphans)
 - [ ] Wiki settings (schema editor, compilation schedule)
 
-### Phase 5: Open-Source Package (1-2 sessions)
+### Phase 5: Source Adapters — Tier 2 + Obsidian (1-2 sessions)
+- [ ] Implement `obsidian-vault` adapter (bulk .md import, preserve wikilinks
+      as KG relations, parse frontmatter, parse tags)
+- [ ] Implement `epub` adapter (chapters → frames, characters/themes → entities)
+- [ ] Implement `youtube` adapter (transcript via API → frames)
+- [ ] LLM-assisted entity extraction pass (GEPA-optimized Haiku prompt)
+- [ ] Obsidian export (proper vault structure with .obsidian config)
+- [ ] Test: import existing Obsidian vault → compile wiki → export back
+
+### Phase 6: Open-Source Package (1-2 sessions)
 - [ ] Extract into standalone `hive-mind` repo
 - [ ] CLI interface (`hive-mind init/ingest/compile/search/lint/export`)
 - [ ] README with Karpathy attribution and positioning
@@ -514,16 +759,22 @@ hive-mind export --format obsidian --output ./my-vault
 - [ ] GitHub Actions CI
 - [ ] npm publish as `hive-mind-mcp`
 
-### Phase 6: Polish + Launch (1 session)
-- [ ] Obsidian export (proper vault structure with .obsidian config)
+### Phase 7: Polish + Launch (1 session)
 - [ ] Dream cycles (scheduled overnight compilation, a la GBrain)
 - [ ] GEPA integration for cost-efficient compilation
 - [ ] Launch blog post / X thread
 - [ ] Product Hunt submission
 
+### Phase 8: Source Adapters — Tier 3 (post-launch)
+- [ ] `email-mbox` + `slack-export` + `notion-export` adapters
+- [ ] Live MCP connectors (Gmail, Slack, Notion, GitHub)
+- [ ] `meeting-transcript` adapter (Granola / Fireflies / Otter)
+- [ ] RSS feed poller (periodic ingest of subscribed feeds)
+- [ ] `kindle-highlights` + `zotero` adapters
+
 ---
 
-## 7. Technical Decisions
+## 8. Technical Decisions
 
 ### 7.1 LLM for Compilation
 
@@ -607,7 +858,7 @@ Cross-references generated automatically by the linker:
 
 ---
 
-## 8. Differentiation Matrix
+## 9. Differentiation Matrix
 
 ### vs. Karpathy's LLM Wiki
 
@@ -657,7 +908,7 @@ something humans can browse, learn from, and build on.
 
 ---
 
-## 9. Open-Source Launch Strategy
+## 10. Open-Source Launch Strategy
 
 ### 9.1 Naming
 
@@ -725,7 +976,7 @@ wants a GUI, team features, or enterprise governance flows toward Waggle/KVARK.
 
 ---
 
-## 10. Risk Register
+## 11. Risk Register
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
@@ -739,7 +990,7 @@ wants a GUI, team features, or enterprise governance flows toward Waggle/KVARK.
 
 ---
 
-## 11. Success Metrics
+## 12. Success Metrics
 
 ### Open-Source (hive-mind)
 - GitHub stars: 1,000 in first week (GBrain did 5,400 in 24h — aspirational)
@@ -759,7 +1010,7 @@ wants a GUI, team features, or enterprise governance flows toward Waggle/KVARK.
 
 ---
 
-## 12. Open Questions
+## 13. Open Questions
 
 1. **Should the wiki replace FilesApp or live alongside it?** Current thinking:
    alongside — wiki is a compiled view, files are user-managed documents.
