@@ -734,6 +734,408 @@ for enterprise adoption.**
 
 ---
 
+## 5B. Privacy Architecture — Local-First, User-Controlled
+
+### 5B.1 Core Principle
+
+**Your second brain is YOUR brain.** No cloud. No telemetry. No phone-home.
+Every byte stays on your machine unless you explicitly choose to share it.
+
+This isn't just a feature — it's the trust foundation. If users don't trust
+that their emails, Slack DMs, meeting transcripts, and AI conversations are
+private, they won't connect their sources. Privacy is the prerequisite for
+the entire system working.
+
+### 5B.2 Privacy Tiers
+
+| Tier | Data Location | Sharing | Encryption | Use Case |
+|------|--------------|---------|------------|----------|
+| **Personal** (default) | Local device only (~/.waggle/) | Never leaves device | Optional (SQLCipher) | Free/Pro users |
+| **Team Shared** | Team server (MinIO/S3) | Explicitly promoted frames only | Encrypted at rest + in transit | Teams tier |
+| **Enterprise Sovereign** | Customer infrastructure (KVARK) | Governed by RBAC + policies | Full encryption + audit | KVARK tier |
+
+### 5B.3 Privacy Controls
+
+**Per-Source Privacy Settings:**
+```yaml
+sources:
+  gmail:
+    privacy: private          # never shared to team wiki
+    pii_filter: redact        # strip emails, phones, SSN
+    retention: 1y             # auto-delete after 1 year
+  slack:
+    privacy: team-eligible    # can be promoted to team wiki
+    pii_filter: flag          # flag but don't redact
+    channels_excluded: ["#random", "#social"]
+  meetings:
+    privacy: private
+    pii_filter: redact
+    transcript_retention: 6mo
+```
+
+**PII Detection & Filtering on Ingest:**
+- Email addresses → `[EMAIL]`
+- Phone numbers → `[PHONE]`
+- Credit card numbers → `[CC]`
+- Social Security / ID numbers → `[SSN]`
+- API keys / tokens → `[SECRET]`
+- Passwords → `[PASSWORD]`
+- Custom patterns (user-defined regex)
+
+Configurable modes:
+1. **Redact** — replace PII with placeholders before storing
+2. **Flag** — store but mark as sensitive (excluded from wiki compilation)
+3. **Pass-through** — store as-is (user accepts risk)
+4. **Ask** — prompt user on first encounter of each PII type
+
+**Frame-Level Privacy:**
+```typescript
+interface FramePrivacy {
+  visibility: 'private' | 'team-eligible' | 'team-shared';
+  pii_detected: boolean;
+  pii_types?: string[];      // ['email', 'phone', 'api_key']
+  redacted: boolean;
+  source_privacy: string;     // inherited from source config
+  promoted_by?: string;       // who promoted to team (audit trail)
+  promoted_at?: string;       // when
+}
+```
+
+### 5B.4 Right to Forget
+
+Users must be able to delete any source and ALL derived data:
+
+```
+Delete source "Gmail import 2026-03-15"
+  → Delete all frames from this source
+    → Delete all KG entities only sourced from these frames
+      → Delete all wiki pages that relied solely on these frames
+        → Re-compile affected wiki pages that had mixed sources
+          → Update index.md
+```
+
+**Cascade delete** with source tracking. Every frame knows its source.
+Every wiki page knows its frames. The chain is traceable and deletable.
+
+### 5B.5 Data Portability
+
+Everything is open formats:
+- Memory: SQLite database (standard, readable by any tool)
+- Wiki: Markdown files (editable in any editor)
+- KG: JSON export of entities + relations
+- Full export: ZIP of everything, ready to move to another system
+
+**No vendor lock-in.** This is critical for trust AND for GDPR Art. 20
+(right to data portability).
+
+### 5B.6 GDPR Compliance Mapping
+
+| GDPR Article | Requirement | How We Comply |
+|-------------|-------------|---------------|
+| Art. 5(1)(c) | Data minimization | Per-source filters, PII redaction, retention limits |
+| Art. 6 | Lawful basis | User explicitly connects each source (consent) |
+| Art. 13-14 | Information provision | Transparency dashboard: "What data do I have?" |
+| Art. 15 | Right of access | Full data export in open formats |
+| Art. 17 | Right to erasure | Cascade delete per source |
+| Art. 20 | Data portability | SQLite + Markdown + JSON export |
+| Art. 25 | Data protection by design | Local-first, no cloud default, encryption option |
+| Art. 32 | Security | SQLCipher encryption at rest, no network transmission |
+
+### 5B.7 Zero-Telemetry Pledge (Open-Source Product)
+
+For hive-mind (open-source):
+- **ZERO telemetry.** No analytics. No crash reports. No usage tracking.
+- **ZERO network calls** except to user-configured LLM API and user-connected MCP servers.
+- **ZERO cloud dependencies.** Everything runs locally. SQLite, not Postgres.
+- **Auditable.** Open source. Anyone can verify.
+
+This is the trust moat. When users compare hive-mind to GBrain (PGLite +
+potential cloud), Mem0 (cloud option), or any SaaS — we're the one they
+can verify won't leak their data.
+
+---
+
+## 5C. Complete Source Coverage + Custom Adapters
+
+### 5C.1 Full AI System Harvest Coverage
+
+Current adapters only cover 5 systems. The complete list of AI systems
+people use in 2026 that need harvest adapters:
+
+**Tier 1 — Must-Have (ship with v1):**
+
+| AI System | Export Method | Adapter Status |
+|-----------|-------------|----------------|
+| ChatGPT | JSON export (Settings > Data controls) | EXISTS |
+| Claude | JSON export (Settings > Account) | EXISTS |
+| Claude Code | Session JSON | EXISTS |
+| Gemini | JSON export (Google Takeout) | EXISTS |
+| Perplexity | GDPR request → JSON, or browser extension scrape | NEW |
+| Microsoft Copilot | account.microsoft.com/privacy/copilot | NEW |
+| GitHub Copilot Chat | VS Code chat history (SQLite in extension dir) | NEW |
+
+**Tier 2 — High Value:**
+
+| AI System | Export Method | Notes |
+|-----------|-------------|-------|
+| Cursor | SQLite session DB (~/.cursor/) | Popular AI code editor |
+| Windsurf | Session files (~/.windsurf/) | Growing AI code editor |
+| Grok (X) | Account data export | X/Twitter AI |
+| DeepSeek | Chat export | Chinese AI, growing Western usage |
+| Mistral (Le Chat) | Chat export | EU-based AI |
+| NotebookLM | Google Takeout | Google's research AI |
+| Poe | Account export | Multi-model AI platform |
+| v0 (Vercel) | Session history | Design/code AI |
+| Replit AI | Workspace export | Code generation |
+| Bolt / Lovable | Session export | Code generation platforms |
+
+**Tier 3 — Niche but Requested:**
+
+| AI System | Export Method |
+|-----------|-------------|
+| Character.AI | GDPR request |
+| Pi (Inflection) | Account export |
+| Cohere Coral | API history |
+| Together AI | Usage logs |
+| Groq Playground | Session history |
+
+### 5C.2 Microsoft Stack — Full Coverage
+
+Microsoft is THE enterprise stack. One `microsoft-graph` MCP connector
+covers everything via the unified Graph API:
+
+| Service | What Gets Ingested | Graph API Endpoint |
+|---------|-------------------|-------------------|
+| **Outlook** | Emails (filtered by rules) | /me/messages |
+| **Calendar** | Events + attendees + notes | /me/events |
+| **Teams Chats** | 1:1 and group messages | /me/chats/messages |
+| **Teams Channels** | Channel messages in joined teams | /teams/{id}/channels/{id}/messages |
+| **Teams Meetings** | Meeting transcripts (if available) | /me/onlineMeetings/{id}/transcripts |
+| **OneDrive** | Document content (Word, Excel, PDF) | /me/drive/items |
+| **SharePoint** | Site pages, document libraries | /sites/{id}/pages |
+| **OneNote** | Notebooks, sections, pages | /me/onenote/pages |
+| **Planner** | Tasks, plans, buckets | /me/planner/tasks |
+| **To Do** | Task lists, tasks | /me/todo/lists |
+
+**Authentication:** OAuth 2.0 via Microsoft identity platform. User grants
+delegated permissions. No admin consent required for personal data.
+Enterprise admin can pre-authorize via Entra ID for team-wide deployment.
+
+**Implementation:** Use the existing `microsoft-365` MCP server from our
+catalog, or the official Anthropic M365 connector. Both use Microsoft Graph.
+Wire as an auto-ingest source with per-service toggle and filter rules.
+
+### 5C.3 Manual Source Input
+
+Not everything comes from a connector. Users need frictionless manual input:
+
+**In Waggle Desktop UI:**
+- **Quick Add** (keyboard shortcut: Ctrl+Shift+N): Floating input field.
+  Type or paste anything. Auto-detects: URL → fetch and ingest, file path →
+  read and ingest, plain text → save as frame.
+- **File Drop Zone**: Drag & drop files onto any workspace. Supports: PDF,
+  markdown, text, Word (.docx), images (OCR via LLM vision), audio (Whisper
+  transcription).
+- **Clip from Browser**: Browser extension that sends current page to Waggle
+  as a source. One click. Like Obsidian Web Clipper but for your second brain.
+- **Share Target**: Register as a system share target on Windows/macOS. Share
+  from any app → ingests into active workspace.
+
+**In CLI:**
+```bash
+# Ingest a file
+hive-mind add paper.pdf
+hive-mind add meeting-notes.md
+hive-mind add ~/Documents/report.docx
+
+# Ingest a URL
+hive-mind add https://arxiv.org/abs/2401.12345
+
+# Ingest pasted text
+echo "Key decision: we're going with React for the frontend" | hive-mind add -
+
+# Ingest a whole directory
+hive-mind add ./research-papers/ --recursive
+
+# Ingest with metadata
+hive-mind add paper.pdf --tags "ml,transformers" --importance critical
+```
+
+**In MCP (for AI agents):**
+```
+Tool: ingest_source
+  content: "string or file path or URL"
+  type_hint: "pdf" | "url" | "markdown" | "text" | "auto"
+  importance: "critical" | "important" | "normal"
+  tags: ["optional", "tags"]
+  workspace: "optional workspace ID"
+```
+
+### 5C.4 Custom Adapters — Extensible by Design
+
+Users and the community must be able to add their own source adapters:
+
+**Adapter Interface:**
+```typescript
+interface SourceAdapter {
+  /** Unique adapter ID */
+  id: string;
+
+  /** Human-readable name */
+  displayName: string;
+
+  /** Supported input types */
+  accepts: ('file' | 'url' | 'json' | 'text' | 'directory')[];
+
+  /** File extensions this adapter handles (e.g., ['.pdf', '.epub']) */
+  extensions?: string[];
+
+  /** Parse input into source items */
+  parse(input: unknown, options?: AdapterOptions): SourceItem[];
+
+  /** Optional: detect if this adapter can handle the input */
+  canHandle?(input: unknown): boolean;
+}
+
+interface AdapterOptions {
+  /** Maximum content length per item */
+  maxContentLength?: number;
+  /** Extract entities via LLM */
+  extractEntities?: boolean;
+  /** PII filtering mode */
+  piiFilter?: 'redact' | 'flag' | 'pass' | 'ask';
+  /** Custom metadata to attach */
+  metadata?: Record<string, unknown>;
+}
+```
+
+**Custom Adapter Registration:**
+```bash
+# Register a custom adapter from a JS/TS file
+hive-mind adapters add ./my-custom-adapter.ts
+
+# List registered adapters
+hive-mind adapters list
+
+# Remove a custom adapter
+hive-mind adapters remove my-custom-id
+```
+
+**Community Adapter Registry:**
+- Published as npm packages: `hive-mind-adapter-*`
+- Install: `npm install hive-mind-adapter-jira`
+- Auto-discovered on startup
+- Community-maintained, reviewed for security
+
+### 5C.5 Custom Automations
+
+Beyond adapters, users need custom automation triggers:
+
+**Webhook Ingest:**
+```bash
+# Start local webhook server
+hive-mind webhooks start --port 9876
+
+# POST from any tool (Zapier, n8n, Make, custom scripts)
+curl -X POST http://localhost:9876/ingest \
+  -H "Content-Type: application/json" \
+  -d '{"content": "Meeting decision: launch Q3", "source": "custom"}'
+```
+
+**File Watch:**
+```yaml
+# Watch a directory for new files → auto-ingest
+automations:
+  - type: file-watch
+    path: ~/Downloads/research/
+    pattern: "*.pdf"
+    adapter: pdf
+    workspace: research-project
+    on_ingest: compile  # auto-compile wiki after ingest
+```
+
+**Schedule:**
+```yaml
+# Run on a schedule
+automations:
+  - type: cron
+    schedule: "0 6 * * *"        # every day at 6 AM
+    action: compile               # compile wiki
+  - type: cron
+    schedule: "0 22 * * *"       # every night at 10 PM
+    action: lint                  # health check
+  - type: cron
+    schedule: "*/30 * * * *"     # every 30 minutes
+    action: ingest-mcp            # pull from connected MCP sources
+```
+
+### 5C.6 UX — Killer Easy Setup
+
+The entire source configuration must be accessible to non-technical users.
+
+**Onboarding Flow (Waggle Desktop):**
+
+```
+Step 1: "Welcome to your Second Brain"
+  → Brief 10-second animation showing the concept
+
+Step 2: "Connect your AI tools" (checkboxes)
+  [✓] ChatGPT    → "Upload your export (Settings > Data controls > Export)"
+  [✓] Claude     → "Upload your export (Settings > Account > Export)"
+  [ ] Perplexity → "Request your data (Settings > Privacy > Request data)"
+  [ ] Copilot    → "Download from account.microsoft.com/privacy"
+  [Skip for now]
+
+Step 3: "Connect your work tools" (OAuth one-click)
+  [Connect Gmail]      → OAuth popup → done
+  [Connect Slack]      → OAuth popup → done
+  [Connect Notion]     → OAuth popup → done
+  [Connect Microsoft 365] → OAuth popup → done
+  [Skip for now]
+
+Step 4: "Import existing knowledge" (optional)
+  [Import Obsidian Vault] → folder picker → done
+  [Import Files]          → drag & drop zone → done
+  [Skip for now]
+
+Step 5: "Privacy settings"
+  ○ Maximum privacy (all PII redacted, no team sharing)
+  ○ Balanced (PII flagged, team sharing opt-in per source)
+  ○ Open (no filtering, full team sharing)
+  [Customize per source] → advanced settings
+
+Step 6: "Your second brain is ready"
+  → First compilation starts
+  → "Check back in 10 minutes for your first wiki"
+```
+
+**CLI Setup:**
+```bash
+$ hive-mind init
+
+  Welcome to Hive Mind — your second brain engine.
+
+  ? Choose a schema template:
+    ❯ Personal (journal, articles, podcasts, self-improvement)
+      Research (papers, articles, notes, thesis development)
+      Business (meetings, emails, projects, team knowledge)
+      Custom (start from scratch)
+
+  ? Set privacy level:
+    ❯ Maximum (all PII redacted, local only)
+      Balanced (PII flagged, sharing opt-in)
+      Open (no filtering)
+
+  ? Connect sources now? (you can add more later)
+    [y/N]: y
+
+  Initialized in ~/.hive-mind/
+  Run 'hive-mind add <file-or-url>' to start ingesting.
+  Run 'hive-mind compile' to build your wiki.
+```
+
+---
+
 ## 6. Dual-Track Delivery Plan
 
 ### Track A: Waggle Feature (packages/wiki-compiler)
