@@ -49,9 +49,22 @@ export interface HarnessPhase {
   gates: PhaseGate[];
   /** Max retries if gates fail (default 1) */
   maxRetries?: number;
-  /** Whether this phase requires human approval before proceeding */
+  /**
+   * Advisory: whether this phase requires human approval before proceeding.
+   * Enforcement is the caller's responsibility — the harness engine cannot
+   * gate approval itself because phase execution happens in the agent
+   * loop outside `advancePhase`. Agents reading this flag should prompt
+   * for approval (via the approvals inbox or equivalent) before running
+   * the phase.
+   */
   requiresApproval?: boolean;
-  /** Timeout in ms (default 5 minutes) */
+  /**
+   * Advisory: suggested wall-clock timeout for the agent's work on this
+   * phase (default 5 minutes). Not enforced by `advancePhase` — by the
+   * time output is handed in, the work has already completed. Agents
+   * executing phases should race their own work against this value if
+   * they need hard timeouts.
+   */
   timeoutMs?: number;
 }
 

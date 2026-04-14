@@ -229,14 +229,16 @@ export function createWorkflowTools(config: WorkflowToolsConfig): ToolDefinition
     {
       name: 'run_harness',
       description:
-        'Start or advance a workflow harness. First call with a harness_id ' +
-        'creates a new run and returns the first phase instruction. ' +
-        'Subsequent calls with phase_output advance through phases, ' +
-        'validating gates at each step. Returns next instruction or summary.',
+        'Start or advance a workflow harness. The FIRST call takes a harness_id ' +
+        'and returns the first phase instruction plus a run_id. SUBSEQUENT calls ' +
+        'MUST pass that run_id along with phase_output to advance through phases, ' +
+        'validating gates at each step. Keyed by run_id so parallel harness runs ' +
+        'for the same harness_id in different sessions do not collide.',
       parameters: {
         type: 'object',
         properties: {
-          harness_id: { type: 'string', description: 'Harness ID (e.g., "research-verify", "code-review-fix", "document-draft")' },
+          harness_id: { type: 'string', description: 'Harness ID (e.g., "research-verify", "code-review-fix", "document-draft"). Required on the first call.' },
+          run_id: { type: 'string', description: 'Run id returned from the first call. Required on every subsequent call.' },
           phase_output: {
             type: 'object',
             description: 'Output from the current phase (provide on subsequent calls to advance)',
@@ -255,6 +257,15 @@ export function createWorkflowTools(config: WorkflowToolsConfig): ToolDefinition
                 description: 'Tool calls made during this phase',
               },
               artifacts: { type: 'array', items: { type: 'string' }, description: 'Files created or modified' },
+              duration_ms: { type: 'number', description: 'Wall-clock duration of the phase in ms (optional but recommended for meaningful summaries)' },
+              tokens: {
+                type: 'object',
+                properties: {
+                  input: { type: 'number' },
+                  output: { type: 'number' },
+                },
+                description: 'Tokens consumed during this phase (optional)',
+              },
             },
           },
         },
@@ -262,60 +273,105 @@ export function createWorkflowTools(config: WorkflowToolsConfig): ToolDefinition
       },
       execute: async (args: Record<string, unknown>) => {
         const harnessId = args.harness_id as string;
+        const providedRunId = typeof args.run_id === 'string' ? args.run_id : undefined;
+
         const harness = getHarnessById(harnessId);
         if (!harness) {
           return `Harness "${harnessId}" not found. Available: ${BUILTIN_HARNESSES.map(h => h.id).join(', ')}`;
         }
 
-        // Track active harness runs in closure
-        if (!activeHarnessRuns.has(harnessId)) {
-          // First call — create run
+        // FIRST call — create a fresh run and return the run_id.
+        if (!providedRunId) {
           const run = createHarnessRun(harness);
-          activeHarnessRuns.set(harnessId, run);
+          const runId = generateHarnessRunId(harnessId);
+          activeHarnessRuns.set(runId, { harnessId, state: run });
           const instruction = getCurrentPhaseInstruction(run, harness);
-          return `## Harness Started: ${harness.name}\n\n${instruction ?? 'No phases defined.'}`;
+          return [
+            `## Harness Started: ${harness.name}`,
+            '',
+            `**run_id:** \`${runId}\``,
+            '_Pass this run_id on every subsequent call to advance the harness._',
+            '',
+            instruction ?? 'No phases defined.',
+          ].join('\n');
         }
 
-        // Subsequent call — advance with output
-        const phaseOutput = args.phase_output as { content?: string; tool_calls?: unknown[]; artifacts?: string[] } | undefined;
+        const tracked = activeHarnessRuns.get(providedRunId);
+        if (!tracked || tracked.harnessId !== harnessId) {
+          return `Unknown run_id "${providedRunId}" for harness "${harnessId}". Start a new run by omitting run_id.`;
+        }
+
+        // Subsequent call — no output supplied? Just echo current instruction.
+        const phaseOutput = args.phase_output as {
+          content?: string;
+          tool_calls?: unknown[];
+          artifacts?: string[];
+          duration_ms?: number;
+          tokens?: { input?: number; output?: number };
+        } | undefined;
+
         if (!phaseOutput?.content) {
-          const run = activeHarnessRuns.get(harnessId)!;
-          const instruction = getCurrentPhaseInstruction(run, harness);
+          const instruction = getCurrentPhaseInstruction(tracked.state, harness);
           if (!instruction) {
-            const summary = getRunSummary(run, harness);
-            activeHarnessRuns.delete(harnessId);
+            const summary = getRunSummary(tracked.state, harness);
+            activeHarnessRuns.delete(providedRunId);
             return summary;
           }
           return instruction;
         }
 
-        const currentRun = activeHarnessRuns.get(harnessId)!;
-        const currentPhase = harness.phases[currentRun.currentPhase];
-
+        const currentPhase = harness.phases[tracked.state.currentPhase];
         const output: PhaseOutput = {
           phaseId: currentPhase?.id ?? 'unknown',
           content: phaseOutput.content,
           toolCalls: (phaseOutput.tool_calls as PhaseOutput['toolCalls']) ?? [],
           artifacts: phaseOutput.artifacts ?? [],
-          durationMs: 0,
-          tokens: { input: 0, output: 0 },
+          durationMs: typeof phaseOutput.duration_ms === 'number' ? phaseOutput.duration_ms : 0,
+          tokens: {
+            input: typeof phaseOutput.tokens?.input === 'number' ? phaseOutput.tokens.input : 0,
+            output: typeof phaseOutput.tokens?.output === 'number' ? phaseOutput.tokens.output : 0,
+          },
         };
 
-        const newRun = await advancePhase(currentRun, harness, output);
-        activeHarnessRuns.set(harnessId, newRun);
+        const newRunState = await advancePhase(tracked.state, harness, output);
+        activeHarnessRuns.set(providedRunId, { harnessId, state: newRunState });
 
-        if (newRun.completed || newRun.aborted) {
-          const summary = getRunSummary(newRun, harness);
-          activeHarnessRuns.delete(harnessId);
+        if (newRunState.completed || newRunState.aborted) {
+          const summary = getRunSummary(newRunState, harness);
+          activeHarnessRuns.delete(providedRunId);
           return summary;
         }
 
-        const nextInstruction = getCurrentPhaseInstruction(newRun, harness);
-        return nextInstruction ?? getRunSummary(newRun, harness);
+        const nextInstruction = getCurrentPhaseInstruction(newRunState, harness);
+        return nextInstruction ?? getRunSummary(newRunState, harness);
       },
     },
   ];
 }
 
-// Active harness runs — keyed by harness ID
-const activeHarnessRuns = new Map<string, HarnessRunState>();
+// Active harness runs — keyed by a unique run_id so parallel sessions
+// running the same harness_id do not collide. Previous implementation
+// keyed by harness_id and would trample cross-session state.
+interface TrackedHarnessRun {
+  harnessId: string;
+  state: HarnessRunState;
+}
+const activeHarnessRuns = new Map<string, TrackedHarnessRun>();
+
+/**
+ * Generate a short opaque run id — no crypto strength needed, just uniqueness
+ * within the process. Shape: `<harnessId>-<timestamp>-<rand>`.
+ */
+function generateHarnessRunId(harnessId: string): string {
+  const ts = Date.now().toString(36);
+  const rand = Math.random().toString(36).slice(2, 8);
+  return `${harnessId}-${ts}-${rand}`;
+}
+
+/**
+ * Test-only reset. Exported so test suites can isolate from each other
+ * when they spin up fresh tool instances sharing the process-global Map.
+ */
+export function __resetActiveHarnessRunsForTests(): void {
+  activeHarnessRuns.clear();
+}
