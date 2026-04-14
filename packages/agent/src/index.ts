@@ -43,6 +43,13 @@ export {
   type MutateArgs, type MutateFn, type MutationStrategy, type EvolutionTarget,
 } from './iterative-optimizer.js';
 export {
+  runGates, DEFAULT_SIZE_LIMITS,
+  checkNonEmpty, checkSize, checkGrowth,
+  checkBalancedFences, checkNoPlaceholders, checkNoObviousTodos, checkRegression,
+  type GateVerdict, type GateResult as EvolutionGateResult, type GateCheckResult,
+  type SizeLimits, type GateOptions, type CheckInput as GateCheckInput,
+} from './evolution-gates.js';
+export {
   LLMJudge, DEFAULT_WEIGHTS, DEFAULT_RUBRIC,
   buildPrompt as buildJudgePrompt,
   parseJudgeResponse, computeLengthPenalty,
