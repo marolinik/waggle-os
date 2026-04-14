@@ -1,0 +1,1114 @@
+{
+  "anthropic/claude-opus-4.6": {
+    "A": {
+      "js-map-vs-foreach": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 4,
+          "feedback": "The core answer is perfectly correct and well-structured, but it is significantly more verbose than needed for the question asked. The summary table, multiple code examples, and the 'when to use which' section add padding beyond what a concise answer requires."
+        },
+        "overall": 0.8800000000000001
+      },
+      "py-list-tuple": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 5,
+          "feedback": "The answer is thorough and correct, covering all key points (immutability, hashability, performance, use cases). However, it is significantly more verbose than necessary for the question asked, with extensive code examples and a comparison table that pad the response well beyond what's needed."
+        },
+        "overall": 0.9
+      },
+      "sql-inner-vs-left": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 5,
+          "feedback": "The explanation is fully correct and well-structured with helpful examples and visualizations, but it is significantly more verbose than needed for the question asked. The core answer could be conveyed in a few sentences rather than a full tutorial with ASCII art, tables, and multiple code blocks."
+        },
+        "overall": 0.9
+      },
+      "ts-type-vs-interface": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 5,
+          "feedback": "The answer is thorough and correct, covering all key points from the expected answer (declaration merging, extending/implementing, unions, intersections, tuples, mapped types). However, it is significantly more verbose than needed for the question, with extensive code examples, tables, and formatting that go well beyond what was asked."
+        },
+        "overall": 0.9
+      },
+      "regex-bug": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 5,
+          "feedback": "The answer is fully correct and covers all key points from the expected answer (ASCII-only limitation, Unicode property escapes with both \\p{Lowercase_Letter} and \\p{Ll}, the u flag). However, it is excessively verbose with multiple code examples, a table, and extra solutions that weren't needed, making it much longer than necessary."
+        },
+        "overall": 0.9
+      },
+      "async-race": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 6,
+          "feedback": "The answer is fully correct and well-structured, covering all key points from the expected answer plus useful extras (error handling, visual timeline). However, it's significantly more verbose than needed — the error handling table, bonus section header, and extensive code examples add bulk beyond what the question requires."
+        },
+        "overall": 0.9199999999999999
+      },
+      "go-slice-append": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 10,
+          "conciseness": 6,
+          "feedback": "The answer is technically accurate and thorough, covering all key points from the expected answer (shared underlying array, capacity-based behavior, reallocation breaking sharing). However, it is significantly more verbose than necessary, with multiple code examples and diagrams. The response also appears truncated at the end. It could mention the make+copy or full-slice expression workaround more explicitly as a solution."
+        },
+        "overall": 0.8699999999999999
+      },
+      "rust-lifetime": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 9,
+          "conciseness": 6,
+          "feedback": "The answer is correct and thorough, covering the core concept well with good examples. However, it is significantly more verbose than needed — the code examples and extended explanations go well beyond what the question requires, and the response appears to be cut off at the end."
+        },
+        "overall": 0.8399999999999999
+      },
+      "python-gil": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 5,
+          "feedback": "The answer is fully correct and covers all key points (and more), but it is significantly more verbose than needed—adding code examples, async I/O, and C-extension details that weren't asked for. A tighter response would better respect the user's time."
+        },
+        "overall": 0.9
+      },
+      "react-key": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 9,
+          "conciseness": 5,
+          "feedback": "The answer is technically correct and covers all key points from the expected answer (reconciliation, index-based fallback, state preservation, unnecessary remounts), but it is significantly more verbose than needed for the question asked, with extensive code examples, tables, and formatting that pad the response well beyond what's necessary. The response also appears truncated at the end."
+        },
+        "overall": 0.82
+      }
+    },
+    "B": {
+      "js-map-vs-foreach": {
+        "parsed": {
+          "correctness": 0,
+          "procedure": 0,
+          "conciseness": 0,
+          "feedback": "The assistant provided no response at all. It should have explained that map returns a new array of transformed values while forEach returns undefined and is used for side effects."
+        },
+        "overall": 0
+      },
+      "py-list-tuple": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 9,
+          "conciseness": 6,
+          "feedback": "The answer is thorough and covers all key points from the expected answer (immutability, dictionary keys, hashability, performance), plus adds useful extras like heterogeneous data convention. However, it is quite verbose with extensive formatting, code examples, and the response appears cut off at point #5, suggesting incomplete generation."
+        },
+        "overall": 0.8399999999999999
+      },
+      "sql-inner-vs-left": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 5,
+          "feedback": "The answer is fully correct and well-structured, but it is significantly more verbose than needed—repeating the same concept through prose, examples, a comparison table, and code snippets. A more concise explanation would better match the scope of the question."
+        },
+        "overall": 0.9
+      },
+      "ts-type-vs-interface": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 5,
+          "feedback": "The answer is fully correct and covers all the key points from the expected answer (declaration merging, extending/implementing, unions, intersections, tuples, mapped types, non-object shapes). However, it is significantly more verbose than necessary for the question asked, with extensive code examples, headers, and a comparison table that add bulk without adding essential new information."
+        },
+        "overall": 0.9
+      },
+      "regex-bug": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 6,
+          "feedback": "The answer is fully correct and well-structured, covering the problem, explanation, and solution with the right regex. However, it is significantly more verbose than needed—the table, multiple examples, environment notes, and key requirements section add padding beyond what the question requires."
+        },
+        "overall": 0.9199999999999999
+      },
+      "async-race": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 5,
+          "feedback": "The answer is fully correct and well-structured, covering all key points (sum vs max of durations, when to use each). However, it is significantly more verbose than needed—code examples, a comparison table, and the truncated error handling section add bulk without being requested. A tighter response would be more appropriate for a conceptual question."
+        },
+        "overall": 0.9
+      },
+      "go-slice-append": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 10,
+          "conciseness": 6,
+          "feedback": "The explanation is thorough and correct, covering all key points from the expected answer including shared underlying arrays, capacity-based behavior, and reallocation. However, it is significantly more verbose than needed, with a code example that appears truncated. The safe alternatives (make+copy or full slice expression) are not explicitly mentioned."
+        },
+        "overall": 0.8699999999999999
+      },
+      "rust-lifetime": {
+        "parsed": {
+          "correctness": 8,
+          "procedure": 8,
+          "conciseness": 5,
+          "feedback": "The answer correctly explains that the compiler needs to know which input a returned reference is tied to and covers lifetime elision, but it is overly verbose with extended examples and appears to be cut off at the end. The first example (`get_first_word`) actually compiles fine due to elision rules, which slightly undermines the explanation."
+        },
+        "overall": 0.74
+      },
+      "python-gil": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 5,
+          "feedback": "The answer is fully correct and well-structured, covering all key points (GIL limits parallel bytecode execution, I/O-bound threading works, multiprocessing bypasses the GIL) and even adds useful extras like C-extensions. However, it is significantly more verbose than needed for the question, with extensive formatting, a table, and detailed subsections that go well beyond what was asked."
+        },
+        "overall": 0.9
+      },
+      "react-key": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 9,
+          "conciseness": 5,
+          "feedback": "The answer is technically correct and covers all key points from the expected answer (reconciliation, stable identity, state preservation, index-based fallback issues). However, it is significantly more verbose than necessary for the question asked, with extensive examples, tables, and formatting that pad the response well beyond what's needed."
+        },
+        "overall": 0.82
+      }
+    },
+    "C": {
+      "js-map-vs-foreach": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 8,
+          "feedback": "The answer is fully correct and well-structured with a helpful example. It could be slightly more concise by omitting the code example, but the example does add clarity without being excessive."
+        },
+        "overall": 0.96
+      },
+      "py-list-tuple": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 9,
+          "feedback": "The response covers all key points from the expected answer (immutability, dictionary keys, performance, fixed structures) and adds a helpful example. Only very slightly more verbose than necessary, but the example adds value."
+        },
+        "overall": 0.9800000000000001
+      },
+      "sql-inner-vs-left": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 10,
+          "conciseness": 8,
+          "feedback": "The answer is accurate and well-structured with a helpful example. It could mention the practical guidance about when to use LEFT JOIN (preserving all left-side rows) more explicitly, as the expected answer does."
+        },
+        "overall": 0.9099999999999999
+      },
+      "ts-type-vs-interface": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 7,
+          "feedback": "The answer is fully correct and well-structured, covering all key points from the expected answer (declaration merging, extends, unions, intersections, tuples, non-object shapes). However, the code examples and extra formatting add verbosity beyond what the question requires."
+        },
+        "overall": 0.9400000000000001
+      },
+      "regex-bug": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 9,
+          "feedback": "The response accurately identifies the issue and provides the correct Unicode property escape solution with a helpful code example. Slightly more verbose than necessary with the code snippet, but it adds clarity."
+        },
+        "overall": 0.9800000000000001
+      },
+      "async-race": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 9,
+          "conciseness": 7,
+          "feedback": "The answer is correct and well-structured with code examples. It could be slightly more concise—the code examples add value but weren't strictly necessary. It also omits the practical guidance about when to use each approach (use Promise.all for independent promises, sequential when one depends on the other), which was part of the expected answer."
+        },
+        "overall": 0.86
+      },
+      "go-slice-append": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 9,
+          "conciseness": 9,
+          "feedback": "The answer correctly explains the core mechanism (shared underlying array, capacity check, in-place modification vs. reallocation). It mentions the full slice expression as a prevention method, which is a valid alternative to make+copy, though it omits the make+copy approach mentioned in the reference. The code example is a nice addition."
+        },
+        "overall": 0.9
+      },
+      "rust-lifetime": {
+        "parsed": {
+          "correctness": 5,
+          "procedure": 6,
+          "conciseness": 7,
+          "feedback": "The answer focuses on dangling pointers and locally-owned data, but misses the core reason: when multiple reference inputs exist, the compiler cannot infer which input's lifetime the returned reference is tied to. The expected answer emphasizes lifetime ambiguity among inputs, not just local ownership issues."
+        },
+        "overall": 0.5700000000000001
+      },
+      "python-gil": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 8,
+          "feedback": "The answer is fully correct and well-structured, covering all key points (GIL scope, I/O-bound threading, multiprocessing for CPU-bound). The examples at the end add slight verbosity but are still relevant and helpful."
+        },
+        "overall": 0.96
+      },
+      "react-key": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 9,
+          "conciseness": 8,
+          "feedback": "The answer correctly explains reconciliation, efficient DOM updates, and the pitfalls of index-based keys. It could have explicitly mentioned preserving component state and avoiding unnecessary unmount/remount cycles more clearly. The code example is helpful but adds slight verbosity beyond what was asked."
+        },
+        "overall": 0.8799999999999999
+      }
+    }
+  },
+  "openai/gpt-5.4": {
+    "A": {
+      "js-map-vs-foreach": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 9,
+          "conciseness": 6,
+          "feedback": "The answer is fully correct, but it's more detailed than necessary for a simple conceptual question. Trim the examples and table to keep it tighter and closer to the requested key difference."
+        },
+        "overall": 0.8899999999999999
+      },
+      "py-list-tuple": {
+        "parsed": {
+          "correctness": 8,
+          "procedure": 7,
+          "conciseness": 4,
+          "feedback": "Your answer is mostly correct, but it was cut off mid-table and includes extra examples beyond the core distinction. Keep it shorter and ensure the response is complete, focusing on immutability, hashability, and mutation as the main criteria."
+        },
+        "overall": 0.69
+      },
+      "sql-inner-vs-left": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 6,
+          "feedback": "The answer is correct and clearly explains the key difference. To improve, make it more concise by removing the visualizations and long example unless specifically requested."
+        },
+        "overall": 0.9199999999999999
+      },
+      "ts-type-vs-interface": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 8,
+          "conciseness": 5,
+          "feedback": "The answer is largely correct, but it is cut off at the end and more detailed than necessary for a simple guidance question. Make it shorter and finish with a clear rule of thumb matching the key distinction: interface for extendable object/class contracts, type for unions, tuples, intersections, and other non-object forms."
+        },
+        "overall": 0.79
+      },
+      "regex-bug": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 8,
+          "conciseness": 4,
+          "feedback": "Your answer is semantically correct, but it was much longer than needed and appears cut off mid-table, which hurts clarity. Give a brief explanation and one clear fix, e.g. `/^\\p{Ll}+$/u`, without extra sections or incomplete formatting."
+        },
+        "overall": 0.77
+      },
+      "async-race": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 9,
+          "conciseness": 6,
+          "feedback": "Your core explanation is correct, but you added extra details that weren't asked for and ended with an incomplete 'Bonus: Promise.allSettled' section. Keep the answer tighter and avoid potentially misleading wording like 'both start at the same time' without clarifying it's concurrent initiation, not true parallelism."
+        },
+        "overall": 0.8399999999999999
+      },
+      "go-slice-append": {
+        "parsed": {
+          "correctness": 7,
+          "procedure": 6,
+          "conciseness": 5,
+          "feedback": "Your explanation correctly identifies shared backing arrays and capacity-driven append behavior, but the answer is cut off and misses the key mitigation from the reference: forcing a fresh array with make+copy or a full slice expression like s[:len(s):len(s)]. Finish the response and include how to avoid the issue."
+        },
+        "overall": 0.63
+      },
+      "rust-lifetime": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 9,
+          "conciseness": 6,
+          "feedback": "Your explanation is correct and helpful, but it’s longer than necessary and the final example is cut off mid-sentence. Tighten the answer and avoid incomplete snippets to better match the prompt."
+        },
+        "overall": 0.8399999999999999
+      },
+      "python-gil": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 8,
+          "conciseness": 5,
+          "feedback": "Your answer is semantically correct and even adds useful examples, but it is much more detailed than needed for this short conceptual question. Make it more concise and ensure code examples are complete or omit them if they don't add necessary value."
+        },
+        "overall": 0.79
+      },
+      "react-key": {
+        "parsed": {
+          "correctness": 7,
+          "procedure": 5,
+          "conciseness": 3,
+          "feedback": "Your explanation is mostly correct, but the answer is cut off and misses the explicit point that stable keys preserve component state and prevent incorrect unmount/remount behavior when lists change. Make it complete and much shorter for a direct conceptual question like this."
+        },
+        "overall": 0.5599999999999999
+      }
+    },
+    "B": {
+      "js-map-vs-foreach": {
+        "parsed": {
+          "correctness": 0,
+          "procedure": 0,
+          "conciseness": 10,
+          "feedback": "The response is empty and does not answer the question. State that map returns a new transformed array, while forEach returns undefined and is mainly for side effects."
+        },
+        "overall": 0.2
+      },
+      "py-list-tuple": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 8,
+          "conciseness": 5,
+          "feedback": "Your answer is mostly correct and covers the key tuple-vs-list distinctions, but it is more verbose than needed and trails off with an incomplete point ('For Function Return Values'). Finish incomplete sections and condense to the core guidance: use tuples for fixed/immutable, hashable records/keys; lists for mutable collections."
+        },
+        "overall": 0.79
+      },
+      "sql-inner-vs-left": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 8,
+          "conciseness": 6,
+          "feedback": "Your explanation is semantically correct, but the response is unnecessarily long for a basic concept and the SQL example is cut off mid-sentence/code block. Make it shorter and ensure the example is complete if you include one."
+        },
+        "overall": 0.8100000000000002
+      },
+      "ts-type-vs-interface": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 10,
+          "conciseness": 6,
+          "feedback": "Your answer is accurate and covers the key distinction well, but it is more detailed than needed for this question. Tighten it by leading with the simple rule of thumb: use interface for extensible object/class shapes and type for unions, tuples, mapped types, and other non-object aliases."
+        },
+        "overall": 0.8699999999999999
+      },
+      "regex-bug": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 7,
+          "feedback": "The answer is correct and directly addresses the issue, including the proper Unicode-aware fix. To improve, trim some explanatory detail and the comparison table for a more concise response."
+        },
+        "overall": 0.9400000000000001
+      },
+      "async-race": {
+        "parsed": {
+          "correctness": 8,
+          "procedure": 7,
+          "conciseness": 4,
+          "feedback": "Your answer is mostly correct, but it adds extra claims like \"blocking/non-blocking\" and error-handling details that weren't asked, and it gets cut off at the end. Keep it shorter and focus on the core comparison: sequential = sum of times, Promise.all = max of times when independent."
+        },
+        "overall": 0.69
+      },
+      "go-slice-append": {
+        "parsed": {
+          "correctness": 7,
+          "procedure": 6,
+          "conciseness": 3,
+          "feedback": "Your explanation correctly identifies shared underlying arrays and capacity-driven reallocation, but the answer is cut off and misses the reference’s practical advice on forcing a fresh array (e.g., make+copy or limiting capacity). Finish the example or remove it, and include the brief mitigation guidance."
+        },
+        "overall": 0.5900000000000001
+      },
+      "rust-lifetime": {
+        "parsed": {
+          "correctness": 8,
+          "procedure": 7,
+          "conciseness": 4,
+          "feedback": "Your explanation is mostly correct, but the example `fn get_first_word(s: &str) -> &str` is misleading because Rust lifetime elision usually allows that signature. Focus on the key point from the prompt: ambiguity about which input lifetime the return value is tied to, and avoid truncating the answer mid-sentence."
+        },
+        "overall": 0.69
+      },
+      "python-gil": {
+        "parsed": {
+          "correctness": 8,
+          "procedure": 7,
+          "conciseness": 4,
+          "feedback": "Your core explanation is correct, but the answer is unnecessarily long and includes extra material beyond the expected scope. Also, the response is cut off at the summary table, so keep it brief and complete with the key point: threads help for I/O, while multiprocessing is needed for CPU-bound parallelism."
+        },
+        "overall": 0.69
+      },
+      "react-key": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 9,
+          "conciseness": 5,
+          "feedback": "The answer is semantically correct and covers the key reasons: efficient reconciliation and preserving component state. Biggest issue is verbosity—trim the long examples and table to answer more directly and completely fit the requested scope."
+        },
+        "overall": 0.8699999999999999
+      }
+    },
+    "C": {
+      "js-map-vs-foreach": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 8,
+          "feedback": "Good answer: it correctly explains the return-value and side-effect distinction and includes a clear example. To be even tighter, you could omit the example unless specifically requested."
+        },
+        "overall": 0.96
+      },
+      "py-list-tuple": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 8,
+          "feedback": "Strong answer: it correctly explains immutability, fixed structure, hashability, and performance, with a relevant example. To improve conciseness, trim the formatting and slightly reduce explanatory detail."
+        },
+        "overall": 0.96
+      },
+      "sql-inner-vs-left": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 9,
+          "feedback": "Good answer: it correctly explains both joins and gives a clear example. To be even closer to the reference, briefly mention that LEFT JOIN is used when you need to preserve all rows from the left table."
+        },
+        "overall": 0.9800000000000001
+      },
+      "ts-type-vs-interface": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 10,
+          "conciseness": 7,
+          "feedback": "Your answer is essentially correct, but it overstates 'type aliases for everything else' and adds extra details not in the reference. Tighten it by explicitly noting that interfaces are preferred when shapes may be extended/implemented, while types are for unions, intersections, tuples, mapped types, and non-object shapes."
+        },
+        "overall": 0.89
+      },
+      "regex-bug": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 9,
+          "feedback": "Accurate and directly answers the issue and fix. To match the reference even more closely, you could briefly mention the alternative of explicitly including expected characters if Unicode property escapes aren't suitable."
+        },
+        "overall": 0.9800000000000001
+      },
+      "async-race": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 10,
+          "conciseness": 9,
+          "feedback": "Good answer overall; the only issue is a slight overstatement that sequential await means the second promise does not start until the first resolves, which is only true when the promises are created at the await site. You could improve it by noting that if promises are already started before awaiting, sequential awaits won't serialize their execution."
+        },
+        "overall": 0.93
+      },
+      "go-slice-append": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 8,
+          "feedback": "Good answer overall; it correctly explains shared underlying arrays and capacity-driven in-place appends. To match the reference more fully, also mention that exceeding capacity causes reallocation and that make+copy is another way to guarantee a fresh array."
+        },
+        "overall": 0.96
+      },
+      "rust-lifetime": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 10,
+          "conciseness": 8,
+          "feedback": "Good explanation of lifetime safety, but you missed the key ambiguity point from the reference answer: for returned references, the compiler often needs to know which input borrow the output is tied to. Mention lifetime elision limits and that explicit annotations are required when multiple inputs make the source of the returned reference unclear."
+        },
+        "overall": 0.9099999999999999
+      },
+      "python-gil": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 8,
+          "feedback": "The answer is correct and directly addresses the question. To be even tighter, you could omit the examples and keep it to the core distinction between I/O-bound threading and CPU-bound multiprocessing."
+        },
+        "overall": 0.96
+      },
+      "react-key": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 8,
+          "feedback": "Strong answer: it correctly explains reconciliation, stable identity, and the problems with index keys. To be more concise, trim the example unless the question specifically asks for one."
+        },
+        "overall": 0.96
+      }
+    }
+  },
+  "google/gemini-2.5-pro": {
+    "A": {
+      "js-map-vs-foreach": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 8,
+          "feedback": "Excellent, correct answer. Provides valuable examples and a summary table, though it's more detailed than a strictly concise answer."
+        },
+        "overall": 0.96
+      },
+      "py-list-tuple": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 10,
+          "conciseness": 4,
+          "feedback": "Excellent, correct, and well-structured answer that covers all key points and more. However, it is not concise and contains an incomplete summary table."
+        },
+        "overall": 0.8300000000000001
+      },
+      "sql-inner-vs-left": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 8,
+          "feedback": "Excellent, correct explanation. The use of examples and visualizations is very helpful, though it makes the response longer than a minimal definition."
+        },
+        "overall": 0.96
+      },
+      "ts-type-vs-interface": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 3,
+          "feedback": "The answer is perfectly correct and comprehensive, but it is far too verbose. The expected answer is a single sentence; this response is a full document."
+        },
+        "overall": 0.86
+      },
+      "regex-bug": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 9,
+          "feedback": "Excellent. Correctly identifies the ASCII-only limitation and provides the modern Unicode property escape solution with clear examples. The response is thorough and well-explained, though slightly less concise than a minimal answer."
+        },
+        "overall": 0.9800000000000001
+      },
+      "async-race": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 9,
+          "feedback": "Excellent, comprehensive answer. Correctly explains concurrency, timing, use cases, and even crucial error handling differences."
+        },
+        "overall": 0.9800000000000001
+      },
+      "go-slice-append": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 9,
+          "feedback": "Excellent, correct explanation with clear code examples. Accurately details the relationship between slices, underlying arrays, length, and capacity. A minor issue is the truncated text at the very end."
+        },
+        "overall": 0.9800000000000001
+      },
+      "rust-lifetime": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 8,
+          "feedback": "Excellent, correct explanation. The code examples and added context on elision rules are very helpful, though it could be slightly more concise."
+        },
+        "overall": 0.96
+      },
+      "python-gil": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 7,
+          "feedback": "Excellent, correct, and comprehensive answer. It correctly identifies the nuances of the GIL and provides great examples. Slightly long for a concise answer, but the detail is valuable."
+        },
+        "overall": 0.9400000000000001
+      },
+      "react-key": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 3,
+          "feedback": "The answer is perfectly correct and well-structured, but it is not concise. It provides a detailed explanation instead of a brief summary."
+        },
+        "overall": 0.86
+      }
+    },
+    "B": {
+      "js-map-vs-foreach": {
+        "parsed": {
+          "correctness": 0,
+          "procedure": 0,
+          "conciseness": 0,
+          "feedback": "No response was provided for evaluation."
+        },
+        "overall": 0
+      },
+      "py-list-tuple": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 10,
+          "conciseness": 6,
+          "feedback": "Excellent, correct answer covering all key points like immutability and hashability. While the detail is valuable, the response could be more concise, and the final point was incomplete."
+        },
+        "overall": 0.8699999999999999
+      },
+      "sql-inner-vs-left": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 5,
+          "feedback": "Correct and thorough explanation, but not concise. The response is more of a detailed tutorial than a brief summary."
+        },
+        "overall": 0.9
+      },
+      "ts-type-vs-interface": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 8,
+          "feedback": "Excellent, comprehensive, and correct. The response covers all key differences with clear examples. It's slightly longer than the expected summary but the detail adds significant value."
+        },
+        "overall": 0.96
+      },
+      "regex-bug": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 7,
+          "feedback": "Perfectly correct and well-explained. While not strictly concise, the added detail and examples are very helpful."
+        },
+        "overall": 0.9400000000000001
+      },
+      "async-race": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 7,
+          "feedback": "Excellent, correct, and well-structured response. The code examples and summary table are very helpful. It's more detailed than a strictly concise answer, but the detail adds significant value. The response was cut off at the end."
+        },
+        "overall": 0.9400000000000001
+      },
+      "go-slice-append": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 7,
+          "feedback": "Excellent, correct, and thorough explanation. The response is more of a detailed tutorial than a brief summary, which impacts conciseness but adds significant value."
+        },
+        "overall": 0.9400000000000001
+      },
+      "rust-lifetime": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 8,
+          "feedback": "Excellent, correct, and comprehensive explanation. It covers the core reason (dangling pointers), the solution (annotations), and the exception (elision). Slightly verbose, but the detail is highly relevant and useful."
+        },
+        "overall": 0.96
+      },
+      "python-gil": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 9,
+          "feedback": "Excellent, comprehensive answer. Correctly distinguishes concurrency/parallelism and covers all key workarounds (I/O, C-extensions, multiprocessing)."
+        },
+        "overall": 0.9800000000000001
+      },
+      "react-key": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 4,
+          "feedback": "Excellent, correct, and detailed explanation with great examples, but it is not concise."
+        },
+        "overall": 0.8800000000000001
+      }
+    },
+    "C": {
+      "js-map-vs-foreach": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 10,
+          "feedback": "Excellent. Correctly identifies the key difference in return values and use cases, and provides a perfect, concise code example."
+        },
+        "overall": 1
+      },
+      "py-list-tuple": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 9,
+          "feedback": "Excellent response. It correctly identifies all key use cases for tuples, including immutability and hashability, and provides a clear, practical example. Slightly more verbose than the minimal expected answer, but the added detail is valuable."
+        },
+        "overall": 0.9800000000000001
+      },
+      "sql-inner-vs-left": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 10,
+          "feedback": "Excellent. The explanation is correct, concise, and the added example provides great clarity."
+        },
+        "overall": 1
+      },
+      "ts-type-vs-interface": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 9,
+          "feedback": "Excellent answer. It correctly identifies the core differences and use cases, and the examples provide great clarity."
+        },
+        "overall": 0.9800000000000001
+      },
+      "regex-bug": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 10,
+          "feedback": "Excellent. The response correctly identifies the issue with ASCII-only matching and provides the correct, modern Unicode-aware solution."
+        },
+        "overall": 1
+      },
+      "async-race": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 9,
+          "conciseness": 7,
+          "feedback": "Perfectly correct and clear. Slightly less concise than the ideal answer due to the inclusion of helpful code examples, but this improves the overall quality."
+        },
+        "overall": 0.9099999999999999
+      },
+      "go-slice-append": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 10,
+          "feedback": "Perfect response. The explanation is clear, the example is correct, and the inclusion of a solution is excellent."
+        },
+        "overall": 1
+      },
+      "rust-lifetime": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 10,
+          "feedback": "Excellent. The answer correctly identifies the fundamental reason (preventing dangling pointers) and provides a perfect, simple example."
+        },
+        "overall": 1
+      },
+      "python-gil": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 10,
+          "feedback": "Excellent. Correctly distinguishes concurrency from parallelism and explains the solutions for both I/O and CPU-bound tasks."
+        },
+        "overall": 1
+      },
+      "react-key": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 10,
+          "conciseness": 9,
+          "feedback": "Excellent, comprehensive answer that correctly explains the 'why' and provides useful examples."
+        },
+        "overall": 0.9800000000000001
+      }
+    }
+  },
+  "x-ai/grok-4.20": {
+    "A": {
+      "js-map-vs-foreach": {
+        "parsed": {
+          "correctness": 10,
+          "procedure": 9,
+          "conciseness": 6,
+          "feedback": "The response is semantically perfect and includes helpful examples/table, but it is significantly more verbose than the expected answer with unnecessary sections and code blocks."
+        },
+        "overall": 0.8899999999999999
+      },
+      "py-list-tuple": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 8,
+          "conciseness": 4,
+          "feedback": "The response is semantically accurate and comprehensive but far too long and padded with examples and sections that weren't requested; the expected answer is a single concise paragraph."
+        },
+        "overall": 0.77
+      },
+      "sql-inner-vs-left": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 10,
+          "conciseness": 6,
+          "feedback": "The response is semantically accurate and well-structured but is significantly more verbose than the expected answer with extra visualizations, tables, and examples that weren't requested."
+        },
+        "overall": 0.8699999999999999
+      },
+      "ts-type-vs-interface": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 8,
+          "conciseness": 4,
+          "feedback": "The response is mostly correct and comprehensive but far too long and padded with code examples and tables instead of being concise. It should have been a short, direct answer matching the expected reference."
+        },
+        "overall": 0.77
+      },
+      "regex-bug": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 8,
+          "conciseness": 4,
+          "feedback": "The response is semantically correct and provides good examples/solutions, but it is excessively long and padded with multiple alternatives, a table, and extra explanations instead of staying concise like the expected answer."
+        },
+        "overall": 0.77
+      },
+      "async-race": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 10,
+          "conciseness": 6,
+          "feedback": "Add one sentence explicitly stating that sequential awaits run one after another (total = sum) while Promise.all runs concurrently (total = max). The response is otherwise excellent but too long and padded with extra tables/visuals."
+        },
+        "overall": 0.8699999999999999
+      },
+      "go-slice-append": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 10,
+          "conciseness": 6,
+          "feedback": "The response is semantically correct and explains the concept well, but it is overly long and verbose with multiple examples and diagrams. It also gets cut off at the end which slightly hurts completeness."
+        },
+        "overall": 0.8699999999999999
+      },
+      "rust-lifetime": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 10,
+          "conciseness": 6,
+          "feedback": "The response is semantically correct and follows the requested format, but it is overly verbose with extra examples and explanations beyond the core reason asked in the question."
+        },
+        "overall": 0.8699999999999999
+      },
+      "python-gil": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 10,
+          "conciseness": 6,
+          "feedback": "The response is semantically correct and comprehensive but is excessively long and padded with multiple code examples and sections instead of staying concise like the expected answer."
+        },
+        "overall": 0.8699999999999999
+      },
+      "react-key": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 10,
+          "conciseness": 6,
+          "feedback": "The response is semantically accurate and well-structured but is significantly more verbose than the expected answer, including unnecessary tables, multiple code examples, and extra sections that dilute the core explanation."
+        },
+        "overall": 0.8699999999999999
+      }
+    },
+    "B": {
+      "js-map-vs-foreach": {
+        "parsed": {
+          "correctness": 0,
+          "procedure": 0,
+          "conciseness": 0,
+          "feedback": "The ACTUAL output is missing entirely. Provide a direct, concise answer that semantically matches the expected explanation of map vs forEach."
+        },
+        "overall": 0
+      },
+      "py-list-tuple": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 8,
+          "conciseness": 4,
+          "feedback": "The response is semantically correct and comprehensive but far too long and padded with multiple sections/examples instead of staying concise like the expected answer."
+        },
+        "overall": 0.77
+      },
+      "sql-inner-vs-left": {
+        "parsed": {
+          "correctness": 8,
+          "procedure": 9,
+          "conciseness": 6,
+          "feedback": "The response is semantically accurate and well-structured but is significantly more verbose than the expected answer with extra examples, table, and incomplete code snippet that reduce conciseness."
+        },
+        "overall": 0.7899999999999999
+      },
+      "ts-type-vs-interface": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 10,
+          "conciseness": 6,
+          "feedback": "The response is semantically very close and comprehensive, but it is too long and tutorial-style instead of delivering the expected concise rule-of-thumb directly. The table also slightly misrepresents 'Extensibility' for types."
+        },
+        "overall": 0.8699999999999999
+      },
+      "regex-bug": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 10,
+          "conciseness": 6,
+          "feedback": "The response is semantically correct and thorough but is excessively long and detailed compared to the concise expected answer; trim the extended explanations, code demos, and table to focus only on the core problem and solution."
+        },
+        "overall": 0.8699999999999999
+      },
+      "async-race": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 10,
+          "conciseness": 6,
+          "feedback": "The response is semantically correct and follows the requested format well, but it is verbose with unnecessary sections (detailed breakdown, table, partial error note) instead of staying tight like the expected answer."
+        },
+        "overall": 0.8699999999999999
+      },
+      "go-slice-append": {
+        "parsed": {
+          "correctness": 8,
+          "procedure": 9,
+          "conciseness": 6,
+          "feedback": "The response is mostly correct and well-explained but is overly long/verbose with unnecessary details and is truncated at the end; it should be tightened to focus directly on the core mechanism and include the key takeaway from the EXPECTED answer."
+        },
+        "overall": 0.7899999999999999
+      },
+      "rust-lifetime": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 8,
+          "conciseness": 4,
+          "feedback": "The response is semantically correct and explains the core concept well, but it is excessively long and verbose with multiple code examples and sections instead of staying concise like the expected answer. It also doesn't fully finish the last sentence on lifetime elision."
+        },
+        "overall": 0.77
+      },
+      "python-gil": {
+        "parsed": {
+          "correctness": 8,
+          "procedure": 9,
+          "conciseness": 4,
+          "feedback": "The response is semantically correct and well-structured but is excessively long and verbose with unnecessary sections (definitions, tables, examples) compared to the concise expected answer."
+        },
+        "overall": 0.7499999999999999
+      },
+      "react-key": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 10,
+          "conciseness": 6,
+          "feedback": "The response is semantically accurate and well-structured but is excessively long and detailed compared to the concise ground truth explanation. Trim the examples, table, and extra sections to focus only on the core reconciliation and state-preservation points."
+        },
+        "overall": 0.8699999999999999
+      }
+    },
+    "C": {
+      "js-map-vs-foreach": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 10,
+          "conciseness": 8,
+          "feedback": "Strong answer that matches the expected meaning and adds a clear example. Could be slightly tighter by directly echoing the 'use map when... use forEach when...' guidance."
+        },
+        "overall": 0.9099999999999999
+      },
+      "py-list-tuple": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 10,
+          "conciseness": 7,
+          "feedback": "Strong answer but slightly more verbose than the expected reference; the core points match well and the example is helpful."
+        },
+        "overall": 0.89
+      },
+      "sql-inner-vs-left": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 10,
+          "conciseness": 8,
+          "feedback": "Response is semantically accurate and uses a helpful example, but slightly exceeds the expected brevity by adding an example not present in the reference answer."
+        },
+        "overall": 0.9099999999999999
+      },
+      "ts-type-vs-interface": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 10,
+          "conciseness": 8,
+          "feedback": "The response is semantically very close to the expected answer and well-structured, but it slightly over-emphasizes 'classes' and 'public APIs' which aren't in the reference; it could be tighter by removing the IDE error messages claim."
+        },
+        "overall": 0.9099999999999999
+      },
+      "regex-bug": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 10,
+          "conciseness": 8,
+          "feedback": "Excellent explanation and code example. Minor deduction for not explicitly mentioning the need for the 'u' flag in the initial diagnosis sentence, though it is correctly included in the solution."
+        },
+        "overall": 0.9099999999999999
+      },
+      "async-race": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 10,
+          "conciseness": 9,
+          "feedback": "Excellent match to the expected answer with clear examples; minor deduction as it doesn't explicitly mention using sequential awaits when one result depends on the previous."
+        },
+        "overall": 0.93
+      },
+      "go-slice-append": {
+        "parsed": {
+          "correctness": 8,
+          "procedure": 9,
+          "conciseness": 8,
+          "feedback": "Good explanation and example, but misses the key point about what happens when capacity is exceeded and should mention the make+copy or three-index slice idiom more explicitly as in the expected answer."
+        },
+        "overall": 0.8299999999999998
+      },
+      "rust-lifetime": {
+        "parsed": {
+          "correctness": 7,
+          "procedure": 9,
+          "conciseness": 8,
+          "feedback": "The actual response focuses on dangling pointers and local ownership, but misses the core point about ambiguity between multiple input references that the expected answer emphasizes."
+        },
+        "overall": 0.7799999999999999
+      },
+      "python-gil": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 10,
+          "conciseness": 7,
+          "feedback": "The response is semantically accurate and well-structured but is slightly more verbose than the expected answer with extra explanatory framing and bolding that isn't strictly necessary."
+        },
+        "overall": 0.89
+      },
+      "react-key": {
+        "parsed": {
+          "correctness": 9,
+          "procedure": 10,
+          "conciseness": 8,
+          "feedback": "Strong answer that correctly explains reconciliation and pitfalls of index keys, but slightly less precise than the expected on state preservation and unmount/remount cycles."
+        },
+        "overall": 0.9099999999999999
+      }
+    }
+  }
+}

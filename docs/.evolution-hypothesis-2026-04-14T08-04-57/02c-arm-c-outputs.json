@@ -1,0 +1,42 @@
+[
+  {
+    "id": "js-map-vs-foreach",
+    "output": "The key difference is that `.map()` **returns a new array** containing the results of the callback function, whereas `.forEach()` **returns `undefined`** and is used to execute side effects.\n\n**Example:**\n```javascript\nconst nums = [1, 2, 3];\n\n// .map() creates a new array\nconst doubled = nums.map(n => n * 2); // [2, 4, 6]\n\n// .forEach() just iterates\nnums.forEach(n => console.log(n)); // Logs 1, 2, 3; returns undefined\n```"
+  },
+  {
+    "id": "py-list-tuple",
+    "output": "Use a tuple when the data should be **immutable** (cannot be changed after creation) or when the data represents a **fixed structure** (like a record or a coordinate).\n\n**Key reasons to choose tuples:**\n1.  **Data Integrity:** To ensure a collection of items remains constant throughout the program.\n2.  **Dictionary Keys:** Tuples can be used as keys in a dictionary because they are hashable; lists cannot.\n3.  **Performance:** Tuples are slightly faster and more memory-efficient than lists.\n\n**Example:**\n```python\n# Use a tuple for a fixed coordinate (x, y)\nlocation = (40.7128, 74.0060) \n\n# Use a list for a collection that will grow or change\ntodo_list = [\"Buy milk\", \"Clean room\"]\n```"
+  },
+  {
+    "id": "sql-inner-vs-left",
+    "output": "The key difference is that **INNER JOIN** returns only the rows where there is a match in both tables, while **LEFT JOIN** returns all rows from the left table and the matching rows from the right table (filling with `NULL` where no match exists).\n\n**Example:**\n*   **INNER JOIN:** If you join `Customers` and `Orders`, you get only customers who have placed an order.\n*   **LEFT JOIN:** You get all customers, including those who have never placed an order."
+  },
+  {
+    "id": "ts-type-vs-interface",
+    "output": "Use **interfaces** for defining the shape of objects and classes, especially when you need **declaration merging** or intend to use `extends`. Use **type aliases** for everything else, such as **unions, primitives, tuples, and intersections**.\n\n**Key Guidelines:**\n*   **Interface:** Best for public APIs and object-oriented structures because they are extendable and provide better error messages in some IDEs.\n*   **Type Alias:** Best for complex types (e.g., `type Status = 'Open' | 'Closed'`) or when you need to alias a primitive.\n\n**Example:**\n```typescript\n// Interface: Ideal for object shapes and extension\ninterface User { name: string }\ninterface Admin extends User { role: string }\n\n// Type Alias: Necessary for unions or primitives\ntype ID = string | number;\ntype Point = [number, number];\n```"
+  },
+  {
+    "id": "regex-bug",
+    "output": "The regex `[a-z]` only matches the **ASCII** range (English alphabet). It does not recognize Unicode characters, such as accented letters (`é`, `ö`) or non-Latin scripts, as lowercase.\n\nTo support non-ASCII lowercase letters, use the **Unicode property escape** `\\p{Ll}` (Lowercase Letter) with the `u` flag:\n\n```javascript\nconst regex = /^\\p{Ll}+$/u;\nconsole.log(regex.test('é')); // true\n```"
+  },
+  {
+    "id": "async-race",
+    "output": "Sequential `await` executes promises **serially**, meaning the second promise does not start until the first one resolves. `Promise.all` executes them **concurrently**, starting all promises simultaneously and waiting for all to complete.\n\n**Sequential (Slower):**\nTotal time = Time(P1) + Time(P2).\n```javascript\nconst a = await fetch('/api1'); // Starts now\nconst b = await fetch('/api2'); // Starts only after a finishes\n```\n\n**Promise.all (Faster):**\nTotal time = Time of the slowest promise.\n```javascript\nconst [a, b] = await Promise.all([fetch('/api1'), fetch('/api2')]); // Both start immediately\n```"
+  },
+  {
+    "id": "go-slice-append",
+    "output": "This happens because slices are headers pointing to a shared underlying array; if a slice has enough **capacity** (`cap`), `append` modifies the array in place rather than allocating a new one. If another slice points to that same memory location, it will see the updated value.\n\n**Example:**\n```go\na := make([]int, 3, 5) // len: 3, cap: 5\nb := a[:2]             // b shares the same array as a\n\nb = append(b, 10)      // b has capacity, so it overwrites a[2] with 10\nfmt.Println(a)        // Output: [0 0 10] (a was modified)\n```\n\nTo prevent this, use the **full slice expression** `a[low:high:max]` to set the capacity of the sub-slice to its length, forcing `append` to allocate a new array."
+  },
+  {
+    "id": "rust-lifetime",
+    "output": "The compiler complains because it cannot guarantee that the data being referenced will outlive the reference itself, which would lead to a **dangling pointer**.\n\nWithout an explicit lifetime, the compiler doesn't know if the reference points to data owned by the function (which is dropped at the end of the scope) or data passed in as an argument.\n\n**Example of the error:**\n```rust\nfn get_str() -> &str {\n    let s = String::from(\"hello\");\n    &s // Error: returns a reference to data owned by the current function\n}\n```\nIn this case, `s` is dropped when the function returns, making the reference invalid. Explicit lifetimes (or returning an owned `String`) tell the compiler exactly how long the data remains valid."
+  },
+  {
+    "id": "python-gil",
+    "output": "No. The GIL (Global Interpreter Lock) prevents **true parallel execution of Python bytecode** on multiple CPU cores, but it does not prevent concurrency.\n\nPython achieves concurrency in two primary ways despite the GIL:\n\n1.  **I/O-bound concurrency:** The GIL is released during I/O operations (e.g., network requests, disk reads), allowing other threads to run while one waits for a response.\n2.  **Multiprocessing:** The `multiprocessing` module bypasses the GIL by creating separate Python processes, each with its own interpreter and GIL, enabling true parallelism across multiple CPU cores.\n\n**Example:**\n*   **Threading:** Good for downloading 10 images simultaneously (I/O-bound).\n*   **Multiprocessing:** Good for calculating 10 large prime numbers (CPU-bound)."
+  },
+  {
+    "id": "react-key",
+    "output": "React uses the `key` prop to uniquely identify elements during the **reconciliation** process. It allows React to track which items in a list have changed, been added, or been removed, ensuring it only updates the specific DOM elements that changed rather than re-rendering the entire list.\n\nWithout unique keys (or when using indexes as keys), React may incorrectly reuse state or DOM elements for the wrong data items when the list is reordered or filtered.\n\n**Example:**\n```javascript\n// Correct: Using a unique ID from the data\n{items.map(item => <li key={item.id}>{item.text}</li>)}\n\n// Risky: Using index (can cause bugs if the list is sorted/filtered)\n{items.map((item, index) => <li key={index}>{item.text}</li>)}\n```"
+  }
+]

@@ -1,0 +1,20 @@
+{
+  "baseline": "You are a coding assistant. Answer the user's coding question clearly.",
+  "evolved": "You are a coding assistant. Answer the user's coding question with precision and appropriate brevity. Lead with the core insight or direct answer first, then provide supporting details only if necessary. For questions asking for \"the key difference\" or \"the main reason,\" prioritize a concise explanation (1-3 sentences) over comprehensive breakdowns. Include a brief example only when it clarifies ambiguity. Avoid verbose elaboration unless the question explicitly requests depth or a comprehensive guide.",
+  "delta": 0.02833333333333332,
+  "winnerId": "g1-m0",
+  "winnerScore": {
+    "overall": 0.9049999999999999,
+    "correctness": 0.9100000000000001,
+    "procedureFollowing": 1,
+    "conciseness": 0.7499999999999999,
+    "lengthPenalty": 1,
+    "n": 10,
+    "weaknessFeedback": [
+      "The response is largely correct and well-structured with a helpful example. However, it emphasizes the dangling pointer risk slightly more than the core issue—the actual problem is ambiguity about which input a reference borrows from, not just safety guarantees. Consider leading with the ambiguity point to align more closely with the expected explanation.",
+      "The response is factually sound and well-structured, but includes extra detail (C-extensions, asyncio) beyond the expected answer's scope. Consider whether the instruction asks for comprehensive coverage or a concise explanation—if conciseness is valued, trim to the core three points (I/O threading, multiprocessing, and the parallelism vs. concurrency distinction).",
+      "The response is accurate and well-structured with helpful examples. To improve conciseness, consider consolidating the 'Key distinctions' section into the main paragraph rather than using a separate bulleted list, as the information is somewhat redundant with the opening statement."
+    ]
+  },
+  "historyCount": 7
+}
