@@ -94,6 +94,14 @@ export {
   type ParsedJudgeResponse,
 } from './judge.js';
 export {
+  createAnthropicEvolutionLLM,
+  buildJudgeLLMCall, buildGEPAMutateFn, buildSchemaExecuteFn,
+  buildReflectiveMutationPrompt, buildSchemaFillPrompt,
+  makeRunningJudge,
+  type EvolutionLLM, type CreateAnthropicEvolutionLLMOptions,
+  type BuildReflectiveMutationPromptArgs,
+} from './evolution-llm-wiring.js';
+export {
   createHarnessRun, advancePhase, getCurrentPhaseInstruction,
   canRetry, getRunSummary, harnessEvents,
   type WorkflowHarness, type HarnessPhase, type PhaseGate, type GateResult,

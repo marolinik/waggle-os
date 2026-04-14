@@ -17,9 +17,20 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { EvolutionRun, EvolutionRunStatus } from '@waggle/core';
 import {
   EvolutionOrchestrator,
+  LLMJudge,
   deployPersonaOverride,
   deployBehavioralSpecOverride,
+  createAnthropicEvolutionLLM,
+  buildJudgeLLMCall,
+  buildGEPAMutateFn,
+  buildSchemaExecuteFn,
+  makeRunningJudge,
   type BehavioralSpecSection,
+  type EvolutionLLM,
+  type Schema,
+  type SchemaBaselineInput,
+  type EvolutionTarget,
+  type GateOptions,
 } from '@waggle/agent';
 import { createLogger } from '../logger.js';
 
@@ -205,6 +216,153 @@ export const evolutionRoutes: FastifyPluginAsync = async (server) => {
   });
 
   /**
+   * POST /api/evolution/run
+   *
+   * Trigger a real evolution run synchronously. Uses the Anthropic key from
+   * the vault to build Haiku-backed judge / mutate / execute functions and
+   * invokes `EvolutionOrchestrator.runOnce`. The resulting proposal (if
+   * any) is persisted to the evolution store and surfaced in the response
+   * so the caller can immediately show it to the user.
+   *
+   * Body:
+   *   {
+   *     targetKind: 'persona-system-prompt' | 'behavioral-spec-section' | ...
+   *     targetName: string
+   *     baseline: string                 // current instruction text
+   *     schemaBaseline: Schema           // current structural baseline (DSPy signature)
+   *     minDelta?: number                // default 0.02
+   *     gepa?: { populationSize?, generations?, miniEvalSize?, anchorEvalSize?, seed? }
+   *     schema?: { populationSize?, generations?, evalSize?, anchorEvalSize?, seed? }
+   *     gateOptions?: GateOptions
+   *   }
+   *
+   * Status codes:
+   *   200 — orchestrator ran (see body.outcome for proposed / skipped-*)
+   *   400 — validation error (missing/invalid body fields)
+   *   422 — no Anthropic API key configured in the vault
+   *   503 — @ax-llm/ax unavailable or LLM init failed
+   */
+  server.post<{
+    Body: {
+      targetKind?: EvolutionTarget;
+      targetName?: string;
+      baseline?: string;
+      schemaBaseline?: Schema;
+      minDelta?: number;
+      gepa?: {
+        populationSize?: number;
+        generations?: number;
+        miniEvalSize?: number;
+        anchorEvalSize?: number;
+        seed?: number;
+      };
+      schema?: {
+        populationSize?: number;
+        generations?: number;
+        evalSize?: number;
+        anchorEvalSize?: number;
+        seed?: number;
+      };
+      gateOptions?: GateOptions;
+    };
+  }>('/api/evolution/run', async (request, reply) => {
+    const body = request.body ?? {};
+    const validation = validateRunBody(body);
+    if (!validation.ok) {
+      return reply.status(400).send({ error: validation.error });
+    }
+    const { targetKind, targetName, baseline, schemaBaseline } = validation;
+
+    // Resolve the Anthropic key from the vault. Evolution is opt-in — if
+    // the user has not added their key we stop here with an actionable
+    // message rather than burning CPU on stub LLMs.
+    const apiKey = server.vault?.get('anthropic')?.value;
+    if (!apiKey) {
+      return reply.status(422).send({
+        error: 'No Anthropic API key configured. Add one in Settings → Vault.',
+      });
+    }
+
+    const llm = await buildEvolutionLLM(apiKey);
+    if (!llm) {
+      return reply.status(503).send({
+        error: '@ax-llm/ax is not available — cannot initialize the evolution LLM.',
+      });
+    }
+
+    // Compose adapters — shared judge for both stages, wrapped with a
+    // running judge for GEPA so prompts are executed against real LLM
+    // output before scoring. The ES stage has its own executor and uses
+    // the base judge directly.
+    const baseJudge = new LLMJudge(buildJudgeLLMCall(llm));
+    const runningJudge = makeRunningJudge(baseJudge, llm);
+    const schemaExecute = buildSchemaExecuteFn(llm);
+    const mutate = buildGEPAMutateFn(llm);
+
+    const orchestrator = new EvolutionOrchestrator({
+      traceStore: server.traceStore,
+      runStore: server.evolutionStore,
+      // No deploy callback — accept endpoint handles that separately.
+    });
+
+    try {
+      const result = await orchestrator.runOnce({
+        targetKind,
+        targetName,
+        baseline,
+        schemaBaseline: schemaBaseline as SchemaBaselineInput['baseline'],
+        minDelta: body.minDelta,
+        gateOptions: body.gateOptions,
+        compose: {
+          schema: {
+            execute: schemaExecute,
+            judge: baseJudge,
+            // Orchestrator mines examples from the trace store when empty;
+            // the field is present for type-completeness only.
+            examples: [],
+            ...(body.schema ?? {}),
+          },
+          instructions: {
+            judge: runningJudge,
+            mutate,
+            targetKind,
+            examples: [],
+            ...(body.gepa ?? {}),
+          },
+        },
+      });
+
+      log.info(
+        `Evolution run: ${targetKind}/${targetName ?? '?'} → ${result.outcome}` +
+        (result.run ? ` (run ${result.run.run_uuid})` : ''),
+      );
+
+      return reply.status(200).send({
+        outcome: result.outcome,
+        reason: result.reason,
+        run: result.run,
+        gateResults: result.gateResults,
+        // Compose result can be large; only include the deltas + winner id.
+        composeSummary: result.compose
+          ? {
+            combinedDelta: result.compose.combinedDelta,
+            fullyImproved: result.compose.fullyImproved,
+            schemaImproved: result.compose.schema.improved,
+            schemaDelta: result.compose.schema.deltaAccuracy,
+            instructionImproved: result.compose.instructions.improved,
+            instructionDelta: result.compose.instructions.delta,
+            winnerId: result.compose.instructions.winner.id,
+          }
+          : null,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.warn(`Evolution run failed: ${msg}`);
+      return reply.status(500).send({ error: `Evolution run failed: ${msg}` });
+    }
+  });
+
+  /**
    * GET /api/evolution/status — aggregate counts for the dashboard.
    */
   server.get<{
@@ -224,3 +382,77 @@ export const evolutionRoutes: FastifyPluginAsync = async (server) => {
     return { counts, pendingCount };
   });
 };
+
+// ── /run helpers ────────────────────────────────────────────────
+
+const VALID_TARGET_KINDS: EvolutionTarget[] = [
+  'persona-system-prompt',
+  'behavioral-spec-section',
+  'tool-description',
+  'skill-body',
+  'generic',
+];
+
+type ValidationOk = {
+  ok: true;
+  targetKind: EvolutionTarget;
+  targetName: string;
+  baseline: string;
+  schemaBaseline: Schema;
+};
+type ValidationErr = { ok: false; error: string };
+
+/**
+ * Validate the POST /api/evolution/run body. Returns a discriminated union
+ * so the handler can early-return with a 400 on any shape error.
+ */
+function validateRunBody(body: unknown): ValidationOk | ValidationErr {
+  if (!body || typeof body !== 'object') {
+    return { ok: false, error: 'Body must be a JSON object.' };
+  }
+  const b = body as Record<string, unknown>;
+
+  if (typeof b.targetKind !== 'string' || !VALID_TARGET_KINDS.includes(b.targetKind as EvolutionTarget)) {
+    return {
+      ok: false,
+      error: `targetKind must be one of: ${VALID_TARGET_KINDS.join(', ')}`,
+    };
+  }
+  if (typeof b.targetName !== 'string' || b.targetName.trim().length === 0) {
+    return { ok: false, error: 'targetName must be a non-empty string.' };
+  }
+  if (typeof b.baseline !== 'string' || b.baseline.trim().length === 0) {
+    return { ok: false, error: 'baseline must be a non-empty string.' };
+  }
+  const sb = b.schemaBaseline;
+  if (!sb || typeof sb !== 'object') {
+    return { ok: false, error: 'schemaBaseline must be an object with {name, fields, version}.' };
+  }
+  const schemaObj = sb as Record<string, unknown>;
+  if (typeof schemaObj.name !== 'string' || !Array.isArray(schemaObj.fields)) {
+    return { ok: false, error: 'schemaBaseline requires string "name" and array "fields".' };
+  }
+
+  return {
+    ok: true,
+    targetKind: b.targetKind as EvolutionTarget,
+    targetName: b.targetName,
+    baseline: b.baseline,
+    schemaBaseline: sb as Schema,
+  };
+}
+
+/**
+ * Hook point for tests: override the LLM factory by setting
+ * `(globalThis as any).__wagglEvolutionLlmFactory` to an `(apiKey) => EvolutionLLM`.
+ * Production code flows through `createAnthropicEvolutionLLM`.
+ */
+async function buildEvolutionLLM(apiKey: string): Promise<EvolutionLLM | null> {
+  const override = (globalThis as unknown as {
+    __waggleEvolutionLlmFactory?: (apiKey: string) => EvolutionLLM | Promise<EvolutionLLM>;
+  }).__waggleEvolutionLlmFactory;
+  if (override) {
+    return await override(apiKey);
+  }
+  return createAnthropicEvolutionLLM(apiKey);
+}
