@@ -3,6 +3,7 @@ import { LoopGuard } from './loop-guard.js';
 import { scanForInjection } from './injection-scanner.js';
 import type { HookRegistry } from './hooks.js';
 import type { CapabilityRouter } from './capability-router.js';
+import type { TraceRecorder, TraceHandle } from './trace-recorder.js';
 
 /** Minimal interface for plugin runtime integration (from @waggle/sdk) */
 export interface PluginToolProvider {
@@ -48,6 +49,23 @@ export interface AgentLoopConfig {
     blockedTools?: string[];
     allowedSources?: string[];
   };
+  /**
+   * Optional trace recording. When provided, the agent loop automatically
+   * captures tool calls, reasoning, and artifacts into the handle using
+   * recorder.wireAgentLoopCallbacks(). Caller-supplied onToolUse /
+   * onToolResult still fire — the trace wiring is additive.
+   *
+   * The caller is responsible for starting the handle via
+   * `recorder.start({...})` BEFORE calling runAgentLoop and finalizing
+   * it via `recorder.finalize(handle, {...})` AFTER. The loop never
+   * finalizes the trace itself because outcome labeling happens after
+   * the user (or correction detector) signals success / corrected /
+   * abandoned / verified.
+   */
+  traceRecording?: {
+    recorder: TraceRecorder;
+    handle: TraceHandle;
+  };
 }
 
 export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentResponse> {
@@ -59,14 +77,36 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     tools: configTools,
     messages: inputMessages,
     onToken,
-    onToolUse,
-    onToolResult,
+    onToolUse: userOnToolUse,
+    onToolResult: userOnToolResult,
     maxTurns = 10,
     stream = false,
     fetch: fetchFn = globalThis.fetch,
     hooks,
     pluginTools: pluginToolProvider,
+    traceRecording,
   } = config;
+
+  // Wire trace recorder callbacks if configured. The recorder's handlers
+  // run BEFORE the caller's so the trace captures the call even if the
+  // caller's handler throws.
+  const traceCallbacks = traceRecording
+    ? traceRecording.recorder.wireAgentLoopCallbacks(traceRecording.handle)
+    : null;
+
+  const onToolUse = traceCallbacks
+    ? (name: string, input: Record<string, unknown>) => {
+        traceCallbacks.onToolUse(name, input);
+        userOnToolUse?.(name, input);
+      }
+    : userOnToolUse;
+
+  const onToolResult = traceCallbacks
+    ? (name: string, input: Record<string, unknown>, result: string) => {
+        traceCallbacks.onToolResult(name, input, result);
+        userOnToolResult?.(name, input, result);
+      }
+    : userOnToolResult;
 
   // Merge plugin tools (if any) into the base tool set
   const tools: ToolDefinition[] = pluginToolProvider
