@@ -45,6 +45,11 @@ export {
   type StartTraceInput, type FinalizeTraceInput, type TraceQueryFilter,
 } from './mind/execution-traces.js';
 export {
+  EvolutionRunStore, EVOLUTION_RUNS_TABLE_SQL,
+  type EvolutionRun, type EvolutionRunStatus, type EvolutionRunTarget,
+  type CreateEvolutionRunInput, type EvolutionRunFilter,
+} from './mind/evolution-runs.js';
+export {
   InstallAuditStore, INSTALL_AUDIT_TABLE_SQL,
   type InstallAuditEntry, type RecordAuditInput,
   type AuditAction, type AuditRiskLevel, type AuditTrustSource,

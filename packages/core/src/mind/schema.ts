@@ -189,6 +189,32 @@ CREATE INDEX IF NOT EXISTS idx_traces_persona ON execution_traces (persona_id, o
 CREATE INDEX IF NOT EXISTS idx_traces_outcome ON execution_traces (outcome, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_traces_workspace ON execution_traces (workspace_id, created_at DESC);
 
+-- Layer 10: Evolution Runs (proposed/accepted/rejected self-evolution runs)
+CREATE TABLE IF NOT EXISTS evolution_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_uuid TEXT NOT NULL UNIQUE,
+  target_kind TEXT NOT NULL,
+  target_name TEXT,
+  baseline_text TEXT NOT NULL,
+  winner_text TEXT NOT NULL,
+  winner_schema_json TEXT,
+  delta_accuracy REAL NOT NULL DEFAULT 0,
+  gate_verdict TEXT NOT NULL DEFAULT 'pass'
+    CHECK (gate_verdict IN ('pass', 'fail')),
+  gate_reasons_json TEXT NOT NULL DEFAULT '[]',
+  status TEXT NOT NULL DEFAULT 'proposed'
+    CHECK (status IN ('proposed', 'accepted', 'rejected', 'deployed', 'failed')),
+  artifacts_json TEXT,
+  user_note TEXT,
+  failure_reason TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  decided_at TEXT,
+  deployed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_evo_runs_status ON evolution_runs (status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_evo_runs_target ON evolution_runs (target_kind, target_name, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_evo_runs_created ON evolution_runs (created_at DESC);
+
 -- Layer 8: Harvest Sources (Memory Harvest sync tracking)
 CREATE TABLE IF NOT EXISTS harvest_sources (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
