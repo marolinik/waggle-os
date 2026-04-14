@@ -282,4 +282,105 @@ describe('Evolution Routes', () => {
       expect(body.pendingCount).toBe(0);
     });
   });
+
+  // ── GET /api/evolution/targets ──
+
+  describe('GET /api/evolution/targets', () => {
+    it('returns personas + behavioral-spec sections + a default schema', async () => {
+      const res = await injectWithAuth(server, {
+        method: 'GET', url: '/api/evolution/targets',
+      });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(Array.isArray(body.personas)).toBe(true);
+      expect(body.personas.length).toBeGreaterThan(0);
+      expect(body.personas[0]).toHaveProperty('id');
+      expect(body.personas[0]).toHaveProperty('name');
+      // systemPrompt is intentionally omitted from /targets to match /api/personas privacy policy
+      expect(body.personas[0]).not.toHaveProperty('systemPrompt');
+
+      expect(Array.isArray(body.sections)).toBe(true);
+      expect(body.sections).toEqual(expect.arrayContaining([
+        'coreLoop', 'qualityRules', 'behavioralRules', 'workPatterns', 'intelligenceDefaults',
+      ]));
+
+      expect(body.defaultSchema).toMatchObject({
+        name: expect.any(String),
+        version: expect.any(Number),
+        fields: expect.any(Array),
+      });
+      expect(body.defaultSchema.fields.length).toBeGreaterThan(0);
+    });
+  });
+
+  // ── GET /api/evolution/baseline ──
+
+  describe('GET /api/evolution/baseline', () => {
+    it('returns 400 when kind or name is missing', async () => {
+      const a = await injectWithAuth(server, {
+        method: 'GET', url: '/api/evolution/baseline',
+      });
+      expect(a.statusCode).toBe(400);
+
+      const b = await injectWithAuth(server, {
+        method: 'GET', url: '/api/evolution/baseline?kind=persona-system-prompt',
+      });
+      expect(b.statusCode).toBe(400);
+    });
+
+    it('returns the persona systemPrompt for persona-system-prompt', async () => {
+      // Pick whatever persona the registry lists first — avoids hardcoding
+      // an id that might be renamed.
+      const listRes = await injectWithAuth(server, {
+        method: 'GET', url: '/api/evolution/targets',
+      });
+      const { personas } = JSON.parse(listRes.body);
+      const personaId = personas[0].id;
+
+      const res = await injectWithAuth(server, {
+        method: 'GET', url: `/api/evolution/baseline?kind=persona-system-prompt&name=${encodeURIComponent(personaId)}`,
+      });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(typeof body.baseline).toBe('string');
+      expect(body.baseline.length).toBeGreaterThan(0);
+      expect(body.schemaBaseline).toMatchObject({
+        name: expect.any(String),
+        fields: expect.any(Array),
+      });
+    });
+
+    it('returns 404 for unknown persona', async () => {
+      const res = await injectWithAuth(server, {
+        method: 'GET', url: '/api/evolution/baseline?kind=persona-system-prompt&name=ghost-persona',
+      });
+      expect(res.statusCode).toBe(404);
+    });
+
+    it('returns the active section text for behavioral-spec-section', async () => {
+      const res = await injectWithAuth(server, {
+        method: 'GET', url: '/api/evolution/baseline?kind=behavioral-spec-section&name=coreLoop',
+      });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(typeof body.baseline).toBe('string');
+      expect(body.baseline.length).toBeGreaterThan(0);
+      // coreLoop has identifiable content
+      expect(body.baseline).toMatch(/HOW YOU THINK|Core Loop|Step 1/i);
+    });
+
+    it('returns 404 for unknown section', async () => {
+      const res = await injectWithAuth(server, {
+        method: 'GET', url: '/api/evolution/baseline?kind=behavioral-spec-section&name=nopeSection',
+      });
+      expect(res.statusCode).toBe(404);
+    });
+
+    it('returns 400 for unknown kind', async () => {
+      const res = await injectWithAuth(server, {
+        method: 'GET', url: '/api/evolution/baseline?kind=tool-description&name=x',
+      });
+      expect(res.statusCode).toBe(400);
+    });
+  });
 });

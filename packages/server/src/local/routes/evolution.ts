@@ -25,6 +25,10 @@ import {
   buildGEPAMutateFn,
   buildSchemaExecuteFn,
   makeRunningJudge,
+  listPersonas,
+  getPersona,
+  BEHAVIORAL_SPEC,
+  BEHAVIORAL_SPEC_SECTIONS,
   type BehavioralSpecSection,
   type EvolutionLLM,
   type Schema,
@@ -213,6 +217,75 @@ export const evolutionRoutes: FastifyPluginAsync = async (server) => {
 
     const updated = server.evolutionStore.reject(uuid, reason);
     return reply.status(200).send(updated);
+  });
+
+  /**
+   * GET /api/evolution/targets — enumerate what the user can evolve.
+   *
+   * Returns the available persona ids + the fixed behavioral-spec section
+   * list so the UI can populate its Run-form dropdowns without hardcoding.
+   */
+  server.get('/api/evolution/targets', async () => {
+    const personas = listPersonas().map(p => ({
+      id: p.id,
+      name: p.name,
+      description: p.description,
+      icon: p.icon,
+    }));
+    return {
+      personas,
+      sections: BEHAVIORAL_SPEC_SECTIONS,
+      defaultSchema: defaultSchemaBaseline('generic'),
+    };
+  });
+
+  /**
+   * GET /api/evolution/baseline?kind=X&name=Y — fetch the current baseline.
+   *
+   * For `persona-system-prompt`, returns the persona's live systemPrompt.
+   * For `behavioral-spec-section`, returns the active section text from
+   * `server.activeBehavioralSpec` (which already accounts for any
+   * deployed overrides). Also returns a sensible default schemaBaseline.
+   */
+  server.get<{
+    Querystring: { kind?: string; name?: string };
+  }>('/api/evolution/baseline', async (request, reply) => {
+    const { kind, name } = request.query;
+    if (!kind || !name) {
+      return reply.status(400).send({ error: 'kind and name query params are required' });
+    }
+
+    if (kind === 'persona-system-prompt') {
+      const persona = getPersona(name);
+      if (!persona) {
+        return reply.status(404).send({ error: `Unknown persona: ${name}` });
+      }
+      return {
+        baseline: persona.systemPrompt,
+        schemaBaseline: defaultSchemaBaseline('persona-system-prompt'),
+      };
+    }
+
+    if (kind === 'behavioral-spec-section') {
+      if (!BEHAVIORAL_SPEC_SECTIONS.includes(name as BehavioralSpecSection)) {
+        return reply.status(404).send({ error: `Unknown section: ${name}` });
+      }
+      // Prefer the live active spec (accounts for any deployed overrides)
+      // over BEHAVIORAL_SPEC's compile-time text.
+      const section = name as BehavioralSpecSection;
+      const activeSpec = server.activeBehavioralSpec as unknown as Record<string, string> | undefined;
+      const activeText =
+        activeSpec?.[section]
+        ?? (BEHAVIORAL_SPEC as unknown as Record<string, string>)[section];
+      return {
+        baseline: activeText ?? '',
+        schemaBaseline: defaultSchemaBaseline('behavioral-spec-section'),
+      };
+    }
+
+    return reply.status(400).send({
+      error: 'kind must be "persona-system-prompt" or "behavioral-spec-section"',
+    });
   });
 
   /**
@@ -439,6 +512,34 @@ function validateRunBody(body: unknown): ValidationOk | ValidationErr {
     targetName: b.targetName,
     baseline: b.baseline,
     schemaBaseline: sb as Schema,
+  };
+}
+
+/**
+ * Sensible default schema for a given target kind. Returning this from
+ * the baseline endpoint lets the UI submit without forcing the user to
+ * hand-write a DSPy signature up front.
+ */
+function defaultSchemaBaseline(kind: EvolutionTarget): Schema {
+  return {
+    name: kind.replace(/-/g, '_') + '_baseline',
+    version: 1,
+    fields: [
+      {
+        name: 'reasoning',
+        type: 'string',
+        description: 'short step-by-step justification before the answer',
+        required: false,
+        constraints: [],
+      },
+      {
+        name: 'answer',
+        type: 'string',
+        description: 'the assistant\u0027s direct response',
+        required: true,
+        constraints: [],
+      },
+    ],
   };
 }
 
