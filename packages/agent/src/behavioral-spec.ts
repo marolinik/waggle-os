@@ -319,6 +319,62 @@ When approaching any task:
 };
 
 /**
+ * Section name literal type — matches the evolution-deploy module.
+ * Kept minimal here so behavioral-spec.ts stays free of cross-imports.
+ */
+export type BehavioralSpecSectionName =
+  | 'coreLoop'
+  | 'qualityRules'
+  | 'behavioralRules'
+  | 'workPatterns'
+  | 'intelligenceDefaults';
+
+/**
+ * Build an "active" behavioral spec with section overrides applied.
+ *
+ * Keeps the same shape as BEHAVIORAL_SPEC so existing callers that use
+ * `.rules` continue to work. Empty/undefined overrides fall through to
+ * the compiled baseline unchanged.
+ *
+ * Typical usage at server boot:
+ *   const overrides = loadBehavioralSpecOverrides(dataDir);
+ *   const spec = buildActiveBehavioralSpec(overrides);
+ *   // ...pass spec.rules into the system prompt...
+ */
+export function buildActiveBehavioralSpec(
+  overrides: Partial<Record<BehavioralSpecSectionName, string>> = {},
+): {
+  version: string;
+  coreLoop: string;
+  qualityRules: string;
+  behavioralRules: string;
+  workPatterns: string;
+  intelligenceDefaults: string;
+  rules: string;
+} {
+  const coreLoop = pickOverride(overrides.coreLoop, BEHAVIORAL_SPEC.coreLoop);
+  const qualityRules = pickOverride(overrides.qualityRules, BEHAVIORAL_SPEC.qualityRules);
+  const behavioralRules = pickOverride(overrides.behavioralRules, BEHAVIORAL_SPEC.behavioralRules);
+  const workPatterns = pickOverride(overrides.workPatterns, BEHAVIORAL_SPEC.workPatterns);
+  const intelligenceDefaults = pickOverride(overrides.intelligenceDefaults, BEHAVIORAL_SPEC.intelligenceDefaults);
+
+  return {
+    version: BEHAVIORAL_SPEC.version,
+    coreLoop,
+    qualityRules,
+    behavioralRules,
+    workPatterns,
+    intelligenceDefaults,
+    rules: [coreLoop, qualityRules, behavioralRules, workPatterns, intelligenceDefaults].join('\n\n'),
+  };
+}
+
+function pickOverride(override: string | undefined, baseline: string): string {
+  if (typeof override === 'string' && override.trim().length > 0) return override;
+  return baseline;
+}
+
+/**
  * Compaction prompt — used when context window nears capacity.
  * Instructs the model to summarize the conversation for seamless continuation.
  */

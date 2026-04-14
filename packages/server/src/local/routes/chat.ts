@@ -175,12 +175,16 @@ ${historyLength && historyLength > 0 ? `- This is a continuing conversation (${h
 ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailor responses to this domain.` : ''}
 `;
 
-    // Behavioral rules from versioned spec (v${BEHAVIORAL_SPEC.version})
-    prompt += '\n' + BEHAVIORAL_SPEC.rules;
+    // Behavioral rules from the ACTIVE spec — baseline with any deployed
+    // self-evolution overrides applied. Falls back to the compiled
+    // BEHAVIORAL_SPEC when the server hasn't decorated activeBehavioralSpec
+    // (legacy test harness).
+    const activeSpec = server.activeBehavioralSpec ?? BEHAVIORAL_SPEC;
+    prompt += '\n' + activeSpec.rules;
 
     // Token monitoring
     const estimatedTokens = Math.ceil(prompt.length / 4);
-    log.info(`[Orchestrator] System prompt: ~${estimatedTokens} tokens (behavioral-spec v${BEHAVIORAL_SPEC.version})`);
+    log.info(`[Orchestrator] System prompt: ~${estimatedTokens} tokens (behavioral-spec v${activeSpec.version})`);
     if (estimatedTokens > 12000) {
       log.warn(`[Orchestrator] System prompt exceeds 12K tokens (${estimatedTokens}). Consider trimming.`);
     }

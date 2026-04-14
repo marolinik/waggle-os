@@ -139,7 +139,10 @@ export {
 } from './capability-acquisition.js';
 export { McpServerInstance, McpRuntime, type McpServerConfig, type McpServerState, type McpToolInfo, type McpProcess, type SpawnFn } from './mcp/mcp-runtime.js';
 export { SubagentOrchestrator, type WorkerState, type WorkerStatus, type WorkflowStep, type WorkflowTemplate, type OrchestratorConfig as SubagentOrchestratorConfig } from './subagent-orchestrator.js';
-export { BEHAVIORAL_SPEC, COMPACTION_PROMPT } from './behavioral-spec.js';
+export {
+  BEHAVIORAL_SPEC, COMPACTION_PROMPT, buildActiveBehavioralSpec,
+  type BehavioralSpecSectionName,
+} from './behavioral-spec.js';
 export { FEATURE_FLAGS, isEnabled, type FeatureFlag } from './feature-flags.js';
 export { WORKFLOW_TEMPLATES, listWorkflowTemplates, createResearchTeamTemplate, createReviewPairTemplate, createPlanExecuteTemplate, createTicketResolveTemplate, createContentPipelineTemplate } from './workflow-templates.js';
 export { loadCustomWorkflows, saveCustomWorkflow, deleteCustomWorkflow, listAllWorkflows } from './custom-workflows.js';

@@ -45,6 +45,8 @@ import {
   setPersonaDataDir,
   deliverCronResult,
   createDefaultDeliveryPreferences,
+  buildActiveBehavioralSpec,
+  loadBehavioralSpecOverrides,
   type ToolDefinition,
   type LoadedSkill,
   type DeliveryPreferences,
@@ -226,6 +228,12 @@ declare module 'fastify' {
     cronStore: import('@waggle/core').CronStore;
     traceStore: import('@waggle/core').ExecutionTraceStore;
     evolutionStore: import('@waggle/core').EvolutionRunStore;
+    /**
+     * Active behavioral spec — baseline `BEHAVIORAL_SPEC` with any
+     * accepted-and-deployed evolution overrides applied. Re-derived on
+     * the 'behavioral-spec:reloaded' event.
+     */
+    activeBehavioralSpec: ReturnType<typeof import('@waggle/agent').buildActiveBehavioralSpec>;
     vault: import('@waggle/core').VaultStore;
     embeddingProvider: import('@waggle/core').EmbeddingProviderInstance;
     skillHashStore: import('@waggle/core').SkillHashStore;
@@ -286,6 +294,19 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   // Evolution run store — audit trail of proposed/accepted/rejected self-evolution runs
   const evolutionStore = new EvolutionRunStore(multiMind.personal);
   server.decorate('evolutionStore', evolutionStore);
+
+  // Behavioral spec with deployed overrides applied (self-evolution deploy target).
+  // Re-derived on the 'behavioral-spec:reloaded' event emitted by evolution routes.
+  const initialOverrides = loadBehavioralSpecOverrides(fullConfig.dataDir);
+  let activeBehavioralSpec = buildActiveBehavioralSpec(initialOverrides);
+  server.decorate('activeBehavioralSpec', activeBehavioralSpec);
+  eventBus.on('behavioral-spec:reloaded', () => {
+    const latest = loadBehavioralSpecOverrides(fullConfig.dataDir);
+    activeBehavioralSpec = buildActiveBehavioralSpec(latest);
+    // Re-decorate so server.activeBehavioralSpec returns the fresh value.
+    // Fastify's decorate() is idempotent for reassignment via the instance.
+    (server as unknown as { activeBehavioralSpec: typeof activeBehavioralSpec }).activeBehavioralSpec = activeBehavioralSpec;
+  });
 
   // Vault — encrypted secret storage
   const vault = new VaultStore(fullConfig.dataDir);
