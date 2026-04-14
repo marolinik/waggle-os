@@ -65,6 +65,12 @@ export {
   type EvolveSchemaProgress,
 } from './evolve-schema.js';
 export {
+  ComposeEvolution, defaultFeedbackFilter, filterJudgeFeedback,
+  stripStructuralLines, schemaExecutorFromInstructionRunner,
+  type ComposeEvolutionOptions, type ComposeEvolutionResult,
+  type ComposeProgress, type FeedbackFilter,
+} from './compose-evolution.js';
+export {
   LLMJudge, DEFAULT_WEIGHTS, DEFAULT_RUBRIC,
   buildPrompt as buildJudgePrompt,
   parseJudgeResponse, computeLengthPenalty,
