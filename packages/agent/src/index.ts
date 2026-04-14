@@ -98,8 +98,12 @@ export {
   buildJudgeLLMCall, buildGEPAMutateFn, buildSchemaExecuteFn,
   buildReflectiveMutationPrompt, buildSchemaFillPrompt,
   makeRunningJudge,
+  retryWithBackoff, wrapWithRetry,
+  isRetryableEvolutionError, computeRetryDelay,
+  DEFAULT_RETRY_OPTIONS,
   type EvolutionLLM, type CreateAnthropicEvolutionLLMOptions,
   type BuildReflectiveMutationPromptArgs,
+  type RetryOptions, type RetryInfo,
 } from './evolution-llm-wiring.js';
 export {
   createHarnessRun, advancePhase, getCurrentPhaseInstruction,

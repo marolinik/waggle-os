@@ -45,11 +45,163 @@ export interface EvolutionLLM {
   complete(prompt: string): Promise<string>;
 }
 
+// ── Retry with exponential backoff ──────────────────────────────
+
+/**
+ * Tuning knobs for `retryWithBackoff` and `wrapWithRetry`. All fields
+ * optional — defaults match the schedule proven out in the hypothesis
+ * test: 5s → 15s → 45s → 135s (capped at 150s) with ±3s jitter across
+ * six total attempts (five retries).
+ */
+export interface RetryOptions {
+  /** Total attempts including the first. Default 6 (= 5 retries). */
+  maxAttempts?: number;
+  /** Base backoff in ms. Default 5_000. */
+  baseMs?: number;
+  /** Cap on a single backoff in ms. Default 150_000. */
+  capMs?: number;
+  /** Multiplicative growth factor per attempt. Default 3. */
+  factor?: number;
+  /** Random jitter in ms added to each backoff. Default 3_000. */
+  jitterMs?: number;
+  /** Predicate that decides whether an error is retryable. */
+  isRetryable?: (err: unknown) => boolean;
+  /** Sleep override — tests can pass `async () => {}` for instant sleeps. */
+  sleep?: (ms: number) => Promise<void>;
+  /** Observability hook fired BEFORE each retry sleep. */
+  onRetry?: (info: RetryInfo) => void;
+  /** AbortSignal — interrupts the next sleep + causes the loop to throw. */
+  signal?: AbortSignal;
+}
+
+export interface RetryInfo {
+  /** 1-based attempt number that just failed. */
+  attempt: number;
+  /** Planned sleep duration in ms before the next attempt. */
+  delayMs: number;
+  /** The error that triggered the retry. */
+  error: unknown;
+}
+
+/** Immutable defaults — frozen so typos at call sites fail loudly. */
+export const DEFAULT_RETRY_OPTIONS: Required<Omit<RetryOptions, 'onRetry' | 'signal' | 'sleep' | 'isRetryable'>> = Object.freeze({
+  maxAttempts: 6,
+  baseMs: 5_000,
+  capMs: 150_000,
+  factor: 3,
+  jitterMs: 3_000,
+});
+
+const DEFAULT_SLEEP = (ms: number): Promise<void> => new Promise(r => setTimeout(r, ms));
+
+const RETRYABLE_STATUSES: ReadonlySet<number> = new Set([408, 425, 429, 500, 502, 503, 504, 529]);
+
+const RETRYABLE_CODES: ReadonlySet<string> = new Set([
+  'ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN',
+  'EPIPE', 'ECONNABORTED', 'ESOCKETTIMEDOUT', 'UND_ERR_SOCKET',
+]);
+
+const RETRYABLE_MESSAGE_RE = /\b(rate.?limit|too.many.requests|overloaded|timeout|timed.out|socket.hang.up|network.error|connection.reset|connection.refused|fetch.failed|retry|503|502|504|529|429)\b/i;
+
+/**
+ * Default retryable-error detector. Looks at (in order):
+ *   1. Explicit HTTP status on the error object (`status`, `statusCode`).
+ *   2. Well-known Node/fetch failure codes (ETIMEDOUT, ECONNRESET, ...).
+ *   3. Message patterns that indicate a transient condition.
+ *
+ * Conservative on unknowns — returns `false` rather than retrying blind.
+ */
+export function isRetryableEvolutionError(err: unknown): boolean {
+  if (err === null || err === undefined) return false;
+  const e = err as { status?: unknown; statusCode?: unknown; code?: unknown; message?: unknown };
+  const status = typeof e.status === 'number' ? e.status
+    : typeof e.statusCode === 'number' ? e.statusCode
+      : undefined;
+  if (status !== undefined && RETRYABLE_STATUSES.has(status)) return true;
+  if (typeof e.code === 'string' && RETRYABLE_CODES.has(e.code)) return true;
+  const message = typeof e.message === 'string' ? e.message : '';
+  if (message && RETRYABLE_MESSAGE_RE.test(message)) return true;
+  return false;
+}
+
+/**
+ * Deterministic (when `jitterMs === 0`) backoff schedule. Attempt is
+ * 1-based: the first retry uses `attempt = 1`, giving `baseMs`.
+ */
+export function computeRetryDelay(attempt: number, options: RetryOptions = {}): number {
+  const baseMs = options.baseMs ?? DEFAULT_RETRY_OPTIONS.baseMs;
+  const capMs = options.capMs ?? DEFAULT_RETRY_OPTIONS.capMs;
+  const factor = options.factor ?? DEFAULT_RETRY_OPTIONS.factor;
+  const jitterMs = options.jitterMs ?? DEFAULT_RETRY_OPTIONS.jitterMs;
+  const clampedAttempt = Math.max(1, attempt);
+  const raw = baseMs * Math.pow(factor, clampedAttempt - 1);
+  const base = Math.min(capMs, raw);
+  const jitter = jitterMs > 0 ? Math.floor(Math.random() * jitterMs) : 0;
+  return base + jitter;
+}
+
+/**
+ * Run `op` with exponential-backoff retries. The closure receives the
+ * 1-based attempt number so callers can do per-attempt diagnostics.
+ *
+ * - Non-retryable errors throw on first occurrence.
+ * - After `maxAttempts` failed retryable attempts, the final error is
+ *   rethrown unchanged (so callers can inspect `.status` / `.message`).
+ * - `signal` aborts the next sleep and causes the loop to throw — the
+ *   op itself is not cancelled mid-flight.
+ */
+export async function retryWithBackoff<T>(
+  op: (attempt: number) => Promise<T>,
+  options: RetryOptions = {},
+): Promise<T> {
+  const maxAttempts = options.maxAttempts ?? DEFAULT_RETRY_OPTIONS.maxAttempts;
+  const isRetryable = options.isRetryable ?? isRetryableEvolutionError;
+  const sleep = options.sleep ?? DEFAULT_SLEEP;
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (options.signal?.aborted) {
+      throw options.signal.reason instanceof Error
+        ? options.signal.reason
+        : new Error('retryWithBackoff aborted');
+    }
+    try {
+      return await op(attempt);
+    } catch (err) {
+      lastError = err;
+      if (!isRetryable(err) || attempt === maxAttempts) throw err;
+      const delayMs = computeRetryDelay(attempt, options);
+      options.onRetry?.({ attempt, delayMs, error: err });
+      await sleep(delayMs);
+    }
+  }
+  // Unreachable: the loop either returns, throws inside the catch, or exhausts
+  // maxAttempts (which is handled by the `attempt === maxAttempts` throw above).
+  throw lastError ?? new Error('retryWithBackoff: unreachable');
+}
+
+/**
+ * Wrap any `EvolutionLLM` so that each `complete()` call is retried on
+ * transient failures. Pure composition — the inner LLM is unaware.
+ */
+export function wrapWithRetry(llm: EvolutionLLM, options: RetryOptions = {}): EvolutionLLM {
+  return {
+    complete(prompt: string): Promise<string> {
+      return retryWithBackoff(() => llm.complete(prompt), options);
+    },
+  };
+}
+
 // ── Anthropic builder ───────────────────────────────────────────
 
 export interface CreateAnthropicEvolutionLLMOptions {
   /** Optional model override. Defaults to Claude 4.5 Haiku. */
   model?: string;
+  /**
+   * Retry policy applied to every `complete()` call. Omit to use the
+   * library defaults; pass `{ maxAttempts: 1 }` to disable retries
+   * entirely.
+   */
+  retry?: RetryOptions;
 }
 
 /**
@@ -83,7 +235,7 @@ export async function createAnthropicEvolutionLLM(
       }): Promise<unknown>;
     };
 
-    return {
+    const inner: EvolutionLLM = {
       async complete(prompt: string): Promise<string> {
         const response = await ai.chat({
           chatPrompt: [{ role: 'user', content: prompt }],
@@ -97,6 +249,10 @@ export async function createAnthropicEvolutionLLM(
         return typeof first === 'string' ? first : '';
       },
     };
+    // Apply retry policy — defaults are sized for background evolution runs
+    // (5s → 15s → 45s → 135s → 150s across 6 attempts). Callers can disable
+    // by passing `retry: { maxAttempts: 1 }`.
+    return wrapWithRetry(inner, options.retry ?? {});
   } catch {
     // @ax-llm/ax missing or init failure — graceful degradation.
     return null;

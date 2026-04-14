@@ -356,7 +356,7 @@ export const evolutionRoutes: FastifyPluginAsync = async (server) => {
       });
     }
 
-    const llm = await buildEvolutionLLM(apiKey);
+    const llm = await buildEvolutionLLM(apiKey, request.log);
     if (!llm) {
       return reply.status(503).send({
         error: '@ax-llm/ax is not available — cannot initialize the evolution LLM.',
@@ -544,16 +544,49 @@ function defaultSchemaBaseline(kind: EvolutionTarget): Schema {
 }
 
 /**
- * Hook point for tests: override the LLM factory by setting
- * `(globalThis as any).__wagglEvolutionLlmFactory` to an `(apiKey) => EvolutionLLM`.
- * Production code flows through `createAnthropicEvolutionLLM`.
+ * Minimal logger shape — structured enough for Fastify's logger, noop-safe
+ * when omitted. Kept narrow so we don't pull in Fastify types here.
  */
-async function buildEvolutionLLM(apiKey: string): Promise<EvolutionLLM | null> {
+interface RunLogger {
+  warn(payload: unknown, msg?: string): void;
+}
+
+/**
+ * Hook point for tests: override the LLM factory by setting
+ * `(globalThis as any).__waggleEvolutionLlmFactory` to an `(apiKey) => EvolutionLLM`.
+ * Production code flows through `createAnthropicEvolutionLLM` with the
+ * default retry policy (5s → 15s → 45s → 135s → 150s, 6 attempts). When a
+ * logger is supplied each backoff is surfaced as a structured warn event
+ * so rate-limit backoffs show up in ops logs instead of looking like a
+ * silent hang.
+ */
+async function buildEvolutionLLM(
+  apiKey: string,
+  logger?: RunLogger,
+): Promise<EvolutionLLM | null> {
   const override = (globalThis as unknown as {
     __waggleEvolutionLlmFactory?: (apiKey: string) => EvolutionLLM | Promise<EvolutionLLM>;
   }).__waggleEvolutionLlmFactory;
   if (override) {
     return await override(apiKey);
   }
-  return createAnthropicEvolutionLLM(apiKey);
+  return createAnthropicEvolutionLLM(apiKey, {
+    retry: logger
+      ? {
+        onRetry: ({ attempt, delayMs, error }) => {
+          const e = error as { status?: number; message?: string };
+          logger.warn(
+            {
+              component: 'evolution.run',
+              attempt,
+              delayMs,
+              status: e?.status,
+              error: e?.message ?? String(error),
+            },
+            `evolution LLM rate-limited — backing off ${delayMs}ms (attempt ${attempt})`,
+          );
+        },
+      }
+      : undefined,
+  });
 }

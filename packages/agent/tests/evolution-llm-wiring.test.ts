@@ -6,7 +6,14 @@ import {
   makeRunningJudge,
   buildReflectiveMutationPrompt,
   buildSchemaFillPrompt,
+  retryWithBackoff,
+  wrapWithRetry,
+  isRetryableEvolutionError,
+  computeRetryDelay,
+  DEFAULT_RETRY_OPTIONS,
   type EvolutionLLM,
+  type RetryOptions,
+  type RetryInfo,
 } from '../src/evolution-llm-wiring.js';
 import type { MutateArgs, GEPACandidate } from '../src/index.js';
 import type { Schema } from '../src/evolve-schema.js';
@@ -324,5 +331,276 @@ describe('makeRunningJudge', () => {
     });
 
     expect(baseScore.mock.calls[0][0].context).toBe('persona:coder');
+  });
+});
+
+// ── isRetryableEvolutionError ─────────────────────────────────────
+
+describe('isRetryableEvolutionError', () => {
+  it('returns true for retryable HTTP statuses (429/502/503/504/529/500/408/425)', () => {
+    for (const status of [408, 425, 429, 500, 502, 503, 504, 529]) {
+      expect(isRetryableEvolutionError({ status })).toBe(true);
+      expect(isRetryableEvolutionError({ statusCode: status })).toBe(true);
+    }
+  });
+
+  it('returns false for non-retryable HTTP statuses', () => {
+    for (const status of [400, 401, 403, 404, 422]) {
+      expect(isRetryableEvolutionError({ status })).toBe(false);
+    }
+  });
+
+  it('returns true for transient network error codes', () => {
+    for (const code of ['ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN']) {
+      expect(isRetryableEvolutionError({ code })).toBe(true);
+    }
+  });
+
+  it('returns true for rate-limit / overloaded / timeout message patterns', () => {
+    const patterns = [
+      new Error('Rate limit exceeded'),
+      new Error('Too many requests, slow down'),
+      new Error('Anthropic: server overloaded — retry shortly'),
+      new Error('connection reset by peer'),
+      new Error('fetch failed'),
+      new Error('socket hang up'),
+      new Error('HTTP 429: rate limited'),
+      new Error('HTTP 503 Service Unavailable'),
+    ];
+    for (const err of patterns) {
+      expect(isRetryableEvolutionError(err)).toBe(true);
+    }
+  });
+
+  it('returns false for null, undefined, and empty errors', () => {
+    expect(isRetryableEvolutionError(null)).toBe(false);
+    expect(isRetryableEvolutionError(undefined)).toBe(false);
+    expect(isRetryableEvolutionError({})).toBe(false);
+    expect(isRetryableEvolutionError(new Error(''))).toBe(false);
+  });
+
+  it('returns false for deterministic logic errors', () => {
+    expect(isRetryableEvolutionError(new Error('Invalid input schema'))).toBe(false);
+    expect(isRetryableEvolutionError(new Error('Permission denied'))).toBe(false);
+    expect(isRetryableEvolutionError(new Error('Not found'))).toBe(false);
+  });
+});
+
+// ── computeRetryDelay ─────────────────────────────────────────────
+
+describe('computeRetryDelay', () => {
+  it('produces the 5s → 15s → 45s → 135s → 150s (capped) schedule with zero jitter', () => {
+    const opts: RetryOptions = { jitterMs: 0 };
+    expect(computeRetryDelay(1, opts)).toBe(5_000);
+    expect(computeRetryDelay(2, opts)).toBe(15_000);
+    expect(computeRetryDelay(3, opts)).toBe(45_000);
+    expect(computeRetryDelay(4, opts)).toBe(135_000);
+    expect(computeRetryDelay(5, opts)).toBe(150_000);
+    expect(computeRetryDelay(6, opts)).toBe(150_000);
+  });
+
+  it('clamps attempt < 1 to attempt 1', () => {
+    expect(computeRetryDelay(0, { jitterMs: 0 })).toBe(5_000);
+    expect(computeRetryDelay(-5, { jitterMs: 0 })).toBe(5_000);
+  });
+
+  it('applies jitter within [0, jitterMs)', () => {
+    // Stub Math.random to isolate jitter behavior.
+    const spy = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    try {
+      expect(computeRetryDelay(1, { jitterMs: 2_000 })).toBe(5_000 + 1_000);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('honors custom baseMs / capMs / factor', () => {
+    const opts: RetryOptions = { baseMs: 100, capMs: 1_000, factor: 2, jitterMs: 0 };
+    expect(computeRetryDelay(1, opts)).toBe(100);
+    expect(computeRetryDelay(2, opts)).toBe(200);
+    expect(computeRetryDelay(3, opts)).toBe(400);
+    expect(computeRetryDelay(4, opts)).toBe(800);
+    // Cap engages at attempt 5: 1600 → 1000.
+    expect(computeRetryDelay(5, opts)).toBe(1_000);
+  });
+});
+
+// ── retryWithBackoff ──────────────────────────────────────────────
+
+describe('retryWithBackoff', () => {
+  /** Instant sleep — tests run in ~microseconds. */
+  const noSleep = async (): Promise<void> => { /* noop */ };
+
+  it('returns the first-try result without retry', async () => {
+    const op = vi.fn(async () => 'ok');
+    const result = await retryWithBackoff(op, { sleep: noSleep });
+    expect(result).toBe('ok');
+    expect(op).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries on retryable errors and eventually succeeds', async () => {
+    let callCount = 0;
+    const op = vi.fn(async () => {
+      callCount++;
+      if (callCount < 3) {
+        const err = Object.assign(new Error('rate limit'), { status: 429 });
+        throw err;
+      }
+      return 'recovered';
+    });
+
+    const sleeps: number[] = [];
+    const result = await retryWithBackoff(op, {
+      sleep: async (ms) => { sleeps.push(ms); },
+      jitterMs: 0,
+    });
+
+    expect(result).toBe('recovered');
+    expect(op).toHaveBeenCalledTimes(3);
+    expect(sleeps).toEqual([5_000, 15_000]);
+  });
+
+  it('propagates non-retryable errors on first occurrence without retrying', async () => {
+    const err = Object.assign(new Error('bad request'), { status: 400 });
+    const op = vi.fn(async () => { throw err; });
+
+    await expect(retryWithBackoff(op, { sleep: noSleep })).rejects.toBe(err);
+    expect(op).toHaveBeenCalledTimes(1);
+  });
+
+  it('throws the last error after maxAttempts retryable failures', async () => {
+    const err = Object.assign(new Error('always 503'), { status: 503 });
+    const op = vi.fn(async () => { throw err; });
+
+    await expect(
+      retryWithBackoff(op, { sleep: noSleep, maxAttempts: 3 }),
+    ).rejects.toBe(err);
+    expect(op).toHaveBeenCalledTimes(3);
+  });
+
+  it('fires onRetry hook before each sleep with attempt + delay + error', async () => {
+    let callCount = 0;
+    const op = vi.fn(async () => {
+      callCount++;
+      if (callCount < 3) {
+        throw Object.assign(new Error('rl'), { status: 429 });
+      }
+      return 'ok';
+    });
+
+    const retries: RetryInfo[] = [];
+    await retryWithBackoff(op, {
+      sleep: noSleep,
+      jitterMs: 0,
+      onRetry: (info) => retries.push(info),
+    });
+
+    expect(retries).toHaveLength(2);
+    expect(retries[0].attempt).toBe(1);
+    expect(retries[0].delayMs).toBe(5_000);
+    expect(retries[1].attempt).toBe(2);
+    expect(retries[1].delayMs).toBe(15_000);
+    expect(retries.every(r => r.error instanceof Error)).toBe(true);
+  });
+
+  it('honors a custom isRetryable predicate', async () => {
+    const err = new Error('custom: transient');
+    const op = vi.fn(async () => { throw err; });
+
+    // Default predicate would reject this — but custom says "always retry then give up".
+    await expect(retryWithBackoff(op, {
+      sleep: noSleep,
+      maxAttempts: 2,
+      isRetryable: (e) => e === err,
+    })).rejects.toBe(err);
+    expect(op).toHaveBeenCalledTimes(2);
+  });
+
+  it('throws immediately when signal is pre-aborted', async () => {
+    const controller = new AbortController();
+    controller.abort(new Error('user cancelled'));
+    const op = vi.fn(async () => 'never');
+
+    await expect(retryWithBackoff(op, {
+      sleep: noSleep,
+      signal: controller.signal,
+    })).rejects.toThrow(/user cancelled|aborted/i);
+    expect(op).not.toHaveBeenCalled();
+  });
+
+  it('uses DEFAULT_RETRY_OPTIONS when nothing is supplied', async () => {
+    // Smoke test: a successful op should return without touching defaults.
+    const result = await retryWithBackoff(async () => 42);
+    expect(result).toBe(42);
+    expect(DEFAULT_RETRY_OPTIONS.maxAttempts).toBe(6);
+    expect(DEFAULT_RETRY_OPTIONS.baseMs).toBe(5_000);
+    expect(DEFAULT_RETRY_OPTIONS.capMs).toBe(150_000);
+    expect(DEFAULT_RETRY_OPTIONS.factor).toBe(3);
+  });
+
+  it('provides the 1-based attempt number to the operation', async () => {
+    const attempts: number[] = [];
+    let n = 0;
+    const op = vi.fn(async (attempt: number) => {
+      attempts.push(attempt);
+      n++;
+      if (n < 3) throw Object.assign(new Error('rl'), { status: 429 });
+      return 'done';
+    });
+
+    await retryWithBackoff(op, { sleep: noSleep });
+    expect(attempts).toEqual([1, 2, 3]);
+  });
+});
+
+// ── wrapWithRetry ─────────────────────────────────────────────────
+
+describe('wrapWithRetry', () => {
+  it('wraps an EvolutionLLM so complete() retries on retryable errors', async () => {
+    let n = 0;
+    const base: EvolutionLLM = {
+      async complete() {
+        n++;
+        if (n < 3) throw Object.assign(new Error('429'), { status: 429 });
+        return 'finally';
+      },
+    };
+    const wrapped = wrapWithRetry(base, { sleep: async () => {}, jitterMs: 0 });
+
+    const result = await wrapped.complete('anything');
+    expect(result).toBe('finally');
+    expect(n).toBe(3);
+  });
+
+  it('does not retry non-retryable errors', async () => {
+    let n = 0;
+    const err = Object.assign(new Error('bad auth'), { status: 401 });
+    const base: EvolutionLLM = {
+      async complete() { n++; throw err; },
+    };
+    const wrapped = wrapWithRetry(base, { sleep: async () => {} });
+
+    await expect(wrapped.complete('x')).rejects.toBe(err);
+    expect(n).toBe(1);
+  });
+
+  it('threads retry options through to each call (independent per complete)', async () => {
+    const calls: number[] = [];
+    const base: EvolutionLLM = {
+      async complete(prompt: string) {
+        calls.push(prompt.length);
+        throw Object.assign(new Error('503'), { status: 503 });
+      },
+    };
+    const wrapped = wrapWithRetry(base, {
+      sleep: async () => {},
+      maxAttempts: 2,
+    });
+
+    await expect(wrapped.complete('a')).rejects.toThrow();
+    await expect(wrapped.complete('bb')).rejects.toThrow();
+
+    // Two separate complete() calls, each retried maxAttempts=2 times.
+    expect(calls).toEqual([1, 1, 2, 2]);
   });
 });
