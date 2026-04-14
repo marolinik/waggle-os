@@ -49,7 +49,7 @@ describe('Workspace Templates API', () => {
     }
   });
 
-  it('GET /api/workspace-templates returns 7 built-in templates', async () => {
+  it('GET /api/workspace-templates returns 15 built-in templates', async () => {
     const res = await injectWithAuth(server, {
       method: 'GET',
       url: '/api/workspace-templates',
@@ -58,8 +58,8 @@ describe('Workspace Templates API', () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as { templates: TemplateResponse[]; count: number };
     expect(body.templates).toBeDefined();
-    expect(body.count).toBe(7);
-    expect(body.templates.length).toBe(7);
+    expect(body.count).toBe(15);
+    expect(body.templates.length).toBe(15);
   });
 
   it('each built-in template has all required fields', async () => {
@@ -81,7 +81,11 @@ describe('Workspace Templates API', () => {
       expect(Array.isArray(template.suggestedCommands)).toBe(true);
       expect(template.suggestedCommands.length).toBeGreaterThan(0);
       expect(Array.isArray(template.starterMemory)).toBe(true);
-      expect(template.starterMemory.length).toBeGreaterThan(0);
+      // `blank` template intentionally starts with empty starterMemory;
+      // all other templates must seed some context.
+      if (template.id !== 'blank') {
+        expect(template.starterMemory.length).toBeGreaterThan(0);
+      }
       expect(template.builtIn).toBe(true);
     }
   });
@@ -103,9 +107,13 @@ describe('Workspace Templates API', () => {
   });
 
   it('built-in templates map to valid persona IDs', async () => {
+    // Kept in sync with BUILT_IN_TEMPLATES — expanded to 15 templates
+    // following the Template/Persona Architecture expansion (see CLAUDE.md §5).
     const validPersonaIds = [
       'researcher', 'writer', 'analyst', 'coder',
       'project-manager', 'executive-assistant', 'sales-rep', 'marketer',
+      'support-agent', 'finance-owner', 'hr-manager', 'ops-manager',
+      'data-engineer', 'recruiter', 'creative-director', 'general-purpose',
     ];
 
     const res = await injectWithAuth(server, {
@@ -150,8 +158,8 @@ describe('Workspace Templates API', () => {
     });
 
     const body = JSON.parse(res.body) as { templates: TemplateResponse[]; count: number };
-    // 7 built-in + 1 custom from previous test
-    expect(body.count).toBe(8);
+    // 15 built-in + 1 custom from previous test
+    expect(body.count).toBe(16);
     const custom = body.templates.find(t => t.name === 'My Custom Template');
     expect(custom).toBeDefined();
     expect(custom!.builtIn).toBe(false);

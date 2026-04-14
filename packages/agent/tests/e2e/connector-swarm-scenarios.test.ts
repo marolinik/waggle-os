@@ -221,10 +221,11 @@ describe('E2E Swarm Scenarios', () => {
     it('create, use, pause, resume, kill session', () => {
       const manager = new WorkspaceSessionManager(3);
       const mind = { close: vi.fn() } as any;
+      const orchestrator = { setWorkspaceMind: vi.fn() } as any;
       const tools = [{ name: 't1', description: '', parameters: {}, execute: async () => '' }];
 
       // Create
-      const session = manager.create('ws-1', mind, tools, 'researcher');
+      const session = manager.create('ws-1', mind, orchestrator, tools, 'researcher');
       expect(session.status).toBe('active');
       expect(session.personaId).toBe('researcher');
 

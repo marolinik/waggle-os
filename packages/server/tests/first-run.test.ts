@@ -14,8 +14,21 @@ function makeTmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-firstrun-test-'));
 }
 
+// Pick an OS-assigned ephemeral port by briefly binding to port 0.
+// Falls back to random high port if probing fails. This avoids the
+// collisions we saw when multiple test files ran in parallel with a
+// narrow random range.
+import net from 'node:net';
 function randomPort(): number {
-  return 4500 + Math.floor(Math.random() * 1000);
+  try {
+    const server = net.createServer();
+    server.listen(0);
+    const addr = server.address();
+    const port = typeof addr === 'object' && addr ? addr.port : 0;
+    server.close();
+    if (port > 0) return port;
+  } catch { /* fall through */ }
+  return 20_000 + Math.floor(Math.random() * 40_000);
 }
 
 // ── isFirstRun ─────────────────────────────────────────────────────

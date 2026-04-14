@@ -46,7 +46,12 @@ describe('LocalScheduler Error Handling (11B-9)', () => {
 
     await scheduler.tick();
 
-    expect(errorSpy).toHaveBeenCalledWith('[cron] Job failed:', 1, expect.any(Error));
+    // Structured logger emits a single tagged string per call.
+    // Format: "[waggle:cron] \x1b[31m[error]\x1b[0m Job failed: <id> <detail>"
+    expect(errorSpy).toHaveBeenCalled();
+    const [[logged]] = errorSpy.mock.calls;
+    expect(String(logged)).toContain('[waggle:cron]');
+    expect(String(logged)).toContain('Job failed: 1');
     errorSpy.mockRestore();
   });
 
@@ -112,7 +117,9 @@ describe('LocalScheduler Error Handling (11B-9)', () => {
 
     expect(scheduler.getFailCount(99)).toBe(5);
     expect(scheduler.isDisabled(99)).toBe(true);
-    expect(warnSpy).toHaveBeenCalledWith('[cron] Job disabled after 5 failures:', 99);
+    expect(warnSpy).toHaveBeenCalled();
+    const warnArgs = warnSpy.mock.calls.flat().map(a => String(a));
+    expect(warnArgs.some(s => s.includes('Job disabled after 5 failures: 99'))).toBe(true);
 
     // 6th tick — executor should NOT be called (job is disabled)
     executor.mockClear();

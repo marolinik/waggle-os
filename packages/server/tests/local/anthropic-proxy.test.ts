@@ -147,7 +147,12 @@ describe('Anthropic Proxy Routes', () => {
       expect(fetchCall[0]).toBe('https://api.anthropic.com/v1/messages');
       const requestBody = JSON.parse(fetchCall[1].body);
       expect(requestBody.model).toBe('claude-sonnet-4-20250514');
-      expect(requestBody.system).toContain('You are a helpful assistant');
+      // system is either a string or an Anthropic cache-control block array —
+      // extract the text in either case.
+      const systemText = Array.isArray(requestBody.system)
+        ? requestBody.system.map((b: { text?: string }) => b.text ?? '').join('\n')
+        : String(requestBody.system ?? '');
+      expect(systemText).toContain('You are a helpful assistant');
       expect(requestBody.stream).toBe(false);
     });
 

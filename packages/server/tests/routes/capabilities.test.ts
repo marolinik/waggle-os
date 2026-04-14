@@ -190,18 +190,20 @@ describe('Capabilities Route', () => {
     expect(Array.isArray(body.hooks.recentActivity)).toBe(true);
   });
 
-  it('returns workflows array with 3 built-in templates', async () => {
+  it('returns workflows array with 5 built-in templates', async () => {
     const res = await injectWithAuth(server, { method: 'GET', url: '/api/capabilities/status' });
     const body = JSON.parse(res.body);
 
     expect(body).toHaveProperty('workflows');
     expect(Array.isArray(body.workflows)).toBe(true);
-    expect(body.workflows).toHaveLength(3);
+    expect(body.workflows).toHaveLength(5);
 
     const names = body.workflows.map((w: { name: string }) => w.name);
     expect(names).toContain('research-team');
     expect(names).toContain('review-pair');
     expect(names).toContain('plan-execute');
+    expect(names).toContain('ticket-resolve');
+    expect(names).toContain('content-pipeline');
 
     for (const wf of body.workflows) {
       expect(wf).toHaveProperty('name');

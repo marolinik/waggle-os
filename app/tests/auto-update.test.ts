@@ -139,26 +139,9 @@ describe('auto-update configuration', () => {
     });
   });
 
-  describe('frontend update hook', () => {
-    const hookSource = readFileSync(
-      resolve(ROOT, 'src/hooks/useAutoUpdate.ts'),
-      'utf-8',
-    );
-
-    it('exists and imports from react', () => {
-      expect(hookSource).toContain("from 'react'");
-    });
-
-    it('guards with __TAURI_INTERNALS__ for web mode', () => {
-      expect(hookSource).toContain('__TAURI_INTERNALS__');
-    });
-
-    it('listens for waggle://update-available event', () => {
-      expect(hookSource).toContain('waggle://update-available');
-    });
-
-    it('exports useAutoUpdate function', () => {
-      expect(hookSource).toContain('export function useAutoUpdate');
-    });
-  });
+  // Frontend update hook describe block removed — the Tauri app/src/
+  // frontend was deprecated in favor of apps/web/ (see commit a883050);
+  // the useAutoUpdate listener was dropped along with it. The Rust shell
+  // still emits `waggle://update-available` for future consumers, which
+  // is verified by the "Rust updater plugin registration" block above.
 });
