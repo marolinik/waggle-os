@@ -36,6 +36,13 @@ export {
   type BuildOptions as EvalBuildOptions, type JudgeVerdict,
 } from './eval-dataset.js';
 export {
+  IterativeGEPA, paretoFront, scoreCandidate, aggregateScores,
+  pickWinner, pickSample as pickGepaSample,
+  type Candidate as GEPACandidate, type CandidateScore as GEPACandidateScore,
+  type IterativeGEPAOptions, type GEPARunResult, type GEPAProgress,
+  type MutateArgs, type MutateFn, type MutationStrategy, type EvolutionTarget,
+} from './iterative-optimizer.js';
+export {
   LLMJudge, DEFAULT_WEIGHTS, DEFAULT_RUBRIC,
   buildPrompt as buildJudgePrompt,
   parseJudgeResponse, computeLengthPenalty,
