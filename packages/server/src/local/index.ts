@@ -80,6 +80,7 @@ import { personaRoutes } from './routes/personas.js';
 import { feedbackRoutes } from './routes/feedback.js';
 import { workflowRoutes } from './routes/workflows.js';
 import { workspaceTemplateRoutes } from './routes/workspace-templates.js';
+import { evolutionRoutes } from './routes/evolution.js';
 import { exportRoutes } from './routes/export.js';
 import { costRoutes } from './routes/cost.js';
 import { backupRoutes } from './routes/backup.js';
@@ -1693,6 +1694,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(personaRoutes);
   await server.register(feedbackRoutes);
   await server.register(workspaceTemplateRoutes);
+  await server.register(evolutionRoutes);
   await server.register(exportRoutes);
   await server.register(costRoutes);
   await server.register(backupRoutes);
