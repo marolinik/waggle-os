@@ -71,6 +71,13 @@ export {
   type ComposeProgress, type FeedbackFilter,
 } from './compose-evolution.js';
 export {
+  EvolutionOrchestrator, eligibleForEvolution, summarizeRuns,
+  type EvolutionOrchestratorDeps, type EvolutionOrchestratorOptions,
+  type EvolutionAutoTriggerConfig, type OrchestratorRunResult,
+  type OrchestratorOutcome, type EvolutionProgress,
+  type SchemaBaselineInput,
+} from './evolution-orchestrator.js';
+export {
   LLMJudge, DEFAULT_WEIGHTS, DEFAULT_RUBRIC,
   buildPrompt as buildJudgePrompt,
   parseJudgeResponse, computeLengthPenalty,
