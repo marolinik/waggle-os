@@ -5,7 +5,7 @@ import path from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
-import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture } from '@waggle/agent';
+import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, TraceRecorder } from '@waggle/agent';
 import type { AgentLoopConfig, AgentResponse, Orchestrator, AutonomyLevel } from '@waggle/agent';
 import type { WorkspaceSession } from '../workspace-sessions.js';
 import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
@@ -1040,7 +1040,29 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         const credPool = getCredentialPool(providerName);
         const poolKey = credPool?.getKey();
         const effectiveApiKey = poolKey ?? server.agentState.litellmApiKey;
-        const runConfig = { ...agentConfig, litellmApiKey: effectiveApiKey };
+
+        // ── Start execution trace (self-evolution substrate) ──
+        // Lazy-created per request so unit tests with no traceStore decorator
+        // (legacy suites) still pass. Finalized in the success + error paths
+        // below so outcome labels are accurate.
+        const traceRecorder = server.traceStore ? new TraceRecorder(server.traceStore) : null;
+        const traceHandle = traceRecorder
+          ? traceRecorder.start({
+              sessionId,
+              personaId: activePersonaId,
+              workspaceId: effectiveWorkspace ?? null,
+              model: resolvedModel,
+              input: message,
+            })
+          : null;
+
+        const runConfig: typeof agentConfig = {
+          ...agentConfig,
+          litellmApiKey: effectiveApiKey,
+          ...(traceRecorder && traceHandle
+            ? { traceRecording: { recorder: traceRecorder, handle: traceHandle } }
+            : {}),
+        };
 
         // ── Run agent with credential pool + fallback chain ──
         let result;
@@ -1100,6 +1122,22 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
         // Track cost with the ACTUALLY used model
         costTracker.addUsage(resolvedModel, result.usage.inputTokens, result.usage.outputTokens, effectiveWorkspace);
+
+        // ── Finalize the execution trace (self-evolution substrate) ──
+        // Default outcome is 'success'; correction-detector may downgrade to
+        // 'corrected' on the next turn via traceStore.markCorrected().
+        if (traceRecorder && traceHandle) {
+          try {
+            traceRecorder.finalize(traceHandle, {
+              outcome: 'success',
+              output: result.content ?? '',
+              tokens: {
+                input: result.usage.inputTokens,
+                output: result.usage.outputTokens,
+              },
+            });
+          } catch { /* tracing is best-effort — don't fail the response */ }
+        }
 
         // ── Post-response memory write-back ──────────────────────
         // If the agent didn't save memory itself, check if the exchange

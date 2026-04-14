@@ -6,7 +6,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
-import { MindDB, MultiMind, MultiMindCache, WorkspaceManager, WaggleConfig, createEmbeddingProvider, type EmbeddingProviderConfig, type EmbeddingProviderInstance, FrameStore, SessionStore, InstallAuditStore, CronStore, AwarenessLayer, VaultStore, SkillHashStore, OptimizationLogStore, ImprovementSignalStore, HarvestSourceStore, ClaudeCodeAdapter, reconcileIndexes, TeamSync, TelemetryStore, TELEMETRY_EVENTS } from '@waggle/core';
+import { MindDB, MultiMind, MultiMindCache, WorkspaceManager, WaggleConfig, createEmbeddingProvider, type EmbeddingProviderConfig, type EmbeddingProviderInstance, FrameStore, SessionStore, InstallAuditStore, CronStore, AwarenessLayer, VaultStore, SkillHashStore, OptimizationLogStore, ImprovementSignalStore, HarvestSourceStore, ClaudeCodeAdapter, reconcileIndexes, TeamSync, TelemetryStore, TELEMETRY_EVENTS, ExecutionTraceStore, EvolutionRunStore } from '@waggle/core';
 import { ALLOWED_ORIGINS } from './cors-config.js';
 import { MemoryWeaver } from '@waggle/weaver';
 import {
@@ -223,6 +223,8 @@ declare module 'fastify' {
     agentState: AgentState;
     auditStore: import('@waggle/core').InstallAuditStore;
     cronStore: import('@waggle/core').CronStore;
+    traceStore: import('@waggle/core').ExecutionTraceStore;
+    evolutionStore: import('@waggle/core').EvolutionRunStore;
     vault: import('@waggle/core').VaultStore;
     embeddingProvider: import('@waggle/core').EmbeddingProviderInstance;
     skillHashStore: import('@waggle/core').SkillHashStore;
@@ -275,6 +277,14 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   server.decorate('cronStore', cronStore);
 
   seedDefaultCrons(cronStore);
+
+  // Execution trace store — persistent log of agent runs (self-evolution substrate)
+  const traceStore = new ExecutionTraceStore(multiMind.personal);
+  server.decorate('traceStore', traceStore);
+
+  // Evolution run store — audit trail of proposed/accepted/rejected self-evolution runs
+  const evolutionStore = new EvolutionRunStore(multiMind.personal);
+  server.decorate('evolutionStore', evolutionStore);
 
   // Vault — encrypted secret storage
   const vault = new VaultStore(fullConfig.dataDir);
