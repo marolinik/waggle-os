@@ -384,61 +384,119 @@ export const evolutionRoutes: FastifyPluginAsync = async (server) => {
       // No deploy callback — accept endpoint handles that separately.
     });
 
-    try {
-      const result = await orchestrator.runOnce({
-        targetKind,
-        targetName,
-        baseline,
-        schemaBaseline: schemaBaseline as SchemaBaselineInput['baseline'],
-        minDelta: body.minDelta,
-        gateOptions: body.gateOptions,
-        compose: {
-          schema: {
-            execute: schemaExecute,
-            judge: baseJudge,
-            // Orchestrator mines examples from the trace store when empty;
-            // the field is present for type-completeness only.
-            examples: [],
-            ...(body.schema ?? {}),
-          },
-          instructions: {
-            judge: runningJudge,
-            mutate,
-            targetKind,
-            examples: [],
-            // Parallelize the per-candidate mini-eval by default.
-            // Historical sequential runs took 54 min for 10×3×2; a
-            // concurrency of 4 gets that down to roughly a quarter of
-            // the wall time without saturating the Anthropic API.
-            concurrency: 4,
-            ...(body.gepa ?? {}),
-          },
+    const runOptions = {
+      targetKind,
+      targetName,
+      baseline,
+      schemaBaseline: schemaBaseline as SchemaBaselineInput['baseline'],
+      minDelta: body.minDelta,
+      gateOptions: body.gateOptions,
+      compose: {
+        schema: {
+          execute: schemaExecute,
+          judge: baseJudge,
+          // Orchestrator mines examples from the trace store when empty;
+          // the field is present for type-completeness only.
+          examples: [],
+          ...(body.schema ?? {}),
         },
-      });
+        instructions: {
+          judge: runningJudge,
+          mutate,
+          targetKind,
+          examples: [],
+          // Parallelize the per-candidate mini-eval by default.
+          // Historical sequential runs took 54 min for 10×3×2; a
+          // concurrency of 4 gets that down to roughly a quarter of
+          // the wall time without saturating the Anthropic API.
+          concurrency: 4,
+          ...(body.gepa ?? {}),
+        },
+      },
+    };
+
+    const buildResultPayload = (result: Awaited<ReturnType<typeof orchestrator.runOnce>>) => ({
+      outcome: result.outcome,
+      reason: result.reason,
+      run: result.run,
+      gateResults: result.gateResults,
+      // Compose result can be large; only include the deltas + winner id.
+      composeSummary: result.compose
+        ? {
+          combinedDelta: result.compose.combinedDelta,
+          fullyImproved: result.compose.fullyImproved,
+          schemaImproved: result.compose.schema.improved,
+          schemaDelta: result.compose.schema.deltaAccuracy,
+          instructionImproved: result.compose.instructions.improved,
+          instructionDelta: result.compose.instructions.delta,
+          winnerId: result.compose.instructions.winner.id,
+        }
+        : null,
+    });
+
+    // Opt-in SSE: when the client sends Accept: text/event-stream, stream
+    // per-phase progress events. Without the header the route returns a
+    // single JSON body as before (backwards compat for tests + cron).
+    const wantsSse = (request.headers.accept ?? '').toLowerCase().includes('text/event-stream');
+
+    if (wantsSse) {
+      reply.raw.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+      reply.raw.setHeader('Cache-Control', 'no-cache, no-transform');
+      reply.raw.setHeader('Connection', 'keep-alive');
+      // Disable reverse-proxy buffering (nginx, etc) — streamed data must
+      // reach the client immediately, not in chunks.
+      reply.raw.setHeader('X-Accel-Buffering', 'no');
+      reply.raw.flushHeaders?.();
+
+      const writeSse = (event: string, data: unknown): void => {
+        // Guard against writes after the socket has already closed.
+        if (reply.raw.writableEnded || reply.raw.destroyed) return;
+        reply.raw.write(`event: ${event}\n`);
+        reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
+      };
+
+      // If the client disconnects, stop emitting. The orchestrator run
+      // itself continues to completion — cancelling mid-flight LLM work
+      // would waste spend already incurred.
+      let clientClosed = false;
+      request.raw.on('close', () => { clientClosed = true; });
+
+      // Emit an initial event so clients know the stream is live.
+      writeSse('open', { targetKind, targetName });
+
+      try {
+        const result = await orchestrator.runOnce({
+          ...runOptions,
+          onProgress: (progress) => {
+            if (!clientClosed) writeSse('progress', progress);
+          },
+        });
+
+        log.info(
+          `Evolution run (SSE): ${targetKind}/${targetName ?? '?'} → ${result.outcome}` +
+          (result.run ? ` (run ${result.run.run_uuid})` : ''),
+        );
+        writeSse('done', buildResultPayload(result));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        log.warn(`Evolution run failed (SSE): ${msg}`);
+        writeSse('error', { error: `Evolution run failed: ${msg}` });
+      } finally {
+        if (!reply.raw.writableEnded) reply.raw.end();
+      }
+      return reply;
+    }
+
+    // ── JSON path (legacy / non-streaming callers) ──────────────
+    try {
+      const result = await orchestrator.runOnce(runOptions);
 
       log.info(
         `Evolution run: ${targetKind}/${targetName ?? '?'} → ${result.outcome}` +
         (result.run ? ` (run ${result.run.run_uuid})` : ''),
       );
 
-      return reply.status(200).send({
-        outcome: result.outcome,
-        reason: result.reason,
-        run: result.run,
-        gateResults: result.gateResults,
-        // Compose result can be large; only include the deltas + winner id.
-        composeSummary: result.compose
-          ? {
-            combinedDelta: result.compose.combinedDelta,
-            fullyImproved: result.compose.fullyImproved,
-            schemaImproved: result.compose.schema.improved,
-            schemaDelta: result.compose.schema.deltaAccuracy,
-            instructionImproved: result.compose.instructions.improved,
-            instructionDelta: result.compose.instructions.delta,
-            winnerId: result.compose.instructions.winner.id,
-          }
-          : null,
-      });
+      return reply.status(200).send(buildResultPayload(result));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       log.warn(`Evolution run failed: ${msg}`);

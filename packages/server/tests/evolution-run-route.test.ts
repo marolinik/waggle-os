@@ -262,6 +262,114 @@ describe('POST /api/evolution/run', () => {
     }
   }, 30_000);
 
+  // ── SSE streaming path ─────────────────────────────────────────
+
+  describe('SSE streaming (Accept: text/event-stream)', () => {
+    /** Tiny SSE parser — takes the raw event-stream body and emits parsed events. */
+    function parseSseEvents(raw: string): Array<{ event: string; data: unknown }> {
+      const out: Array<{ event: string; data: unknown }> = [];
+      for (const block of raw.split('\n\n')) {
+        if (!block.trim()) continue;
+        let event = 'message';
+        const dataLines: string[] = [];
+        for (const line of block.split('\n')) {
+          if (line.startsWith('event:')) event = line.slice(6).trim();
+          else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+        }
+        if (dataLines.length > 0) {
+          try {
+            out.push({ event, data: JSON.parse(dataLines.join('\n')) });
+          } catch {
+            out.push({ event, data: dataLines.join('\n') });
+          }
+        }
+      }
+      return out;
+    }
+
+    it('emits open → progress* → done sequence for a successful run', async () => {
+      seedTraces(8);
+      const stub = makeStubLLM([
+        { match: /reflective|evolving an AI prompt/i, reply: 'A careful assistant.' },
+        { match: /schema/i, reply: '{"answer":"City-X"}' },
+        { match: /USER INPUT:/i, reply: 'The capital is City-X.' },
+      ]);
+      installLLMFactory(() => stub.llm);
+
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/evolution/run',
+        payload: baseBody,
+        headers: { accept: 'text/event-stream' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toMatch(/text\/event-stream/);
+
+      const events = parseSseEvents(res.body);
+      const types = events.map(e => e.event);
+
+      expect(types[0]).toBe('open');
+      expect(types).toContain('done');
+
+      // Terminal event carries the same payload shape as the JSON path.
+      const done = events.find(e => e.event === 'done');
+      expect(done).toBeDefined();
+      const donePayload = done!.data as { outcome: string; composeSummary: unknown };
+      expect(['proposed', 'skipped-delta', 'skipped-gates']).toContain(donePayload.outcome);
+      expect(donePayload.composeSummary).toBeTruthy();
+
+      // There should be at least one progress event reporting an orchestrator phase.
+      const progresses = events.filter(e => e.event === 'progress');
+      expect(progresses.length).toBeGreaterThan(0);
+      const phases = progresses.map(p => (p.data as { phase: string }).phase);
+      // Orchestrator emits at least 'dataset' before skipping or compose.
+      expect(phases.some(p => ['dataset', 'compose', 'gates', 'persist', 'skipped', 'done'].includes(p))).toBe(true);
+    }, 30_000);
+
+    it('emits open → error when the orchestrator throws', async () => {
+      seedTraces(4);
+      installLLMFactory(() => ({
+        async complete() { throw new Error('stub-llm-always-fails'); },
+      }));
+      // Force a real error path like the JSON test does.
+      const originalQuery = server.traceStore.queryParsed.bind(server.traceStore);
+      server.traceStore.queryParsed = () => { throw new Error('stub-trace-store-explodes'); };
+
+      try {
+        const res = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/evolution/run',
+          payload: baseBody,
+          headers: { accept: 'text/event-stream' },
+        });
+        expect(res.statusCode).toBe(200); // SSE streams return 200 even on internal errors; the error is an SSE event
+        const events = parseSseEvents(res.body);
+        const types = events.map(e => e.event);
+        expect(types[0]).toBe('open');
+        expect(types).toContain('error');
+        const errEvent = events.find(e => e.event === 'error');
+        expect((errEvent!.data as { error: string }).error).toMatch(/stub-trace-store-explodes/);
+      } finally {
+        server.traceStore.queryParsed = originalQuery;
+      }
+    });
+
+    it('falls back to JSON when Accept header is absent', async () => {
+      seedTraces(8);
+      const stub = makeStubLLM([]);
+      installLLMFactory(() => stub.llm);
+
+      const res = await injectWithAuth(server, {
+        method: 'POST', url: '/api/evolution/run', payload: baseBody,
+        // No accept header — should return JSON.
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toMatch(/application\/json/);
+      expect(() => JSON.parse(res.body)).not.toThrow();
+    });
+  });
+
   // ── Orchestrator error path ────────────────────────────────────
 
   it('returns 500 when the orchestrator throws', async () => {

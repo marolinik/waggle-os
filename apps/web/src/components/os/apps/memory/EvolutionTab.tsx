@@ -49,6 +49,86 @@ interface StatusCounts {
   pendingCount: number;
 }
 
+/** Matches the orchestrator's EvolutionProgress shape. */
+interface EvolutionProgressEvent {
+  phase: 'trigger-check' | 'dataset' | 'compose' | 'gates' | 'persist' | 'skipped' | 'done';
+  message?: string;
+  detail?: unknown;
+}
+
+// ── SSE helpers ───────────────────────────────────────────────────
+
+interface SseConsumerCallbacks {
+  onProgress: (ev: EvolutionProgressEvent) => void;
+  onDone: (payload: { outcome: string; reason?: string; run?: { run_uuid: string } }) => void;
+  onError: (message: string) => void;
+}
+
+/**
+ * Read a `text/event-stream` ReadableStream and dispatch parsed events to
+ * the supplied callbacks. Handles multi-line `data:` fields and arbitrary
+ * chunk boundaries — the browser may deliver bytes in any-sized chunks.
+ */
+async function consumeEvolutionSse(
+  body: ReadableStream<Uint8Array>,
+  cb: SseConsumerCallbacks,
+): Promise<void> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    // Process all complete events (blank-line-separated) in the buffer.
+    let boundary = buffer.indexOf('\n\n');
+    while (boundary !== -1) {
+      const block = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      dispatchSseBlock(block, cb);
+      boundary = buffer.indexOf('\n\n');
+    }
+  }
+
+  // Flush any trailing event that didn't end with a blank line.
+  if (buffer.trim()) {
+    dispatchSseBlock(buffer, cb);
+  }
+}
+
+function dispatchSseBlock(block: string, cb: SseConsumerCallbacks): void {
+  let event = 'message';
+  const dataLines: string[] = [];
+  for (const line of block.split('\n')) {
+    if (line.startsWith('event:')) event = line.slice(6).trim();
+    else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+  }
+  if (dataLines.length === 0) return;
+
+  let parsed: unknown = null;
+  try {
+    parsed = JSON.parse(dataLines.join('\n'));
+  } catch {
+    // Non-JSON payload — skip for safety.
+    return;
+  }
+
+  switch (event) {
+    case 'progress':
+      cb.onProgress(parsed as EvolutionProgressEvent);
+      break;
+    case 'done':
+      cb.onDone(parsed as Parameters<SseConsumerCallbacks['onDone']>[0]);
+      break;
+    case 'error':
+      cb.onError((parsed as { error?: string })?.error ?? 'Evolution run failed');
+      break;
+    // 'open' and anything else are ignored — pure connectivity signals.
+  }
+}
+
 // ── Presentation helpers ──────────────────────────────────────────
 
 const STATUS_COLORS: Record<RunStatus, string> = {
@@ -615,6 +695,7 @@ function NewRunModal({ onClose, onSuccess }: NewRunModalProps) {
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [runResult, setRunResult] = useState<{ outcome: string; reason?: string; run?: { run_uuid: string } } | null>(null);
+  const [progress, setProgress] = useState<EvolutionProgressEvent | null>(null);
 
   // Load the list of targets once.
   useEffect(() => {
@@ -683,6 +764,7 @@ function NewRunModal({ onClose, onSuccess }: NewRunModalProps) {
     if (submitting) return;
     setErr(null);
     setRunResult(null);
+    setProgress(null);
 
     let schemaBaseline: unknown;
     try {
@@ -706,12 +788,32 @@ function NewRunModal({ onClose, onSuccess }: NewRunModalProps) {
           baseline,
           schemaBaseline,
         }),
+        // Opt into SSE streaming so the user sees per-phase progress
+        // instead of a silent 30–60s wait.
+        headers: { Accept: 'text/event-stream' },
       });
-      const body = await res.json().catch(() => null);
+
       if (!res.ok) {
+        // Non-stream error path — server chose to return a JSON error
+        // (e.g. 422 missing key, 503 LLM init, 400 validation).
+        const body = await res.json().catch(() => null);
         throw new Error(body?.error ?? `HTTP ${res.status}`);
       }
-      setRunResult(body);
+
+      const contentType = res.headers.get('content-type') ?? '';
+      if (contentType.includes('text/event-stream') && res.body) {
+        // Stream path — consume SSE events.
+        await consumeEvolutionSse(res.body, {
+          onProgress: (ev) => setProgress(ev),
+          onDone: (payload) => setRunResult(payload),
+          onError: (err) => setErr(err),
+        });
+      } else {
+        // Backwards-compat: server returned JSON even though we asked for SSE.
+        const body = await res.json().catch(() => null);
+        if (body) setRunResult(body);
+      }
+
       // Small delay so the user can read the outcome before the list refresh.
       setTimeout(() => { onSuccess(); }, 800);
     } catch (e) {
@@ -827,7 +929,16 @@ function NewRunModal({ onClose, onSuccess }: NewRunModalProps) {
                 )}
               </div>
 
-              {/* Error / result */}
+              {/* Progress / error / result */}
+              {submitting && progress && !runResult && !err && (
+                <div className="text-[11px] text-primary bg-primary/5 border border-primary/20 rounded px-2 py-1.5 flex items-center gap-2">
+                  <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+                  <span className="font-mono">Phase: {progress.phase}</span>
+                  {progress.message && (
+                    <span className="text-muted-foreground truncate"> — {progress.message}</span>
+                  )}
+                </div>
+              )}
               {err && (
                 <div className="text-[11px] text-destructive font-mono bg-destructive/10 border border-destructive/30 rounded px-2 py-1.5">
                   {err}
