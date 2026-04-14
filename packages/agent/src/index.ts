@@ -78,6 +78,15 @@ export {
   type SchemaBaselineInput,
 } from './evolution-orchestrator.js';
 export {
+  deployPersonaOverride, rollbackPersonaOverride,
+  deployBehavioralSpecOverride, rollbackBehavioralSpecOverride,
+  loadBehavioralSpecOverrides, applyBehavioralSpecOverrides,
+  BEHAVIORAL_SPEC_SECTIONS,
+  type DeployResult, type DeployPersonaInput,
+  type DeployBehavioralSpecInput, type BehavioralSpecOverride,
+  type BehavioralSpecSection,
+} from './evolution-deploy.js';
+export {
   LLMJudge, DEFAULT_WEIGHTS, DEFAULT_RUBRIC,
   buildPrompt as buildJudgePrompt,
   parseJudgeResponse, computeLengthPenalty,
