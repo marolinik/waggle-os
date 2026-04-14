@@ -220,6 +220,17 @@ npm run test -- --run                                      # all pass
 - **Exhaustive grep on rename:** Direct refs, type-level, string literals, dynamic imports,
   re-exports/barrel entries, test files. One grep is never enough.
 
+### 7.5 Output Discipline
+
+- **Chat reply budget.** Long specs, handoffs, audit reports, and multi-phase plans MUST be written to files (memory/, docs/, or via `/handoff`), not rendered inline. The chat is a pointer; the file is the deliverable.
+- **Chunk long work.** Multi-phase roadmaps and >1k-line specs: implement in phases, commit per phase, give a 3-line status, then stop and await the next instruction. Do not stream an exhaustive summary that blows the output budget.
+
+### 7.6 Handoff Discipline
+
+- **Use the skill.** End-of-session handoffs invoke `~/.claude/skills/handoff/`, which enforces verification (`git status`, tests N/M, `npx tsc --noEmit` on touched packages) BEFORE writing the doc. Do not hand-write handoffs that skip the gate.
+- **Canonical location.** `C:/Users/MarkoMarkovic/.claude/projects/D--Projects-waggle-os/memory/project_session_handoff_<MMDD>_s<N>.md`, with MEMORY.md "START HERE" pointer updated. That is the single source of truth for what shipped / what's left / how to roll back.
+- **Never hide failures.** Failing tests, unverified MCP reconnects, wrong build dir — surface under "What's still open" in the handoff. Clean-looking handoffs that hide rot cost the next session hours.
+
 ---
 
 ## 8. Security Constraints
