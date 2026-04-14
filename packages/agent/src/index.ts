@@ -50,6 +50,21 @@ export {
   type SizeLimits, type GateOptions, type CheckInput as GateCheckInput,
 } from './evolution-gates.js';
 export {
+  EvolveSchema,
+  addOutputField, removeField, editFieldDescription,
+  changeFieldType, addConstraint, removeConstraint,
+  reorderFields, replaceOutputFields,
+  schemaComplexity, aggregateSchemaScores, paretoFrontSchema,
+  scoreSchemaCandidate, pickSchemaWinner,
+  generateStructureMutations, generateOrderMutations, generateRefinementMutations,
+  pickSample as pickSchemaSample,
+  type Schema, type SchemaField, type FieldType, type FieldConstraint,
+  type Mutation as SchemaMutation, type MutationKind as SchemaMutationKind,
+  type SchemaCandidate, type SchemaCandidateScore, type SchemaExampleResult,
+  type SchemaExecuteFn, type EvolveSchemaOptions, type EvolveSchemaResult,
+  type EvolveSchemaProgress,
+} from './evolve-schema.js';
+export {
   LLMJudge, DEFAULT_WEIGHTS, DEFAULT_RUBRIC,
   buildPrompt as buildJudgePrompt,
   parseJudgeResponse, computeLengthPenalty,
