@@ -110,7 +110,14 @@ export {
   canRetry, getRunSummary, harnessEvents,
   type WorkflowHarness, type HarnessPhase, type PhaseGate, type GateResult,
   type PhaseOutput, type HarnessCheckpoint, type HarnessRunState, type PhaseStatus,
+  type HarnessPhaseStartEvent, type HarnessPhaseCompleteEvent,
+  type HarnessPhaseFailEvent, type HarnessGatePassEvent, type HarnessGateFailEvent,
 } from './workflow-harness.js';
+export {
+  HarnessTraceBridge,
+  type HarnessTraceBridgeOptions, type HarnessTraceContext,
+  type HarnessTraceContextResolver,
+} from './harness-trace-bridge.js';
 export {
   BUILTIN_HARNESSES, getHarnessById, matchHarness,
   researchVerifyHarness, codeReviewFixHarness, documentDraftHarness,

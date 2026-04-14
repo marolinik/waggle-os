@@ -147,6 +147,52 @@ export function createHarnessRun(harness: WorkflowHarness): HarnessRunState {
   };
 }
 
+// ── Event payload types ──────────────────────────────────────────
+//
+// These shapes are what `harnessEvents.emit(...)` hands to listeners.
+// Exporting them lets downstream consumers (like HarnessTraceBridge) type
+// their subscribers properly instead of coercing `unknown`.
+
+export interface HarnessPhaseStartEvent {
+  harnessId: string;
+  phaseId: string;
+  phaseName: string;
+}
+
+export interface HarnessPhaseCompleteEvent {
+  harnessId: string;
+  phaseId: string;
+  phaseName: string;
+  /** The phase's static instruction text — useful as trace input. */
+  phaseInstruction: string;
+  output: PhaseOutput;
+  gateResults: Array<GateResult & { name: string }>;
+}
+
+export interface HarnessPhaseFailEvent {
+  harnessId: string;
+  phaseId: string;
+  phaseName: string;
+  phaseInstruction: string;
+  output: PhaseOutput;
+  gateResults: Array<GateResult & { name: string }>;
+  retryCount: number;
+  aborted?: boolean;
+}
+
+export interface HarnessGatePassEvent {
+  harnessId: string;
+  phaseId: string;
+  gateName: string;
+}
+
+export interface HarnessGateFailEvent {
+  harnessId: string;
+  phaseId: string;
+  gateName: string;
+  reason: string;
+}
+
 /**
  * Validate output against current phase gates, record checkpoint,
  * advance if all gates pass, retry or abort if they fail.
@@ -221,14 +267,24 @@ export async function advancePhase(
   };
   newState.checkpoints = [...state.checkpoints, checkpoint];
 
+  // Attach gate names so consumers don't have to zip back to phase.gates[i].
+  const namedGateResults: Array<GateResult & { name: string }> = gateResults.map((r, i) => ({
+    ...r,
+    name: phase.gates[i]?.name ?? '(anonymous)',
+  }));
+
   if (allPassed) {
     // Phase passed — advance to next
     newState.phaseStatuses.set(phase.id, 'passed');
-    harnessEvents.emit('harness:phase:complete', {
+    const completeEvent: HarnessPhaseCompleteEvent = {
       harnessId: harness.id,
       phaseId: phase.id,
-      gateResults,
-    });
+      phaseName: phase.name,
+      phaseInstruction: phase.instruction,
+      output,
+      gateResults: namedGateResults,
+    };
+    harnessEvents.emit('harness:phase:complete', completeEvent);
 
     const nextIdx = state.currentPhase + 1;
     if (nextIdx >= harness.phases.length) {
@@ -272,24 +328,32 @@ export async function advancePhase(
     if (retryCount < maxRetries) {
       // Retry — keep phase active
       newState.phaseStatuses.set(phase.id, 'active');
-      harnessEvents.emit('harness:phase:fail', {
+      const failEvent: HarnessPhaseFailEvent = {
         harnessId: harness.id,
         phaseId: phase.id,
-        gateResults,
+        phaseName: phase.name,
+        phaseInstruction: phase.instruction,
+        output,
+        gateResults: namedGateResults,
         retryCount: retryCount + 1,
-      });
+      };
+      harnessEvents.emit('harness:phase:fail', failEvent);
     } else {
       // Max retries exceeded — abort
       newState.phaseStatuses.set(phase.id, 'failed');
       newState.aborted = true;
       newState.abortReason = `Phase "${phase.name}" failed after ${retryCount + 1} attempts: ${gateResults.filter(g => !g.passed).map(g => g.reason).join('; ')}`;
-      harnessEvents.emit('harness:phase:fail', {
+      const abortEvent: HarnessPhaseFailEvent = {
         harnessId: harness.id,
         phaseId: phase.id,
-        gateResults,
+        phaseName: phase.name,
+        phaseInstruction: phase.instruction,
+        output,
+        gateResults: namedGateResults,
         retryCount: retryCount + 1,
         aborted: true,
-      });
+      };
+      harnessEvents.emit('harness:phase:fail', abortEvent);
     }
   }
 

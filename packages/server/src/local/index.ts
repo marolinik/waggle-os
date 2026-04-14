@@ -47,6 +47,8 @@ import {
   createDefaultDeliveryPreferences,
   buildActiveBehavioralSpec,
   loadBehavioralSpecOverrides,
+  TraceRecorder,
+  HarnessTraceBridge,
   type ToolDefinition,
   type LoadedSkill,
   type DeliveryPreferences,
@@ -244,6 +246,12 @@ declare module 'fastify' {
     telemetry: import('@waggle/core').TelemetryStore;
     connectorRegistry: import('@waggle/agent').ConnectorRegistry;
     sessionManager: import('./workspace-sessions.js').WorkspaceSessionManager;
+    /**
+     * Bridges workflow-harness phase events into the execution trace store
+     * so harnessed runs become training signal for the self-evolution loop.
+     * Started at boot, stopped on close.
+     */
+    harnessTraceBridge: HarnessTraceBridge;
   }
 }
 
@@ -290,6 +298,19 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   // Execution trace store — persistent log of agent runs (self-evolution substrate)
   const traceStore = new ExecutionTraceStore(multiMind.personal);
   server.decorate('traceStore', traceStore);
+
+  // Workflow-harness → trace bridge. Any harness phase that completes or
+  // aborts anywhere in the app emits on the shared `harnessEvents` emitter;
+  // this bridge translates those into rows in `execution_traces` so harness
+  // runs become training data for the self-evolution loop.
+  const harnessTraceBridge = new HarnessTraceBridge({
+    recorder: new TraceRecorder(traceStore),
+  });
+  harnessTraceBridge.start();
+  server.decorate('harnessTraceBridge', harnessTraceBridge);
+  server.addHook('onClose', async () => {
+    harnessTraceBridge.stop();
+  });
 
   // Evolution run store — audit trail of proposed/accepted/rejected self-evolution runs
   const evolutionStore = new EvolutionRunStore(multiMind.personal);
