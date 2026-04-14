@@ -263,6 +263,149 @@ describe('scoreCandidate', () => {
     await scoreCandidate(cand, makeExamples(10), judge, ctrl.signal);
     expect(cand.perExample.length).toBeLessThan(10);
   });
+
+  // ── Concurrency ────────────────────────────────────────────────
+
+  it('accepts an options object (new API) equivalently to AbortSignal (legacy)', async () => {
+    const judge = makeFakeJudge('uniform');
+    const candA = makeCandidate('a', null);
+    const candB = makeCandidate('b', null);
+
+    const ctrl = new AbortController();
+    ctrl.abort();
+
+    await scoreCandidate(candA, makeExamples(5), judge, ctrl.signal);
+    await scoreCandidate(candB, makeExamples(5), judge, { signal: ctrl.signal });
+
+    expect(candA.perExample.length).toBe(candB.perExample.length);
+  });
+
+  it('concurrency=1 produces identical aggregate to no option (sequential baseline)', async () => {
+    const examples = makeExamples(6);
+    const candSeq = makeCandidate('seq', null);
+    const candPar = makeCandidate('par', null);
+
+    const seqScore = await scoreCandidate(candSeq, examples, makeFakeJudge('uniform'));
+    const parScore = await scoreCandidate(candPar, examples, makeFakeJudge('uniform'), { concurrency: 1 });
+
+    expect(parScore.overall).toBeCloseTo(seqScore.overall);
+    expect(parScore.n).toBe(seqScore.n);
+  });
+
+  it('with concurrency > 1, runs scores in parallel (observable via in-flight counter)', async () => {
+    let inFlight = 0;
+    let peakInFlight = 0;
+    const judge = {
+      async score(): Promise<JudgeScore> {
+        inFlight++;
+        peakInFlight = Math.max(peakInFlight, inFlight);
+        // Await a microtask + a real delay so parallel workers can accumulate.
+        await new Promise(r => setTimeout(r, 5));
+        inFlight--;
+        return makeScore(0.5);
+      },
+    };
+    const cand = makeCandidate('c', null);
+    await scoreCandidate(cand, makeExamples(8), judge, { concurrency: 4 });
+
+    expect(peakInFlight).toBe(4);
+    expect(cand.perExample).toHaveLength(8);
+  });
+
+  it('with concurrency=1, exactly 1 in-flight call at a time', async () => {
+    let inFlight = 0;
+    let peakInFlight = 0;
+    const judge = {
+      async score(): Promise<JudgeScore> {
+        inFlight++;
+        peakInFlight = Math.max(peakInFlight, inFlight);
+        await new Promise(r => setTimeout(r, 3));
+        inFlight--;
+        return makeScore(0.5);
+      },
+    };
+    const cand = makeCandidate('c', null);
+    await scoreCandidate(cand, makeExamples(5), judge, { concurrency: 1 });
+    expect(peakInFlight).toBe(1);
+  });
+
+  it('concurrency is capped at examples.length (does not start idle workers)', async () => {
+    let peakInFlight = 0;
+    let inFlight = 0;
+    const judge = {
+      async score(): Promise<JudgeScore> {
+        inFlight++;
+        peakInFlight = Math.max(peakInFlight, inFlight);
+        await new Promise(r => setTimeout(r, 2));
+        inFlight--;
+        return makeScore(0.5);
+      },
+    };
+    const cand = makeCandidate('c', null);
+    await scoreCandidate(cand, makeExamples(3), judge, { concurrency: 100 });
+    expect(peakInFlight).toBeLessThanOrEqual(3);
+  });
+
+  it('parallel mode still filters out thrown-error results without corrupting the batch', async () => {
+    let call = 0;
+    const judge = {
+      async score(): Promise<JudgeScore> {
+        call++;
+        if (call % 3 === 0) throw new Error('flaky');
+        return makeScore(0.7);
+      },
+    };
+    const cand = makeCandidate('c', null);
+    const score = await scoreCandidate(cand, makeExamples(9), judge, { concurrency: 3 });
+    // 9 total, every 3rd throws → 6 succeed.
+    expect(score.n).toBe(6);
+  });
+
+  it('parallel mode respects abort signal by not dispatching further workers', async () => {
+    const ctrl = new AbortController();
+    ctrl.abort();
+    const judge = makeFakeJudge();
+    const cand = makeCandidate('c', null);
+    await scoreCandidate(cand, makeExamples(20), judge, {
+      signal: ctrl.signal,
+      concurrency: 4,
+    });
+    expect(cand.perExample.length).toBeLessThan(20);
+  });
+});
+
+// ── IterativeGEPA end-to-end with concurrency ────────────────────
+
+describe('IterativeGEPA with concurrency', () => {
+  it('threads options.concurrency into every scoreCandidate call', async () => {
+    let peakInFlight = 0;
+    let inFlight = 0;
+    const judge = {
+      async score(): Promise<JudgeScore> {
+        inFlight++;
+        peakInFlight = Math.max(peakInFlight, inFlight);
+        await new Promise(r => setTimeout(r, 2));
+        inFlight--;
+        return makeScore(0.5);
+      },
+    };
+    const mutate: MutateFn = async ({ parent, strategy }) => `${parent.prompt} :: ${strategy}`;
+
+    await new IterativeGEPA().run({
+      baseline: 'base',
+      examples: makeExamples(8),
+      judge,
+      mutate,
+      populationSize: 2,
+      generations: 1,
+      microScreenSize: 4,
+      miniEvalSize: 4,
+      anchorEvalSize: 4,
+      concurrency: 3,
+    });
+
+    expect(peakInFlight).toBe(3);
+  });
 });
 
 // ── End-to-end run ─────────────────────────────────────────────

@@ -328,6 +328,12 @@ export const evolutionRoutes: FastifyPluginAsync = async (server) => {
         miniEvalSize?: number;
         anchorEvalSize?: number;
         seed?: number;
+        /**
+         * Max concurrent judge.score() calls during eval stages. Default
+         * 4 — a safe tradeoff between wall time and API politeness. Bump
+         * higher for dedicated endpoints, drop to 1 for strict ordering.
+         */
+        concurrency?: number;
       };
       schema?: {
         populationSize?: number;
@@ -400,6 +406,11 @@ export const evolutionRoutes: FastifyPluginAsync = async (server) => {
             mutate,
             targetKind,
             examples: [],
+            // Parallelize the per-candidate mini-eval by default.
+            // Historical sequential runs took 54 min for 10×3×2; a
+            // concurrency of 4 gets that down to roughly a quarter of
+            // the wall time without saturating the Anthropic API.
+            concurrency: 4,
             ...(body.gepa ?? {}),
           },
         },

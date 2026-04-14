@@ -127,6 +127,14 @@ export interface IterativeGEPAOptions {
   onProgress?: (event: GEPAProgress) => void;
   /** Optional abort signal */
   signal?: AbortSignal;
+  /**
+   * Max concurrent `judge.score()` calls per candidate during eval stages.
+   * Default 1 (fully sequential) — preserves legacy behavior. Bumping to
+   * 4–8 cuts wall time dramatically when the judge is an LLM API with
+   * plenty of concurrent capacity. Does not affect determinism: all
+   * scores are aggregated after every example completes.
+   */
+  concurrency?: number;
 }
 
 export interface GEPARunResult {
@@ -173,7 +181,10 @@ export class IterativeGEPA {
 
     // Score the baseline on the micro-screen so we have a comparison point.
     const microSample = pickSample(config.examples, config.microScreenSize, rng);
-    await scoreCandidate(baseline, microSample, config.judge, config.signal);
+    await scoreCandidate(baseline, microSample, config.judge, {
+      signal: config.signal,
+      concurrency: config.concurrency,
+    });
     emit(config, 'micro-screen', 0, 1, baseline.score?.overall ?? 0);
 
     // ── Generations ──────────────────────────────────────────
@@ -222,7 +233,10 @@ export class IterativeGEPA {
       const microSet = pickSample(config.examples, config.microScreenSize, rng);
       for (const child of children) {
         if (config.signal?.aborted) break;
-        await scoreCandidate(child, microSet, config.judge, config.signal);
+        await scoreCandidate(child, microSet, config.judge, {
+          signal: config.signal,
+          concurrency: config.concurrency,
+        });
       }
       emit(
         config, 'micro-screen', gen, children.length,
@@ -246,7 +260,10 @@ export class IterativeGEPA {
         const miniSet = pickSample(config.examples, config.miniEvalSize, rng);
         for (const cand of microSurvivors) {
           if (config.signal?.aborted) break;
-          await scoreCandidate(cand, miniSet, config.judge, config.signal);
+          await scoreCandidate(cand, miniSet, config.judge, {
+            signal: config.signal,
+            concurrency: config.concurrency,
+          });
         }
         emit(
           config, 'mini-eval', gen, microSurvivors.length,
@@ -264,7 +281,10 @@ export class IterativeGEPA {
     const anchorSet = pickSample(config.examples, config.anchorEvalSize, rng);
     for (const cand of survivors) {
       if (config.signal?.aborted) break;
-      await scoreCandidate(cand, anchorSet, config.judge, config.signal);
+      await scoreCandidate(cand, anchorSet, config.judge, {
+        signal: config.signal,
+        concurrency: config.concurrency,
+      });
     }
 
     const anchorPareto = paretoFront(survivors);
@@ -321,36 +341,111 @@ function dominates(a: CandidateScore, b: CandidateScore): boolean {
   return geAll && gtAny;
 }
 
-/** Score a candidate against a batch of examples and aggregate. */
+export interface ScoreCandidateOptions {
+  /** Abort signal — checked before each example is dispatched. */
+  signal?: AbortSignal;
+  /** Max concurrent judge.score() calls. Default 1 (sequential). */
+  concurrency?: number;
+}
+
+/**
+ * Score a candidate against a batch of examples and aggregate.
+ *
+ * Backwards compatible: the 4th argument may be either an `AbortSignal`
+ * (legacy) or a `ScoreCandidateOptions` object. Pass
+ * `{ concurrency: 4 }` to parallelize — individual examples are
+ * independent so the aggregate result is identical to the sequential
+ * version, only faster when the judge is an LLM API.
+ */
 export async function scoreCandidate(
   candidate: Candidate,
   examples: EvalExample[],
   judge: Pick<LLMJudge, 'score'>,
-  signal?: AbortSignal,
+  signalOrOptions?: AbortSignal | ScoreCandidateOptions,
 ): Promise<CandidateScore> {
-  const scores: JudgeScore[] = [];
-  for (const ex of examples) {
-    if (signal?.aborted) break;
-    // The "candidate" in this context IS the new prompt we want to test.
-    // We treat it as the model's actual response to the example's input,
-    // since mutation produces a variant prompt-as-response. Callers can
-    // substitute a `runCandidate` step before scoring if the prompt needs
-    // to be executed first — see docs.
+  const options = resolveScoreOptions(signalOrOptions);
+  const signal = options.signal;
+  const concurrency = Math.max(1, options.concurrency ?? 1);
+
+  // The "candidate" in this context IS the new prompt we want to test.
+  // We treat it as the model's actual response to the example's input,
+  // since mutation produces a variant prompt-as-response. Callers can
+  // substitute a `runCandidate` step before scoring if the prompt needs
+  // to be executed first — see docs.
+  const scoreOne = async (ex: EvalExample): Promise<JudgeScore | null> => {
+    if (signal?.aborted) return null;
     try {
-      const score = await judge.score({
+      return await judge.score({
         input: ex.input,
         expected: ex.expected_output,
         actual: candidate.prompt,
       });
-      scores.push(score);
     } catch {
       // Keep iterating so one bad example doesn't invalidate the whole score.
+      return null;
     }
-  }
+  };
+
+  const results = concurrency === 1
+    ? await runSequential(examples, scoreOne)
+    : await mapWithConcurrency(examples, concurrency, scoreOne);
+
+  const scores = results.filter((s): s is JudgeScore => s !== null);
   candidate.perExample = scores;
   const aggregated = aggregateScores(scores);
   candidate.score = aggregated;
   return aggregated;
+}
+
+function resolveScoreOptions(
+  arg: AbortSignal | ScoreCandidateOptions | undefined,
+): ScoreCandidateOptions {
+  if (!arg) return {};
+  // Legacy: AbortSignal passed directly. Detect by presence of `aborted`
+  // (a boolean getter unique to AbortSignal-like objects).
+  if (typeof (arg as AbortSignal).aborted === 'boolean' && typeof (arg as AbortSignal).addEventListener === 'function') {
+    return { signal: arg as AbortSignal };
+  }
+  return arg as ScoreCandidateOptions;
+}
+
+async function runSequential<T, R>(
+  items: readonly T[],
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = [];
+  for (const item of items) {
+    results.push(await fn(item));
+  }
+  return results;
+}
+
+/**
+ * Bounded-parallelism map. Runs `fn` over `items` with at most
+ * `concurrency` in-flight calls at once. Results are returned in the
+ * same order as inputs regardless of completion order.
+ *
+ * Implementation: N worker loops share a counter. Each worker pulls the
+ * next index, awaits `fn`, stores at that index, repeats. No external
+ * deps, no extra state machinery.
+ */
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  const workerCount = Math.min(concurrency, items.length);
+  let next = 0;
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (true) {
+      const i = next++;
+      if (i >= items.length) return;
+      results[i] = await fn(items[i], i);
+    }
+  });
+  await Promise.all(workers);
+  return results;
 }
 
 export function aggregateScores(scores: JudgeScore[]): CandidateScore {
@@ -490,6 +585,7 @@ function normalizeOptions(opts: IterativeGEPAOptions): Required<Omit<IterativeGE
     seed: opts.seed ?? 1,
     onProgress: opts.onProgress,
     signal: opts.signal,
+    concurrency: Math.max(1, opts.concurrency ?? 1),
   };
 }
 

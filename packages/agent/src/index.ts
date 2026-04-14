@@ -40,6 +40,7 @@ export {
   pickWinner, pickSample as pickGepaSample,
   type Candidate as GEPACandidate, type CandidateScore as GEPACandidateScore,
   type IterativeGEPAOptions, type GEPARunResult, type GEPAProgress,
+  type ScoreCandidateOptions,
   type MutateArgs, type MutateFn, type MutationStrategy, type EvolutionTarget,
 } from './iterative-optimizer.js';
 export {
