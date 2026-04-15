@@ -10,6 +10,8 @@ import type {
 } from '@waggle/core';
 import type { CognifyPipeline } from './cognify.js';
 import type { FeedbackHandler } from './feedback-handler.js';
+import type { ImprovementSignalStore } from '@waggle/core';
+import { detectContradiction } from './contradiction-detector.js';
 import { normalizeForDedup, cosineSimilarity, detectDramaticClaims, deriveConfidence, type ConfidenceLevel } from './text-analysis.js';
 export type { ConfidenceLevel } from './text-analysis.js';
 export { formatCombinedResult } from './result-formatter.js';
@@ -82,6 +84,13 @@ export interface MindToolDeps {
   feedback?: FeedbackHandler;
   /** F16: Optional embedder for semantic dedup (cosine similarity) */
   embedder?: Embedder;
+  /**
+   * Skills 2.0 gap K: improvement-signal store for recording write-path
+   * conflicts. When a new save contradicts an existing frame,
+   * detectContradiction fires and we emit a "correction" signal so the
+   * evolution / improvement loops can surface the conflict.
+   */
+  improvementSignals?: ImprovementSignalStore;
   /** Dynamic accessor for workspace layers — checked at call time */
   getWorkspaceLayers?: () => WorkspaceLayers | null;
   /** W5.7: Accessor for ALL workspace search instances (for cross-workspace search) */
@@ -466,10 +475,41 @@ export function createMindTools(deps: MindToolDeps): ToolDefinition[] {
           }
         }
 
+        // Skills 2.0 gap K: write-path conflict detection.
+        // Check recent frames for contradictions BEFORE saving. When found,
+        // still save the new frame (conflicts are data, not errors) but
+        // emit a correction improvement signal and flag the response so
+        // the agent surfaces the conflict to the user.
+        let conflictFlag = '';
+        try {
+          const raw = targetDb.getDatabase();
+          const recentRows = raw.prepare(
+            "SELECT content FROM memory_frames ORDER BY id DESC LIMIT 50",
+          ).all() as Array<{ content: string }>;
+          const contradiction = detectContradiction(content, recentRows);
+          if (contradiction.isContradiction && contradiction.conflictsWith) {
+            conflictFlag = ` [flag: contradicts_existing (${contradiction.conflictsWith.slice(0, 80).replace(/\s+/g, ' ').trim()}…)]`;
+            // Record a correction-category signal on the improvement-signal
+            // store. pattern_key is a stable hash-ish of the conflicting
+            // frames so repeat contradictions merge via the ON CONFLICT upsert.
+            if (deps.improvementSignals) {
+              const patternKey = `write-conflict:${normalizeForDedup(content).slice(0, 64)}`;
+              try {
+                deps.improvementSignals.record(
+                  'correction',
+                  patternKey,
+                  `New save contradicts existing frame. New: "${content.slice(0, 120)}" ⟂ Existing: "${contradiction.conflictsWith.slice(0, 120)}"`,
+                  { mindLabel, newContent: content.slice(0, 240), conflictsWith: contradiction.conflictsWith.slice(0, 240) },
+                );
+              } catch { /* non-blocking — signal persistence failure must not abort the save */ }
+            }
+          }
+        } catch { /* non-blocking — contradiction check failure proceeds with save */ }
+
         // Use cognify pipeline if available (extracts entities + indexes for search)
         if (targetCognify) {
           const result = await targetCognify.cognify(content, importance as any);
-          return `Memory saved to ${mindLabel} mind (importance: ${importance}, source: ${source}, confidence: ${confidence}${dramaticFlag}, entities: ${result.entitiesExtracted}, relations: ${result.relationsCreated}).`;
+          return `Memory saved to ${mindLabel} mind (importance: ${importance}, source: ${source}, confidence: ${confidence}${dramaticFlag}${conflictFlag}, entities: ${result.entitiesExtracted}, relations: ${result.relationsCreated}).`;
         }
 
         // Fallback: raw frame creation (no entity extraction or vector indexing)
@@ -487,7 +527,7 @@ export function createMindTools(deps: MindToolDeps): ToolDefinition[] {
         } else {
           targetFrames.createIFrame(gopId, content, importance as any, source as any);
         }
-        return `Memory saved to ${mindLabel} mind (importance: ${importance}, source: ${source}, confidence: ${confidence}${dramaticFlag}).`;
+        return `Memory saved to ${mindLabel} mind (importance: ${importance}, source: ${source}, confidence: ${confidence}${dramaticFlag}${conflictFlag}).`;
       },
     },
     {

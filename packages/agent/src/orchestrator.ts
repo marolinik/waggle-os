@@ -99,6 +99,10 @@ export class Orchestrator {
       search: this.search,
       knowledge: this.knowledge,
       cognify,
+      // Skills 2.0 gap K: write-path contradiction detection emits a
+      // correction signal through this store when a new save conflicts
+      // with an existing frame.
+      improvementSignals: this.improvementSignals,
       // Provide workspace accessors so tools can route to the right mind
       getWorkspaceLayers: () => this.workspaceLayers,
     });
