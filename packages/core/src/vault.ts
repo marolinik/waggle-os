@@ -42,7 +42,6 @@ export class VaultStore {
   private vaultPath: string;
   private keyPath: string;
   private encryptionKey: Buffer;
-  private writeLock: Promise<void> = Promise.resolve();
 
   constructor(dataDir: string) {
     this.dataDir = dataDir;
@@ -152,20 +151,17 @@ export class VaultStore {
   }
 
   /**
-   * Async version of set that serializes concurrent writes via a promise chain.
-   * Use this when multiple concurrent callers may write to the vault simultaneously.
+   * Async set — delegates to the synchronous set().
+   * Review Critical #2: the previous implementation used a promise chain
+   * (.writeLock.then(...)) which deferred the actual write to a microtask.
+   * A sync set() between the chain call and microtask execution would be
+   * overwritten when the deferred write fired. Since all vault I/O is
+   * synchronous (fs.readFileSync/writeFileSync), the lock is unnecessary —
+   * each callback runs to completion before the next microtask. Delegating
+   * to the sync method eliminates the interleaving window entirely.
    */
   async setAsync(name: string, value: string, metadata?: Record<string, unknown>): Promise<void> {
-    this.writeLock = this.writeLock.then(() => {
-      const vault = this.readVault();
-      vault[name] = {
-        encrypted: this.encrypt(value),
-        metadata,
-        updatedAt: new Date().toISOString(),
-      };
-      this.writeVault(vault);
-    });
-    await this.writeLock;
+    this.set(name, value, metadata);
   }
 
   /** Get a decrypted secret by name. Returns null if not found or decryption fails. */
@@ -195,23 +191,14 @@ export class VaultStore {
   }
 
   /**
-   * Async version of delete that serializes concurrent writes via a promise chain.
-   * Use this when multiple concurrent callers may write to the vault simultaneously.
+   * Async delete — delegates to the synchronous delete().
+   * Review Critical #2: same rationale as setAsync — sync I/O means no
+   * interleaving risk. The previous promise-chain approach deferred the
+   * actual delete, creating a window where a sync caller's write could
+   * be overwritten.
    */
   async deleteAsync(name: string): Promise<boolean> {
-    let existed = false;
-    this.writeLock = this.writeLock.then(() => {
-      const vault = this.readVault();
-      if (!vault[name]) {
-        existed = false;
-        return;
-      }
-      delete vault[name];
-      this.writeVault(vault);
-      existed = true;
-    });
-    await this.writeLock;
-    return existed;
+    return this.delete(name);
   }
 
   /** List secret names (without values). */
