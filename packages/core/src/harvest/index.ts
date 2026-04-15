@@ -4,6 +4,7 @@ export { ChatGPTAdapter } from './chatgpt-adapter.js';
 export { ClaudeAdapter } from './claude-adapter.js';
 export { ClaudeCodeAdapter } from './claude-code-adapter.js';
 export { GeminiAdapter } from './gemini-adapter.js';
+export { PerplexityAdapter } from './perplexity-adapter.js';
 export { UniversalAdapter } from './universal-adapter.js';
 export { MarkdownAdapter } from './markdown-adapter.js';
 export { PlaintextAdapter } from './plaintext-adapter.js';
