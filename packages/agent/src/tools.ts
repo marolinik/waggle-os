@@ -374,9 +374,9 @@ export function createMindTools(deps: MindToolDeps): ToolDefinition[] {
           return `Memory save rate limit reached (${MAX_SAVES_PER_SESSION} saves this session). This prevents memory flooding. Start a new session to save more memories.`;
         }
 
-        let importance = (args.importance as string) ?? 'normal';
-        const target = (args.target as string) ?? 'workspace';
-        const source = (args.source as string) ?? 'user_stated';
+        let importance = typeof args.importance === 'string' ? args.importance : 'normal';
+        const target = typeof args.target === 'string' ? args.target : 'workspace';
+        const source = typeof args.source === 'string' ? args.source : 'user_stated';
         const wsLayers = deps.getWorkspaceLayers?.();
 
         // F6: Derive confidence from source if not explicitly provided
@@ -414,7 +414,7 @@ export function createMindTools(deps: MindToolDeps): ToolDefinition[] {
         // F22: Detect dramatic claims and flag them
         const dramaticClaims = detectDramaticClaims(content);
         let dramaticFlag = '';
-        if (dramaticClaims.length > 0) {
+        if (dramaticClaims.length) {
           // Downgrade importance to 'temporary' for dramatic claims unless explicitly set to critical
           if (importance !== 'critical') {
             importance = 'temporary';
@@ -608,7 +608,8 @@ export function createMindTools(deps: MindToolDeps): ToolDefinition[] {
         required: ['content'],
       },
       execute: async (args) => {
-        const item = deps.awareness.add('task', args.content as string, (args.priority as number) ?? 5);
+        const taskContent = typeof args.content === 'string' ? args.content.slice(0, 2000) : '';
+        const item = deps.awareness.add('task', taskContent, (args.priority as number) ?? 5);
         return `Task added: "${item.content}" (priority: ${item.priority})`;
       },
     },

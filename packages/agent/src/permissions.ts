@@ -1,13 +1,17 @@
 import type { ToolDefinition } from './tools.js';
 
-export const READONLY_TOOLS = [
+// Frozen at runtime — do not mutate
+export const READONLY_TOOLS: string[] = [
   'read_file', 'search_files', 'search_content',
   'git_status', 'git_diff', 'git_log',
   'web_search', 'web_fetch',
   'show_plan', 'search_memory',
   'get_identity', 'get_awareness',
   'query_knowledge', 'query_audit',
+  'list_skills', 'search_skills', 'list_connectors',
+  'list_harnesses',
 ];
+Object.freeze(READONLY_TOOLS);
 
 export class PermissionManager {
   private blacklist: Set<string>;

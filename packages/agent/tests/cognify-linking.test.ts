@@ -32,8 +32,6 @@ describe('CognifyPipeline with linking', () => {
   it('returns relatedFrames when enableLinking is true', async () => {
     // First, index an existing frame so there's something to link to
     const pipeline1 = new CognifyPipeline({
-      db,
-      embedder: new MockEmbedder(),
       frames,
       sessions,
       knowledge,
@@ -43,8 +41,6 @@ describe('CognifyPipeline with linking', () => {
 
     // Now create a pipeline with linking enabled
     const pipeline2 = new CognifyPipeline({
-      db,
-      embedder: new MockEmbedder(),
       frames,
       sessions,
       knowledge,
@@ -70,8 +66,6 @@ describe('CognifyPipeline with linking', () => {
 
   it('does not return relatedFrames when enableLinking is false', async () => {
     const pipeline = new CognifyPipeline({
-      db,
-      embedder: new MockEmbedder(),
       frames,
       sessions,
       knowledge,

@@ -164,6 +164,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
   let totalOutputTokens = 0;
   let allStreamedContent = ''; // Accumulate ALL streamed content across all turns
   const guard = new LoopGuard();
+  // Shared retry budget across 429 + 5xx — total cap prevents infinite retry loops
   let retryCount = 0;
   const MAX_RETRIES = 3;
 
@@ -219,7 +220,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         if (retryCount >= MAX_RETRIES) {
           throw new Error(`Server error retry cap exceeded (${MAX_RETRIES} consecutive ${response.status} errors): ${errorBody}`);
         }
-        const waitMs = Math.min(2000 * (retryCount), 10_000);
+        const waitMs = Math.min(1000 * Math.pow(2, retryCount), 30_000);
         if (onToken) onToken(`\n[Server error ${response.status} — retrying in ${waitMs / 1000}s (retry ${retryCount}/${MAX_RETRIES})...]\n`);
         await new Promise(r => setTimeout(r, waitMs));
         turn--; // retry this turn without consuming a turn
@@ -256,7 +257,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         // Process complete SSE events (separated by double newlines)
         const parts = buffer.split('\n\n');
         // Last part may be incomplete — keep it in the buffer
-        buffer = parts.pop()!;
+        buffer = parts.pop() ?? '';
 
         for (const part of parts) {
           for (const line of part.split('\n')) {
@@ -355,6 +356,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     if (!assistantMessage.tool_calls || assistantMessage.tool_calls.length === 0) {
       // Use this turn's content, or fall back to all accumulated streamed content
       const content = (assistantMessage.content ?? '') || allStreamedContent;
+      allStreamedContent = ''; // Release accumulated tokens once consumed
       // In non-streaming mode, emit the full content as a single token
       if (!stream && onToken && content) {
         onToken(content);
@@ -455,9 +457,10 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       } else if (config.capabilityRouter) {
         const routes = config.capabilityRouter.resolve(fnName);
         const routeInfo = routes.map(r => `- [${r.source}] ${r.name}: ${r.description} (${r.available ? 'available' : 'not wired yet'})`).join('\n');
+        const ACQUIRE_TOOL = 'acquire_capability';
         const hasMissing = routes.some(r => r.source === 'missing');
-        const acquireHint = hasMissing && toolMap.has('acquire_capability')
-          ? '\n\nTip: Use acquire_capability to search for installable skills that might help.'
+        const acquireHint = hasMissing && toolMap.has(ACQUIRE_TOOL)
+          ? `\n\nTip: Use ${ACQUIRE_TOOL} to search for installable skills that might help.`
           : '';
         result = `Tool "${fnName}" not found. Here are alternatives:\n${routeInfo}${acquireHint}\n\nAvailable tools: ${Array.from(toolMap.keys()).join(', ')}`;
       } else {

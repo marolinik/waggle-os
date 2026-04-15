@@ -668,7 +668,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             const recall = await sessionOrch.recallMemory(agentMessage);
             const recallDuration = Date.now() - recallStart;
             if (recall.count > 0) {
-              recalledContext = '\n\n' + recall.text;
+              // Minor #3: scan recalled memory for injection payloads before injecting into prompt
+              const recallInjection = scanForInjection(recall.text, 'tool_output');
+              if (recallInjection.score >= 0.7) {
+                log.warn('[security] Injection detected in recalled memory — dropping context', recallInjection.flags);
+                sendEvent('step', { content: 'Recalled memories dropped — suspicious content detected.' });
+              } else {
+                recalledContext = '\n\n' + recall.text;
+              }
               // B5: Include content snippets so ToolCard can show what was recalled
               const snippets = (recall.recalled ?? []).slice(0, 3);
               const snippetText = snippets.map(s => `  - ${s}`).join('\n');

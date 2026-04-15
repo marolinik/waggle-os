@@ -1117,7 +1117,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     // and don't need to be duplicated into memory frames.
 
     if (result && !workspaceWeavers.has(workspaceId)) {
-      const wsDb = mindCache.get(workspaceId);
+      const wsDb = mindCache.getIfOpen(workspaceId);
       if (wsDb) {
         const wsFrames = new FrameStore(wsDb);
         const wsSessions = new SessionStore(wsDb);
@@ -1156,7 +1156,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
           orchestrator.setTeamSync(sync);
 
           // Pull team frames into local workspace mind
-          const wsDb = mindCache.get(workspaceId);
+          const wsDb = mindCache.getIfOpen(workspaceId);
           if (wsDb) {
             const wsSessionStore = new SessionStore(wsDb);
             wsSessionStore.ensure('team-sync', 'team-sync', 'Frames synced from team server');

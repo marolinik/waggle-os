@@ -154,6 +154,10 @@ export async function vaultRoutes(fastify: FastifyInstance) {
     const { name } = request.params as { name: string };
     const deleted = fastify.vault.delete(name);
 
+    if (!deleted) {
+      return reply.code(404).send({ error: 'Secret not found', name });
+    }
+
     return { deleted, name };
   });
 

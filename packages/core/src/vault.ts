@@ -132,19 +132,23 @@ export class VaultStore {
     const data = JSON.stringify(vault, null, 2);
     fs.writeFileSync(tmpPath, data, { mode: 0o600 });
     try {
-      fs.renameSync(tmpPath, this.vaultPath);
-    } catch {
-      // M6: On Windows, rename fails with EPERM when target exists.
-      // Delete target first, then rename — preserves atomicity better than direct write.
-      try { fs.unlinkSync(this.vaultPath); } catch { /* target may not exist */ }
       try {
         fs.renameSync(tmpPath, this.vaultPath);
-      } catch (renameErr) {
-        // Last resort: direct write (non-atomic) — log the degradation
-        log.error('Atomic vault write failed, falling back to direct write', renameErr);
-        fs.writeFileSync(this.vaultPath, data, { mode: 0o600 });
-        try { fs.unlinkSync(tmpPath); } catch { /* cleanup */ }
+      } catch {
+        // M6: On Windows, rename fails with EPERM when target exists.
+        // Delete target first, then rename — preserves atomicity better than direct write.
+        try { fs.unlinkSync(this.vaultPath); } catch { /* target may not exist */ }
+        try {
+          fs.renameSync(tmpPath, this.vaultPath);
+        } catch (renameErr) {
+          // Last resort: direct write (non-atomic) — log the degradation
+          log.error('Atomic vault write failed, falling back to direct write', renameErr);
+          fs.writeFileSync(this.vaultPath, data, { mode: 0o600 });
+        }
       }
+    } finally {
+      // M12: clean up .tmp if it still exists after any failure path
+      try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch { /* best effort */ }
     }
   }
 

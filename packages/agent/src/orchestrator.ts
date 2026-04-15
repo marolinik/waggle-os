@@ -20,6 +20,22 @@ import { scanForInjection } from './injection-scanner.js';
 
 const logger = createCoreLogger('orchestrator');
 
+// ── Content-length constants (M16: replace scattered magic numbers) ──
+/** Minimum user message length to be worth memorizing */
+const MIN_CONTENT_LENGTH = 30;
+/** Saved-content preview length (autoSave dedup display) */
+const DEDUP_SLICE_LENGTH = 80;
+/** Recalled-content snippet length for UI display */
+const RECALLED_SNIPPET_LENGTH = 120;
+/** Preloaded-context content preview length */
+const CONTEXT_PREVIEW_LENGTH = 200;
+/** Recall line / decision / save content truncation */
+const RECALL_LINE_LENGTH = 300;
+/** Research findings / key-points truncation */
+const FINDINGS_SLICE_LENGTH = 400;
+/** Assistant response length threshold for structured extraction */
+const STRUCTURED_EXTRACT_THRESHOLD = 500;
+
 export interface OrchestratorConfig {
   db: MindDB;
   embedder: Embedder;
@@ -90,8 +106,6 @@ export class Orchestrator {
     this.improvementSignals = new ImprovementSignalStore(config.db);
 
     const cognify = new CognifyPipeline({
-      db: config.db,
-      embedder: config.embedder,
       frames: this.frames,
       sessions: this.sessions,
       knowledge: this.knowledge,
@@ -122,13 +136,14 @@ export class Orchestrator {
    * Identity always stays in personal mind.
    */
   setWorkspaceMind(workspaceDb: MindDB): void {
+    if (this.workspaceLayers) {
+      logger.info('switching workspace mind — replacing previous workspace layers');
+    }
     const frames = new FrameStore(workspaceDb);
     const sessions = new SessionStore(workspaceDb);
     const search = new HybridSearch(workspaceDb, this.embedder);
     const knowledge = new KnowledgeGraph(workspaceDb);
     const cognify = new CognifyPipeline({
-      db: workspaceDb,
-      embedder: this.embedder,
       frames,
       sessions,
       knowledge,
@@ -183,19 +198,23 @@ export class Orchestrator {
   }
 
   /**
-   * Load recent context from memory for session preloading.
-   * Loads from workspace mind when available, falls back to personal.
+   * M17: shared helper — fetches recent frames ordered by importance then recency.
+   * Used by both loadRecentContext and recallMemory's catch-up branch.
    */
-  loadRecentContext(limit = 5): string {
-    // Use workspace mind for recent context when available (it's more relevant)
-    const primaryDb = this.workspaceLayers?.db ?? this.db;
-    const raw = primaryDb.getDatabase();
-
-    // Recent memories — prioritize by importance, then recency (A3 fix)
-    const recentFrames = raw.prepare(
-      `SELECT content, frame_type, importance, created_at
+  private fetchRecentFrames(
+    db: MindDB,
+    limit: number,
+    opts?: { excludeTemporary?: boolean },
+  ): Array<{ id: number; content: string; frame_type: string; importance: string; created_at: string }> {
+    const raw = db.getDatabase();
+    const excludeTemp = opts?.excludeTemporary ?? false;
+    const whereClause = excludeTemp
+      ? `WHERE importance != 'deprecated' AND importance != 'temporary'`
+      : `WHERE importance != 'deprecated'`;
+    return raw.prepare(
+      `SELECT id, content, frame_type, importance, created_at
        FROM memory_frames
-       WHERE importance != 'deprecated'
+       ${whereClause}
        ORDER BY
          CASE importance
            WHEN 'critical' THEN 0
@@ -205,7 +224,20 @@ export class Orchestrator {
          END,
          id DESC
        LIMIT ?`
-    ).all(limit) as Array<{ content: string; frame_type: string; importance: string; created_at: string }>;
+    ).all(limit) as Array<{ id: number; content: string; frame_type: string; importance: string; created_at: string }>;
+  }
+
+  /**
+   * Load recent context from memory for session preloading.
+   * Loads from workspace mind when available, falls back to personal.
+   */
+  loadRecentContext(limit = 5): string {
+    // Use workspace mind for recent context when available (it's more relevant)
+    const primaryDb = this.workspaceLayers?.db ?? this.db;
+    const raw = primaryDb.getDatabase();
+
+    // Recent memories — prioritize by importance, then recency (A3 fix)
+    const recentFrames = this.fetchRecentFrames(primaryDb, limit);
 
     // Active tasks (from personal awareness — always available)
     const awarenessCtx = this.awareness.toContext();
@@ -231,7 +263,7 @@ export class Orchestrator {
       const source = this.workspaceLayers ? 'Workspace' : 'Personal';
       parts.push(`## Recent ${source} Memory`);
       for (const f of recentFrames) {
-        parts.push(`- [${f.importance}] ${f.content.slice(0, 200)}`);
+        parts.push(`- [${f.importance}] ${f.content.slice(0, CONTEXT_PREVIEW_LENGTH)}`);
       }
     }
 
@@ -262,7 +294,7 @@ export class Orchestrator {
           : 'Personal Preferences';
         parts.push(`\n## ${label}`);
         for (const p of personalPrefs) {
-          parts.push(`- ${p.content.slice(0, 200)}`);
+          parts.push(`- ${p.content.slice(0, CONTEXT_PREVIEW_LENGTH)}`);
         }
       }
     }
@@ -393,13 +425,10 @@ export class Orchestrator {
            LIMIT ?`
         ).all(limit) as CatchUpRow[];
 
-        // Also get the most recent frames for recency context
-        const recentFrames = wsRaw.prepare(
-          `SELECT id, content, frame_type, importance, created_at
-           FROM memory_frames
-           WHERE importance != 'deprecated' AND importance != 'temporary'
-           ORDER BY id DESC LIMIT ?`
-        ).all(Math.min(limit, 3)) as CatchUpRow[];
+        // Also get the most recent frames for recency context (M17: shared helper)
+        const recentFrames = this.fetchRecentFrames(
+          this.workspaceLayers!.db, Math.min(limit, 3), { excludeTemporary: true },
+        ) as CatchUpRow[];
 
         // Combine and deduplicate by frame id
         const seen = new Set<number>();
@@ -430,7 +459,7 @@ export class Orchestrator {
         allLines.push('## Workspace Memory');
         for (const r of workspaceResults) {
           const date = r.frame.created_at?.slice(0, 10) ?? 'unknown';
-          allLines.push(`- [${date}, ${r.frame.importance}] ${r.frame.content.slice(0, 300)}`);
+          allLines.push(`- [${date}, ${r.frame.importance}] ${r.frame.content.slice(0, RECALL_LINE_LENGTH)}`);
         }
       }
 
@@ -441,7 +470,7 @@ export class Orchestrator {
         }
         for (const r of personalResults) {
           const date = r.frame.created_at?.slice(0, 10) ?? 'unknown';
-          allLines.push(`- [${date}, ${r.frame.importance}] ${r.frame.content.slice(0, 300)}`);
+          allLines.push(`- [${date}, ${r.frame.importance}] ${r.frame.content.slice(0, RECALL_LINE_LENGTH)}`);
         }
       }
 
@@ -451,7 +480,7 @@ export class Orchestrator {
       // Collect content snippets for UI display (B5 fix)
       const recalled: string[] = [];
       for (const r of [...workspaceResults, ...personalResults]) {
-        recalled.push(r.frame.content.slice(0, 120));
+        recalled.push(r.frame.content.slice(0, RECALLED_SNIPPET_LENGTH));
       }
 
       // Review #1: scan recalled memory for injection before it enters the system prompt.
@@ -504,6 +533,7 @@ export class Orchestrator {
 
     // Helper to save a memory entry. Returns the created frame (or null if cognify couldn't
     // hydrate it by id) so review #9's teamSync correctness fix can push what we just wrote.
+    // Serial embed: 3-5 items per exchange, batching would add complexity for negligible gain
     const save = async (content: string, importance: Importance, target: 'workspace' | 'personal' = 'workspace'): Promise<MemoryFrame | null> => {
       const useWorkspace = target === 'workspace' && this.workspaceLayers;
       const frames = useWorkspace ? this.workspaceLayers!.frames : this.frames;
@@ -525,7 +555,7 @@ export class Orchestrator {
           ? frames.createPFrame(gopId, content, latestI.id, importance)
           : frames.createIFrame(gopId, content, importance);
       }
-      saved.push(content.slice(0, 80));
+      saved.push(content.slice(0, DEDUP_SLICE_LENGTH));
 
       // Review #9: push the frame we just created, not whatever is "latest" at read time.
       // Between the write above and a re-read here, another save() could have fired and
@@ -543,7 +573,8 @@ export class Orchestrator {
     // bilateral-decision logic below.
     const userTrimmedEarly = userMsg.trim();
     const looksLikeAcceptance = /^(?:ok(?:ay)?|yes|yeah|yep|sure|go|go ahead|do it|let'?s (?:do (?:it|that)|proceed|go)|sounds good|perfect|great|that works|go with (?:it|that))\b/i.test(userTrimmedEarly);
-    if (userMsg.length < 30 && !assistantMsg.includes('```') && !looksLikeAcceptance) {
+    if (userMsg.length < MIN_CONTENT_LENGTH && !assistantMsg.includes('```') && !looksLikeAcceptance) {
+      logger.debug('autoSave: skipping short exchange', { len: userMsg.length });
       return saved;
     }
 
@@ -585,7 +616,7 @@ export class Orchestrator {
 
     // ── E4: Implicit style detection (infer from behavior, not just explicit statements) ──
     // Only trigger if we haven't already saved a preference this exchange
-    if (saved.length === 0 && userMsg.length > 30) {
+    if (saved.length === 0 && userMsg.length > MIN_CONTENT_LENGTH) {
       // Detect format preferences from how user asks
       const styleSignals: Array<{ pattern: RegExp; note: string }> = [
         { pattern: /\b(?:bullet|bullets|bullet.?points?|list form)\b/i, note: 'Style note: User prefers bullet-point format' },
@@ -644,7 +675,7 @@ export class Orchestrator {
       for (const pat of decisionPatterns) {
         const sentences = userMsg.split(/[.!?\n]+/).filter(s => pat.test(s));
         if (sentences.length > 0) {
-          decisionText = sentences[0].trim().slice(0, 300);
+          decisionText = sentences[0].trim().slice(0, RECALL_LINE_LENGTH);
           break;
         }
       }
@@ -652,7 +683,7 @@ export class Orchestrator {
       for (const pat of decisionPatterns) {
         const sentences = assistantMsg.split(/[.!?\n]+/).filter(s => pat.test(s));
         if (sentences.length > 0) {
-          decisionText = sentences[0].trim().slice(0, 300);
+          decisionText = sentences[0].trim().slice(0, RECALL_LINE_LENGTH);
           break;
         }
       }
@@ -668,7 +699,7 @@ export class Orchestrator {
       /\b(?:no,? (?:actually|that'?s wrong|it'?s)|wrong|incorrect|not (?:right|correct|true)|you'?re mistaken)\b/i,
     ];
     if (correctionPatterns.some(p => p.test(userMsg))) {
-      await save(`Correction from user: ${userMsg.slice(0, 200)}`, 'important', 'personal');
+      await save(`Correction from user: ${userMsg.slice(0, CONTEXT_PREVIEW_LENGTH)}`, 'important', 'personal');
     }
 
     // ── Pattern: Research output with external sources (B2 fix) ──
@@ -686,7 +717,7 @@ export class Orchestrator {
         ...(urls.length > 0 ? [`Sources: ${urls.join(', ')}`] : []),
       ].join('. ');
       if (findingSummary.length > 20) {
-        await save(`Research findings: ${findingSummary.slice(0, 400)}`, 'important');
+        await save(`Research findings: ${findingSummary.slice(0, FINDINGS_SLICE_LENGTH)}`, 'important');
       }
     }
 
@@ -706,7 +737,7 @@ export class Orchestrator {
         if (decisionLines.length > 0 && saved.length < 5) {
           const decisionText = decisionLines[0].replace(/^[-*\d.#]+\s*/, '').trim();
           if (decisionText.length > 20) {
-            await save(`Recommendation: ${decisionText.slice(0, 300)}`, 'important');
+            await save(`Recommendation: ${decisionText.slice(0, RECALL_LINE_LENGTH)}`, 'important');
             savedStructured = true;
             break;
           }
@@ -714,19 +745,19 @@ export class Orchestrator {
       }
 
       // F29b: Save user's original question/statement as a frame (if substantive)
-      if (userMsg.length >= 30 && userMsg.length <= 500 && saved.length < 5) {
+      if (userMsg.length >= MIN_CONTENT_LENGTH && userMsg.length <= STRUCTURED_EXTRACT_THRESHOLD && saved.length < 5) {
         // Only if not already captured by other patterns (preferences, corrections, decisions)
         const alreadyCapturedUser = saved.some(s =>
           s.startsWith('User preference:') || s.startsWith('Correction from user:') || s.startsWith('Decision:')
         );
         if (!alreadyCapturedUser) {
-          await save(`User asked: ${userMsg.slice(0, 300)}`, 'temporary');
+          await save(`User asked: ${userMsg.slice(0, RECALL_LINE_LENGTH)}`, 'temporary');
           savedStructured = true;
         }
       }
 
       // F29c: Extract key facts from bullet points or numbered lists
-      if (assistantMsg.length > 500) {
+      if (assistantMsg.length > STRUCTURED_EXTRACT_THRESHOLD) {
         const bullets = lines
           .filter(l => l.match(/^[-*]\s/) || l.match(/^\d+\.\s/))
           .map(l => l.replace(/^[-*\d.]+\s+/, '').trim())
@@ -737,20 +768,20 @@ export class Orchestrator {
           const keyPoints = bullets.slice(0, 3).join('; ');
           const heading = lines.find(l => l.startsWith('#'))?.replace(/^#+\s+/, '') ?? '';
           const prefix = heading ? `${heading}: ` : 'Key points: ';
-          await save(`${prefix}${keyPoints.slice(0, 400)}`, 'normal');
+          await save(`${prefix}${keyPoints.slice(0, FINDINGS_SLICE_LENGTH)}`, 'normal');
           savedStructured = true;
         }
       }
 
       // F29d: Fallback — if nothing structured was extracted and response is substantial,
       // save a compact summary (not the full blob)
-      if (!savedStructured && assistantMsg.length > 500 && saved.length === 0) {
+      if (!savedStructured && assistantMsg.length > STRUCTURED_EXTRACT_THRESHOLD && saved.length === 0) {
         const heading = lines.find(l => l.startsWith('#'))?.replace(/^#+\s+/, '') ?? '';
         const firstMeaningful = lines.find(l => !l.startsWith('#') && l.length > 20)?.trim() ?? '';
         const summary = heading
           ? `${heading}${firstMeaningful ? ': ' + firstMeaningful : ''}`
           : firstMeaningful || 'Work output produced';
-        await save(`Work completed: ${summary.slice(0, 300)}`, 'normal');
+        await save(`Work completed: ${summary.slice(0, RECALL_LINE_LENGTH)}`, 'normal');
       }
     }
 

@@ -49,9 +49,17 @@ export class ComplianceStatusChecker {
     const total = this.store.count(workspaceId);
 
     if (total === 0) {
+      // M11: if the DB has been active for >24h with zero interactions, escalate to non-compliant
+      const firstRun = this.store.getFirstRunAt();
+      const activeOver24h = firstRun
+        ? (Date.now() - new Date(firstRun).getTime()) > 24 * 60 * 60 * 1000
+        : false;
+
       return {
-        status: 'warning',
-        detail: 'No interactions logged yet. Logging activates automatically on first AI interaction.',
+        status: activeOver24h ? 'non-compliant' : 'warning',
+        detail: activeOver24h
+          ? 'No interactions logged despite system being active for over 24 hours. Verify logging pipeline.'
+          : 'No interactions logged yet. Logging activates automatically on first AI interaction.',
         totalInteractions: 0,
       };
     }

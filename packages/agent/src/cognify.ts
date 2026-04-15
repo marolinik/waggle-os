@@ -1,18 +1,17 @@
 import type {
-  MindDB,
   FrameStore,
   SessionStore,
   KnowledgeGraph,
   HybridSearch,
   Importance,
-  Embedder,
 } from '@waggle/core';
+import { createCoreLogger } from '@waggle/core';
 import { extractEntities, extractRelations, type ExtractedEntity } from './entity-extractor.js';
 import { MemoryLinker, type MemoryLink } from './memory-linker.js';
 
+const log = createCoreLogger('cognify');
+
 export interface CognifyConfig {
-  db: MindDB;
-  embedder: Embedder;
   frames: FrameStore;
   sessions: SessionStore;
   knowledge: KnowledgeGraph;
@@ -61,8 +60,10 @@ export class CognifyPipeline {
       ? this.frames.createPFrame(resolvedGopId, content, latestI.id, importance)
       : this.frames.createIFrame(resolvedGopId, content, importance);
 
-    // 3. Extract entities from content
-    const extracted = extractEntities(content);
+    // 3. Extract entities from content (guard against very long content)
+    const maxContentLength = 10_000;
+    const trimmedContent = content.slice(0, maxContentLength);
+    const extracted = extractEntities(trimmedContent);
 
     // 4. Upsert entities into KnowledgeGraph
     const entityIds = this.upsertEntities(extracted);
@@ -80,6 +81,7 @@ export class CognifyPipeline {
     let relatedFrames: MemoryLink[] | undefined;
     if (this.linker) {
       relatedFrames = await this.linker.findRelated(content);
+      relatedFrames = relatedFrames.filter(r => r.frameId !== frame.id);
     }
 
     return {
@@ -98,14 +100,20 @@ export class CognifyPipeline {
     const frame = this.frames.getById(frameId);
     if (!frame) return null;
 
-    const extracted = extractEntities(frame.content);
+    const maxContentLength = 10_000;
+    const content = frame.content.slice(0, maxContentLength);
+    const extracted = extractEntities(content);
     const entityIds = this.upsertEntities(extracted);
     let relationsCreated = this.createCoOccurrenceRelations(entityIds);
 
-    relationsCreated += this.createSemanticRelations(frame.content, extracted);
+    relationsCreated += this.createSemanticRelations(content, extracted);
 
     // Re-index for search
-    try { await this.search.indexFrame(frame.id, frame.content); } catch { /* non-fatal */ }
+    try {
+      await this.search.indexFrame(frame.id, frame.content);
+    } catch (err) {
+      log.warn(`indexFrame failed for frame ${frame.id}`, err);
+    }
 
     return {
       frameId: frame.id,
@@ -121,6 +129,7 @@ export class CognifyPipeline {
     let processed = 0;
     let entities = 0;
     let relations = 0;
+    // Sequential: each frame's cognify may produce entities used by the next frame's relation linking
     for (const id of frameIds) {
       const result = await this.cognifyFrame(id);
       if (result) {
@@ -209,7 +218,9 @@ export class CognifyPipeline {
             count++;
           }
         }
-      } catch { /* non-blocking */ }
+      } catch (err) {
+        log.warn('semantic relation extraction failed', err);
+      }
     }
     return count;
   }

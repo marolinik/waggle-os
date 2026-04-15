@@ -81,7 +81,7 @@ export class MultiMindCache {
     }
   }
 
-  get(workspaceId: string): MindDB | null {
+  getIfOpen(workspaceId: string): MindDB | null {
     const entry = this.cache.get(workspaceId);
     if (entry) {
       entry.lastAccessed = Date.now();
@@ -97,14 +97,14 @@ export class MultiMindCache {
   close(workspaceId: string): void {
     const entry = this.cache.get(workspaceId);
     if (entry) {
-      try { entry.db.close(); } catch { /* already closed */ }
+      try { entry.db.close(); } catch (err) { log.warn('close failed', { workspaceId, error: err instanceof Error ? err.message : String(err) }); }
       this.cache.delete(workspaceId);
     }
   }
 
   closeAll(): void {
-    for (const [, entry] of this.cache) {
-      try { entry.db.close(); } catch { /* already closed */ }
+    for (const [id, entry] of this.cache) {
+      try { entry.db.close(); } catch (err) { log.warn('close failed', { workspaceId: id, error: err instanceof Error ? err.message : String(err) }); }
     }
     this.cache.clear();
   }

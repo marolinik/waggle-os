@@ -25,8 +25,6 @@ describe('CognifyPipeline', () => {
     knowledge = new KnowledgeGraph(db);
     search = new HybridSearch(db, embedder);
     pipeline = new CognifyPipeline({
-      db,
-      embedder,
       frames,
       sessions,
       knowledge,

@@ -59,8 +59,6 @@ describe('M3b Integration Test', () => {
     const search = new HybridSearch(db, mockEmbedder);
 
     const pipeline = new CognifyPipeline({
-      db,
-      embedder: mockEmbedder,
       frames,
       sessions,
       knowledge: kg,

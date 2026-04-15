@@ -2,6 +2,9 @@ import { MindDB } from './mind/db.js';
 import { IdentityLayer, type Identity } from './mind/identity.js';
 import { AwarenessLayer, type AwarenessItem } from './mind/awareness.js';
 import { FrameStore, type MemoryFrame } from './mind/frames.js';
+import { createCoreLogger } from './logger.js';
+
+const log = createCoreLogger('multi-mind');
 
 export type MindSource = 'personal' | 'workspace';
 export type SearchScope = 'personal' | 'workspace' | 'all';
@@ -136,8 +139,8 @@ export class MultiMind {
    * Close both minds. After this, the MultiMind instance should not be used.
    */
   close(): void {
-    try { this.personal?.close(); } catch { /* already closed */ }
-    try { this.workspace?.close(); } catch { /* already closed */ }
+    try { this.personal?.close(); } catch (err) { log.warn('close failed (personal)', err); }
+    try { this.workspace?.close(); } catch (err) { log.warn('close failed (workspace)', err); }
   }
 
   /**

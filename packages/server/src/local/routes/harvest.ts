@@ -150,8 +150,6 @@ export async function harvestRoutes(fastify: FastifyInstance) {
       const { CognifyPipeline } = await import('@waggle/agent');
       const embedder = await createEmbeddingProvider({ provider: 'mock' });
       const cognify = new CognifyPipeline({
-        db: personalDb,
-        embedder,
         frames: frameStore,
         sessions: sessionStore,
         knowledge: new KnowledgeGraph(personalDb),

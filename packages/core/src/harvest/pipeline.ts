@@ -32,6 +32,10 @@ export interface PipelineOptions {
   llmCall: LLMCallFn;
   existingContents?: string[];
   onProgress?: (stage: string, current: number, total: number) => void;
+  /** Items per LLM batch call (default: 20). */
+  batchSize?: number;
+  /** Max concurrent LLM batch calls (default: 3). */
+  concurrency?: number;
   /**
    * Fallback behavior when the Pass 1 (classify) LLM call throws.
    * - `'skip'` (default, safer): drop the batch. Under-inclusion beats cost/noise inflation.
@@ -81,17 +85,22 @@ export class HarvestPipeline {
   private existingContents: string[];
   private onProgress?: (stage: string, current: number, total: number) => void;
   private classifyFailureFallback: 'skip' | 'pass-through-medium';
+  private batchSize: number;
+  private concurrency: number;
 
   constructor(options: PipelineOptions) {
     this.llmCall = options.llmCall;
     this.existingContents = options.existingContents ?? [];
     this.onProgress = options.onProgress;
     this.classifyFailureFallback = options.classifyFailureFallback ?? 'skip';
+    this.batchSize = options.batchSize ?? BATCH_SIZE;
+    this.concurrency = options.concurrency ?? CONCURRENCY_CAP;
   }
 
   async run(items: UniversalImportItem[], source: ImportSourceType): Promise<HarvestPipelineResult> {
     const startTime = Date.now();
     const errors: string[] = [];
+    log.info('harvest pipeline starting', { source, itemCount: items.length, batchSize: this.batchSize, concurrency: this.concurrency });
 
     // Pass 0: Injection scan — drop any item whose title or content carries a
     // prompt-injection payload (role_override / prompt_extraction / instruction_injection).
@@ -139,12 +148,16 @@ export class HarvestPipeline {
     this.onProgress?.('dedup', 0, distilled.length);
     const dedupResult = dedup(distilled, this.existingContents);
 
+    const durationMs = Date.now() - startTime;
+    log.info('harvest pipeline complete', {
+      source, itemsReceived: originalCount, classified: classified.length,
+      extracted: extracted.length, distilled: distilled.length,
+      unique: dedupResult.unique.length, dupsSkipped: dedupResult.duplicatesSkipped,
+      errors: errors.length, durationMs,
+    });
+
     return {
-      source,
-      // itemsReceived is the count the pipeline was HANDED, not what survived the
-      // security filter. Items blocked by the injection scan still count as "received"
-      // for the caller's accounting; each blocked item has an entry in `errors`.
-      itemsReceived: originalCount,
+      source, itemsReceived: originalCount,
       itemsClassified: classified.length,
       itemsSkipped: classified.length - valuable.length,
       itemsExtracted: extracted.length,
@@ -156,13 +169,13 @@ export class HarvestPipeline {
       duplicatesSkipped: dedupResult.duplicatesSkipped,
       errors,
       costUsd: 0, // Caller tracks cost
-      durationMs: Date.now() - startTime,
+      durationMs,
     };
   }
 
   private async classify(items: UniversalImportItem[], errors: string[]): Promise<ClassifiedItem[]> {
     const results: ClassifiedItem[] = [];
-    const batches = batch(items, BATCH_SIZE);
+    const batches = batch(items, this.batchSize);
 
     // M3: run batches with concurrency cap instead of sequentially
     const tasks = batches.map((b, i) => async () => {
@@ -203,7 +216,7 @@ export class HarvestPipeline {
       }
     });
 
-    const batchResults = await runWithConcurrency(tasks, CONCURRENCY_CAP);
+    const batchResults = await runWithConcurrency(tasks, this.concurrency);
     for (const br of batchResults) results.push(...br);
 
     return results;
@@ -211,7 +224,7 @@ export class HarvestPipeline {
 
   private async extract(classified: ClassifiedItem[], errors: string[]): Promise<ExtractedContent[]> {
     const results: ExtractedContent[] = [];
-    const batches = batch(classified, BATCH_SIZE);
+    const batches = batch(classified, this.batchSize);
 
     // M3: concurrent batches with cap
     const tasks = batches.map((b, i) => async () => {
@@ -255,7 +268,7 @@ export class HarvestPipeline {
       }
     });
 
-    const batchResults = await runWithConcurrency(tasks, CONCURRENCY_CAP);
+    const batchResults = await runWithConcurrency(tasks, this.concurrency);
     for (const br of batchResults) results.push(...br);
 
     return results;
@@ -267,7 +280,7 @@ export class HarvestPipeline {
     errors: string[],
   ): Promise<DistilledKnowledge[]> {
     const results: DistilledKnowledge[] = [];
-    const batches = batch(extracted, BATCH_SIZE);
+    const batches = batch(extracted, this.batchSize);
 
     // Review C2: per-item serialization with individual budget. The old flat
     // `JSON.stringify(b, null, 2).slice(0, 8000)` truncated the *middle* of the last
@@ -318,7 +331,7 @@ export class HarvestPipeline {
       }
     });
 
-    const batchResults = await runWithConcurrency(tasks, CONCURRENCY_CAP);
+    const batchResults = await runWithConcurrency(tasks, this.concurrency);
     for (const br of batchResults) results.push(...br);
 
     return results;

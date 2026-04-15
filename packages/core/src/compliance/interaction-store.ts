@@ -56,25 +56,31 @@ export class InteractionStore {
 
   /** Get interactions for a workspace within a date range. */
   getByWorkspace(workspaceId: string, from?: string, to?: string): AIInteraction[] {
+    if (from && !/^\d{4}-\d{2}-\d{2}/.test(from)) throw new Error('Invalid date format');
+    if (to && !/^\d{4}-\d{2}-\d{2}/.test(to)) throw new Error('Invalid date format');
+
     const raw = this.db.getDatabase();
     let sql = 'SELECT * FROM ai_interactions WHERE workspace_id = ?';
     const params: unknown[] = [workspaceId];
 
     if (from) { sql += ' AND timestamp >= ?'; params.push(from); }
     if (to) { sql += ' AND timestamp <= ?'; params.push(to); }
-    sql += ' ORDER BY timestamp DESC';
+    sql += ' ORDER BY timestamp DESC LIMIT 1000';
 
     return (raw.prepare(sql).all(...params) as Record<string, unknown>[]).map(r => this.rowToInteraction(r));
   }
 
   /** Get all interactions within a date range. */
   getByDateRange(from: string, to: string, workspaceId?: string): AIInteraction[] {
+    if (from && !/^\d{4}-\d{2}-\d{2}/.test(from)) throw new Error('Invalid date format');
+    if (to && !/^\d{4}-\d{2}-\d{2}/.test(to)) throw new Error('Invalid date format');
+
     const raw = this.db.getDatabase();
     let sql = 'SELECT * FROM ai_interactions WHERE timestamp >= ? AND timestamp <= ?';
     const params: unknown[] = [from, to];
 
     if (workspaceId) { sql += ' AND workspace_id = ?'; params.push(workspaceId); }
-    sql += ' ORDER BY timestamp DESC';
+    sql += ' ORDER BY timestamp DESC LIMIT 1000';
 
     return (raw.prepare(sql).all(...params) as Record<string, unknown>[]).map(r => this.rowToInteraction(r));
   }
@@ -148,7 +154,7 @@ export class InteractionStore {
     return (raw.prepare(sql).all(...params) as Record<string, unknown>[]).map(r => ({
       timestamp: r.timestamp as string,
       action: r.human_action as HumanAction,
-      tool: (JSON.parse(r.tools_called as string) as string[])[0] ?? 'unknown',
+      tool: (JSON.parse(r.tools_called as string) as string[])[0] ?? 'none',
       detail: r.persona ? `Persona: ${r.persona}` : '',
     }));
   }
