@@ -18,12 +18,6 @@ const ALGORITHM = 'aes-256-gcm';
 const KEY_LENGTH = 32;
 const IV_LENGTH = 16;
 
-/**
- * Per-instance write lock to ensure sequential vault writes.
- * Each VaultStore instance gets its own lock chain so concurrent
- * set/delete calls are serialized without external dependencies.
- */
-
 export interface VaultEntry {
   name: string;
   value: string;

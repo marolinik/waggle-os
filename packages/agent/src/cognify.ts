@@ -71,20 +71,7 @@ export class CognifyPipeline {
     let relationsCreated = this.createCoOccurrenceRelations(entityIds);
 
     // 5b. Extract semantic relations (led_by, reports_to, depends_on, etc.)
-    const semanticRelations = extractRelations(content, extracted);
-    for (const rel of semanticRelations) {
-      try {
-        const srcEntity = this.knowledge.searchEntities(rel.source, 5).find(e => e.name.toLowerCase() === rel.source.toLowerCase());
-        const tgtEntity = this.knowledge.searchEntities(rel.target, 5).find(e => e.name.toLowerCase() === rel.target.toLowerCase());
-        if (srcEntity && tgtEntity) {
-          const existing = this.knowledge.getRelationsFrom(srcEntity.id, rel.relationType);
-          if (!existing.some(r => r.target_id === tgtEntity.id)) {
-            this.knowledge.createRelation(srcEntity.id, tgtEntity.id, rel.relationType, rel.confidence, { source: 'semantic' });
-            relationsCreated++;
-          }
-        }
-      } catch { /* non-blocking */ }
-    }
+    relationsCreated += this.createSemanticRelations(content, extracted);
 
     // 6. Index the frame for vector search
     await this.search.indexFrame(frame.id, content);
@@ -115,20 +102,7 @@ export class CognifyPipeline {
     const entityIds = this.upsertEntities(extracted);
     let relationsCreated = this.createCoOccurrenceRelations(entityIds);
 
-    const semanticRelations = extractRelations(frame.content, extracted);
-    for (const rel of semanticRelations) {
-      try {
-        const srcEntity = this.knowledge.searchEntities(rel.source, 5).find(e => e.name.toLowerCase() === rel.source.toLowerCase());
-        const tgtEntity = this.knowledge.searchEntities(rel.target, 5).find(e => e.name.toLowerCase() === rel.target.toLowerCase());
-        if (srcEntity && tgtEntity) {
-          const existing = this.knowledge.getRelationsFrom(srcEntity.id, rel.relationType);
-          if (!existing.some(r => r.target_id === tgtEntity.id)) {
-            this.knowledge.createRelation(srcEntity.id, tgtEntity.id, rel.relationType, rel.confidence, { source: 'semantic' });
-            relationsCreated++;
-          }
-        }
-      } catch { /* non-blocking */ }
-    }
+    relationsCreated += this.createSemanticRelations(frame.content, extracted);
 
     // Re-index for search
     try { await this.search.indexFrame(frame.id, frame.content); } catch { /* non-fatal */ }
@@ -210,6 +184,32 @@ export class CognifyPipeline {
           count++;
         }
       }
+    }
+    return count;
+  }
+
+  /**
+   * Extract semantic relations (led_by, reports_to, depends_on, etc.)
+   * from content and upsert them into the knowledge graph.
+   * Returns the number of new relations created.
+   */
+  private createSemanticRelations(content: string, extracted: ExtractedEntity[]): number {
+    let count = 0;
+    const relations = extractRelations(content, extracted);
+    for (const rel of relations) {
+      try {
+        const srcEntity = this.knowledge.searchEntities(rel.source, 5)
+          .find(e => e.name.toLowerCase() === rel.source.toLowerCase());
+        const tgtEntity = this.knowledge.searchEntities(rel.target, 5)
+          .find(e => e.name.toLowerCase() === rel.target.toLowerCase());
+        if (srcEntity && tgtEntity) {
+          const existing = this.knowledge.getRelationsFrom(srcEntity.id, rel.relationType);
+          if (!existing.some(r => r.target_id === tgtEntity.id)) {
+            this.knowledge.createRelation(srcEntity.id, tgtEntity.id, rel.relationType, rel.confidence, { source: 'semantic' });
+            count++;
+          }
+        }
+      } catch { /* non-blocking */ }
     }
     return count;
   }
