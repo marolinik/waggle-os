@@ -32,6 +32,7 @@ import {
 } from './skill-frontmatter.js';
 import type { ImprovementSignalStore } from '@waggle/core';
 import { autoExtractAndCreateSkill, type AutoExtractMessage } from './skill-autoextract.js';
+import { retireStaleSkills } from './skill-retirement.js';
 
 export interface SkillToolsDeps {
   /** Path to ~/.waggle directory */
@@ -854,6 +855,62 @@ Only use this after acquire_capability has identified a specific installable can
           return `Pattern "${result.template!.name}" detected, but a skill with that filename already exists. Skipped.`;
         }
         return 'No repeatable workflow pattern detected in this session yet. Keep using the tools — the pattern needs at least 2 repetitions.';
+      },
+    },
+
+    // Skills 2.0 gap F: retire_skills — archive personal-scope skills
+    // that haven't been used in N days. Keeps the skill library from
+    // growing monotonically. Runs in dry-run by default so the agent can
+    // report the plan before any file moves.
+    {
+      name: 'retire_skills',
+      description:
+        'Archive personal-scope skills that have not been used within the idle window. '
+        + 'Moves stale SKILL.md files to ~/.waggle/skills-archive/ (recoverable — no deletion). '
+        + 'Default max_idle_days is 90. Default dry_run is true — call with dry_run: false to '
+        + 'actually move the files. Records a workflow_pattern signal per retirement.',
+      parameters: {
+        type: 'object',
+        properties: {
+          max_idle_days: {
+            type: 'number',
+            description: 'Skills not used within this many days are retired. Default 90.',
+          },
+          dry_run: {
+            type: 'boolean',
+            description: 'When true (default), reports the plan without moving files.',
+          },
+        },
+      },
+      execute: async (args) => {
+        const maxIdleDays = typeof args.max_idle_days === 'number' ? args.max_idle_days : 90;
+        const dryRun = args.dry_run !== false; // default true
+        const report = retireStaleSkills(waggleHome, {
+          maxIdleDays,
+          dryRun,
+          improvementSignals: deps.improvementSignals,
+        });
+        if (!dryRun && report.retired.length > 0) {
+          onSkillsChanged?.();
+        }
+        const lines: string[] = [
+          `## Skill Retirement ${dryRun ? '(dry run)' : ''}`,
+          '',
+          `- Scanned: ${report.scanned}`,
+          `- Retired: ${report.retired.length}${report.retired.length > 0 ? ` — ${report.retired.join(', ')}` : ''}`,
+          `- Skipped fresh: ${report.skipped.filter(s => s.reason === 'fresh').length}`,
+        ];
+        const errors = report.skipped.filter(s => s.reason !== 'fresh');
+        if (errors.length > 0) {
+          lines.push(`- Errors: ${errors.map(e => `${e.name}: ${e.reason}`).join('; ')}`);
+        }
+        if (dryRun && report.retired.length > 0) {
+          lines.push('', `Run again with \`dry_run: false\` to move ${report.retired.length} file${report.retired.length > 1 ? 's' : ''} to the archive.`);
+        }
+        if (!dryRun && report.archived.length > 0) {
+          lines.push('', `Archive dir: \`${report.archived[0].replace(/\\[^\\]+$/, '')}\``);
+        }
+        return lines.join('\n');
       },
     },
   ];

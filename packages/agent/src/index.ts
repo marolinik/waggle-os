@@ -204,6 +204,14 @@ export {
   type AutoExtractMessage, type AutoExtractDeps, type AutoExtractResult,
 } from './skill-autoextract.js';
 export { getSkillDirForScope } from './skill-tools.js';
+export {
+  loadSkillUsage, saveSkillUsage, recordSkillUsage, forgetSkillUsage, getSkillUsagePath,
+  type SkillUsageEntry, type SkillUsageIndex,
+} from './skill-usage.js';
+export {
+  retireStaleSkills,
+  type RetireOptions, type RetireReport,
+} from './skill-retirement.js';
 export { BaseConnector, type WaggleConnector, type ConnectorAction, type ConnectorResult } from './connector-sdk.js';
 export { ConnectorRegistry, type AuditLogger } from './connector-registry.js';
 export {
