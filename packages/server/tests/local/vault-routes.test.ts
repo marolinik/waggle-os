@@ -206,9 +206,9 @@ describe('Vault Routes', () => {
         url: '/api/vault/NONEXISTENT',
       });
 
-      expect(res.statusCode).toBe(200);
+      expect(res.statusCode).toBe(404);
       const body = res.json();
-      expect(body.deleted).toBe(false);
+      expect(body.error).toBe('Secret not found');
       expect(body.name).toBe('NONEXISTENT');
     });
   });
