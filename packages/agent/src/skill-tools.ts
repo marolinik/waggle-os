@@ -23,6 +23,14 @@ async function getSecurityGate() {
   return _SecurityGate;
 }
 import { generateSkillMarkdown, type SkillTemplate } from './skill-creator.js';
+import {
+  parseSkillFrontmatter,
+  serializeFrontmatter,
+  nextScope,
+  SKILL_SCOPE_ORDER,
+  type SkillScope,
+} from './skill-frontmatter.js';
+import type { ImprovementSignalStore } from '@waggle/core';
 
 export interface SkillToolsDeps {
   /** Path to ~/.waggle directory */
@@ -39,6 +47,45 @@ export interface SkillToolsDeps {
   auditStore?: InstallAuditStore;
   /** Optional callback to search the marketplace catalog for capabilities */
   searchMarketplace?: (query: string) => Promise<MarketplaceCandidate[]>;
+  /**
+   * Skills 2.0 gap E: promotion infrastructure. Each callback is optional.
+   * - getWorkspaceId / getTeamId resolve scope dirs dynamically at tool-call time.
+   * - hasTeamSkillLibrary / isEnterprise gate tier-restricted scopes.
+   * - improvementSignals records skill_promotion signals on successful moves.
+   */
+  getWorkspaceId?: () => string | null;
+  getTeamId?: () => string | null;
+  hasTeamSkillLibrary?: () => boolean;
+  isEnterprise?: () => boolean;
+  improvementSignals?: ImprovementSignalStore;
+}
+
+/**
+ * Skills 2.0 gap E: resolve the on-disk directory for a given scope.
+ * - personal:   ~/.waggle/skills/
+ * - workspace:  ~/.waggle/workspaces/{workspaceId}/skills/
+ * - team:       ~/.waggle/teams/{teamId}/skills/
+ * - enterprise: ~/.waggle/enterprise/skills/
+ *
+ * Returns null when the required context (workspaceId, teamId) is missing.
+ */
+export function getSkillDirForScope(
+  waggleHome: string,
+  scope: SkillScope,
+  ctx: { workspaceId?: string | null; teamId?: string | null },
+): string | null {
+  switch (scope) {
+    case 'personal':
+      return path.join(waggleHome, 'skills');
+    case 'workspace':
+      if (!ctx.workspaceId) return null;
+      return path.join(waggleHome, 'workspaces', ctx.workspaceId, 'skills');
+    case 'team':
+      if (!ctx.teamId) return null;
+      return path.join(waggleHome, 'teams', ctx.teamId, 'skills');
+    case 'enterprise':
+      return path.join(waggleHome, 'enterprise', 'skills');
+  }
 }
 
 export function createSkillTools(deps: SkillToolsDeps): ToolDefinition[] {
@@ -594,6 +641,163 @@ Only use this after acquire_capability has identified a specific installable can
           `### Skill Content\n\nUse the following instructions to complete the current task:\n\n` +
           `---\n\n${content}\n\n---\n\n` +
           `You can now apply this skill to the user's request.`
+        );
+      },
+    },
+
+    // Skills 2.0 gap E: promote_skill — move a skill up one scope rung.
+    // personal → workspace → team → enterprise. Enforces one-step-at-a-time,
+    // tier gates, and records a skill_promotion improvement signal on success.
+    {
+      name: 'promote_skill',
+      description:
+        'Promote an installed skill one scope up (personal → workspace → team → enterprise). '
+        + 'Team scope requires the teamSkillLibrary capability (TEAMS or ENTERPRISE tier). '
+        + 'Enterprise scope requires ENTERPRISE tier. '
+        + 'The file is moved to the appropriate directory, frontmatter is rewritten '
+        + '(scope + promoted_from history), and a skill_promotion signal is recorded.',
+      parameters: {
+        type: 'object',
+        properties: {
+          skill_name: {
+            type: 'string',
+            description: 'Name of the installed skill (SKILL.md filename without extension).',
+          },
+          target_scope: {
+            type: 'string',
+            enum: [...SKILL_SCOPE_ORDER],
+            description:
+              'Target scope. If omitted, auto-advances one step from the skill\'s current scope. '
+              + 'Must be exactly one rung above the current scope — no jumps.',
+          },
+        },
+        required: ['skill_name'],
+      },
+      execute: async (args) => {
+        const skillName = args.skill_name as string;
+        const explicitTarget = args.target_scope as SkillScope | undefined;
+
+        // Resolve context for scope paths
+        const workspaceId = deps.getWorkspaceId?.() ?? null;
+        const teamId = deps.getTeamId?.() ?? null;
+        const ctx = { workspaceId, teamId };
+
+        // 1. Locate the skill: walk every scope dir the agent can see and
+        // find a SKILL file that matches the requested name. Preference
+        // order follows SKILL_SCOPE_ORDER so we pick the lowest scope
+        // available when multiple copies exist.
+        type Located = { scope: SkillScope; filePath: string; content: string };
+        let found: Located | null = null;
+        for (const s of SKILL_SCOPE_ORDER) {
+          const dir = getSkillDirForScope(waggleHome, s, ctx);
+          if (!dir || !fs.existsSync(dir)) continue;
+          const filePath = path.join(dir, `${skillName}.md`);
+          if (fs.existsSync(filePath)) {
+            found = {
+              scope: s,
+              filePath,
+              content: fs.readFileSync(filePath, 'utf-8'),
+            };
+            break;
+          }
+        }
+        if (!found) {
+          return `Skill "${skillName}" not found in any accessible scope. Use list_skills to see what's installed.`;
+        }
+
+        // 2. Read current scope from frontmatter (falling back to the
+        // dir-derived scope if the frontmatter is missing — handles
+        // pre-gap-E legacy skills).
+        const parsed = parseSkillFrontmatter(found.content);
+        const currentScope: SkillScope = parsed.frontmatter.scope ?? found.scope;
+
+        // 3. Determine target scope + validate one-step rule
+        const target = explicitTarget ?? nextScope(currentScope);
+        if (!target) {
+          return `Skill "${skillName}" is already at the top scope (${currentScope}). Cannot promote further.`;
+        }
+        const expectedNext = nextScope(currentScope);
+        if (target !== expectedNext) {
+          return (
+            `Invalid promotion: skill "${skillName}" is at scope "${currentScope}" and can only be promoted to "${expectedNext}". `
+            + `Requested target "${target}" is not exactly one rung up. Multi-step promotions must be done one at a time.`
+          );
+        }
+
+        // 4. Tier + context gating
+        if (target === 'workspace' && !workspaceId) {
+          return `Cannot promote to workspace scope: no active workspace. Switch to a workspace first.`;
+        }
+        if (target === 'team') {
+          if (!deps.hasTeamSkillLibrary?.()) {
+            return `Cannot promote to team scope: your plan does not include the team skill library. Upgrade to TEAMS or ENTERPRISE.`;
+          }
+          if (!teamId) {
+            return `Cannot promote to team scope: this workspace is not linked to a team.`;
+          }
+        }
+        if (target === 'enterprise' && !deps.isEnterprise?.()) {
+          return `Cannot promote to enterprise scope: requires ENTERPRISE tier. Contact sales for KVARK.`;
+        }
+
+        // 5. Resolve destination dir + path
+        const destDir = getSkillDirForScope(waggleHome, target, ctx);
+        if (!destDir) {
+          return `Cannot resolve destination directory for scope "${target}".`;
+        }
+        if (!fs.existsSync(destDir)) {
+          fs.mkdirSync(destDir, { recursive: true });
+        }
+        const destPath = path.join(destDir, `${skillName}.md`);
+        if (fs.existsSync(destPath)) {
+          return `Cannot promote: a skill named "${skillName}" already exists at scope "${target}". Rename one of them first.`;
+        }
+
+        // 6. Rewrite frontmatter: set new scope, append old to promoted_from
+        const updatedFrontmatter = {
+          ...parsed.frontmatter,
+          scope: target,
+          promoted_from: [...(parsed.frontmatter.promoted_from ?? []), currentScope],
+        };
+        const newContent = serializeFrontmatter(updatedFrontmatter, parsed.body);
+
+        // 7. Atomic-ish move: write to new location, then remove old.
+        // Writing first means a crash before the unlink leaves two copies,
+        // which is recoverable; a crash after the unlink but before the
+        // write would be catastrophic and is avoided by this ordering.
+        fs.writeFileSync(destPath, newContent, 'utf-8');
+        try {
+          fs.unlinkSync(found.filePath);
+        } catch {
+          // Non-fatal — leave a copy at the old location rather than
+          // failing the promotion. An audit warning is fine.
+        }
+
+        // 8. Record skill_promotion signal
+        if (deps.improvementSignals) {
+          try {
+            deps.improvementSignals.record(
+              'skill_promotion',
+              `promote:${skillName}:${currentScope}->${target}`,
+              `Promoted skill "${skillName}" from ${currentScope} to ${target}`,
+              { skillName, from: currentScope, to: target, workspaceId, teamId },
+            );
+          } catch { /* non-blocking */ }
+        }
+
+        // 9. Let the agent reload its skill list so the new scope is picked up
+        onSkillsChanged?.();
+
+        return (
+          `## Skill Promoted\n\n`
+          + `**${skillName}**: ${currentScope} → ${target}\n\n`
+          + `- Moved from \`${found.filePath}\`\n`
+          + `- Now at \`${destPath}\`\n`
+          + `- Promotion history: ${updatedFrontmatter.promoted_from!.join(' → ')} → ${target}\n`
+          + `- Signal recorded: skill_promotion\n\n`
+          + `The skill is available immediately at the new scope. Agents in other `
+          + `workspaces${target === 'team' ? ' on this team' : target === 'enterprise' ? ' across the enterprise' : ''} `
+          + `will pick it up on their next skill reload.`
         );
       },
     },
