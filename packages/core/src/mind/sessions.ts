@@ -54,6 +54,31 @@ export class SessionStore {
     ).all() as Session[];
   }
 
+  /**
+   * Return the most-recent active session, or create one atomically if none exists.
+   * Transaction-wrapped so two concurrent callers on a fresh mind produce exactly
+   * one session (review finding #7: session-create race in autoSaveFromExchange).
+   */
+  ensureActive(projectId?: string): Session {
+    const raw = this.db.getDatabase();
+    const txn = raw.transaction((): Session => {
+      // Secondary `id DESC` tiebreak: datetime('now') has second precision, so two
+      // create() calls in the same second share started_at and SQLite's ordering becomes
+      // unspecified without an explicit tiebreaker.
+      const existing = raw.prepare(
+        "SELECT * FROM sessions WHERE status = 'active' ORDER BY started_at DESC, id DESC LIMIT 1"
+      ).get() as Session | undefined;
+      if (existing) return existing;
+      const gopId = `session:${new Date().toISOString()}:${Math.random().toString(36).slice(2, 8)}`;
+      const result = raw.prepare(`
+        INSERT INTO sessions (gop_id, project_id, status, started_at)
+        VALUES (?, ?, 'active', datetime('now'))
+      `).run(gopId, projectId ?? null);
+      return raw.prepare('SELECT * FROM sessions WHERE id = ?').get(result.lastInsertRowid) as Session;
+    });
+    return txn();
+  }
+
   getByGopId(gopId: string): Session | undefined {
     return this.db.getDatabase().prepare(
       'SELECT * FROM sessions WHERE gop_id = ?'

@@ -154,6 +154,104 @@ describe('Orchestrator — recall path hardening', () => {
   });
 
   // ────────────────────────────────────────────────────────────────
+  // Review #6 — catch-up dedup keyed by frame id (not content prefix)
+  // ────────────────────────────────────────────────────────────────
+
+  describe('#6 — catch-up dedup preserves frames with shared content prefix', () => {
+    it('keeps both frames when they share a 100-char prefix but differ in tail', async () => {
+      const wsDb = new MindDB(':memory:');
+      orchestrator.setWorkspaceMind(wsDb);
+      try {
+        // Two distinct decisions whose first 100 chars are identical.
+        // Old dedup (content.slice(0, 100)) would drop one; new dedup (by frame id) keeps both.
+        const sharedPrefix = 'Decision: ' + 'Z'.repeat(92);
+        await orchestrator.executeTool('save_memory', {
+          content: sharedPrefix + ' alpha tail',
+          importance: 'important',
+        });
+        await orchestrator.executeTool('save_memory', {
+          content: sharedPrefix + ' beta tail',
+          importance: 'important',
+        });
+
+        // "catch me up" triggers the catch-up path (importance + recency bypassing semantic search)
+        const result = await orchestrator.recallMemory('catch me up');
+
+        // Both frames should be recalled — count occurrences of 'alpha tail' and 'beta tail'
+        const alphaHits = (result.text.match(/alpha tail/g) ?? []).length;
+        const betaHits = (result.text.match(/beta tail/g) ?? []).length;
+        expect(alphaHits).toBeGreaterThanOrEqual(1);
+        expect(betaHits).toBeGreaterThanOrEqual(1);
+      } finally {
+        orchestrator.clearWorkspaceMind();
+        wsDb.close();
+      }
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────
+  // Review #11 — identity cache keyed by updated_at
+  // ────────────────────────────────────────────────────────────────
+
+  describe('#11 — identity cache invalidates when identity updates', () => {
+    it('serves updated identity after a name change (not stale cached text)', () => {
+      orchestrator.getIdentity().create({
+        name: 'Waggle',
+        role: 'Assistant',
+        department: '',
+        personality: '',
+        capabilities: '',
+        system_prompt: '',
+      });
+      const before = orchestrator.buildSystemPrompt();
+      expect(before).toContain('Name: Waggle');
+
+      orchestrator.getIdentity().update({ name: 'Waggle-Prime' });
+      const after = orchestrator.buildSystemPrompt();
+      expect(after).toContain('Name: Waggle-Prime');
+      expect(after).not.toContain('Name: Waggle\n'); // old name should be gone
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────
+  // Review #12 + #20 — length gate + casual pattern polish
+  // ────────────────────────────────────────────────────────────────
+
+  describe('#12 — short acceptance reaches decision detection', () => {
+    it('saves a decision when user replies "ok, go ahead" to an assistant suggestion', async () => {
+      const saved = await orchestrator.autoSaveFromExchange(
+        'ok, go ahead',
+        'Based on your constraints, let\'s go with Postgres for ACID and Redis for caching.',
+      );
+      const decisionSaves = saved.filter(s => s.startsWith('Decision:'));
+      expect(decisionSaves.length).toBeGreaterThanOrEqual(1);
+      expect(decisionSaves[0]).toContain('Postgres');
+    });
+  });
+
+  describe('#20 — casual pattern matches only bare acks, not ack-prefixed substantive replies', () => {
+    it('bails on a bare "ok." (casual pattern still fires for trivial acks)', async () => {
+      const saved = await orchestrator.autoSaveFromExchange(
+        'ok.',
+        'Let\'s go with the Postgres plan for your workspace.',
+      );
+      // Bare "ok." → casual pattern matches → early return, no save
+      expect(saved).toHaveLength(0);
+    });
+
+    it('does NOT bail on "ok, do it" (substantive acceptance should proceed)', async () => {
+      const saved = await orchestrator.autoSaveFromExchange(
+        'ok, do it',
+        'Let\'s go with the Postgres plan for your workspace.',
+      );
+      // Not a bare ack → no casual bail. Length gate bypassed via acceptance escape.
+      // Decision should be saved from assistant side.
+      const decisionSaves = saved.filter(s => s.startsWith('Decision:'));
+      expect(decisionSaves.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────
   // Review #3 — stats cache with TTL
   // ────────────────────────────────────────────────────────────────
 

@@ -1,6 +1,7 @@
 import {
   type MindDB,
   type Importance,
+  type MemoryFrame,
   IdentityLayer,
   AwarenessLayer,
   FrameStore,
@@ -312,9 +313,12 @@ export class Orchestrator {
 
   buildSystemPrompt(): string {
     // ── IDENTITY (always personal, stable within a session) ──
+    // Review #11: cache key must reflect identity content, not just "exists"/"empty".
+    // updated_at alone is not reliable — SQLite datetime('now') has second precision, so
+    // rapid successive edits (or fresh-mind tests) share a timestamp. Hash the full row.
     const identitySection = this.cachedSection(
       'identity',
-      this.identity.exists() ? 'exists' : 'empty',
+      this.identity.exists() ? JSON.stringify(this.identity.get()) : 'empty',
       () => this.identity.exists() ? '# Identity\n' + this.identity.toContext() : '',
     );
 
@@ -369,10 +373,14 @@ export class Orchestrator {
       let workspaceResults;
 
       if (isCatchUp && this.workspaceLayers) {
-        // For catch-up queries: fetch important frames by importance + recency, not semantic search
+        // For catch-up queries: fetch important frames by importance + recency, not semantic search.
+        // Review #6: dedup by frame id, not content prefix. Two distinct frames sharing a 100-char
+        // prefix ("Decision: use Postgres …" vs "Decision: use Postgres (revised): …") previously
+        // collapsed and one was dropped. Frame id is the only safe equality key.
         const wsRaw = this.workspaceLayers.db.getDatabase();
+        type CatchUpRow = { id: number; content: string; frame_type: string; importance: string; created_at: string };
         const importantFrames = wsRaw.prepare(
-          `SELECT content, frame_type, importance, created_at
+          `SELECT id, content, frame_type, importance, created_at
            FROM memory_frames
            WHERE importance IN ('critical', 'important')
               OR content LIKE 'Decision%'
@@ -381,23 +389,22 @@ export class Orchestrator {
              CASE importance WHEN 'critical' THEN 0 WHEN 'important' THEN 1 ELSE 2 END,
              id DESC
            LIMIT ?`
-        ).all(limit) as Array<{ content: string; frame_type: string; importance: string; created_at: string }>;
+        ).all(limit) as CatchUpRow[];
 
         // Also get the most recent frames for recency context
         const recentFrames = wsRaw.prepare(
-          `SELECT content, frame_type, importance, created_at
+          `SELECT id, content, frame_type, importance, created_at
            FROM memory_frames
            WHERE importance != 'deprecated' AND importance != 'temporary'
            ORDER BY id DESC LIMIT ?`
-        ).all(Math.min(limit, 3)) as Array<{ content: string; frame_type: string; importance: string; created_at: string }>;
+        ).all(Math.min(limit, 3)) as CatchUpRow[];
 
-        // Combine and deduplicate
-        const seen = new Set<string>();
-        const combined: typeof importantFrames = [];
+        // Combine and deduplicate by frame id
+        const seen = new Set<number>();
+        const combined: CatchUpRow[] = [];
         for (const f of [...importantFrames, ...recentFrames]) {
-          const key = f.content.slice(0, 100);
-          if (!seen.has(key)) {
-            seen.add(key);
+          if (!seen.has(f.id)) {
+            seen.add(f.id);
             combined.push(f);
           }
         }
@@ -489,51 +496,61 @@ export class Orchestrator {
     const targetSessions = this.workspaceLayers?.sessions ?? this.sessions;
     const targetCognify = this.workspaceLayers?.cognify ?? null;
 
-    // Helper to save a memory entry
-    const save = async (content: string, importance: Importance, target: 'workspace' | 'personal' = 'workspace') => {
+    // Helper to save a memory entry. Returns the created frame (or null if cognify couldn't
+    // hydrate it by id) so review #9's teamSync correctness fix can push what we just wrote.
+    const save = async (content: string, importance: Importance, target: 'workspace' | 'personal' = 'workspace'): Promise<MemoryFrame | null> => {
       const useWorkspace = target === 'workspace' && this.workspaceLayers;
       const frames = useWorkspace ? this.workspaceLayers!.frames : this.frames;
       const sessions = useWorkspace ? this.workspaceLayers!.sessions : this.sessions;
       const cognify = useWorkspace ? this.workspaceLayers!.cognify : null;
 
+      let createdFrame: MemoryFrame | null = null;
+
       if (cognify) {
-        await cognify.cognify(content, importance);
+        const result = await cognify.cognify(content, importance);
+        createdFrame = frames.getById(result.frameId) ?? null;
       } else {
-        const active = sessions.getActive();
-        let gopId: string;
-        if (active.length === 0) {
-          gopId = sessions.create().gop_id;
-        } else {
-          gopId = active[0].gop_id;
-        }
+        // Review #7: ensureActive is transaction-wrapped, so concurrent saves on a fresh
+        // mind don't race into twin sessions with frames split across them.
+        const session = sessions.ensureActive();
+        const gopId = session.gop_id;
         const latestI = frames.getLatestIFrame(gopId);
-        if (latestI) {
-          frames.createPFrame(gopId, content, latestI.id, importance);
-        } else {
-          frames.createIFrame(gopId, content, importance);
-        }
+        createdFrame = latestI
+          ? frames.createPFrame(gopId, content, latestI.id, importance)
+          : frames.createIFrame(gopId, content, importance);
       }
       saved.push(content.slice(0, 80));
 
-      // Push-on-write: also push to team server for team workspaces
-      if (this.teamSync && useWorkspace) {
-        const gopId = sessions.getActive()[0]?.gop_id ?? 'unknown';
-        const frame = frames.getLatestIFrame(gopId) ?? frames.getRecent(1)[0];
-        if (frame) {
-          this.teamSync.pushFrame(frame).catch(() => { /* non-blocking */ });
-        }
+      // Review #9: push the frame we just created, not whatever is "latest" at read time.
+      // Between the write above and a re-read here, another save() could have fired and
+      // the old code would push the wrong frame to the team server.
+      if (this.teamSync && useWorkspace && createdFrame) {
+        this.teamSync.pushFrame(createdFrame).catch(() => { /* non-blocking */ });
       }
+
+      return createdFrame;
     };
 
-    // Skip trivial exchanges — very short messages are rarely worth memorizing
-    // Threshold lowered from 100 to 30: preference/style statements are often concise
-    if (userMsg.length < 30 && !assistantMsg.includes('```')) return saved;
+    // Skip trivial exchanges — very short messages are rarely worth memorizing.
+    // Review #12: short acceptance messages ("ok, go ahead") DO carry a decision when
+    // paired with an assistant suggestion, so we let those through to reach the
+    // bilateral-decision logic below.
+    const userTrimmedEarly = userMsg.trim();
+    const looksLikeAcceptance = /^(?:ok(?:ay)?|yes|yeah|yep|sure|go|go ahead|do it|let'?s (?:do (?:it|that)|proceed|go)|sounds good|perfect|great|that works|go with (?:it|that))\b/i.test(userTrimmedEarly);
+    if (userMsg.length < 30 && !assistantMsg.includes('```') && !looksLikeAcceptance) {
+      return saved;
+    }
 
-    // Skip casual patterns that produce false-positive memory saves
+    // Skip casual patterns that produce false-positive memory saves.
+    // Review #20: old "^(ok|okay|sure|yep|yes|no|…)\b" was too greedy — it matched any
+    // user message starting with "ok" (including "ok, go ahead with Postgres"), bailing
+    // before decision detection could fire. Split into greetings + bare-ack-only patterns.
     const CASUAL_PATTERNS = [
       /\b(lunch|dinner|breakfast|coffee|pizza|food|snack|drink)\b/i,
       /\b(weather|weekend|holiday|vacation|birthday|party)\b/i,
-      /^(hi|hey|hello|thanks|thank you|bye|goodbye|ok|okay|sure|yep|nope|yes|no)\b/i,
+      /^(hi|hey|hello|thanks|thank you|bye|goodbye)\b/i,
+      // Bare acks — only when the entire user message is just that word (optional punctuation)
+      /^(ok|okay|sure|yep|nope|yes|no)[.!?\s]*$/i,
     ];
     if (CASUAL_PATTERNS.some(p => p.test(userMsg))) return saved;
 
