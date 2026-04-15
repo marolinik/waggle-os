@@ -212,6 +212,11 @@ export {
   retireStaleSkills,
   type RetireOptions, type RetireReport,
 } from './skill-retirement.js';
+export {
+  buildComplianceDocDefinition,
+  renderComplianceReportPdf,
+  writeComplianceReportPdf,
+} from './compliance-pdf.js';
 export { BaseConnector, type WaggleConnector, type ConnectorAction, type ConnectorResult } from './connector-sdk.js';
 export { ConnectorRegistry, type AuditLogger } from './connector-registry.js';
 export {
