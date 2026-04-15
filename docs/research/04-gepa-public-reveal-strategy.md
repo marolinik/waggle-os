@@ -1,8 +1,17 @@
-# GEPA + EvolveSchema Self-Improvement Proof — Public Reveal Strategy
+# GEPA + ACE Self-Improvement Proof — Public Reveal Strategy
 
 **Author:** Waggle OS research series (4 of 7)
 **Drafted:** 2026-04-15 (overnight batch)
 **Context:** Waggle's v1 evolution hypothesis produced a 108.8% C/A ratio (Gemma 4 31B + Waggle-evolved prompt vs raw Opus 4.6 on 10 coder questions, 4 blind judges). V2 scales to 60 examples × 3 domains × 3 baselines with a hard train/test split. Q1-Q5 decisions are captured in `docs/hypothesis-v2-decisions.md`; execution runbook in `docs/hypothesis-v2-execution-plan.md`. This document is the **public-communication strategy** for that result — how to reveal it without it getting pattern-matched as hype.
+
+---
+
+## ⚠ Critical corrections from research-agent returns (post-draft)
+
+- **GEPA stands for "Genetic-Pareto"**, not "Goal-driven Evolution of Prompts Algorithm." Paper: Agrawal et al., arXiv:2507.19457, ICLR 2026 Oral. Core algorithm is reflective prompt evolution with Pareto frontier of candidates across objectives, beats RL (GRPO) by +6 % avg / +20 % max with ≤35× fewer rollouts, and beats MIPROv2 by >10 %. Integrated into DSPy 3.0 as `dspy.GEPA` and into MLflow prompt-opt APIs. Repo: github.com/gepa-ai/gepa.
+- **"EvolveSchema" by Mikhail" could not be pinned down.** Best candidate as a public analog: **ACE — Agentic Context Engineering** (Zhang et al., Stanford/SambaNova, arXiv:2510.04618). No Mikhail on author list. Recommend dropping the Mikhail attribution in public publication unless the original internal source is located.
+- **Gemma 4 31B** was released by Google on April 2, 2026 under Apache 2.0 and currently sits at Arena #3 open model (1452 Elo). Our v1 headline rides a very recent wave rather than fighting against it.
+- **Reflection 70B (Matt Shumer, Sept 2024)** is the canonical cautionary tale — any "small beats big" claim is pattern-matched against it. Lesson applied in §5.1 below: publish reproducibility first, headline second.
 
 ---
 
@@ -83,7 +92,7 @@ This is the right rigor level for a credible publication.
 - Side-by-side output examples (concrete, not abstract)
 - The evolved prompt visible in full (they want to copy it)
 - A reproducibility-to-the-minute guide
-- A clear "this is not magic, here's how" explanation of GEPA + EvolveSchema mechanics
+- A clear "this is not magic, here's how" explanation of GEPA + ACE mechanics
 
 **Channel:** Twitter thread with screenshots; explainer blog post; YouTube walkthrough if we're ambitious
 
@@ -108,12 +117,12 @@ Target: ~15 pages, arXiv-style. Saves to `docs/research/evolution-hypothesis-v2-
 
 ### 3.1 Abstract (200 words)
 
-> We report on a replication of Waggle OS's v1 evolution result at a 6× larger scale. In our v1 experiment (n=10, coder domain, 4 judges), Gemma 4 31B with a prompt evolved by Waggle's GEPA + EvolveSchema loop scored 108.8% of raw Claude Opus 4.6 per blind judge. To test whether this generalizes, we ran a v2 evaluation on 60 examples across 3 domains (writer, analyst, researcher), with a held-out 30-example test set, 3 graded baselines (weak / human-engineered / GEPA-evolved), and a 4-vendor judge pool (Anthropic Sonnet, Anthropic Haiku, OpenAI GPT-5, Google Gemini 2.5 Pro). We report C/A ratio of [RESULT] on the test set, 95% bootstrap CI [LO, HI], permutation test p=[P]. [H₁ / H₂ / H₃ verdict.] Full dataset, split seed, evolved prompts, judge prompts, and raw scores are available at [reproducibility repo URL].
+> We report on a replication of Waggle OS's v1 evolution result at a 6× larger scale. In our v1 experiment (n=10, coder domain, 4 judges), Gemma 4 31B with a prompt evolved by Waggle's GEPA + ACE loop scored 108.8% of raw Claude Opus 4.6 per blind judge. To test whether this generalizes, we ran a v2 evaluation on 60 examples across 3 domains (writer, analyst, researcher), with a held-out 30-example test set, 3 graded baselines (weak / human-engineered / GEPA-evolved), and a 4-vendor judge pool (Anthropic Sonnet, Anthropic Haiku, OpenAI GPT-5, Google Gemini 2.5 Pro). We report C/A ratio of [RESULT] on the test set, 95% bootstrap CI [LO, HI], permutation test p=[P]. [H₁ / H₂ / H₃ verdict.] Full dataset, split seed, evolved prompts, judge prompts, and raw scores are available at [reproducibility repo URL].
 
 ### 3.2 Introduction (1 page)
 
 - The problem: can a general-purpose evolution loop take an open-weight model to flagship quality on a user's task distribution?
-- What we built: GEPA + EvolveSchema integrated, closed-loop on execution traces
+- What we built: GEPA + ACE integrated, closed-loop on execution traces
 - What we tested: v1 result replication at scale with a much tighter methodology
 - Why it matters: local-first AI systems can achieve competitive quality without customer data crossing the training-loop boundary
 
@@ -203,7 +212,7 @@ Outline:
 
 1. **The problem** — "We kept running into the same thing at Egzakta. Our enterprise customers loved Claude Opus's quality, but couldn't use it on sensitive data. Self-hosted open-weight models were a step behind. We wanted to close that gap *without* asking customers to send data to the cloud."
 
-2. **The hypothesis** — "What if prompt evolution — specifically an integrated GEPA + EvolveSchema loop — could take Gemma 4 31B running on a customer's infrastructure to the point where it beats raw Opus on the customer's actual tasks?"
+2. **The hypothesis** — "What if prompt evolution — specifically an integrated GEPA + ACE loop — could take Gemma 4 31B running on a customer's infrastructure to the point where it beats raw Opus on the customer's actual tasks?"
 
 3. **The v1 experiment** — tell the story of the 10-question test, the 108.8% result, the surprised-us-too moment
 
@@ -255,13 +264,20 @@ Prepare BEFORE the research note drops:
 
 Email 5-10 named people 72 hours before public post. Not for endorsement — for **no surprises**. Give them a heads-up + PDF draft + link to repo. Ask only: "Any methodological issues I should address before this goes out? I want to catch issues privately before critics catch them publicly."
 
-Suggested warm list (adjust based on Marko's actual network):
+Suggested warm list (refined based on who owns the prompt-evolution narrative):
 
-- 1-2 AI research academics Marko has a relationship with
-- 1-2 enterprise AI leaders (not at Anthropic / OpenAI / Google to avoid awkwardness)
-- 1 prompt-engineering practitioner with a Twitter following (for the virality assist if they like it)
-- 1-2 technical journalists who cover AI rigorously (Import AI, The Batch, etc.)
-- 1 reputable AI safety / interpretability person (their nod matters)
+- **Omar Khattab** (Stanford / DSPy) — the academic center of gravity for this line of work; GEPA was contributed into DSPy 3.0
+- **Lakshya Agrawal** — first author on the GEPA paper (arXiv:2507.19457, ICLR 2026 Oral); courtesy brief
+- **Krista Opsahl-Ong** — MIPROv2 author; competitor but credible gatekeeper
+- **Qizheng Zhang** / **James Zou** (Stanford/SambaNova) — ACE paper authors; relevant to the structural-evolution claim
+- **Simon Willison** (simonwillison.net) — kingmaker blog; one post moves the narrative
+- **Nathan Lambert** (Interconnects / AI2) — researcher-practitioner, high-credibility amplifier
+- **Swyx** (Latent Space) — podcast distribution if they bite
+- **Jim Fan** (NVIDIA) — high-reach amplifier for agent-world results
+- 1-2 Egzakta-network enterprise AI leaders (not at Anthropic / OpenAI / Google to avoid awkwardness)
+- 1 technical journalist who covers AI rigorously (Import AI, The Batch)
+
+Marko to cross-check against his actual network and adjust.
 
 The warm-list response often catches 1-2 non-obvious issues that would otherwise be HN-critique #1. Worth the 72 hours.
 
@@ -280,7 +296,7 @@ The warm-list response often catches 1-2 non-obvious issues that would otherwise
 | "Opus 4.6 is getting worse over time / not the current frontier" | We tested in [specific model version, dated]. Anthropic has not announced deprecation. |
 | "Gemma 4 31B has seen benchmark contamination" | Eval examples were hand-authored, not drawn from MMLU/HellaSwag/etc. Split seed shows this. |
 | "108.8% → 0.5% is all noise" | Bootstrap 95% CI is [LO, HI]; excludes zero / doesn't cross 1.0 for [X of Y] domains. |
-| "Why should I trust your evolution loop vs DSPy/TextGrad?" | We don't claim unique novelty in the core algorithm; we claim the *integration* (GEPA + EvolveSchema on live user traces) works at product scale. DSPy path comparison is future work. |
+| "Why should I trust your evolution loop vs DSPy/TextGrad?" | We don't claim unique novelty in the core algorithm; we claim the *integration* (GEPA + ACE on live user traces) works at product scale. DSPy path comparison is future work. |
 | "This only works because you cherry-picked task types" | 3 domains (writer, analyst, researcher) span different reasoning styles; per-domain breakdowns in §3.4 show [XYZ]. |
 
 ### 9.2 If H₃ fires (negative result)

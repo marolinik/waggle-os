@@ -36,6 +36,15 @@ Our contributions:
 
 The system is implemented in a dual-license configuration: the memory primitives are slated for Apache 2.0 release as `hive-mind`; the product layer (agent runtime, evolution stack, UI, compliance reporting) remains in Waggle's commercial repository.
 
+### Verified scope numbers (from code inventory, 2026-04-15)
+
+- **10 harvest adapters** (chatgpt, claude, claude-code, gemini, perplexity, markdown, plaintext, pdf, url, universal)
+- **18 canonical personas** with tool allowlists + failure patterns
+- **13 SQL tables** across 8 schema layers; sqlite-vec virtual table at 1024-dim embeddings; WAL mode
+- **RRF_K = 60** for hybrid search fusion
+- **4 scoring profiles** (balanced / recent / important / connected) with explicit weight vectors
+- **60+ native agent tools** across memory / filesystem / git / web / planning / workflow / compliance categories
+
 ---
 
 ## 2. System architecture
@@ -223,7 +232,9 @@ Hive-Mind's companion evolution subsystem (open-source roadmap pending but not i
 
 Specifically: `ExecutionTraceStore` records every chat turn with input/output/score. The eval-dataset builder curates held-out subsets from these traces. `IterativeOptimizer` runs a GEPA-style rank-by-score mutation loop. `EvolveSchema` (integration targeting Mikhail's 2026 paper) runs structural schema-level evolution. `ComposeEvolution` combines signals from both. `EvolutionGates` enforce constraints. `EvolutionOrchestrator` coordinates end-to-end runs with accept/reject gates presented to the user.
 
-Preliminary result: an internal v1 evaluation (n=10 coder questions, 4 blind multi-vendor judges) measured Gemma 4 31B with a Waggle-evolved prompt at **108.8 % of raw Claude Opus 4.6** per-judge mean (v2 scaling to n=60 × 3 domains × 3 baselines with hard train/test split is pending execution). This is discussed in a companion paper and is not the focus of this work; mentioned here because the evolution subsystem is architecturally dependent on the memory subsystem described above.
+Preliminary result: an internal v1 evaluation (n=10 coder questions, 4 blind multi-vendor judges) measured Gemma 4 31B (Google, released April 2026 under Apache 2.0, Arena #3 open at 1452 Elo) with a Waggle-evolved prompt at **108.8 % of raw Claude Opus 4.6** per-judge mean (v2 scaling to n=60 × 3 domains × 3 baselines with hard train/test split is pending execution). This is discussed in a companion paper and is not the focus of this work; mentioned here because the evolution subsystem is architecturally dependent on the memory subsystem described above.
+
+The evolution subsystem integrates **GEPA** — short for *Genetic-Pareto* per Agrawal et al. (arXiv:2507.19457, ICLR 2026 Oral), which uses reflective prompt evolution with a Pareto frontier of candidates across multiple objectives, outperforming RL baselines (GRPO) by +6 % average and +20 % max with up to 35× fewer rollouts, and the previous best prompt optimizer (MIPROv2, Opsahl-Ong et al., arXiv:2406.11695) by >10 % — and a structural-schema evolution layer whose closest public analog is **ACE** (Agentic Context Engineering, Zhang et al., arXiv:2510.04618), a Stanford/SambaNova line of work on incremental playbook evolution that avoids context collapse in long-running agents. Waggle's contribution is the integration of these signals against a persistent memory corpus + LLM-as-judge scoring + constraint-gated deployment — not a novel core algorithm. Prior related work: DSPy (Khattab, arXiv:2310.03714, ~28k GitHub stars, ~160k monthly PyPI downloads); TextGrad (Yuksekgonul et al., Nature 2025); OPRO (Yang et al., arXiv:2309.03409); Promptbreeder (DeepMind, arXiv:2309.16797); APE (Zhou et al., arXiv:2211.01910).
 
 ---
 
@@ -315,7 +326,7 @@ The empirical work is ahead of us. The architecture is available now. We invite 
 
 ## Acknowledgments
 
-Marko Markovic leads Waggle OS as part of Egzakta Group's AI portfolio. The evolution subsystem integrates GEPA [citation pending — overnight research agent verifying] and EvolveSchema [Mikhail et al., 2026 — citation pending]. The compliance mapping draws on EU AI Office interpretive guidance. Contributors to the Waggle OS codebase are listed in the repository.
+Marko Markovic leads Waggle OS as part of Egzakta Group's AI portfolio. The evolution subsystem builds on GEPA (Agrawal et al., ICLR 2026 Oral) and ACE (Zhang et al., 2025) as the closest public analogs for reflective prompt evolution and context-playbook evolution respectively. The prior "Mikhail's EvolveSchema" internal reference in our project memory could not be definitively tied to a specific public paper; we cite ACE as the closest published analog and flag this for correction if the original reference is located. The compliance mapping draws on EU AI Office interpretive guidance and NIST AI RMF 2.0. Contributors to the Waggle OS codebase are listed in the repository.
 
 ---
 

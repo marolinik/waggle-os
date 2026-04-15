@@ -138,6 +138,54 @@ Intentional omissions:
 
 ---
 
+## Post-draft corrections from research agents (2026-04-15)
+
+The 5 background research agents returned after the initial reports were written. Their findings were folded back into reports 1, 2, and 4 as factual corrections + refinements. The changes worth flagging in the morning:
+
+### Factual corrections (reports 2 + 4)
+
+- **GEPA = "Genetic-Pareto"** (not "Goal-driven Evolution of Prompts Algorithm" as the name was initially guessed). Paper: Agrawal et al., **arXiv:2507.19457**, **ICLR 2026 Oral**. Stanford/Databricks circle around Omar Khattab (DSPy). Beats RL baselines (GRPO) +6% avg / +20% max with ≤35× fewer rollouts; beats MIPROv2 by >10%. Integrated into **DSPy 3.0** as `dspy.GEPA`. Repo: github.com/gepa-ai/gepa.
+- **"Mikhail's EvolveSchema" could not be pinned down** in public literature. Closest analog is **ACE — Agentic Context Engineering** (Zhang et al., Stanford/SambaNova, **arXiv:2510.04618**). No Mikhail on the ACE author list. Recommendation: drop the Mikhail attribution in public publications unless Marko can locate the original internal source. Cite ACE as closest analog instead.
+- **Gemma 4 31B** confirmed — Google release April 2, 2026, Apache 2.0, currently Arena **#3 open model at 1452 Elo**. Waggle's v1 headline rides an existing wave.
+- **Reflection 70B (Matt Shumer, Sept 2024)** is the canonical cautionary tale — framed in §5.1 of report 4 as the pattern to actively avoid (non-reproducible Twitter-first reveal).
+- **Harvest adapters: 10 not 11** per code inventory (chatgpt, claude, claude-code, gemini, perplexity, markdown, plaintext, pdf, url, universal).
+
+### OSS competitor data (report 1)
+
+Star counts and funding rounds verified live:
+
+| Project | Stars | License | Funding |
+|---|---|---|---|
+| mem0 | ~48k | Apache-2.0 | $24M Series A |
+| Graphiti | ~24.5k | Apache-2.0 | VC-backed |
+| GraphRAG | ~31k | MIT | Microsoft |
+| Mastra | ~22k | **Apache core + source-available `ee/` (Enterprise License)** — the pattern to copy | YC |
+| Cognee | ~14.2k | Apache-2.0 | Independent |
+| Letta | ~13k | Apache-2.0 | $10M seed @ $70M |
+
+5 of 6 picked Apache-2.0. None has gone to BSL/SSPL/AGPL yet — field is still in land-grab. Waggle's Apache-2.0 + potentially `ee/` pattern is maximally ecosystem-compatible.
+
+### Waggle features inventory (affects reports 6 + 7 — not yet folded in; do so in a morning refinement pass if time permits)
+
+Verified counts from code inventory:
+
+- **18 canonical personas** (not 13 as CLAUDE.md §5 lists). persona-data.ts has grown since the CLAUDE.md authoritative section was last written.
+- **24 built-in apps** in `apps/web/src/components/os/apps/` (MemoryApp / FilesApp / AgentsApp / MissionControlApp / CockpitApp / DashboardApp / CapabilitiesApp / ConnectorsApp / MarketplaceApp / SettingsApp / TimelineApp / EventsApp / ScheduledJobsApp / TelemetryApp / BackupApp / ApprovalsApp / TeamGovernanceApp / RoomApp / VaultApp / VoiceApp / WaggleDanceApp / UserProfileApp / WikiTab / ChatApp)
+- **13 UI overlays** (OnboardingWizard, PersonaSwitcher, WorkspaceSwitcher, CreateWorkspaceDialog, SpawnAgentDialog, GlobalSearch, NotificationInbox, TrialExpiredModal, UpgradeModal, LoginBriefing, KeyboardShortcutsHelp, ContextRail, LockedFeature)
+- **19 starter skills** (not 20)
+- **30 native connectors** + **148 MCP catalog entries** across 14 categories
+- **60+ native agent tools** total
+
+This enriches reports 6 and 7 but doesn't invalidate their structural claims. Consider a morning refinement pass to update the hard numbers.
+
+### Competitive landscape enrichments (affects report 6 — not yet folded in)
+
+Specific pricing / ARR / deal-size data now available for Cohere North ($240M ARR, 2026 IPO), C3 AI ($250k pilots, $5.2B FY26 guidance), Palantir AIP (~$5.2B FY26 +61% YoY), Databricks Mosaic ($249,960 median contract), Salesforce Agentforce ($125 add-on / $550 Editions), Mistral Forge (ARR ~$400M → $1B trajectory, free-compute-on-customer-GPU — disruptive pricing anchor for KVARK). Full table in the Agent B return; consider folding into report 6 during morning pass.
+
+**Flagged:** The "$248M → $2.63B" EU AI governance market figure from prior Egzakta memos does NOT match public 2026 figures. Public data: governance market is $2.2B (2025) → $2.54B (2026) → $11.05B (2036) at 15.8% CAGR. The Egzakta figure may be a narrower segment (AI-Act audit tooling specifically) — worth verifying the original source before using externally.
+
+---
+
 ## How these were produced
 
 Drafted overnight in a single autonomous session. Background research agents were dispatched for:

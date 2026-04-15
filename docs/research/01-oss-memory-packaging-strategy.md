@@ -142,9 +142,11 @@ Two options:
 | SSPL (MongoDB) | Not OSI-approved | Yes | Low | Permanent stigma post-MongoDB episode; avoid |
 | Commons Clause overlay | Adds "can't sell" restriction to any base | Depends on base | Low | Niche; creates confusion |
 
-### 3.2 Recommendation: Apache 2.0
+### 3.2 Recommendation: Apache 2.0 (refined: consider Mastra's dual-license pattern)
 
-Reasoning:
+After research-agent validation: the strongest license strategy is **Apache-2.0 for the `hive-mind` primitives PLUS a source-available `ee/` directory pattern** (copy Mastra's playbook) for any future enterprise-only subsystems that stay in the same repo. Mastra ships Apache-2.0 `packages/core` and source-available `packages/ee/` governed by an Enterprise License — it's functionally the best of both worlds and the community has accepted it. If Waggle later wants a team-server or enterprise feature inside `hive-mind`, the `ee/` pattern is the clean answer. For the initial OSS split the `ee/` dir can just not exist yet.
+
+Reasoning for Apache-2.0 on the core:
 
 - **Patent grant is critical.** MIT/BSD don't have it; Apache 2.0 does. For a memory system that may touch patentable territory (temporal frame model, hybrid RRF, wiki compilation), the patent grant is defensive armor.
 - **Cloud-vendor capture risk is real but manageable.** If AWS/Azure/GCP fork hive-mind and launch "Managed Hive Mind as a Service," that's painful but not existential — Waggle's moat is in the agent/evolution/compliance layer, not the memory primitives themselves. Apache 2.0 lets Waggle keep iterating ahead.
@@ -173,16 +175,20 @@ Recommend **Developer Certificate of Origin (DCO)** — simple, no paperwork bur
 
 *(Specific star counts and funding details to be refined when Agent A's research returns. Framing below based on public knowledge as of early 2026.)*
 
-### 4.1 The likely neighboring projects
+### 4.1 The neighboring projects (verified April 2026)
 
-- **mem0** (was Embedchain) — MIT licensed, Python-first, API-centric, 20k+ stars. Memory-as-a-service positioning. Strong developer adoption.
-- **Letta** (formerly MemGPT) — Apache 2.0, UC Berkeley origin, 15k+ stars. Research-grade. Stateful agent framework with memory + archival / recall paging.
-- **Zep** (zep-ai/zep) — Apache 2.0, Go + Python. Knowledge-graph + temporal memory. Y Combinator-backed.
-- **Cognee** — MIT, Python, graph-focused memory + reasoning.
-- **Mastra** — Apache 2.0 (verify), TypeScript, Gatsby-team founders. Not memory-specific but includes memory as part of agent framework.
-- **GraphRAG** (Microsoft) — MIT, Python. Research artifact; not a productized lib.
-- **LangChain memory modules** — MIT, Python. Ships as part of LangChain; widely adopted, widely criticized for fragility.
-- **Anthropic Memory / OpenAI Memory** — closed; positioning context only.
+| Project | Stars | License | Funding / Backer | Positioning |
+|---|---|---|---|---|
+| **mem0** (ex-Embedchain) | ~48k | Apache-2.0 | $24M Series A (Basis Set, Kindred, Peak XV, YC) | Universal memory layer; fact extraction + vector recall. Paper claims ~26% accuracy gain on LOCOMO vs full-context. |
+| **Letta** (ex-MemGPT) | ~13k | Apache-2.0 | $10M seed @ $70M post (Felicis, YC); UC Berkeley Sky Lab | OS-inspired tiered memory (core/recall/archival); highest benchmark scores (~83% LongMemEval) |
+| **Graphiti** (ex-Zep OSS) | ~24.5k (plus 4.4k zep) | Apache-2.0 | VC-backed | Bi-temporal KG memory. **Zep Community Edition deprecated April 2025** — only Graphiti OSS remains. |
+| **GraphRAG** (Microsoft) | ~31k | MIT | Microsoft Research | Entity-community graph over doc corpora. Retrieval-oriented research artifact. |
+| **Mastra** | ~22k | **Apache-2.0 core + source-available `ee/` (Enterprise License)** | YC; ex-Gatsby team | TypeScript agent framework with 4 built-in memory types. **Pattern Waggle should copy.** |
+| **Cognee** | ~14.2k | Apache-2.0 | Independent/seed | "Knowledge engine" — vector + graph unified memory, cognitive-science framing. Graduated GitHub Secure OSS. |
+| **LangChain memory** | part of 100k+ LangChain | MIT | LangChain (VC) | Baseline table-stakes: Buffer/Window/Summary/Entity/KG memory classes. |
+| **Anthropic / OpenAI Memory** | closed | proprietary | — | Surface-scoped (per-product), not portable. Anthropic's "Auto Dream" consolidation cycle is notable. |
+
+**License consensus is striking:** 5 of the 6 top OSS memory projects picked Apache-2.0 (GraphRAG is the MIT outlier — and Microsoft doesn't monetize it). None has gone BSL/SSPL/AGPL yet. The field is still in land-grab; permissive license wins adoption.
 
 ### 4.2 Where hive-mind would differentiate
 
