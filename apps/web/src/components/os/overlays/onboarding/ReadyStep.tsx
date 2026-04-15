@@ -15,7 +15,7 @@ const ReadyStep = ({ createError, onLetsGo }: ReadyStepProps) => (
           src={waggleLogo}
           alt="Waggle"
           className="w-20 h-20 rounded-2xl"
-          style={{ boxShadow: '0 0 60px hsl(38 92% 50% / 0.4)' }}
+          style={{ boxShadow: '0 0 60px hsl(var(--primary) / 0.4)' }}
         />
       </div>
       {createError && (

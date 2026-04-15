@@ -16,7 +16,7 @@ const WelcomeStep = ({ onClickAnywhere }: WelcomeStepProps) => (
         alt="Waggle"
         className="w-24 h-24 rounded-2xl"
         style={{
-          boxShadow: '0 0 60px hsl(38 92% 50% / 0.3)',
+          boxShadow: '0 0 60px hsl(var(--primary) / 0.3)',
         }}
       />
     </div>

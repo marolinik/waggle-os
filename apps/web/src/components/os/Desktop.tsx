@@ -317,7 +317,7 @@ const Desktop = () => {
         <motion.p initial={{ opacity: 0 }} animate={{ opacity: [0, 0.5, 0.35, 0.5] }}
           transition={{ delay: 1.2, duration: 5, repeat: Infinity, ease: "easeInOut" }}
           className="absolute bottom-20 left-0 right-0 text-center text-sm font-mono tracking-wide pointer-events-none z-[1]"
-          style={{ color: "hsl(30, 8%, 50%)", textShadow: "0 1px 3px hsl(0 0% 0% / 0.7)" }}>
+          style={{ color: "hsl(var(--muted-foreground))", textShadow: "0 1px 3px hsl(var(--background) / 0.7)" }}>
           Click an app in the dock · Ctrl+` to switch windows
         </motion.p>
       )}
