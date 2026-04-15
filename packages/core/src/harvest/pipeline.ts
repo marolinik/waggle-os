@@ -15,7 +15,11 @@ import type {
   DistilledKnowledge, HarvestPipelineResult, ImportSourceType,
 } from './types.js';
 import { CLASSIFY_PROMPT, EXTRACT_PROMPT, SYNTHESIZE_PROMPT } from './prompts.js';
-import { dedup, type DedupResult } from './dedup.js';
+import { dedup } from './dedup.js';
+import { scanForInjection } from '../injection-scanner.js';
+import { createCoreLogger } from '../logger.js';
+
+const log = createCoreLogger('harvest-pipeline');
 
 const BATCH_SIZE = 20;
 
@@ -64,6 +68,35 @@ export class HarvestPipeline {
     const startTime = Date.now();
     const errors: string[] = [];
 
+    // Pass 0: Injection scan — drop any item whose title or content carries a
+    // prompt-injection payload (role_override / prompt_extraction / instruction_injection).
+    // Harvest ingests UNTRUSTED external exports (ChatGPT/Claude/Gemini JSON dumps,
+    // Perplexity shares, URL fetches). A hostile file must not flow through to the
+    // LLM passes or into memory frames.
+    const originalCount = items.length;
+    items = items.filter((item) => {
+      // Scan title + first 4KB of content — enough to catch payloads hidden in either field.
+      // Using 'tool_output' context since imports are external data, weighted like tool output.
+      const probe = `${item.title ?? ''}\n${(item.content ?? '').slice(0, 4000)}`;
+      const scan = scanForInjection(probe, 'tool_output');
+      if (!scan.safe) {
+        const reason = scan.flags.join(',');
+        log.warn('dropping harvest item with injection payload', {
+          itemId: item.id,
+          title: item.title?.slice(0, 80),
+          flags: scan.flags,
+          score: scan.score,
+        });
+        errors.push(`Blocked item "${item.title?.slice(0, 40) ?? item.id}" — injection detected (${reason})`);
+        return false;
+      }
+      return true;
+    });
+    const blockedCount = originalCount - items.length;
+    if (blockedCount > 0) {
+      log.info(`harvest security: blocked ${blockedCount} of ${originalCount} items for injection patterns`);
+    }
+
     // Pass 1: Classify
     this.onProgress?.('classify', 0, items.length);
     const classified = await this.classify(items, errors);
@@ -83,7 +116,10 @@ export class HarvestPipeline {
 
     return {
       source,
-      itemsReceived: items.length,
+      // itemsReceived is the count the pipeline was HANDED, not what survived the
+      // security filter. Items blocked by the injection scan still count as "received"
+      // for the caller's accounting; each blocked item has an entry in `errors`.
+      itemsReceived: originalCount,
       itemsClassified: classified.length,
       itemsSkipped: classified.length - valuable.length,
       itemsExtracted: extracted.length,

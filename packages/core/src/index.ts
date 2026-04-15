@@ -1,4 +1,5 @@
 export { createCoreLogger } from './logger.js';
+export { scanForInjection, type ScanResult } from './injection-scanner.js';
 export { MindDB } from './mind/db.js';
 export { IdentityLayer, type Identity } from './mind/identity.js';
 export { AwarenessLayer, type AwarenessItem, type AwarenessCategory } from './mind/awareness.js';
