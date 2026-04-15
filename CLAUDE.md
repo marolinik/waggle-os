@@ -127,19 +127,31 @@ Subdirs:
 
 ### `packages/core/src/`
 ```
-Top-level: awareness.ts, identity.ts, knowledge.ts, frames.ts, search.ts,
-           sessions.ts, db.ts, schema.ts, reconcile.ts, ontology.ts,
-           scoring.ts, concept-tracker.ts, entity-normalizer.ts,
-           evolution-runs.ts, execution-traces.ts, improvement-signals.ts,
-           *-embedder.ts (api/inprocess/litellm/ollama), embedding-provider.ts
+Top-level: config.ts, cron-store.ts, file-store.ts, install-audit.ts,
+           logger.ts (createCoreLogger), memory-import.ts, migration.ts,
+           multi-mind.ts, multi-mind-cache.ts, optimization-log.ts,
+           skill-hashes.ts, team-sync.ts, telemetry.ts, vault.ts,
+           workspace-config.ts, index.ts
 
 Subdirs:
   compliance/  — compliance reporting, interaction-store, status-checker
-  harvest/     — adapters for chatgpt, claude, claude-code, gemini, pdf,
-                 plaintext, markdown, url, universal; pipeline.ts; dedup.ts
-  mind/        — multi-mind, file-store, cron-store, vault, telemetry,
-                 migration, skill-hashes, team-sync, workspace-config
+  harvest/     — adapters for chatgpt, claude, claude-code, gemini,
+                 perplexity, pdf, plaintext, markdown, url, universal;
+                 pipeline.ts; dedup.ts
+  mind/        — memory substrate layers. db.ts (MindDB + sqlite-vec),
+                 schema.ts (SCHEMA_SQL + VEC_TABLE_SQL), identity.ts,
+                 awareness.ts, frames.ts (I/P/B + compaction + dedup),
+                 sessions.ts (SessionStore + ensureActive),
+                 search.ts (HybridSearch — FTS5 + vec0 fused via RRF),
+                 knowledge.ts (KnowledgeGraph + bitemporal validity),
+                 scoring.ts (scoring profiles), reconcile.ts, ontology.ts,
+                 concept-tracker.ts, entity-normalizer.ts,
+                 evolution-runs.ts, execution-traces.ts,
+                 improvement-signals.ts, embedding-provider.ts,
+                 *-embedder.ts (api/inprocess/litellm/ollama)
 ```
+
+For the deep-dive on what the mind/ substrate does, see [`docs/memory-architecture.md`](docs/memory-architecture.md).
 
 ### `packages/shared/src/`
 ```
