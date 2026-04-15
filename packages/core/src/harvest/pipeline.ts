@@ -22,6 +22,7 @@ import { createCoreLogger } from '../logger.js';
 const log = createCoreLogger('harvest-pipeline');
 
 const BATCH_SIZE = 20;
+const CONCURRENCY_CAP = 3;
 
 export interface LLMCallFn {
   (prompt: string, model: 'fast' | 'accurate'): Promise<string>;
@@ -59,6 +60,20 @@ function batch<T>(items: T[], size: number): T[][] {
     batches.push(items.slice(i, i + size));
   }
   return batches;
+}
+
+/** Run async tasks with a concurrency cap (sliding window). */
+async function runWithConcurrency<T>(
+  tasks: (() => Promise<T>)[],
+  cap: number,
+): Promise<T[]> {
+  const results: T[] = [];
+  for (let i = 0; i < tasks.length; i += cap) {
+    const window = tasks.slice(i, i + cap);
+    const windowResults = await Promise.all(window.map(fn => fn()));
+    results.push(...windowResults);
+  }
+  return results;
 }
 
 export class HarvestPipeline {
@@ -149,9 +164,9 @@ export class HarvestPipeline {
     const results: ClassifiedItem[] = [];
     const batches = batch(items, BATCH_SIZE);
 
-    for (let i = 0; i < batches.length; i++) {
+    // M3: run batches with concurrency cap instead of sequentially
+    const tasks = batches.map((b, i) => async () => {
       this.onProgress?.('classify', i * BATCH_SIZE, items.length);
-      const b = batches[i];
       const prompt = CLASSIFY_PROMPT + b.map((item, idx) => (
         `\n--- Item ${idx} (id: ${item.id}) ---\nTitle: ${item.title}\nSource: ${item.source}\nType: ${item.type}\nContent (first 500 chars): ${item.content.slice(0, 500)}\n`
       )).join('');
@@ -159,11 +174,9 @@ export class HarvestPipeline {
       try {
         const response = await this.llmCall(prompt, 'fast');
         const parsed = parseLLMJson<{ itemId?: string; domain?: string; value?: string; categories?: string[] }>(response);
+        const batchResults: ClassifiedItem[] = [];
 
         for (const entry of parsed) {
-          // Review M4: strict itemId match only. The old `b[parsed.indexOf(entry)]` fallback
-          // misattributed entries to wrong source items whenever the LLM skipped one — every
-          // subsequent entry shifted one position silently. Now: no ID → log + skip.
           if (!entry.itemId) {
             log.warn('classify entry missing itemId — skipping', { batchIndex: i });
             continue;
@@ -173,25 +186,25 @@ export class HarvestPipeline {
             log.warn('classify entry itemId does not match any batch item — skipping', { itemId: entry.itemId, batchIndex: i });
             continue;
           }
-          results.push({
+          batchResults.push({
             item,
             domain: (entry.domain as ClassifiedItem['domain']) ?? 'mixed',
             value: (entry.value as ClassifiedItem['value']) ?? 'medium',
             categories: entry.categories ?? [],
           });
         }
+        return batchResults;
       } catch (err) {
         errors.push(`Classify batch ${i} failed: ${err instanceof Error ? err.message : 'unknown'}`);
-        // Review M5: safer default is 'skip'. 'pass-through-medium' (legacy) let junk flow
-        // into extract+synthesize, multiplying cost and polluting memory with noise frames
-        // whenever the classify model hiccuped.
         if (this.classifyFailureFallback === 'pass-through-medium') {
-          for (const item of b) {
-            results.push({ item, domain: 'mixed', value: 'medium', categories: [] });
-          }
+          return b.map(item => ({ item, domain: 'mixed' as const, value: 'medium' as const, categories: [] as string[] }));
         }
+        return [] as ClassifiedItem[];
       }
-    }
+    });
+
+    const batchResults = await runWithConcurrency(tasks, CONCURRENCY_CAP);
+    for (const br of batchResults) results.push(...br);
 
     return results;
   }
@@ -200,9 +213,9 @@ export class HarvestPipeline {
     const results: ExtractedContent[] = [];
     const batches = batch(classified, BATCH_SIZE);
 
-    for (let i = 0; i < batches.length; i++) {
+    // M3: concurrent batches with cap
+    const tasks = batches.map((b, i) => async () => {
       this.onProgress?.('extract', i * BATCH_SIZE, classified.length);
-      const b = batches[i];
       const prompt = EXTRACT_PROMPT + b.map((c, idx) => (
         `\n--- Conversation ${idx} (id: ${c.item.id}, value: ${c.value}, categories: ${c.categories.join(',')}) ---\nTitle: ${c.item.title}\n${c.item.content.slice(0, 2000)}\n`
       )).join('');
@@ -214,20 +227,18 @@ export class HarvestPipeline {
           decisions?: unknown[]; preferences?: unknown[]; facts?: unknown[];
           knowledge?: unknown[]; entities?: unknown[]; relations?: unknown[];
         }>(response);
+        const batchResults: ExtractedContent[] = [];
 
         for (const entry of parsed) {
-          // Review M4: no indexOf fallback — LLM-skipped items would shift every
-          // subsequent entry's itemId by one position silently.
           if (!entry.itemId) {
             log.warn('extract entry missing itemId — skipping', { batchIndex: i });
             continue;
           }
-          // Confirm itemId matches the batch (defense-in-depth against model hallucination)
           if (!b.some(c => c.item.id === entry.itemId)) {
             log.warn('extract entry itemId does not match batch — skipping', { itemId: entry.itemId, batchIndex: i });
             continue;
           }
-          results.push({
+          batchResults.push({
             itemId: entry.itemId,
             decisions: (entry.decisions ?? []) as ExtractedContent['decisions'],
             preferences: (entry.preferences ?? []) as ExtractedContent['preferences'],
@@ -237,10 +248,15 @@ export class HarvestPipeline {
             relations: (entry.relations ?? []) as ExtractedContent['relations'],
           });
         }
+        return batchResults;
       } catch (err) {
         errors.push(`Extract batch ${i} failed: ${err instanceof Error ? err.message : 'unknown'}`);
+        return [] as ExtractedContent[];
       }
-    }
+    });
+
+    const batchResults = await runWithConcurrency(tasks, CONCURRENCY_CAP);
+    for (const br of batchResults) results.push(...br);
 
     return results;
   }
@@ -260,9 +276,9 @@ export class HarvestPipeline {
     // own PER_ITEM_BUDGET and survives regardless of batch size.
     const PER_ITEM_BUDGET = 1200;
 
-    for (let i = 0; i < batches.length; i++) {
+    // M3: concurrent batches with cap
+    const tasks = batches.map((b, i) => async () => {
       this.onProgress?.('synthesize', i * BATCH_SIZE, extracted.length);
-      const b = batches[i];
       const serialized = b.map((ec, idx) => {
         const json = JSON.stringify(ec, null, 2);
         const trimmed = json.length > PER_ITEM_BUDGET
@@ -278,9 +294,10 @@ export class HarvestPipeline {
           targetLayer?: string; frameType?: string; importance?: string;
           content?: string; confidence?: number;
         }>(response);
+        const batchResults: DistilledKnowledge[] = [];
 
         for (const entry of parsed) {
-          results.push({
+          batchResults.push({
             targetLayer: (entry.targetLayer as DistilledKnowledge['targetLayer']) ?? 'frame',
             frameType: (entry.frameType as DistilledKnowledge['frameType']) ?? 'I',
             importance: (entry.importance as DistilledKnowledge['importance']) ?? 'normal',
@@ -294,10 +311,15 @@ export class HarvestPipeline {
             },
           });
         }
+        return batchResults;
       } catch (err) {
         errors.push(`Synthesize batch ${i} failed: ${err instanceof Error ? err.message : 'unknown'}`);
+        return [] as DistilledKnowledge[];
       }
-    }
+    });
+
+    const batchResults = await runWithConcurrency(tasks, CONCURRENCY_CAP);
+    for (const br of batchResults) results.push(...br);
 
     return results;
   }

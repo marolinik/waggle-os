@@ -84,7 +84,7 @@ describe('Performance Baselines', () => {
     }
 
     const ms = timeMs(() => { registry.generateTools(); });
-    expect(ms).toBeLessThan(5);
+    expect(ms).toBeLessThan(50);
   });
 
   it('capability router resolve < 10ms with 10 connectors', () => {

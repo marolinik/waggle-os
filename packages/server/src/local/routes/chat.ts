@@ -890,9 +890,26 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         const activePersonaId = personaOverride ?? wsConfig?.personaId ?? null;
         if (!hasCustomRunner && activePersonaId) {
           const persona = getPersona(activePersonaId);
-          if (persona && persona.tools.length > 0) {
-            const allowedTools = new Set([...persona.tools, ...ALWAYS_AVAILABLE]);
-            effectiveTools = effectiveTools.filter(t => allowedTools.has(t.name));
+          if (persona) {
+            // Allowlist: keep only declared tools + always-available (if persona declares any)
+            if (persona.tools.length > 0) {
+              const allowedTools = new Set([...persona.tools, ...ALWAYS_AVAILABLE]);
+              effectiveTools = effectiveTools.filter(t => allowedTools.has(t.name));
+            }
+            // Denylist: remove explicitly denied tools — wins over allowlist AND ALWAYS_AVAILABLE
+            if (persona.disallowedTools?.length) {
+              const denied = new Set(persona.disallowedTools);
+              effectiveTools = effectiveTools.filter(t => !denied.has(t.name));
+            }
+            // Read-only personas: strip all write tools
+            if (persona.isReadOnly) {
+              const WRITE_TOOLS = new Set([
+                'write_file', 'edit_file', 'git_commit', 'git_push', 'git_merge',
+                'save_memory', 'correct_knowledge', 'generate_docx', 'install_capability',
+                'spawn_agent', 'execute_step', 'bash',
+              ]);
+              effectiveTools = effectiveTools.filter(t => !WRITE_TOOLS.has(t.name));
+            }
           }
         }
 
@@ -1206,6 +1223,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             });
           } catch { /* tracing is best-effort — don't fail the response */ }
         }
+
+        // M8: commit deferred signal markings now that model call succeeded
+        if (!hasCustomRunner) sessionOrch.commitSurfacedSignals();
 
         // ── Post-response memory write-back ──────────────────────
         // If the agent didn't save memory itself, check if the exchange

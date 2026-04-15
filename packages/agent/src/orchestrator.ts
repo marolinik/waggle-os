@@ -14,7 +14,7 @@ import {
 } from '@waggle/core';
 import { createMindTools, type ToolDefinition } from './tools.js';
 import { buildSelfAwareness, type AgentCapabilities } from './self-awareness.js';
-import { buildAwarenessSummary, markSummarySurfaced } from './improvement-detector.js';
+import { buildAwarenessSummary, markSummarySurfaced, type AwarenessSummary } from './improvement-detector.js';
 import { CognifyPipeline } from './cognify.js';
 import { scanForInjection } from './injection-scanner.js';
 
@@ -58,6 +58,9 @@ export class Orchestrator {
   private version: string;
   private skills: string[];
   private improvementSignals: ImprovementSignalStore;
+
+  /** M8: deferred signal marking — collected during buildSystemPrompt, committed after model call */
+  private _pendingSurfacedAwareness: AwarenessSummary | null = null;
 
   /** Workspace-specific layers (null when no workspace is active) */
   private workspaceLayers: WorkspaceLayers | null = null;
@@ -312,9 +315,9 @@ export class Orchestrator {
     // ── SELF-AWARENESS (runtime context, changes every call) ──
     const awarenessSection = this.uncachedSection('self_awareness', () => {
       const awareness = buildAwarenessSummary(this.improvementSignals);
-      // Mark signals as surfaced so they won't repeat (per correction #6)
+      // M8: defer marking until commitSurfacedSignals() — called after model call succeeds
       if (awareness.totalActionable > 0) {
-        markSummarySurfaced(this.improvementSignals, awareness);
+        this._pendingSurfacedAwareness = awareness;
       }
       const caps: AgentCapabilities = {
         tools: this.tools.map(t => ({ name: t.name, description: t.description })),
@@ -338,6 +341,18 @@ export class Orchestrator {
 
     const parts = [identitySection, awarenessSection, contextSection].filter(Boolean);
     return parts.join('\n\n');
+  }
+
+  /**
+   * M8: Commit deferred signal markings after model call succeeds.
+   * Call this after the LLM response is received. If the model call fails,
+   * skip this call — signals stay actionable for the next turn.
+   */
+  commitSurfacedSignals(): void {
+    if (this._pendingSurfacedAwareness) {
+      markSummarySurfaced(this.improvementSignals, this._pendingSurfacedAwareness);
+      this._pendingSurfacedAwareness = null;
+    }
   }
 
   /**
@@ -461,10 +476,14 @@ export class Orchestrator {
 
       return { text, count: totalCount, recalled };
     } catch (err) {
-      // Review #5: surface failures instead of silently degrading. Memory recall failures
-      // (sqlite-vec extension missing, embedder NaN, etc.) cause "I don't remember" hallucinations.
+      // M5: surface failures visibly — silent empty results cause "I don't remember" hallucinations
       logger.error('recallMemory failed', err);
-      return { text: '', count: 0, recalled: [] };
+      const errMsg = err instanceof Error ? err.message : 'unknown error';
+      return {
+        text: `[Memory recall failed: ${errMsg}. The agent has no memory context for this turn.]`,
+        count: 0,
+        recalled: [],
+      };
     }
   }
 

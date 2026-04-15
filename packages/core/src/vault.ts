@@ -117,7 +117,11 @@ export class VaultStore {
       // the `name` validation at the route layer.
       const parsed = JSON.parse(fs.readFileSync(this.vaultPath, 'utf-8'));
       return Object.assign(Object.create(null), parsed);
-    } catch {
+    } catch (err) {
+      // M5: corrupt vault.json — back up the corrupt file so data isn't silently lost
+      log.error('Failed to parse vault.json — backing up corrupt file', err);
+      const bakPath = this.vaultPath + '.bak';
+      try { fs.copyFileSync(this.vaultPath, bakPath); } catch { /* best effort */ }
       return {};
     }
   }
@@ -130,10 +134,17 @@ export class VaultStore {
     try {
       fs.renameSync(tmpPath, this.vaultPath);
     } catch {
-      // On Windows, rename can fail with EPERM when target exists.
-      // Fall back to direct write + cleanup.
-      fs.writeFileSync(this.vaultPath, data, { mode: 0o600 });
-      try { fs.unlinkSync(tmpPath); } catch { /* best effort cleanup */ }
+      // M6: On Windows, rename fails with EPERM when target exists.
+      // Delete target first, then rename — preserves atomicity better than direct write.
+      try { fs.unlinkSync(this.vaultPath); } catch { /* target may not exist */ }
+      try {
+        fs.renameSync(tmpPath, this.vaultPath);
+      } catch (renameErr) {
+        // Last resort: direct write (non-atomic) — log the degradation
+        log.error('Atomic vault write failed, falling back to direct write', renameErr);
+        fs.writeFileSync(this.vaultPath, data, { mode: 0o600 });
+        try { fs.unlinkSync(tmpPath); } catch { /* cleanup */ }
+      }
     }
   }
 

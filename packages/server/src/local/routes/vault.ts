@@ -162,13 +162,22 @@ export async function vaultRoutes(fastify: FastifyInstance) {
   fastify.post('/api/vault/:name/reveal', async (request, reply) => {
     if (!fastify.vault) return reply.code(503).send({ error: 'Vault not available' });
 
-    // Same-origin check: only allow requests from the local app
+    // Same-origin check: only allow requests from the local app.
+    // Parse as URL to prevent prefix-bypass (e.g. http://localhost.evil.com).
+    const ALLOWED_HOSTS = new Set(['127.0.0.1', 'localhost']);
+    const ALLOWED_PROTOCOLS = new Set(['http:', 'tauri:']);
+    const isLocalOrigin = (raw: string): boolean => {
+      try {
+        const u = new URL(raw);
+        return ALLOWED_PROTOCOLS.has(u.protocol) && (ALLOWED_HOSTS.has(u.hostname) || u.protocol === 'tauri:');
+      } catch { return false; }
+    };
     const origin = request.headers.origin;
     const referer = request.headers.referer;
-    if (origin && !origin.startsWith('http://127.0.0.1') && !origin.startsWith('http://localhost') && !origin.startsWith('tauri://')) {
+    if (origin && !isLocalOrigin(origin)) {
       return reply.code(403).send({ error: 'Forbidden: external origin not allowed for vault reveal' });
     }
-    if (!origin && referer && !referer.startsWith('http://127.0.0.1') && !referer.startsWith('http://localhost') && !referer.startsWith('tauri://')) {
+    if (!origin && referer && !isLocalOrigin(referer)) {
       return reply.code(403).send({ error: 'Forbidden: external origin not allowed for vault reveal' });
     }
 
