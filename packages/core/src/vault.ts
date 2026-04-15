@@ -10,6 +10,7 @@
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { createCoreLogger } from './logger.js';
 
 const log = createCoreLogger('vault');
@@ -69,10 +70,14 @@ export class VaultStore {
     }
     const key = crypto.randomBytes(KEY_LENGTH);
     fs.writeFileSync(this.keyPath, key.toString('hex'), { mode: 0o600 });
-    // On Windows, restrict key file access to current user only
+    // Review Critical #1: On Windows, restrict key file access to current user only.
+    // Previously used `require('node:child_process')` inline which fails silently under
+    // ESM (`type: module` in the sidecar) — the try/catch swallowed the ReferenceError
+    // and every Windows install left the vault key with no ACL restriction.
+    // Now imported statically at the top of the file; the try/catch only covers actual
+    // icacls failures (e.g. icacls.exe not on PATH in a minimal Windows image).
     if (process.platform === 'win32') {
       try {
-        const { execFileSync } = require('node:child_process');
         execFileSync('icacls', [
           this.keyPath,
           '/inheritance:r',
@@ -80,7 +85,6 @@ export class VaultStore {
           `${process.env.USERNAME || 'CURRENT_USER'}:F`,
         ], { stdio: 'ignore' });
       } catch {
-        // icacls may not be available in all contexts — log but don't fail
         log.warn('Could not restrict key file permissions via icacls');
       }
     }
@@ -111,7 +115,11 @@ export class VaultStore {
   private readVault(): Record<string, VaultRecord> {
     if (!fs.existsSync(this.vaultPath)) return {};
     try {
-      return JSON.parse(fs.readFileSync(this.vaultPath, 'utf-8'));
+      // Review Critical #3: use a null-prototype object so a malicious `__proto__`
+      // key in vault.json cannot pollute Object.prototype when accessed. Matches
+      // the `name` validation at the route layer.
+      const parsed = JSON.parse(fs.readFileSync(this.vaultPath, 'utf-8'));
+      return Object.assign(Object.create(null), parsed);
     } catch {
       return {};
     }
