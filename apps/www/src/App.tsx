@@ -1,6 +1,7 @@
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
 import Features from './components/Features';
+import CrownJewels from './components/CrownJewels';
 import HowItWorks from './components/HowItWorks';
 import Pricing from './components/Pricing';
 import Enterprise from './components/Enterprise';
@@ -12,6 +13,7 @@ const App = () => (
     <Navbar />
     <Hero />
     <Features />
+    <CrownJewels />
     <HowItWorks />
     <Pricing />
     <Enterprise />

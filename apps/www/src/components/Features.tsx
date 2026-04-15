@@ -1,10 +1,10 @@
 import { useRef, useEffect, useState } from 'react';
 
 const FEATURES = [
-  { icon: 'icon-remember-dark.jpeg', title: 'Persistent Memory', desc: 'Your AI remembers everything. Conversations, decisions, preferences — stored locally in your .mind file. Context that grows with you.' },
-  { icon: 'icon-capabilities-dark.jpeg', title: '53+ Tools, 29 Connectors', desc: 'GitHub, Slack, Jira, Google Calendar, Notion — Waggle connects to your existing workflow. No switching tools.' },
-  { icon: 'icon-settings-dark.jpeg', title: 'Privacy by Architecture', desc: 'Desktop-native. Your data never leaves your machine. AES-256 encrypted vault for API keys. Zero cloud dependency by default.' },
-  { icon: 'icon-health-dark.jpeg', title: 'Self-Improving System', desc: 'Agents learn from corrections. The Sentinel daemon detects patterns and promotes improvements — your workspace gets smarter over time.' },
+  { icon: 'icon-remember-dark.jpeg', title: 'Memory That Grows', desc: 'Your AI remembers everything across sessions. Decisions, preferences, context — stored locally in your .mind file. 11 harvest adapters import your AI history from ChatGPT, Claude, Gemini, and more.' },
+  { icon: 'icon-capabilities-dark.jpeg', title: '60+ Tools, 148 Integrations', desc: 'GitHub, Slack, Jira, Notion, Google Calendar — 30 native connectors plus 148 MCP servers. Your AI works inside your existing workflow.' },
+  { icon: 'icon-settings-dark.jpeg', title: 'Privacy by Architecture', desc: 'Desktop-native. Your data never leaves your machine. AES-256 encrypted vault. SQLite-backed memory. Zero cloud dependency by default.' },
+  { icon: 'icon-health-dark.jpeg', title: 'Self-Evolving Intelligence', desc: 'Agents learn from every interaction. The evolution engine traces, evaluates, and improves prompts across generations — your workspace gets smarter over time.' },
 ];
 
 const Features = () => {

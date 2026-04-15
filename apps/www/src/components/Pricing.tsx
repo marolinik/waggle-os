@@ -5,19 +5,19 @@ const API_URL = import.meta.env.VITE_API_URL ?? 'https://cloud.waggle-os.ai';
 
 const TIERS = [
   {
-    id: 'SOLO' as const, name: 'Solo', price: 'Free', period: '', target: 'For individual power users',
+    id: 'FREE' as const, name: 'Free', price: '$0', period: '/forever', target: 'For individuals',
     cta: 'Download Free', ctaHref: 'https://github.com/marolinik/waggle/releases/latest', highlighted: false, stripeCheckout: false,
-    features: ['5 workspaces', 'Local in-process embeddings', '53+ tools, 29 connectors', 'Community skills marketplace', 'Persistent .mind file', 'AES-256 encrypted vault'],
+    features: ['5 workspaces', 'All 22 AI personas', '60+ tools, 30 connectors', 'Persistent memory (.mind)', 'Harvest from any AI platform', 'AES-256 encrypted vault', 'Wiki compiler', 'Self-evolution engine'],
   },
   {
-    id: 'BASIC' as const, name: 'Basic', price: '$15', period: '/mo', target: 'For power users who need more',
-    cta: 'Start Basic', ctaHref: '', highlighted: true, stripeCheckout: true,
-    features: ['Everything in Solo, plus:', 'Unlimited workspaces', 'All embedding providers', 'Sub-agent spawning', 'Custom skills', 'Priority support'],
+    id: 'PRO' as const, name: 'Pro', price: '$19', period: '/mo', target: 'For power users',
+    cta: 'Start Pro', ctaHref: '', highlighted: true, stripeCheckout: true,
+    features: ['Everything in Free, plus:', 'Unlimited workspaces', 'All embedding providers', 'Skills marketplace', 'Custom skill creation', 'Compliance audit reports', 'Priority support'],
   },
   {
-    id: 'TEAMS' as const, name: 'Teams', price: '$79', period: '/mo per seat', target: 'For teams and organizations',
-    cta: 'Talk to Us', ctaHref: 'mailto:marko@egzakta.rs?subject=Waggle%20Teams%20Inquiry', highlighted: false, stripeCheckout: false,
-    features: ['Everything in Basic, plus:', 'Shared workspaces', 'Team skill library', 'Cloud sync', 'Admin panel & audit log', 'Self-host option', 'Dedicated support'],
+    id: 'TEAMS' as const, name: 'Teams', price: '$49', period: '/mo per seat', target: 'For teams and organizations',
+    cta: 'Start Teams', ctaHref: '', highlighted: false, stripeCheckout: true,
+    features: ['Everything in Pro, plus:', 'Shared team memory', 'WaggleDance coordination', 'Team skill library', 'Admin governance panel', 'S3 team storage', 'Audit trail + compliance'],
   },
 ];
 
