@@ -2,6 +2,15 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+
+// Hoisted mock for node:child_process so static imports in vault.ts are intercepted.
+// Defaults to the real implementation; individual tests override via mockImplementation.
+const mockExecFileSync = vi.hoisted(() => vi.fn());
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>();
+  return { ...actual, execFileSync: mockExecFileSync };
+});
+
 import { VaultStore, type VaultEntry } from '../src/vault.js';
 
 describe('VaultStore', () => {
@@ -330,23 +339,21 @@ describe('VaultStore', () => {
     const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
 
-    // Mock child_process.execFileSync to track calls (safe — no shell injection)
-    const childProcess = require('node:child_process');
-    const execFileSpy = vi.spyOn(childProcess, 'execFileSync').mockImplementation(() => {});
+    // Use the hoisted mock (intercepted at module level via vi.mock)
+    mockExecFileSync.mockImplementation(() => {});
 
     try {
       new VaultStore(dir);
 
       // Verify icacls was called with the key path
-      expect(execFileSpy).toHaveBeenCalledWith(
+      expect(mockExecFileSync).toHaveBeenCalledWith(
         'icacls',
         expect.arrayContaining([keyPath, '/inheritance:r', '/grant:r']),
         expect.objectContaining({ stdio: 'ignore' })
       );
     } finally {
-      // Restore
       Object.defineProperty(process, 'platform', originalPlatform);
-      execFileSpy.mockRestore();
+      mockExecFileSync.mockReset();
     }
   });
 
@@ -359,8 +366,7 @@ describe('VaultStore', () => {
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
 
     // Mock execFileSync to throw (safe — no shell injection, uses execFileSync not exec)
-    const childProcess = require('node:child_process');
-    const execFileSpy = vi.spyOn(childProcess, 'execFileSync').mockImplementation(() => {
+    mockExecFileSync.mockImplementation(() => {
       throw new Error('icacls not found');
     });
 
@@ -376,7 +382,7 @@ describe('VaultStore', () => {
       );
     } finally {
       Object.defineProperty(process, 'platform', originalPlatform);
-      execFileSpy.mockRestore();
+      mockExecFileSync.mockReset();
       warnSpy.mockRestore();
     }
   });

@@ -12,6 +12,7 @@ import type { CognifyPipeline } from './cognify.js';
 import type { FeedbackHandler } from './feedback-handler.js';
 import type { ImprovementSignalStore } from '@waggle/core';
 import { detectContradiction } from './contradiction-detector.js';
+import { scanForInjection } from './injection-scanner.js';
 import { normalizeForDedup, cosineSimilarity, detectDramaticClaims, deriveConfidence, type ConfidenceLevel } from './text-analysis.js';
 export type { ConfidenceLevel } from './text-analysis.js';
 export { formatCombinedResult } from './result-formatter.js';
@@ -97,12 +98,20 @@ export interface MindToolDeps {
   getAllWorkspaceSearches?: () => Array<{ workspaceId: string; workspaceName: string; search: HybridSearch }>;
   /** Optional tool utilization tracker for session-level stats */
   toolUtilizationTracker?: ToolUtilizationTracker;
+  /**
+   * Review C2: externally-owned save counter so the rate limit survives
+   * tool-array reconstruction (persona switch, workspace change, MCP reconnect).
+   * If omitted, a local counter is used (legacy behavior).
+   */
+  saveCounter?: { count: number };
 }
 
 export function createMindTools(deps: MindToolDeps): ToolDefinition[] {
   // W2.10: Per-session memory save rate limiter (prevents memory flooding attacks)
+  // Review C2: use externally-owned counter when provided so limit survives
+  // tool-array reconstruction (persona switch, workspace change, MCP reconnect).
   const MAX_SAVES_PER_SESSION = 50;
-  let saveMemoryCount = 0;
+  const saveCounter = deps.saveCounter ?? { count: 0 };
 
   return [
     {
@@ -345,14 +354,24 @@ export function createMindTools(deps: MindToolDeps): ToolDefinition[] {
         required: ['content'],
       },
       execute: async (args) => {
+        const content = args.content as string;
+
+        // Review C1: scan LLM-controlled content for prompt-injection payloads
+        // BEFORE any DB write. The pre:memory-write hook is a cancellation gate,
+        // not a scanner — if no hook is registered, content goes straight to SQLite.
+        const scan = scanForInjection(content, 'user_input');
+        if (!scan.safe) {
+          return `Memory save blocked: content contains suspected prompt-injection payload (${scan.flags.join(', ')}). The content was NOT saved.`;
+        }
+
         // W2.10: Rate limit memory saves to prevent flooding (50 per session)
-        saveMemoryCount++;
-        if (saveMemoryCount > MAX_SAVES_PER_SESSION) {
+        // Review C2: counter is externally-owned so it survives tool-array rebuilds.
+        saveCounter.count++;
+        if (saveCounter.count > MAX_SAVES_PER_SESSION) {
           return `Memory save rate limit reached (${MAX_SAVES_PER_SESSION} saves this session). This prevents memory flooding. Start a new session to save more memories.`;
         }
 
         let importance = (args.importance as string) ?? 'normal';
-        const content = args.content as string;
         const target = (args.target as string) ?? 'workspace';
         const source = (args.source as string) ?? 'user_stated';
         const wsLayers = deps.getWorkspaceLayers?.();
@@ -368,7 +387,6 @@ export function createMindTools(deps: MindToolDeps): ToolDefinition[] {
         // B1-guardrail: Detect workspace-specific content being routed to personal mind
         // If workspace is active and content contains confidential/project signals, redirect to workspace
         if (effectiveTarget === 'personal' && wsLayers != null) {
-          const contentLower = content.toLowerCase();
           const workspaceSpecificPatterns = [
             /\bconfidential\b/i, /\bclient\b/i, /\bbudget\b/i, /\bengagement\b/i,
             /\bdeliverable\b/i, /\bmilestone\b/i, /\btimeline\b/i, /\bdeadline\b/i,
