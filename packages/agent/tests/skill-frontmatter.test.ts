@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseSkillFrontmatter } from '../src/skill-frontmatter.js';
+import { parseSkillFrontmatter, nextScope, serializeFrontmatter, SKILL_SCOPE_ORDER } from '../src/skill-frontmatter.js';
 
 describe('parseSkillFrontmatter', () => {
   it('parses frontmatter with name and description', () => {
@@ -151,5 +151,86 @@ name: After Permissions
     const { frontmatter } = parseSkillFrontmatter(content);
     expect(frontmatter.permissions!.fileSystem).toBe(true);
     expect(frontmatter.name).toBe('After Permissions');
+  });
+
+  // Skills 2.0 gap E — scope + promotion metadata
+  describe('scope + promoted_from (gap E)', () => {
+    it('parses an explicit scope field', () => {
+      const content = `---
+name: Team Skill
+scope: team
+---
+
+# body`;
+      const { frontmatter } = parseSkillFrontmatter(content);
+      expect(frontmatter.scope).toBe('team');
+    });
+
+    it('ignores an invalid scope value', () => {
+      const content = `---
+name: X
+scope: nonsense
+---
+body`;
+      const { frontmatter } = parseSkillFrontmatter(content);
+      expect(frontmatter.scope).toBeUndefined();
+    });
+
+    it('parses promoted_from as a JSON-array', () => {
+      const content = `---
+name: Promoted
+scope: team
+promoted_from: [personal, workspace]
+---
+body`;
+      const { frontmatter } = parseSkillFrontmatter(content);
+      expect(frontmatter.promoted_from).toEqual(['personal', 'workspace']);
+    });
+
+    it('tolerates missing scope (backwards-compat)', () => {
+      const content = `---
+name: Legacy
+description: no scope field
+---
+body`;
+      const { frontmatter } = parseSkillFrontmatter(content);
+      expect(frontmatter.scope).toBeUndefined();
+      expect(frontmatter.name).toBe('Legacy');
+    });
+  });
+
+  describe('nextScope', () => {
+    it('returns the next scope up', () => {
+      expect(nextScope('personal')).toBe('workspace');
+      expect(nextScope('workspace')).toBe('team');
+      expect(nextScope('team')).toBe('enterprise');
+    });
+    it('returns null at the top', () => {
+      expect(nextScope('enterprise')).toBeNull();
+    });
+    it('SKILL_SCOPE_ORDER is stable', () => {
+      expect(SKILL_SCOPE_ORDER).toEqual(['personal', 'workspace', 'team', 'enterprise']);
+    });
+  });
+
+  describe('serializeFrontmatter', () => {
+    it('round-trips scope + promoted_from through parse', () => {
+      const out = serializeFrontmatter(
+        { name: 'RT', description: 'round-trip', scope: 'team', promoted_from: ['personal', 'workspace'] },
+        '# body line 1',
+      );
+      const { frontmatter, body } = parseSkillFrontmatter(out);
+      expect(frontmatter.name).toBe('RT');
+      expect(frontmatter.scope).toBe('team');
+      expect(frontmatter.promoted_from).toEqual(['personal', 'workspace']);
+      expect(body).toBe('# body line 1');
+    });
+
+    it('omits scope/promoted_from when absent', () => {
+      const out = serializeFrontmatter({ name: 'NoScope' }, 'body');
+      expect(out).not.toContain('scope:');
+      expect(out).not.toContain('promoted_from:');
+      expect(out).toContain('name: NoScope');
+    });
   });
 });

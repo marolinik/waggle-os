@@ -102,7 +102,7 @@ CREATE INDEX IF NOT EXISTS idx_relations_target ON knowledge_relations (target_i
 -- Layer 5: Improvement Signals (recurring patterns that should change behavior)
 CREATE TABLE IF NOT EXISTS improvement_signals (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  category TEXT NOT NULL CHECK (category IN ('capability_gap', 'correction', 'workflow_pattern')),
+  category TEXT NOT NULL CHECK (category IN ('capability_gap', 'correction', 'workflow_pattern', 'skill_promotion')),
   pattern_key TEXT NOT NULL,
   detail TEXT NOT NULL DEFAULT '',
   count INTEGER NOT NULL DEFAULT 1,

@@ -1,6 +1,6 @@
 import type { MindDB } from './db.js';
 
-export type SignalCategory = 'capability_gap' | 'correction' | 'workflow_pattern';
+export type SignalCategory = 'capability_gap' | 'correction' | 'workflow_pattern' | 'skill_promotion';
 
 export interface ImprovementSignal {
   id: number;
@@ -23,12 +23,14 @@ export interface ActionableThresholds {
   capability_gap?: number;
   correction?: number;
   workflow_pattern?: number;
+  skill_promotion?: number;
 }
 
 const DEFAULT_THRESHOLDS: Required<ActionableThresholds> = {
   capability_gap: 2,
   correction: 3,
   workflow_pattern: 3,
+  skill_promotion: 1, // one promotion request is actionable
 };
 
 const MAX_ACTIONABLE = 3;
@@ -52,7 +54,7 @@ export class ImprovementSignalStore {
         raw.exec(`
           CREATE TABLE IF NOT EXISTS improvement_signals (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            category TEXT NOT NULL CHECK (category IN ('capability_gap', 'correction', 'workflow_pattern')),
+            category TEXT NOT NULL CHECK (category IN ('capability_gap', 'correction', 'workflow_pattern', 'skill_promotion')),
             pattern_key TEXT NOT NULL,
             detail TEXT NOT NULL DEFAULT '',
             count INTEGER NOT NULL DEFAULT 1,
