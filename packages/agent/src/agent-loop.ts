@@ -44,7 +44,11 @@ export interface AgentLoopConfig {
   maxTokenBudget?: number;
   /** Optional abort signal — when aborted, the agent loop exits between turns */
   signal?: AbortSignal;
-  /** Team governance policies — blocked tools and allowed sources */
+  /** Team governance policies — blocked tools and allowed sources.
+   *  NOTE: `allowedSources` is **not yet enforced** (agent-loop review Critical #1).
+   *  Setting it on TEAMS/ENTERPRISE tiers logs a warning at startup but does not
+   *  restrict tool execution — tools don't carry source-provenance metadata yet.
+   *  `blockedTools` IS enforced. Remove this caveat when per-tool source is wired. */
   governancePolicies?: {
     blockedTools?: string[];
     allowedSources?: string[];
@@ -86,6 +90,18 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     pluginTools: pluginToolProvider,
     traceRecording,
   } = config;
+
+  // Review C1: surface the honest contract for allowedSources. Admins set this
+  // via the TEAMS/ENTERPRISE governance UI believing data-source restrictions
+  // are active; they are NOT until ToolDefinition carries source-provenance
+  // metadata. Log once per invocation so the policy visibility gap is loud.
+  if (config.governancePolicies?.allowedSources && config.governancePolicies.allowedSources.length > 0) {
+    console.warn(
+      '[agent-loop] governancePolicies.allowedSources is set but NOT YET ENFORCED — ' +
+      'tool-source metadata required first. blockedTools IS enforced. ' +
+      `Received ${config.governancePolicies.allowedSources.length} allowed sources.`
+    );
+  }
 
   // Wire trace recorder callbacks if configured. The recorder's handlers
   // run BEFORE the caller's so the trace captures the call even if the
@@ -387,8 +403,12 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         continue; // Skip execution, process next tool call
       }
 
-      // Fire pre:tool hook — may cancel execution
-      let result: string;
+      // Fire pre:tool hook — may cancel execution.
+      // Review H3: initialize to a safe empty-string sentinel. Every branch below does
+      // assign `result`, so TypeScript's definite-assignment analysis accepts it without
+      // the init — but adding one defends against future refactors that slip in an
+      // early continue and produce a runtime `undefined` string.
+      let result: string = '';
       if (hooks) {
         const hookResult = await hooks.fire('pre:tool', { toolName: fnName, args: fnArgs });
         if (hookResult.cancelled) {
@@ -444,12 +464,22 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         result = `Error: Unknown tool "${fnName}". Available tools: ${Array.from(toolMap.keys()).join(', ')}`;
       }
 
-      // Notify on tool completion
+      // Review C2: sanitize BEFORE post-hooks + onToolResult callback.
+      // Old order let audit sinks, telemetry hooks, team-sync, and UI callbacks all
+      // see raw injection-flagged content. The scanner output is what flows into
+      // model context on the next turn; it's also what should flow into every
+      // downstream observer.
+      const scanResult = scanForInjection(result, 'tool_output');
+      if (!scanResult.safe) {
+        result = `[SECURITY] Tool output flagged (${scanResult.flags.join(', ')}). Content sanitized.`;
+      }
+
+      // Notify on tool completion (now receives sanitized content)
       if (onToolResult) {
         onToolResult(fnName, fnArgs, result);
       }
 
-      // Fire post:memory-write hook for save_memory tool
+      // Fire post:memory-write hook for save_memory tool (sanitized result)
       if (hooks && fnName === 'save_memory') {
         await hooks.fire('post:memory-write', {
           toolName: fnName,
@@ -460,14 +490,9 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         });
       }
 
-      // Fire post:tool hook
+      // Fire post:tool hook (sanitized result)
       if (hooks) {
         await hooks.fire('post:tool', { toolName: fnName, args: fnArgs, result });
-      }
-
-      const scanResult = scanForInjection(result, 'tool_output');
-      if (!scanResult.safe) {
-        result = `[SECURITY] Tool output flagged (${scanResult.flags.join(', ')}). Content sanitized.`;
       }
 
       messages.push({
