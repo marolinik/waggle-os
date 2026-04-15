@@ -159,12 +159,11 @@ export class CognifyPipeline {
   }
 
   private ensureSession(): string {
-    const active = this.sessions.getActive();
-    if (active.length > 0) {
-      return active[0].gop_id;
-    }
-    const session = this.sessions.create();
-    return session.gop_id;
+    // Review (cognify Major #1): use the transaction-wrapped SessionStore.ensureActive()
+    // method. The previous getActive() + create() sequence was racy — two concurrent
+    // callers on a fresh mind both saw no active session and both created one, splitting
+    // frames across twin sessions. Same fix pattern as autoSaveFromExchange (commit b8ffe8e).
+    return this.sessions.ensureActive().gop_id;
   }
 
   /**

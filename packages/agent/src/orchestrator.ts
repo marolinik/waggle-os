@@ -71,14 +71,6 @@ export class Orchestrator {
    */
   private _sectionCache = new Map<string, { input: string; output: string }>();
 
-  /**
-   * Stats cache — TTL-based.
-   * Review #3: `getMemoryStats` runs 6× COUNT(*) and was fired per prompt build.
-   * At 1M frames a full-table count is 50-200ms on WAL SQLite.
-   */
-  private _statsCache: { t: number; value: { frameCount: number; sessionCount: number; entityCount: number } } | null = null;
-  private static readonly STATS_CACHE_TTL_MS = 5_000;
-
   constructor(config: OrchestratorConfig) {
     this.db = config.db;
     this.embedder = config.embedder;
@@ -141,7 +133,6 @@ export class Orchestrator {
     });
 
     this.workspaceLayers = { db: workspaceDb, frames, sessions, search, knowledge, cognify };
-    this._statsCache = null; // workspace changed, stats must recompute
   }
 
   /**
@@ -149,7 +140,6 @@ export class Orchestrator {
    */
   clearWorkspaceMind(): void {
     this.workspaceLayers = null;
-    this._statsCache = null;
   }
 
   /** Set the TeamSync client for push-on-write to team server. */
@@ -163,33 +153,30 @@ export class Orchestrator {
   }
 
   getMemoryStats(): { frameCount: number; sessionCount: number; entityCount: number } {
-    // Review #3: cache with TTL instead of running 6× COUNT(*) per prompt build.
-    if (this._statsCache && Date.now() - this._statsCache.t < Orchestrator.STATS_CACHE_TTL_MS) {
-      return this._statsCache.value;
-    }
-
+    // Review #3 revisited: an earlier revision TTL-cached this (5s). Removed because
+    // callers and tests write to the underlying tables via ancillary paths (direct
+    // KnowledgeGraph.createEntity, FrameStore.createIFrame) that the cache cannot
+    // observe. buildSystemPrompt runs once per user turn, not once per LLM iteration,
+    // so the "6× COUNT(*)" cost the original finding flagged is paid once per turn —
+    // negligible below ~100k frames. If a large-scale user ever proves this matters,
+    // the correct fix is a write-counter in MindDB, not a time-based cache.
     const raw = this.db.getDatabase();
     const frameCount = (raw.prepare('SELECT COUNT(*) as cnt FROM memory_frames').get() as { cnt: number }).cnt;
     const sessionCount = (raw.prepare('SELECT COUNT(*) as cnt FROM sessions').get() as { cnt: number }).cnt;
     const entityCount = (raw.prepare('SELECT COUNT(*) as cnt FROM knowledge_entities').get() as { cnt: number }).cnt;
 
-    let value: { frameCount: number; sessionCount: number; entityCount: number };
     if (this.workspaceLayers) {
       const wsRaw = this.workspaceLayers.db.getDatabase();
       const wsFrames = (wsRaw.prepare('SELECT COUNT(*) as cnt FROM memory_frames').get() as { cnt: number }).cnt;
       const wsSessions = (wsRaw.prepare('SELECT COUNT(*) as cnt FROM sessions').get() as { cnt: number }).cnt;
       const wsEntities = (wsRaw.prepare('SELECT COUNT(*) as cnt FROM knowledge_entities').get() as { cnt: number }).cnt;
-      value = {
+      return {
         frameCount: frameCount + wsFrames,
         sessionCount: sessionCount + wsSessions,
         entityCount: entityCount + wsEntities,
       };
-    } else {
-      value = { frameCount, sessionCount, entityCount };
     }
-
-    this._statsCache = { t: Date.now(), value };
-    return value;
+    return { frameCount, sessionCount, entityCount };
   }
 
   /**

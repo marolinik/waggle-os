@@ -252,44 +252,20 @@ describe('Orchestrator — recall path hardening', () => {
   });
 
   // ────────────────────────────────────────────────────────────────
-  // Review #3 — stats cache with TTL
+  // Review #3 — cache reverted; getMemoryStats now always reads fresh.
+  // See comment in orchestrator.ts getMemoryStats() for rationale.
   // ────────────────────────────────────────────────────────────────
 
-  describe('#3 — getMemoryStats caches within TTL, invalidates on workspace change', () => {
-    it('returns identical reference on consecutive calls within TTL', () => {
-      const a = orchestrator.getMemoryStats();
-      const b = orchestrator.getMemoryStats();
-      // Cache returns the exact same object
-      expect(b).toBe(a);
-    });
-
-    it('invalidates cache on setWorkspaceMind', () => {
+  describe('#3 — getMemoryStats reflects current DB state on every call', () => {
+    it('returns fresh counts after writes (no stale cache)', async () => {
       const before = orchestrator.getMemoryStats();
-      expect(before).toBe(orchestrator.getMemoryStats()); // cached
+      expect(before.frameCount).toBe(0);
 
-      const workspaceDb = new MindDB(':memory:');
-      try {
-        orchestrator.setWorkspaceMind(workspaceDb);
-        const after = orchestrator.getMemoryStats();
-        // New object, not the same reference
-        expect(after).not.toBe(before);
-      } finally {
-        orchestrator.clearWorkspaceMind();
-        workspaceDb.close();
-      }
-    });
+      await orchestrator.executeTool('save_memory', { content: 'First memory', importance: 'normal' });
+      await orchestrator.executeTool('save_memory', { content: 'Second memory', importance: 'normal' });
 
-    it('invalidates cache on clearWorkspaceMind', () => {
-      const workspaceDb = new MindDB(':memory:');
-      orchestrator.setWorkspaceMind(workspaceDb);
-      const withWs = orchestrator.getMemoryStats();
-      expect(withWs).toBe(orchestrator.getMemoryStats()); // cached
-
-      orchestrator.clearWorkspaceMind();
-      const cleared = orchestrator.getMemoryStats();
-      expect(cleared).not.toBe(withWs);
-
-      workspaceDb.close();
+      const after = orchestrator.getMemoryStats();
+      expect(after.frameCount).toBeGreaterThanOrEqual(2);
     });
   });
 });
