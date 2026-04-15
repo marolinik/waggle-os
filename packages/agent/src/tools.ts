@@ -11,11 +11,14 @@ import type {
 import type { CognifyPipeline } from './cognify.js';
 import type { FeedbackHandler } from './feedback-handler.js';
 import type { ImprovementSignalStore } from '@waggle/core';
+import { createCoreLogger } from '@waggle/core';
 import { detectContradiction } from './contradiction-detector.js';
 import { scanForInjection } from './injection-scanner.js';
 import { normalizeForDedup, cosineSimilarity, detectDramaticClaims, deriveConfidence, type ConfidenceLevel } from './text-analysis.js';
 export type { ConfidenceLevel } from './text-analysis.js';
 export { formatCombinedResult } from './result-formatter.js';
+
+const log = createCoreLogger('mind-tools');
 
 export interface ToolDefinition {
   name: string;
@@ -309,7 +312,7 @@ export function createMindTools(deps: MindToolDeps): ToolDefinition[] {
                 `[${i + 1}] (score: ${r.finalScore.toFixed(3)}, importance: ${r.frame.importance})\n${r.frame.content}`
               ));
             }
-          } catch { /* skip unreadable workspaces */ }
+          } catch (err) { log.warn(`search_all_workspaces: skipped workspace ${workspaceId}`, err); }
         }
 
         if (sections.length === 0) return 'No relevant memories found across any workspace.';
@@ -413,7 +416,7 @@ export function createMindTools(deps: MindToolDeps): ToolDefinition[] {
         let dramaticFlag = '';
         if (dramaticClaims.length > 0) {
           // Downgrade importance to 'temporary' for dramatic claims unless explicitly set to critical
-          if (!args.importance || (importance !== 'critical')) {
+          if (importance !== 'critical') {
             importance = 'temporary';
           }
           dramaticFlag = ` [flag: dramatic_claim (${dramaticClaims.join(', ')})]`;

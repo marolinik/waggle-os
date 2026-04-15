@@ -74,8 +74,8 @@ export class CognifyPipeline {
     const semanticRelations = extractRelations(content, extracted);
     for (const rel of semanticRelations) {
       try {
-        const srcEntity = this.knowledge.getEntitiesByType('').find(e => e.name.toLowerCase() === rel.source.toLowerCase());
-        const tgtEntity = this.knowledge.getEntitiesByType('').find(e => e.name.toLowerCase() === rel.target.toLowerCase());
+        const srcEntity = this.knowledge.searchEntities(rel.source, 5).find(e => e.name.toLowerCase() === rel.source.toLowerCase());
+        const tgtEntity = this.knowledge.searchEntities(rel.target, 5).find(e => e.name.toLowerCase() === rel.target.toLowerCase());
         if (srcEntity && tgtEntity) {
           const existing = this.knowledge.getRelationsFrom(srcEntity.id, rel.relationType);
           if (!existing.some(r => r.target_id === tgtEntity.id)) {
@@ -118,8 +118,8 @@ export class CognifyPipeline {
     const semanticRelations = extractRelations(frame.content, extracted);
     for (const rel of semanticRelations) {
       try {
-        const srcEntity = this.knowledge.getEntitiesByType('').find(e => e.name.toLowerCase() === rel.source.toLowerCase());
-        const tgtEntity = this.knowledge.getEntitiesByType('').find(e => e.name.toLowerCase() === rel.target.toLowerCase());
+        const srcEntity = this.knowledge.searchEntities(rel.source, 5).find(e => e.name.toLowerCase() === rel.source.toLowerCase());
+        const tgtEntity = this.knowledge.searchEntities(rel.target, 5).find(e => e.name.toLowerCase() === rel.target.toLowerCase());
         if (srcEntity && tgtEntity) {
           const existing = this.knowledge.getRelationsFrom(srcEntity.id, rel.relationType);
           if (!existing.some(r => r.target_id === tgtEntity.id)) {
