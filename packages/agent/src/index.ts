@@ -217,6 +217,10 @@ export {
   renderComplianceReportPdf,
   writeComplianceReportPdf,
 } from './compliance-pdf.js';
+export {
+  watchSkillDirectory,
+  type SkillWatcherOptions, type SkillWatcherHandle,
+} from './skill-watcher.js';
 export { BaseConnector, type WaggleConnector, type ConnectorAction, type ConnectorResult } from './connector-sdk.js';
 export { ConnectorRegistry, type AuditLogger } from './connector-registry.js';
 export {
