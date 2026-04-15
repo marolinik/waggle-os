@@ -8,12 +8,16 @@ import {
   HybridSearch,
   KnowledgeGraph,
   ImprovementSignalStore,
+  createCoreLogger,
   type Embedder,
 } from '@waggle/core';
 import { createMindTools, type ToolDefinition } from './tools.js';
 import { buildSelfAwareness, type AgentCapabilities } from './self-awareness.js';
 import { buildAwarenessSummary, markSummarySurfaced } from './improvement-detector.js';
 import { CognifyPipeline } from './cognify.js';
+import { scanForInjection } from './injection-scanner.js';
+
+const logger = createCoreLogger('orchestrator');
 
 export interface OrchestratorConfig {
   db: MindDB;
@@ -65,6 +69,14 @@ export class Orchestrator {
    * Cached sections are recomputed only when their input changes.
    */
   private _sectionCache = new Map<string, { input: string; output: string }>();
+
+  /**
+   * Stats cache — TTL-based.
+   * Review #3: `getMemoryStats` runs 6× COUNT(*) and was fired per prompt build.
+   * At 1M frames a full-table count is 50-200ms on WAL SQLite.
+   */
+  private _statsCache: { t: number; value: { frameCount: number; sessionCount: number; entityCount: number } } | null = null;
+  private static readonly STATS_CACHE_TTL_MS = 5_000;
 
   constructor(config: OrchestratorConfig) {
     this.db = config.db;
@@ -128,6 +140,7 @@ export class Orchestrator {
     });
 
     this.workspaceLayers = { db: workspaceDb, frames, sessions, search, knowledge, cognify };
+    this._statsCache = null; // workspace changed, stats must recompute
   }
 
   /**
@@ -135,6 +148,7 @@ export class Orchestrator {
    */
   clearWorkspaceMind(): void {
     this.workspaceLayers = null;
+    this._statsCache = null;
   }
 
   /** Set the TeamSync client for push-on-write to team server. */
@@ -148,25 +162,33 @@ export class Orchestrator {
   }
 
   getMemoryStats(): { frameCount: number; sessionCount: number; entityCount: number } {
+    // Review #3: cache with TTL instead of running 6× COUNT(*) per prompt build.
+    if (this._statsCache && Date.now() - this._statsCache.t < Orchestrator.STATS_CACHE_TTL_MS) {
+      return this._statsCache.value;
+    }
+
     const raw = this.db.getDatabase();
     const frameCount = (raw.prepare('SELECT COUNT(*) as cnt FROM memory_frames').get() as { cnt: number }).cnt;
     const sessionCount = (raw.prepare('SELECT COUNT(*) as cnt FROM sessions').get() as { cnt: number }).cnt;
     const entityCount = (raw.prepare('SELECT COUNT(*) as cnt FROM knowledge_entities').get() as { cnt: number }).cnt;
 
-    // Add workspace stats if available
+    let value: { frameCount: number; sessionCount: number; entityCount: number };
     if (this.workspaceLayers) {
       const wsRaw = this.workspaceLayers.db.getDatabase();
       const wsFrames = (wsRaw.prepare('SELECT COUNT(*) as cnt FROM memory_frames').get() as { cnt: number }).cnt;
       const wsSessions = (wsRaw.prepare('SELECT COUNT(*) as cnt FROM sessions').get() as { cnt: number }).cnt;
       const wsEntities = (wsRaw.prepare('SELECT COUNT(*) as cnt FROM knowledge_entities').get() as { cnt: number }).cnt;
-      return {
+      value = {
         frameCount: frameCount + wsFrames,
         sessionCount: sessionCount + wsSessions,
         entityCount: entityCount + wsEntities,
       };
+    } else {
+      value = { frameCount, sessionCount, entityCount };
     }
 
-    return { frameCount, sessionCount, entityCount };
+    this._statsCache = { t: Date.now(), value };
+    return value;
   }
 
   /**
@@ -197,11 +219,18 @@ export class Orchestrator {
     // Active tasks (from personal awareness — always available)
     const awarenessCtx = this.awareness.toContext();
 
-    // Top knowledge entities (from workspace if available)
+    // Top knowledge entities (from workspace if available).
+    // Review #4: `OR` in JOIN condition defeats both relation indexes
+    // (idx_relations_source, idx_relations_target). UNION ALL over two
+    // index-friendly joins keeps both indexes live at 1M+ relations.
     const topEntities = raw.prepare(
-      `SELECT ke.name, ke.entity_type, COUNT(kr.id) as rel_count
+      `SELECT ke.name, ke.entity_type, COUNT(rc.entity_id) as rel_count
        FROM knowledge_entities ke
-       LEFT JOIN knowledge_relations kr ON kr.source_id = ke.id OR kr.target_id = ke.id
+       LEFT JOIN (
+         SELECT source_id AS entity_id FROM knowledge_relations
+         UNION ALL
+         SELECT target_id AS entity_id FROM knowledge_relations
+       ) rc ON rc.entity_id = ke.id
        GROUP BY ke.id ORDER BY rel_count DESC LIMIT 10`
     ).all() as Array<{ name: string; entity_type: string; rel_count: number }>;
 
@@ -247,7 +276,18 @@ export class Orchestrator {
       }
     }
 
-    return parts.join('\n');
+    // Review #1: scan preloaded context for injection before it enters the system prompt.
+    // Harvested personal preferences and workspace frames can carry poisoned instructions.
+    const joined = parts.join('\n');
+    const scan = scanForInjection(joined, 'tool_output');
+    if (!scan.safe) {
+      logger.warn('preloaded context injection detected — dropping', {
+        score: scan.score,
+        flags: scan.flags,
+      });
+      return '';
+    }
+    return joined;
   }
 
   /**
@@ -405,14 +445,31 @@ export class Orchestrator {
         recalled.push(r.frame.content.slice(0, 120));
       }
 
+      // Review #1: scan recalled memory for injection before it enters the system prompt.
+      // A poisoned harvest frame (ChatGPT export with embedded "ignore previous instructions",
+      // malicious shared workspace content, etc.) must not silently flow into model context.
+      const joinedLines = allLines.join('\n');
+      const scan = scanForInjection(joinedLines, 'tool_output');
+      if (!scan.safe) {
+        logger.warn('recalled-memory injection detected — blocking recall', {
+          score: scan.score,
+          flags: scan.flags,
+          count: totalCount,
+        });
+        return { text: '', count: 0, recalled: [] };
+      }
+
       const text = '# Recalled Memories\n'
         + 'These memories were automatically retrieved for the user\'s current message.\n'
         + 'IMPORTANT: Use these to ground your response. Cite them naturally: "From our previous discussion...", "You mentioned that...", "Based on your workspace context..."\n'
         + 'Do NOT ignore relevant memories. Do NOT present memory content as your own reasoning — attribute it.\n\n'
-        + allLines.join('\n');
+        + joinedLines;
 
       return { text, count: totalCount, recalled };
-    } catch {
+    } catch (err) {
+      // Review #5: surface failures instead of silently degrading. Memory recall failures
+      // (sqlite-vec extension missing, embedder NaN, etc.) cause "I don't remember" hallucinations.
+      logger.error('recallMemory failed', err);
       return { text: '', count: 0, recalled: [] };
     }
   }
@@ -426,7 +483,6 @@ export class Orchestrator {
   async autoSaveFromExchange(userMsg: string, assistantMsg: string): Promise<string[]> {
     const saved: string[] = [];
     const userLower = userMsg.toLowerCase();
-    const combined = `${userMsg}\n${assistantMsg}`;
 
     // Target: workspace when available, personal otherwise
     const targetFrames = this.workspaceLayers?.frames ?? this.frames;
@@ -532,7 +588,15 @@ export class Orchestrator {
       }
     }
 
-    // ── Pattern: Decision was made (A5: broadened patterns) ──
+    // ── Pattern: Decision was made — REQUIRES BILATERAL AGREEMENT ──
+    // Review C2: previous logic tested a `userMsg + '\n' + assistantMsg` combined source,
+    // so when the assistant *suggested* "Let's go with option A" and the user had not yet
+    // responded — or had declined — we still saved `Decision: …` as `important`. Important
+    // frames outlive compaction windows and bubble to the top of catch-up recall, so this
+    // false-positive polluted long-term memory durably over weeks of use.
+    //
+    // Now: save only if (a) the user states the decision explicitly, or (b) the assistant
+    // states it AND the user explicitly accepts it.
     const decisionPatterns = [
       /\b(?:let'?s go with|we(?:'ll| will) (?:use|go with|do)|decided to|decision:|agreed to)\b/i,
       /\bthe plan is\b/i,
@@ -542,22 +606,38 @@ export class Orchestrator {
       /\bfinal(?:ly|ized)?\s+(?:decision|choice|answer)\b/i,
       /\bi(?:'ll| will) go (?:with|ahead)\b/i,
     ];
-    const decisionSource = combined;
-    for (const pat of decisionPatterns) {
-      if (pat.test(decisionSource)) {
-        // Extract decision from assistant response first, then user message
-        const decisionSentences = assistantMsg.split(/[.!?\n]+/).filter(s => pat.test(s));
-        if (decisionSentences.length > 0) {
-          // Save up to 300 chars for full decision context (A5: was 200)
-          await save(`Decision: ${decisionSentences[0].trim().slice(0, 300)}`, 'important');
-        } else {
-          const userDecisions = userMsg.split(/[.!?\n]+/).filter(s => pat.test(s));
-          if (userDecisions.length > 0) {
-            await save(`Decision: ${userDecisions[0].trim().slice(0, 300)}`, 'important');
-          }
+
+    const userHasDecision = decisionPatterns.some(p => p.test(userMsg));
+    const assistantHasDecision = decisionPatterns.some(p => p.test(assistantMsg));
+
+    // User explicitly accepts assistant's suggestion. Anchored start, length-gated to avoid
+    // matching long hedged replies that happen to begin with "yes but …".
+    const userTrimmed = userMsg.trim();
+    const userAcceptsAssistant = userTrimmed.length < 60 &&
+      /^(?:ok(?:ay)?|yes|yeah|yep|sure|go|go ahead|do it|let'?s (?:do (?:it|that)|proceed|go)|sounds good|perfect|great|that works|go with (?:it|that))\b/i.test(userTrimmed);
+
+    let decisionText: string | null = null;
+    if (userHasDecision) {
+      for (const pat of decisionPatterns) {
+        const sentences = userMsg.split(/[.!?\n]+/).filter(s => pat.test(s));
+        if (sentences.length > 0) {
+          decisionText = sentences[0].trim().slice(0, 300);
+          break;
         }
-        break;
       }
+    } else if (assistantHasDecision && userAcceptsAssistant) {
+      for (const pat of decisionPatterns) {
+        const sentences = assistantMsg.split(/[.!?\n]+/).filter(s => pat.test(s));
+        if (sentences.length > 0) {
+          decisionText = sentences[0].trim().slice(0, 300);
+          break;
+        }
+      }
+    }
+    // (assistantHasDecision && !userAcceptsAssistant): skip — the bug this fix closes.
+
+    if (decisionText) {
+      await save(`Decision: ${decisionText}`, 'important');
     }
 
     // ── Pattern: User correction ──
