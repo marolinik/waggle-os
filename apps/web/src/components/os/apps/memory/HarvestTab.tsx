@@ -78,7 +78,10 @@ const HarvestTab = () => {
   // a summary shape the server can't re-parse, so we must retain the original
   // data (file JSON, pasted object, or paste string) here for commit.
   const [pendingData, setPendingData] = useState<unknown>(null);
-  const [importResult, setImportResult] = useState<{ saved: number; itemCount?: number; message: string } | null>(null);
+  const [importResult, setImportResult] = useState<{
+    saved: number; itemCount?: number; message: string;
+    duplicatesSkipped?: number; entitiesCreated?: number; identityUpdates?: number;
+  } | null>(null);
   const [selectedSource, setSelectedSource] = useState<string>('chatgpt');
   const [pasteMode, setPasteMode] = useState(false);
   const [pasteContent, setPasteContent] = useState('');
@@ -217,6 +220,11 @@ const HarvestTab = () => {
         </button>
       </div>
 
+      {/* Privacy headline — Report 3 principle #6 */}
+      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+        <span className="text-emerald-400 text-[11px] font-medium">Your data stays on this device. Harvest processes locally — nothing is sent to any server.</span>
+      </div>
+
       <p className="text-[11px] text-muted-foreground">
         Import your AI history from 20+ platforms. Waggle extracts decisions, preferences, facts, and knowledge into your persistent memory.
       </p>
@@ -270,19 +278,36 @@ const HarvestTab = () => {
         </div>
       )}
 
-      {/* Import result — amber when zero items saved, emerald otherwise. */}
+      {/* Import result with dedup summary — Report 3 principle #3 */}
       {importResult && (
-        importResult.saved > 0 ? (
-          <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-start gap-2">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 mt-0.5 shrink-0" />
-            <p className="text-[11px] text-emerald-400">{importResult.message}</p>
+        <div className={`p-3 rounded-lg flex flex-col gap-1.5 ${
+          importResult.saved > 0
+            ? 'bg-emerald-500/10 border border-emerald-500/20'
+            : 'bg-amber-500/10 border border-amber-500/20'
+        }`}>
+          <div className="flex items-start gap-2">
+            {importResult.saved > 0
+              ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 mt-0.5 shrink-0" />
+              : <AlertCircle className="w-3.5 h-3.5 text-amber-400 mt-0.5 shrink-0" />}
+            <p className={`text-[11px] ${importResult.saved > 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
+              {importResult.message}
+            </p>
           </div>
-        ) : (
-          <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-start gap-2">
-            <AlertCircle className="w-3.5 h-3.5 text-amber-400 mt-0.5 shrink-0" />
-            <p className="text-[11px] text-amber-400">{importResult.message}</p>
-          </div>
-        )
+          {/* Dedup + enrichment summary */}
+          {(importResult.duplicatesSkipped || importResult.entitiesCreated || importResult.identityUpdates) && (
+            <div className="text-[10px] text-muted-foreground ml-5.5 space-y-0.5">
+              {importResult.duplicatesSkipped ? (
+                <p>{importResult.duplicatesSkipped} duplicate{importResult.duplicatesSkipped !== 1 ? 's' : ''} already known — skipped</p>
+              ) : null}
+              {importResult.entitiesCreated ? (
+                <p>{importResult.entitiesCreated} entities added to knowledge graph</p>
+              ) : null}
+              {importResult.identityUpdates ? (
+                <p>{importResult.identityUpdates} identity signal{importResult.identityUpdates !== 1 ? 's' : ''} detected</p>
+              ) : null}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Connected sources */}
