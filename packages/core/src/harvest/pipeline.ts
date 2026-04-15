@@ -31,6 +31,14 @@ export interface PipelineOptions {
   llmCall: LLMCallFn;
   existingContents?: string[];
   onProgress?: (stage: string, current: number, total: number) => void;
+  /**
+   * Fallback behavior when the Pass 1 (classify) LLM call throws.
+   * - `'skip'` (default, safer): drop the batch. Under-inclusion beats cost/noise inflation.
+   * - `'pass-through-medium'` (legacy): promote every item to `value: 'medium'`. This is what
+   *   the pipeline did historically but it runs extract + synthesize on junk and pollutes
+   *   memory with trivial greetings/debugging loops when the classify model hiccups.
+   */
+  classifyFailureFallback?: 'skip' | 'pass-through-medium';
 }
 
 /** Safely parse JSON from LLM response, handling markdown code fences. */
@@ -57,11 +65,13 @@ export class HarvestPipeline {
   private llmCall: LLMCallFn;
   private existingContents: string[];
   private onProgress?: (stage: string, current: number, total: number) => void;
+  private classifyFailureFallback: 'skip' | 'pass-through-medium';
 
   constructor(options: PipelineOptions) {
     this.llmCall = options.llmCall;
     this.existingContents = options.existingContents ?? [];
     this.onProgress = options.onProgress;
+    this.classifyFailureFallback = options.classifyFailureFallback ?? 'skip';
   }
 
   async run(items: UniversalImportItem[], source: ImportSourceType): Promise<HarvestPipelineResult> {
@@ -148,23 +158,37 @@ export class HarvestPipeline {
 
       try {
         const response = await this.llmCall(prompt, 'fast');
-        const parsed = parseLLMJson<any>(response);
+        const parsed = parseLLMJson<{ itemId?: string; domain?: string; value?: string; categories?: string[] }>(response);
 
         for (const entry of parsed) {
-          const item = b.find(it => it.id === entry.itemId) ?? b[parsed.indexOf(entry)];
-          if (!item) continue;
+          // Review M4: strict itemId match only. The old `b[parsed.indexOf(entry)]` fallback
+          // misattributed entries to wrong source items whenever the LLM skipped one — every
+          // subsequent entry shifted one position silently. Now: no ID → log + skip.
+          if (!entry.itemId) {
+            log.warn('classify entry missing itemId — skipping', { batchIndex: i });
+            continue;
+          }
+          const item = b.find(it => it.id === entry.itemId);
+          if (!item) {
+            log.warn('classify entry itemId does not match any batch item — skipping', { itemId: entry.itemId, batchIndex: i });
+            continue;
+          }
           results.push({
             item,
-            domain: entry.domain ?? 'mixed',
-            value: entry.value ?? 'medium',
+            domain: (entry.domain as ClassifiedItem['domain']) ?? 'mixed',
+            value: (entry.value as ClassifiedItem['value']) ?? 'medium',
             categories: entry.categories ?? [],
           });
         }
       } catch (err) {
         errors.push(`Classify batch ${i} failed: ${err instanceof Error ? err.message : 'unknown'}`);
-        // On failure, pass all items through as medium value
-        for (const item of b) {
-          results.push({ item, domain: 'mixed', value: 'medium', categories: [] });
+        // Review M5: safer default is 'skip'. 'pass-through-medium' (legacy) let junk flow
+        // into extract+synthesize, multiplying cost and polluting memory with noise frames
+        // whenever the classify model hiccuped.
+        if (this.classifyFailureFallback === 'pass-through-medium') {
+          for (const item of b) {
+            results.push({ item, domain: 'mixed', value: 'medium', categories: [] });
+          }
         }
       }
     }
@@ -185,17 +209,32 @@ export class HarvestPipeline {
 
       try {
         const response = await this.llmCall(prompt, 'accurate');
-        const parsed = parseLLMJson<any>(response);
+        const parsed = parseLLMJson<{
+          itemId?: string;
+          decisions?: unknown[]; preferences?: unknown[]; facts?: unknown[];
+          knowledge?: unknown[]; entities?: unknown[]; relations?: unknown[];
+        }>(response);
 
         for (const entry of parsed) {
+          // Review M4: no indexOf fallback — LLM-skipped items would shift every
+          // subsequent entry's itemId by one position silently.
+          if (!entry.itemId) {
+            log.warn('extract entry missing itemId — skipping', { batchIndex: i });
+            continue;
+          }
+          // Confirm itemId matches the batch (defense-in-depth against model hallucination)
+          if (!b.some(c => c.item.id === entry.itemId)) {
+            log.warn('extract entry itemId does not match batch — skipping', { itemId: entry.itemId, batchIndex: i });
+            continue;
+          }
           results.push({
-            itemId: entry.itemId ?? b[parsed.indexOf(entry)]?.item.id ?? '',
-            decisions: entry.decisions ?? [],
-            preferences: entry.preferences ?? [],
-            facts: entry.facts ?? [],
-            knowledge: entry.knowledge ?? [],
-            entities: entry.entities ?? [],
-            relations: entry.relations ?? [],
+            itemId: entry.itemId,
+            decisions: (entry.decisions ?? []) as ExtractedContent['decisions'],
+            preferences: (entry.preferences ?? []) as ExtractedContent['preferences'],
+            facts: (entry.facts ?? []) as ExtractedContent['facts'],
+            knowledge: (entry.knowledge ?? []) as ExtractedContent['knowledge'],
+            entities: (entry.entities ?? []) as ExtractedContent['entities'],
+            relations: (entry.relations ?? []) as ExtractedContent['relations'],
           });
         }
       } catch (err) {
@@ -214,25 +253,42 @@ export class HarvestPipeline {
     const results: DistilledKnowledge[] = [];
     const batches = batch(extracted, BATCH_SIZE);
 
+    // Review C2: per-item serialization with individual budget. The old flat
+    // `JSON.stringify(b, null, 2).slice(0, 8000)` truncated the *middle* of the last
+    // item's JSON on a long batch; parseLLMJson returned [] on the malformed tail and
+    // every subsequent item silently vanished with no error. Now each item gets its
+    // own PER_ITEM_BUDGET and survives regardless of batch size.
+    const PER_ITEM_BUDGET = 1200;
+
     for (let i = 0; i < batches.length; i++) {
       this.onProgress?.('synthesize', i * BATCH_SIZE, extracted.length);
       const b = batches[i];
-      const prompt = SYNTHESIZE_PROMPT + JSON.stringify(b, null, 2).slice(0, 8000);
+      const serialized = b.map((ec, idx) => {
+        const json = JSON.stringify(ec, null, 2);
+        const trimmed = json.length > PER_ITEM_BUDGET
+          ? json.slice(0, PER_ITEM_BUDGET) + '\n  ... (truncated — full item in trace)'
+          : json;
+        return `\n--- Item ${idx} (id: ${ec.itemId}) ---\n${trimmed}`;
+      }).join('');
+      const prompt = SYNTHESIZE_PROMPT + serialized;
 
       try {
         const response = await this.llmCall(prompt, 'accurate');
-        const parsed = parseLLMJson<any>(response);
+        const parsed = parseLLMJson<{
+          targetLayer?: string; frameType?: string; importance?: string;
+          content?: string; confidence?: number;
+        }>(response);
 
         for (const entry of parsed) {
           results.push({
-            targetLayer: entry.targetLayer ?? 'frame',
-            frameType: entry.frameType ?? 'I',
-            importance: entry.importance ?? 'normal',
+            targetLayer: (entry.targetLayer as DistilledKnowledge['targetLayer']) ?? 'frame',
+            frameType: (entry.frameType as DistilledKnowledge['frameType']) ?? 'I',
+            importance: (entry.importance as DistilledKnowledge['importance']) ?? 'normal',
             content: entry.content ?? '',
             provenance: {
               originalSource: source,
               importedAt: new Date().toISOString(),
-              distillationModel: entry.targetLayer === 'identity' ? 'accurate' : 'accurate',
+              distillationModel: 'accurate',
               confidence: entry.confidence ?? 0.7,
               pass: 3,
             },
