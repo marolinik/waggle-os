@@ -66,6 +66,24 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
   // C3: Cache the base system prompt per session to avoid rebuilding on every message
   const systemPromptCache = new Map<string, { prompt: string; workspace: string | undefined; workspaceId: string | undefined; skillCount: number; personaId: string | null }>();
 
+  // Profile cache (review Major #4): was fs.readFileSync on every buildSystemPrompt call —
+  // blocks the Node event loop on every concurrent SSE request. Load once per mtime change,
+  // keyed by file mtime so a profile update flips the cache without a restart.
+  let profileCache: { mtimeMs: number; data: Record<string, unknown> | null } | null = null;
+  function loadProfile(dataDir: string): Record<string, unknown> | null {
+    try {
+      const profilePath = path.join(dataDir, 'profile.json');
+      if (!fs.existsSync(profilePath)) return null;
+      const stat = fs.statSync(profilePath);
+      if (profileCache && profileCache.mtimeMs === stat.mtimeMs) return profileCache.data;
+      const data = JSON.parse(fs.readFileSync(profilePath, 'utf-8'));
+      profileCache = { mtimeMs: stat.mtimeMs, data };
+      return data;
+    } catch {
+      return null;
+    }
+  }
+
   // Context compression: track previous summaries per session for iterative compression
   const compressionSummaries = new Map<string, string>();
 
@@ -117,11 +135,15 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
     // Orchestrator's built prompt (identity + self-awareness + preloaded context)
     prompt += orch.buildSystemPrompt();
 
-    // Inject user profile context
+    // Inject user profile context (review Major #4: cached by mtime, no sync I/O per turn)
     try {
-      const profilePath = path.join(server.localConfig.dataDir, 'profile.json');
-      if (fs.existsSync(profilePath)) {
-        const profileData = JSON.parse(fs.readFileSync(profilePath, 'utf-8'));
+      const profileData = loadProfile(server.localConfig.dataDir) as Record<string, unknown> & {
+        name?: string; role?: string; company?: string; industry?: string;
+        communicationStyle?: string; interests?: string[]; language?: string;
+        writingStyle?: { analyzed?: boolean; tone?: string; sentenceLength?: string; vocabulary?: string; structure?: string };
+        brand?: { analyzed?: boolean; primaryColor?: string; secondaryColor?: string; accentColor?: string; fontHeading?: string; fontBody?: string };
+      } | null;
+      if (profileData) {
         if (profileData.name || profileData.role || profileData.company) {
           prompt += `\n\n# About the User\n`;
           if (profileData.name) prompt += `- Name: ${profileData.name}\n`;
@@ -130,13 +152,13 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
           if (profileData.industry) prompt += `- Industry: ${profileData.industry}\n`;
           if (profileData.communicationStyle) prompt += `- Prefers ${profileData.communicationStyle} responses\n`;
           if (profileData.interests?.length) prompt += `- Interests: ${profileData.interests.join(', ')}\n`;
-          if (profileData.writingStyle?.analyzed) {
-            const ws = profileData.writingStyle;
+          const ws = profileData.writingStyle;
+          if (ws?.analyzed) {
             prompt += `- Writing style: ${ws.tone} tone, ${ws.sentenceLength} sentences, ${ws.vocabulary} vocabulary, ${ws.structure} structure\n`;
             prompt += `- When drafting content for this user, match their writing style.\n`;
           }
-          if (profileData.brand?.analyzed || profileData.brand?.primaryColor !== '#D4A84B') {
-            const b = profileData.brand;
+          const b = profileData.brand;
+          if (b && (b.analyzed || b.primaryColor !== '#D4A84B')) {
             prompt += `- Brand colors: primary ${b.primaryColor}, secondary ${b.secondaryColor}, accent ${b.accentColor}\n`;
             if (b.fontHeading) prompt += `- Brand fonts: ${b.fontHeading} (headings), ${b.fontBody} (body)\n`;
             prompt += `- When generating documents (docx, pptx, pdf, xlsx), apply these brand styles.\n`;
@@ -146,7 +168,7 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
           }
         }
       }
-    } catch { /* profile not available — continue without */ }
+    } catch { /* profile shape unexpected — continue without */ }
 
     prompt += `
 
@@ -1381,12 +1403,18 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     raw.end();
   });
 
-  // DELETE /api/chat/history — clear session history
+  // DELETE /api/chat/history — clear session history AND all per-session in-process state.
+  // Review Major #6: previously only sessionHistories was evicted. The other Maps
+  // (systemPromptCache, compressionSummaries, sessionToolSequences) grew unbounded
+  // across the sidecar's lifetime, compounding in heavy-use instances.
   server.delete<{
     Querystring: { session?: string };
   }>('/api/chat/history', async (request, reply) => {
     const sessionId = request.query.session ?? 'default';
     sessionHistories.delete(sessionId);
+    systemPromptCache.delete(sessionId);
+    compressionSummaries.delete(sessionId);
+    sessionToolSequences.delete(sessionId);
     return reply.send({ ok: true, cleared: sessionId });
   });
 };
