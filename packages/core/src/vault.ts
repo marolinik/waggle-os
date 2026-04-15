@@ -101,7 +101,11 @@ export class VaultStore {
 
   /** Decrypt an encoded string (iv:authTag:ciphertext, all hex). */
   private decrypt(encoded: string): string {
-    const [ivHex, authTagHex, ciphertextHex] = encoded.split(':');
+    const parts = encoded.split(':');
+    if (parts.length !== 3) {
+      throw new Error('Vault entry format invalid — expected iv:authTag:ciphertext');
+    }
+    const [ivHex, authTagHex, ciphertextHex] = parts;
     const iv = Buffer.from(ivHex, 'hex');
     const authTag = Buffer.from(authTagHex, 'hex');
     const ciphertext = Buffer.from(ciphertextHex, 'hex');
@@ -256,7 +260,9 @@ export class VaultStore {
     return {
       value: entry.value,
       type: (entry.metadata?.credentialType as string) ?? 'api_key',
-      refreshToken: refreshEntry?.value ?? (entry.metadata?.refreshToken as string | undefined),
+      // Review Major #7: removed dead plaintext metadata fallback that contradicted
+      // the "never in plaintext metadata" security contract from setConnectorCredential.
+      refreshToken: refreshEntry?.value,
       expiresAt,
       scopes: entry.metadata?.scopes as string[] | undefined,
       isExpired: expiresAt ? new Date(expiresAt) < new Date() : false,
