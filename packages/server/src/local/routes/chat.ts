@@ -303,7 +303,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       }
     }
 
-    // Validation — return standard JSON error before starting SSE
+    // Validation — return standard JSON error before starting SSE.
+    // Review Critical #3: ALL validation + auth checks must run BEFORE reply.hijack() —
+    // once hijacked, reply.status() / reply.send() become no-ops on the raw socket.
     if (!message) {
       return reply.status(400).send({ error: 'message is required' });
     }
@@ -316,18 +318,48 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // Security: scan for prompt injection patterns
     const injectionResult = scanForInjection(message, 'user_input');
     if (injectionResult.score >= 0.7) {
-      // High-confidence injection: block entirely
+      // High-confidence injection: block entirely.
+      // Review Major #3: flags NOT included in the client response — the scanner's
+      // internal pattern vocabulary leaks a roadmap for crafting bypassing payloads.
       log.warn(`[security] Prompt injection BLOCKED (score ${injectionResult.score})`, injectionResult.flags);
       return reply.code(400).send({
         error: 'Message blocked by security scanner',
         code: 'INJECTION_DETECTED',
-        flags: injectionResult.flags,
       });
     } else if (injectionResult.score >= 0.3) {
       log.warn(`[security] Potential prompt injection detected (score ${injectionResult.score})`, injectionResult.flags);
     }
 
-    // Hijack the response so Fastify doesn't try to send its own reply
+    // Review Critical #3: viewer RBAC moved above reply.hijack() — after hijack,
+    // reply.status(403) silently no-ops and the client gets HTTP 200 + empty SSE stream.
+    if (workspace && workspace !== 'default') {
+      const wsConfig = server.workspaceManager?.get(workspace);
+      if (wsConfig?.teamId && wsConfig?.teamRole === 'viewer') {
+        return reply.status(403).send({
+          error: 'Viewers cannot send messages in team workspaces. Ask a team admin to upgrade your role.',
+          code: 'VIEWER_READ_ONLY',
+        });
+      }
+    }
+
+    // Review Critical #1: path-traversal guard on workspacePath.
+    // A client can supply "../../../../etc" or on Windows "C:\\Windows\\System32".
+    // Both the explicit-path and workspace-derived branches must be anchored to dataDir.
+    if (workspacePath) {
+      const resolved = path.resolve(workspacePath);
+      const allowed = path.resolve(server.localConfig.dataDir);
+      if (resolved !== allowed && !resolved.startsWith(allowed + path.sep)) {
+        log.warn(`[security] Path traversal attempt blocked: ${workspacePath}`);
+        return reply.status(400).send({
+          error: 'Invalid workspace path',
+          code: 'PATH_TRAVERSAL',
+        });
+      }
+      workspacePath = resolved;
+    }
+
+    // Hijack the response so Fastify doesn't try to send its own reply.
+    // All validation + auth above — safe to commit to SSE from here.
     await reply.hijack();
 
     // Set SSE headers via raw response (include CORS since hijack bypasses Fastify plugins)
@@ -356,6 +388,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
     // B1-B7: Rerouted message from slash command processing — scoped to handler
     let reroutedMessage: string | undefined;
+
+    // Review Critical #2: hoist unregisterHook so the outer finally can always clean up.
+    // Old code's only cleanup was at the happy-path line ~1125; every exception path leaked
+    // the hook into the shared hookRegistry, causing ghost confirmation prompts on every
+    // subsequent request with closures pointing at dead sockets.
+    let unregisterHook: (() => void) | undefined;
 
     try {
       const hasCustomRunner = !!server.agentRunner;
@@ -397,16 +435,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       const sessionId = session ?? workspace ?? 'default';
       const effectiveWorkspace = workspace ?? 'default';
 
-      // Viewer permission enforcement: viewers in team workspaces cannot chat
-      if (workspace && workspace !== 'default') {
-        const wsConfig = server.workspaceManager?.get(workspace);
-        if (wsConfig?.teamId && wsConfig?.teamRole === 'viewer') {
-          return reply.status(403).send({
-            error: 'Viewers cannot send messages in team workspaces. Ask a team admin to upgrade your role.',
-            code: 'VIEWER_READ_ONLY',
-          });
-        }
-      }
+      // Viewer RBAC moved above reply.hijack() — see review Critical #3 fix at top of handler.
 
       // Get or create session history — load from disk if not in RAM
       if (!sessionHistories.has(sessionId)) {
@@ -533,6 +562,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           history.push({ role: 'assistant', content: friendlyError });
           persistMessage(server.localConfig.dataDir, effectiveWorkspace, sessionId, { role: 'assistant', content: friendlyError });
           sendEvent('done', { content: friendlyError, usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }, toolsUsed: [] });
+          raw.end();
+          return; // Review Major #5: explicit terminal — don't fall through to agent loop
         } else {
           // Stream the command result as SSE tokens
           const cmdWords = cmdResult.split(' ');
@@ -548,6 +579,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
             toolsUsed: [],
           });
+          raw.end();
+          return; // Review Major #5: explicit terminal — don't fall through to agent loop
         }
       }
 
@@ -697,7 +730,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // Register a per-request pre:tool hook for confirmation gates
         // This fires during the agent loop and pauses until user approves/denies
         const autoApprove = process.env.WAGGLE_AUTO_APPROVE === '1' || process.env.WAGGLE_AUTO_APPROVE === 'true';
-        const unregisterHook = hasCustomRunner ? undefined : hookRegistry.on('pre:tool', async (ctx) => {
+        // Assignment (not declaration) — unregisterHook is declared at outer try scope
+        // so the outer finally can always clean up regardless of which path we exit on.
+        unregisterHook = hasCustomRunner ? undefined : hookRegistry.on('pre:tool', async (ctx) => {
           if (!ctx.toolName) return;
           const args = (ctx.args ?? {}) as Record<string, unknown>;
 
@@ -745,8 +780,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           let trustMeta: Record<string, unknown> | undefined;
           if (toolName === 'install_capability') {
             try {
-              const skillName = input.name as string ?? '';
+              const skillNameRaw = input.name as string ?? '';
               const source = input.source as string ?? '';
+              // Review Minor #1: path.basename strips any directory separators so a model
+              // coerced into `name: "../../evil"` cannot escape the starter-skills directory.
+              const skillName = path.basename(skillNameRaw);
               // Read starter skill content for trust assessment
               const { getStarterSkillsDir } = await import('@waggle/sdk');
               const starterPath = path.join(getStarterSkillsDir(), `${skillName}.md`);
@@ -1121,8 +1159,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           sendEvent('step', { content: budgetPressure.trim() });
         }
 
-        // Unregister the per-request approval hook
-        if (unregisterHook) unregisterHook();
+        // Unregister the per-request approval hook. Setting to undefined so the outer
+        // finally's defensive cleanup is a no-op on the happy path.
+        if (unregisterHook) {
+          unregisterHook();
+          unregisterHook = undefined;
+        }
 
         // Track cost with the ACTUALLY used model
         costTracker.addUsage(resolvedModel, result.usage.inputTokens, result.usage.outputTokens, effectiveWorkspace);
@@ -1326,6 +1368,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       }
       // Send clean error to user — don't leak raw recalled context (contains system prompt instructions)
       sendEvent('error', { message: errorMessage });
+    } finally {
+      // Review Critical #2: defensive cleanup for the pre:tool hook. The happy path
+      // already unregisters and sets to undefined; this guarantees we never leak the
+      // hook into the shared hookRegistry on any exception path.
+      if (unregisterHook) {
+        try { unregisterHook(); } catch { /* registry already torn down — ignore */ }
+      }
     }
 
     // End the SSE stream
