@@ -1,0 +1,66 @@
+You are working on Waggle OS, a Tauri 2.0 desktop app (Rust shell) + Vite web app (React 19) + Node.js sidecar.
+
+BEFORE WRITING ANY CODE:
+- Read CLAUDE.md at the repo root. It is the authority.
+- State your assumptions. If uncertain, ask.
+- If multiple approaches exist, present tradeoffs. Don't pick silently.
+- Grep before creating. This repo has 16 packages and ~94 files in packages/agent/src alone.
+
+CODE QUALITY:
+- Minimum code that solves the problem. Nothing speculative.
+- No abstractions for single-use code. No features beyond what was asked.
+- Every changed line must trace to the user's request.
+- Don't "improve" adjacent code, comments, or formatting.
+- Match existing style even if you'd do it differently.
+- If you write 200 lines and it could be 50, rewrite it.
+
+VERIFICATION (non-negotiable):
+- npx tsc --noEmit --project packages/agent/tsconfig.json
+- npx tsc --noEmit --project app/tsconfig.json
+- npm run test -- --run
+
+SECURITY (non-negotiable):
+- No eval(), no dynamic require()
+- All SQL parameterized — no string interpolation
+- API keys in .env only, never committed (use packages/core/src/mind/vault.ts)
+- scanForInjection() on all external/connector input
+- Tauri IPC: scoped capabilities in app/src-tauri/capabilities/, never allowlist all
+
+MONOREPO (16 packages):
+- Build order: shared -> core -> agent -> server
+- Types from @waggle/shared, memory from @waggle/core, agent logic from @waggle/agent
+- Run npm run build:packages after changing any package types
+- Two UI trees: app/src/ is Tauri shell (mostly cockpit/), apps/web/src/ is main UI
+
+PATHS THAT MATTER:
+- Main web app: apps/web/src/
+- Onboarding UI: apps/web/src/components/os/overlays/OnboardingWizard.tsx
+- Persona switcher: apps/web/src/components/os/overlays/PersonaSwitcher.tsx
+- Personas (data): packages/agent/src/persona-data.ts
+- Personas (logic): packages/agent/src/personas.ts
+- Tiers: packages/shared/src/tiers.ts (TRIAL/FREE/PRO/TEAMS/ENTERPRISE)
+- LLM routing: litellm-config.yaml at root
+
+EXISTING CODE — don't recreate:
+- injection-scanner.ts (security scanning)
+- cost-tracker.ts (cost/pricing)
+- tool-filter.ts (tool filtering)
+- kvark-tools.ts (KVARK integration, tier-gated)
+- skill-frontmatter.ts (skill parsing)
+- feature-flags.ts (feature flags)
+- tiers.ts (pricing tiers)
+- evolution-*.ts + judge.ts + iterative-optimizer.ts (self-improvement)
+- vault.ts (secret storage)
+
+DESIGN SYSTEM:
+- Use Hive DS tokens from waggle-theme.css
+- Colors: honey #e5a000, hive-950 #08090c, accent #a78bfa
+- UI primitives: @base-ui/react + Tailwind 4
+
+TIERS (correct as of April 2026):
+- TRIAL $0 / 15 days
+- FREE $0 forever
+- PRO $19/mo
+- TEAMS $49/mo per seat
+- ENTERPRISE consultative (KVARK)
+Never say "Solo" or "Basic $15" — those names are obsolete.
