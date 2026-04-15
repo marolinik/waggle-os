@@ -31,6 +31,7 @@ import {
   type SkillScope,
 } from './skill-frontmatter.js';
 import type { ImprovementSignalStore } from '@waggle/core';
+import { autoExtractAndCreateSkill, type AutoExtractMessage } from './skill-autoextract.js';
 
 export interface SkillToolsDeps {
   /** Path to ~/.waggle directory */
@@ -58,6 +59,12 @@ export interface SkillToolsDeps {
   hasTeamSkillLibrary?: () => boolean;
   isEnterprise?: () => boolean;
   improvementSignals?: ImprovementSignalStore;
+  /**
+   * Skills 2.0 gap A: session-message accessor for auto-extracting skills
+   * from repeated workflow patterns. When provided, enables the
+   * auto_extract_skills tool.
+   */
+  getSessionMessages?: () => AutoExtractMessage[];
 }
 
 /**
@@ -799,6 +806,54 @@ Only use this after acquire_capability has identified a specific installable can
           + `workspaces${target === 'team' ? ' on this team' : target === 'enterprise' ? ' across the enterprise' : ''} `
           + `will pick it up on their next skill reload.`
         );
+      },
+    },
+
+    // Skills 2.0 gap A: auto_extract_skills — analyze the current session
+    // for a repeated workflow pattern and auto-create a personal-scope
+    // SKILL.md from it. Wires the previously-dormant
+    // detectWorkflowPattern → generateSkillMarkdown pipeline so the agent
+    // can learn from its own repetition without an explicit create_skill.
+    {
+      name: 'auto_extract_skills',
+      description:
+        'Scan the current session for repeated workflow patterns (the same 3+ tools '
+        + 'used in the same order 2+ times) and auto-create a SKILL.md for any pattern '
+        + 'found. Creates personal-scope skills only — promote_skill moves them up '
+        + 'afterwards. Dedups by filename. Records a workflow_pattern signal on each '
+        + 'successful extraction.',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+      execute: async () => {
+        if (!deps.getSessionMessages) {
+          return 'auto_extract_skills is unavailable: session-message accessor not wired. (This is a local-only feature.)';
+        }
+        const messages = deps.getSessionMessages();
+        if (!messages || messages.length < 6) {
+          return `Not enough session history yet (${messages?.length ?? 0} messages). Need at least 6 to detect a pattern.`;
+        }
+        const result = await autoExtractAndCreateSkill(messages, {
+          personalSkillsDir: skillsDir,
+          improvementSignals: deps.improvementSignals,
+        });
+        if (result.filePath) {
+          onSkillsChanged?.();
+          return (
+            `## Skill Auto-Extracted\n\n`
+            + `- Name: **${result.template!.name}**\n`
+            + `- Category: ${result.template!.category}\n`
+            + `- Tools: ${result.template!.tools.join(', ')}\n`
+            + `- Written to: \`${result.filePath}\`\n`
+            + `- Scope: personal (use promote_skill to move it up)\n`
+            + `- Signal: workflow_pattern recorded\n`
+          );
+        }
+        if (result.reason === 'already_exists') {
+          return `Pattern "${result.template!.name}" detected, but a skill with that filename already exists. Skipped.`;
+        }
+        return 'No repeatable workflow pattern detected in this session yet. Keep using the tools — the pattern needs at least 2 repetitions.';
       },
     },
   ];

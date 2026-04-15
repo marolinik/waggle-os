@@ -194,8 +194,16 @@ export {
   type TrustAssessment, type TrustSource, type RiskLevel, type RiskFactor, type PermissionSummary,
   type AssessmentMode, type AssessTrustInput,
 } from './trust-model.js';
-export { parseSkillFrontmatter, type SkillFrontmatter } from './skill-frontmatter.js';
+export {
+  parseSkillFrontmatter, serializeFrontmatter, nextScope, SKILL_SCOPE_ORDER,
+  type SkillFrontmatter, type SkillScope,
+} from './skill-frontmatter.js';
 export { generateSkillMarkdown, type SkillTemplate } from './skill-creator.js';
+export {
+  autoExtractAndCreateSkill, skillFilename,
+  type AutoExtractMessage, type AutoExtractDeps, type AutoExtractResult,
+} from './skill-autoextract.js';
+export { getSkillDirForScope } from './skill-tools.js';
 export { BaseConnector, type WaggleConnector, type ConnectorAction, type ConnectorResult } from './connector-sdk.js';
 export { ConnectorRegistry, type AuditLogger } from './connector-registry.js';
 export {
