@@ -1,8 +1,19 @@
+import path from 'node:path';
 import { MindDB } from './mind/db.js';
+import { createCoreLogger } from './logger.js';
+
+const log = createCoreLogger('multi-mind-cache');
 
 export interface MultiMindCacheConfig {
   maxOpen: number;
   getMindPath: (workspaceId: string) => string | null;
+  /**
+   * Defense-in-depth root directory. If set, `getOrOpen` rejects any path that does not
+   * resolve to a descendant of this root. Prevents a crafted workspaceId like
+   * '../../other-user.mind' from opening an arbitrary file via the caller-supplied
+   * `getMindPath` — closes review Critical #2 from cowork/Code-Review_MultiMind_April-2026.md.
+   */
+  allowedRoot?: string;
 }
 
 interface CacheEntry {
@@ -18,10 +29,12 @@ export class MultiMindCache {
   private readonly cache = new Map<string, CacheEntry>();
   private readonly maxOpen: number;
   private readonly getMindPath: (workspaceId: string) => string | null;
+  private readonly allowedRoot: string | null;
 
   constructor(config: MultiMindCacheConfig) {
     this.maxOpen = config.maxOpen;
     this.getMindPath = config.getMindPath;
+    this.allowedRoot = config.allowedRoot ? path.resolve(config.allowedRoot) : null;
   }
 
   getOrOpen(workspaceId: string): MindDB | null {
@@ -34,14 +47,36 @@ export class MultiMindCache {
     const mindPath = this.getMindPath(workspaceId);
     if (!mindPath) return null;
 
+    // Review Critical #2: path-traversal guard. Defense-in-depth against an
+    // attacker-controlled workspaceId (e.g. from an LLM tool call with a misconfigured
+    // approval gate) that resolves to an arbitrary filesystem path.
+    if (this.allowedRoot) {
+      const resolved = path.resolve(mindPath);
+      if (resolved !== this.allowedRoot && !resolved.startsWith(this.allowedRoot + path.sep)) {
+        log.warn('path outside allowedRoot — rejecting getOrOpen', {
+          workspaceId,
+          resolvedPath: resolved,
+        });
+        return null;
+      }
+    }
+
+    // Review Major #5: re-check after evictLRU — a concurrent call may have just
+    // inserted the same workspaceId between our initial .get() and here.
     try {
       if (this.cache.size >= this.maxOpen) {
         this.evictLRU();
       }
+      const recheck = this.cache.get(workspaceId);
+      if (recheck) {
+        recheck.lastAccessed = Date.now();
+        return recheck.db;
+      }
       const db = new MindDB(mindPath);
       this.cache.set(workspaceId, { db, lastAccessed: Date.now() });
       return db;
-    } catch {
+    } catch (err) {
+      log.warn('failed to open MindDB', { workspaceId, error: err instanceof Error ? err.message : String(err) });
       return null;
     }
   }

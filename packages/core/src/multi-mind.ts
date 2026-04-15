@@ -101,8 +101,15 @@ export class MultiMind {
   }
 
   /**
-   * Switch the workspace mind to a new path.
-   * Closes the old workspace mind (if any) and opens the new one.
+   * @deprecated Use `setWorkspace(db)` with a cache-managed `MindDB` instead.
+   *
+   * Review Major #3 (cowork/Code-Review_MultiMind_April-2026.md): this method
+   * unconditionally closes `this.workspace` and constructs a new `MindDB(newPath)`.
+   * When the previous workspace DB is owned by `MultiMindCache` (the live code path),
+   * the close corrupts the cache's handle — every subsequent `cache.getOrOpen()` for
+   * that workspace returns a closed DB and throws on every SQL call. This method is
+   * retained ONLY for the legacy test path (`packages/core/tests/multi-mind.test.ts`)
+   * which does not use the cache. Remove when those tests migrate to `setWorkspace`.
    */
   switchWorkspace(newPath: string): void {
     if (this.workspace) {

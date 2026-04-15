@@ -544,54 +544,18 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
       upcomingSchedules = buildUpcomingSchedules(cronSchedules, id);
     } catch { /* non-blocking — cron store may not be available */ }
 
-    // ── Wave 6.5: Lightweight cross-workspace relevance hints ──
-    let crossWorkspaceHints: string[] = [];
-    try {
-      const allWorkspaces = server.workspaceManager.list();
-      // Only check if there are 2+ workspaces (current + at least one other)
-      if (allWorkspaces.length >= 2 && recentMemories.length > 0) {
-        // Extract top 3 keywords from workspace name + recent memory content
-        const keywordSource = [ws.name, ...recentMemories.slice(0, 3).map(m => m.content)].join(' ');
-        const stopWords = new Set(['the', 'a', 'an', 'is', 'are', 'was', 'were', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'this', 'that', 'it', 'not', 'from', 'by', 'as', 'be', 'has', 'have', 'had', 'will', 'would', 'can', 'could', 'should', 'may', 'do', 'does']);
-        const words = keywordSource.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 3 && !stopWords.has(w));
-        // Count word frequency
-        const freq = new Map<string, number>();
-        for (const w of words) {
-          freq.set(w, (freq.get(w) ?? 0) + 1);
-        }
-        const topKeywords = Array.from(freq.entries()).sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0]);
-
-        // Search other workspace minds for those keywords (limit 1 result per workspace, max 3 hints)
-        for (const otherWs of allWorkspaces) {
-          if (otherWs.id === id || crossWorkspaceHints.length >= 3) break;
-          const otherMindPath = server.workspaceManager.getMindPath(otherWs.id);
-          if (!fs.existsSync(otherMindPath)) continue;
-          let otherDb: MindDB | null = null;
-          try {
-            otherDb = new MindDB(otherMindPath);
-            const raw = otherDb.getDatabase();
-            for (const keyword of topKeywords) {
-              if (crossWorkspaceHints.length >= 3) break;
-              const match = raw.prepare(
-                `SELECT content FROM memory_frames
-                 WHERE importance != 'deprecated' AND importance != 'temporary'
-                   AND content LIKE ?
-                 LIMIT 1`
-              ).get(`%${keyword}%`) as { content: string } | undefined;
-              if (match) {
-                const firstLine = match.content.split('\n')[0].slice(0, 80);
-                crossWorkspaceHints.push(`Related: "${firstLine}" found in ${otherWs.name}`);
-                break; // Only 1 hint per workspace
-              }
-            }
-            otherDb.close();
-            otherDb = null;
-          } catch {
-            if (otherDb) { try { otherDb.close(); } catch { /* */ } }
-          }
-        }
-      }
-    } catch { /* cross-workspace hints are non-blocking */ }
+    // ── Wave 6.5 (DISABLED): Cross-workspace relevance hints ──
+    // Security review (cowork/Code-Review_MultiMind_April-2026.md Critical #1) flagged
+    // the original implementation as a privacy leak: it iterated every workspace the
+    // user owns, opened each MindDB directly, and returned 80-char content snippets in
+    // the HTTP response with NO grant check and no approval gate. That is a complete
+    // bypass of the `read_other_workspace` agent-tool approval contract.
+    //
+    // Keeping the field to preserve frontend compat (consumed by WorkspaceBriefing.tsx
+    // + ChatArea.tsx) but returning an empty array until grant-based access is wired
+    // through `server.approvalGrantStore`. Cross-workspace context remains available
+    // via the agent tool path where user approval is enforced.
+    const crossWorkspaceHints: string[] = [];
 
     return {
       workspace: { id: ws.id, name: ws.name, group: ws.group, model: ws.model, directory: ws.directory, templateId: ws.templateId, personaId: ws.personaId },

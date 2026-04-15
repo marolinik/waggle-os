@@ -987,9 +987,13 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   };
 
   // ── Workspace mind cache (LRU, max 20 open) ──
+  // allowedRoot defends against path-traversal via a crafted workspaceId (review
+  // Critical #2 from cowork/Code-Review_MultiMind_April-2026.md). Any resolved
+  // path outside this root is rejected before MindDB construction.
   const mindCache = new MultiMindCache({
     maxOpen: 20,
     getMindPath: (id) => wsManager.getMindPath(id),
+    allowedRoot: path.join(fullConfig.dataDir, 'workspaces'),
   });
   let activeWorkspaceId: string | null = null;
 
