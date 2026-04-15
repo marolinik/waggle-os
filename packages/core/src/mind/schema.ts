@@ -162,11 +162,34 @@ CREATE TABLE IF NOT EXISTS ai_interactions (
   human_action TEXT CHECK (human_action IN ('approved', 'denied', 'modified', 'none')),
   risk_context TEXT,
   imported_from TEXT,
-  persona TEXT
+  persona TEXT,
+  -- Review Critical #3 (compliance): EU AI Act Art. 12.1(a) requires recording
+  -- the actual INPUTS and OUTPUTS of the system, not just token counts. Added
+  -- 2026-04-15; migration for pre-existing DBs in MindDB.runMigrations().
+  input_text TEXT,
+  output_text TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_interactions_workspace ON ai_interactions (workspace_id, timestamp);
 CREATE INDEX IF NOT EXISTS idx_interactions_timestamp ON ai_interactions (timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_interactions_model ON ai_interactions (model);
+
+-- Review Critical #1 (compliance): append-only enforcement for the audit log.
+-- DDL-level triggers make the database itself refuse UPDATE / DELETE so a motivated
+-- auditor's first question ('can rows be silently mutated?') has a concrete 'no'
+-- answer. GDPR Art. 17 erasure is handled via a separate pseudonymize_and_tombstone
+-- flow that's not yet implemented — when it is, it will replace inputText/outputText
+-- with tombstone markers via a fresh INSERT + status flag, NOT by bypassing these
+-- triggers.
+CREATE TRIGGER IF NOT EXISTS ai_interactions_no_delete
+BEFORE DELETE ON ai_interactions
+BEGIN
+  SELECT RAISE(ABORT, 'ai_interactions is append-only (EU AI Act Art. 12 audit log)');
+END;
+CREATE TRIGGER IF NOT EXISTS ai_interactions_no_update
+BEFORE UPDATE ON ai_interactions
+BEGIN
+  SELECT RAISE(ABORT, 'ai_interactions is append-only (EU AI Act Art. 12 audit log)');
+END;
 
 -- Layer 9: Execution Traces (agent run history — foundation for self-evolution)
 CREATE TABLE IF NOT EXISTS execution_traces (

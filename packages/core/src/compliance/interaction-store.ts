@@ -8,56 +8,31 @@
 import type { MindDB } from '../mind/db.js';
 import type { AIInteraction, RecordInteractionInput, HumanAction, ModelInventoryEntry, OversightLogEntry } from './types.js';
 
-const AI_INTERACTIONS_DDL = `
-CREATE TABLE IF NOT EXISTS ai_interactions (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  timestamp TEXT NOT NULL DEFAULT (datetime('now')),
-  workspace_id TEXT,
-  session_id TEXT,
-  model TEXT NOT NULL,
-  provider TEXT NOT NULL,
-  input_tokens INTEGER NOT NULL DEFAULT 0,
-  output_tokens INTEGER NOT NULL DEFAULT 0,
-  cost_usd REAL NOT NULL DEFAULT 0,
-  tools_called TEXT NOT NULL DEFAULT '[]',
-  human_action TEXT CHECK (human_action IN ('approved', 'denied', 'modified', 'none')),
-  risk_context TEXT,
-  imported_from TEXT,
-  persona TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_interactions_workspace ON ai_interactions (workspace_id, timestamp);
-CREATE INDEX IF NOT EXISTS idx_interactions_timestamp ON ai_interactions (timestamp DESC);
-CREATE INDEX IF NOT EXISTS idx_interactions_model ON ai_interactions (model);
-`;
-
 export class InteractionStore {
   private db: MindDB;
 
   constructor(db: MindDB) {
     this.db = db;
-    this.ensureTable();
-  }
-
-  private ensureTable(): void {
-    const raw = this.db.getDatabase();
-    const exists = raw.prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='ai_interactions'",
-    ).get();
-    if (!exists) {
-      raw.exec(AI_INTERACTIONS_DDL);
-    }
+    // Review Major #8: previously ensureTable() duplicated the DDL from schema.ts and
+    // drifted whenever the canonical schema changed. Now schema.ts + MindDB.runMigrations()
+    // own the table definition, including the input_text/output_text columns and the
+    // append-only triggers (Critical #1, #3).
   }
 
   /** Record an AI interaction event. */
   record(input: RecordInteractionInput): AIInteraction {
     const raw = this.db.getDatabase();
 
-    raw.prepare(`
+    // Review Major #4: use lastInsertRowid from .run() instead of reading back
+    // ORDER BY id DESC LIMIT 1 — under concurrent writes (WaggleDance multi-agent),
+    // the LIMIT 1 row may belong to a different writer.
+    const result = raw.prepare(`
       INSERT INTO ai_interactions (
         workspace_id, session_id, model, provider,
         input_tokens, output_tokens, cost_usd,
-        tools_called, human_action, risk_context, imported_from, persona
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        tools_called, human_action, risk_context, imported_from, persona,
+        input_text, output_text
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       input.workspaceId ?? null,
       input.sessionId ?? null,
@@ -71,11 +46,12 @@ export class InteractionStore {
       input.riskContext ?? null,
       input.importedFrom ?? null,
       input.persona ?? null,
+      input.inputText ?? null,
+      input.outputText ?? null,
     );
 
-    return this.rowToInteraction(
-      raw.prepare('SELECT * FROM ai_interactions ORDER BY id DESC LIMIT 1').get() as Record<string, unknown>,
-    );
+    const row = raw.prepare('SELECT * FROM ai_interactions WHERE id = ?').get(result.lastInsertRowid) as Record<string, unknown>;
+    return this.rowToInteraction(row);
   }
 
   /** Get interactions for a workspace within a date range. */
@@ -119,6 +95,15 @@ export class InteractionStore {
     const raw = this.db.getDatabase();
     const row = raw.prepare('SELECT MIN(timestamp) as oldest FROM ai_interactions').get() as { oldest: string | null };
     return row.oldest;
+  }
+
+  /**
+   * Returns the `first_run_at` timestamp from the MindDB's `meta` table — set on
+   * schema initialization and backfilled for pre-existing DBs. Used by the Art. 19
+   * retention checker to distinguish 'new system' from 'pruned logs'.
+   */
+  getFirstRunAt(): string | null {
+    return this.db.getFirstRunAt();
   }
 
   /** Get model inventory (aggregated usage per model). */
@@ -210,6 +195,8 @@ export class InteractionStore {
       riskContext: row.risk_context as string | null,
       importedFrom: row.imported_from as string | null,
       persona: row.persona as string | null,
+      inputText: (row.input_text as string | null | undefined) ?? null,
+      outputText: (row.output_text as string | null | undefined) ?? null,
     };
   }
 }

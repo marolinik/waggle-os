@@ -106,15 +106,29 @@ export class ComplianceStatusChecker {
     const retentionMs = now.getTime() - oldestDate.getTime();
     const retentionDays = Math.floor(retentionMs / (24 * 60 * 60 * 1000));
 
-    const meetsMinimum = retentionMs >= SIX_MONTHS_MS || retentionDays < 180;
-    // If we haven't been running for 6 months yet, we're compliant by default
-    // (can't retain 6 months of data if the system is younger than 6 months)
+    // Review Critical #2: the previous expression was a tautology
+    // (`retentionMs >= SIX_MONTHS_MS || retentionDays < 180`) that covered every
+    // non-negative value of retentionDays. A deployment that pruned logs after 30
+    // days still reported compliant.
+    //
+    // Proper fix requires distinguishing 'system is young' from 'logs were pruned'.
+    // We track system age via MindDB's `meta.first_run_at` entry (set on schema init,
+    // backfilled for pre-existing DBs). If the system has been running for 180+ days
+    // but the oldest log is younger than that, something pruned the logs and we
+    // correctly report warning.
+    const firstRun = this.store.getFirstRunAt();
+    const systemAgeMs = firstRun ? now.getTime() - new Date(firstRun).getTime() : retentionMs;
+    const hasBeenRunning6Months = systemAgeMs >= SIX_MONTHS_MS;
+    const logsOlderThan6Months = retentionMs >= SIX_MONTHS_MS;
+    const meetsMinimum = !hasBeenRunning6Months || logsOlderThan6Months;
 
     return {
       status: meetsMinimum ? 'compliant' : 'warning',
       detail: meetsMinimum
-        ? `Logs retained since ${oldest.split('T')[0]} (${retentionDays} days). Permanent retention policy.`
-        : `Oldest log: ${oldest.split('T')[0]}. Ensure logs are not pruned before 180 days.`,
+        ? hasBeenRunning6Months
+          ? `Logs retained since ${oldest.split('T')[0]} (${retentionDays} days). Art. 19 minimum (180 days) met.`
+          : `Logs retained since ${oldest.split('T')[0]} (${retentionDays} days). System is still within its first 180 days — retention compliance will be enforceable after 2026-${(new Date(firstRun ?? now).getMonth() + 7).toString().padStart(2, '0')}.`
+        : `Oldest log: ${oldest.split('T')[0]} (${retentionDays} days) but system is ${Math.floor(systemAgeMs / (24 * 60 * 60 * 1000))} days old. Logs appear to have been pruned — EU AI Act Art. 19 requires 180-day minimum retention.`,
       oldestLogDate: oldest,
       retentionDays,
     };

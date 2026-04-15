@@ -25,6 +25,11 @@ export interface AIInteraction {
   riskContext: string | null;
   importedFrom: string | null;
   persona: string | null;
+  // Review Critical #3 (compliance): EU AI Act Art. 12.1(a) requires recording the
+  // actual inputs and outputs of the system, not just token counts. Nullable because
+  // pre-existing DBs may have rows from before the columns were added.
+  inputText: string | null;
+  outputText: string | null;
 }
 
 export interface RecordInteractionInput {
@@ -40,6 +45,11 @@ export interface RecordInteractionInput {
   riskContext?: string;
   importedFrom?: string;
   persona?: string;
+  // Review Critical #3: optional because echo-mode interactions may not have meaningful
+  // content. Callers on the live agent path SHOULD pass these; record() does not reject
+  // absent values but the compliance status checker flags them as a gap.
+  inputText?: string;
+  outputText?: string;
 }
 
 // ── Compliance Status ──
