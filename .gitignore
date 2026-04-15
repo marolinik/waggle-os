@@ -22,8 +22,11 @@ dist-ssr
 *.mind
 marketplace.db
 
-# Local scratch parking lot — see .scratch/README if any
+# Non-production workspace (planning, reviews, session docs, archives)
+.workspace/
 .scratch/
+.mind/
+.planning/
 
 # Build artifacts
 *.tsbuildinfo
