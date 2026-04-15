@@ -507,9 +507,8 @@ export class Orchestrator {
     } catch (err) {
       // M5: surface failures visibly — silent empty results cause "I don't remember" hallucinations
       logger.error('recallMemory failed', err);
-      const errMsg = err instanceof Error ? err.message : 'unknown error';
       return {
-        text: `[Memory recall failed: ${errMsg}. The agent has no memory context for this turn.]`,
+        text: '[Memory recall temporarily unavailable. Proceed without prior context.]',
         count: 0,
         recalled: [],
       };

@@ -26,6 +26,6 @@ export const ALLOWED_ORIGINS = [
  */
 export function validateOrigin(requestOrigin: string | undefined): string {
   if (!requestOrigin) return ALLOWED_ORIGINS[0];
-  if (ALLOWED_ORIGINS.some(o => requestOrigin.startsWith(o))) return requestOrigin;
+  if (ALLOWED_ORIGINS.includes(requestOrigin)) return requestOrigin;
   return ALLOWED_ORIGINS[0];
 }

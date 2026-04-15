@@ -164,8 +164,9 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
   let totalOutputTokens = 0;
   let allStreamedContent = ''; // Accumulate ALL streamed content across all turns
   const guard = new LoopGuard();
-  // Shared retry budget across 429 + 5xx — total cap prevents infinite retry loops
-  let retryCount = 0;
+  // Separate retry counters — 429 and 5xx have different backoff strategies
+  let rateLimitRetries = 0;
+  let serverErrorRetries = 0;
   const MAX_RETRIES = 3;
 
   for (let turn = 0; turn < maxTurns; turn++) {
@@ -200,13 +201,13 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     });
 
     if (response.status === 429) {
-      retryCount++;
-      if (retryCount >= MAX_RETRIES) {
+      rateLimitRetries++;
+      if (rateLimitRetries >= MAX_RETRIES) {
         throw new Error(`Rate limit retry cap exceeded (${MAX_RETRIES} consecutive 429 responses). Try again later.`);
       }
       const retryAfter = parseInt(response.headers.get('retry-after') ?? '5', 10);
       const waitMs = Math.min(retryAfter * 1000, 60_000);
-      if (onToken) onToken(`\n[Rate limited — waiting ${retryAfter}s (retry ${retryCount}/${MAX_RETRIES})...]\n`);
+      if (onToken) onToken(`\n[Rate limited — waiting ${retryAfter}s (retry ${rateLimitRetries}/${MAX_RETRIES})...]\n`);
       await new Promise(r => setTimeout(r, waitMs));
       turn--; // retry this turn without consuming a turn
       continue;
@@ -216,12 +217,12 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       const errorBody = await response.text().catch(() => 'Unknown error');
       // Retry on transient server errors (502, 503, 504)
       if ([502, 503, 504].includes(response.status)) {
-        retryCount++;
-        if (retryCount >= MAX_RETRIES) {
+        serverErrorRetries++;
+        if (serverErrorRetries >= MAX_RETRIES) {
           throw new Error(`Server error retry cap exceeded (${MAX_RETRIES} consecutive ${response.status} errors): ${errorBody}`);
         }
-        const waitMs = Math.min(1000 * Math.pow(2, retryCount), 30_000);
-        if (onToken) onToken(`\n[Server error ${response.status} — retrying in ${waitMs / 1000}s (retry ${retryCount}/${MAX_RETRIES})...]\n`);
+        const waitMs = Math.min(1000 * Math.pow(2, serverErrorRetries), 30_000);
+        if (onToken) onToken(`\n[Server error ${response.status} — retrying in ${waitMs / 1000}s (retry ${serverErrorRetries}/${MAX_RETRIES})...]\n`);
         await new Promise(r => setTimeout(r, waitMs));
         turn--; // retry this turn without consuming a turn
         continue;
@@ -340,7 +341,8 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
 
     totalInputTokens += turnInputTokens;
     totalOutputTokens += turnOutputTokens;
-    retryCount = 0; // Reset retry counter on successful response
+    rateLimitRetries = 0; // Reset retry counters on successful response
+    serverErrorRetries = 0;
 
     // Check token budget
     if (config.maxTokenBudget && (totalInputTokens + totalOutputTokens) > config.maxTokenBudget) {
