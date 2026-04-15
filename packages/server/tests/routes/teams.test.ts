@@ -13,11 +13,14 @@ describe('Team API', () => {
     server = await buildServer();
 
     // Clean up any leftover test data (use unique prefix to avoid collision with auth tests)
-    await server.db.execute(sql`DELETE FROM team_members WHERE team_id IN (SELECT id FROM teams WHERE slug LIKE 'test-%')`);
-    await server.db.execute(sql`DELETE FROM team_capability_requests WHERE team_id IN (SELECT id FROM teams WHERE slug LIKE 'test-%')`);
-    await server.db.execute(sql`DELETE FROM team_capability_overrides WHERE team_id IN (SELECT id FROM teams WHERE slug LIKE 'test-%')`);
-    await server.db.execute(sql`DELETE FROM team_capability_policies WHERE team_id IN (SELECT id FROM teams WHERE slug LIKE 'test-%')`);
-    await server.db.execute(sql`DELETE FROM teams WHERE slug LIKE 'test-%'`);
+    // Narrow to 'test-team%' — previously 'test-%' collided with analytics.test.ts's
+    // 'test-analytics' slug when files ran in parallel and wiped it mid-run, causing
+    // spurious 403s because the analytics team's owner was no longer a member.
+    await server.db.execute(sql`DELETE FROM team_members WHERE team_id IN (SELECT id FROM teams WHERE slug LIKE 'test-team%')`);
+    await server.db.execute(sql`DELETE FROM team_capability_requests WHERE team_id IN (SELECT id FROM teams WHERE slug LIKE 'test-team%')`);
+    await server.db.execute(sql`DELETE FROM team_capability_overrides WHERE team_id IN (SELECT id FROM teams WHERE slug LIKE 'test-team%')`);
+    await server.db.execute(sql`DELETE FROM team_capability_policies WHERE team_id IN (SELECT id FROM teams WHERE slug LIKE 'test-team%')`);
+    await server.db.execute(sql`DELETE FROM teams WHERE slug LIKE 'test-team%'`);
     await server.db.execute(sql`DELETE FROM users WHERE clerk_id LIKE 'tmtest_%'`);
 
     // Create test users directly in DB (clerk IDs use 'tmtest_' prefix to avoid auth test cleanup)
@@ -54,11 +57,14 @@ describe('Team API', () => {
   });
 
   afterAll(async () => {
-    await server.db.execute(sql`DELETE FROM team_members WHERE team_id IN (SELECT id FROM teams WHERE slug LIKE 'test-%')`);
-    await server.db.execute(sql`DELETE FROM team_capability_requests WHERE team_id IN (SELECT id FROM teams WHERE slug LIKE 'test-%')`);
-    await server.db.execute(sql`DELETE FROM team_capability_overrides WHERE team_id IN (SELECT id FROM teams WHERE slug LIKE 'test-%')`);
-    await server.db.execute(sql`DELETE FROM team_capability_policies WHERE team_id IN (SELECT id FROM teams WHERE slug LIKE 'test-%')`);
-    await server.db.execute(sql`DELETE FROM teams WHERE slug LIKE 'test-%'`);
+    // Narrow to 'test-team%' — previously 'test-%' collided with analytics.test.ts's
+    // 'test-analytics' slug when files ran in parallel and wiped it mid-run, causing
+    // spurious 403s because the analytics team's owner was no longer a member.
+    await server.db.execute(sql`DELETE FROM team_members WHERE team_id IN (SELECT id FROM teams WHERE slug LIKE 'test-team%')`);
+    await server.db.execute(sql`DELETE FROM team_capability_requests WHERE team_id IN (SELECT id FROM teams WHERE slug LIKE 'test-team%')`);
+    await server.db.execute(sql`DELETE FROM team_capability_overrides WHERE team_id IN (SELECT id FROM teams WHERE slug LIKE 'test-team%')`);
+    await server.db.execute(sql`DELETE FROM team_capability_policies WHERE team_id IN (SELECT id FROM teams WHERE slug LIKE 'test-team%')`);
+    await server.db.execute(sql`DELETE FROM teams WHERE slug LIKE 'test-team%'`);
     await server.db.execute(sql`DELETE FROM users WHERE clerk_id LIKE 'tmtest_%'`);
     await server.close();
   });
