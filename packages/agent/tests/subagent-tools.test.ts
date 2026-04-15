@@ -145,4 +145,86 @@ describe('subagent-tools', () => {
     const config = runner.mock.calls[0][0];
     expect(config.maxTurns).toBe(5);
   });
+
+  // Gap L (Skills 2.0 verification): sub-agent results must persist beyond
+  // the 30-min in-memory eviction via a caller-supplied completion callback.
+  describe('onSubAgentComplete — gap L (result persistence)', () => {
+    it('fires the callback once with the full SubAgentResult on success', async () => {
+      const onComplete = vi.fn(async () => {});
+      const tools = createSubAgentTools({
+        availableTools: makeMockTools(),
+        runLoop: makeMockRunner(),
+        litellmUrl: 'http://localhost:4000',
+        litellmApiKey: 'test-key',
+        defaultModel: 'test-model',
+        onSubAgentComplete: onComplete,
+      });
+      await run(tools, 'spawn_agent', {
+        name: 'Persisted Bot',
+        role: 'analyst',
+        task: 'Do a thing',
+      });
+      expect(onComplete).toHaveBeenCalledOnce();
+      const arg = onComplete.mock.calls[0][0];
+      expect(arg).toMatchObject({
+        agentName: 'Persisted Bot',
+        role: 'analyst',
+        response: expect.stringContaining('Do a thing'),
+        toolsUsed: expect.any(Array),
+        usage: { inputTokens: 100, outputTokens: 50 },
+      });
+      expect(typeof arg.duration).toBe('number');
+      expect(typeof arg.completedAt).toBe('number');
+      expect(typeof arg.agentId).toBe('string');
+    });
+
+    it('does NOT fire the callback when the sub-agent errors', async () => {
+      const onComplete = vi.fn(async () => {});
+      const failingRunner = vi.fn(async () => { throw new Error('LLM down'); });
+      const tools = createSubAgentTools({
+        availableTools: makeMockTools(),
+        runLoop: failingRunner,
+        litellmUrl: 'http://localhost:4000',
+        litellmApiKey: 'test-key',
+        onSubAgentComplete: onComplete,
+      });
+      const result = await run(tools, 'spawn_agent', {
+        name: 'Broken Bot',
+        role: 'researcher',
+        task: 'Will fail',
+      });
+      expect(result).toContain('Sub-Agent Error');
+      expect(onComplete).not.toHaveBeenCalled();
+    });
+
+    it('swallows callback errors — persistence failure must not break the return', async () => {
+      const onComplete = vi.fn(async () => { throw new Error('DB write failed'); });
+      const tools = createSubAgentTools({
+        availableTools: makeMockTools(),
+        runLoop: makeMockRunner(),
+        litellmUrl: 'http://localhost:4000',
+        litellmApiKey: 'test-key',
+        onSubAgentComplete: onComplete,
+      });
+      const result = await run(tools, 'spawn_agent', {
+        name: 'Survivor Bot',
+        role: 'researcher',
+        task: 'Main agent still gets the result',
+      });
+      expect(onComplete).toHaveBeenCalledOnce();
+      // Main-agent-visible string unaffected by the persistence failure
+      expect(result).toContain('Sub-Agent Result: Survivor Bot');
+      expect(result).not.toContain('DB write failed');
+    });
+
+    it('still works when no callback is provided (backwards-compatible)', async () => {
+      const tools = createTools();
+      const result = await run(tools, 'spawn_agent', {
+        name: 'Legacy Bot',
+        role: 'researcher',
+        task: 'No callback wired',
+      });
+      expect(result).toContain('Sub-Agent Result: Legacy Bot');
+    });
+  });
 });

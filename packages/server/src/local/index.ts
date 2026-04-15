@@ -646,6 +646,10 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   // SSE stream so the Room canvas can render live tiles for sub-agents
   // spawned via spawn_agent (bug #9). Without this wiring, sub-agents ran
   // silently and Room stayed empty.
+  //
+  // onSubAgentComplete persists the result into the active mind (workspace if
+  // active, else personal) so specialist work survives beyond the 30-min
+  // in-memory eviction window — Skills 2.0 gap L.
   const subAgentTools = createSubAgentTools({
     availableTools: baseTools,
     runLoop: runAgentLoop,
@@ -665,6 +669,38 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
         startedAt: event.startedAt,
         completedAt: event.completedAt,
       }]);
+    },
+    onSubAgentComplete: async (result) => {
+      // Gap L — persist sub-agent result to the active mind so specialist
+      // work is searchable after the 30-min in-memory cache evicts.
+      // Best-effort: any failure is swallowed by subagent-tools so the
+      // main-agent-visible return path stays intact.
+      try {
+        const wsId = server.agentState.activeWorkspaceId;
+        const wsDb = wsId ? mindCache.getOrOpen(wsId) : null;
+        const targetDb = wsDb ?? multiMind.personal;
+        const mindLabel = wsDb ? `workspace:${wsId}` : 'personal';
+
+        // Structured content: tag provenance so search/evolution can filter
+        // for sub-agent-derived frames and so humans can see where it came from.
+        const content = `[Sub-agent: ${result.role}] ${result.agentName}\n\n${result.response}\n\n— tools: ${result.toolsUsed.join(', ') || 'none'} · ${(result.duration / 1000).toFixed(1)}s · ${result.usage.inputTokens + result.usage.outputTokens} tokens`;
+
+        // Use raw frames — cognify requires a per-mind pipeline we don't
+        // construct here; the decayFrames weaver will pick these up later.
+        const frames = new FrameStore(targetDb);
+        const sessions = new SessionStore(targetDb);
+        const active = sessions.getActive();
+        const gopId = active.length > 0 ? active[0].gop_id : sessions.create().gop_id;
+        const latestI = frames.getLatestIFrame(gopId);
+        if (latestI) {
+          frames.createPFrame(gopId, content, latestI.id, 'normal', 'agent_inferred');
+        } else {
+          frames.createIFrame(gopId, content, 'normal', 'agent_inferred');
+        }
+        log.debug(`Gap L: persisted sub-agent result ${result.agentId} to ${mindLabel} mind`);
+      } catch (err) {
+        log.debug('Gap L: sub-agent persistence failed (non-blocking)', err);
+      }
     },
   });
 

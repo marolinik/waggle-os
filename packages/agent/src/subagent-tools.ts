@@ -67,6 +67,18 @@ export interface SubAgentToolsDeps {
    * Bug #9.
    */
   onSubAgentStatus?: (event: SubAgentStatusEvent) => void;
+  /**
+   * Fired exactly once on successful sub-agent completion (not on error).
+   * The server wires this to persist the result into the active mind so
+   * specialist work survives beyond the 30-min in-memory eviction window
+   * and the 100-entry MAX_AGENT_RESULTS cap. Gap L from the Skills 2.0
+   * verification doc.
+   *
+   * Implementations MUST NOT throw — failures should be caught and logged;
+   * the caller treats this as best-effort and always returns the result
+   * string to the main agent regardless of persistence outcome.
+   */
+  onSubAgentComplete?: (result: SubAgentResult) => Promise<void> | void;
   /** Hook registry — passed to sub-agent loops so approval gates and memory validation apply */
   hooks?: HookRegistry;
 }
@@ -247,6 +259,17 @@ ${task}
           agentResults.set(id, subResult);
           evictOldestResult();
           activeAgents.delete(id);
+
+          // Gap L: persist completed sub-agent result into the active mind
+          // so specialist work survives the 30-min in-memory eviction window.
+          // Best-effort — persistence failure must not break the return path.
+          if (deps.onSubAgentComplete) {
+            try {
+              await deps.onSubAgentComplete(subResult);
+            } catch {
+              // Swallow — persistence is best-effort. Caller should log on its side.
+            }
+          }
 
           // Bug #9: emit done status so the Room canvas moves the tile to completed.
           deps.onSubAgentStatus?.({
