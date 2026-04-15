@@ -523,4 +523,33 @@ export class WikiCompiler {
 
     return concepts.slice(0, 20); // Cap at 20 concepts
   }
+
+  /**
+   * Export all wiki pages as a flat markdown bundle.
+   * Returns a map of slug → markdown content, suitable for writing to disk.
+   */
+  exportToMarkdown(): Map<string, string> {
+    const pages = this.state.getAllPages();
+    const result = new Map<string, string>();
+    for (const page of pages) {
+      result.set(page.slug, page.markdown || `# ${page.name}\n\n(no content compiled yet)`);
+    }
+    return result;
+  }
+
+  /**
+   * Export all wiki pages to a directory as individual .md files.
+   * Creates the directory if it doesn't exist.
+   */
+  async exportToDirectory(dir: string): Promise<{ filesWritten: number }> {
+    const { mkdirSync, writeFileSync } = await import('node:fs');
+    mkdirSync(dir, { recursive: true });
+    const pages = this.exportToMarkdown();
+    let count = 0;
+    for (const [slug, markdown] of pages) {
+      writeFileSync(`${dir}/${slug}.md`, markdown, 'utf-8');
+      count++;
+    }
+    return { filesWritten: count };
+  }
 }
