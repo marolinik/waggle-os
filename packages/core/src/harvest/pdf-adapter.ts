@@ -10,30 +10,9 @@
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import type { SourceAdapter, UniversalImportItem } from './types.js';
+import { chunkByParagraphs } from './chunk-utils.js';
 
 const MAX_CHUNK_LENGTH = 3000;
-
-function chunkText(text: string, maxLen: number): string[] {
-  const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim().length > 0);
-  const chunks: string[] = [];
-  let current = '';
-
-  for (const para of paragraphs) {
-    const trimmed = para.trim();
-    if (current.length + trimmed.length + 2 > maxLen && current.length > 0) {
-      chunks.push(current.trim());
-      current = trimmed;
-    } else {
-      current += (current ? '\n\n' : '') + trimmed;
-    }
-  }
-
-  if (current.trim()) {
-    chunks.push(current.trim());
-  }
-
-  return chunks;
-}
 
 export class PdfAdapter implements SourceAdapter {
   readonly sourceType = 'pdf' as const;
@@ -96,7 +75,7 @@ export class PdfAdapter implements SourceAdapter {
       ?? filePath.split(/[\\/]/).pop()?.replace('.pdf', '')
       ?? 'PDF Document';
 
-    const chunks = chunkText(fullText, MAX_CHUNK_LENGTH);
+    const chunks = chunkByParagraphs(fullText, MAX_CHUNK_LENGTH);
 
     return chunks.map((chunk, i) => ({
       id: randomUUID(),

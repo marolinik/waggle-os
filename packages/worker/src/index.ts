@@ -28,7 +28,7 @@ export function createWorker(redisUrl = REDIS_URL, databaseUrl?: string, queueNa
   processor.register('task', taskHandler);
   processor.register('waggle', waggleHandler);
   processor.register('group', groupHandler);
-  // Cron handler placeholder (real implementation in Task 3.16)
+  // TODO(pre-launch): Replace with real cron execution handler
   processor.register('cron', async (job) => ({ result: 'cron handler placeholder', input: job.data.input }));
 
   const url = new URL(redisUrl);

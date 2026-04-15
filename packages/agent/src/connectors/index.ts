@@ -27,5 +27,5 @@ export { ComposioConnector } from './composio-connector.js';
 export { MSTeamsConnector } from './ms-teams-connector.js';
 export { OutlookConnector } from './outlook-connector.js';
 export { OneDriveConnector } from './onedrive-connector.js';
-// MOCK: Remove when real OAuth integrations are ready
+// DEMO: Mock connectors for testing/demo mode — remove when real OAuth integrations are ready
 export { MockSlackConnector, MockTeamsConnector, MockDiscordConnector } from './mock-channel-connectors.js';

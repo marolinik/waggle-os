@@ -54,7 +54,7 @@ export function KvarkSection({ serverUrl: _serverUrl = 'http://127.0.0.1:3333' }
       }
     } catch {
       // Network error or timeout — show mock "Not configured" message
-      // MOCK: Remove this fallback once real KVARK is wired end-to-end
+      // TODO(pre-launch): Remove mock fallback once KVARK API is wired
       setStatus('error');
       setStatusMessage('Could not reach KVARK. Verify the URL and ensure KVARK is running.');
     }

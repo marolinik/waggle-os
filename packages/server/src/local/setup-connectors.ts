@@ -50,9 +50,11 @@ export function registerConnectors(vault: VaultStore): ConnectorRegistry {
   registry.register(new OutlookConnector());
   registry.register(new OneDriveConnector());
   registry.register(new ComposioConnector());
-  // MOCK: Remove when real OAuth integrations are ready
-  registry.register(new MockSlackConnector());
-  registry.register(new MockTeamsConnector());
-  registry.register(new MockDiscordConnector());
+  // DEMO: Mock connectors for testing/demo mode — remove when real OAuth integrations are ready
+  if (process.env.NODE_ENV !== 'production') {
+    registry.register(new MockSlackConnector());
+    registry.register(new MockTeamsConnector());
+    registry.register(new MockDiscordConnector());
+  }
   return registry;
 }

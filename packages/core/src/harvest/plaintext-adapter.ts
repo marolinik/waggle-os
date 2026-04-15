@@ -8,30 +8,7 @@
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import type { SourceAdapter, UniversalImportItem } from './types.js';
-
-const MAX_CHUNK_LENGTH = 2000;
-
-function chunkParagraphs(text: string): string[] {
-  const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim().length > 0);
-  const chunks: string[] = [];
-  let current = '';
-
-  for (const para of paragraphs) {
-    const trimmed = para.trim();
-    if (current.length + trimmed.length + 2 > MAX_CHUNK_LENGTH && current.length > 0) {
-      chunks.push(current.trim());
-      current = trimmed;
-    } else {
-      current += (current ? '\n\n' : '') + trimmed;
-    }
-  }
-
-  if (current.trim()) {
-    chunks.push(current.trim());
-  }
-
-  return chunks;
-}
+import { chunkByParagraphs } from './chunk-utils.js';
 
 export class PlaintextAdapter implements SourceAdapter {
   readonly sourceType = 'plaintext' as const;
@@ -61,7 +38,7 @@ export class PlaintextAdapter implements SourceAdapter {
 
     if (!content.trim()) return [];
 
-    const chunks = chunkParagraphs(content);
+    const chunks = chunkByParagraphs(content);
     const docTitle = sourcePath?.split(/[\\/]/).pop()?.replace(/\.\w+$/, '');
 
     return chunks.map((chunk, i) => ({

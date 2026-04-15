@@ -1,7 +1,8 @@
 /**
  * Mock Channel Connectors — Slack, Microsoft Teams, Discord
  *
- * MOCK: Remove when real OAuth integration is ready.
+ * DEMO: Mock channel connectors for testing and demo mode.
+ * Remove when real OAuth integration is ready.
  *
  * These connectors appear in Settings → Connectors and expose tools that
  * return mock success responses. They require no credentials and are

@@ -230,7 +230,7 @@ export {
   PipedriveConnector, AirtableConnector, GitLabConnector, BitbucketConnector, DropboxConnector,
   PostgresConnector, GmailConnector, GoogleDocsConnector, GoogleDriveConnector, GoogleSheetsConnector,
   ComposioConnector, MSTeamsConnector, OutlookConnector, OneDriveConnector,
-  // MOCK: Remove when real OAuth integrations are ready
+  // DEMO: Mock connectors for testing/demo mode — remove when real OAuth integrations are ready
   MockSlackConnector, MockTeamsConnector, MockDiscordConnector,
 } from './connectors/index.js';
 export { IterationBudget, type IterationBudgetConfig } from './iteration-budget.js';
