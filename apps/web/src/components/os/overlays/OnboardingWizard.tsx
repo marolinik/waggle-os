@@ -68,6 +68,21 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
     trackTelemetry(serverBaseUrl, 'onboarding_start');
   }, []);
 
+  /* ── A11y audit (WCAG 2.1.1): Escape maps to Skip for the full-screen wizard.
+       Gives keyboard users a predictable exit. Clears auto-advance timer to
+       prevent focus jumping after dismiss. ── */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        clearTimeout(autoTimer.current);
+        trackTelemetry(serverBaseUrl, 'onboarding_skip', { atStep: step, via: 'escape' });
+        onDismiss();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [step, onDismiss, serverBaseUrl]);
+
   /* ── Bug #3: detect existing API key in vault on mount, so we don't
        re-prompt the user for a key they already configured. Any secret
        whose name matches the selected provider (case-insensitive match
@@ -282,10 +297,19 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      role="region"
+      aria-label="Waggle onboarding"
       className="fixed inset-0 z-[9999] bg-background flex flex-col"
     >
-      {/* Progress bar */}
-      <div className="h-1 w-full bg-muted/30">
+      {/* Progress bar — A11y audit #2: carries the semantic progress signal for screen readers */}
+      <div
+        role="progressbar"
+        aria-valuenow={step}
+        aria-valuemin={0}
+        aria-valuemax={7}
+        aria-label="Onboarding progress"
+        className="h-1 w-full bg-muted/30"
+      >
         <motion.div
           className="h-full bg-primary"
           initial={{ width: 0 }}
@@ -302,23 +326,28 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
               Step {displayStep} of 6
             </span>
           )}
-          <div className="flex gap-1.5">
-            {[0, 1, 2, 3, 4, 5, 6, 7].map(i => (
-              <div
-                key={i}
-                className={`w-2 h-2 rounded-full transition-colors ${
-                  i <= step ? 'bg-primary' : 'bg-muted/40'
-                }`}
-              />
-            ))}
-          </div>
+          {/* A11y audit #6: render 6 dots matching the "of 6" label (was 8, confusing).
+              Decorative — the progressbar above carries the semantic. */}
+          {displayStep !== null && (
+            <div className="flex gap-1.5" aria-hidden="true">
+              {[1, 2, 3, 4, 5, 6].map(i => (
+                <div
+                  key={i}
+                  className={`w-2 h-2 rounded-full transition-colors ${
+                    i <= step ? 'bg-primary' : 'bg-muted/40'
+                  }`}
+                />
+              ))}
+            </div>
+          )}
         </div>
         <button
           onClick={() => {
             trackTelemetry(serverBaseUrl, 'onboarding_skip', { atStep: step });
             onDismiss();
           }}
-          className="text-xs text-muted-foreground hover:text-foreground transition-colors font-display"
+          /* A11y audit #12: touch target ≥44×44 via padding. Was raw text-xs with no padding. */
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors font-display px-3 py-2 rounded-md focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
           Skip setup
         </button>

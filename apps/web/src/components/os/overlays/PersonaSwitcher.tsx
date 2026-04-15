@@ -66,6 +66,16 @@ const PersonaSwitcher = ({ open, onClose, currentPersona, currentGroupId, onSele
     });
   }, [open]);
 
+  // A11y audit (WCAG 2.1.1): Escape closes the modal — #1 keyboard expectation for modal UIs.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   const isLocked = (id: string) => !allPersonasUnlocked && !FREE_PERSONA_IDS.includes(id);
@@ -84,9 +94,10 @@ const PersonaSwitcher = ({ open, onClose, currentPersona, currentGroupId, onSele
       key={p.id}
       onClick={() => { if (!locked) { onSelect(p.id); onClose(); } }}
       disabled={locked}
-      className={`flex items-center gap-3 p-3 rounded-xl transition-all text-left ${
+      aria-label={locked ? `${p.name} — locked, upgrade to Teams to unlock` : p.name}
+      className={`flex items-center gap-3 p-3 rounded-xl transition-all text-left focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
         locked
-          ? 'bg-secondary/20 border border-transparent opacity-50 cursor-not-allowed'
+          ? 'bg-secondary/10 border border-transparent cursor-not-allowed grayscale'
           : currentPersona === p.id && !currentGroupId
           ? 'bg-primary/20 border border-primary/50'
           : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
@@ -94,16 +105,17 @@ const PersonaSwitcher = ({ open, onClose, currentPersona, currentGroupId, onSele
       title={p.description}
     >
       <Avatar className="w-10 h-10 shrink-0">
-        {p.avatar ? <AvatarImage src={p.avatar} /> : (
+        {p.avatar ? <AvatarImage src={p.avatar} alt="" /> : (
           <AvatarFallback className="text-[11px] bg-primary/20">{p.icon || p.name[0]}</AvatarFallback>
         )}
       </Avatar>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1">
-          <p className="text-xs font-display font-medium text-foreground truncate">{p.name}</p>
-          {locked && <Lock className="w-3 h-3 text-muted-foreground shrink-0" />}
+          <p className={`text-xs font-display font-medium truncate ${locked ? 'text-muted-foreground' : 'text-foreground'}`}>{p.name}</p>
+          {locked && <Lock className="w-3 h-3 text-muted-foreground shrink-0" aria-hidden="true" />}
         </div>
-        <p className="text-[11px] text-muted-foreground truncate">{p.description}</p>
+        {/* A11y audit #5: bumped text-[11px] → text-xs for readability floor */}
+        <p className={`text-xs truncate ${locked ? 'text-muted-foreground/70' : 'text-muted-foreground'}`}>{p.description}</p>
       </div>
     </button>
   );
@@ -117,16 +129,19 @@ const PersonaSwitcher = ({ open, onClose, currentPersona, currentGroupId, onSele
         className="fixed inset-0 z-[100] flex items-center justify-center"
         onClick={onClose}
       >
-        <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+        <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" aria-hidden="true" />
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="persona-switcher-title"
           className="relative w-full max-w-md glass-strong rounded-2xl shadow-2xl p-5"
           onClick={e => e.stopPropagation()}
         >
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-display font-semibold text-foreground">Switch Agent</h2>
+            <h2 id="persona-switcher-title" className="text-sm font-display font-semibold text-foreground">Switch Agent</h2>
             {/* Tabs */}
             <div className="flex items-center gap-0.5 bg-secondary/30 rounded-lg p-0.5">
               <button
