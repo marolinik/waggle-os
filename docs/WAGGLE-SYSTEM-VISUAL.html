@@ -1,0 +1,1366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Waggle OS -- System Architecture</title>
+<style>
+  :root {
+    --honey: #e5a000;
+    --honey-light: #f5c842;
+    --honey-dim: #b37e00;
+    --hive-950: #08090c;
+    --hive-900: #0f1117;
+    --hive-850: #151821;
+    --hive-800: #1a1e2a;
+    --hive-700: #252a3a;
+    --hive-600: #353b50;
+    --hive-500: #505872;
+    --hive-400: #7b84a0;
+    --hive-300: #a8afc4;
+    --accent: #a78bfa;
+    --accent-light: #c4b5fd;
+    --accent-dim: #7c5fcf;
+    --green: #34d399;
+    --green-dim: #059669;
+    --red: #f87171;
+    --orange: #fb923c;
+    --blue: #60a5fa;
+    --pink: #f472b6;
+    --cyan: #22d3ee;
+    --white: #f0f0f5;
+    --glass: rgba(255,255,255,0.04);
+    --glass-border: rgba(255,255,255,0.08);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--hive-950);
+    color: var(--white);
+    overflow-x: hidden;
+    min-height: 100vh;
+  }
+
+  /* ---- HEADER ---- */
+  .header {
+    text-align: center;
+    padding: 48px 24px 32px;
+    position: relative;
+  }
+  .header::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 120px;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--honey), transparent);
+  }
+  .header h1 {
+    font-size: 42px;
+    font-weight: 700;
+    letter-spacing: -1px;
+    background: linear-gradient(135deg, var(--honey-light), var(--honey), var(--honey-dim));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .header .subtitle {
+    font-size: 16px;
+    color: var(--hive-400);
+    margin-top: 8px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+  .header .tagline {
+    font-size: 14px;
+    color: var(--hive-500);
+    margin-top: 16px;
+    font-style: italic;
+  }
+
+  /* ---- MAIN LAYOUT ---- */
+  .architecture {
+    display: flex;
+    max-width: 1400px;
+    margin: 40px auto;
+    padding: 0 24px;
+    gap: 24px;
+  }
+  .main-stack {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-width: 0;
+  }
+  .sidebar {
+    width: 300px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* ---- LAYER CARD ---- */
+  .layer {
+    background: var(--hive-900);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    overflow: hidden;
+    transition: border-color 0.3s;
+  }
+  .layer:hover {
+    border-color: rgba(229, 160, 0, 0.25);
+  }
+  .layer-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 20px;
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+  }
+  .layer-header::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 20px;
+    right: 20px;
+    height: 1px;
+    background: var(--glass-border);
+  }
+  .layer-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+  .layer-title {
+    font-size: 18px;
+    font-weight: 600;
+    flex: 1;
+  }
+  .layer-badge {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .layer-toggle {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1px solid var(--hive-600);
+    background: transparent;
+    color: var(--hive-400);
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+    flex-shrink: 0;
+  }
+  .layer-toggle:hover {
+    border-color: var(--honey);
+    color: var(--honey);
+  }
+  .layer.expanded .layer-toggle {
+    transform: rotate(180deg);
+  }
+  .layer-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .layer.expanded .layer-body {
+    max-height: 2000px;
+  }
+  .layer-content {
+    padding: 20px;
+  }
+
+  /* ---- COMPONENT GRID ---- */
+  .comp-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+  }
+  .comp-grid.wide {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  }
+  .comp-grid.narrow {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+
+  /* ---- COMPONENT BOX ---- */
+  .comp {
+    background: var(--hive-850);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    padding: 14px;
+    cursor: default;
+    position: relative;
+    transition: all 0.25s;
+  }
+  .comp:hover {
+    border-color: rgba(229, 160, 0, 0.35);
+    background: var(--hive-800);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  }
+  .comp-name {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .comp-name .icon {
+    font-size: 15px;
+  }
+  .comp-desc {
+    font-size: 11px;
+    color: var(--hive-400);
+    line-height: 1.4;
+  }
+
+  /* ---- TOOLTIP ---- */
+  .tooltip-container {
+    position: relative;
+  }
+  .tooltip {
+    position: absolute;
+    bottom: calc(100% + 10px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--hive-800);
+    border: 1px solid var(--honey-dim);
+    border-radius: 10px;
+    padding: 14px 16px;
+    width: 280px;
+    z-index: 1000;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+  }
+  .tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: var(--honey-dim);
+  }
+  .comp:hover .tooltip {
+    opacity: 1;
+  }
+  .tooltip-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--honey-light);
+    margin-bottom: 6px;
+  }
+  .tooltip-body {
+    font-size: 12px;
+    color: var(--hive-300);
+    line-height: 1.5;
+  }
+  .tooltip-file {
+    font-size: 10px;
+    color: var(--hive-500);
+    margin-top: 8px;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    border-top: 1px solid var(--glass-border);
+    padding-top: 6px;
+  }
+
+  /* ---- FLOW ARROW ---- */
+  .flow-connector {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
+    position: relative;
+  }
+  .flow-connector::before {
+    content: '';
+    width: 2px;
+    height: 100%;
+    background: linear-gradient(180deg, var(--honey-dim), var(--honey));
+  }
+  .flow-connector::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 8px solid var(--honey);
+  }
+
+  /* ---- PERSONA STRIP ---- */
+  .persona-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .persona-chip {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--hive-800);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px;
+    padding: 5px 12px 5px 8px;
+    font-size: 12px;
+    transition: all 0.2s;
+    cursor: default;
+    position: relative;
+  }
+  .persona-chip:hover {
+    border-color: var(--accent);
+    background: rgba(167, 139, 250, 0.1);
+  }
+  .persona-chip .p-icon { font-size: 14px; }
+  .persona-chip .p-name { color: var(--hive-300); }
+
+  /* ---- TIER STRIP ---- */
+  .tier-strip {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+  .tier-tag {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+  }
+  .tier-free { background: rgba(52, 211, 153, 0.15); color: var(--green); border: 1px solid rgba(52, 211, 153, 0.3); }
+  .tier-pro { background: rgba(96, 165, 250, 0.15); color: var(--blue); border: 1px solid rgba(96, 165, 250, 0.3); }
+  .tier-teams { background: rgba(167, 139, 250, 0.15); color: var(--accent); border: 1px solid rgba(167, 139, 250, 0.3); }
+  .tier-enterprise { background: rgba(229, 160, 0, 0.15); color: var(--honey); border: 1px solid rgba(229, 160, 0, 0.3); }
+
+  /* ---- SIDEBAR CARDS ---- */
+  .sidebar-card {
+    background: var(--hive-900);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    padding: 20px;
+  }
+  .sidebar-card h3 {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .sidebar-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--glass-border);
+    font-size: 12px;
+  }
+  .sidebar-item:last-child { border-bottom: none; }
+  .sidebar-item .si-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+  .sidebar-item .si-label { font-weight: 600; color: var(--hive-300); }
+  .sidebar-item .si-desc { color: var(--hive-500); margin-top: 2px; line-height: 1.4; }
+
+  /* ---- TIER TABLE ---- */
+  .tier-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin-top: 12px;
+  }
+  .tier-table th {
+    text-align: left;
+    font-size: 10px;
+    color: var(--hive-500);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--glass-border);
+  }
+  .tier-table td {
+    font-size: 12px;
+    padding: 8px;
+    border-bottom: 1px solid var(--glass-border);
+    color: var(--hive-300);
+  }
+  .tier-table tr:last-child td { border-bottom: none; }
+  .tier-table .tier-name {
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+  }
+  .tier-table .tier-price {
+    color: var(--honey-light);
+    font-weight: 600;
+  }
+
+  /* ---- FLOW LINE ---- */
+  .harvest-flow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, rgba(229, 160, 0, 0.08), rgba(167, 139, 250, 0.06));
+    border: 1px solid rgba(229, 160, 0, 0.2);
+    border-radius: 10px;
+  }
+  .harvest-flow .arrow {
+    color: var(--honey);
+    font-size: 18px;
+    animation: pulse-arrow 2s ease-in-out infinite;
+  }
+  @keyframes pulse-arrow {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+  }
+  .harvest-flow .flow-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--honey-light);
+  }
+  .harvest-flow .flow-desc {
+    font-size: 11px;
+    color: var(--hive-400);
+  }
+
+  /* ---- BENEFITS BAR ---- */
+  .benefits {
+    display: flex;
+    gap: 16px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+  }
+  .benefit {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: linear-gradient(135deg, rgba(52, 211, 153, 0.08), rgba(52, 211, 153, 0.03));
+    border: 1px solid rgba(52, 211, 153, 0.2);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--green);
+  }
+  .benefit .b-icon { font-size: 16px; }
+
+  /* ---- SECTION LABEL ---- */
+  .section-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--hive-500);
+    margin-bottom: 10px;
+    font-weight: 600;
+  }
+
+  /* ---- ADAPTER GRID ---- */
+  .adapter-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 8px;
+  }
+  .adapter {
+    background: var(--hive-850);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--hive-300);
+    transition: all 0.2s;
+    cursor: default;
+  }
+  .adapter:hover {
+    border-color: var(--honey-dim);
+    background: var(--hive-800);
+    transform: translateY(-1px);
+  }
+  .adapter .a-icon {
+    font-size: 20px;
+    display: block;
+    margin-bottom: 4px;
+  }
+
+  /* ---- EVOLUTION PIPELINE ---- */
+  .evo-pipeline {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+  }
+  .evo-step {
+    background: var(--hive-800);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent-light);
+    white-space: nowrap;
+    transition: all 0.2s;
+    cursor: default;
+    position: relative;
+  }
+  .evo-step:hover {
+    border-color: var(--accent);
+    background: rgba(167, 139, 250, 0.1);
+    transform: translateY(-1px);
+  }
+  .evo-arrow {
+    color: var(--accent-dim);
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  /* ---- SEARCH BOX INSIDE MEMORY ---- */
+  .search-viz {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 12px 0;
+    padding: 10px 16px;
+    background: var(--hive-800);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+  }
+  .search-viz .sv-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--hive-300);
+    white-space: nowrap;
+  }
+  .search-viz .sv-plus {
+    color: var(--honey);
+    font-weight: 700;
+    font-size: 16px;
+  }
+  .search-viz .sv-eq {
+    color: var(--green);
+    font-weight: 700;
+    font-size: 14px;
+  }
+
+  /* ---- KVARK CALLOUT ---- */
+  .kvark-callout {
+    background: linear-gradient(135deg, rgba(229, 160, 0, 0.1), rgba(229, 160, 0, 0.03));
+    border: 1px solid rgba(229, 160, 0, 0.25);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-top: 16px;
+  }
+  .kvark-callout h4 {
+    font-size: 14px;
+    color: var(--honey-light);
+    margin-bottom: 6px;
+  }
+  .kvark-callout p {
+    font-size: 12px;
+    color: var(--hive-400);
+    line-height: 1.5;
+  }
+
+  /* ---- FOOTER ---- */
+  .footer {
+    text-align: center;
+    padding: 40px 24px;
+    font-size: 12px;
+    color: var(--hive-600);
+    border-top: 1px solid var(--glass-border);
+    margin-top: 40px;
+  }
+  .footer a {
+    color: var(--honey-dim);
+    text-decoration: none;
+  }
+  .footer a:hover { color: var(--honey); }
+
+  /* ---- RESPONSIVE ---- */
+  @media (max-width: 1024px) {
+    .architecture {
+      flex-direction: column;
+    }
+    .sidebar {
+      width: 100%;
+      flex-direction: row;
+      flex-wrap: wrap;
+    }
+    .sidebar-card {
+      flex: 1;
+      min-width: 280px;
+    }
+  }
+  @media (max-width: 600px) {
+    .header h1 { font-size: 28px; }
+    .comp-grid { grid-template-columns: 1fr 1fr; }
+    .adapter-grid { grid-template-columns: 1fr 1fr; }
+    .evo-pipeline { flex-direction: column; align-items: stretch; }
+    .evo-arrow { transform: rotate(90deg); text-align: center; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ HEADER ============ -->
+<div class="header">
+  <h1>Waggle OS</h1>
+  <div class="subtitle">System Architecture</div>
+  <div class="tagline">Workspace-native AI agent platform with persistent memory &mdash; Tauri 2.0 + React 19 + SQLite</div>
+</div>
+
+<!-- ============ ARCHITECTURE ============ -->
+<div class="architecture">
+
+  <!-- ======== MAIN STACK ======== -->
+  <div class="main-stack">
+
+    <!-- ---- USER LAYER ---- -->
+    <div class="layer expanded" id="layer-user">
+      <div class="layer-header" onclick="toggleLayer('layer-user')">
+        <div class="layer-icon" style="background: linear-gradient(135deg, var(--honey), var(--honey-dim));">
+          <span>&#x1f4bb;</span>
+        </div>
+        <span class="layer-title">User Layer</span>
+        <span class="layer-badge" style="background: rgba(52,211,153,0.15); color: var(--green);">Desktop + Web</span>
+        <button class="layer-toggle" aria-label="Toggle section">&#9660;</button>
+      </div>
+      <div class="layer-body">
+        <div class="layer-content">
+          <div class="section-label">Desktop Experience</div>
+          <div class="comp-grid wide">
+            <div class="comp tooltip-container">
+              <div class="comp-name"><span class="icon">&#x1f5a5;</span> Desktop Shell</div>
+              <div class="comp-desc">Tauri 2.0 binary &mdash; Windows + macOS. Rust shell with WebView2.</div>
+              <div class="tooltip">
+                <div class="tooltip-title">Tauri 2.0 Desktop Shell</div>
+                <div class="tooltip-body">Lightweight native shell wrapping the React web app. Handles IPC, filesystem access, and native menus. Ships with a Node.js sidecar for the backend.</div>
+                <div class="tooltip-file">app/src-tauri/</div>
+              </div>
+            </div>
+            <div class="comp tooltip-container">
+              <div class="comp-name"><span class="icon">&#x1f3af;</span> 24 OS Apps</div>
+              <div class="comp-desc">Chat, Memory, Files, Wiki, Settings, Marketplace, Cockpit, and more.</div>
+              <div class="tooltip">
+                <div class="tooltip-title">Application Suite</div>
+                <div class="tooltip-body">Full desktop OS experience with dock, windows, and overlays. Each app is a React component shell rendered in a managed window with per-window persona assignment.</div>
+                <div class="tooltip-file">apps/web/src/components/os/apps/</div>
+              </div>
+            </div>
+            <div class="comp tooltip-container">
+              <div class="comp-name"><span class="icon">&#x1f9ed;</span> Onboarding</div>
+              <div class="comp-desc">7-step wizard: API key, workspace, template, persona, import.</div>
+              <div class="tooltip">
+                <div class="tooltip-title">Onboarding Wizard</div>
+                <div class="tooltip-body">First-run setup flow guiding users through API key entry, workspace creation, template selection (15 templates), and persona assignment. Imports from ChatGPT/Claude/Gemini.</div>
+                <div class="tooltip-file">apps/web/src/components/os/overlays/OnboardingWizard.tsx</div>
+              </div>
+            </div>
+            <div class="comp tooltip-container">
+              <div class="comp-name"><span class="icon">&#x1f3a8;</span> Hive DS</div>
+              <div class="comp-desc">Design system: honey #e5a000, hive-950, accent #a78bfa.</div>
+              <div class="tooltip">
+                <div class="tooltip-title">Hive Design System</div>
+                <div class="tooltip-body">Consistent visual language across the platform. Dark-first palette with honey gold as primary, deep navy as background, purple as accent. Tailwind 4 + CSS tokens.</div>
+                <div class="tooltip-file">waggle-theme.css</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="benefits">
+            <div class="benefit"><span class="b-icon">&#x1f9e0;</span> Your AI remembers</div>
+            <div class="benefit"><span class="b-icon">&#x1f393;</span> Learns your style</div>
+            <div class="benefit"><span class="b-icon">&#x26a1;</span> Works offline</div>
+            <div class="benefit"><span class="b-icon">&#x1f512;</span> Data stays local</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-connector"></div>
+
+    <!-- ---- AGENT LAYER ---- -->
+    <div class="layer" id="layer-agent">
+      <div class="layer-header" onclick="toggleLayer('layer-agent')">
+        <div class="layer-icon" style="background: linear-gradient(135deg, var(--accent), var(--accent-dim));">
+          <span>&#x1f916;</span>
+        </div>
+        <span class="layer-title">Agent Layer</span>
+        <span class="layer-badge" style="background: rgba(167,139,250,0.15); color: var(--accent);">22 Personas</span>
+        <button class="layer-toggle" aria-label="Toggle section">&#9660;</button>
+      </div>
+      <div class="layer-body">
+        <div class="layer-content">
+          <div class="comp-grid wide">
+            <div class="comp tooltip-container">
+              <div class="comp-name"><span class="icon">&#x1f504;</span> Agent Loop</div>
+              <div class="comp-desc">Core execution: LLM call, tool parse, execute, stream. Up to 200 turns.</div>
+              <div class="tooltip">
+                <div class="tooltip-title">Agent Loop</div>
+                <div class="tooltip-body">The heart of Waggle. Sends messages to LLM, parses tool calls, executes them through capability routing, and streams results via SSE. Supports approval gates, cost tracking, and loop guards.</div>
+                <div class="tooltip-file">packages/agent/src/agent-loop.ts</div>
+              </div>
+            </div>
+            <div class="comp tooltip-container">
+              <div class="comp-name"><span class="icon">&#x1f3af;</span> Orchestrator</div>
+              <div class="comp-desc">Builds system prompt, recalls memory, assembles context per turn.</div>
+              <div class="tooltip">
+                <div class="tooltip-title">Orchestrator</div>
+                <div class="tooltip-body">Constructs the system prompt from persona + behavioral spec + skills + recalled memory. Calls recallMemory() to fuse personal and workspace mind results into context.</div>
+                <div class="tooltip-file">packages/agent/src/orchestrator.ts</div>
+              </div>
+            </div>
+            <div class="comp tooltip-container">
+              <div class="comp-name"><span class="icon">&#x1f9f0;</span> 97+ Tools</div>
+              <div class="comp-desc">12 categories: system, memory, web, git, plan, doc, sub-agent, skill, KVARK, team, audit, connector.</div>
+              <div class="tooltip">
+                <div class="tooltip-title">Tool System</div>
+                <div class="tooltip-body">Organized across 12 categories. Each tool follows the ToolDefinition interface. Sensitive tools go through approval gates. Tool pool is filtered per-persona via allowlist + denylist.</div>
+                <div class="tooltip-file">packages/agent/src/tool-filter.ts</div>
+              </div>
+            </div>
+            <div class="comp tooltip-container">
+              <div class="comp-name"><span class="icon">&#x26a1;</span> GEPA Optimizer</div>
+              <div class="comp-desc">Prompt expansion and optimization engine. Iterative refinement with constraint gates.</div>
+              <div class="tooltip">
+                <div class="tooltip-title">GEPA (Guided Expansion Prompt Algorithm)</div>
+                <div class="tooltip-body">Expands terse user prompts into detailed, high-quality instructions. Iterative refinement with constraint gates ensures quality. Core to the self-evolution stack.</div>
+                <div class="tooltip-file">packages/optimizer/</div>
+              </div>
+            </div>
+            <div class="comp tooltip-container">
+              <div class="comp-name"><span class="icon">&#x1f6e1;</span> Behavioral Spec</div>
+              <div class="comp-desc">Safety rules, disclaimer logic, persona constraints. Non-negotiable agent boundaries.</div>
+              <div class="tooltip">
+                <div class="tooltip-title">Behavioral Specification</div>
+                <div class="tooltip-body">Defines the non-negotiable rules all agents follow. Includes memory-conflict handling (CRITICAL), disclaimer requirements, and persona-specific behavioral constraints.</div>
+                <div class="tooltip-file">packages/agent/src/behavioral-spec.ts</div>
+              </div>
+            </div>
+            <div class="comp tooltip-container">
+              <div class="comp-name"><span class="icon">&#x1f50d;</span> Injection Scanner</div>
+              <div class="comp-desc">3 pattern sets for prompt injection defense on all external input.</div>
+              <div class="tooltip">
+                <div class="tooltip-title">Injection Scanner</div>
+                <div class="tooltip-body">scanForInjection() runs 3 pattern sets against all connector and external input. Mandatory security gate &mdash; never bypass.</div>
+                <div class="tooltip-file">packages/agent/src/injection-scanner.ts</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-label" style="margin-top: 16px;">22 Personas</div>
+          <div class="persona-strip">
+            <div class="persona-chip"><span class="p-icon">&#x1f52c;</span><span class="p-name">Researcher</span></div>
+            <div class="persona-chip"><span class="p-icon">&#x270d;</span><span class="p-name">Writer</span></div>
+            <div class="persona-chip"><span class="p-icon">&#x1f4ca;</span><span class="p-name">Analyst</span></div>
+            <div class="persona-chip"><span class="p-icon">&#x1f4bb;</span><span class="p-name">Coder</span></div>
+            <div class="persona-chip"><span class="p-icon">&#x1f4cb;</span><span class="p-name">PM</span></div>
+            <div class="persona-chip"><span class="p-icon">&#x1f4e7;</span><span class="p-name">Exec Asst</span></div>
+            <div class="persona-chip"><span class="p-icon">&#x1f3af;</span><span class="p-name">Sales</span></div>
+            <div class="persona-chip"><span class="p-icon">&#x1f4e2;</span><span class="p-name">Marketer</span></div>
+            <div class="persona-chip"><span class="p-icon">&#x1f4e6;</span><span class="p-name">Product</span></div>
+            <div class="persona-chip"><span class="p-icon">&#x1f465;</span><span class="p-name">HR</span></div>
+            <div class="persona-chip"><span class="p-icon">&#x2696;</span><span class="p-name">Legal</span></div>
+            <div class="persona-chip"><span class="p-icon">&#x1f4b0;</span><span class="p-name">Finance</span></div>
+            <div class="persona-chip"><span class="p-icon">&#x1f4bc;</span><span class="p-name">Consultant</span></div>
+            <div class="persona-chip"><span class="p-icon">&#x1f310;</span><span class="p-name">General</span></div>
+            <div class="persona-chip"><span class="p-icon">&#x1f5fa;</span><span class="p-name">Planner</span></div>
+            <div class="persona-chip"><span class="p-icon">&#x2705;</span><span class="p-name">Verifier</span></div>
+            <div class="persona-chip"><span class="p-icon">&#x1f517;</span><span class="p-name">Coordinator</span></div>
+            <div class="persona-chip"><span class="p-icon">&#x1f3a9;</span><span class="p-name">Support</span></div>
+            <div class="persona-chip"><span class="p-icon">&#x1f4d0;</span><span class="p-name">Designer</span></div>
+            <div class="persona-chip"><span class="p-icon">&#x1f4da;</span><span class="p-name">Educator</span></div>
+            <div class="persona-chip"><span class="p-icon">&#x1f30d;</span><span class="p-name">Translator</span></div>
+            <div class="persona-chip"><span class="p-icon">&#x1f527;</span><span class="p-name">DevOps</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-connector"></div>
+
+    <!-- ---- INTELLIGENCE LAYER ---- -->
+    <div class="layer" id="layer-intelligence">
+      <div class="layer-header" onclick="toggleLayer('layer-intelligence')">
+        <div class="layer-icon" style="background: linear-gradient(135deg, var(--pink), #be185d);">
+          <span>&#x1f9ec;</span>
+        </div>
+        <span class="layer-title">Intelligence Layer</span>
+        <span class="layer-badge" style="background: rgba(244,114,182,0.15); color: var(--pink);">Self-Evolution</span>
+        <button class="layer-toggle" aria-label="Toggle section">&#9660;</button>
+      </div>
+      <div class="layer-body">
+        <div class="layer-content">
+          <div class="section-label">Self-Evolution Pipeline (closed loop)</div>
+          <div class="evo-pipeline">
+            <div class="evo-step" title="Records every agent action, tool call, and outcome">TraceRecorder</div>
+            <span class="evo-arrow">&#x2192;</span>
+            <div class="evo-step" title="Builds evaluation datasets from trace history">EvalDataset</div>
+            <span class="evo-arrow">&#x2192;</span>
+            <div class="evo-step" title="LLM-as-judge scores agent outputs for quality">LLM Judge</div>
+            <span class="evo-arrow">&#x2192;</span>
+            <div class="evo-step" title="Iterative prompt expansion and optimization">GEPA</div>
+            <span class="evo-arrow">&#x2192;</span>
+            <div class="evo-step" title="Schema-guided prompt mutation inspired by Mikhail's paper">EvolveSchema</div>
+            <span class="evo-arrow">&#x2192;</span>
+            <div class="evo-step" title="Constraint gates validate before deployment">Gates</div>
+            <span class="evo-arrow">&#x2192;</span>
+            <div class="evo-step" title="Atomic deploy with backup and rollback capability">Deploy</div>
+          </div>
+          <div style="font-size: 11px; color: var(--hive-500); margin-top: 8px; font-style: italic;">
+            Result: Gemma 4 + Waggle-evolved prompts scored higher than raw Opus 4.6 by all 4 blind judges (C/A ratio: 108.8%)
+          </div>
+
+          <div style="margin-top: 20px;"></div>
+          <div class="comp-grid">
+            <div class="comp tooltip-container">
+              <div class="comp-name"><span class="icon">&#x1f3ad;</span> Workflow Harness</div>
+              <div class="comp-desc">research-verify, code-review-fix, document-draft templates.</div>
+              <div class="tooltip">
+                <div class="tooltip-title">Workflow Harness</div>
+                <div class="tooltip-body">Bridges workflow templates to the evolution system. Traces flow through the harness into the TraceRecorder for continuous improvement of multi-step workflows.</div>
+                <div class="tooltip-file">packages/agent/src/workflow-harness.ts</div>
+              </div>
+            </div>
+            <div class="comp tooltip-container">
+              <div class="comp-name"><span class="icon">&#x1f4a1;</span> Skill Extraction</div>
+              <div class="comp-desc">Auto-extract patterns. Promote: personal, workspace, team, enterprise.</div>
+              <div class="tooltip">
+                <div class="tooltip-title">Skill Auto-Extraction + Promotion</div>
+                <div class="tooltip-body">Detects recurring patterns in agent behavior and promotes them through a 4-level hierarchy: personal skill, workspace skill, team skill, enterprise skill.</div>
+                <div class="tooltip-file">packages/agent/src/skill-frontmatter.ts</div>
+              </div>
+            </div>
+            <div class="comp tooltip-container">
+              <div class="comp-name"><span class="icon">&#x1f4b2;</span> Cost Tracker</div>
+              <div class="comp-desc">Per-model pricing, session budgets, token accounting.</div>
+              <div class="tooltip">
+                <div class="tooltip-title">Cost Tracker</div>
+                <div class="tooltip-body">Tracks token usage and costs per model. Supports session-level budget caps. Includes pricing table for all supported models.</div>
+                <div class="tooltip-file">packages/agent/src/cost-tracker.ts</div>
+              </div>
+            </div>
+            <div class="comp tooltip-container">
+              <div class="comp-name"><span class="icon">&#x1f6ab;</span> Loop Guard</div>
+              <div class="comp-desc">Detects and breaks infinite loops in agent execution.</div>
+              <div class="tooltip">
+                <div class="tooltip-title">Loop Guard</div>
+                <div class="tooltip-body">Monitors agent execution patterns for repetitive tool calls or circular reasoning. Breaks infinite loops before they consume budget.</div>
+                <div class="tooltip-file">packages/agent/src/loop-guard.ts</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-connector"></div>
+
+    <!-- ---- MEMORY LAYER ---- -->
+    <div class="layer" id="layer-memory">
+      <div class="layer-header" onclick="toggleLayer('layer-memory')">
+        <div class="layer-icon" style="background: linear-gradient(135deg, var(--cyan), #0891b2);">
+          <span>&#x1f9e0;</span>
+        </div>
+        <span class="layer-title">Memory Layer</span>
+        <span class="layer-badge" style="background: rgba(34,211,238,0.15); color: var(--cyan);">SQLite + sqlite-vec</span>
+        <button class="layer-toggle" aria-label="Toggle section">&#9660;</button>
+      </div>
+      <div class="layer-body">
+        <div class="layer-content">
+          <div class="comp-grid wide">
+            <div class="comp tooltip-container">
+              <div class="comp-name"><span class="icon">&#x1f4be;</span> FrameStore</div>
+              <div class="comp-desc">I/P/B frames grouped by GOP. Append-only event log with compaction and dedup.</div>
+              <div class="tooltip">
+                <div class="tooltip-title">FrameStore (I/P/B Frames)</div>
+                <div class="tooltip-body">Memory is stored as frames: I-frames (complete snapshots), P-frames (deltas), B-frames (bidirectional refs). Grouped by GOP (Group of Pictures) for efficient retrieval. Supports compaction, dedup, and importance scoring.</div>
+                <div class="tooltip-file">packages/core/src/mind/frames.ts</div>
+              </div>
+            </div>
+            <div class="comp tooltip-container">
+              <div class="comp-name"><span class="icon">&#x1f50d;</span> HybridSearch</div>
+              <div class="comp-desc">FTS5 + vec0 fused via Reciprocal Rank Fusion. Configurable scoring profiles.</div>
+              <div class="tooltip">
+                <div class="tooltip-title">HybridSearch (FTS5 + Vector)</div>
+                <div class="tooltip-body">Combines full-text search (FTS5 with porter + unicode61 tokenizer) and vector similarity search (vec0 with 1024-dim embeddings) using Reciprocal Rank Fusion. Re-ranked by configurable scoring profiles.</div>
+                <div class="tooltip-file">packages/core/src/mind/search.ts</div>
+              </div>
+            </div>
+            <div class="comp tooltip-container">
+              <div class="comp-name"><span class="icon">&#x1f578;</span> KnowledgeGraph</div>
+              <div class="comp-desc">Typed entities and relations with bitemporal validity (valid_from/valid_to).</div>
+              <div class="tooltip">
+                <div class="tooltip-title">KnowledgeGraph</div>
+                <div class="tooltip-body">Entity-relation graph with typed nodes and edges. Supports temporal validity windows (bitemporal) and confidence scoring. The structured distillation of the frame log.</div>
+                <div class="tooltip-file">packages/core/src/mind/knowledge.ts</div>
+              </div>
+            </div>
+            <div class="comp tooltip-container">
+              <div class="comp-name"><span class="icon">&#x1f464;</span> IdentityLayer</div>
+              <div class="comp-desc">Single-row table: name, role, personality, capabilities. Injected into system prompt.</div>
+              <div class="tooltip">
+                <div class="tooltip-title">IdentityLayer</div>
+                <div class="tooltip-body">Persists who this mind is. Single row with name, role, department, personality, capabilities. toContext() output is pasted directly into the agent system prompt.</div>
+                <div class="tooltip-file">packages/core/src/mind/identity.ts</div>
+              </div>
+            </div>
+            <div class="comp tooltip-container">
+              <div class="comp-name"><span class="icon">&#x1f4e1;</span> AwarenessLayer</div>
+              <div class="comp-desc">10 rolling items: current tasks, goals, active context. Real-time state.</div>
+              <div class="tooltip">
+                <div class="tooltip-title">AwarenessLayer</div>
+                <div class="tooltip-body">Tracks what the mind is currently working on. Maximum 10 rolling items with category constraints. Provides real-time context about active tasks and goals.</div>
+                <div class="tooltip-file">packages/core/src/mind/awareness.ts</div>
+              </div>
+            </div>
+            <div class="comp tooltip-container">
+              <div class="comp-name"><span class="icon">&#x1f4d6;</span> Wiki Compiler</div>
+              <div class="comp-desc">Compiles memory into wiki pages. Entity, concept, and synthesis pages with incremental compilation.</div>
+              <div class="tooltip">
+                <div class="tooltip-title">Wiki Compiler</div>
+                <div class="tooltip-body">Transforms raw memory frames into structured wiki pages. 4 adapters (md/txt/pdf/url). Entity pages, concept pages, and LLM-synthesized summary pages. Incremental compilation with health reports.</div>
+                <div class="tooltip-file">packages/wiki-compiler/</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="search-viz">
+            <span class="sv-label">FTS5 keyword</span>
+            <span class="sv-plus">+</span>
+            <span class="sv-label">vec0 semantic</span>
+            <span class="sv-eq">=</span>
+            <span class="sv-label" style="color: var(--green);">Reciprocal Rank Fusion</span>
+          </div>
+
+          <div class="tier-strip">
+            <span class="tier-tag tier-free">FREE FOREVER</span>
+            <span style="font-size: 11px; color: var(--hive-500);">&mdash; Memory + agents are the lock-in moat. Never paywalled.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-connector"></div>
+
+    <!-- ---- HARVEST LAYER ---- -->
+    <div class="layer" id="layer-harvest">
+      <div class="layer-header" onclick="toggleLayer('layer-harvest')">
+        <div class="layer-icon" style="background: linear-gradient(135deg, var(--orange), #c2410c);">
+          <span>&#x1f33e;</span>
+        </div>
+        <span class="layer-title">Harvest Layer</span>
+        <span class="layer-badge" style="background: rgba(251,146,60,0.15); color: var(--orange);">11 Adapters</span>
+        <button class="layer-toggle" aria-label="Toggle section">&#9660;</button>
+      </div>
+      <div class="layer-body">
+        <div class="layer-content">
+          <div class="section-label">Source Adapters</div>
+          <div class="adapter-grid">
+            <div class="adapter"><span class="a-icon">&#x1f4ac;</span>ChatGPT</div>
+            <div class="adapter"><span class="a-icon">&#x1f9e0;</span>Claude</div>
+            <div class="adapter"><span class="a-icon">&#x1f4bb;</span>Claude Code</div>
+            <div class="adapter"><span class="a-icon">&#x2728;</span>Gemini</div>
+            <div class="adapter"><span class="a-icon">&#x1f50e;</span>Perplexity</div>
+            <div class="adapter"><span class="a-icon">&#x1f4dd;</span>Markdown</div>
+            <div class="adapter"><span class="a-icon">&#x1f4c4;</span>Plaintext</div>
+            <div class="adapter"><span class="a-icon">&#x1f4d5;</span>PDF</div>
+            <div class="adapter"><span class="a-icon">&#x1f310;</span>URL</div>
+            <div class="adapter"><span class="a-icon">&#x1f504;</span>Universal</div>
+          </div>
+
+          <div class="comp-grid" style="margin-top: 14px;">
+            <div class="comp tooltip-container">
+              <div class="comp-name"><span class="icon">&#x1f6e1;</span> Injection Scanner</div>
+              <div class="comp-desc">Security gate: all imported content scanned for prompt injection.</div>
+              <div class="tooltip">
+                <div class="tooltip-title">Injection Scanner (Security Gate)</div>
+                <div class="tooltip-body">Every piece of harvested content passes through scanForInjection() with 3 pattern sets before entering the memory substrate. Non-negotiable security boundary.</div>
+                <div class="tooltip-file">packages/agent/src/injection-scanner.ts</div>
+              </div>
+            </div>
+            <div class="comp tooltip-container">
+              <div class="comp-name"><span class="icon">&#x1f503;</span> Dedup Pipeline</div>
+              <div class="comp-desc">Content-hash deduplication prevents duplicate memory frames.</div>
+              <div class="tooltip">
+                <div class="tooltip-title">Deduplication Pipeline</div>
+                <div class="tooltip-body">SHA-256 content hashing detects and prevents duplicate frames from being stored. Runs as part of the harvest pipeline before frame insertion.</div>
+                <div class="tooltip-file">packages/core/src/harvest/dedup.ts</div>
+              </div>
+            </div>
+            <div class="comp tooltip-container">
+              <div class="comp-name"><span class="icon">&#x1f9ea;</span> Cognify</div>
+              <div class="comp-desc">Memory extraction pipeline. Classifies and structures harvested knowledge.</div>
+              <div class="tooltip">
+                <div class="tooltip-title">Cognify</div>
+                <div class="tooltip-body">Post-harvest processing that classifies imported content, extracts structured knowledge (entities, concepts, decisions), and routes it to the appropriate memory layer.</div>
+                <div class="tooltip-file">packages/agent/src/cognify.ts</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="harvest-flow">
+            <span class="arrow">&#x2192;</span>
+            <div>
+              <div class="flow-label">Your AI history &#x2192; Waggle memory</div>
+              <div class="flow-desc">Import conversations from any AI platform. Every insight becomes searchable, persistent memory.</div>
+            </div>
+          </div>
+
+          <div class="tier-strip" style="margin-top: 12px;">
+            <span class="tier-tag tier-free">FREE FOREVER</span>
+            <span style="font-size: 11px; color: var(--hive-500);">&mdash; Harvest is the lock-in moat. Import everything, keep everything.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---- INFRASTRUCTURE BAR ---- -->
+    <div style="margin-top: 8px;"></div>
+    <div class="layer" id="layer-infra">
+      <div class="layer-header" onclick="toggleLayer('layer-infra')">
+        <div class="layer-icon" style="background: linear-gradient(135deg, var(--hive-500), var(--hive-700));">
+          <span>&#x2699;</span>
+        </div>
+        <span class="layer-title">Infrastructure</span>
+        <span class="layer-badge" style="background: rgba(255,255,255,0.06); color: var(--hive-400);">Sidecar + LiteLLM</span>
+        <button class="layer-toggle" aria-label="Toggle section">&#9660;</button>
+      </div>
+      <div class="layer-body">
+        <div class="layer-content">
+          <div class="comp-grid wide">
+            <div class="comp tooltip-container">
+              <div class="comp-name"><span class="icon">&#x1f680;</span> Fastify Sidecar</div>
+              <div class="comp-desc">Node.js backend bundled into Tauri. 29 route modules. SSE streaming.</div>
+              <div class="tooltip">
+                <div class="tooltip-title">Fastify Sidecar</div>
+                <div class="tooltip-body">Node.js server running alongside the Tauri shell. Handles all API routes: chat, workspaces, sessions, memory, settings, vault, skills, marketplace, cron, fleet. Streams chat via SSE.</div>
+                <div class="tooltip-file">sidecar/ + packages/server/</div>
+              </div>
+            </div>
+            <div class="comp tooltip-container">
+              <div class="comp-name"><span class="icon">&#x1f500;</span> LiteLLM Router</div>
+              <div class="comp-desc">LLM routing layer. Model normalization, key resolution from vault.</div>
+              <div class="tooltip">
+                <div class="tooltip-title">LiteLLM Router</div>
+                <div class="tooltip-body">3-layer LLM routing: built-in proxy to LiteLLM to echo fallback. Normalizes model names across providers. Resolves API keys from the vault at call time.</div>
+                <div class="tooltip-file">litellm-config.yaml</div>
+              </div>
+            </div>
+            <div class="comp tooltip-container">
+              <div class="comp-name"><span class="icon">&#x1f512;</span> Vault</div>
+              <div class="comp-desc">AES-256-GCM encrypted secret storage. API keys, credentials, tokens.</div>
+              <div class="tooltip">
+                <div class="tooltip-title">Vault</div>
+                <div class="tooltip-body">Encrypted secret storage using AES-256-GCM. Stores API keys, connector credentials, and sensitive metadata. The ONLY place secrets live. Never committed to source.</div>
+                <div class="tooltip-file">packages/core/src/mind/vault.ts</div>
+              </div>
+            </div>
+            <div class="comp tooltip-container">
+              <div class="comp-name"><span class="icon">&#x1f4e6;</span> Marketplace</div>
+              <div class="comp-desc">120+ packages. Skills, plugins, MCP servers. Security gate + FTS5 search.</div>
+              <div class="tooltip">
+                <div class="tooltip-title">Marketplace</div>
+                <div class="tooltip-body">SQLite-based catalog with 120+ packages across skills, plugins, and MCP servers. SecurityGate scans for dangerous patterns before install. Auto-seeded from bundled data.</div>
+                <div class="tooltip-file">packages/marketplace/</div>
+              </div>
+            </div>
+            <div class="comp tooltip-container">
+              <div class="comp-name"><span class="icon">&#x1f483;</span> WaggleDance</div>
+              <div class="comp-desc">Multi-agent swarm coordination. Task dispatch, HiveQuery broadcast.</div>
+              <div class="tooltip">
+                <div class="tooltip-title">WaggleDance</div>
+                <div class="tooltip-body">Swarm orchestration protocol for multi-agent coordination. Includes task dispatcher (routes by capability/load), HiveQuery (broadcast queries across agents), and result collection.</div>
+                <div class="tooltip-file">packages/waggle-dance/</div>
+              </div>
+            </div>
+            <div class="comp tooltip-container">
+              <div class="comp-name"><span class="icon">&#x1f4b3;</span> Stripe Billing</div>
+              <div class="comp-desc">Subscription management. Wired to tier enforcement.</div>
+              <div class="tooltip">
+                <div class="tooltip-title">Stripe Billing</div>
+                <div class="tooltip-body">Stripe SDK v21.0.1 installed. Handles subscription lifecycle: checkout, upgrade/downgrade, webhook processing. Wired to the 5-tier capability system.</div>
+                <div class="tooltip-file">stripe@^21.0.1 in package.json</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---- KVARK ---- -->
+    <div class="kvark-callout">
+      <h4>&#x1f3ed; KVARK Enterprise &mdash; On-Prem Sovereign AI</h4>
+      <p>"Everything Waggle does &mdash; on your infrastructure, connected to all your internal systems. Full data pipeline injection, your permissions, complete audit trail, governance. Your data never leaves your perimeter."</p>
+      <div class="tier-strip" style="margin-top: 10px;">
+        <span class="tier-tag tier-enterprise">ENTERPRISE</span>
+        <span style="font-size: 11px; color: var(--hive-500);">Consultative pricing &mdash; www.kvark.ai</span>
+      </div>
+    </div>
+
+  </div><!-- /main-stack -->
+
+
+  <!-- ======== SIDEBAR ======== -->
+  <div class="sidebar">
+
+    <!-- COMPLIANCE -->
+    <div class="sidebar-card" id="sidebar-compliance">
+      <h3 style="color: var(--red);">&#x1f6e1; Compliance</h3>
+      <div class="sidebar-item">
+        <div class="si-icon" style="background: rgba(248,113,113,0.15); color: var(--red);">&#x1f4dc;</div>
+        <div>
+          <div class="si-label">EU AI Act</div>
+          <div class="si-desc">Art. 12 interaction logging, Art. 13 transparency, Art. 14 human oversight, Art. 52 disclosure.</div>
+        </div>
+      </div>
+      <div class="sidebar-item">
+        <div class="si-icon" style="background: rgba(248,113,113,0.15); color: var(--red);">&#x1f4dd;</div>
+        <div>
+          <div class="si-label">Interaction Logging</div>
+          <div class="si-desc">Every AI interaction stored in ai_interactions table. Full event log for audit.</div>
+        </div>
+      </div>
+      <div class="sidebar-item">
+        <div class="si-icon" style="background: rgba(248,113,113,0.15); color: var(--red);">&#x1f4cb;</div>
+        <div>
+          <div class="si-label">Audit PDF</div>
+          <div class="si-desc">Generate compliance reports on demand. Model inventory + interaction history.</div>
+        </div>
+      </div>
+      <div class="sidebar-item">
+        <div class="si-icon" style="background: rgba(248,113,113,0.15); color: var(--red);">&#x1f916;</div>
+        <div>
+          <div class="si-label">Model Inventory</div>
+          <div class="si-desc">Track all LLM models used, versions, and capabilities for regulatory reporting.</div>
+        </div>
+      </div>
+      <div style="margin-top: 8px;">
+        <span class="tier-tag tier-free">FREE</span>
+        <span style="font-size: 10px; color: var(--hive-500); margin-left: 4px;">Basic logging</span>
+        <span class="tier-tag tier-teams" style="margin-left: 6px;">TEAMS</span>
+        <span style="font-size: 10px; color: var(--hive-500); margin-left: 4px;">Full audit</span>
+      </div>
+    </div>
+
+    <!-- TIERS -->
+    <div class="sidebar-card" id="sidebar-tiers">
+      <h3 style="color: var(--honey);">&#x1f3c6; Tier System</h3>
+      <table class="tier-table">
+        <tr>
+          <th>Tier</th>
+          <th>Price</th>
+          <th>Unlocks</th>
+        </tr>
+        <tr>
+          <td><span class="tier-name" style="color: var(--honey-light);">TRIAL</span></td>
+          <td class="tier-price">$0 / 15d</td>
+          <td>Everything unlocked</td>
+        </tr>
+        <tr>
+          <td><span class="tier-name" style="color: var(--green);">FREE</span></td>
+          <td class="tier-price">$0</td>
+          <td>5 ws, agents, memory, harvest</td>
+        </tr>
+        <tr>
+          <td><span class="tier-name" style="color: var(--blue);">PRO</span></td>
+          <td class="tier-price">$19/mo</td>
+          <td>Unlimited, marketplace, connectors</td>
+        </tr>
+        <tr>
+          <td><span class="tier-name" style="color: var(--accent);">TEAMS</span></td>
+          <td class="tier-price">$49/seat</td>
+          <td>Shared ws, WaggleDance, governance</td>
+        </tr>
+        <tr>
+          <td><span class="tier-name" style="color: var(--honey);">ENTERPRISE</span></td>
+          <td class="tier-price">Custom</td>
+          <td>KVARK on-prem, sovereign</td>
+        </tr>
+      </table>
+      <div style="margin-top: 12px; padding: 10px 12px; background: rgba(52,211,153,0.08); border: 1px solid rgba(52,211,153,0.2); border-radius: 8px;">
+        <div style="font-size: 11px; font-weight: 700; color: var(--green);">Moat Strategy</div>
+        <div style="font-size: 11px; color: var(--hive-400); margin-top: 4px; line-height: 1.4;">
+          Memory + Harvest = free forever (lock-in).<br>
+          Agents = free (they generate memory).<br>
+          Skills + connectors = upgrade trigger.
+        </div>
+      </div>
+    </div>
+
+    <!-- TECH STACK -->
+    <div class="sidebar-card" id="sidebar-tech">
+      <h3 style="color: var(--cyan);">&#x1f528; Tech Stack</h3>
+      <div class="sidebar-item">
+        <div class="si-icon" style="background: rgba(34,211,238,0.15); color: var(--cyan);">&#x269b;</div>
+        <div>
+          <div class="si-label">React 19 + Vite</div>
+          <div class="si-desc">TypeScript, Tailwind 4, base-ui/react</div>
+        </div>
+      </div>
+      <div class="sidebar-item">
+        <div class="si-icon" style="background: rgba(34,211,238,0.15); color: var(--cyan);">&#x1f980;</div>
+        <div>
+          <div class="si-label">Tauri 2.0</div>
+          <div class="si-desc">Rust shell, WebView2, Windows + macOS</div>
+        </div>
+      </div>
+      <div class="sidebar-item">
+        <div class="si-icon" style="background: rgba(34,211,238,0.15); color: var(--cyan);">&#x1f5c4;</div>
+        <div>
+          <div class="si-label">SQLite</div>
+          <div class="si-desc">better-sqlite3 + sqlite-vec, WAL mode</div>
+        </div>
+      </div>
+      <div class="sidebar-item">
+        <div class="si-icon" style="background: rgba(34,211,238,0.15); color: var(--cyan);">&#x26a1;</div>
+        <div>
+          <div class="si-label">Fastify</div>
+          <div class="si-desc">29 route modules, SSE streaming</div>
+        </div>
+      </div>
+      <div class="sidebar-item">
+        <div class="si-icon" style="background: rgba(34,211,238,0.15); color: var(--cyan);">&#x1f9ea;</div>
+        <div>
+          <div class="si-label">Vitest + Playwright</div>
+          <div class="si-desc">5100+ unit tests, 96 E2E tests</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PACKAGES -->
+    <div class="sidebar-card" id="sidebar-packages">
+      <h3 style="color: var(--accent-light);">&#x1f4e6; 16 Packages</h3>
+      <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+        <span style="background: var(--hive-800); border: 1px solid var(--glass-border); border-radius: 6px; padding: 4px 10px; font-size: 11px; color: var(--hive-300); font-family: 'Cascadia Code', monospace;">core</span>
+        <span style="background: var(--hive-800); border: 1px solid var(--glass-border); border-radius: 6px; padding: 4px 10px; font-size: 11px; color: var(--hive-300); font-family: 'Cascadia Code', monospace;">agent</span>
+        <span style="background: var(--hive-800); border: 1px solid var(--glass-border); border-radius: 6px; padding: 4px 10px; font-size: 11px; color: var(--hive-300); font-family: 'Cascadia Code', monospace;">server</span>
+        <span style="background: var(--hive-800); border: 1px solid var(--glass-border); border-radius: 6px; padding: 4px 10px; font-size: 11px; color: var(--hive-300); font-family: 'Cascadia Code', monospace;">shared</span>
+        <span style="background: var(--hive-800); border: 1px solid var(--glass-border); border-radius: 6px; padding: 4px 10px; font-size: 11px; color: var(--hive-300); font-family: 'Cascadia Code', monospace;">ui</span>
+        <span style="background: var(--hive-800); border: 1px solid var(--glass-border); border-radius: 6px; padding: 4px 10px; font-size: 11px; color: var(--hive-300); font-family: 'Cascadia Code', monospace;">sdk</span>
+        <span style="background: var(--hive-800); border: 1px solid var(--glass-border); border-radius: 6px; padding: 4px 10px; font-size: 11px; color: var(--hive-300); font-family: 'Cascadia Code', monospace;">cli</span>
+        <span style="background: var(--hive-800); border: 1px solid var(--glass-border); border-radius: 6px; padding: 4px 10px; font-size: 11px; color: var(--hive-300); font-family: 'Cascadia Code', monospace;">marketplace</span>
+        <span style="background: var(--hive-800); border: 1px solid var(--glass-border); border-radius: 6px; padding: 4px 10px; font-size: 11px; color: var(--hive-300); font-family: 'Cascadia Code', monospace;">optimizer</span>
+        <span style="background: var(--hive-800); border: 1px solid var(--glass-border); border-radius: 6px; padding: 4px 10px; font-size: 11px; color: var(--hive-300); font-family: 'Cascadia Code', monospace;">memory-mcp</span>
+        <span style="background: var(--hive-800); border: 1px solid var(--glass-border); border-radius: 6px; padding: 4px 10px; font-size: 11px; color: var(--hive-300); font-family: 'Cascadia Code', monospace;">wiki-compiler</span>
+        <span style="background: var(--hive-800); border: 1px solid var(--glass-border); border-radius: 6px; padding: 4px 10px; font-size: 11px; color: var(--hive-300); font-family: 'Cascadia Code', monospace;">waggle-dance</span>
+        <span style="background: var(--hive-800); border: 1px solid var(--glass-border); border-radius: 6px; padding: 4px 10px; font-size: 11px; color: var(--hive-300); font-family: 'Cascadia Code', monospace;">weaver</span>
+        <span style="background: var(--hive-800); border: 1px solid var(--glass-border); border-radius: 6px; padding: 4px 10px; font-size: 11px; color: var(--hive-300); font-family: 'Cascadia Code', monospace;">worker</span>
+        <span style="background: var(--hive-800); border: 1px solid var(--glass-border); border-radius: 6px; padding: 4px 10px; font-size: 11px; color: var(--hive-300); font-family: 'Cascadia Code', monospace;">launcher</span>
+        <span style="background: var(--hive-800); border: 1px solid var(--glass-border); border-radius: 6px; padding: 4px 10px; font-size: 11px; color: var(--hive-300); font-family: 'Cascadia Code', monospace;">admin-web</span>
+      </div>
+    </div>
+
+  </div><!-- /sidebar -->
+
+</div><!-- /architecture -->
+
+<!-- ============ FOOTER ============ -->
+<div class="footer">
+  Waggle OS &mdash; Egzakta Group &mdash; April 2026<br>
+  <a href="https://waggle-os.ai">waggle-os.ai</a> &middot; <a href="https://www.kvark.ai">www.kvark.ai</a>
+</div>
+
+<script>
+  // ---- Layer expand/collapse ----
+  function toggleLayer(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle('expanded');
+  }
+
+  // Start with first layer expanded, rest collapsed
+  // (already set via class="expanded" on #layer-user)
+
+  // ---- Tooltip positioning fix for edge cases ----
+  document.querySelectorAll('.comp').forEach(comp => {
+    comp.addEventListener('mouseenter', () => {
+      const tooltip = comp.querySelector('.tooltip');
+      if (!tooltip) return;
+      const rect = tooltip.getBoundingClientRect();
+      // If tooltip goes off the left edge
+      if (rect.left < 8) {
+        tooltip.style.left = '0';
+        tooltip.style.transform = 'translateX(0)';
+      }
+      // If tooltip goes off the right edge
+      if (rect.right > window.innerWidth - 8) {
+        tooltip.style.left = 'auto';
+        tooltip.style.right = '0';
+        tooltip.style.transform = 'translateX(0)';
+      }
+      // If tooltip goes above viewport
+      if (rect.top < 8) {
+        tooltip.style.bottom = 'auto';
+        tooltip.style.top = 'calc(100% + 10px)';
+        // Move the arrow
+        const arrow = tooltip.querySelector('::after');
+      }
+    });
+    comp.addEventListener('mouseleave', () => {
+      const tooltip = comp.querySelector('.tooltip');
+      if (!tooltip) return;
+      tooltip.style.left = '';
+      tooltip.style.right = '';
+      tooltip.style.transform = '';
+      tooltip.style.bottom = '';
+      tooltip.style.top = '';
+    });
+  });
+
+  // ---- Smooth expand all on load for demo feel ----
+  let layerIndex = 0;
+  const layerIds = ['layer-agent', 'layer-intelligence', 'layer-memory', 'layer-harvest', 'layer-infra'];
+  function expandNext() {
+    if (layerIndex >= layerIds.length) return;
+    const el = document.getElementById(layerIds[layerIndex]);
+    if (el) el.classList.add('expanded');
+    layerIndex++;
+    setTimeout(expandNext, 300);
+  }
+  // Start cascading expand after a short delay
+  setTimeout(expandNext, 600);
+</script>
+
+</body>
+</html>
