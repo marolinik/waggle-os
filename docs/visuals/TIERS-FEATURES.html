@@ -1,0 +1,1267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Waggle OS — Tier System & Feature Revelation</title>
+<style>
+  :root {
+    --honey: #e5a000;
+    --honey-light: #f5c842;
+    --honey-dark: #b07d00;
+    --hive-950: #08090c;
+    --hive-900: #0f1117;
+    --hive-800: #1a1d26;
+    --hive-700: #252935;
+    --hive-600: #3a3f50;
+    --hive-500: #555b6e;
+    --hive-400: #7c8293;
+    --hive-300: #a3a8b5;
+    --hive-200: #d0d3da;
+    --hive-100: #e8eaee;
+    --accent: #a78bfa;
+    --accent-dim: #7c5cbf;
+    --green: #34d399;
+    --red: #f87171;
+    --orange: #fb923c;
+    --blue: #60a5fa;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--hive-950);
+    color: var(--hive-200);
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* -- Header -- */
+  .header {
+    text-align: center;
+    padding: 48px 24px 32px;
+    border-bottom: 1px solid var(--hive-700);
+  }
+  .header h1 {
+    font-size: 2rem;
+    color: var(--honey);
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+  .header p {
+    color: var(--hive-400);
+    margin-top: 8px;
+    font-size: 0.95rem;
+  }
+
+  /* -- Navigation -- */
+  .nav {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    padding: 16px 24px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--hive-950);
+    border-bottom: 1px solid var(--hive-800);
+  }
+  .nav button {
+    background: var(--hive-800);
+    border: 1px solid var(--hive-700);
+    color: var(--hive-300);
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: 500;
+    transition: all 0.2s;
+  }
+  .nav button:hover { background: var(--hive-700); color: var(--hive-100); }
+  .nav button.active {
+    background: var(--honey);
+    color: var(--hive-950);
+    border-color: var(--honey);
+    font-weight: 600;
+  }
+
+  /* -- Sections -- */
+  .section {
+    display: none;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 40px 24px 64px;
+  }
+  .section.active { display: block; }
+  .section h2 {
+    font-size: 1.4rem;
+    color: var(--honey);
+    margin-bottom: 8px;
+    font-weight: 600;
+  }
+  .section .subtitle {
+    color: var(--hive-400);
+    font-size: 0.9rem;
+    margin-bottom: 32px;
+  }
+
+  /* -- Section 1: Tier Ladder -- */
+  .tier-ladder {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 16px;
+    padding: 24px 0 40px;
+  }
+  .tier-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    transition: transform 0.25s;
+  }
+  .tier-block:hover { transform: translateY(-6px); }
+  .tier-bar {
+    width: 140px;
+    border-radius: 10px 10px 4px 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 16px 12px;
+    position: relative;
+    transition: box-shadow 0.3s;
+  }
+  .tier-block:hover .tier-bar {
+    box-shadow: 0 0 24px rgba(229, 160, 0, 0.25);
+  }
+  .tier-bar .icon { font-size: 1.6rem; margin-bottom: 8px; }
+  .tier-bar .name {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: #fff;
+    letter-spacing: 0.5px;
+  }
+  .tier-bar .price {
+    font-size: 0.8rem;
+    color: rgba(255,255,255,0.7);
+    margin-top: 4px;
+  }
+  .tier-bar .tag {
+    position: absolute;
+    top: -10px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 0.65rem;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+  .tier-detail {
+    margin-top: 12px;
+    text-align: center;
+    max-width: 150px;
+  }
+  .tier-detail .headline {
+    font-size: 0.78rem;
+    color: var(--hive-300);
+    font-weight: 500;
+    margin-bottom: 6px;
+  }
+  .tier-detail ul {
+    list-style: none;
+    font-size: 0.72rem;
+    color: var(--hive-400);
+  }
+  .tier-detail li { margin: 2px 0; }
+  .tier-detail li::before {
+    content: '';
+    display: inline-block;
+    width: 5px; height: 5px;
+    background: var(--honey);
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+
+  .ladder-arrow {
+    display: flex;
+    align-items: center;
+    padding-bottom: 120px;
+    color: var(--hive-600);
+    font-size: 1.2rem;
+  }
+
+  /* -- Section 2: Feature Matrix -- */
+  .matrix-wrap { overflow-x: auto; }
+  .matrix {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+  }
+  .matrix th {
+    padding: 10px 12px;
+    text-align: center;
+    font-weight: 600;
+    border-bottom: 2px solid var(--hive-700);
+    color: var(--hive-300);
+    position: sticky;
+    top: 0;
+    background: var(--hive-950);
+  }
+  .matrix th.tier-col { min-width: 100px; }
+  .matrix th.feature-col {
+    text-align: left;
+    min-width: 160px;
+    color: var(--honey);
+  }
+  .matrix th.tier-trial { color: var(--accent); }
+  .matrix th.tier-free { color: var(--green); }
+  .matrix th.tier-pro { color: var(--honey); }
+  .matrix th.tier-teams { color: var(--blue); }
+  .matrix th.tier-ent { color: var(--orange); }
+
+  .matrix td {
+    padding: 9px 12px;
+    text-align: center;
+    border-bottom: 1px solid var(--hive-800);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .matrix td.feat-name {
+    text-align: left;
+    color: var(--hive-200);
+    font-weight: 500;
+    cursor: default;
+  }
+  .matrix tr:hover td { background: var(--hive-900); }
+  .matrix td:hover:not(.feat-name) { background: var(--hive-800) !important; }
+
+  .cell-yes { color: var(--green); font-weight: 700; }
+  .cell-no { color: var(--hive-600); }
+  .cell-limited { color: var(--honey-light); font-weight: 500; }
+  .cell-value { color: var(--hive-200); font-weight: 500; }
+
+  .cat-header {
+    color: var(--honey);
+    font-weight: 700;
+    padding-top: 18px;
+    font-size: 0.85rem;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--hive-700);
+  }
+
+  /* -- Tooltip -- */
+  .tooltip-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 999;
+  }
+  .tooltip-overlay.visible { display: block; }
+  .tooltip {
+    position: fixed;
+    z-index: 1000;
+    background: var(--hive-800);
+    border: 1px solid var(--hive-600);
+    border-radius: 10px;
+    padding: 16px 20px;
+    max-width: 340px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .tooltip.visible { opacity: 1; pointer-events: auto; }
+  .tooltip .tip-tier {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--honey);
+    margin-bottom: 4px;
+  }
+  .tooltip .tip-feature {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 8px;
+  }
+  .tooltip .tip-body {
+    font-size: 0.82rem;
+    color: var(--hive-300);
+    line-height: 1.55;
+  }
+
+  /* -- Section 3: Moat Strategy -- */
+  .moat-container {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+  .moat-layer {
+    display: flex;
+    align-items: stretch;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--hive-700);
+  }
+  .moat-label {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    padding: 16px 12px;
+    font-weight: 700;
+    font-size: 0.75rem;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+  }
+  .moat-body {
+    flex: 1;
+    padding: 20px 24px;
+  }
+  .moat-body h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .moat-body p {
+    font-size: 0.85rem;
+    color: var(--hive-400);
+    margin-bottom: 10px;
+  }
+  .moat-features {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .moat-chip {
+    padding: 4px 12px;
+    border-radius: 16px;
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+  .moat-lock-in .moat-label { background: var(--green); color: var(--hive-950); }
+  .moat-lock-in .moat-body h3 { color: var(--green); }
+  .moat-lock-in .moat-chip { background: rgba(52,211,153,0.15); color: var(--green); }
+
+  .moat-trigger .moat-label { background: var(--honey); color: var(--hive-950); }
+  .moat-trigger .moat-body h3 { color: var(--honey); }
+  .moat-trigger .moat-chip { background: rgba(229,160,0,0.15); color: var(--honey-light); }
+
+  .moat-closer .moat-label { background: var(--accent); color: #fff; }
+  .moat-closer .moat-body h3 { color: var(--accent); }
+  .moat-closer .moat-chip { background: rgba(167,139,250,0.15); color: var(--accent); }
+
+  .moat-funnel {
+    text-align: center;
+    padding: 8px 0;
+    color: var(--hive-500);
+    font-size: 1.2rem;
+  }
+
+  /* -- Section 4: Trial Transition -- */
+  .timeline {
+    position: relative;
+    padding-left: 40px;
+  }
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 15px;
+    top: 0; bottom: 0;
+    width: 2px;
+    background: linear-gradient(to bottom, var(--accent), var(--honey), var(--green));
+  }
+  .tl-item {
+    position: relative;
+    margin-bottom: 32px;
+    padding-left: 24px;
+  }
+  .tl-dot {
+    position: absolute;
+    left: -33px;
+    top: 4px;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    border: 2px solid var(--hive-950);
+  }
+  .tl-day {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+  .tl-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 4px;
+  }
+  .tl-body {
+    font-size: 0.85rem;
+    color: var(--hive-400);
+  }
+
+  .modal-preview {
+    margin: 32px auto;
+    max-width: 480px;
+    background: var(--hive-800);
+    border: 1px solid var(--hive-600);
+    border-radius: 16px;
+    padding: 32px 28px;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+  }
+  .modal-preview .modal-icon { font-size: 2.4rem; margin-bottom: 12px; }
+  .modal-preview h3 {
+    font-size: 1.15rem;
+    color: #fff;
+    margin-bottom: 8px;
+  }
+  .modal-preview .hook {
+    font-size: 0.9rem;
+    color: var(--honey-light);
+    margin-bottom: 16px;
+    font-style: italic;
+    line-height: 1.5;
+  }
+  .modal-preview .modal-body {
+    font-size: 0.82rem;
+    color: var(--hive-400);
+    margin-bottom: 20px;
+  }
+  .modal-btns { display: flex; gap: 10px; justify-content: center; }
+  .modal-btns .btn {
+    padding: 10px 24px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: default;
+    border: none;
+  }
+  .btn-primary { background: var(--honey); color: var(--hive-950); }
+  .btn-secondary { background: var(--hive-700); color: var(--hive-200); }
+
+  /* -- Section 5: Upgrade UX Flow -- */
+  .flow-steps {
+    display: flex;
+    gap: 0;
+    align-items: flex-start;
+    overflow-x: auto;
+    padding-bottom: 16px;
+  }
+  .flow-step {
+    flex: 0 0 200px;
+    text-align: center;
+    position: relative;
+  }
+  .flow-num {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: var(--hive-700);
+    color: var(--honey);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.9rem;
+    margin-bottom: 10px;
+    border: 2px solid var(--honey);
+  }
+  .flow-step h4 {
+    font-size: 0.88rem;
+    color: #fff;
+    margin-bottom: 4px;
+  }
+  .flow-step p {
+    font-size: 0.78rem;
+    color: var(--hive-400);
+  }
+  .flow-arrow {
+    flex: 0 0 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-top: 12px;
+    color: var(--hive-600);
+    font-size: 1.2rem;
+  }
+
+  .psychology-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    margin-top: 32px;
+  }
+  .psych-card {
+    background: var(--hive-900);
+    border: 1px solid var(--hive-700);
+    border-radius: 10px;
+    padding: 20px;
+  }
+  .psych-card h4 {
+    font-size: 0.9rem;
+    color: var(--honey);
+    margin-bottom: 6px;
+  }
+  .psych-card p {
+    font-size: 0.8rem;
+    color: var(--hive-400);
+    line-height: 1.5;
+  }
+
+  /* -- Section 6: KVARK Enterprise -- */
+  .kvark-hero {
+    text-align: center;
+    padding: 40px 0 24px;
+  }
+  .kvark-hero .kvark-logo {
+    font-size: 2.2rem;
+    font-weight: 800;
+    letter-spacing: 3px;
+    background: linear-gradient(135deg, var(--orange), var(--honey));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .kvark-hero blockquote {
+    max-width: 600px;
+    margin: 16px auto 0;
+    font-size: 1rem;
+    color: var(--hive-300);
+    font-style: italic;
+    line-height: 1.6;
+    border-left: 3px solid var(--orange);
+    padding-left: 16px;
+    text-align: left;
+  }
+
+  .kvark-pillars {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 16px;
+    margin-top: 32px;
+  }
+  .kvark-pillar {
+    background: var(--hive-900);
+    border: 1px solid var(--hive-700);
+    border-radius: 10px;
+    padding: 24px;
+    transition: border-color 0.2s;
+  }
+  .kvark-pillar:hover { border-color: var(--orange); }
+  .kvark-pillar h4 {
+    font-size: 0.95rem;
+    color: var(--orange);
+    margin-bottom: 6px;
+  }
+  .kvark-pillar p {
+    font-size: 0.8rem;
+    color: var(--hive-400);
+    line-height: 1.5;
+  }
+
+  .compliance-bar {
+    margin-top: 32px;
+    background: linear-gradient(135deg, rgba(251,146,60,0.08), rgba(167,139,250,0.08));
+    border: 1px solid var(--hive-700);
+    border-radius: 12px;
+    padding: 24px;
+    text-align: center;
+  }
+  .compliance-bar h4 {
+    color: var(--accent);
+    font-size: 1rem;
+    margin-bottom: 8px;
+  }
+  .compliance-bar p {
+    font-size: 0.85rem;
+    color: var(--hive-400);
+    max-width: 600px;
+    margin: 0 auto;
+  }
+  .compliance-badges {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 14px;
+    flex-wrap: wrap;
+  }
+  .compliance-badge {
+    padding: 5px 14px;
+    border-radius: 16px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: rgba(167,139,250,0.12);
+    color: var(--accent);
+    border: 1px solid rgba(167,139,250,0.25);
+  }
+
+  /* -- Footer -- */
+  .footer {
+    text-align: center;
+    padding: 24px;
+    border-top: 1px solid var(--hive-800);
+    color: var(--hive-600);
+    font-size: 0.75rem;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Waggle OS Tier System</h1>
+  <p>Progressive feature revelation &mdash; from free lock-in to sovereign enterprise</p>
+</div>
+
+<nav class="nav" id="nav">
+  <button class="active" data-section="ladder">Tier Ladder</button>
+  <button data-section="matrix">Feature Matrix</button>
+  <button data-section="moat">Moat Strategy</button>
+  <button data-section="trial">Trial &rarr; Free</button>
+  <button data-section="upgrade">Upgrade UX</button>
+  <button data-section="kvark">KVARK Enterprise</button>
+</nav>
+
+<!-- ====== SECTION 1: TIER LADDER ====== -->
+<div class="section active" id="sec-ladder">
+  <h2>Five-Tier Architecture</h2>
+  <p class="subtitle">Each tier unlocks progressive capability. Trial gives everything for 15 days, then graceful downgrade.</p>
+
+  <div class="tier-ladder">
+    <div class="tier-block" data-tier="trial">
+      <div class="tier-bar" style="height:280px; background:linear-gradient(to top, #7c5cbf, #a78bfa);">
+        <span class="tag">15 DAYS</span>
+        <span class="icon">&#9733;</span>
+        <span class="name">TRIAL</span>
+        <span class="price">$0 / 15 days</span>
+      </div>
+      <div class="tier-detail">
+        <div class="headline">Everything unlocked</div>
+        <ul><li>All features</li><li>All connectors</li><li>Full audit log</li></ul>
+      </div>
+    </div>
+
+    <div class="ladder-arrow">&#8594;</div>
+
+    <div class="tier-block" data-tier="free">
+      <div class="tier-bar" style="height:140px; background:linear-gradient(to top, #1a6b4a, #34d399);">
+        <span class="icon">&#9679;</span>
+        <span class="name">FREE</span>
+        <span class="price">$0 forever</span>
+      </div>
+      <div class="tier-detail">
+        <div class="headline">The moat tier</div>
+        <ul><li>5 workspaces</li><li>Agents + Memory</li><li>Built-in skills only</li></ul>
+      </div>
+    </div>
+
+    <div class="ladder-arrow">&#8594;</div>
+
+    <div class="tier-block" data-tier="pro">
+      <div class="tier-bar" style="height:200px; background:linear-gradient(to top, #b07d00, #e5a000);">
+        <span class="icon">&#9670;</span>
+        <span class="name">PRO</span>
+        <span class="price">$19/mo</span>
+      </div>
+      <div class="tier-detail">
+        <div class="headline">Power user</div>
+        <ul><li>Unlimited everything</li><li>Marketplace access</li><li>All connectors</li></ul>
+      </div>
+    </div>
+
+    <div class="ladder-arrow">&#8594;</div>
+
+    <div class="tier-block" data-tier="teams">
+      <div class="tier-bar" style="height:240px; background:linear-gradient(to top, #2563eb, #60a5fa);">
+        <span class="icon">&#9733;</span>
+        <span class="name">TEAMS</span>
+        <span class="price">$49/seat/mo</span>
+      </div>
+      <div class="tier-detail">
+        <div class="headline">Collaboration</div>
+        <ul><li>Shared workspaces</li><li>WaggleDance</li><li>Full governance</li></ul>
+      </div>
+    </div>
+
+    <div class="ladder-arrow">&#8594;</div>
+
+    <div class="tier-block" data-tier="enterprise">
+      <div class="tier-bar" style="height:300px; background:linear-gradient(to top, #c2410c, #fb923c);">
+        <span class="tag">KVARK</span>
+        <span class="icon">&#9830;</span>
+        <span class="name">ENTERPRISE</span>
+        <span class="price">Consultative</span>
+      </div>
+      <div class="tier-detail">
+        <div class="headline">Sovereign on-prem</div>
+        <ul><li>Self-hosted</li><li>Data pipeline injection</li><li>Full audit trail</li></ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== SECTION 2: FEATURE MATRIX ====== -->
+<div class="section" id="sec-matrix">
+  <h2>Feature Matrix</h2>
+  <p class="subtitle">Click any cell to see details. Data sourced from <code>packages/shared/src/tiers.ts</code>.</p>
+  <div class="matrix-wrap">
+    <table class="matrix" id="featureMatrix">
+      <thead id="matrixHead"></thead>
+      <tbody id="matrixBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ====== SECTION 3: MOAT STRATEGY ====== -->
+<div class="section" id="sec-moat">
+  <h2>Moat Strategy</h2>
+  <p class="subtitle">Free features create lock-in. Paid features create value. Enterprise features close deals.</p>
+
+  <div class="moat-container">
+    <div class="moat-layer moat-lock-in">
+      <div class="moat-label">LOCK-IN</div>
+      <div class="moat-body">
+        <h3>Free Forever &mdash; The Moat</h3>
+        <p>Memory + Harvest are free forever. Users accumulate thousands of memories. Agents are free because they generate memory. The more you use it, the harder it is to leave.</p>
+        <div class="moat-features">
+          <span class="moat-chip">Memory</span>
+          <span class="moat-chip">Harvest</span>
+          <span class="moat-chip">Agents</span>
+          <span class="moat-chip">Wiki</span>
+          <span class="moat-chip">5 Workspaces</span>
+          <span class="moat-chip">Built-in Skills</span>
+          <span class="moat-chip">Unlimited History</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="moat-funnel">&#9660;</div>
+
+    <div class="moat-layer moat-trigger">
+      <div class="moat-label">TRIGGER</div>
+      <div class="moat-body">
+        <h3>Upgrade Triggers &mdash; $19/mo PRO</h3>
+        <p>When free users hit limits, they feel the friction: "I need more connectors," "I want custom skills," "I need PDF export." These are the conversion levers.</p>
+        <div class="moat-features">
+          <span class="moat-chip">Custom Skills</span>
+          <span class="moat-chip">Marketplace</span>
+          <span class="moat-chip">Unlimited Connectors</span>
+          <span class="moat-chip">PDF + JSON Export</span>
+          <span class="moat-chip">Unlimited Workspaces</span>
+          <span class="moat-chip">Voyage/OpenAI Embeddings</span>
+          <span class="moat-chip">Basic Audit Log</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="moat-funnel">&#9660;</div>
+
+    <div class="moat-layer moat-closer">
+      <div class="moat-label">CLOSER</div>
+      <div class="moat-body">
+        <h3>Enterprise Closer &mdash; KVARK</h3>
+        <p>Regulated industries need compliance, governance, shared memory, and on-prem deployment. Compliance is the closer: EU AI Act, audit trails, full governance. This is the KVARK funnel.</p>
+        <div class="moat-features">
+          <span class="moat-chip">Full Compliance</span>
+          <span class="moat-chip">Shared Workspaces</span>
+          <span class="moat-chip">Admin Panel</span>
+          <span class="moat-chip">Full Audit Log</span>
+          <span class="moat-chip">Self-Hosted</span>
+          <span class="moat-chip">Managed Model Pool</span>
+          <span class="moat-chip">Team Skill Library</span>
+          <span class="moat-chip">Cloud Sync</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== SECTION 4: TRIAL TRANSITION ====== -->
+<div class="section" id="sec-trial">
+  <h2>Trial to Free Transition</h2>
+  <p class="subtitle">What happens when the 15-day trial ends. Painful but not destructive &mdash; data is always preserved.</p>
+
+  <div class="timeline">
+    <div class="tl-item">
+      <div class="tl-dot" style="background:var(--accent);"></div>
+      <div class="tl-day" style="color:var(--accent);">Day 1</div>
+      <div class="tl-title">Trial Begins</div>
+      <div class="tl-body">User signs up. All features unlocked: unlimited connectors, workspaces, marketplace, custom skills, all export formats, full audit log. trialStartedAt timestamp recorded.</div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot" style="background:var(--honey);"></div>
+      <div class="tl-day" style="color:var(--honey);">Day 10-12</div>
+      <div class="tl-title">Gentle Nudges</div>
+      <div class="tl-body">Subtle upgrade prompts appear. Memory count is highlighted: "You have built 1,200+ memories." Usage stats surfaced. trialDaysRemaining() returns 3-5.</div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot" style="background:var(--red);"></div>
+      <div class="tl-day" style="color:var(--red);">Day 15</div>
+      <div class="tl-title">Trial Expires</div>
+      <div class="tl-body">isTrialExpired() returns true. getEffectiveTier() downgrades TRIAL to FREE. Modal appears with the emotional hook. Features gracefully degrade &mdash; no data loss.</div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot" style="background:var(--green);"></div>
+      <div class="tl-day" style="color:var(--green);">Day 15+</div>
+      <div class="tl-title">Free Forever</div>
+      <div class="tl-body">All memories preserved. 5 workspaces, 5 connectors, built-in skills. Agents still work. Memory + Harvest still free. The moat holds.</div>
+    </div>
+  </div>
+
+  <div class="modal-preview">
+    <div class="modal-icon">&#128029;</div>
+    <h3>Your trial has ended</h3>
+    <div class="hook">"You have built 2,847 memories. Keep them free forever &mdash; or unlock Pro for the full experience."</div>
+    <div class="modal-body">
+      Your workspaces, memories, and harvest data are safe. Free tier keeps Memory + Harvest + Agents forever.
+      Upgrade to Pro for unlimited workspaces, custom skills, marketplace, and all export formats.
+    </div>
+    <div class="modal-btns">
+      <span class="btn btn-primary">Upgrade to Pro &mdash; $19/mo</span>
+      <span class="btn btn-secondary">Stay Free</span>
+    </div>
+  </div>
+</div>
+
+<!-- ====== SECTION 5: UPGRADE UX FLOW ====== -->
+<div class="section" id="sec-upgrade">
+  <h2>Upgrade UX Flow</h2>
+  <p class="subtitle">The psychology of conversion: use, value, friction, upgrade.</p>
+
+  <div class="flow-steps">
+    <div class="flow-step">
+      <div class="flow-num">1</div>
+      <h4>Use</h4>
+      <p>User works daily. Memory accumulates. Agents generate insights. Harvest imports conversations.</p>
+    </div>
+    <div class="flow-arrow">&#8594;</div>
+    <div class="flow-step">
+      <div class="flow-num">2</div>
+      <h4>Value</h4>
+      <p>2,000+ memories. Wiki pages auto-generated. Knowledge graph grows. User depends on Waggle.</p>
+    </div>
+    <div class="flow-arrow">&#8594;</div>
+    <div class="flow-step">
+      <div class="flow-num">3</div>
+      <h4>Friction</h4>
+      <p>Hits connector limit. Wants custom skill. Needs PDF export. Feature gate triggers upgrade nudge.</p>
+    </div>
+    <div class="flow-arrow">&#8594;</div>
+    <div class="flow-step">
+      <div class="flow-num">4</div>
+      <h4>Nudge</h4>
+      <p>Contextual upgrade prompt appears at the point of friction. Shows exact feature they need.</p>
+    </div>
+    <div class="flow-arrow">&#8594;</div>
+    <div class="flow-step">
+      <div class="flow-num">5</div>
+      <h4>Checkout</h4>
+      <p>Stripe checkout modal. One click. Card details. Immediate unlock. No page reload needed.</p>
+    </div>
+  </div>
+
+  <div class="psychology-cards">
+    <div class="psych-card">
+      <h4>Loss Aversion</h4>
+      <p>Memory count creates emotional attachment. "You have built 2,847 memories" makes downgrade feel like losing something valuable.</p>
+    </div>
+    <div class="psych-card">
+      <h4>Endowment Effect</h4>
+      <p>Trial gives full access. Users feel ownership over Pro features. Taking them away after 15 days triggers upgrade impulse.</p>
+    </div>
+    <div class="psych-card">
+      <h4>Contextual Friction</h4>
+      <p>Upgrade prompts appear exactly when the user hits a limit &mdash; not randomly. The pain is real and immediate.</p>
+    </div>
+    <div class="psych-card">
+      <h4>Immediate Unlock</h4>
+      <p>No waiting. Payment processes, tier updates, features unlock. The relief is instant &mdash; reinforcing the purchase decision.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ====== SECTION 6: KVARK ENTERPRISE ====== -->
+<div class="section" id="sec-kvark">
+  <h2>KVARK Enterprise</h2>
+  <p class="subtitle">The sovereign pitch for regulated industries. Waggle is the demand-creation engine for KVARK.</p>
+
+  <div class="kvark-hero">
+    <div class="kvark-logo">KVARK</div>
+    <blockquote>"Everything Waggle does &mdash; on your infrastructure, connected to all your internal systems. Full data pipeline injection, your permissions, complete audit trail, governance. Your data never leaves your perimeter."</blockquote>
+  </div>
+
+  <div class="kvark-pillars">
+    <div class="kvark-pillar">
+      <h4>Data Pipeline Injection</h4>
+      <p>Connect Waggle to all internal systems. Harvest from proprietary sources. Full data pipeline under your control. No cloud dependency.</p>
+    </div>
+    <div class="kvark-pillar">
+      <h4>Your Permissions</h4>
+      <p>Enterprise SSO, RBAC, admin panel with unlimited team members. Every action scoped to user roles. Self-hosted identity.</p>
+    </div>
+    <div class="kvark-pillar">
+      <h4>Complete Audit Trail</h4>
+      <p>Full audit log on every interaction. Trace every agent decision, every memory write, every data access. Compliance-ready from day one.</p>
+    </div>
+    <div class="kvark-pillar">
+      <h4>Governance</h4>
+      <p>Team skill library, shared workspaces, cloud sync, managed model pool, priority models. WaggleDance multi-agent coordination under organizational control.</p>
+    </div>
+  </div>
+
+  <div class="compliance-bar">
+    <h4>The Compliance Closer</h4>
+    <p>Regulated industries (finance, healthcare, government, legal) need compliance by default. KVARK delivers EU AI Act readiness, sovereign deployment, and full audit trails.</p>
+    <div class="compliance-badges">
+      <span class="compliance-badge">EU AI Act</span>
+      <span class="compliance-badge">GDPR</span>
+      <span class="compliance-badge">SOC 2</span>
+      <span class="compliance-badge">On-Premises</span>
+      <span class="compliance-badge">Air-Gapped</span>
+      <span class="compliance-badge">Full Audit</span>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  Waggle OS &mdash; Egzakta Group &mdash; waggle-os.ai &mdash; kvark.ai &mdash; April 2026
+</div>
+
+<!-- Tooltip element -->
+<div class="tooltip-overlay" id="tooltipOverlay"></div>
+<div class="tooltip" id="tooltip">
+  <div class="tip-tier" id="tipTier"></div>
+  <div class="tip-feature" id="tipFeature"></div>
+  <div class="tip-body" id="tipBody"></div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  /* ====== Navigation ====== */
+  var navBtns = document.querySelectorAll('.nav button');
+  var sections = document.querySelectorAll('.section');
+  var sectionMap = {
+    ladder:  'sec-ladder',
+    matrix:  'sec-matrix',
+    moat:    'sec-moat',
+    trial:   'sec-trial',
+    upgrade: 'sec-upgrade',
+    kvark:   'sec-kvark'
+  };
+
+  Array.prototype.forEach.call(navBtns, function(btn) {
+    btn.addEventListener('click', function() {
+      Array.prototype.forEach.call(navBtns, function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      Array.prototype.forEach.call(sections, function(s) { s.classList.remove('active'); });
+      document.getElementById(sectionMap[btn.dataset.section]).classList.add('active');
+    });
+  });
+
+  /* ====== Tooltip system ====== */
+  var tooltip = document.getElementById('tooltip');
+  var tooltipOverlay = document.getElementById('tooltipOverlay');
+  var tipTier = document.getElementById('tipTier');
+  var tipFeature = document.getElementById('tipFeature');
+  var tipBody = document.getElementById('tipBody');
+
+  function showTooltip(el, tier, feature, body) {
+    tipTier.textContent = tier;
+    tipFeature.textContent = feature;
+    tipBody.textContent = body;
+    tooltipOverlay.classList.add('visible');
+    tooltip.classList.add('visible');
+
+    var rect = el.getBoundingClientRect();
+    var left = rect.left + rect.width / 2 - 170;
+    var top = rect.bottom + 10;
+    if (left < 12) left = 12;
+    if (left + 340 > window.innerWidth) left = window.innerWidth - 352;
+    if (top + 200 > window.innerHeight) top = rect.top - 160;
+    tooltip.style.left = left + 'px';
+    tooltip.style.top = top + 'px';
+  }
+
+  function hideTooltip() {
+    tooltip.classList.remove('visible');
+    tooltipOverlay.classList.remove('visible');
+  }
+
+  tooltipOverlay.addEventListener('click', hideTooltip);
+  document.addEventListener('keydown', function(e) { if (e.key === 'Escape') hideTooltip(); });
+
+  /* ====== Tier ladder click handlers ====== */
+  var tierTips = {
+    trial: {
+      t: 'TRIAL', f: 'Full Access for 15 Days',
+      b: 'All features unlocked: unlimited connectors (-1), unlimited workspaces (-1), all 6 embedding providers, custom skills, team skill library, cloud sync, all export formats (txt/md/pdf/json), admin panel, full audit log, priority models. Falls back to FREE after 15 days via isTrialExpired().'
+    },
+    free: {
+      t: 'FREE', f: 'Free Forever - The Lock-In Moat',
+      b: '5 workspaces, 5 connectors, inprocess/mock/ollama embeddings only. No custom skills, no marketplace, no cloud sync. Export: txt + md only. 1 team member, no shared workspaces, no admin panel, no audit log. Memory + Harvest + Agents are free forever.'
+    },
+    pro: {
+      t: 'PRO', f: '$19/mo - Power User Tier',
+      b: 'Unlimited workspaces (-1) and connectors (-1). Custom skills enabled. 5 embedding providers (adds voyage + openai). All export formats. Basic audit log. Still single-user (1 team member). No shared workspaces, no admin panel. Stripe price from STRIPE_PRICE_PRO env var.'
+    },
+    teams: {
+      t: 'TEAMS', f: '$49/seat/mo - Collaboration Tier',
+      b: 'Everything in PRO plus: unlimited team members (-1), shared workspaces, team skill library, cloud sync, admin panel, full audit log, self-hosted option, managed model pool, priority models, all 6 embedding providers including LiteLLM. Active KVARK CTA. Stripe price from STRIPE_PRICE_TEAMS.'
+    },
+    enterprise: {
+      t: 'ENTERPRISE', f: 'KVARK - Sovereign On-Premises',
+      b: 'Everything in TEAMS plus: fully self-hosted, no KVARK CTA (they ARE KVARK). Consultative pricing. Data pipeline injection, organizational permissions, complete audit trail, governance. Your data never leaves your perimeter. Contact kvark.ai.'
+    }
+  };
+
+  var tierBlocks = document.querySelectorAll('.tier-block[data-tier]');
+  Array.prototype.forEach.call(tierBlocks, function(block) {
+    block.addEventListener('click', function() {
+      var key = block.dataset.tier;
+      var d = tierTips[key];
+      showTooltip(block, d.t, d.f, d.b);
+    });
+  });
+
+  /* ====== Feature matrix data (from tiers.ts) ====== */
+  var CHECK = '\u2713';
+  var CROSS = '\u2717';
+  var INF   = '\u221e';
+
+  var features = [
+    { cat: 'WORKSPACES', rows: [
+      { name: 'Workspace Limit', vals: [INF, '5', INF, INF, INF], details: [
+        'Unlimited during 15-day trial (workspaceLimit: -1).',
+        'Hard cap of 5 workspaces. Core moat feature -- enough to get hooked.',
+        'Unlimited workspaces. First upgrade trigger for power users.',
+        'Unlimited. Team-scoped workspaces with shared access.',
+        'Unlimited. Organizational workspace hierarchy.'
+      ]},
+      { name: 'Shared Workspaces', vals: [CHECK, CROSS, CROSS, CHECK, CHECK], details: [
+        'Available during trial so users experience collaboration.',
+        'Not available. Single-user only.',
+        'Not available. PRO is still single-user.',
+        'Core TEAMS feature: shared workspaces with team access.',
+        'Full shared workspace support across the organization.'
+      ]}
+    ]},
+    { cat: 'CONNECTORS', rows: [
+      { name: 'Connector Limit', vals: [INF, '5', INF, INF, INF], details: [
+        'Unlimited connectors during trial.',
+        '5 connectors. Key upgrade trigger -- users want more integrations.',
+        'Unlimited connectors. Major PRO selling point.',
+        'Unlimited. All team members share connector pool.',
+        'Unlimited. Enterprise-grade connector management.'
+      ]}
+    ]},
+    { cat: 'SKILLS', rows: [
+      { name: 'Custom Skills', vals: [CHECK, CROSS, CHECK, CHECK, CHECK], details: [
+        'Custom skills available during trial.',
+        'Built-in skills only. Custom skills are an upgrade trigger.',
+        'Custom skills enabled. Users can create and share skills.',
+        'Full custom skills plus team skill library.',
+        'Enterprise skill governance and distribution.'
+      ]},
+      { name: 'Team Skill Library', vals: [CHECK, CROSS, CROSS, CHECK, CHECK], details: [
+        'Team library available during trial.',
+        'Not available. Single-user tier.',
+        'Not available. PRO is still individual.',
+        'Shared skill library across the team.',
+        'Organization-wide skill library with governance.'
+      ]}
+    ]},
+    { cat: 'MEMORY & HARVEST', rows: [
+      { name: 'Memory (FrameStore)', vals: [CHECK, CHECK, CHECK, CHECK, CHECK], details: [
+        'Full memory system during trial.',
+        'FREE FOREVER. Core moat. Memory accumulates and creates lock-in.',
+        'Full memory with enhanced embedding providers.',
+        'Shared team memory across workspaces.',
+        'Enterprise memory with full audit trail.'
+      ]},
+      { name: 'Harvest Pipeline', vals: [CHECK, CHECK, CHECK, CHECK, CHECK], details: [
+        'Full harvest during trial.',
+        'FREE FOREVER. Import from ChatGPT, Claude, Gemini, Perplexity, PDF, URL, markdown, plaintext.',
+        'Full harvest with all adapters.',
+        'Team harvest with shared pipeline.',
+        'Enterprise harvest with data pipeline injection.'
+      ]},
+      { name: 'Message History', vals: [INF, INF, INF, INF, INF], details: [
+        'Unlimited message history.',
+        'Unlimited. History is part of the moat -- users keep everything.',
+        'Unlimited message history.',
+        'Unlimited with team-scoped history.',
+        'Unlimited with full audit logging.'
+      ]}
+    ]},
+    { cat: 'AGENTS', rows: [
+      { name: 'Spawn Agents', vals: [CHECK, CHECK, CHECK, CHECK, CHECK], details: [
+        'Full agent spawning during trial.',
+        'FREE FOREVER. Agents generate memory (the moat). 22 personas available.',
+        'Full agent capabilities with custom personas.',
+        'Multi-agent coordination via WaggleDance.',
+        'Enterprise agent governance and audit.'
+      ]}
+    ]},
+    { cat: 'EMBEDDINGS', rows: [
+      { name: 'Embedding Providers', vals: ['All 6', '3', '5', 'All 6', 'All 6'], details: [
+        'All providers: inprocess, mock, ollama, voyage, openai, litellm.',
+        'inprocess + mock + ollama only. Local-only embeddings. Free Ollama support.',
+        'Adds voyage + openai. 5 providers total. No litellm.',
+        'All 6 including litellm for model routing.',
+        'All 6. Full managed model pool.'
+      ]}
+    ]},
+    { cat: 'EXPORT', rows: [
+      { name: 'Export Formats', vals: ['All 4', 'txt, md', 'All 4', 'All 4', 'All 4'], details: [
+        'All formats: txt, md, pdf, json.',
+        'txt + md only. PDF and JSON export are upgrade triggers.',
+        'All 4 formats: txt, md, pdf, json.',
+        'All 4 formats with team-scoped exports.',
+        'All 4 formats with compliance-ready exports.'
+      ]}
+    ]},
+    { cat: 'TEAM & ADMIN', rows: [
+      { name: 'Team Members', vals: [INF, '1', '1', INF, INF], details: [
+        'Unlimited during trial.',
+        'Single user only.',
+        'Single user. PRO is individual.',
+        'Unlimited team members. Core TEAMS value.',
+        'Unlimited. Enterprise-wide.'
+      ]},
+      { name: 'Admin Panel', vals: [CHECK, CROSS, CROSS, CHECK, CHECK], details: [
+        'Admin panel available during trial.',
+        'No admin features.',
+        'No admin features. Individual tier.',
+        'Full admin panel for team management.',
+        'Enterprise admin with organizational hierarchy.'
+      ]}
+    ]},
+    { cat: 'COMPLIANCE & AUDIT', rows: [
+      { name: 'Audit Log', vals: ['Full', 'None', 'Basic', 'Full', 'Full'], details: [
+        'Full audit log during trial.',
+        'No audit logging. Individual use.',
+        'Basic audit log. Sufficient for individual compliance.',
+        'Full audit log. Team-wide compliance.',
+        'Full audit log. Enterprise governance. EU AI Act ready.'
+      ]},
+      { name: 'Cloud Sync', vals: [CHECK, CROSS, CROSS, CHECK, CHECK], details: [
+        'Cloud sync available during trial.',
+        'No cloud sync. Local only.',
+        'No cloud sync. Local only.',
+        'Cloud sync for team collaboration.',
+        'Cloud sync with sovereign deployment option.'
+      ]},
+      { name: 'Self-Hosted', vals: [CROSS, CROSS, CROSS, CHECK, CHECK], details: [
+        'Not available during trial (cloud only).',
+        'Not available. Cloud/desktop only.',
+        'Not available. Cloud/desktop only.',
+        'Self-hosted option available.',
+        'Fully self-hosted. Data never leaves your perimeter.'
+      ]}
+    ]},
+    { cat: 'MODELS', rows: [
+      { name: 'Managed Model Pool', vals: [CHECK, CROSS, CROSS, CHECK, CHECK], details: [
+        'Managed models during trial.',
+        'Bring your own models only.',
+        'Bring your own models. No managed pool.',
+        'Managed model pool with LiteLLM routing.',
+        'Full managed pool with priority access.'
+      ]},
+      { name: 'Priority Models', vals: [CHECK, CROSS, CROSS, CHECK, CHECK], details: [
+        'Priority model access during trial.',
+        'Standard model access only.',
+        'Standard model access.',
+        'Priority model queue. Faster inference.',
+        'Priority models with SLA guarantees.'
+      ]}
+    ]},
+    { cat: 'KVARK', rows: [
+      { name: 'KVARK CTA', vals: ['Subtle', 'Subtle', 'Subtle', 'Active', 'None'], details: [
+        'Subtle KVARK promotion during trial.',
+        'Subtle KVARK CTA. Awareness without pressure.',
+        'Subtle KVARK CTA in UI.',
+        'Active KVARK CTA. Teams users are enterprise-adjacent.',
+        'No CTA needed -- they ARE the KVARK customer.'
+      ]}
+    ]}
+  ];
+
+  var tierNames = ['TRIAL', 'FREE', 'PRO', 'TEAMS', 'ENTERPRISE'];
+  var tierClasses = ['tier-trial', 'tier-free', 'tier-pro', 'tier-teams', 'tier-ent'];
+
+  function getCellClass(v) {
+    if (v === CHECK) return 'cell-yes';
+    if (v === CROSS || v === 'None') return 'cell-no';
+    if (v === '5' || v === '3' || v === '1' || v === 'Basic' || v === 'Subtle' || v === 'txt, md') return 'cell-limited';
+    return 'cell-value';
+  }
+
+  function buildMatrix() {
+    var thead = document.getElementById('matrixHead');
+    var tbody = document.getElementById('matrixBody');
+
+    /* Build header row */
+    var headRow = document.createElement('tr');
+    var thFeat = document.createElement('th');
+    thFeat.className = 'feature-col';
+    thFeat.textContent = 'Feature';
+    headRow.appendChild(thFeat);
+
+    tierNames.forEach(function(name, i) {
+      var th = document.createElement('th');
+      th.className = 'tier-col ' + tierClasses[i];
+      th.textContent = name;
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+
+    /* Build body rows */
+    features.forEach(function(cat) {
+      /* Category header row */
+      var catRow = document.createElement('tr');
+      var catTd = document.createElement('td');
+      catTd.className = 'feat-name cat-header';
+      catTd.setAttribute('colspan', '6');
+      catTd.textContent = cat.cat;
+      catRow.appendChild(catTd);
+      tbody.appendChild(catRow);
+
+      /* Feature rows */
+      cat.rows.forEach(function(row) {
+        var tr = document.createElement('tr');
+        var nameTd = document.createElement('td');
+        nameTd.className = 'feat-name';
+        nameTd.textContent = row.name;
+        tr.appendChild(nameTd);
+
+        row.vals.forEach(function(v, i) {
+          var td = document.createElement('td');
+          td.className = getCellClass(v);
+          td.textContent = v;
+          td.addEventListener('click', (function(tierName, featureName, detail) {
+            return function() {
+              showTooltip(td, tierName, featureName, detail);
+            };
+          })(tierNames[i], row.name, row.details[i]));
+          tr.appendChild(td);
+        });
+
+        tbody.appendChild(tr);
+      });
+    });
+  }
+
+  buildMatrix();
+})();
+</script>
+</body>
+</html>

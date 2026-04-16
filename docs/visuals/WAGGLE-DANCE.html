@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WaggleDance -- Multi-Agent Communication</title>
+<style>
+  :root {
+    --honey: #e5a000;
+    --honey-light: #f5c842;
+    --honey-dim: #b37d00;
+    --hive-950: #08090c;
+    --hive-900: #0e1017;
+    --hive-800: #181b24;
+    --hive-700: #242834;
+    --hive-600: #3a3f50;
+    --hive-500: #555a6e;
+    --accent: #a78bfa;
+    --accent-dim: #7c5fd6;
+    --green: #34d399;
+    --green-dim: #10b981;
+    --red: #f87171;
+    --blue: #60a5fa;
+    --cyan: #22d3ee;
+    --orange: #fb923c;
+    --pink: #f472b6;
+    --white: #f0f0f0;
+    --text: #c8cad0;
+    --text-dim: #8a8d9a;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--hive-950);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    overflow-x: hidden;
+  }
+  /* --- Tooltip --- */
+  #tooltip {
+    position: fixed;
+    z-index: 9999;
+    pointer-events: none;
+    background: var(--hive-800);
+    border: 1px solid var(--honey-dim);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 13px;
+    color: var(--text);
+    max-width: 280px;
+    line-height: 1.5;
+    opacity: 0;
+    transition: opacity 0.2s;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  }
+  #tooltip.visible { opacity: 1; }
+  /* --- Header --- */
+  header {
+    text-align: center;
+    padding: 48px 20px 24px;
+    position: relative;
+  }
+  header h1 {
+    font-size: 42px;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--honey), var(--honey-light));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: -1px;
+  }
+  header p {
+    color: var(--text-dim);
+    font-size: 16px;
+    margin-top: 8px;
+    max-width: 600px;
+    margin-inline: auto;
+  }
+  .badge {
+    display: inline-block;
+    background: var(--hive-700);
+    border: 1px solid var(--hive-600);
+    border-radius: 20px;
+    padding: 4px 14px;
+    font-size: 12px;
+    color: var(--honey);
+    margin-top: 12px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  /* --- Navigation --- */
+  nav {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 20px 32px;
+    flex-wrap: wrap;
+  }
+  nav button {
+    background: var(--hive-800);
+    border: 1px solid var(--hive-700);
+    border-radius: 8px;
+    color: var(--text-dim);
+    padding: 8px 16px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.25s;
+    font-family: inherit;
+  }
+  nav button:hover {
+    border-color: var(--honey-dim);
+    color: var(--honey);
+  }
+  nav button.active {
+    background: linear-gradient(135deg, var(--honey-dim), var(--honey));
+    color: var(--hive-950);
+    border-color: var(--honey);
+    font-weight: 600;
+  }
+  /* --- Sections --- */
+  .section {
+    display: none;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 20px 60px;
+  }
+  .section.active { display: block; }
+  .section-title {
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--white);
+    margin-bottom: 6px;
+  }
+  .section-sub {
+    color: var(--text-dim);
+    font-size: 14px;
+    margin-bottom: 32px;
+    line-height: 1.6;
+  }
+  /* --- Canvas area --- */
+  .canvas {
+    position: relative;
+    background: var(--hive-900);
+    border: 1px solid var(--hive-700);
+    border-radius: 16px;
+    min-height: 440px;
+    overflow: hidden;
+  }
+  /* --- Shared node styles --- */
+  .node {
+    position: absolute;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 12px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    transition: transform 0.3s, box-shadow 0.3s;
+    cursor: default;
+  }
+  .node:hover {
+    transform: scale(1.08);
+    box-shadow: 0 0 20px rgba(229,160,0,0.25);
+  }
+  .node .icon { font-size: 28px; margin-bottom: 4px; }
+  .node .label { line-height: 1.3; }
+  .node-user {
+    background: linear-gradient(135deg, var(--accent-dim), var(--accent));
+    color: #fff;
+    border: 2px solid var(--accent);
+    width: 100px; height: 80px;
+  }
+  .node-orch {
+    background: linear-gradient(135deg, var(--honey-dim), var(--honey));
+    color: var(--hive-950);
+    border: 2px solid var(--honey-light);
+    width: 120px; height: 80px;
+  }
+  .node-agent {
+    background: var(--hive-800);
+    border: 2px solid var(--hive-600);
+    color: var(--text);
+    width: 110px; height: 78px;
+  }
+  .node-agent.research { border-color: var(--blue); }
+  .node-agent.code { border-color: var(--green); }
+  .node-agent.analysis { border-color: var(--orange); }
+  .node-agent.writer { border-color: var(--pink); }
+  .node-agent.reviewer { border-color: var(--cyan); }
+  .node-result {
+    background: linear-gradient(135deg, var(--green-dim), var(--green));
+    color: var(--hive-950);
+    border: 2px solid var(--green);
+    width: 130px; height: 72px;
+  }
+  .node-memory {
+    background: var(--hive-800);
+    border: 2px solid var(--honey);
+    color: var(--honey-light);
+    width: 130px; height: 72px;
+    border-style: dashed;
+  }
+  .node-queue {
+    background: var(--hive-800);
+    border: 2px solid var(--accent);
+    color: var(--accent);
+    width: 120px; height: 70px;
+  }
+  /* --- SVG lines --- */
+  .canvas svg {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+  }
+  .flow-line {
+    stroke-width: 2;
+    fill: none;
+    stroke-dasharray: 8 4;
+  }
+  .flow-line.animated {
+    animation: dash 1.2s linear infinite;
+  }
+  @keyframes dash {
+    to { stroke-dashoffset: -24; }
+  }
+  /* --- Pulse ring on nodes --- */
+  .pulse-ring {
+    position: absolute;
+    top: -6px; left: -6px;
+    right: -6px; bottom: -6px;
+    border-radius: 16px;
+    border: 2px solid var(--honey);
+    opacity: 0;
+    animation: pulse-out 2.4s ease-out infinite;
+    pointer-events: none;
+  }
+  @keyframes pulse-out {
+    0% { opacity: 0.6; transform: scale(1); }
+    100% { opacity: 0; transform: scale(1.25); }
+  }
+  /* --- Step labels on canvas --- */
+  .step-label {
+    position: absolute;
+    background: var(--hive-700);
+    border: 1px solid var(--hive-600);
+    border-radius: 20px;
+    padding: 3px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--honey);
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  /* --- Section 5 resource cards --- */
+  .resource-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+    margin-top: 20px;
+  }
+  .resource-card {
+    background: var(--hive-800);
+    border: 1px solid var(--hive-700);
+    border-radius: 12px;
+    padding: 20px;
+    transition: all 0.3s;
+    cursor: default;
+  }
+  .resource-card:hover {
+    border-color: var(--honey-dim);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  }
+  .resource-card .rc-icon { font-size: 32px; margin-bottom: 8px; }
+  .resource-card .rc-title {
+    font-weight: 700;
+    color: var(--white);
+    font-size: 15px;
+    margin-bottom: 4px;
+  }
+  .resource-card .rc-desc {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+  .resource-card .rc-tag {
+    display: inline-block;
+    margin-top: 8px;
+    background: var(--hive-700);
+    border-radius: 12px;
+    padding: 2px 10px;
+    font-size: 11px;
+    color: var(--honey);
+  }
+  /* --- Section 6 lifecycle --- */
+  .lifecycle {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin-top: 20px;
+  }
+  .lc-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    position: relative;
+    padding: 16px 0;
+  }
+  .lc-step:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    left: 19px;
+    top: 52px;
+    bottom: -4px;
+    width: 2px;
+    background: var(--hive-600);
+  }
+  .lc-num {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: var(--hive-800);
+    border: 2px solid var(--honey);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--honey);
+    flex-shrink: 0;
+  }
+  .lc-body { flex: 1; }
+  .lc-title {
+    font-weight: 700;
+    color: var(--white);
+    font-size: 15px;
+    margin-bottom: 4px;
+  }
+  .lc-detail {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+  .lc-code {
+    display: inline-block;
+    background: var(--hive-700);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 12px;
+    color: var(--green);
+  }
+  /* --- Footer --- */
+  footer {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-dim);
+    font-size: 12px;
+    border-top: 1px solid var(--hive-800);
+  }
+  footer span { color: var(--honey); font-weight: 600; }
+  /* --- Animated dot traveling along path --- */
+  .traveler {
+    position: absolute;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 10;
+  }
+  /* --- Broadcast rings --- */
+  @keyframes broadcast-ring {
+    0% { transform: scale(0.3); opacity: 0.8; }
+    100% { transform: scale(2.5); opacity: 0; }
+  }
+  .broadcast-ring {
+    position: absolute;
+    width: 60px; height: 60px;
+    border-radius: 50%;
+    border: 2px solid var(--honey);
+    pointer-events: none;
+    animation: broadcast-ring 2s ease-out infinite;
+  }
+</style>
+</head>
+<body>
+
+<div id="tooltip"></div>
+
+<header>
+  <h1>WaggleDance</h1>
+  <p>Multi-agent communication protocol -- how Waggle OS agents coordinate, share knowledge, and solve problems together.</p>
+  <div class="badge">@waggle/waggle-dance</div>
+</header>
+
+<nav id="nav"></nav>
+
+<!-- ==================== Section 1: Single-User Multi-Agent ==================== -->
+<div class="section" id="sec-1">
+  <div class="section-title">Single-User Multi-Agent</div>
+  <div class="section-sub">One user, multiple specialist agents working in parallel. The SubagentOrchestrator resolves dependencies, injects context, and synthesizes results into a unified answer.</div>
+  <div class="canvas" id="canvas-1" style="height:460px;">
+    <svg id="svg-1"></svg>
+    <div class="node node-user" style="left:30px;top:190px;" data-tip-title="User" data-tip-body="Asks a complex question that requires multiple specialties to answer completely.">
+      <div class="icon">&#x1F464;</div>
+      <div class="label">User</div>
+    </div>
+    <div class="node node-orch" style="left:200px;top:185px;" data-tip-title="SubagentOrchestrator" data-tip-body="Analyzes the query, decomposes into sub-tasks, spawns specialist workers via runWorkflow(), manages dependencies.">
+      <div class="icon">&#x1F3AF;</div>
+      <div class="label">Orchestrator</div>
+      <div class="pulse-ring"></div>
+    </div>
+    <div class="node node-agent research" style="left:420px;top:40px;" data-tip-title="Research Agent" data-tip-body="Role preset: web_search, web_fetch, search_memory, save_memory. Gathers external information and existing knowledge.">
+      <div class="icon">&#x1F50D;</div>
+      <div class="label">Researcher</div>
+    </div>
+    <div class="node node-agent code" style="left:420px;top:185px;" data-tip-title="Coder Agent" data-tip-body="Role preset: bash, read_file, write_file, edit_file, git_status, git_diff. Writes and reviews code artifacts.">
+      <div class="icon">&#x1F4BB;</div>
+      <div class="label">Coder</div>
+    </div>
+    <div class="node node-agent analysis" style="left:420px;top:330px;" data-tip-title="Analyst Agent" data-tip-body="Role preset: bash, read_file, search_files, web_search, web_fetch, search_memory. Processes data and draws conclusions.">
+      <div class="icon">&#x1F4CA;</div>
+      <div class="label">Analyst</div>
+    </div>
+    <div class="step-label" style="left:130px;top:160px;">1. Decompose</div>
+    <div class="step-label" style="left:340px;top:12px;">2. Spawn</div>
+    <div class="step-label" style="left:570px;top:185px;">3. Execute</div>
+    <div class="node node-result" style="left:680px;top:185px;" data-tip-title="Synthesized Result" data-tip-body="Aggregation modes: concatenate, last, or synthesize. The orchestrator merges all worker outputs into one coherent answer.">
+      <div class="icon">&#x2714;</div>
+      <div class="label">Merged Result</div>
+    </div>
+    <div class="step-label" style="left:830px;top:160px;">4. Return</div>
+    <div class="node node-user" style="left:870px;top:190px;" data-tip-title="User" data-tip-body="Receives a comprehensive answer that no single agent could have produced alone.">
+      <div class="icon">&#x1F464;</div>
+      <div class="label">User</div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== Section 2: Team WaggleDance ==================== -->
+<div class="section" id="sec-2">
+  <div class="section-title">Team WaggleDance</div>
+  <div class="section-sub">Multiple users share a team memory layer via TeamSync. Knowledge discovered by one agent flows to all team members automatically -- push-on-write, pull-on-activate.</div>
+  <div class="canvas" id="canvas-2" style="height:480px;">
+    <svg id="svg-2"></svg>
+    <div class="node node-user" style="left:40px;top:60px;" data-tip-title="User A" data-tip-body="Discovers new knowledge during a research session. Their agent writes frames to local .mind DB.">
+      <div class="icon">&#x1F464;</div>
+      <div class="label">User A</div>
+    </div>
+    <div class="node node-agent research" style="left:40px;top:190px;" data-tip-title="Agent A" data-tip-body="Executes save_memory after discovering useful information. Triggers push-on-write to team server.">
+      <div class="icon">&#x1F41D;</div>
+      <div class="label">Agent A</div>
+    </div>
+    <div class="step-label" style="left:30px;top:160px;">Discovers</div>
+    <div class="node node-memory" style="left:200px;top:190px;" data-tip-title="Local .mind" data-tip-body="SQLite database with FrameStore, HybridSearch, KnowledgeGraph. Each user has their own local mind.">
+      <div class="icon">&#x1F9E0;</div>
+      <div class="label">Local Mind A</div>
+    </div>
+    <div class="step-label" style="left:195px;top:158px;">Writes</div>
+    <div class="node node-orch" style="left:420px;top:200px;width:160px;height:90px;" data-tip-title="Team Memory Server" data-tip-body="Stores memory frames as team entities (entityType='memory_frame'). Push-on-write, pull-on-activate. Last-write-wins at frame level. Frames carry authorId and authorName attribution.">
+      <div class="icon">&#x1F3E0;</div>
+      <div class="label">Shared Team Memory</div>
+      <div class="pulse-ring"></div>
+    </div>
+    <div class="step-label" style="left:345px;top:168px;">Push</div>
+    <div class="step-label" style="left:575px;top:168px;">Pull</div>
+    <div class="node node-memory" style="left:660px;top:190px;" data-tip-title="Local .mind" data-tip-body="User B's local SQLite database. Pulls new frames from team server when workspace activates.">
+      <div class="icon">&#x1F9E0;</div>
+      <div class="label">Local Mind B</div>
+    </div>
+    <div class="node node-agent code" style="left:830px;top:190px;" data-tip-title="Agent B" data-tip-body="Automatically has access to knowledge that User A discovered. search_memory returns team-shared frames alongside local ones.">
+      <div class="icon">&#x1F41D;</div>
+      <div class="label">Agent B</div>
+    </div>
+    <div class="node node-user" style="left:830px;top:60px;" data-tip-title="User B" data-tip-body="Benefits from team knowledge without having to do the research. Sees attributed frames ('discovered by User A').">
+      <div class="icon">&#x1F464;</div>
+      <div class="label">User B</div>
+    </div>
+    <div class="step-label" style="left:815px;top:160px;">Recalls</div>
+    <div class="step-label" style="left:380px;top:330px;background:var(--hive-800);border-color:var(--honey-dim);">TeamSync: frameToEntity() -- composite key gopId+t</div>
+    <div class="node node-user" style="left:420px;top:400px;width:160px;" data-tip-title="User C" data-tip-body="Also connected to the same team memory. The entire team builds shared institutional knowledge over time.">
+      <div class="icon">&#x1F464;</div>
+      <div class="label">User C (also synced)</div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== Section 3: Task Dispatcher ==================== -->
+<div class="section" id="sec-3">
+  <div class="section-title">Task Dispatcher</div>
+  <div class="section-sub">The WaggleDanceDispatcher routes messages by type/subtype combination. task_delegation spawns workers, knowledge_check searches memory, skill_request resolves capabilities.</div>
+  <div class="canvas" id="canvas-3" style="height:460px;">
+    <svg id="svg-3"></svg>
+    <div class="node node-queue" style="left:30px;top:50px;" data-tip-title="task_delegation" data-tip-body="Routes to spawnWorker(task, role, context). Creates a new sub-agent with the specified role and tool preset.">
+      <div class="icon">&#x1F4CB;</div>
+      <div class="label">Task Delegation</div>
+    </div>
+    <div class="node node-queue" style="left:30px;top:170px;border-color:var(--blue);" data-tip-title="knowledge_check" data-tip-body="Routes to searchMemory(query). Searches local and team memory for relevant knowledge frames.">
+      <div class="icon">&#x2753;</div>
+      <div class="label" style="color:var(--blue);">Knowledge Check</div>
+    </div>
+    <div class="node node-queue" style="left:30px;top:290px;border-color:var(--green);" data-tip-title="skill_request" data-tip-body="Routes to resolveCapability(query). Searches the capability router for matching skills and tools.">
+      <div class="icon">&#x1F527;</div>
+      <div class="label" style="color:var(--green);">Skill Request</div>
+    </div>
+    <div class="node node-orch" style="left:260px;top:165px;width:160px;height:110px;" data-tip-title="WaggleDanceDispatcher" data-tip-body="Validates message type-subtype combinations against the protocol matrix. Routes to: handleTaskDelegation, handleKnowledgeCheck, handleSkillRequest, handleSkillShare.">
+      <div class="icon">&#x1F3AF;</div>
+      <div class="label">Dispatcher</div>
+      <div class="pulse-ring"></div>
+    </div>
+    <div class="node node-agent research" style="left:540px;top:30px;" data-tip-title="Capability Match" data-tip-body="resolveCapability() checks which agents have the skills needed. Returns source, name, description, availability.">
+      <div class="icon">&#x1F50E;</div>
+      <div class="label">Cap. Match</div>
+    </div>
+    <div class="node node-agent code" style="left:540px;top:160px;" data-tip-title="Worker Spawn" data-tip-body="spawnWorker() picks the right role preset from ROLE_TOOL_PRESETS (researcher, writer, coder, analyst, reviewer, planner, synthesizer, summarizer).">
+      <div class="icon">&#x2696;</div>
+      <div class="label">Worker Spawn</div>
+    </div>
+    <div class="node node-agent analysis" style="left:540px;top:290px;" data-tip-title="Memory Search" data-tip-body="searchMemory() queries HybridSearch (FTS5 + sqlite-vec, fused via RRF). Returns ranked knowledge frames.">
+      <div class="icon">&#x1F9E0;</div>
+      <div class="label">Memory Search</div>
+    </div>
+    <div class="node node-agent writer" style="left:750px;top:30px;" data-tip-title="Available Agents" data-tip-body="Filtered list of agents with matching capabilities. Each reports availability status.">
+      <div class="icon">&#x1F41D;</div>
+      <div class="label">Agent Pool</div>
+    </div>
+    <div class="node node-agent reviewer" style="left:750px;top:160px;" data-tip-title="Spawned Worker" data-tip-body="New sub-agent with role-specific tool preset, parent context injected, and max turn budget.">
+      <div class="icon">&#x1F41D;</div>
+      <div class="label">New Worker</div>
+    </div>
+    <div class="node node-result" style="left:750px;top:290px;" data-tip-title="DispatchResult" data-tip-body="{ handled: boolean, response?: string, error?: string }. Every dispatch returns a structured result.">
+      <div class="icon">&#x1F4E6;</div>
+      <div class="label">Results</div>
+    </div>
+    <div class="step-label" style="left:200px;top:400px;background:var(--hive-800);border-color:var(--honey-dim);font-size:10px;">
+      Protocol: request=[knowledge_check, task_delegation, skill_request] | response=[knowledge_match, task_claim] | broadcast=[discovery, routed_share, skill_share]
+    </div>
+  </div>
+</div>
+
+<!-- ==================== Section 4: HiveQuery Broadcast ==================== -->
+<div class="section" id="sec-4">
+  <div class="section-title">HiveQuery Broadcast</div>
+  <div class="section-sub">One agent broadcasts a question to the entire hive. Every agent searches its knowledge, and results are collected, ranked by relevance, and the best answer surfaces. Like a hive mind where every bee contributes.</div>
+  <div class="canvas" id="canvas-4" style="height:500px;">
+    <svg id="svg-4"></svg>
+    <div class="node node-orch" style="left:60px;top:200px;width:130px;" data-tip-title="Broadcast Source" data-tip-body="Sends a HiveQuery with topic and optional scope. The query propagates to all agents in the hive simultaneously.">
+      <div class="icon">&#x1F4E2;</div>
+      <div class="label">Broadcast Query</div>
+      <div class="pulse-ring"></div>
+    </div>
+    <div class="step-label" style="left:50px;top:170px;">HiveQuery { topic, scope }</div>
+    <div class="broadcast-ring" style="left:95px;top:220px;animation-delay:0s;"></div>
+    <div class="broadcast-ring" style="left:95px;top:220px;animation-delay:0.6s;"></div>
+    <div class="broadcast-ring" style="left:95px;top:220px;animation-delay:1.2s;"></div>
+    <div class="node node-agent research" style="left:340px;top:20px;" data-tip-title="Researcher" data-tip-body="Searches web sources and memory for matching knowledge. Returns entities, related tasks, and messages.">
+      <div class="icon">&#x1F41D;</div>
+      <div class="label">Researcher</div>
+    </div>
+    <div class="node node-agent code" style="left:460px;top:100px;" data-tip-title="Coder" data-tip-body="Checks code-related knowledge, file references, git history. Returns technical context if relevant.">
+      <div class="icon">&#x1F41D;</div>
+      <div class="label">Coder</div>
+    </div>
+    <div class="node node-agent analysis" style="left:480px;top:240px;" data-tip-title="Analyst" data-tip-body="Processes analytical data, metrics, past findings. Returns statistical or business context.">
+      <div class="icon">&#x1F41D;</div>
+      <div class="label">Analyst</div>
+    </div>
+    <div class="node node-agent writer" style="left:440px;top:370px;" data-tip-title="Writer" data-tip-body="Checks documents, reports, written content. Returns relevant prose and documentation.">
+      <div class="icon">&#x1F41D;</div>
+      <div class="label">Writer</div>
+    </div>
+    <div class="node node-agent reviewer" style="left:300px;top:400px;" data-tip-title="Reviewer" data-tip-body="Checks review logs, code quality findings, architectural notes. Returns QA-relevant knowledge.">
+      <div class="icon">&#x1F41D;</div>
+      <div class="label">Reviewer</div>
+    </div>
+    <div class="node node-orch" style="left:700px;top:140px;width:130px;height:90px;" data-tip-title="Collect and Rank" data-tip-body="HiveQueryResult: entities (name, type, properties), relatedTasks (id, title, status, createdBy), relatedMessages (type, subtype, content). Results ranked by relevance.">
+      <div class="icon">&#x1F3C6;</div>
+      <div class="label">Collect + Rank</div>
+    </div>
+    <div class="node node-result" style="left:700px;top:290px;" data-tip-title="Best Answer" data-tip-body="The highest-ranked response surfaces as the definitive answer. Lower-ranked results available as supporting context.">
+      <div class="icon">&#x2B50;</div>
+      <div class="label">Best Answer</div>
+    </div>
+    <div class="step-label" style="left:730px;top:260px;">Surfaces</div>
+  </div>
+</div>
+
+<!-- ==================== Section 5: Shared Resources ==================== -->
+<div class="section" id="sec-5">
+  <div class="section-title">Shared Resources</div>
+  <div class="section-sub">What flows between agents in the WaggleDance protocol. Every shared resource type maps to a real mechanism in the codebase.</div>
+  <div class="resource-grid">
+    <div class="resource-card" data-tip-title="Memory Frames" data-tip-body="FrameStore (I/P/B frames) synced via TeamSync. Push-on-write, pull-on-activate. Composite key: gopId + t. Author attribution preserved. HybridSearch (FTS5 + vec0) across local + team frames.">
+      <div class="rc-icon">&#x1F9E0;</div>
+      <div class="rc-title">Memory Frames</div>
+      <div class="rc-desc">Shared via team-sync.ts. Push-on-write, pull-on-activate. Frames carry author attribution (userId + displayName).</div>
+      <div class="rc-tag">team-sync.ts</div>
+    </div>
+    <div class="resource-card" data-tip-title="Skills" data-tip-body="skill_share message subtype in the WaggleDance protocol. handleSkillShare() returns { action: 'install_shared_skill', skillName, skillContent, sharedBy }. The server persists the skill for the receiving workspace.">
+      <div class="rc-icon">&#x1F3AF;</div>
+      <div class="rc-title">Skills</div>
+      <div class="rc-desc">Shared via skill_share broadcast message. Receiving agents install shared skills into their workspace skill library.</div>
+      <div class="rc-tag">dispatcher.ts</div>
+    </div>
+    <div class="resource-card" data-tip-title="Knowledge Graph" data-tip-body="Entity-relation graph with bitemporal validity. Cross-workspace via global KG queries (MultiMindCache). Entities, relationships, and ontology concepts propagate.">
+      <div class="rc-icon">&#x1F578;</div>
+      <div class="rc-title">Knowledge Graph</div>
+      <div class="rc-desc">Entity-relation graph with bitemporal validity. Global KG queries span all workspaces via MultiMindCache.</div>
+      <div class="rc-tag">knowledge.ts</div>
+    </div>
+    <div class="resource-card" data-tip-title="Evolution Learnings" data-tip-body="Self-improvement results from the evolution pipeline. Persona overrides and behavioral-spec overrides propagate to improve all agents. Accept/reject at run level.">
+      <div class="rc-icon">&#x1F9EC;</div>
+      <div class="rc-title">Learnings</div>
+      <div class="rc-desc">Evolution improvements propagate: persona overrides, behavioral-spec patches. Accepted runs improve all agents globally.</div>
+      <div class="rc-tag">evolution-deploy.ts</div>
+    </div>
+    <div class="resource-card" data-tip-title="Tool Pool" data-tip-body="ROLE_TOOL_PRESETS define per-role tool access: researcher, writer, coder, analyst, reviewer, planner, synthesizer, summarizer. filterToolsForContext() enforces allowlist/denylist per persona.">
+      <div class="rc-icon">&#x1F6E0;</div>
+      <div class="rc-title">Tool Pool</div>
+      <div class="rc-desc">Role-based tool presets shared across agents. 8 roles with curated tool sets. filterToolsForContext() enforces access.</div>
+      <div class="rc-tag">subagent-orchestrator.ts</div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== Section 6: Communication Protocol ==================== -->
+<div class="section" id="sec-6">
+  <div class="section-title">Communication Protocol</div>
+  <div class="section-sub">The lifecycle of a sub-agent from spawn request to trace recording. Each step maps directly to code in the agent package.</div>
+  <div class="lifecycle">
+    <div class="lc-step" data-tip-title="Spawn Request" data-tip-body="WorkflowStep defines: name, role, task, tools, dependsOn, contextFrom, maxTurns. The orchestrator validates dependencies before spawning.">
+      <div class="lc-num">1</div>
+      <div class="lc-body">
+        <div class="lc-title">Spawn Request</div>
+        <div class="lc-detail">Orchestrator receives a <span class="lc-code">WorkflowStep</span> with role, task, tools, and dependency list. Validates that all <span class="lc-code">dependsOn</span> steps have completed before proceeding.</div>
+      </div>
+    </div>
+    <div class="lc-step" data-tip-title="Agent Creation" data-tip-body="makeWorkerId() generates unique ID. WorkerState created with status='pending'. UI receives 'worker:status' event to show the agent in the workflow plan.">
+      <div class="lc-num">2</div>
+      <div class="lc-body">
+        <div class="lc-title">Agent Creation</div>
+        <div class="lc-detail">Worker ID generated via <span class="lc-code">makeWorkerId()</span>. WorkerState initialized as <span class="lc-code">pending</span>. The <span class="lc-code">worker:status</span> event fires so UI can show the planned workflow.</div>
+      </div>
+    </div>
+    <div class="lc-step" data-tip-title="Context Injection" data-tip-body="setParentContext() injects: userName, userRole, workspaceName, workspaceDomain, plus behavioral rules (search memory first, be grounded, save findings). contextFrom steps inject prior results.">
+      <div class="lc-num">3</div>
+      <div class="lc-body">
+        <div class="lc-title">Context Injection</div>
+        <div class="lc-detail"><span class="lc-code">setParentContext()</span> injects user identity, workspace info, and behavioral rules. Results from <span class="lc-code">contextFrom</span> steps are prepended as prior context. Role tool presets resolved from <span class="lc-code">ROLE_TOOL_PRESETS</span>.</div>
+      </div>
+    </div>
+    <div class="lc-step" data-tip-title="Execution" data-tip-body="Worker status transitions: pending -> running -> done/failed. The agent loop runs with injected context, constrained tools, and maxTurns budget. toolsUsed and token usage tracked.">
+      <div class="lc-num">4</div>
+      <div class="lc-body">
+        <div class="lc-title">Execution</div>
+        <div class="lc-detail">Status transitions: <span class="lc-code">pending -> running -> done|failed</span>. Agent loop runs with constrained tools and turn budget. Token usage tracked in <span class="lc-code">WorkerState.usage</span>.</div>
+      </div>
+    </div>
+    <div class="lc-step" data-tip-title="Result Return" data-tip-body="Worker result stored in WorkerState.result. contextResults map populated for downstream steps. Aggregation runs after all steps complete: concatenate, last, or synthesize.">
+      <div class="lc-num">5</div>
+      <div class="lc-body">
+        <div class="lc-title">Result Return</div>
+        <div class="lc-detail">Worker result stored in <span class="lc-code">WorkerState.result</span>. Context map updated for downstream steps. Final aggregation mode: <span class="lc-code">concatenate | last | synthesize</span>.</div>
+      </div>
+    </div>
+    <div class="lc-step" data-tip-title="Trace Recording" data-tip-body="TraceRecorder captures the full execution trace: input tokens, output tokens, tools used, latency, model, result quality. Traces feed into the evolution pipeline for self-improvement.">
+      <div class="lc-num">6</div>
+      <div class="lc-body">
+        <div class="lc-title">Trace Recording</div>
+        <div class="lc-detail"><span class="lc-code">TraceRecorder</span> captures full execution trace: tokens, tools, latency, model, quality. Traces feed into the evolution pipeline -- enabling closed-loop self-improvement.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <span>Waggle OS</span> -- WaggleDance Multi-Agent Protocol | @waggle/waggle-dance | Egzakta Group
+</footer>
+
+<script>
+(function() {
+  /* ========== Tab Navigation ========== */
+  var tabs = [
+    { id: 'sec-1', label: 'Multi-Agent' },
+    { id: 'sec-2', label: 'Team Dance' },
+    { id: 'sec-3', label: 'Dispatcher' },
+    { id: 'sec-4', label: 'HiveQuery' },
+    { id: 'sec-5', label: 'Shared Resources' },
+    { id: 'sec-6', label: 'Protocol' }
+  ];
+  var navEl = document.getElementById('nav');
+  tabs.forEach(function(t, i) {
+    var btn = document.createElement('button');
+    btn.textContent = t.label;
+    if (i === 0) btn.classList.add('active');
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.section').forEach(function(s) { s.classList.remove('active'); });
+      document.querySelectorAll('nav button').forEach(function(b) { b.classList.remove('active'); });
+      document.getElementById(t.id).classList.add('active');
+      btn.classList.add('active');
+      drawMap[t.id] && drawMap[t.id]();
+    });
+    navEl.appendChild(btn);
+  });
+  document.getElementById('sec-1').classList.add('active');
+
+  /* ========== Tooltip (safe DOM methods) ========== */
+  var tip = document.getElementById('tooltip');
+  function showTip(el) {
+    var title = el.getAttribute('data-tip-title');
+    var body = el.getAttribute('data-tip-body');
+    tip.textContent = '';
+    if (title) {
+      var h = document.createElement('div');
+      h.style.color = 'var(--honey)';
+      h.style.fontWeight = '700';
+      h.style.fontSize = '13px';
+      h.style.marginBottom = '4px';
+      h.textContent = title;
+      tip.appendChild(h);
+    }
+    if (body) {
+      var p = document.createElement('div');
+      p.textContent = body;
+      tip.appendChild(p);
+    }
+    tip.classList.add('visible');
+  }
+  document.addEventListener('mouseover', function(e) {
+    var el = e.target.closest('[data-tip-title]');
+    if (!el) { tip.classList.remove('visible'); return; }
+    showTip(el);
+  });
+  document.addEventListener('mousemove', function(e) {
+    if (!tip.classList.contains('visible')) return;
+    var x = e.clientX + 14;
+    var y = e.clientY + 14;
+    if (x + 290 > window.innerWidth) x = e.clientX - 294;
+    if (y + 120 > window.innerHeight) y = e.clientY - 130;
+    tip.style.left = x + 'px';
+    tip.style.top = y + 'px';
+  });
+  document.addEventListener('mouseout', function(e) {
+    var el = e.target.closest('[data-tip-title]');
+    if (el && !el.contains(e.relatedTarget)) tip.classList.remove('visible');
+  });
+
+  /* ========== SVG Helpers ========== */
+  var NS = 'http://www.w3.org/2000/svg';
+
+  function svgLine(svg, x1, y1, x2, y2, color, animated) {
+    var line = document.createElementNS(NS, 'line');
+    line.setAttribute('x1', x1);
+    line.setAttribute('y1', y1);
+    line.setAttribute('x2', x2);
+    line.setAttribute('y2', y2);
+    line.setAttribute('stroke', color || 'var(--honey-dim)');
+    line.classList.add('flow-line');
+    if (animated) line.classList.add('animated');
+    svg.appendChild(line);
+  }
+
+  function svgArrow(svg, x, y, angle, color) {
+    var g = document.createElementNS(NS, 'g');
+    g.setAttribute('transform', 'translate(' + x + ',' + y + ') rotate(' + angle + ')');
+    var poly = document.createElementNS(NS, 'polygon');
+    poly.setAttribute('points', '0,-5 10,0 0,5');
+    poly.setAttribute('fill', color || 'var(--honey-dim)');
+    g.appendChild(poly);
+    svg.appendChild(g);
+  }
+
+  /* ========== Animated traveling dots ========== */
+  function clearTravelers(container) {
+    container.querySelectorAll('.traveler').forEach(function(t) { t.remove(); });
+  }
+
+  function addTraveler(container, x1, y1, x2, y2, color, duration, delay) {
+    var dot = document.createElement('div');
+    dot.className = 'traveler';
+    dot.style.background = color || 'var(--honey)';
+    dot.style.boxShadow = '0 0 8px ' + (color || 'var(--honey)');
+    container.appendChild(dot);
+    var startTime = performance.now() + (delay || 0);
+    var cycleDuration = duration + 1200;
+
+    function step(now) {
+      if (now < startTime) { requestAnimationFrame(step); return; }
+      var elapsed = (now - startTime) % cycleDuration;
+      if (elapsed > duration) {
+        dot.style.opacity = '0';
+      } else {
+        var t = elapsed / duration;
+        var x = x1 + (x2 - x1) * t;
+        var y = y1 + (y2 - y1) * t;
+        dot.style.left = (x - 4) + 'px';
+        dot.style.top = (y - 4) + 'px';
+        dot.style.opacity = (t < 0.1 ? t / 0.1 : (t > 0.85 ? (1 - t) / 0.15 : 1)).toString();
+      }
+      requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  /* ========== Section Drawers ========== */
+
+  function drawSection1() {
+    var svg = document.getElementById('svg-1');
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    var c = document.getElementById('canvas-1');
+    clearTravelers(c);
+
+    // User -> Orchestrator
+    svgLine(svg, 130, 230, 200, 225, 'var(--accent)', true);
+    svgArrow(svg, 195, 225, 0, 'var(--accent)');
+    // Orchestrator -> agents
+    svgLine(svg, 320, 210, 420, 80, 'var(--blue)', true);
+    svgArrow(svg, 415, 83, -52, 'var(--blue)');
+    svgLine(svg, 320, 225, 420, 225, 'var(--green)', true);
+    svgArrow(svg, 415, 225, 0, 'var(--green)');
+    svgLine(svg, 320, 240, 420, 365, 'var(--orange)', true);
+    svgArrow(svg, 415, 362, 52, 'var(--orange)');
+    // Agents -> Result
+    svgLine(svg, 530, 80, 680, 210, 'var(--blue)', true);
+    svgArrow(svg, 676, 208, 40, 'var(--blue)');
+    svgLine(svg, 530, 225, 680, 221, 'var(--green)', true);
+    svgArrow(svg, 675, 221, 0, 'var(--green)');
+    svgLine(svg, 530, 370, 680, 236, 'var(--orange)', true);
+    svgArrow(svg, 676, 237, -40, 'var(--orange)');
+    // Result -> User
+    svgLine(svg, 810, 221, 870, 225, 'var(--green)', true);
+    svgArrow(svg, 866, 225, 2, 'var(--green)');
+
+    // Traveling dots
+    addTraveler(c, 130, 230, 200, 225, 'var(--accent)', 800, 0);
+    addTraveler(c, 320, 210, 420, 80, 'var(--blue)', 900, 400);
+    addTraveler(c, 320, 225, 420, 225, 'var(--green)', 900, 500);
+    addTraveler(c, 320, 240, 420, 365, 'var(--orange)', 900, 600);
+    addTraveler(c, 530, 80, 680, 210, 'var(--blue)', 800, 1600);
+    addTraveler(c, 530, 225, 680, 221, 'var(--green)', 800, 1800);
+    addTraveler(c, 530, 370, 680, 236, 'var(--orange)', 800, 2000);
+    addTraveler(c, 810, 221, 870, 225, 'var(--green)', 600, 3000);
+  }
+
+  function drawSection2() {
+    var svg = document.getElementById('svg-2');
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    var c = document.getElementById('canvas-2');
+    clearTravelers(c);
+
+    svgLine(svg, 90, 140, 90, 190, 'var(--accent)', true);
+    svgArrow(svg, 90, 185, 90, 'var(--accent)');
+    svgLine(svg, 150, 230, 200, 226, 'var(--blue)', true);
+    svgArrow(svg, 195, 226, 0, 'var(--blue)');
+    svgLine(svg, 330, 226, 420, 240, 'var(--honey)', true);
+    svgArrow(svg, 415, 239, 5, 'var(--honey)');
+    svgLine(svg, 580, 240, 660, 226, 'var(--honey)', true);
+    svgArrow(svg, 655, 226, -5, 'var(--honey)');
+    svgLine(svg, 790, 226, 830, 230, 'var(--blue)', true);
+    svgArrow(svg, 825, 229, 4, 'var(--blue)');
+    svgLine(svg, 880, 190, 880, 140, 'var(--accent)', true);
+    svgArrow(svg, 880, 145, -90, 'var(--accent)');
+    svgLine(svg, 500, 290, 500, 400, 'var(--honey-dim)', true);
+    svgArrow(svg, 500, 395, 90, 'var(--honey-dim)');
+
+    addTraveler(c, 90, 140, 90, 190, 'var(--accent)', 600, 0);
+    addTraveler(c, 150, 230, 200, 226, 'var(--blue)', 500, 800);
+    addTraveler(c, 330, 226, 420, 240, 'var(--honey)', 700, 1500);
+    addTraveler(c, 580, 240, 660, 226, 'var(--honey)', 700, 2500);
+    addTraveler(c, 790, 226, 830, 230, 'var(--blue)', 400, 3400);
+    addTraveler(c, 880, 190, 880, 140, 'var(--accent)', 500, 4000);
+  }
+
+  function drawSection3() {
+    var svg = document.getElementById('svg-3');
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    var c = document.getElementById('canvas-3');
+    clearTravelers(c);
+
+    svgLine(svg, 150, 85, 260, 200, 'var(--accent)', true);
+    svgArrow(svg, 256, 197, 47, 'var(--accent)');
+    svgLine(svg, 150, 205, 260, 220, 'var(--blue)', true);
+    svgArrow(svg, 256, 219, 5, 'var(--blue)');
+    svgLine(svg, 150, 325, 260, 250, 'var(--green)', true);
+    svgArrow(svg, 256, 252, -30, 'var(--green)');
+    svgLine(svg, 420, 200, 540, 70, 'var(--accent)', true);
+    svgArrow(svg, 536, 73, -47, 'var(--accent)');
+    svgLine(svg, 420, 220, 540, 200, 'var(--blue)', true);
+    svgArrow(svg, 536, 200, -6, 'var(--blue)');
+    svgLine(svg, 420, 250, 540, 325, 'var(--green)', true);
+    svgArrow(svg, 536, 323, 35, 'var(--green)');
+    svgLine(svg, 650, 70, 750, 65, 'var(--accent)', true);
+    svgArrow(svg, 746, 65, -2, 'var(--accent)');
+    svgLine(svg, 650, 200, 750, 195, 'var(--blue)', true);
+    svgArrow(svg, 746, 195, -2, 'var(--blue)');
+    svgLine(svg, 650, 325, 750, 325, 'var(--green)', true);
+    svgArrow(svg, 746, 325, 0, 'var(--green)');
+
+    addTraveler(c, 150, 85, 260, 200, 'var(--accent)', 700, 0);
+    addTraveler(c, 150, 205, 260, 220, 'var(--blue)', 700, 300);
+    addTraveler(c, 150, 325, 260, 250, 'var(--green)', 700, 600);
+    addTraveler(c, 420, 200, 540, 70, 'var(--accent)', 600, 1200);
+    addTraveler(c, 420, 220, 540, 200, 'var(--blue)', 600, 1500);
+    addTraveler(c, 420, 250, 540, 325, 'var(--green)', 600, 1800);
+    addTraveler(c, 650, 70, 750, 65, 'var(--accent)', 400, 2200);
+    addTraveler(c, 650, 200, 750, 195, 'var(--blue)', 400, 2400);
+    addTraveler(c, 650, 325, 750, 325, 'var(--green)', 400, 2600);
+  }
+
+  function drawSection4() {
+    var svg = document.getElementById('svg-4');
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    var c = document.getElementById('canvas-4');
+    clearTravelers(c);
+
+    var agents = [
+      { x: 395, y: 60 },
+      { x: 515, y: 140 },
+      { x: 535, y: 280 },
+      { x: 495, y: 410 },
+      { x: 355, y: 440 }
+    ];
+    var colors = ['var(--blue)', 'var(--green)', 'var(--orange)', 'var(--pink)', 'var(--cyan)'];
+    agents.forEach(function(a, i) {
+      svgLine(svg, 190, 240, a.x, a.y, colors[i], true);
+      addTraveler(c, 190, 240, a.x, a.y, colors[i], 1000, i * 200);
+    });
+    agents.forEach(function(a, i) {
+      svgLine(svg, a.x + 40, a.y, 700, 185, colors[i], true);
+      addTraveler(c, a.x + 40, a.y, 700, 185, colors[i], 900, 1500 + i * 200);
+    });
+    svgLine(svg, 765, 230, 765, 290, 'var(--green)', true);
+    svgArrow(svg, 765, 286, 90, 'var(--green)');
+    addTraveler(c, 765, 230, 765, 290, 'var(--green)', 500, 3000);
+  }
+
+  var drawMap = {
+    'sec-1': drawSection1,
+    'sec-2': drawSection2,
+    'sec-3': drawSection3,
+    'sec-4': drawSection4
+  };
+
+  // Initial draw
+  drawSection1();
+})();
+</script>
+</body>
+</html>

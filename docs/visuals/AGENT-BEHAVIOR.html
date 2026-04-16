@@ -1,0 +1,1163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Waggle OS -- Agent Behavior Visual</title>
+<style>
+  :root {
+    --honey: #e5a000;
+    --honey-dim: #b37d00;
+    --honey-glow: #f5c842;
+    --hive-950: #08090c;
+    --hive-900: #101218;
+    --hive-800: #1a1c24;
+    --hive-700: #252830;
+    --hive-600: #3a3d48;
+    --hive-500: #5a5e6a;
+    --accent: #a78bfa;
+    --accent-dim: #7c5fd6;
+    --green: #34d399;
+    --green-dim: #059669;
+    --red: #f87171;
+    --red-dim: #dc2626;
+    --blue: #60a5fa;
+    --blue-dim: #2563eb;
+    --orange: #fb923c;
+    --text: #e2e4ea;
+    --text-dim: #9ca0ab;
+    --text-muted: #6b7080;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--hive-950);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    line-height: 1.5;
+    overflow-x: hidden;
+  }
+
+  /* ── Tooltip (body-level, positioned via JS) ── */
+  #tooltip {
+    position: fixed;
+    z-index: 9999;
+    max-width: 340px;
+    padding: 10px 14px;
+    background: var(--hive-800);
+    border: 1px solid var(--hive-600);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.45;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity 0.15s, transform 0.15s;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  }
+  #tooltip.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  #tooltip .tip-title {
+    font-weight: 600;
+    color: var(--honey);
+    margin-bottom: 4px;
+  }
+  #tooltip .tip-body {
+    color: var(--text);
+  }
+
+  /* ── Header ── */
+  header {
+    text-align: center;
+    padding: 40px 20px 20px;
+    border-bottom: 1px solid var(--hive-700);
+  }
+  header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--honey);
+    letter-spacing: -0.5px;
+  }
+  header p {
+    color: var(--text-dim);
+    margin-top: 6px;
+    font-size: 14px;
+  }
+
+  /* ── Tab Navigation ── */
+  .tab-bar {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    padding: 16px 20px 0;
+    flex-wrap: wrap;
+  }
+  .tab-btn {
+    background: var(--hive-800);
+    border: 1px solid var(--hive-700);
+    color: var(--text-dim);
+    padding: 8px 16px;
+    border-radius: 6px 6px 0 0;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .tab-btn:hover {
+    background: var(--hive-700);
+    color: var(--text);
+  }
+  .tab-btn.active {
+    background: var(--hive-900);
+    color: var(--honey);
+    border-bottom-color: var(--hive-900);
+  }
+
+  /* ── Section Container ── */
+  .sections {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 20px 60px;
+  }
+  .section {
+    display: none;
+    padding-top: 24px;
+  }
+  .section.active { display: block; }
+  .section h2 {
+    font-size: 20px;
+    color: var(--honey);
+    margin-bottom: 6px;
+  }
+  .section .subtitle {
+    color: var(--text-dim);
+    font-size: 13px;
+    margin-bottom: 24px;
+  }
+
+  /* ── Nodes ── */
+  .node {
+    position: relative;
+    padding: 12px 18px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: default;
+    transition: transform 0.12s, box-shadow 0.12s;
+    flex-shrink: 0;
+    text-align: center;
+    min-width: 120px;
+  }
+  .node:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  }
+  .node .node-icon { margin-right: 6px; font-size: 15px; }
+  .node .node-label { display: block; font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+  .node.user      { background: var(--hive-700); border: 2px solid var(--honey); color: var(--honey); }
+  .node.process   { background: var(--hive-800); border: 1px solid var(--hive-600); }
+  .node.security  { background: rgba(248,113,113,0.1); border: 1px solid var(--red); color: var(--red); }
+  .node.llm       { background: rgba(167,139,250,0.12); border: 1px solid var(--accent); color: var(--accent); }
+  .node.tool      { background: rgba(96,165,250,0.1); border: 1px solid var(--blue); color: var(--blue); }
+  .node.output    { background: rgba(52,211,153,0.1); border: 1px solid var(--green); color: var(--green); }
+  .node.gate      { background: rgba(251,146,60,0.1); border: 1px solid var(--orange); color: var(--orange); }
+  .node.harness   { background: rgba(229,160,0,0.08); border: 1px solid var(--honey-dim); color: var(--honey); }
+  .node.agent     { background: rgba(167,139,250,0.08); border: 1px solid var(--accent-dim); }
+  .node.sse       { background: rgba(52,211,153,0.08); border: 1px solid var(--green-dim); }
+
+  /* ── Arrows ── */
+  .arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 0;
+  }
+  .arrow svg { display: block; }
+  .arrow-h { padding: 0 2px; }
+
+  /* ── Vertical flow layout ── */
+  .vflow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+
+  /* ── Horizontal flow layout ── */
+  .hflow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    flex-wrap: wrap;
+  }
+
+  /* ── Parallel container ── */
+  .parallel {
+    display: flex;
+    gap: 20px;
+    padding: 16px;
+    border: 1px dashed var(--hive-600);
+    border-radius: 12px;
+    background: rgba(167,139,250,0.03);
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .parallel-label {
+    position: absolute;
+    top: -10px;
+    left: 20px;
+    background: var(--hive-900);
+    padding: 0 8px;
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .parallel-wrap {
+    position: relative;
+    margin: 8px 0;
+  }
+
+  /* ── Legend ── */
+  .legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding: 12px 16px;
+    background: var(--hive-800);
+    border-radius: 8px;
+    margin-bottom: 20px;
+    font-size: 12px;
+    border: 1px solid var(--hive-700);
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+  }
+
+  /* ── SSE Event Table ── */
+  .event-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-top: 16px;
+  }
+  .event-table th {
+    text-align: left;
+    padding: 8px 12px;
+    background: var(--hive-800);
+    color: var(--honey);
+    font-weight: 600;
+    border-bottom: 2px solid var(--hive-600);
+  }
+  .event-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--hive-700);
+    vertical-align: top;
+  }
+  .event-table tr:hover td { background: var(--hive-800); }
+  .event-table code {
+    background: var(--hive-700);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 12px;
+    color: var(--accent);
+  }
+  .event-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .event-tag.token  { background: rgba(52,211,153,0.15); color: var(--green); }
+  .event-tag.step   { background: rgba(96,165,250,0.15); color: var(--blue); }
+  .event-tag.tool   { background: rgba(167,139,250,0.15); color: var(--accent); }
+  .event-tag.done   { background: rgba(229,160,0,0.15); color: var(--honey); }
+  .event-tag.error  { background: rgba(248,113,113,0.15); color: var(--red); }
+  .event-tag.gate   { background: rgba(251,146,60,0.15); color: var(--orange); }
+
+  /* ── Phase Steps (for harness) ── */
+  .phase-steps {
+    display: flex;
+    gap: 0;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .phase-card {
+    padding: 14px 16px;
+    background: var(--hive-800);
+    border: 1px solid var(--hive-700);
+    border-radius: 10px;
+    min-width: 140px;
+    max-width: 180px;
+    text-align: center;
+  }
+  .phase-card .phase-num {
+    font-size: 11px;
+    color: var(--honey);
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .phase-card .phase-name {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .phase-card .phase-desc {
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  /* ── Autonomy Levels ── */
+  .autonomy-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+  }
+  .autonomy-card {
+    padding: 16px;
+    border-radius: 10px;
+    border: 1px solid var(--hive-600);
+    background: var(--hive-800);
+  }
+  .autonomy-card h4 {
+    font-size: 14px;
+    margin-bottom: 6px;
+  }
+  .autonomy-card p {
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .autonomy-card ul {
+    margin-top: 8px;
+    padding-left: 16px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .autonomy-card.normal  h4 { color: var(--blue); }
+  .autonomy-card.trusted h4 { color: var(--honey); }
+  .autonomy-card.yolo    h4 { color: var(--red); }
+
+  /* ── File references ── */
+  .file-ref {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    margin-top: 16px;
+    padding: 8px 12px;
+    background: var(--hive-800);
+    border-radius: 6px;
+    border-left: 3px solid var(--hive-600);
+  }
+  .file-ref span { display: block; margin: 2px 0; }
+</style>
+</head>
+<body>
+
+<div id="tooltip"></div>
+
+<header>
+  <h1>Waggle OS -- Agent Behavior</h1>
+  <p>How the agent system works from a user experience perspective</p>
+</header>
+
+<div class="tab-bar" role="tablist">
+  <button class="tab-btn active" data-tab="single" role="tab">Single Agent Flow</button>
+  <button class="tab-btn" data-tab="multi" role="tab">Multi-Agent</button>
+  <button class="tab-btn" data-tab="tools" role="tab">Tool Execution</button>
+  <button class="tab-btn" data-tab="skills" role="tab">Skill Request</button>
+  <button class="tab-btn" data-tab="sse" role="tab">Streaming UX</button>
+  <button class="tab-btn" data-tab="harness" role="tab">Workflow Harness</button>
+</div>
+
+<div class="sections">
+
+<!-- ╔══════════════════════════════════════════════════════════════╗ -->
+<!-- ║  SECTION 1: Single Agent Flow                               ║ -->
+<!-- ╚══════════════════════════════════════════════════════════════╝ -->
+<div class="section active" id="sec-single">
+  <h2>Single Agent Flow</h2>
+  <p class="subtitle">From user message to streamed response -- the core request lifecycle</p>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--honey)"></div> User</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div> Security</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div> LLM / AI</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--blue)"></div> Tool</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--orange)"></div> Gate</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div> Output</div>
+  </div>
+
+  <div class="vflow">
+    <div class="node user"
+      data-tip-title="User Message"
+      data-tip="The user types a message in the chat UI. Sent via POST to /api/chat with workspace, session, model, and persona context.">
+      <span class="node-icon">&#x1f4ac;</span> User Message
+    </div>
+
+    <div class="arrow"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="28" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+
+    <div class="node security"
+      data-tip-title="Injection Scanner"
+      data-tip="scanForInjection() from injection-scanner.ts runs 3 pattern sets against the message: prompt injection, jailbreak, and system-prompt extraction. Flagged content is dropped before it reaches the LLM.">
+      <span class="node-icon">&#x1f6e1;</span> Injection Scan
+      <span class="node-label">3 pattern sets</span>
+    </div>
+
+    <div class="arrow"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="28" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+
+    <div class="node llm"
+      data-tip-title="GEPA Expansion"
+      data-tip="Guided Expansion for Prompt Augmentation. A lightweight LLM call rewrites vague prompts into detailed, actionable instructions. If clarifying questions arise, a gepa_choices SSE event is sent so the user can pick their intent.">
+      <span class="node-icon">&#x2728;</span> GEPA Expansion
+      <span class="node-label">prompt augmentation</span>
+    </div>
+
+    <div class="arrow"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="28" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+
+    <div class="node process"
+      data-tip-title="Orchestrator: buildSystemPrompt()"
+      data-tip="Assembles the full system prompt from 3 cached/dynamic sections: (1) Identity -- user profile from IdentityLayer, (2) Self-Awareness -- available tools, skills, model, memory stats, improvement signals, (3) Recent Context -- auto-loaded memories relevant to the session. Section caching avoids re-computing stable sections.">
+      <span class="node-icon">&#x2699;</span> Build System Prompt
+      <span class="node-label">persona + spec + memory + skills</span>
+    </div>
+
+    <div class="arrow"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="28" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+
+    <div class="hflow">
+      <div class="node process"
+        data-tip-title="Memory Recall"
+        data-tip="recallMemory() searches both personal and workspace minds using HybridSearch (FTS5 + sqlite-vec fused via RRF). Catch-up queries use importance-based recall. Recalled content is injected into the conversation context and undergoes a second injection scan.">
+        <span class="node-icon">&#x1f9e0;</span> Recall Memory
+        <span class="node-label">hybrid search</span>
+      </div>
+      <div class="arrow-h"><svg width="24" height="2"><line x1="0" y1="1" x2="24" y2="1" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+      <div class="node process"
+        data-tip-title="Behavioral Spec"
+        data-tip="BEHAVIORAL_SPEC from behavioral-spec.ts defines the agent's core operating rules. It can be hot-patched via the evolution system -- buildActiveBehavioralSpec() merges base spec with accepted overrides at boot time.">
+        <span class="node-icon">&#x1f4d0;</span> Behavioral Spec
+        <span class="node-label">agent rules</span>
+      </div>
+      <div class="arrow-h"><svg width="24" height="2"><line x1="0" y1="1" x2="24" y2="1" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+      <div class="node process"
+        data-tip-title="Persona Context"
+        data-tip="The active AgentPersona (from persona-data.ts) provides: system prompt injection, model preference, allowed/disallowed tools, workspace affinity, and suggested commands. 22 built-in personas cover roles from researcher to coordinator.">
+        <span class="node-icon">&#x1f3ad;</span> Persona
+        <span class="node-label">22 built-in roles</span>
+      </div>
+    </div>
+
+    <div class="arrow"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="28" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+
+    <div class="node llm"
+      data-tip-title="LLM Call via LiteLLM"
+      data-tip="The assembled prompt, tools, and conversation history are sent to the LLM through LiteLLM (litellm-config.yaml). Supports streaming (SSE) with onToken callbacks. Model Pilot resolves the model with fallback chain: user choice, workspace config, daily budget model, smart routing for simple turns. Max 10 turns per agent loop by default.">
+      <span class="node-icon">&#x1f916;</span> LLM Call
+      <span class="node-label">via LiteLLM router</span>
+    </div>
+
+    <div class="arrow"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="28" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+
+    <div class="hflow">
+      <div class="node output"
+        data-tip-title="Stream Tokens (SSE)"
+        data-tip="Each token from the LLM response fires an onToken callback, which the chat route relays as SSE event: token with {content}. The frontend renders tokens incrementally for the typing effect.">
+        <span class="node-icon">&#x25b6;</span> Stream Tokens
+        <span class="node-label">SSE: token events</span>
+      </div>
+      <div class="arrow-h"><svg width="24" height="2"><line x1="0" y1="1" x2="24" y2="1" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+      <div class="node tool"
+        data-tip-title="Tool Calls"
+        data-tip="When the LLM emits tool_calls, each one is processed through the tool filter and approval gate. Results are fed back into the conversation for the next LLM turn. The loop continues until the LLM responds with text only (no more tool calls) or maxTurns is reached.">
+        <span class="node-icon">&#x1f527;</span> Tool Calls
+        <span class="node-label">iterative loop</span>
+      </div>
+      <div class="arrow-h"><svg width="24" height="2"><line x1="0" y1="1" x2="24" y2="1" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+      <div class="node gate"
+        data-tip-title="Approval Gates"
+        data-tip="Tools flagged needsConfirmation are paused for user approval. The autonomy level (Normal/Trusted/YOLO) determines what auto-passes. An SSE approval_required event is sent; the frontend shows a confirmation dialog. Critical tools (rm -rf, force-push) are NEVER auto-approved, even at YOLO.">
+        <span class="node-icon">&#x1f512;</span> Approval Gate
+        <span class="node-label">autonomy-aware</span>
+      </div>
+    </div>
+
+    <div class="arrow"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="28" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+
+    <div class="node output"
+      data-tip-title="Response + Auto-Save"
+      data-tip="Final response is sent as SSE event: done with full content, token usage, and tools used. Post-response: Cognify extracts memories, auto-save stores important exchanges, trace recorder captures the full turn for the evolution system.">
+      <span class="node-icon">&#x2705;</span> Response + Memory Save
+      <span class="node-label">cognify + trace recording</span>
+    </div>
+  </div>
+
+  <div class="file-ref">
+    <span>packages/agent/src/agent-loop.ts -- runAgentLoop()</span>
+    <span>packages/agent/src/orchestrator.ts -- buildSystemPrompt(), recallMemory()</span>
+    <span>packages/server/src/local/routes/chat.ts -- SSE streaming + approval hooks</span>
+  </div>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════════════════╗ -->
+<!-- ║  SECTION 2: Multi-Agent Orchestration                       ║ -->
+<!-- ╚══════════════════════════════════════════════════════════════╝ -->
+<div class="section" id="sec-multi">
+  <h2>Multi-Agent Orchestration</h2>
+  <p class="subtitle">Parent agent spawns specialist sub-agents for complex tasks via the SubagentOrchestrator</p>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div> Parent Agent</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--blue)"></div> Sub-Agent</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--honey)"></div> Orchestrator</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div> Result</div>
+  </div>
+
+  <div class="vflow">
+    <div class="node llm"
+      data-tip-title="Parent Agent"
+      data-tip="The main agent in the chat session. When it detects a task that benefits from parallel specialist work (via the WorkflowComposer), it escalates from direct to subagent_workflow execution mode.">
+      <span class="node-icon">&#x1f451;</span> Parent Agent
+      <span class="node-label">detects complex task</span>
+    </div>
+
+    <div class="arrow"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="28" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+
+    <div class="node harness"
+      data-tip-title="WorkflowComposer"
+      data-tip="Analyzes the task shape and selects the lightest sufficient execution mode: direct (most tasks), structured_single_agent, skill_guided, subagent_workflow (heavy), or harnessed (state machine). Principle: most tasks resolve as direct -- sub-agents are the heavy option, not the default.">
+      <span class="node-icon">&#x1f3af;</span> Workflow Composer
+      <span class="node-label">selects execution mode</span>
+    </div>
+
+    <div class="arrow"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="28" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+
+    <div class="node harness"
+      data-tip-title="SubagentOrchestrator"
+      data-tip="Supervisor/worker pattern. Manages: dependency-ordered execution (steps can declare dependsOn), status tracking per worker (pending/running/done/failed), context injection from previous steps (contextFrom), result aggregation (concatenate/last/synthesize). Emits events for the Room canvas UI.">
+      <span class="node-icon">&#x1f3ed;</span> SubagentOrchestrator
+      <span class="node-label">supervisor / worker pattern</span>
+    </div>
+
+    <div class="arrow"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="28" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+
+    <div class="parallel-wrap">
+      <span class="parallel-label">PARALLEL EXECUTION</span>
+      <div class="parallel">
+        <div class="vflow">
+          <div class="node agent"
+            data-tip-title="Worker: Researcher"
+            data-tip="Specialist sub-agent with researcher role. Gets its own tools (filtered by role preset), conversation context, and maxTurns. Runs its own agent loop independently. Status relayed to parent via EventEmitter.">
+            <span class="node-icon">&#x1f50d;</span> Researcher
+            <span class="node-label">role: researcher</span>
+          </div>
+          <div class="arrow"><svg width="2" height="20"><line x1="1" y1="0" x2="1" y2="20" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+          <div class="node output" style="min-width:100px;font-size:12px">Result A</div>
+        </div>
+
+        <div class="vflow">
+          <div class="node agent"
+            data-tip-title="Worker: Analyst"
+            data-tip="Another specialist. Can declare dependsOn to wait for previous steps. contextFrom injects prior output into this agent's prompt.">
+            <span class="node-icon">&#x1f4ca;</span> Analyst
+            <span class="node-label">role: analyst</span>
+          </div>
+          <div class="arrow"><svg width="2" height="20"><line x1="1" y1="0" x2="1" y2="20" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+          <div class="node output" style="min-width:100px;font-size:12px">Result B</div>
+        </div>
+
+        <div class="vflow">
+          <div class="node agent"
+            data-tip-title="Worker: Coder"
+            data-tip="Code-specialized sub-agent. Gets coding tools (file_write, bash, etc.). Each worker tracks its own usage (inputTokens, outputTokens) and toolsUsed for cost accounting via CostTracker.">
+            <span class="node-icon">&#x1f4bb;</span> Coder
+            <span class="node-label">role: coder</span>
+          </div>
+          <div class="arrow"><svg width="2" height="20"><line x1="1" y1="0" x2="1" y2="20" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+          <div class="node output" style="min-width:100px;font-size:12px">Result C</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="28" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+
+    <div class="node harness"
+      data-tip-title="Result Aggregation"
+      data-tip="Three modes: concatenate joins all results in step order, last takes only the final step output, synthesize uses an LLM call to merge multiple outputs into a coherent response. The aggregated result flows back to the parent agent.">
+      <span class="node-icon">&#x1f4e6;</span> Aggregate Results
+      <span class="node-label">concatenate | last | synthesize</span>
+    </div>
+
+    <div class="arrow"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="28" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+
+    <div class="node llm"
+      data-tip-title="Parent Continues"
+      data-tip="The parent agent receives the aggregated sub-agent results and continues its own loop -- it may respond directly, call more tools, or spawn another round of sub-agents. The Room canvas shows live tiles for each sub-agent during execution.">
+      <span class="node-icon">&#x1f451;</span> Parent Continues
+      <span class="node-label">integrates results</span>
+    </div>
+  </div>
+
+  <div class="file-ref">
+    <span>packages/agent/src/subagent-orchestrator.ts -- SubagentOrchestrator, WorkflowTemplate</span>
+    <span>packages/agent/src/workflow-composer.ts -- WorkflowPlan, ExecutionMode selection</span>
+    <span>packages/agent/src/capability-router.ts -- per-capability routing</span>
+  </div>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════════════════╗ -->
+<!-- ║  SECTION 3: Tool Execution                                  ║ -->
+<!-- ╚══════════════════════════════════════════════════════════════╝ -->
+<div class="section" id="sec-tools">
+  <h2>Tool Execution</h2>
+  <p class="subtitle">From LLM tool_call to execution result, with filtering and tiered approval</p>
+
+  <div class="vflow">
+    <div class="node llm"
+      data-tip-title="LLM Emits tool_calls"
+      data-tip="The LLM response includes a tool_calls array. Each entry has: id, function.name, and function.arguments (JSON string). The agent loop processes them sequentially within a single turn.">
+      <span class="node-icon">&#x1f916;</span> LLM emits tool_call
+      <span class="node-label">name + arguments</span>
+    </div>
+
+    <div class="arrow"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="28" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+
+    <div class="node process"
+      data-tip-title="filterToolsForContext()"
+      data-tip="From tool-filter.ts. Checks the tool against: persona allowlist (tools field on AgentPersona), persona denylist (disallowedTools), governance blockedTools from team policies, and disabled_tools from ToolFilterConfig. A tool not in the filtered set is rejected before execution.">
+      <span class="node-icon">&#x1f50d;</span> Tool Filter
+      <span class="node-label">allowlist + denylist + governance</span>
+    </div>
+
+    <div class="arrow"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="28" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+
+    <div class="node security"
+      data-tip-title="Injection Scan on Arguments"
+      data-tip="Tool arguments from the LLM undergo injection scanning. This catches prompt injection hidden in tool parameters -- for example, a web_search query containing jailbreak strings, or connector input with embedded system prompts.">
+      <span class="node-icon">&#x1f6e1;</span> Scan Arguments
+      <span class="node-label">anti-injection</span>
+    </div>
+
+    <div class="arrow"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="28" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+
+    <div class="node gate"
+      data-tip-title="Approval Gate"
+      data-tip="needsConfirmationWithAutonomy() checks the tool against the user's autonomy level. At Normal: all flagged tools require confirmation. At Trusted: writes, edits, and cross-workspace reads auto-pass. At YOLO: everything auto-passes EXCEPT the critical blacklist (rm -rf, force-push to main, etc.).">
+      <span class="node-icon">&#x1f512;</span> Approval Gate
+      <span class="node-label">Normal / Trusted / YOLO</span>
+    </div>
+
+    <div class="arrow"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="28" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+
+    <div class="hflow" style="gap:16px">
+      <div class="node tool"
+        data-tip-title="Execute Tool"
+        data-tip="The tool function runs with the parsed arguments. Results are captured as a string. Duration is measured. SSE events tool (start) and tool_result (end) are emitted so the UI can show progress.">
+        <span class="node-icon">&#x26a1;</span> Execute
+        <span class="node-label">run tool function</span>
+      </div>
+      <div class="arrow-h"><svg width="32" height="2"><line x1="0" y1="1" x2="32" y2="1" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+      <div class="node output"
+        data-tip-title="Result Back to LLM"
+        data-tip="The tool result string is appended to the conversation as a tool role message with the matching tool_call_id. The LLM sees this on its next iteration and can either respond with text or make another tool call. The loop continues until no more tool_calls or maxTurns is hit.">
+        <span class="node-icon">&#x21a9;</span> Result to LLM
+        <span class="node-label">next iteration</span>
+      </div>
+    </div>
+  </div>
+
+  <h3 style="margin-top:32px;color:var(--text);font-size:15px">Autonomy Levels</h3>
+  <div class="autonomy-grid">
+    <div class="autonomy-card normal">
+      <h4>Normal</h4>
+      <p>Default. Every flagged tool requires explicit user confirmation before execution.</p>
+      <ul>
+        <li>All needsConfirmation tools gated</li>
+        <li>SSE: approval_required event</li>
+        <li>User clicks Approve / Deny</li>
+      </ul>
+    </div>
+    <div class="autonomy-card trusted">
+      <h4>Trusted</h4>
+      <p>Auto-approves common write operations. Still gates critical and destructive tools.</p>
+      <ul>
+        <li>file_write, edit_file, bash auto-pass</li>
+        <li>read_other_workspace auto-pass</li>
+        <li>Critical blacklist still gated</li>
+      </ul>
+    </div>
+    <div class="autonomy-card yolo">
+      <h4>YOLO</h4>
+      <p>Everything auto-passes except a hardcoded critical blacklist that NEVER auto-passes.</p>
+      <ul>
+        <li>rm -rf stays gated</li>
+        <li>git push --force to main stays gated</li>
+        <li>Database drops stay gated</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="file-ref">
+    <span>packages/agent/src/tool-filter.ts -- filterToolsForContext()</span>
+    <span>packages/agent/src/confirmation.ts -- needsConfirmationWithAutonomy(), AutonomyLevel</span>
+    <span>packages/agent/src/agent-loop.ts -- tool call processing loop</span>
+  </div>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════════════════╗ -->
+<!-- ║  SECTION 4: Skill Request Flow                              ║ -->
+<!-- ╚══════════════════════════════════════════════════════════════╝ -->
+<div class="section" id="sec-skills">
+  <h2>Skill Request Flow</h2>
+  <p class="subtitle">From skill discovery to installation to pattern promotion across scopes</p>
+
+  <div class="vflow">
+    <div class="node llm"
+      data-tip-title="Agent Needs a Skill"
+      data-tip="During execution, the agent recognizes it needs a capability not in its current toolset. The capability-acquisition system detects this gap and triggers a marketplace search.">
+      <span class="node-icon">&#x1f916;</span> Agent detects skill gap
+      <span class="node-label">capability acquisition</span>
+    </div>
+
+    <div class="arrow"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="28" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+
+    <div class="node tool"
+      data-tip-title="Marketplace Search"
+      data-tip="Searches the MCP catalog (148+ entries in mcp-catalog.ts) and the skill marketplace via FTS. Results include match scores, compatibility info, and tier requirements. Free tier gets built-in skills only; Pro+ gets marketplace access.">
+      <span class="node-icon">&#x1f50e;</span> Search Marketplace
+      <span class="node-label">MCP catalog + skill store</span>
+    </div>
+
+    <div class="arrow"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="28" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+
+    <div class="node gate"
+      data-tip-title="Tier Gate"
+      data-tip="assertTierCapability() checks if the user's tier allows marketplace access. Free tier: built-in skills only. Pro+: full marketplace. The 5-tier system (Trial/Free/Pro/Teams/Enterprise) is defined in tiers.ts.">
+      <span class="node-icon">&#x1f511;</span> Tier Check
+      <span class="node-label">Free: built-in only / Pro+: marketplace</span>
+    </div>
+
+    <div class="arrow"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="28" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+
+    <div class="node process"
+      data-tip-title="Install + Parse Frontmatter"
+      data-tip="parseSkillFrontmatter() from skill-frontmatter.ts extracts structured metadata from the skill file: name, description, required tools, trigger patterns, workflow steps. Skills are stored per-workspace and hot-reloaded via the skill-hashes system.">
+      <span class="node-icon">&#x1f4e5;</span> Install Skill
+      <span class="node-label">parse frontmatter</span>
+    </div>
+
+    <div class="arrow"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="28" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+
+    <div class="node output"
+      data-tip-title="Skill Available"
+      data-tip="The skill's tools and workflows are now available to the agent. The skill appears in the self-awareness section of buildSystemPrompt(). The agent can invoke skill-specific tools and follow skill-defined workflows.">
+      <span class="node-icon">&#x2705;</span> Skill Active
+      <span class="node-label">tools + workflows available</span>
+    </div>
+
+    <div class="arrow"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="28" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+
+    <div class="node harness"
+      data-tip-title="Pattern Promotion"
+      data-tip="When the system detects recurring successful patterns with a skill, it can promote the pattern through scopes: personal (single user) to workspace (all agents in workspace) to team (shared across team members). This creates organizational knowledge accumulation.">
+      <span class="node-icon">&#x1f4c8;</span> Pattern Promotion
+      <span class="node-label">personal -> workspace -> team</span>
+    </div>
+  </div>
+
+  <div class="file-ref">
+    <span>packages/agent/src/skill-frontmatter.ts -- parseSkillFrontmatter()</span>
+    <span>packages/agent/src/capability-acquisition.ts -- skill gap detection + marketplace search</span>
+    <span>packages/shared/src/tiers.ts -- tier gating for marketplace access</span>
+    <span>packages/shared/src/mcp-catalog.ts -- 148+ MCP server catalog</span>
+  </div>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════════════════╗ -->
+<!-- ║  SECTION 5: Streaming UX                                    ║ -->
+<!-- ╚══════════════════════════════════════════════════════════════╝ -->
+<div class="section" id="sec-sse">
+  <h2>Streaming UX</h2>
+  <p class="subtitle">SSE events from the server and how the chat UI renders each one</p>
+
+  <div class="vflow" style="align-items:stretch">
+    <div class="hflow" style="justify-content:space-between;gap:24px;flex-wrap:wrap">
+      <div class="vflow" style="flex:1;min-width:280px">
+        <div class="node sse" style="width:100%">
+          <span class="node-icon">&#x1f310;</span> Server (SSE Source)
+          <span class="node-label">POST /api/chat -- reply.hijack() -- text/event-stream</span>
+        </div>
+        <div class="arrow"><svg width="2" height="20"><line x1="1" y1="0" x2="1" y2="20" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+        <div style="font-size:11px;color:var(--text-muted);text-align:center">
+          event: &lt;type&gt;\ndata: &lt;json&gt;\n\n
+        </div>
+      </div>
+      <div class="vflow" style="flex:1;min-width:280px">
+        <div class="node user" style="width:100%">
+          <span class="node-icon">&#x1f5a5;</span> Chat UI (EventSource)
+          <span class="node-label">renders events as they arrive</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <table class="event-table">
+    <thead>
+      <tr>
+        <th>SSE Event</th>
+        <th>Payload</th>
+        <th>UI Rendering</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="event-tag token">token</span></td>
+        <td><code>{content: "..."}</code></td>
+        <td>Appended to the assistant message bubble character by character, creating the typing effect</td>
+      </tr>
+      <tr>
+        <td><span class="event-tag step">step</span></td>
+        <td><code>{content: "Recalling..."}</code></td>
+        <td>Shows a status indicator below the message -- "Recalling relevant memories...", "GEPA: Expanded prompt", budget warnings</td>
+      </tr>
+      <tr>
+        <td><span class="event-tag tool">tool</span></td>
+        <td><code>{name, input}</code></td>
+        <td>Tool execution card appears: tool name, collapsible input preview, spinning indicator while running</td>
+      </tr>
+      <tr>
+        <td><span class="event-tag tool">tool_result</span></td>
+        <td><code>{name, result, duration, isError}</code></td>
+        <td>Tool card updates: shows result preview, duration badge, green check or red X for errors</td>
+      </tr>
+      <tr>
+        <td><span class="event-tag step">gepa_choices</span></td>
+        <td><code>{original, expanded, choices}</code></td>
+        <td>Expansion card with original vs expanded prompt comparison; clickable choices for ask-first mode</td>
+      </tr>
+      <tr>
+        <td><span class="event-tag gate">approval_required</span></td>
+        <td><code>{toolName, args, riskLevel}</code></td>
+        <td>Confirmation dialog: tool name, argument preview, risk level badge, Approve / Deny buttons</td>
+      </tr>
+      <tr>
+        <td><span class="event-tag step">model_switch</span></td>
+        <td><code>{model, reason, primary}</code></td>
+        <td>Toast notification: "Switched to [model] -- [reason]" with the original model shown</td>
+      </tr>
+      <tr>
+        <td><span class="event-tag step">file_created</span></td>
+        <td><code>{filePath, fileAction}</code></td>
+        <td>File creation badge in the message footer -- clickable to open the file in the workspace</td>
+      </tr>
+      <tr>
+        <td><span class="event-tag step">notification</span></td>
+        <td><code>{type, title, body}</code></td>
+        <td>System notification toast (e.g., "Auto-saved 3 memories from this exchange")</td>
+      </tr>
+      <tr>
+        <td><span class="event-tag done">done</span></td>
+        <td><code>{content, usage, toolsUsed}</code></td>
+        <td>Message finalized. Token counter updates. Tool summary shown. Loading state cleared</td>
+      </tr>
+      <tr>
+        <td><span class="event-tag error">error</span></td>
+        <td><code>{message}</code></td>
+        <td>Red error banner in the chat. If retryable, a "Retry" button appears</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="file-ref">
+    <span>packages/server/src/local/routes/chat.ts -- sendEvent() helper, all SSE event emissions</span>
+    <span>apps/web/src/ -- chat UI components that consume these events</span>
+  </div>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════════════════╗ -->
+<!-- ║  SECTION 6: Workflow Harness                                ║ -->
+<!-- ╚══════════════════════════════════════════════════════════════╝ -->
+<div class="section" id="sec-harness">
+  <h2>Workflow Harness</h2>
+  <p class="subtitle">State-machine templates for multi-step tasks with phase gates and trace recording</p>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--honey)"></div> Harness</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div> Phase</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--orange)"></div> Gate</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div> Evolution</div>
+  </div>
+
+  <div class="vflow">
+    <div class="node user"
+      data-tip-title="Task Input"
+      data-tip="User sends a message like 'Research and verify the latest React 19 changes' or 'Review and fix the authentication code'. The task text is matched against trigger patterns in BUILTIN_HARNESSES.">
+      <span class="node-icon">&#x1f4ac;</span> User Task
+    </div>
+
+    <div class="arrow"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="28" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+
+    <div class="node harness"
+      data-tip-title="matchHarness()"
+      data-tip="Scans the task text against each harness triggerPatterns (regex). Three built-in harnesses: research-verify (research + synthesize + verify), code-review-fix (understand + review + fix + verify), document-draft (context + draft + self-review). Returns the first match.">
+      <span class="node-icon">&#x1f3af;</span> Match Harness
+      <span class="node-label">pattern matching</span>
+    </div>
+
+    <div class="arrow"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="28" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+
+    <div class="node harness"
+      data-tip-title="createHarnessRun()"
+      data-tip="Initializes a HarnessRunState: all phases set to pending, token counters zeroed, start timestamp recorded. The state machine tracks currentPhase index, checkpoints per phase, and abort conditions.">
+      <span class="node-icon">&#x2699;</span> Initialize Run
+      <span class="node-label">state machine created</span>
+    </div>
+
+    <div class="arrow"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="28" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+
+    <!-- Built-in harness examples -->
+    <div style="display:flex;gap:24px;flex-wrap:wrap;justify-content:center;margin:8px 0">
+      <div style="flex:1;min-width:280px;max-width:340px">
+        <div style="font-size:12px;color:var(--honey);font-weight:600;margin-bottom:8px;text-align:center">Research & Verify</div>
+        <div class="phase-steps">
+          <div class="phase-card"
+            data-tip-title="Phase: Research"
+            data-tip="Agent gathers information from available sources. Uses tools like web_search, read_file, recall. Gate: must produce at least N findings. Retry allowed if gate fails.">
+            <div class="phase-num">1</div>
+            <div class="phase-name">Research</div>
+            <div class="phase-desc">Gather sources</div>
+          </div>
+          <div class="arrow-h"><svg width="20" height="2"><line x1="0" y1="1" x2="20" y2="1" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+          <div class="phase-card">
+            <div class="phase-num">2</div>
+            <div class="phase-name">Synthesize</div>
+            <div class="phase-desc">Merge findings</div>
+          </div>
+          <div class="arrow-h"><svg width="20" height="2"><line x1="0" y1="1" x2="20" y2="1" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+          <div class="phase-card">
+            <div class="phase-num">3</div>
+            <div class="phase-name">Verify</div>
+            <div class="phase-desc">Cross-check</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="flex:1;min-width:280px;max-width:340px">
+        <div style="font-size:12px;color:var(--honey);font-weight:600;margin-bottom:8px;text-align:center">Code Review & Fix</div>
+        <div class="phase-steps">
+          <div class="phase-card">
+            <div class="phase-num">1</div>
+            <div class="phase-name">Understand</div>
+            <div class="phase-desc">Read context</div>
+          </div>
+          <div class="arrow-h"><svg width="14" height="2"><line x1="0" y1="1" x2="14" y2="1" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+          <div class="phase-card">
+            <div class="phase-num">2</div>
+            <div class="phase-name">Review</div>
+            <div class="phase-desc">Find issues</div>
+          </div>
+          <div class="arrow-h"><svg width="14" height="2"><line x1="0" y1="1" x2="14" y2="1" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+          <div class="phase-card">
+            <div class="phase-num">3</div>
+            <div class="phase-name">Fix</div>
+            <div class="phase-desc">Apply fixes</div>
+          </div>
+          <div class="arrow-h"><svg width="14" height="2"><line x1="0" y1="1" x2="14" y2="1" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+          <div class="phase-card">
+            <div class="phase-num">4</div>
+            <div class="phase-name">Verify</div>
+            <div class="phase-desc">Run tests</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="28" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+
+    <div class="hflow" style="gap:16px">
+      <div class="node gate"
+        data-tip-title="Phase Gates"
+        data-tip="Each phase has gate conditions that must pass before advancing. Gates check: output quality (minimum findings, code compiles), safety constraints, and custom validation functions. Failed gates trigger retry (up to maxRetries per phase) or abort the harness.">
+        <span class="node-icon">&#x1f6a7;</span> Phase Gate
+        <span class="node-label">quality + safety checks</span>
+      </div>
+      <div class="arrow-h"><svg width="24" height="2"><line x1="0" y1="1" x2="24" y2="1" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+      <div class="node process"
+        data-tip-title="Checkpoint"
+        data-tip="Each completed phase produces a HarnessCheckpoint: harnessId, phaseId, status, output (content + toolCalls + artifacts + tokens), gate results, retry count, timestamp. Checkpoints enable resumability and provide the data for trace recording.">
+        <span class="node-icon">&#x1f4be;</span> Checkpoint
+        <span class="node-label">phase output saved</span>
+      </div>
+    </div>
+
+    <div class="arrow"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="28" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+
+    <div class="node output"
+      data-tip-title="Trace Recording"
+      data-tip="TraceRecorder captures the full harness run: every tool call, reasoning step, and phase output. These traces flow into the evolution system via the TraceRecorder to EvalDataset to Judge to GEPA pipeline. This is how Waggle learns from its own execution.">
+      <span class="node-icon">&#x1f4dd;</span> Trace Recorded
+      <span class="node-label">feeds evolution system</span>
+    </div>
+
+    <div class="arrow"><svg width="2" height="28"><line x1="1" y1="0" x2="1" y2="28" stroke="#5a5e6a" stroke-width="2" stroke-dasharray="4,3"/></svg></div>
+
+    <div class="node output"
+      data-tip-title="Evolution Feedback Loop"
+      data-tip="The closed loop: traces to eval dataset to LLM-as-judge scorer to compose-evolution (EvolveSchema + IterativeGEPA) to constraint gates to accept/reject to deploy (persona override + behavioral-spec override). This is how Waggle self-improves: Gemma 4 + Waggle-evolved prompts exceeded raw Opus 4.6 in blind judge tests.">
+      <span class="node-icon">&#x1f504;</span> Evolution Feedback
+      <span class="node-label">traces -> judge -> GEPA -> deploy</span>
+    </div>
+  </div>
+
+  <div class="file-ref">
+    <span>packages/agent/src/workflow-harness.ts -- WorkflowHarness, HarnessRunState, advancePhase()</span>
+    <span>packages/agent/src/builtin-harnesses.ts -- 3 built-in templates</span>
+    <span>packages/agent/src/trace-recorder.ts -- TraceRecorder, TraceHandle</span>
+    <span>packages/agent/src/compose-evolution.ts -- EvolveSchema + GEPA composition</span>
+  </div>
+</div>
+
+</div><!-- .sections -->
+
+<script>
+(function() {
+  'use strict';
+
+  // ── Tab switching ──
+  var tabs = document.querySelectorAll('.tab-btn');
+  var sections = document.querySelectorAll('.section');
+  var tabMap = {
+    single: 'sec-single',
+    multi: 'sec-multi',
+    tools: 'sec-tools',
+    skills: 'sec-skills',
+    sse: 'sec-sse',
+    harness: 'sec-harness'
+  };
+
+  tabs.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var target = btn.getAttribute('data-tab');
+      tabs.forEach(function(b) { b.classList.remove('active'); });
+      sections.forEach(function(s) { s.classList.remove('active'); });
+      btn.classList.add('active');
+      var sec = document.getElementById(tabMap[target]);
+      if (sec) sec.classList.add('active');
+    });
+  });
+
+  // ── Floating tooltip (DOM-based, no innerHTML) ──
+  var tooltip = document.getElementById('tooltip');
+  var hideTimeout = null;
+
+  function buildTooltipContent(title, body) {
+    // Clear previous content safely
+    while (tooltip.firstChild) {
+      tooltip.removeChild(tooltip.firstChild);
+    }
+
+    if (title) {
+      var titleEl = document.createElement('div');
+      titleEl.className = 'tip-title';
+      titleEl.textContent = title;
+      tooltip.appendChild(titleEl);
+    }
+
+    if (body) {
+      var bodyEl = document.createElement('div');
+      bodyEl.className = 'tip-body';
+      bodyEl.textContent = body;
+      tooltip.appendChild(bodyEl);
+    }
+  }
+
+  function showTooltip(node) {
+    var title = node.getAttribute('data-tip-title');
+    var body = node.getAttribute('data-tip');
+    if (!title && !body) return;
+
+    clearTimeout(hideTimeout);
+    buildTooltipContent(title, body);
+
+    // Position: below the node, centered horizontally
+    var rect = node.getBoundingClientRect();
+    var tipW = 340;
+    var left = rect.left + rect.width / 2 - tipW / 2;
+    var top = rect.bottom + 8;
+
+    // Keep within viewport
+    if (left < 8) left = 8;
+    if (left + tipW > window.innerWidth - 8) left = window.innerWidth - tipW - 8;
+    if (top + 200 > window.innerHeight) {
+      top = rect.top - 8;
+      tooltip.style.transform = 'translateY(-100%)';
+    } else {
+      tooltip.style.transform = '';
+    }
+
+    tooltip.style.left = left + 'px';
+    tooltip.style.top = top + 'px';
+    tooltip.style.maxWidth = tipW + 'px';
+    tooltip.classList.add('visible');
+  }
+
+  function hideTooltip() {
+    hideTimeout = setTimeout(function() {
+      tooltip.classList.remove('visible');
+    }, 120);
+  }
+
+  // Event delegation for all .node and .phase-card elements
+  document.addEventListener('mouseenter', function(e) {
+    var node = e.target.closest('.node, .phase-card');
+    if (node && (node.getAttribute('data-tip-title') || node.getAttribute('data-tip'))) {
+      showTooltip(node);
+    }
+  }, true);
+
+  document.addEventListener('mouseleave', function(e) {
+    var node = e.target.closest('.node, .phase-card');
+    if (node) hideTooltip();
+  }, true);
+
+  // Also support focus for keyboard navigation
+  document.addEventListener('focusin', function(e) {
+    var node = e.target.closest('.node, .phase-card');
+    if (node) showTooltip(node);
+  });
+  document.addEventListener('focusout', function(e) {
+    var node = e.target.closest('.node, .phase-card');
+    if (node) hideTooltip();
+  });
+
+  // ── Keyboard navigation for tabs ──
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      var active = document.querySelector('.tab-btn.active');
+      if (!active) return;
+      var tabArr = Array.from(tabs);
+      var idx = tabArr.indexOf(active);
+      if (e.key === 'ArrowRight') idx = (idx + 1) % tabArr.length;
+      else idx = (idx - 1 + tabArr.length) % tabArr.length;
+      tabArr[idx].click();
+      tabArr[idx].focus();
+    }
+  });
+})();
+</script>
+</body>
+</html>

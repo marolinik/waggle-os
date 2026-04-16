@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Waggle OS - Templates &amp; Personas</title>
+<style>
+  :root {
+    --honey: #e5a000;
+    --honey-dim: #b38200;
+    --honey-glow: #f5c842;
+    --hive-950: #08090c;
+    --hive-900: #0f1117;
+    --hive-850: #161820;
+    --hive-800: #1c1f2a;
+    --hive-700: #282c3a;
+    --hive-600: #3a3f52;
+    --hive-500: #6b7280;
+    --hive-400: #9ca3af;
+    --hive-300: #d1d5db;
+    --accent: #a78bfa;
+    --accent-dim: #7c5cbf;
+    --green: #34d399;
+    --red: #f87171;
+    --blue: #60a5fa;
+    --orange: #fb923c;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--hive-950);
+    color: var(--hive-300);
+    line-height: 1.5;
+    overflow-x: hidden;
+  }
+
+  /* ── Tooltip (body-level, floating) ── */
+  #tooltip {
+    position: fixed;
+    z-index: 9999;
+    pointer-events: none;
+    background: var(--hive-800);
+    border: 1px solid var(--hive-600);
+    border-radius: 8px;
+    padding: 10px 14px;
+    max-width: 320px;
+    font-size: 12px;
+    color: var(--hive-300);
+    box-shadow: 0 8px 32px rgba(0,0,0,.6);
+    opacity: 0;
+    transition: opacity .15s;
+  }
+  #tooltip.visible { opacity: 1; }
+  #tooltip .tt-label { color: var(--honey); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 2px; }
+  #tooltip .tt-body { color: var(--hive-300); }
+
+  /* ── Header ── */
+  header {
+    text-align: center;
+    padding: 48px 24px 32px;
+    border-bottom: 1px solid var(--hive-700);
+    background: linear-gradient(180deg, var(--hive-900) 0%, var(--hive-950) 100%);
+  }
+  header h1 { font-size: 28px; color: #fff; font-weight: 700; margin-bottom: 6px; }
+  header h1 span { color: var(--honey); }
+  header p { color: var(--hive-500); font-size: 14px; max-width: 600px; margin: 0 auto; }
+
+  /* ── Navigation ── */
+  nav {
+    display: flex; gap: 4px; justify-content: center; flex-wrap: wrap;
+    padding: 16px 24px;
+    background: var(--hive-900);
+    border-bottom: 1px solid var(--hive-700);
+    position: sticky; top: 0; z-index: 100;
+  }
+  nav button {
+    background: transparent; border: 1px solid var(--hive-700); color: var(--hive-400);
+    padding: 7px 16px; border-radius: 6px; cursor: pointer; font-size: 13px;
+    transition: all .15s;
+  }
+  nav button:hover { border-color: var(--honey-dim); color: var(--honey); }
+  nav button.active { background: var(--honey); color: var(--hive-950); border-color: var(--honey); font-weight: 600; }
+
+  /* ── Sections ── */
+  section { padding: 40px 24px; max-width: 1200px; margin: 0 auto; display: none; }
+  section.active { display: block; }
+  section h2 { font-size: 20px; color: #fff; margin-bottom: 4px; }
+  section h2 span { color: var(--honey); }
+  section .subtitle { color: var(--hive-500); font-size: 13px; margin-bottom: 24px; }
+
+  /* ── Grid ── */
+  .grid { display: grid; gap: 12px; }
+  .grid-3 { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+  .grid-4 { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+
+  /* ── Template Card ── */
+  .tpl-card {
+    background: var(--hive-850);
+    border: 1px solid var(--hive-700);
+    border-radius: 10px;
+    padding: 16px;
+    cursor: default;
+    transition: border-color .15s, transform .12s;
+  }
+  .tpl-card:hover { border-color: var(--honey-dim); transform: translateY(-2px); }
+  .tpl-card .tpl-icon { font-size: 28px; margin-bottom: 8px; }
+  .tpl-card .tpl-name { font-size: 14px; font-weight: 600; color: #fff; margin-bottom: 2px; }
+  .tpl-card .tpl-desc { font-size: 12px; color: var(--hive-500); margin-bottom: 8px; }
+  .tpl-card .tpl-persona { font-size: 11px; color: var(--accent); display: flex; align-items: center; gap: 4px; }
+  .tpl-card .tpl-hint { font-size: 11px; color: var(--hive-600); font-style: italic; margin-top: 6px; border-top: 1px solid var(--hive-700); padding-top: 6px; }
+
+  /* ── Persona Card ── */
+  .persona-card {
+    background: var(--hive-850);
+    border: 1px solid var(--hive-700);
+    border-radius: 10px;
+    padding: 14px;
+    cursor: pointer;
+    transition: border-color .15s, transform .12s;
+    position: relative;
+  }
+  .persona-card:hover { border-color: var(--honey-dim); transform: translateY(-2px); }
+  .persona-card .pc-icon { font-size: 24px; margin-bottom: 6px; }
+  .persona-card .pc-name { font-size: 13px; font-weight: 600; color: #fff; margin-bottom: 2px; }
+  .persona-card .pc-tagline { font-size: 11px; color: var(--hive-500); margin-bottom: 6px; min-height: 30px; }
+  .persona-card .pc-meta { display: flex; gap: 8px; flex-wrap: wrap; }
+  .persona-card .badge {
+    font-size: 10px; padding: 2px 7px; border-radius: 4px;
+    background: var(--hive-700); color: var(--hive-400);
+  }
+  .persona-card .badge.readonly { background: rgba(248,113,113,.15); color: var(--red); }
+  .persona-card .badge.tools { background: rgba(96,165,250,.12); color: var(--blue); }
+
+  /* ── Tier Labels ── */
+  .tier-section { margin-bottom: 28px; }
+  .tier-label {
+    display: inline-block;
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+    padding: 4px 12px; border-radius: 4px; margin-bottom: 12px;
+  }
+  .tier-label.universal { background: rgba(229,160,0,.15); color: var(--honey); }
+  .tier-label.knowledge { background: rgba(167,139,250,.12); color: var(--accent); }
+  .tier-label.domain { background: rgba(96,165,250,.1); color: var(--blue); }
+
+  /* ── Matrix ── */
+  .matrix-wrap { overflow-x: auto; }
+  .matrix {
+    border-collapse: collapse; font-size: 12px; width: 100%; min-width: 900px;
+  }
+  .matrix th, .matrix td { padding: 6px 8px; border: 1px solid var(--hive-700); text-align: center; }
+  .matrix th { background: var(--hive-800); color: var(--hive-400); font-weight: 600; position: sticky; top: 0; }
+  .matrix th.row-head { text-align: left; min-width: 150px; }
+  .matrix td.row-head { text-align: left; color: #fff; font-weight: 500; background: var(--hive-850); }
+  .matrix .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+  .matrix .dot.default { background: var(--honey); }
+  .matrix .dot.affinity { background: var(--hive-600); }
+
+  /* ── Anatomy ── */
+  .anatomy { max-width: 760px; }
+  .anatomy-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+  .anatomy-header .icon { font-size: 36px; }
+  .anatomy-header .info h3 { color: #fff; font-size: 18px; }
+  .anatomy-header .info p { color: var(--hive-500); font-size: 13px; }
+
+  .anatomy-selector { margin-bottom: 20px; }
+  .anatomy-selector select {
+    background: var(--hive-800); color: #fff; border: 1px solid var(--hive-600);
+    padding: 8px 12px; border-radius: 6px; font-size: 13px; cursor: pointer;
+  }
+
+  .field-group { margin-bottom: 16px; }
+  .field-group .field-label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+    color: var(--honey); margin-bottom: 4px;
+  }
+  .field-group .field-value {
+    background: var(--hive-800); border: 1px solid var(--hive-700); border-radius: 6px;
+    padding: 10px 12px; font-size: 12px; color: var(--hive-300); line-height: 1.6;
+    white-space: pre-wrap; font-family: 'Consolas', 'Courier New', monospace;
+  }
+  .field-group .tag-list { display: flex; flex-wrap: wrap; gap: 4px; }
+  .field-group .tag {
+    font-size: 11px; padding: 3px 8px; border-radius: 4px;
+    background: var(--hive-700); color: var(--hive-300);
+  }
+  .field-group .tag.allow { background: rgba(52,211,153,.12); color: var(--green); }
+  .field-group .tag.deny { background: rgba(248,113,113,.12); color: var(--red); }
+  .field-group .tag.fail { background: rgba(251,146,60,.1); color: var(--orange); }
+
+  /* ── Override Diagram (Section 5) ── */
+  .override-flow {
+    display: flex; align-items: center; gap: 0; flex-wrap: wrap;
+    justify-content: center; margin: 32px 0;
+  }
+  .flow-box {
+    background: var(--hive-800); border: 1px solid var(--hive-700); border-radius: 8px;
+    padding: 16px 20px; text-align: center; min-width: 160px;
+  }
+  .flow-box .fb-title { font-size: 11px; color: var(--honey); font-weight: 700; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+  .flow-box .fb-value { font-size: 14px; color: #fff; font-weight: 600; }
+  .flow-box .fb-sub { font-size: 11px; color: var(--hive-500); margin-top: 2px; }
+  .flow-arrow { color: var(--hive-600); font-size: 22px; padding: 0 8px; user-select: none; }
+
+  .window-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 24px; }
+  .win-card {
+    background: var(--hive-850); border: 1px solid var(--hive-700); border-radius: 8px;
+    padding: 14px; position: relative;
+  }
+  .win-card .win-title { font-size: 13px; color: #fff; font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+  .win-card .win-persona { font-size: 12px; color: var(--accent); }
+  .win-card .win-tools { font-size: 11px; color: var(--hive-500); margin-top: 4px; }
+  .win-card .win-badge {
+    position: absolute; top: 8px; right: 8px; font-size: 9px;
+    padding: 2px 6px; border-radius: 3px;
+    background: rgba(229,160,0,.15); color: var(--honey);
+  }
+
+  .legend { margin-top: 24px; padding: 16px; background: var(--hive-800); border-radius: 8px; border: 1px solid var(--hive-700); }
+  .legend h4 { font-size: 12px; color: var(--honey); margin-bottom: 8px; text-transform: uppercase; letter-spacing: .5px; }
+  .legend p { font-size: 12px; color: var(--hive-400); margin-bottom: 4px; }
+  .legend strong { color: var(--honey); }
+
+  @media (max-width: 640px) {
+    nav { gap: 2px; }
+    nav button { font-size: 11px; padding: 5px 10px; }
+    .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div id="tooltip"><div class="tt-label"></div><div class="tt-body"></div></div>
+
+<header>
+  <h1>Waggle <span>OS</span> - Templates &amp; Personas</h1>
+  <p>Workspace template system and 22 agent personas. Hive DS visual reference.</p>
+</header>
+
+<nav>
+  <button class="active" data-tab="templates">15 Templates</button>
+  <button data-tab="personas">22 Personas</button>
+  <button data-tab="mapping">Template-Persona Map</button>
+  <button data-tab="anatomy">Persona Anatomy</button>
+  <button data-tab="override">Per-Window Override</button>
+</nav>
+
+<!-- SECTION 1: 15 WORKSPACE TEMPLATES -->
+<section id="sec-templates" class="active">
+  <h2><span>15</span> Workspace Templates</h2>
+  <p class="subtitle">Each template pre-configures a workspace with a default persona, starter hint, and relevant tools.</p>
+  <div class="grid grid-3" id="template-grid"></div>
+</section>
+
+<!-- SECTION 2: 22 AGENT PERSONAS -->
+<section id="sec-personas">
+  <h2><span>22</span> Agent Personas</h2>
+  <p class="subtitle">Three tiers: Universal Modes (cross-domain), Knowledge Workers (core skills), and Workspace Specialists (domain-specific). Click a card to inspect in Anatomy.</p>
+  <div class="tier-section" id="tier-universal"></div>
+  <div class="tier-section" id="tier-knowledge"></div>
+  <div class="tier-section" id="tier-domain"></div>
+</section>
+
+<!-- SECTION 3: TEMPLATE -> PERSONA MAPPING MATRIX -->
+<section id="sec-mapping">
+  <h2>Template <span>&rarr;</span> Persona Mapping</h2>
+  <p class="subtitle">Gold dot = default persona for that template. Grey dot = workspace affinity overlap.</p>
+  <div class="matrix-wrap">
+    <table class="matrix" id="mapping-table"></table>
+  </div>
+</section>
+
+<!-- SECTION 4: PERSONA ANATOMY -->
+<section id="sec-anatomy">
+  <h2>Persona <span>Anatomy</span></h2>
+  <p class="subtitle">Full internal structure of a persona. Select any persona to inspect all fields.</p>
+  <div class="anatomy">
+    <div class="anatomy-selector">
+      <select id="anatomy-select"></select>
+    </div>
+    <div id="anatomy-content"></div>
+  </div>
+</section>
+
+<!-- SECTION 5: PER-WINDOW PERSONA OVERRIDE -->
+<section id="sec-override">
+  <h2>Per-Window <span>Persona Override</span></h2>
+  <p class="subtitle">Phase A.2 consistency: each window can run a different persona. Workspace default cascades down unless overridden.</p>
+
+  <div class="override-flow">
+    <div class="flow-box">
+      <div class="fb-title">Workspace Default</div>
+      <div class="fb-value">Researcher</div>
+      <div class="fb-sub">Set during onboarding</div>
+    </div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-box">
+      <div class="fb-title">Per-Window Override</div>
+      <div class="fb-value">Any Persona</div>
+      <div class="fb-sub">Via PersonaSwitcher</div>
+    </div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-box">
+      <div class="fb-title">Tool Filtering</div>
+      <div class="fb-value">filterToolsForContext()</div>
+      <div class="fb-sub">allowlist + denylist enforced</div>
+    </div>
+  </div>
+
+  <h3 style="color:#fff; font-size:14px; margin-bottom:12px;">Example: Research Hub workspace with 4 windows</h3>
+  <div class="window-grid" id="window-examples"></div>
+
+  <div class="legend">
+    <h4>How It Works</h4>
+    <p><strong>1. Workspace creation:</strong> Template sets a default persona (e.g. Research Hub sets Researcher).</p>
+    <p><strong>2. Window spawn:</strong> New windows inherit the workspace default persona.</p>
+    <p><strong>3. Per-window override:</strong> User clicks PersonaSwitcher in any window to change that window's persona independently.</p>
+    <p><strong>4. Tool filtering:</strong> tool-filter.ts enforces the active persona's allowlist/denylist. A Planner window cannot call write_file even if another window can.</p>
+    <p><strong>5. Consistency:</strong> Per-session orchestrators track which persona each window uses. The agent-loop reads the active persona from the window context, not the workspace default.</p>
+  </div>
+</section>
+
+<script>
+/* ================================================================
+   DATA -- extracted from persona-data.ts and onboarding/constants.ts
+   ================================================================ */
+
+var TEMPLATES = [
+  { id: 'sales-pipeline',      name: 'Sales Pipeline',      icon: '\uD83C\uDFAF', desc: 'Track deals and prospects',            hint: 'Research the top 5 competitors in my industry',    persona: 'sales-rep' },
+  { id: 'research-project',    name: 'Research Hub',         icon: '\uD83D\uDD2C', desc: 'Deep dive into any subject',           hint: 'Help me design a literature review on my topic',   persona: 'researcher' },
+  { id: 'code-review',         name: 'Engineering',          icon: '\uD83D\uDCBB', desc: 'Code, review, and ship',               hint: 'Read my project and tell me what you see',         persona: 'coder' },
+  { id: 'marketing-campaign',  name: 'Marketing & Content',  icon: '\uD83D\uDCE2', desc: 'Campaigns, copy, and SEO',             hint: 'Draft a campaign brief for my product launch',     persona: 'marketer' },
+  { id: 'product-launch',      name: 'Product Management',   icon: '\uD83D\uDE80', desc: 'Specs, roadmaps, and launches',        hint: 'Help me write a PRD for my next feature',          persona: 'product-manager-senior' },
+  { id: 'legal-review',        name: 'Legal & Compliance',   icon: '\u2696\uFE0F', desc: 'Contracts, compliance, and risk',      hint: 'Draft a standard NDA template',                    persona: 'legal-professional' },
+  { id: 'agency-consulting',   name: 'Consulting',           icon: '\uD83C\uDFE2', desc: 'Client delivery and strategy',         hint: 'Set up client workspaces for my biggest accounts', persona: 'consultant' },
+  { id: 'customer-support',    name: 'Customer Support',     icon: '\uD83C\uDFA7', desc: 'Tickets, KB, and escalation',          hint: 'Help me draft a response to this customer issue',  persona: 'support-agent' },
+  { id: 'finance-accounting',  name: 'Finance',              icon: '\uD83D\uDCB0', desc: 'Budgets, reports, and close',          hint: 'Prepare a variance analysis for this month',       persona: 'finance-owner' },
+  { id: 'hr-people',           name: 'HR & People',          icon: '\uD83D\uDC65', desc: 'Hiring, policy, and onboarding',       hint: 'Draft a job description for a senior engineer',    persona: 'hr-manager' },
+  { id: 'operations-center',   name: 'Operations',           icon: '\u2699\uFE0F', desc: 'Processes, SOPs, and vendors',         hint: 'Create an SOP for our onboarding process',         persona: 'ops-manager' },
+  { id: 'data-analytics',      name: 'Data & Analytics',     icon: '\uD83D\uDCC8', desc: 'SQL, dashboards, and insights',        hint: 'Write a SQL query to find our top customers',      persona: 'data-engineer' },
+  { id: 'recruiting-pipeline', name: 'Recruiting',           icon: '\uD83E\uDD1D', desc: 'Source, screen, and hire',             hint: 'Write a job description and screening scorecard',  persona: 'recruiter' },
+  { id: 'design-studio',       name: 'Design Studio',        icon: '\uD83C\uDFA8', desc: 'Briefs, feedback, and brand',          hint: 'Write a creative brief for our rebrand',           persona: 'creative-director' },
+  { id: 'blank',               name: 'Blank Workspace',      icon: '\u2795',        desc: 'Start from scratch',                  hint: 'Hello! What can you help me with?',                persona: 'general-purpose' }
+];
+
+var PERSONAS = [
+  { id:'general-purpose',        name:'General Purpose',     icon:'\uD83E\uDDE0', tier:'universal',  tagline:'Adapts to whatever you need. Suggests a specialist when one would do better.', tools:['bash','read_file','write_file','edit_file','search_files','search_content','web_search','web_fetch','search_memory','save_memory','generate_docx','create_plan','add_plan_step','execute_step','show_plan','spawn_agent','list_agents','get_agent_result','git_status','git_diff','git_log','git_commit','list_skills','suggest_skill','acquire_capability','install_capability','compose_workflow','orchestrate_workflow','query_knowledge','get_identity','get_awareness'], disallowedTools:[], isReadOnly:false, modelPreference:'claude-sonnet-4-6', workspaceAffinity:['general','mixed','personal','exploration'], failurePatterns:['Staying general when a specialist is warranted','Doing too much in one turn without a plan','Not saving key findings to memory'], bestFor:['Tasks that cross multiple domains','Quick exploratory work','Anything where you want the AI to adapt'], wontDo:'Nothing is structurally off-limits -- suggests switching to a specialist when warranted.', systemPrompt:'Versatile agent that adapts to whatever the user needs. Full tool set.' },
+  { id:'planner',                name:'Planner',             icon:'\uD83D\uDDC2\uFE0F', tier:'universal',  tagline:'Draws the blueprint before anyone picks up a tool.', tools:['read_file','search_files','search_content','web_search','web_fetch','search_memory','query_knowledge','get_awareness','create_plan','add_plan_step','show_plan','suggest_skill','list_skills','bash'], disallowedTools:['write_file','edit_file','git_commit','git_push','git_merge','generate_docx','install_capability','spawn_agent','execute_step','save_memory'], isReadOnly:true, modelPreference:'claude-sonnet-4-6', workspaceAffinity:['strategy','planning','architecture','project','research'], failurePatterns:['Planning without reading files/memory first','One-option thinking','Vague steps'], bestFor:['Thinking through approaches before starting','Breaking complex projects into phases','Evaluating approaches with trade-offs'], wontDo:'Will not create or modify any files. Read-only -- thinks and structures only.', systemPrompt:'Planning and architecture specialist. Explores context, analyzes options, designs approaches. Does NOT execute.' },
+  { id:'verifier',               name:'Verifier',            icon:'\uD83D\uDD0D', tier:'universal',  tagline:'Your most critical colleague. Finds what is wrong before it matters.', tools:['read_file','search_files','search_content','web_search','web_fetch','search_memory','query_knowledge','bash','show_plan'], disallowedTools:['write_file','edit_file','git_commit','git_push','git_merge','generate_docx','save_memory','install_capability','spawn_agent','execute_step'], isReadOnly:true, modelPreference:'claude-sonnet-4-6', workspaceAffinity:['quality','review','verification','audit'], failurePatterns:['Verification avoidance -- narrating not running','First-80% seduction','Confirmation bias'], bestFor:['Reviewing output for accuracy and completeness','Fact-checking claims against sources','Code review for logic errors and edge cases'], wontDo:'Will not modify anything or produce a fixed version. Identifies problems only.', systemPrompt:'Adversarial QA. Tries to BREAK outputs. VERDICT: PASS/FAIL/PARTIAL.' },
+  { id:'coordinator',            name:'Coordinator',         icon:'\uD83C\uDF9B\uFE0F', tier:'universal',  tagline:'Designs the workflow. Directs the specialists. Never picks up a tool itself.', tools:['spawn_agent','list_agents','get_agent_result','search_memory','save_memory','query_knowledge','get_awareness','create_plan','add_plan_step','execute_step','show_plan'], disallowedTools:['read_file','write_file','edit_file','bash','web_search','web_fetch','search_files','search_content','generate_docx','git_status','git_diff','git_log','git_commit'], isReadOnly:false, modelPreference:'claude-sonnet-4-6', workspaceAffinity:['orchestration','complex-projects','multi-phase','coordination'], failurePatterns:['Delegating without synthesizing','Vague worker prompts','Skipping the Verifier'], bestFor:['Complex multi-phase projects','Parallel research feeding sequential execution','AI managing its own workflow end-to-end'], wontDo:'Will not read files, write files, run bash, or search the web. All execution by spawned workers.', systemPrompt:'Pure orchestrator. Delegates to specialists, synthesizes results, never executes directly.' },
+
+  { id:'researcher',             name:'Researcher',          icon:'\uD83D\uDD2C', tier:'knowledge', tagline:'Finds truth across sources -- never assumes, always cites.', tools:['web_search','web_fetch','search_memory','save_memory','read_file','write_file','search_files','search_content','generate_docx'], disallowedTools:[], isReadOnly:false, modelPreference:'claude-sonnet-4-6', workspaceAffinity:['research','analysis','investigation','due-diligence'], failurePatterns:['Single-source research','Not saving findings','Presenting research as conclusions'], bestFor:['Deep-dive research across web, files, and memory','Literature reviews and competitive intelligence','Fact-checking and source triangulation'], wontDo:'Will not produce final deliverables or make decisions.', systemPrompt:'Deep investigation and multi-source synthesis. Always cite sources.' },
+  { id:'writer',                 name:'Writer',              icon:'\u270D\uFE0F',  tier:'knowledge', tagline:'Drafts, edits, and polishes -- always asks about audience first.', tools:['read_file','write_file','edit_file','search_files','search_memory','save_memory','generate_docx'], disallowedTools:['bash','git_commit','git_push','spawn_agent'], isReadOnly:false, modelPreference:'claude-sonnet-4-6', workspaceAffinity:['writing','content','documentation','proposals'], failurePatterns:['Drafting before gathering context','Wrong scope','Ignoring workspace tone'], bestFor:['Blog posts, reports, proposals, and documentation','Editing for clarity','Adapting tone for different audiences'], wontDo:'Will not run code, execute bash, or manage git.', systemPrompt:'Document creation, editing, and formatting. Ask about audience and purpose first.' },
+  { id:'analyst',                name:'Analyst',             icon:'\uD83D\uDCCA', tier:'knowledge', tagline:'Turns noise into signal with numbers, not adjectives.', tools:['bash','read_file','write_file','search_files','search_content','web_search','web_fetch','search_memory','save_memory','generate_docx'], disallowedTools:[], isReadOnly:false, modelPreference:'claude-sonnet-4-6', workspaceAffinity:['analysis','data','strategy','reporting'], failurePatterns:['Analysis without data','Conclusions without evidence chain','Report when user asked for analysis'], bestFor:['Data analysis with tables, matrices, and frameworks','Decision support with quantified trade-offs','Processing CSV/JSON data'], wontDo:'Will not produce final documents or take action.', systemPrompt:'Data analysis, pattern recognition, and structured decision-making.' },
+  { id:'coder',                  name:'Coder',               icon:'\uD83D\uDCBB', tier:'knowledge', tagline:'Reads before writing, tests alongside implementing.', tools:['bash','read_file','write_file','edit_file','search_files','search_content','git_status','git_diff','git_log','git_commit','git_branch','git_stash','git_push','git_pull','git_merge','git_pr'], disallowedTools:[], isReadOnly:false, modelPreference:'claude-sonnet-4-6', workspaceAffinity:['development','coding','engineering','debugging'], failurePatterns:['Writing new utils without checking existing ones','Changes without reading git_log','Large refactors for small fix requests'], bestFor:['Code review, debugging, and refactoring','Implementing features with test coverage','Understanding codebases'], wontDo:'Will not guess about code it has not read.', systemPrompt:'Software development, debugging, and code architecture.' },
+
+  { id:'project-manager',        name:'Project Manager',     icon:'\uD83D\uDCCB', tier:'domain', tagline:'Breaks big goals into steps and tracks every one.', tools:['create_plan','add_plan_step','execute_step','show_plan','search_memory','save_memory','read_file','search_files','write_file'], disallowedTools:['git_commit','git_push','bash'], isReadOnly:false, modelPreference:'claude-sonnet-4-6', workspaceAffinity:['project','management','coordination','planning'], failurePatterns:['Plans without reading existing context','Vague task assignments','Not saving status updates'], bestFor:['Breaking complex projects into phased plans','Status reports with blockers','Coordinating multi-step work'], wontDo:'Will not write production code or deploy.', systemPrompt:'Task management, status tracking, and coordination.' },
+  { id:'executive-assistant',    name:'Executive Assistant', icon:'\uD83D\uDCE7', tier:'domain', tagline:'Drafts, schedules, and prepares -- always confirms before sending.', tools:['search_memory','save_memory','read_file','write_file','web_search','generate_docx'], disallowedTools:['bash','git_commit','git_push','spawn_agent'], isReadOnly:false, modelPreference:'claude-sonnet-4-6', workspaceAffinity:['executive','admin','communication','scheduling'], failurePatterns:['Drafting without searching memory for prior context','Sending without confirmation','Generic briefings'], bestFor:['Email drafting with appropriate tone','Meeting prep with context from memory','Summarizing long documents'], wontDo:'Will not send external communications without explicit confirmation.', systemPrompt:'Executive support -- communication, scheduling, and preparation.' },
+  { id:'sales-rep',              name:'Sales Rep',           icon:'\uD83C\uDFAF', tier:'domain', tagline:'Researches before reaching out, personalizes everything.', tools:['web_search','web_fetch','search_memory','save_memory','read_file','write_file','generate_docx'], disallowedTools:['git_commit','git_push','bash','spawn_agent'], isReadOnly:false, modelPreference:'claude-sonnet-4-6', workspaceAffinity:['sales','outreach','pipeline','prospecting'], failurePatterns:['Outreach without checking memory for prior interactions','Generic value propositions','Not saving prospect research'], bestFor:['Prospect research -- company intel, key contacts','Personalized outreach emails','Pipeline tracking and deal stage management'], wontDo:'Will not send outreach without checking memory for prior interactions.', systemPrompt:'Sales research, outreach, and pipeline management.' },
+  { id:'marketer',               name:'Marketer',            icon:'\uD83D\uDCE2', tier:'domain', tagline:'Creates content that knows its audience and measures its impact.', tools:['web_search','web_fetch','search_memory','save_memory','read_file','write_file','generate_docx'], disallowedTools:['bash','git_commit','git_push','spawn_agent'], isReadOnly:false, modelPreference:'claude-sonnet-4-6', workspaceAffinity:['marketing','content','social-media','brand'], failurePatterns:['Creating content without brand guidelines','Generic copy when audience context exists','Not saving campaign data'], bestFor:['Content aligned with brand voice','Campaign planning with goals and metrics','SEO-optimized web content'], wontDo:'Will not create content without checking brand guidelines first.', systemPrompt:'Marketing content, campaign strategy, and digital presence.' },
+  { id:'product-manager-senior', name:'Senior PM',           icon:'\uD83D\uDDFA\uFE0F', tier:'domain', tagline:'Structures ambiguity into specs with measurable outcomes.', tools:['search_memory','save_memory','web_search','web_fetch','create_plan','add_plan_step','execute_step','show_plan','generate_docx','search_files','read_file','write_file'], disallowedTools:['bash','git_commit','git_push'], isReadOnly:false, modelPreference:'claude-sonnet-4-6', workspaceAffinity:['product','roadmap','strategy','planning'], failurePatterns:['PRDs without user research','Skipping decision documentation','Vague acceptance criteria'], bestFor:['PRD drafting with RICE scoring','Decision tracking across sessions','Roadmap planning'], wontDo:'Will not write production code or deploy infrastructure.', systemPrompt:'Structured product thinking, decision tracking, and roadmap management.' },
+  { id:'hr-manager',             name:'HR Manager',          icon:'\uD83D\uDC65', tier:'domain', tagline:'Policy-first, compliance-aware, people-focused.', tools:['search_memory','save_memory','create_plan','add_plan_step','show_plan','generate_docx','web_search','read_file','write_file','search_files'], disallowedTools:['bash','git_commit','git_push','spawn_agent'], isReadOnly:false, modelPreference:'claude-sonnet-4-6', workspaceAffinity:['hr','people','policy','compliance'], failurePatterns:['Answering without searching stored policies','Generic job descriptions','Not flagging legal risk areas'], bestFor:['Onboarding checklists and new hire docs','Policy compliance review','Job descriptions with competencies'], wontDo:'Will not provide binding legal advice.', systemPrompt:'HR policy, onboarding, compliance, and employee communications.' },
+  { id:'legal-professional',     name:'Legal Counsel',       icon:'\u2696\uFE0F', tier:'domain', tagline:'Precise language, jurisdiction-aware, always flags assumptions.', tools:['search_memory','save_memory','generate_docx','web_search','web_fetch','read_file','write_file','search_files'], disallowedTools:['bash','git_commit','git_push','spawn_agent'], isReadOnly:false, modelPreference:'claude-sonnet-4-6', workspaceAffinity:['legal','contracts','compliance','risk'], failurePatterns:['Contract review without searching precedents','Jurisdiction-specific advice without flagging','Missing Assumptions Made section'], bestFor:['Contract clause analysis and risk identification','Compliance checklists and regulatory research','Legal correspondence drafting'], wontDo:'Will not provide binding legal advice or represent attorney-client privilege.', systemPrompt:'Contract analysis, legal correspondence, and compliance documentation.' },
+  { id:'finance-owner',          name:'Business Finance',    icon:'\uD83D\uDCB0', tier:'domain', tagline:'Numbers with assumptions stated, projections with sensitivity.', tools:['search_memory','save_memory','generate_docx','web_search','web_fetch','read_file','write_file','search_files','create_plan','add_plan_step','show_plan'], disallowedTools:['bash','git_commit','git_push','spawn_agent'], isReadOnly:false, modelPreference:'claude-sonnet-4-6', workspaceAffinity:['finance','accounting','business','budgets'], failurePatterns:['Numbers without stated assumptions','Analysis without checking stored financial data','Missing sensitivity factors'], bestFor:['Budget analysis and cash flow projections','Variance analysis with explicit assumptions','Financial reporting'], wontDo:'Will not present projections without stating key assumptions.', systemPrompt:'Financial analysis, budgeting, and business finance communications.' },
+  { id:'consultant',             name:'Strategy Consultant', icon:'\uD83C\uDFAF', tier:'domain', tagline:'Structures everything, cites everything, executive summary first.', tools:['search_memory','save_memory','web_search','web_fetch','generate_docx','read_file','write_file','search_files','create_plan','add_plan_step','execute_step','show_plan','bash'], disallowedTools:[], isReadOnly:false, modelPreference:'claude-sonnet-4-6', workspaceAffinity:['consulting','strategy','analysis','research'], failurePatterns:['Framework-first thinking','Deliverable without executive summary','Research without saving'], bestFor:['Client deliverables with structured frameworks','Multi-source research synthesis','Executive summaries and strategic recommendations'], wontDo:'Will not deliver analysis without an executive summary.', systemPrompt:'Top-tier management consultant. Structure everything. Depth over breadth.' },
+  { id:'support-agent',          name:'Customer Support',    icon:'\uD83C\uDFA7', tier:'domain', tagline:'Resolves fast, escalates smart, turns tickets into KB articles.', tools:['search_memory','save_memory','web_search','web_fetch','read_file','write_file','generate_docx','create_plan','add_plan_step','show_plan'], disallowedTools:[], isReadOnly:false, modelPreference:'claude-sonnet-4-6', workspaceAffinity:['support','customer-success','helpdesk','service'], failurePatterns:['Resolving without checking KB first','Escalating without packaging context','Generic responses'], bestFor:['Resolving issues using KB and memory','Drafting professional support responses','Creating KB articles from resolved tickets'], wontDo:'Will not resolve tickets without checking existing KB and memory first.', systemPrompt:'Customer issue resolution, knowledge management, and escalation handling.' },
+  { id:'ops-manager',            name:'Operations Manager',  icon:'\u2699\uFE0F', tier:'domain', tagline:'Processes, SOPs, and vendor management -- operational excellence.', tools:['search_memory','save_memory','read_file','write_file','generate_docx','create_plan','add_plan_step','execute_step','show_plan','web_search'], disallowedTools:[], isReadOnly:false, modelPreference:'claude-sonnet-4-6', workspaceAffinity:['operations','process','procurement','logistics'], failurePatterns:['Designing processes without baseline measurement','SOPs without version numbers','Vendor evaluations without weighted scoring'], bestFor:['Standard Operating Procedures','Vendor evaluation with weighted scoring','Process optimization'], wontDo:'Will not design processes without measuring the current baseline.', systemPrompt:'Process design, documentation, vendor management, and operational efficiency.' },
+  { id:'data-engineer',          name:'Data Engineer',       icon:'\uD83D\uDCC8', tier:'domain', tagline:'SQL, pipelines, dashboards -- makes data accessible and trustworthy.', tools:['bash','read_file','write_file','edit_file','search_files','search_content','search_memory','save_memory','web_search','generate_docx'], disallowedTools:[], isReadOnly:false, modelPreference:'claude-sonnet-4-6', workspaceAffinity:['data','analytics','bi','reporting'], failurePatterns:['Writing queries without exploring schema','Raw data without context','Not saving working queries'], bestFor:['SQL queries across databases','Data exploration and quality assessment','Dashboard design and visualization planning'], wontDo:'Will not write queries without exploring the schema first.', systemPrompt:'Data access, SQL, pipeline design, and making data useful.' },
+  { id:'recruiter',              name:'Recruiter',           icon:'\uD83E\uDD1D', tier:'domain', tagline:'Sources, screens, and manages candidates through the full pipeline.', tools:['web_search','web_fetch','search_memory','save_memory','read_file','write_file','generate_docx','create_plan','add_plan_step','show_plan'], disallowedTools:[], isReadOnly:false, modelPreference:'claude-sonnet-4-6', workspaceAffinity:['recruiting','hiring','talent','hr'], failurePatterns:['JDs without role-specific competencies','Screening without structured scorecard','Not saving candidate context'], bestFor:['Job descriptions with competencies','Candidate sourcing with structured scorecards','Interview preparation with rubrics'], wontDo:'Will not screen candidates without a structured scorecard.', systemPrompt:'Talent acquisition -- sourcing, screening, job descriptions, and interview preparation.' },
+  { id:'creative-director',      name:'Creative Director',   icon:'\uD83C\uDFA8', tier:'domain', tagline:'Briefs, feedback synthesis, and brand consistency guardian.', tools:['search_memory','save_memory','web_search','web_fetch','read_file','write_file','generate_docx'], disallowedTools:[], isReadOnly:false, modelPreference:'claude-sonnet-4-6', workspaceAffinity:['design','creative','brand','marketing'], failurePatterns:['Creating without brand guidelines','Feedback without structured synthesis','Delivering without version tracking'], bestFor:['Creative briefs with clear objectives','Synthesizing feedback from multiple stakeholders','Brand voice and visual consistency auditing'], wontDo:'Will not create deliverables without checking brand guidelines first.', systemPrompt:'Creative direction -- briefs, feedback management, brand consistency, and design thinking.' }
+];
+
+var TEMPLATE_PERSONA = {
+  'sales-pipeline':'sales-rep', 'research-project':'researcher', 'code-review':'coder',
+  'marketing-campaign':'marketer', 'product-launch':'product-manager-senior', 'legal-review':'legal-professional',
+  'agency-consulting':'consultant', 'customer-support':'support-agent', 'finance-accounting':'finance-owner',
+  'hr-people':'hr-manager', 'operations-center':'ops-manager', 'data-analytics':'data-engineer',
+  'recruiting-pipeline':'recruiter', 'design-studio':'creative-director', 'blank':'general-purpose'
+};
+
+/* ── Tooltip ── */
+var ttEl = document.getElementById('tooltip');
+var ttLabel = ttEl.querySelector('.tt-label');
+var ttBody = ttEl.querySelector('.tt-body');
+
+function showTooltip(e, label, body) {
+  ttLabel.textContent = label;
+  ttBody.textContent = '';
+  /* Build body safely via text nodes and line breaks */
+  var lines = body.split('\n');
+  for (var i = 0; i < lines.length; i++) {
+    if (i > 0) ttBody.appendChild(document.createElement('br'));
+    ttBody.appendChild(document.createTextNode(lines[i]));
+  }
+  ttEl.classList.add('visible');
+  positionTooltip(e);
+}
+
+function positionTooltip(e) {
+  var pad = 12;
+  var x = e.clientX + pad, y = e.clientY + pad;
+  var r = ttEl.getBoundingClientRect();
+  if (x + r.width > window.innerWidth) x = e.clientX - r.width - pad;
+  if (y + r.height > window.innerHeight) y = e.clientY - r.height - pad;
+  ttEl.style.left = x + 'px';
+  ttEl.style.top = y + 'px';
+}
+
+function hideTooltip() { ttEl.classList.remove('visible'); }
+
+document.addEventListener('mousemove', function(e) {
+  if (ttEl.classList.contains('visible')) positionTooltip(e);
+});
+
+/* ── Tab navigation ── */
+document.querySelectorAll('nav button').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('nav button').forEach(function(b) { b.classList.remove('active'); });
+    document.querySelectorAll('section').forEach(function(s) { s.classList.remove('active'); });
+    btn.classList.add('active');
+    document.getElementById('sec-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+/* ── Helper: create element with classes and text ── */
+function el(tag, cls, text) {
+  var e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text) e.textContent = text;
+  return e;
+}
+
+/* ================================================================
+   SECTION 1: Templates Grid
+   ================================================================ */
+(function renderTemplates() {
+  var grid = document.getElementById('template-grid');
+  TEMPLATES.forEach(function(t) {
+    var p = PERSONAS.find(function(p) { return p.id === t.persona; });
+    var card = el('div', 'tpl-card');
+
+    card.appendChild(el('div', 'tpl-icon', t.icon));
+    card.appendChild(el('div', 'tpl-name', t.name));
+    card.appendChild(el('div', 'tpl-desc', t.desc));
+
+    var personaEl = el('div', 'tpl-persona');
+    personaEl.textContent = (p ? p.icon + ' ' : '') + 'Default: ' + (p ? p.name : t.persona);
+    card.appendChild(personaEl);
+
+    var hintEl = el('div', 'tpl-hint');
+    hintEl.textContent = '"' + t.hint + '"';
+    card.appendChild(hintEl);
+
+    card.addEventListener('mouseenter', function(e) {
+      showTooltip(e, t.name,
+        'ID: ' + t.id + '\nDefault persona: ' + (p ? p.name : t.persona) + '\nStarter hint: ' + t.hint);
+    });
+    card.addEventListener('mouseleave', hideTooltip);
+    grid.appendChild(card);
+  });
+})();
+
+/* ================================================================
+   SECTION 2: Personas Grid (3-tier)
+   ================================================================ */
+function renderPersonaTier(containerId, tierName, tierLabel) {
+  var container = document.getElementById(containerId);
+  var personas = PERSONAS.filter(function(p) { return p.tier === tierName; });
+
+  var label = el('div', 'tier-label ' + tierName, tierLabel + ' (' + personas.length + ')');
+  container.appendChild(label);
+
+  var grid = el('div', 'grid grid-4');
+  personas.forEach(function(p) {
+    var card = el('div', 'persona-card');
+    card.dataset.pid = p.id;
+
+    card.appendChild(el('div', 'pc-icon', p.icon));
+    card.appendChild(el('div', 'pc-name', p.name));
+    card.appendChild(el('div', 'pc-tagline', p.tagline));
+
+    var meta = el('div', 'pc-meta');
+    var toolsBadge = el('span', 'badge tools', p.tools.length + ' tools');
+    meta.appendChild(toolsBadge);
+    if (p.isReadOnly) {
+      meta.appendChild(el('span', 'badge readonly', 'READ-ONLY'));
+    }
+    if (p.disallowedTools && p.disallowedTools.length > 0) {
+      meta.appendChild(el('span', 'badge', p.disallowedTools.length + ' denied'));
+    }
+    card.appendChild(meta);
+
+    card.addEventListener('mouseenter', function(e) {
+      showTooltip(e, p.name,
+        'Tagline: ' + p.tagline +
+        '\n\nBest for:\n- ' + p.bestFor.join('\n- ') +
+        '\n\nWon\'t do: ' + p.wontDo +
+        '\nModel: ' + p.modelPreference);
+    });
+    card.addEventListener('mouseleave', hideTooltip);
+    card.addEventListener('click', function() {
+      document.querySelectorAll('nav button').forEach(function(b) { b.classList.remove('active'); });
+      document.querySelectorAll('section').forEach(function(s) { s.classList.remove('active'); });
+      document.querySelector('[data-tab="anatomy"]').classList.add('active');
+      document.getElementById('sec-anatomy').classList.add('active');
+      document.getElementById('anatomy-select').value = p.id;
+      renderAnatomy(p.id);
+    });
+    grid.appendChild(card);
+  });
+  container.appendChild(grid);
+}
+
+renderPersonaTier('tier-universal', 'universal', 'Universal Modes');
+renderPersonaTier('tier-knowledge', 'knowledge', 'Knowledge Workers');
+renderPersonaTier('tier-domain',    'domain',    'Workspace Specialists');
+
+/* ================================================================
+   SECTION 3: Mapping Matrix
+   ================================================================ */
+(function renderMatrix() {
+  var table = document.getElementById('mapping-table');
+
+  var templateAffinityKeywords = {
+    'sales-pipeline': ['sales','outreach','pipeline','prospecting'],
+    'research-project': ['research','analysis','investigation'],
+    'code-review': ['development','coding','engineering','debugging'],
+    'marketing-campaign': ['marketing','content','social-media','brand'],
+    'product-launch': ['product','roadmap','strategy','planning'],
+    'legal-review': ['legal','contracts','compliance','risk'],
+    'agency-consulting': ['consulting','strategy','analysis','research'],
+    'customer-support': ['support','customer-success','helpdesk','service'],
+    'finance-accounting': ['finance','accounting','business','budgets'],
+    'hr-people': ['hr','people','policy','compliance'],
+    'operations-center': ['operations','process','procurement','logistics'],
+    'data-analytics': ['data','analytics','bi','reporting'],
+    'recruiting-pipeline': ['recruiting','hiring','talent','hr'],
+    'design-studio': ['design','creative','brand','marketing'],
+    'blank': ['general','mixed','personal']
+  };
+
+  /* Header row */
+  var thead = document.createElement('thead');
+  var headerRow = document.createElement('tr');
+  var th0 = document.createElement('th');
+  th0.className = 'row-head';
+  th0.textContent = 'Template';
+  headerRow.appendChild(th0);
+
+  PERSONAS.forEach(function(p) {
+    var th = document.createElement('th');
+    th.textContent = p.icon;
+    th.title = p.name;
+    headerRow.appendChild(th);
+  });
+  thead.appendChild(headerRow);
+  table.appendChild(thead);
+
+  /* Body rows */
+  var tbody = document.createElement('tbody');
+  TEMPLATES.forEach(function(t) {
+    var row = document.createElement('tr');
+    var tdName = document.createElement('td');
+    tdName.className = 'row-head';
+    tdName.textContent = t.icon + ' ' + t.name;
+    row.appendChild(tdName);
+
+    var defaultPid = TEMPLATE_PERSONA[t.id];
+    var keywords = templateAffinityKeywords[t.id] || [];
+
+    PERSONAS.forEach(function(p) {
+      var td = document.createElement('td');
+      var isDefault = p.id === defaultPid;
+      var hasAffinity = p.workspaceAffinity.some(function(a) { return keywords.indexOf(a) !== -1; });
+
+      if (isDefault) {
+        var dot = el('span', 'dot default');
+        dot.title = 'Default persona';
+        td.appendChild(dot);
+      } else if (hasAffinity) {
+        var dot2 = el('span', 'dot affinity');
+        dot2.title = 'Affinity match';
+        td.appendChild(dot2);
+      }
+      row.appendChild(td);
+    });
+    tbody.appendChild(row);
+  });
+  table.appendChild(tbody);
+})();
+
+/* ================================================================
+   SECTION 4: Persona Anatomy
+   ================================================================ */
+var selectEl = document.getElementById('anatomy-select');
+PERSONAS.forEach(function(p) {
+  var opt = document.createElement('option');
+  opt.value = p.id;
+  opt.textContent = p.icon + ' ' + p.name;
+  selectEl.appendChild(opt);
+});
+selectEl.addEventListener('change', function() { renderAnatomy(selectEl.value); });
+
+function renderAnatomy(pid) {
+  var p = PERSONAS.find(function(x) { return x.id === pid; });
+  if (!p) return;
+  var c = document.getElementById('anatomy-content');
+  /* Clear existing content */
+  while (c.firstChild) c.removeChild(c.firstChild);
+
+  /* Header */
+  var hdr = el('div', 'anatomy-header');
+  hdr.appendChild(el('div', 'icon', p.icon));
+  var info = el('div', 'info');
+  info.appendChild(el('h3', null, p.name));
+  info.appendChild(el('p', null, p.tagline));
+  hdr.appendChild(info);
+  c.appendChild(hdr);
+
+  /* System Prompt */
+  c.appendChild(makeField('System Prompt', null, p.systemPrompt, 'value'));
+
+  /* Tools (Allowlist) */
+  c.appendChild(makeField('Tools (Allowlist) -- ' + p.tools.length + ' tools', p.tools, null, 'tags-allow'));
+
+  /* Disallowed Tools */
+  var denyList = (p.disallowedTools && p.disallowedTools.length) ? p.disallowedTools : null;
+  if (denyList) {
+    c.appendChild(makeField('Disallowed Tools (Denylist)', denyList, null, 'tags-deny'));
+  } else {
+    c.appendChild(makeField('Disallowed Tools (Denylist)', ['none'], null, 'tags'));
+  }
+
+  /* Read-Only */
+  c.appendChild(makeField('Read-Only', null,
+    p.isReadOnly ? 'YES -- Cannot modify files, commit, or generate documents' : 'No -- Full read/write access within tool scope',
+    'value'));
+
+  /* Model */
+  c.appendChild(makeField('Model Preference', null, p.modelPreference, 'value'));
+
+  /* Workspace Affinity */
+  c.appendChild(makeField('Workspace Affinity', p.workspaceAffinity || [], null, 'tags'));
+
+  /* Best For */
+  c.appendChild(makeField('Best For', p.bestFor, null, 'tags'));
+
+  /* Won't Do */
+  c.appendChild(makeField('Won\'t Do', null, p.wontDo, 'value'));
+
+  /* Failure Patterns */
+  c.appendChild(makeField('Failure Patterns', p.failurePatterns, null, 'tags-fail'));
+}
+
+function makeField(label, listItems, textValue, mode) {
+  var group = el('div', 'field-group');
+  group.appendChild(el('div', 'field-label', label));
+
+  if (mode === 'value') {
+    group.appendChild(el('div', 'field-value', textValue));
+  } else {
+    var tagList = el('div', 'tag-list');
+    var tagClass = 'tag';
+    if (mode === 'tags-allow') tagClass = 'tag allow';
+    else if (mode === 'tags-deny') tagClass = 'tag deny';
+    else if (mode === 'tags-fail') tagClass = 'tag fail';
+
+    (listItems || []).forEach(function(item) {
+      tagList.appendChild(el('span', tagClass, item));
+    });
+    group.appendChild(tagList);
+  }
+  return group;
+}
+
+renderAnatomy('general-purpose');
+
+/* ================================================================
+   SECTION 5: Per-Window Override Examples
+   ================================================================ */
+(function renderWindowExamples() {
+  var grid = document.getElementById('window-examples');
+  var windows = [
+    { title: 'Window 1 -- Literature Review',   persona: 'researcher',    badge: 'DEFAULT',  tools: 'web_search, web_fetch, search_memory, save_memory ...' },
+    { title: 'Window 2 -- Draft Paper',          persona: 'writer',        badge: 'OVERRIDE', tools: 'read_file, write_file, edit_file, generate_docx ...' },
+    { title: 'Window 3 -- Verify Citations',     persona: 'verifier',      badge: 'OVERRIDE', tools: 'read_file, search_memory, web_search, bash (read-only) ...' },
+    { title: 'Window 4 -- Plan Next Phase',      persona: 'planner',       badge: 'OVERRIDE', tools: 'read_file, search_files, create_plan, show_plan ...' }
+  ];
+
+  windows.forEach(function(w) {
+    var p = PERSONAS.find(function(x) { return x.id === w.persona; });
+    var card = el('div', 'win-card');
+
+    card.appendChild(el('div', 'win-badge', w.badge));
+
+    var titleEl = el('div', 'win-title');
+    titleEl.textContent = (p ? p.icon + ' ' : '') + w.title;
+    card.appendChild(titleEl);
+
+    var personaText = 'Persona: ' + (p ? p.name : w.persona);
+    if (p && p.isReadOnly) personaText += ' (read-only)';
+    card.appendChild(el('div', 'win-persona', personaText));
+    card.appendChild(el('div', 'win-tools', 'Tools: ' + w.tools));
+
+    card.addEventListener('mouseenter', function(e) {
+      if (!p) return;
+      showTooltip(e, p.name + ' in this window',
+        'Tagline: ' + p.tagline +
+        '\nRead-only: ' + (p.isReadOnly ? 'Yes' : 'No') +
+        '\nTool count: ' + p.tools.length +
+        '\nWon\'t do: ' + p.wontDo);
+    });
+    card.addEventListener('mouseleave', hideTooltip);
+    grid.appendChild(card);
+  });
+})();
+</script>
+</body>
+</html>

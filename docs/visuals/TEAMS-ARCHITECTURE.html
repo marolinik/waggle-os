@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Waggle OS -- Teams Architecture</title>
+<style>
+  :root {
+    --honey: #e5a000;
+    --honey-dim: #b88000;
+    --honey-glow: #f5c542;
+    --hive-950: #08090c;
+    --hive-900: #0e1017;
+    --hive-800: #161821;
+    --hive-700: #1e2130;
+    --hive-600: #2a2d3d;
+    --hive-500: #3d4155;
+    --accent: #a78bfa;
+    --accent-dim: #7c5fd4;
+    --green: #34d399;
+    --green-dim: #10b981;
+    --red: #f87171;
+    --cyan: #22d3ee;
+    --orange: #fb923c;
+    --text: #e2e4ea;
+    --text-dim: #9ca0ad;
+    --text-muted: #6b6f7e;
+    --border: #2a2d3d;
+    --card-bg: #0e1017;
+    --radius: 12px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--hive-950);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Header ─────────────────────────────────── */
+  .header {
+    text-align: center;
+    padding: 40px 20px 24px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, var(--hive-800) 0%, var(--hive-950) 100%);
+  }
+  .header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--honey);
+    letter-spacing: -0.5px;
+  }
+  .header p {
+    color: var(--text-dim);
+    font-size: 14px;
+    margin-top: 6px;
+  }
+  .tier-badge {
+    display: inline-block;
+    margin-top: 10px;
+    padding: 4px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    background: linear-gradient(135deg, var(--honey) 0%, var(--honey-dim) 100%);
+    color: var(--hive-950);
+  }
+
+  /* ── Layout ─────────────────────────────────── */
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 32px 20px 60px;
+  }
+  .section {
+    margin-bottom: 32px;
+  }
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    padding: 14px 18px;
+    border-radius: var(--radius);
+    background: var(--hive-900);
+    border: 1px solid var(--border);
+    transition: border-color 0.2s, background 0.2s;
+    user-select: none;
+  }
+  .section-header:hover {
+    border-color: var(--honey-dim);
+    background: var(--hive-800);
+  }
+  .section-header.active {
+    border-color: var(--honey);
+    background: var(--hive-800);
+  }
+  .section-icon {
+    font-size: 20px;
+    width: 32px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .section-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--honey);
+    flex: 1;
+  }
+  .section-chevron {
+    color: var(--text-dim);
+    font-size: 14px;
+    transition: transform 0.25s;
+  }
+  .section-header.active .section-chevron {
+    transform: rotate(180deg);
+  }
+  .section-body {
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 0.35s ease, opacity 0.25s ease, padding 0.25s ease;
+    padding: 0 18px;
+  }
+  .section-body.open {
+    max-height: 3000px;
+    opacity: 1;
+    padding: 20px 18px;
+  }
+
+  /* ── Cards ──────────────────────────────────── */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    background: var(--hive-800);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    transition: border-color 0.2s, transform 0.15s;
+    cursor: default;
+    position: relative;
+  }
+  .card:hover {
+    border-color: var(--honey-dim);
+    transform: translateY(-2px);
+  }
+  .card-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+  .card-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+  .card-desc {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+  .card-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-top: 8px;
+    margin-right: 4px;
+  }
+  .tag-green  { background: rgba(52,211,153,0.15); color: var(--green); }
+  .tag-accent { background: rgba(167,139,250,0.15); color: var(--accent); }
+  .tag-honey  { background: rgba(229,160,0,0.15); color: var(--honey); }
+  .tag-cyan   { background: rgba(34,211,238,0.15); color: var(--cyan); }
+  .tag-orange { background: rgba(251,146,60,0.15); color: var(--orange); }
+  .tag-red    { background: rgba(248,113,113,0.15); color: var(--red); }
+
+  /* ── Tooltip ────────────────────────────────── */
+  .tooltip {
+    position: fixed;
+    z-index: 9999;
+    background: var(--hive-700);
+    border: 1px solid var(--honey-dim);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 13px;
+    color: var(--text);
+    line-height: 1.5;
+    max-width: 320px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  }
+  .tooltip.visible { opacity: 1; }
+
+  /* ── Data Flow ──────────────────────────────── */
+  .flow-diagram {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    overflow-x: auto;
+    padding: 10px 0 16px;
+    flex-wrap: nowrap;
+  }
+  .flow-step {
+    background: var(--hive-800);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    min-width: 150px;
+    text-align: center;
+    flex-shrink: 0;
+    transition: border-color 0.2s;
+  }
+  .flow-step:hover { border-color: var(--honey); }
+  .flow-step-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+  .flow-step-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .flow-step-detail {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+  .flow-arrow {
+    color: var(--honey);
+    font-size: 22px;
+    flex-shrink: 0;
+    padding: 0 6px;
+    user-select: none;
+  }
+
+  /* ── Workspace isolation diagram ────────────── */
+  .isolation-diagram {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+  .isolation-zone {
+    flex: 1;
+    min-width: 260px;
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    position: relative;
+  }
+  .isolation-zone.local-zone { border-color: var(--green-dim); }
+  .isolation-zone.team-zone  { border-color: var(--accent-dim); }
+  .isolation-zone.agent-zone { border-color: var(--honey-dim); }
+  .zone-label {
+    position: absolute;
+    top: -10px;
+    left: 16px;
+    background: var(--hive-950);
+    padding: 0 8px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .local-zone .zone-label { color: var(--green); }
+  .team-zone .zone-label  { color: var(--accent); }
+  .agent-zone .zone-label { color: var(--honey); }
+  .zone-items {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .zone-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-dim);
+    padding: 6px 10px;
+    background: var(--hive-800);
+    border-radius: 6px;
+  }
+  .zone-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* ── Protocol table ─────────────────────────── */
+  .proto-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 12px;
+    font-size: 13px;
+  }
+  .proto-table th {
+    text-align: left;
+    padding: 8px 12px;
+    background: var(--hive-800);
+    color: var(--honey);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border);
+  }
+  .proto-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--hive-800);
+    color: var(--text-dim);
+    vertical-align: top;
+  }
+  .proto-table tr:hover td { background: var(--hive-900); }
+  .proto-type {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 12px;
+    color: var(--accent);
+  }
+
+  /* ── Governance checks ──────────────────────── */
+  .gov-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 8px;
+  }
+  .gov-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--hive-800);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  .gov-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+    font-weight: 700;
+  }
+  .gov-icon.check { background: rgba(52,211,153,0.15); color: var(--green); }
+  .gov-icon.shield { background: rgba(167,139,250,0.15); color: var(--accent); }
+  .gov-icon.audit { background: rgba(229,160,0,0.15); color: var(--honey); }
+  .gov-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .gov-desc {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 2px;
+    line-height: 1.5;
+  }
+
+  /* ── Legend ──────────────────────────────────── */
+  .legend {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-top: 24px;
+    padding: 14px 18px;
+    background: var(--hive-900);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .legend-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+  }
+
+  /* ── Responsive ─────────────────────────────── */
+  @media (max-width: 640px) {
+    .card-grid { grid-template-columns: 1fr; }
+    .flow-diagram { flex-wrap: wrap; justify-content: center; }
+    .flow-arrow { transform: rotate(90deg); padding: 4px 0; }
+    .isolation-diagram { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Floating tooltip element -->
+<div class="tooltip" id="tooltip"></div>
+
+<div class="header">
+  <h1>Waggle OS -- Teams Architecture</h1>
+  <p>Multi-agent coordination, shared memory, and team governance</p>
+  <div class="tier-badge">TEAMS $49/mo per seat | ENTERPRISE consultative</div>
+</div>
+
+<div class="container">
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- SECTION 1: Deployment Options                                  -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div class="section" id="sec-deploy">
+    <div class="section-header active" onclick="toggleSection('sec-deploy')">
+      <span class="section-icon">1</span>
+      <span class="section-title">Deployment Options</span>
+      <span class="section-chevron">&#9660;</span>
+    </div>
+    <div class="section-body open">
+      <div class="card-grid">
+
+        <div class="card"
+             data-tip="Tauri 2.0 desktop binary for Windows and macOS. Fastify sidecar auto-starts alongside the app. SQLite for local storage, no external dependencies needed.">
+          <div class="card-label">Desktop</div>
+          <div class="card-title">Tauri 2.0 Binary</div>
+          <div class="card-desc">Self-contained desktop app with bundled Node.js sidecar. SQLite local storage. Zero infrastructure required.</div>
+          <span class="card-tag tag-green">FREE/PRO</span>
+          <span class="card-tag tag-cyan">SQLite</span>
+        </div>
+
+        <div class="card"
+             data-tip="docker-compose.production.yml provisions 4 services: waggle (Fastify), postgres:16-alpine, redis:7-alpine, minio/minio. All with health checks and WAL volumes.">
+          <div class="card-label">Self-Hosted</div>
+          <div class="card-title">Docker Compose</div>
+          <div class="card-desc">4-service stack: Waggle server + PostgreSQL 16 + Redis 7 + MinIO S3. Health-checked containers with persistent volumes.</div>
+          <span class="card-tag tag-accent">TEAMS</span>
+          <span class="card-tag tag-orange">Docker</span>
+        </div>
+
+        <div class="card"
+             data-tip="render.yaml blueprint: waggle-server (Node web service, starter plan), waggle-postgres (managed PG), waggle-redis (managed Redis). 10GB persistent disk at /data. Auto-deploy on push.">
+          <div class="card-label">Cloud</div>
+          <div class="card-title">Render.com Blueprint</div>
+          <div class="card-desc">One-click cloud deploy: managed PostgreSQL + Redis + 10GB disk. Auto-deploy from Git. Render starter plan.</div>
+          <span class="card-tag tag-accent">TEAMS</span>
+          <span class="card-tag tag-green">Managed</span>
+        </div>
+
+        <div class="card"
+             data-tip="KVARK sovereign on-prem: everything Waggle does on your infrastructure. Full data pipeline injection, your permissions, complete audit trail. Data never leaves your perimeter. kvark.ai">
+          <div class="card-label">Enterprise</div>
+          <div class="card-title">KVARK On-Prem</div>
+          <div class="card-desc">Sovereign deployment via Egzakta Group. Full data pipeline, your permissions, complete audit trail. Data stays in your perimeter.</div>
+          <span class="card-tag tag-honey">ENTERPRISE</span>
+          <span class="card-tag tag-red">Air-gapped</span>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- SECTION 2: Server Architecture                                 -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div class="section" id="sec-server">
+    <div class="section-header" onclick="toggleSection('sec-server')">
+      <span class="section-icon">2</span>
+      <span class="section-title">Server Architecture</span>
+      <span class="section-chevron">&#9660;</span>
+    </div>
+    <div class="section-body">
+      <div class="card-grid">
+
+        <div class="card"
+             data-tip="Fastify sidecar (packages/server/) bundled into Tauri. Serves API routes for chat, team, workspaces, memory, evolution, compliance. Listens on port 3333.">
+          <div class="card-label">Application</div>
+          <div class="card-title">Fastify Sidecar</div>
+          <div class="card-desc">Node.js Fastify server bundled into Tauri binary. Hosts all API routes: chat, team, workspaces, memory, evolution, compliance.</div>
+          <span class="card-tag tag-green">Port 3333</span>
+        </div>
+
+        <div class="card"
+             data-tip="LiteLLM routing layer (litellm-config.yaml). 3-layer resolution: built-in proxy -> LiteLLM -> echo fallback. Model name normalization and key resolution from vault.">
+          <div class="card-label">LLM Routing</div>
+          <div class="card-title">LiteLLM Router</div>
+          <div class="card-desc">3-layer LLM routing: built-in proxy, LiteLLM gateway, echo fallback. Model normalization, vault key resolution, cost tracking.</div>
+          <span class="card-tag tag-accent">Multi-model</span>
+        </div>
+
+        <div class="card"
+             data-tip="Cloud/Teams: PostgreSQL 16 Alpine with WAL mode, managed by docker-compose or Render. Local/Desktop: SQLite via better-sqlite3 + sqlite-vec for vector search.">
+          <div class="card-label">Database</div>
+          <div class="card-title">PostgreSQL / SQLite</div>
+          <div class="card-desc">Cloud deployments use PostgreSQL 16. Desktop uses SQLite (better-sqlite3 + sqlite-vec). Both use WAL mode for concurrency.</div>
+          <span class="card-tag tag-cyan">PG 16</span>
+          <span class="card-tag tag-green">SQLite</span>
+        </div>
+
+        <div class="card"
+             data-tip="Redis 7 Alpine for cloud job queues and session caching. Used in docker-compose.production.yml and render.yaml. Not needed for local desktop mode.">
+          <div class="card-label">Cache / Queue</div>
+          <div class="card-title">Redis 7</div>
+          <div class="card-desc">Job queues and session caching for cloud deployments. Used in Docker and Render configs. Not required for local desktop.</div>
+          <span class="card-tag tag-orange">Cloud only</span>
+        </div>
+
+        <div class="card"
+             data-tip="MinIO S3-compatible object storage for team files. Configured in docker-compose.production.yml with MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, bucket: waggle-files.">
+          <div class="card-label">Object Storage</div>
+          <div class="card-title">MinIO / S3</div>
+          <div class="card-desc">S3-compatible object storage for team files and document sharing. MinIO in Docker stack, or native S3 in cloud. Bucket: waggle-files.</div>
+          <span class="card-tag tag-accent">Team files</span>
+        </div>
+
+        <div class="card"
+             data-tip="Clerk authentication for team mode (CLERK_SECRET_KEY + CLERK_PUBLISHABLE_KEY). Token-based auth for team server connections. Local desktop uses vault-based identity.">
+          <div class="card-label">Authentication</div>
+          <div class="card-title">Clerk / Token Auth</div>
+          <div class="card-desc">Clerk for managed auth in team mode. Token-based authentication for team server connections. Local desktop uses vault identity.</div>
+          <span class="card-tag tag-honey">Clerk</span>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- SECTION 3: Workspace Isolation                                 -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div class="section" id="sec-workspace">
+    <div class="section-header" onclick="toggleSection('sec-workspace')">
+      <span class="section-icon">3</span>
+      <span class="section-title">Workspace Isolation</span>
+      <span class="section-chevron">&#9660;</span>
+    </div>
+    <div class="section-body">
+
+      <div class="isolation-diagram">
+
+        <div class="isolation-zone local-zone">
+          <div class="zone-label">Personal (Always Local)</div>
+          <div class="zone-items">
+            <div class="zone-item">
+              <div class="zone-dot" style="background:var(--green)"></div>
+              <span><strong>personal.mind</strong> -- SQLite + sqlite-vec</span>
+            </div>
+            <div class="zone-item">
+              <div class="zone-dot" style="background:var(--green)"></div>
+              <span>FrameStore -- I/P/B frames + compaction</span>
+            </div>
+            <div class="zone-item">
+              <div class="zone-dot" style="background:var(--green)"></div>
+              <span>IdentityLayer -- personal identity persistence</span>
+            </div>
+            <div class="zone-item">
+              <div class="zone-dot" style="background:var(--green)"></div>
+              <span>HybridSearch -- FTS5 + vec0 fused via RRF</span>
+            </div>
+            <div class="zone-item">
+              <div class="zone-dot" style="background:var(--green)"></div>
+              <span>KnowledgeGraph -- bitemporal entity relations</span>
+            </div>
+            <div class="zone-item">
+              <div class="zone-dot" style="background:var(--green-dim)"></div>
+              <span>Vault -- API keys, secrets (never synced)</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="isolation-zone team-zone">
+          <div class="zone-label">Team (Shared via Sync)</div>
+          <div class="zone-items">
+            <div class="zone-item">
+              <div class="zone-dot" style="background:var(--accent)"></div>
+              <span><strong>TeamSync</strong> -- push-on-write, pull-on-activate</span>
+            </div>
+            <div class="zone-item">
+              <div class="zone-dot" style="background:var(--accent)"></div>
+              <span>SyncedFrame -- gopId + t composite key</span>
+            </div>
+            <div class="zone-item">
+              <div class="zone-dot" style="background:var(--accent)"></div>
+              <span>Frame attribution -- authorId + authorName</span>
+            </div>
+            <div class="zone-item">
+              <div class="zone-dot" style="background:var(--accent)"></div>
+              <span>Team entities API -- entityType=memory_frame</span>
+            </div>
+            <div class="zone-item">
+              <div class="zone-dot" style="background:var(--accent-dim)"></div>
+              <span>Conflict resolution: last-write-wins (append-mostly)</span>
+            </div>
+            <div class="zone-item">
+              <div class="zone-dot" style="background:var(--accent-dim)"></div>
+              <span>S3/MinIO -- shared file storage (waggle-files bucket)</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="isolation-zone agent-zone">
+          <div class="zone-label">Per-Workspace Agents</div>
+          <div class="zone-items">
+            <div class="zone-item">
+              <div class="zone-dot" style="background:var(--honey)"></div>
+              <span>Per-session orchestrators</span>
+            </div>
+            <div class="zone-item">
+              <div class="zone-dot" style="background:var(--honey)"></div>
+              <span>Per-window persona binding</span>
+            </div>
+            <div class="zone-item">
+              <div class="zone-dot" style="background:var(--honey)"></div>
+              <span>Agent loop scoped to workspace mind</span>
+            </div>
+            <div class="zone-item">
+              <div class="zone-dot" style="background:var(--honey)"></div>
+              <span>Tool filtering via filterToolsForContext()</span>
+            </div>
+            <div class="zone-item">
+              <div class="zone-dot" style="background:var(--honey-dim)"></div>
+              <span>Autonomy levels: Normal / Trusted / YOLO</span>
+            </div>
+            <div class="zone-item">
+              <div class="zone-dot" style="background:var(--honey-dim)"></div>
+              <span>Approval inbox with capability grants</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- SECTION 4: WaggleDance                                         -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div class="section" id="sec-dance">
+    <div class="section-header" onclick="toggleSection('sec-dance')">
+      <span class="section-icon">4</span>
+      <span class="section-title">WaggleDance -- Multi-Agent Coordination</span>
+      <span class="section-chevron">&#9660;</span>
+    </div>
+    <div class="section-body">
+
+      <p style="color:var(--text-dim);font-size:14px;margin-bottom:16px;">
+        The WaggleDance protocol enables multi-agent collaboration within team workspaces.
+        Agents communicate through typed messages with validated type-subtype combinations.
+      </p>
+
+      <table class="proto-table">
+        <thead>
+          <tr>
+            <th>Message Type</th>
+            <th>Subtypes</th>
+            <th>Purpose</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="proto-type">request</span></td>
+            <td>knowledge_check, task_delegation, skill_request, model_recommendation</td>
+            <td>Agent asks the hive for information, delegates tasks, or requests capabilities</td>
+          </tr>
+          <tr>
+            <td><span class="proto-type">response</span></td>
+            <td>knowledge_match, task_claim</td>
+            <td>Another agent responds with knowledge or claims a delegated task</td>
+          </tr>
+          <tr>
+            <td><span class="proto-type">broadcast</span></td>
+            <td>discovery, routed_share, skill_share, model_recipe</td>
+            <td>Agent broadcasts discoveries, shares skills, or publishes model evolution recipes</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="card-grid" style="margin-top:20px;">
+
+        <div class="card"
+             data-tip="WaggleDanceDispatcher maps message subtypes to real handlers: searchMemory for knowledge_check, spawnWorker for task_delegation, resolveCapability for skill_request, install_shared_skill for skill_share.">
+          <div class="card-label">Core</div>
+          <div class="card-title">Task Dispatcher</div>
+          <div class="card-desc">Routes typed messages to handlers. task_delegation spawns workers, knowledge_check queries memory, skill_request resolves capabilities.</div>
+          <span class="card-tag tag-honey">dispatcher.ts</span>
+        </div>
+
+        <div class="card"
+             data-tip="HiveQuery broadcasts a topic to team scope. Returns HiveQueryResult with entities, relatedTasks, and relatedMessages. DB queries live in the server's MessageService.">
+          <div class="card-label">Discovery</div>
+          <div class="card-title">HiveQuery Broadcast</div>
+          <div class="card-desc">Broadcasts topic queries across team agents. Collects entities, related tasks, and messages. Scoped by workspace or global.</div>
+          <span class="card-tag tag-accent">hive-query.ts</span>
+        </div>
+
+        <div class="card"
+             data-tip="CapabilityRouter (packages/agent/src/capability-router.ts) resolves per-capability routing. Returns source, name, description, and availability status for each matching capability.">
+          <div class="card-label">Routing</div>
+          <div class="card-title">Capability Router</div>
+          <div class="card-desc">Per-capability routing across the agent fleet. Resolves available tools, skills, and connectors. Reports availability status.</div>
+          <span class="card-tag tag-green">capability-router.ts</span>
+        </div>
+
+        <div class="card"
+             data-tip="Agents share skills via broadcast/skill_share messages. The dispatcher extracts name + content + sharedBy and returns an install_shared_skill action for the caller to persist.">
+          <div class="card-label">Sharing</div>
+          <div class="card-title">Shared Team Memory</div>
+          <div class="card-desc">TeamSync pushes frames to shared pool. Skill sharing via broadcast. Agents read team context on workspace activation.</div>
+          <span class="card-tag tag-cyan">team-sync.ts</span>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- SECTION 5: Team Governance                                     -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div class="section" id="sec-govern">
+    <div class="section-header" onclick="toggleSection('sec-govern')">
+      <span class="section-icon">5</span>
+      <span class="section-title">Team Governance</span>
+      <span class="section-chevron">&#9660;</span>
+    </div>
+    <div class="section-body">
+
+      <div class="gov-list">
+
+        <div class="gov-item"
+             data-tip="Team CRUD (POST/GET/PUT/DELETE /api/teams), member management (POST/PUT/PATCH/DELETE /api/teams/:id/members/:userId). Roles: owner, admin, member, viewer. Owner or admin required for modifications.">
+          <div class="gov-icon shield">R</div>
+          <div>
+            <div class="gov-title">Role-Based Access Control</div>
+            <div class="gov-desc">Four roles: owner, admin, member, viewer. Enforced on all team entity operations. Owner/admin gate on create, update, delete, and member management.</div>
+          </div>
+        </div>
+
+        <div class="gov-item"
+             data-tip="GET /api/teams/:id/activity queries audit_events table across all team workspaces. Captures event_type, tool_name, session_id with timestamps. Up to 200 events per request.">
+          <div class="gov-icon audit">A</div>
+          <div>
+            <div class="gov-title">Audit Trail</div>
+            <div class="gov-desc">Aggregated audit events across all team workspaces. Captures workspace_create, workspace_delete, tool usage, session activity. Queryable by date range.</div>
+          </div>
+        </div>
+
+        <div class="gov-item"
+             data-tip="ComplianceStatusChecker evaluates 5 EU AI Act articles per workspace: Art. 12 (automatic logging), Art. 14 (human oversight), Art. 19 (log retention >= 6mo), Art. 26 (deployer monitoring), Art. 50 (model transparency).">
+          <div class="gov-icon check">C</div>
+          <div>
+            <div class="gov-title">EU AI Act Compliance</div>
+            <div class="gov-desc">Five-article compliance checker: Art. 12 event logging, Art. 14 human oversight, Art. 19 log retention (6 months), Art. 26 deployer monitoring, Art. 50 model transparency.</div>
+          </div>
+        </div>
+
+        <div class="gov-item"
+             data-tip="GET /api/team/governance/permissions (ENTERPRISE tier only). Fetches capability policies from team server with 5-minute cache TTL. Invalidated on capability_policy_update events.">
+          <div class="gov-icon shield">P</div>
+          <div>
+            <div class="gov-title">Capability Governance</div>
+            <div class="gov-desc">Enterprise-tier capability policy enforcement. Proxied from team server with 5-minute cache. Defines which tools, models, and connectors each role can access.</div>
+          </div>
+        </div>
+
+        <div class="gov-item"
+             data-tip="Team skill library enabled for TEAMS and ENTERPRISE tiers (teamSkillLibrary: true in TierCapabilities). Skills are shared via WaggleDance broadcast/skill_share protocol.">
+          <div class="gov-icon check">S</div>
+          <div>
+            <div class="gov-title">Team Skill Library</div>
+            <div class="gov-desc">Shared skill repository scoped to team. Skills shared via WaggleDance protocol. Available in TEAMS and ENTERPRISE tiers. Managed by admin role.</div>
+          </div>
+        </div>
+
+        <div class="gov-item"
+             data-tip="requireTier('TEAMS') middleware gates team endpoints. Tier enforcement via tiers.ts: connectorLimit, workspaceLimit, teamMembersLimit, adminPanel, auditLog level.">
+          <div class="gov-icon audit">T</div>
+          <div>
+            <div class="gov-title">Tier Enforcement</div>
+            <div class="gov-desc">Middleware-enforced tier gating on all team routes. Controls workspace limits, connector limits, team member caps, admin panel access, and audit log depth.</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- SECTION 6: Data Flow                                           -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div class="section" id="sec-flow">
+    <div class="section-header" onclick="toggleSection('sec-flow')">
+      <span class="section-icon">6</span>
+      <span class="section-title">Data Flow -- Team Memory Sync</span>
+      <span class="section-chevron">&#9660;</span>
+    </div>
+    <div class="section-body">
+
+      <p style="color:var(--text-dim);font-size:14px;margin-bottom:16px;">
+        Memory frames flow between local workspaces and the team server. Push-on-write ensures team context
+        is available immediately. Pull-on-activate keeps each member's view current.
+      </p>
+
+      <div class="flow-diagram">
+        <div class="flow-step"
+             data-tip="Agent writes a memory frame (I/P/B type) to the local workspace .mind SQLite database via FrameStore. The frame includes content, importance, gop_id, and temporal index t.">
+          <div class="flow-step-label">Step 1</div>
+          <div class="flow-step-title">Agent A Writes</div>
+          <div class="flow-step-detail">FrameStore.write() to local .mind</div>
+        </div>
+        <div class="flow-arrow">&#10132;</div>
+        <div class="flow-step"
+             data-tip="TeamSync.pushFrame() converts the MemoryFrame to a team entity via frameToEntity(). Adds authorId and authorName attribution. POST to /api/teams/{slug}/entities.">
+          <div class="flow-step-label">Step 2</div>
+          <div class="flow-step-title">TeamSync Push</div>
+          <div class="flow-step-detail">pushFrame() with attribution</div>
+        </div>
+        <div class="flow-arrow">&#10132;</div>
+        <div class="flow-step"
+             data-tip="Team server stores the entity (entityType=memory_frame) in PostgreSQL with remote UUID. MinIO/S3 handles attached files via the waggle-files bucket.">
+          <div class="flow-step-label">Step 3</div>
+          <div class="flow-step-title">S3 + Server</div>
+          <div class="flow-step-detail">PostgreSQL + MinIO storage</div>
+        </div>
+        <div class="flow-arrow">&#10132;</div>
+        <div class="flow-step"
+             data-tip="TeamSync.pullFrames() on Agent B's workspace activation. GET /api/teams/{slug}/entities?type=memory_frame. Optionally filters by 'since' timestamp for incremental sync.">
+          <div class="flow-step-label">Step 4</div>
+          <div class="flow-step-title">Agent B Pulls</div>
+          <div class="flow-step-detail">pullFrames(since) on activate</div>
+        </div>
+        <div class="flow-arrow">&#10132;</div>
+        <div class="flow-step"
+             data-tip="Agent B's orchestrator calls recallMemory() which now includes team-synced frames in the context. The shared context enriches Agent B's system prompt.">
+          <div class="flow-step-label">Step 5</div>
+          <div class="flow-step-title">Shared Context</div>
+          <div class="flow-step-detail">recallMemory() includes team data</div>
+        </div>
+      </div>
+
+      <div class="card-grid" style="margin-top:16px;">
+        <div class="card"
+             data-tip="TeamSyncConfig requires: teamServerUrl, teamSlug, authToken, userId, displayName. Stored in WaggleConfig via setTeamServer(). Token validated against /health endpoint.">
+          <div class="card-label">Config</div>
+          <div class="card-title">TeamSyncConfig</div>
+          <div class="card-desc">serverUrl, teamSlug, authToken, userId, displayName. Persisted in WaggleConfig. Token validated against team server /health.</div>
+          <span class="card-tag tag-green">team-sync.ts</span>
+        </div>
+
+        <div class="card"
+             data-tip="SyncedFrame carries: remoteId (server UUID), gopId, t, frameType (I/P/B), content, importance, authorId, authorName, createdAt. Composite key: gopId + t.">
+          <div class="card-label">Frame Format</div>
+          <div class="card-title">SyncedFrame</div>
+          <div class="card-desc">remoteId, gopId, t, frameType, content, importance, authorId, authorName, createdAt. Identified by gopId + t composite key.</div>
+          <span class="card-tag tag-accent">Composite key</span>
+        </div>
+
+        <div class="card"
+             data-tip="Last-write-wins at frame level. Frames are append-mostly, so conflicts are rare. lastSyncTimestamp tracks incremental sync position. Client-side timestamp filtering on pull.">
+          <div class="card-label">Conflict Strategy</div>
+          <div class="card-title">Last-Write-Wins</div>
+          <div class="card-desc">Append-mostly frame model minimizes conflicts. Last-write-wins at individual frame level. Incremental sync via lastSyncTimestamp.</div>
+          <span class="card-tag tag-honey">Append-mostly</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Legend ──────────────────────────────────────────────────── -->
+  <div class="legend">
+    <div class="legend-item">
+      <div class="legend-swatch" style="background:var(--green)"></div>
+      <span>Local / Desktop</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-swatch" style="background:var(--accent)"></div>
+      <span>Team / Shared</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-swatch" style="background:var(--honey)"></div>
+      <span>Agent / Protocol</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-swatch" style="background:var(--cyan)"></div>
+      <span>Infrastructure</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-swatch" style="background:var(--orange)"></div>
+      <span>Cloud Only</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-swatch" style="background:var(--red)"></div>
+      <span>Enterprise</span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // ── Section toggle ──────────────────────────────────────────────
+  window.toggleSection = function(sectionId) {
+    var section = document.getElementById(sectionId);
+    if (!section) return;
+
+    var header = section.querySelector('.section-header');
+    var body = section.querySelector('.section-body');
+    if (!header || !body) return;
+
+    var isOpen = body.classList.contains('open');
+
+    if (isOpen) {
+      body.classList.remove('open');
+      header.classList.remove('active');
+    } else {
+      body.classList.add('open');
+      header.classList.add('active');
+    }
+  };
+
+  // ── Floating tooltip (textContent, not innerHTML) ───────────────
+  var tooltipEl = document.getElementById('tooltip');
+  var tooltipVisible = false;
+  var tooltipTarget = null;
+
+  function showTooltip(el, x, y) {
+    var tipText = el.getAttribute('data-tip');
+    if (!tipText) return;
+
+    tooltipEl.textContent = tipText;
+    tooltipVisible = true;
+    tooltipTarget = el;
+
+    // Position: offset from cursor, keep within viewport
+    var pad = 12;
+    var vw = window.innerWidth;
+    var vh = window.innerHeight;
+
+    tooltipEl.style.opacity = '0';
+    tooltipEl.classList.add('visible');
+
+    // Measure after making visible
+    var rect = tooltipEl.getBoundingClientRect();
+    var tw = rect.width;
+    var th = rect.height;
+
+    var left = x + pad;
+    var top = y + pad;
+
+    if (left + tw > vw - pad) {
+      left = x - tw - pad;
+    }
+    if (left < pad) {
+      left = pad;
+    }
+    if (top + th > vh - pad) {
+      top = y - th - pad;
+    }
+    if (top < pad) {
+      top = pad;
+    }
+
+    tooltipEl.style.left = left + 'px';
+    tooltipEl.style.top = top + 'px';
+    tooltipEl.style.opacity = '';
+  }
+
+  function hideTooltip() {
+    tooltipVisible = false;
+    tooltipTarget = null;
+    tooltipEl.classList.remove('visible');
+  }
+
+  function findTipAncestor(el) {
+    while (el && el !== document.body) {
+      if (el.hasAttribute && el.hasAttribute('data-tip')) return el;
+      el = el.parentElement;
+    }
+    return null;
+  }
+
+  document.addEventListener('mousemove', function(e) {
+    var tipEl = findTipAncestor(e.target);
+
+    if (tipEl) {
+      if (tipEl !== tooltipTarget) {
+        showTooltip(tipEl, e.clientX, e.clientY);
+      } else {
+        // Update position
+        var pad = 12;
+        var vw = window.innerWidth;
+        var vh = window.innerHeight;
+        var rect = tooltipEl.getBoundingClientRect();
+        var tw = rect.width;
+        var th = rect.height;
+
+        var left = e.clientX + pad;
+        var top = e.clientY + pad;
+
+        if (left + tw > vw - pad) left = e.clientX - tw - pad;
+        if (left < pad) left = pad;
+        if (top + th > vh - pad) top = e.clientY - th - pad;
+        if (top < pad) top = pad;
+
+        tooltipEl.style.left = left + 'px';
+        tooltipEl.style.top = top + 'px';
+      }
+    } else if (tooltipVisible) {
+      hideTooltip();
+    }
+  });
+
+  document.addEventListener('mouseleave', function() {
+    hideTooltip();
+  });
+
+  // Hide tooltip on scroll (it's position:fixed so it would float wrong)
+  window.addEventListener('scroll', function() {
+    if (tooltipVisible) hideTooltip();
+  }, { passive: true });
+
+})();
+</script>
+
+</body>
+</html>

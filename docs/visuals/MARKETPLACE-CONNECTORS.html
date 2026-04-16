@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Waggle OS - Marketplace &amp; Connector Ecosystem</title>
+<style>
+  :root {
+    --honey: #e5a000;
+    --honey-dim: #b37d00;
+    --honey-glow: #ffc233;
+    --hive-950: #08090c;
+    --hive-900: #0f1117;
+    --hive-850: #151720;
+    --hive-800: #1a1d28;
+    --hive-700: #252836;
+    --hive-600: #363a4d;
+    --hive-500: #555a72;
+    --hive-400: #7f849e;
+    --hive-300: #a8adca;
+    --accent: #a78bfa;
+    --accent-dim: #7c5fc4;
+    --green: #34d399;
+    --green-dim: #059669;
+    --red: #f87171;
+    --blue: #60a5fa;
+    --orange: #fb923c;
+    --cyan: #22d3ee;
+    --pink: #f472b6;
+    --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    --mono: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    --radius: 10px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--hive-950);
+    color: var(--hive-300);
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.55;
+    overflow-x: hidden;
+  }
+  #tooltip {
+    position: fixed;
+    z-index: 9999;
+    pointer-events: none;
+    background: var(--hive-800);
+    border: 1px solid var(--hive-600);
+    border-radius: 8px;
+    padding: 10px 14px;
+    max-width: 340px;
+    font-size: 13px;
+    color: var(--hive-300);
+    box-shadow: 0 8px 32px rgba(0,0,0,.55);
+    opacity: 0;
+    transition: opacity .15s;
+  }
+  #tooltip.visible { opacity: 1; }
+  .page { max-width: 1200px; margin: 0 auto; padding: 32px 24px 64px; }
+  header { text-align: center; margin-bottom: 40px; }
+  header h1 { font-size: 28px; font-weight: 700; color: #fff; letter-spacing: -.3px; }
+  header h1 span { color: var(--honey); }
+  header .subtitle { color: var(--hive-400); margin-top: 6px; font-size: 15px; }
+  .tabs {
+    display: flex; gap: 4px; background: var(--hive-900);
+    border-radius: var(--radius); padding: 4px; margin-bottom: 32px; overflow-x: auto;
+  }
+  .tab {
+    flex: 1; min-width: 120px; padding: 10px 12px; text-align: center;
+    border-radius: 7px; cursor: pointer; font-size: 13px; font-weight: 500;
+    color: var(--hive-400); border: none; background: transparent;
+    transition: all .2s; white-space: nowrap; font-family: var(--font);
+  }
+  .tab:hover { color: var(--hive-300); background: var(--hive-800); }
+  .tab.active { background: var(--hive-800); color: var(--honey); box-shadow: 0 0 0 1px var(--hive-600); }
+  .panel { display: none; }
+  .panel.active { display: block; animation: fadeUp .3s ease; }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .section-title { font-size: 18px; font-weight: 600; color: #fff; margin-bottom: 6px; }
+  .section-desc { color: var(--hive-400); margin-bottom: 20px; font-size: 13px; }
+  .card {
+    background: var(--hive-900); border: 1px solid var(--hive-700);
+    border-radius: var(--radius); padding: 20px; margin-bottom: 16px; transition: border-color .2s;
+  }
+  .card:hover { border-color: var(--hive-600); }
+  .card h3 { color: #fff; font-size: 15px; margin-bottom: 8px; }
+  .card h3 .badge {
+    display: inline-block; font-size: 11px; padding: 2px 8px;
+    border-radius: 50px; font-weight: 500; margin-left: 6px; vertical-align: middle;
+  }
+  .flow { display: flex; align-items: center; gap: 0; flex-wrap: wrap; margin: 16px 0; justify-content: center; }
+  .flow-step { display: flex; align-items: center; gap: 0; }
+  .flow-node {
+    background: var(--hive-800); border: 1px solid var(--hive-600); border-radius: 8px;
+    padding: 10px 16px; font-size: 13px; color: #fff; text-align: center;
+    min-width: 100px; cursor: default; transition: all .2s; position: relative;
+  }
+  .flow-node:hover { border-color: var(--honey); box-shadow: 0 0 12px rgba(229,160,0,.15); }
+  .flow-node .fn-icon { font-size: 20px; display: block; margin-bottom: 4px; }
+  .flow-node .fn-label { font-size: 12px; color: var(--hive-400); }
+  .flow-arrow { color: var(--hive-500); font-size: 18px; padding: 0 6px; flex-shrink: 0; }
+  .col3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .col2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; }
+  .bg-skill { background: rgba(167,139,250,.15); color: var(--accent); }
+  .bg-plugin { background: rgba(52,211,153,.15); color: var(--green); }
+  .bg-mcp { background: rgba(96,165,250,.15); color: var(--blue); }
+  .bg-connector { background: rgba(251,146,60,.15); color: var(--orange); }
+  .bg-security { background: rgba(248,113,113,.15); color: var(--red); }
+  .bg-honey { background: rgba(229,160,0,.15); color: var(--honey); }
+  .code-block {
+    background: var(--hive-950); border: 1px solid var(--hive-700); border-radius: 6px;
+    padding: 12px 16px; font-family: var(--mono); font-size: 12px;
+    color: var(--hive-300); overflow-x: auto; margin: 10px 0; white-space: pre;
+  }
+  .code-block .kw { color: var(--accent); }
+  .code-block .str { color: var(--green); }
+  .code-block .cmt { color: var(--hive-500); font-style: italic; }
+  .code-block .fn { color: var(--honey); }
+  .code-block .type { color: var(--blue); }
+  .connector-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin: 12px 0; }
+  .connector-chip {
+    background: var(--hive-800); border: 1px solid var(--hive-700); border-radius: 8px;
+    padding: 8px 12px; font-size: 12px; color: #fff; display: flex;
+    align-items: center; gap: 6px; cursor: default; transition: all .2s;
+  }
+  .connector-chip:hover { border-color: var(--honey-dim); background: var(--hive-700); }
+  .connector-chip .cc-icon { font-size: 16px; flex-shrink: 0; }
+  .connector-chip .cc-cat { font-size: 10px; color: var(--hive-500); display: block; }
+  .mcp-cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 12px 0; }
+  .mcp-cat {
+    background: var(--hive-800); border: 1px solid var(--hive-700); border-radius: 8px;
+    padding: 10px; text-align: center; cursor: default; transition: all .2s;
+  }
+  .mcp-cat:hover { border-color: var(--blue); }
+  .mcp-cat .mc-emoji { font-size: 22px; display: block; margin-bottom: 4px; }
+  .mcp-cat .mc-name { color: #fff; font-size: 12px; font-weight: 500; }
+  .mcp-cat .mc-count { color: var(--hive-500); font-size: 11px; }
+  .promotion-chain { display: flex; align-items: center; gap: 0; justify-content: center; margin: 20px 0; flex-wrap: wrap; }
+  .promo-node { padding: 10px 20px; border-radius: 8px; border: 2px solid; text-align: center; font-size: 13px; font-weight: 600; min-width: 110px; }
+  .promo-arrow { color: var(--hive-500); font-size: 20px; padding: 0 4px; }
+  .promo-personal { border-color: var(--accent); color: var(--accent); background: rgba(167,139,250,.08); }
+  .promo-workspace { border-color: var(--honey); color: var(--honey); background: rgba(229,160,0,.08); }
+  .promo-team { border-color: var(--green); color: var(--green); background: rgba(52,211,153,.08); }
+  .promo-enterprise { border-color: var(--blue); color: var(--blue); background: rgba(96,165,250,.08); }
+  .stats-bar { display: flex; gap: 16px; margin: 16px 0; flex-wrap: wrap; }
+  .stat {
+    background: var(--hive-800); border: 1px solid var(--hive-700); border-radius: 8px;
+    padding: 14px 20px; text-align: center; flex: 1; min-width: 120px;
+  }
+  .stat .s-num { font-size: 28px; font-weight: 700; color: var(--honey); }
+  .stat .s-label { font-size: 12px; color: var(--hive-400); margin-top: 2px; }
+  .install-stages { display: flex; gap: 0; align-items: stretch; justify-content: center; margin: 20px 0; flex-wrap: wrap; }
+  .install-stage {
+    background: var(--hive-800); border: 1px solid var(--hive-700); border-radius: 8px;
+    padding: 14px 18px; text-align: center; min-width: 130px; transition: all .4s; position: relative;
+  }
+  .install-stage.highlight { border-color: var(--honey); box-shadow: 0 0 20px rgba(229,160,0,.2); }
+  .install-stage .is-num {
+    position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+    background: var(--hive-700); color: var(--honey); font-size: 11px; font-weight: 700;
+    width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  }
+  .install-stage .is-icon { font-size: 22px; margin-bottom: 6px; }
+  .install-stage .is-title { color: #fff; font-size: 13px; font-weight: 600; }
+  .install-stage .is-desc { color: var(--hive-400); font-size: 11px; margin-top: 4px; }
+  .install-arrow { display: flex; align-items: center; color: var(--hive-500); font-size: 20px; padding: 0 4px; }
+  .extraction-vis {
+    background: var(--hive-900); border: 1px solid var(--hive-700);
+    border-radius: var(--radius); padding: 24px; margin: 16px 0;
+  }
+  .ext-phase { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--hive-800); }
+  .ext-phase:last-child { border-bottom: none; }
+  .ext-num {
+    width: 32px; height: 32px; border-radius: 50%; display: flex;
+    align-items: center; justify-content: center; font-weight: 700; font-size: 14px; flex-shrink: 0;
+  }
+  .ext-content { flex: 1; }
+  .ext-content .ext-label { color: #fff; font-weight: 600; font-size: 14px; }
+  .ext-content .ext-detail { color: var(--hive-400); font-size: 12px; margin-top: 2px; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 12px 0; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--hive-400); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .lc-item { display: flex; align-items: center; gap: 10px; }
+  .lc-icon {
+    width: 36px; height: 36px; border-radius: 8px; display: flex;
+    align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;
+  }
+  .sig-item { display: flex; align-items: center; gap: 8px; }
+  .cap-block { margin-bottom: 12px; }
+  .cap-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  @media (max-width: 700px) {
+    .col3, .col2 { grid-template-columns: 1fr; }
+    .tabs { flex-wrap: wrap; }
+    .tab { min-width: 80px; font-size: 12px; padding: 8px; }
+    .flow, .promotion-chain, .install-stages { flex-direction: column; align-items: center; }
+    .flow-arrow, .promo-arrow, .install-arrow { transform: rotate(90deg); }
+  }
+</style>
+</head>
+<body>
+
+<div id="tooltip"></div>
+
+<div class="page">
+  <header>
+    <h1><span>Waggle</span> Marketplace &amp; Connector Ecosystem</h1>
+    <p class="subtitle">Skills, Plugins, MCP Servers, 30 Native Connectors, Composio 250+ Integrations</p>
+  </header>
+
+  <div class="stats-bar">
+    <div class="stat"><div class="s-num">3</div><div class="s-label">Extension Types</div></div>
+    <div class="stat"><div class="s-num">148</div><div class="s-label">MCP Servers</div></div>
+    <div class="stat"><div class="s-num">30</div><div class="s-label">Native Connectors</div></div>
+    <div class="stat"><div class="s-num">250+</div><div class="s-label">Composio Integrations</div></div>
+    <div class="stat"><div class="s-num">14</div><div class="s-label">MCP Categories</div></div>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button class="tab active" data-tab="types" role="tab">Extension Types</button>
+    <button class="tab" data-tab="marketplace" role="tab">Marketplace</button>
+    <button class="tab" data-tab="connectors" role="tab">Connectors</button>
+    <button class="tab" data-tab="custom" role="tab">Custom Skills</button>
+    <button class="tab" data-tab="extraction" role="tab">Auto-Extraction</button>
+    <button class="tab" data-tab="mcp" role="tab">MCP Integration</button>
+  </div>
+
+  <!-- ═══════ TAB 1: Extension Types ═══════ -->
+  <div class="panel active" id="panel-types">
+    <h2 class="section-title">Three Extension Types</h2>
+    <p class="section-desc">Waggle supports three distinct extension mechanisms, each with its own loading, validation, and runtime model.</p>
+    <div class="col3">
+      <div class="card">
+        <h3><span class="badge bg-skill">SKILL</span> Markdown Instructions</h3>
+        <p style="margin-bottom:12px">SKILL.md files contain agent instructions with YAML frontmatter for metadata, permissions, and scope. Loaded at chat-turn time, injected into the system prompt.</p>
+        <div class="code-block"><span class="cmt">--- frontmatter ---</span>
+<span class="kw">name:</span> <span class="str">Deploy Helper</span>
+<span class="kw">scope:</span> <span class="str">personal</span>
+<span class="kw">permissions:</span>
+  <span class="kw">codeExecution:</span> <span class="str">true</span>
+  <span class="kw">network:</span> <span class="str">true</span>
+<span class="cmt">--- end ---</span>
+
+<span class="cmt"># Body is injected into system prompt</span></div>
+        <div class="flow" style="margin-top:12px">
+          <div class="flow-step"><div class="flow-node" data-tip="SKILL.md file on disk in ~/.waggle/skills/" data-meta="Format: Markdown + YAML frontmatter"><span class="fn-icon">&#128196;</span>SKILL.md</div></div>
+          <span class="flow-arrow">&#8594;</span>
+          <div class="flow-step"><div class="flow-node" data-tip="parseSkillFrontmatter() extracts name, description, scope, permissions, promoted_from" data-meta="Source: skill-frontmatter.ts"><span class="fn-icon">&#9881;</span>Parse FM</div></div>
+          <span class="flow-arrow">&#8594;</span>
+          <div class="flow-step"><div class="flow-node" data-tip="Scope + permission check ensures skill is available for the current workspace" data-meta="Scopes: personal | workspace | team | enterprise"><span class="fn-icon">&#10003;</span>Validate</div></div>
+          <span class="flow-arrow">&#8594;</span>
+          <div class="flow-step"><div class="flow-node" data-tip="Skill body injected into agent system prompt for the current chat turn" data-meta="Available to the agent as contextual instructions"><span class="fn-icon">&#129302;</span>Agent</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3><span class="badge bg-plugin">PLUGIN</span> JS/TS Code Modules</h3>
+        <p style="margin-bottom:12px">Plugins are code packages with a plugin.json manifest. They contribute tools, skills, and lifecycle hooks. Managed by PluginRuntime with a state machine (installed &gt; enabled &gt; active).</p>
+        <div class="code-block"><span class="cmt">// plugin.json manifest</span>
+{ <span class="kw">"name"</span>: <span class="str">"my-plugin"</span>,
+  <span class="kw">"tools"</span>: [{ <span class="kw">"name"</span>: <span class="str">"deploy"</span> }],
+  <span class="kw">"skills"</span>: [<span class="str">"deploy.md"</span>] }
+
+<span class="cmt">// Lifecycle: installed &gt; enabled &gt; active</span></div>
+        <div class="flow" style="margin-top:12px">
+          <div class="flow-step"><div class="flow-node" data-tip="Plugin directory at ~/.waggle/plugins/{name}/ with plugin.json manifest" data-meta="Contains code, skills, and manifest"><span class="fn-icon">&#128230;</span>Package</div></div>
+          <span class="flow-arrow">&#8594;</span>
+          <div class="flow-step"><div class="flow-node" data-tip="PluginRuntime reads manifest, validates tool definitions, checks permissions" data-meta="Source: plugin-runtime.ts"><span class="fn-icon">&#128270;</span>Manifest</div></div>
+          <span class="flow-arrow">&#8594;</span>
+          <div class="flow-step"><div class="flow-node" data-tip="State machine: installed then enabled then active. Tools registered on activation." data-meta="States: installed | enabled | active | disabled | error"><span class="fn-icon">&#9889;</span>Activate</div></div>
+          <span class="flow-arrow">&#8594;</span>
+          <div class="flow-step"><div class="flow-node" data-tip="Plugin tools appear in agent tool pool alongside native tools" data-meta="PluginToolDef: name + description + parameters"><span class="fn-icon">&#128295;</span>Tool Pool</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3><span class="badge bg-mcp">MCP</span> External Processes</h3>
+        <p style="margin-bottom:12px">MCP servers run as separate processes, connected via stdio or SSE. They expose tools, resources, and prompt templates through the Model Context Protocol standard.</p>
+        <div class="code-block"><span class="cmt">// .mcp.json configuration</span>
+{ <span class="kw">"servers"</span>: {
+    <span class="str">"filesystem"</span>: {
+      <span class="kw">"command"</span>: <span class="str">"npx"</span>,
+      <span class="kw">"args"</span>: [<span class="str">"@mcp/filesystem"</span>]
+    }
+  }
+}</div>
+        <div class="flow" style="margin-top:12px">
+          <div class="flow-step"><div class="flow-node" data-tip="MCP server entry in .mcp.json with command + args for stdio, or URL for SSE" data-meta="Transport: stdio | sse"><span class="fn-icon">&#127760;</span>Config</div></div>
+          <span class="flow-arrow">&#8594;</span>
+          <div class="flow-step"><div class="flow-node" data-tip="Process spawned and handshake performed. Capabilities negotiated (tools, resources, prompts)" data-meta="Protocol: JSON-RPC over stdio/SSE"><span class="fn-icon">&#128260;</span>Spawn</div></div>
+          <span class="flow-arrow">&#8594;</span>
+          <div class="flow-step"><div class="flow-node" data-tip="Server exposes tools/list, resources/list, prompts/list to the client" data-meta="Standard MCP discovery endpoints"><span class="fn-icon">&#128269;</span>Discover</div></div>
+          <span class="flow-arrow">&#8594;</span>
+          <div class="flow-step"><div class="flow-node" data-tip="MCP tools merged into agent tool pool with mcp__{server}__{tool} naming" data-meta="Unified with native + plugin tools"><span class="fn-icon">&#129302;</span>Merged</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="legend" style="margin-top:20px; justify-content: center;">
+      <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div> Skill (Markdown)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div> Plugin (Code)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--blue)"></div> MCP Server (Process)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--orange)"></div> Connector (API)</div>
+    </div>
+  </div>
+
+  <!-- ═══════ TAB 2: Marketplace Catalog ═══════ -->
+  <div class="panel" id="panel-marketplace">
+    <h2 class="section-title">Marketplace Catalog</h2>
+    <p class="section-desc">SQLite-backed package catalog with 148 MCP entries, SecurityGate multi-layer validation, auto-seed from bundled registry data, and full search/filter capabilities.</p>
+    <div class="col2">
+      <div class="card">
+        <h3>Catalog Architecture</h3>
+        <div class="code-block"><span class="type">MarketplaceDB</span> (SQLite)
+  <span class="kw">tables:</span> sources, packages, packs, installed
+  <span class="fn">auto-seed</span>: mcp-registry.ts inserts 148 entries
+  <span class="fn">dedup</span>: assertCatalogUnique at load time
+
+<span class="type">Package Types:</span>
+  <span class="str">skill</span> | <span class="str">plugin</span> | <span class="str">mcp_server</span> | <span class="str">template</span> | <span class="str">pack</span>
+
+<span class="type">Source Types:</span>
+  <span class="str">marketplace</span> | <span class="str">registry</span> | <span class="str">github_org</span>
+  <span class="str">npm_registry</span> | <span class="str">community_repo</span> | ...</div>
+      </div>
+      <div class="card">
+        <h3><span class="badge bg-security">SECURITY</span> SecurityGate Validation</h3>
+        <div class="code-block"><span class="type">4-Layer Security Pipeline</span>
+
+<span class="kw">Layer 1:</span> <span class="fn">Gen Trust Hub API</span>
+  Cloud URL pre-check (fast, free)
+
+<span class="kw">Layer 2:</span> <span class="fn">Cisco Skill Scanner</span>
+  Local deep analysis (pattern + behavioral + LLM)
+
+<span class="kw">Layer 3:</span> <span class="fn">MCP Guardian</span>
+  Inline tool description pattern matching
+
+<span class="kw">Layer 4:</span> <span class="fn">Built-in Heuristics</span>
+  Waggle-specific threat pattern rules</div>
+        <div style="margin-top: 10px">
+          <div class="legend">
+            <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div> CRITICAL: Block</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--orange)"></div> HIGH: Block (override)</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--honey)"></div> MEDIUM: Warn</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div> LOW/CLEAN: Allow</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <h3 style="color: #fff; margin: 24px 0 12px;">Installation Flow</h3>
+    <div class="install-stages">
+      <div class="install-stage" id="is-1" data-tip="User searches the marketplace by name, category, or package type. SQLite FTS enables fast filtering." data-meta="MarketplaceDB.search() with category + type filters">
+        <div class="is-num">1</div><div class="is-icon">&#128269;</div><div class="is-title">Browse</div><div class="is-desc">Search catalog by name, category, type</div>
+      </div>
+      <div class="install-arrow">&#8594;</div>
+      <div class="install-stage" id="is-2" data-tip="SecurityGate runs all 4 layers. Findings with CRITICAL or HIGH severity block installation. SHA-256 hash computed for integrity." data-meta="11 threat categories: prompt_injection, data_exfiltration, malicious_code, etc.">
+        <div class="is-num">2</div><div class="is-icon">&#128737;</div><div class="is-title">Security Scan</div><div class="is-desc">4-layer validation pipeline</div>
+      </div>
+      <div class="install-arrow">&#8594;</div>
+      <div class="install-stage" id="is-3" data-tip="MarketplaceInstaller routes to type-specific handler: skill copies MD, plugin clones dir + manifest, MCP writes .mcp.json config" data-meta="Paths: ~/.waggle/skills/ | ~/.waggle/plugins/ | .mcp.json">
+        <div class="is-num">3</div><div class="is-icon">&#128229;</div><div class="is-title">Install</div><div class="is-desc">Type-specific handler writes files</div>
+      </div>
+      <div class="install-arrow">&#8594;</div>
+      <div class="install-stage" id="is-4" data-tip="Server notified via PUT /api/skills or POST /api/plugins/install. Tools and skills become available to the agent in the next chat turn." data-meta="Hot-reload: no restart required">
+        <div class="is-num">4</div><div class="is-icon">&#9989;</div><div class="is-title">Available</div><div class="is-desc">Tools appear in agent pool</div>
+      </div>
+    </div>
+    <div class="card" style="margin-top: 20px">
+      <h3>Threat Categories Detected</h3>
+      <div class="connector-grid">
+        <div class="connector-chip" data-tip="Attempts to override system prompt or inject malicious instructions" data-meta="SecurityCategory"><span class="cc-icon">&#128165;</span><span>Prompt Injection</span></div>
+        <div class="connector-chip" data-tip="Attempts to send data to external endpoints without user consent" data-meta="SecurityCategory"><span class="cc-icon">&#128228;</span><span>Data Exfiltration</span></div>
+        <div class="connector-chip" data-tip="Dynamic code execution or obfuscated executable code patterns" data-meta="SecurityCategory"><span class="cc-icon">&#128520;</span><span>Malicious Code</span></div>
+        <div class="connector-chip" data-tip="Attempts to escalate file system or network permissions beyond declared scope" data-meta="SecurityCategory"><span class="cc-icon">&#128274;</span><span>Privilege Escalation</span></div>
+        <div class="connector-chip" data-tip="MCP tool descriptions that manipulate agent behavior via hidden instructions" data-meta="SecurityCategory"><span class="cc-icon">&#129440;</span><span>Tool Poisoning</span></div>
+        <div class="connector-chip" data-tip="Cross-origin resource access or scope escape attempts" data-meta="SecurityCategory"><span class="cc-icon">&#127760;</span><span>Cross-Origin</span></div>
+        <div class="connector-chip" data-tip="Package that changes behavior after install to introduce malicious functionality" data-meta="SecurityCategory"><span class="cc-icon">&#128163;</span><span>Rug Pull</span></div>
+        <div class="connector-chip" data-tip="Code obfuscation techniques designed to hide malicious intent" data-meta="SecurityCategory"><span class="cc-icon">&#128065;</span><span>Obfuscation</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ TAB 3: Connector Architecture ═══════ -->
+  <div class="panel" id="panel-connectors">
+    <h2 class="section-title">Connector Architecture</h2>
+    <p class="section-desc">30 native connectors with Vault-based credential management, plus Composio meta-connector bridging 250+ external services.</p>
+    <div class="flow" style="margin-bottom: 24px">
+      <div class="flow-step"><div class="flow-node" data-tip="ConnectorRegistry holds all 30 native connector instances, indexed by id" data-meta="Source: connectors/index.ts"><span class="fn-icon">&#128218;</span>Registry<span class="fn-label">30 connectors</span></div></div>
+      <span class="flow-arrow">&#8594;</span>
+      <div class="flow-step"><div class="flow-node" data-tip="VaultStore lookup by connector.id to retrieve API key, OAuth token, or bearer token" data-meta="Source: packages/core/src/mind/vault.ts"><span class="fn-icon">&#128272;</span>Vault Lookup<span class="fn-label">Credential fetch</span></div></div>
+      <span class="flow-arrow">&#8594;</span>
+      <div class="flow-step"><div class="flow-node" data-tip="Authenticated HTTP request to external API. Auth types: bearer, oauth2, api_key, basic" data-meta="BaseConnector.executeAction()"><span class="fn-icon">&#128640;</span>API Call<span class="fn-label">Authenticated</span></div></div>
+      <span class="flow-arrow">&#8594;</span>
+      <div class="flow-step"><div class="flow-node" data-tip="ConnectorResult { success, data?, error? } returned to the agent as tool output" data-meta="Standardized response format"><span class="fn-icon">&#129302;</span>Agent Result<span class="fn-label">Tool output</span></div></div>
+    </div>
+    <div class="col2">
+      <div class="card">
+        <h3>Native Connectors <span class="badge bg-connector">30</span></h3>
+        <div class="connector-grid" id="native-connectors"></div>
+      </div>
+      <div class="card">
+        <h3>Composio Meta-Connector <span class="badge bg-honey">250+</span></h3>
+        <p style="margin-bottom: 10px">Single API key bridges to 250+ external services. Actions discovered dynamically and executed through approval gates.</p>
+        <div class="code-block"><span class="type">ComposioConnector</span> <span class="kw">extends</span> <span class="type">BaseConnector</span>
+  <span class="kw">authType:</span> <span class="str">'api_key'</span> (X-API-KEY header)
+  <span class="kw">api:</span> <span class="str">backend.composio.dev/api/v1</span>
+
+  <span class="fn">Actions:</span>
+    <span class="str">list_integrations</span>  <span class="cmt">// connected services</span>
+    <span class="str">list_actions</span>       <span class="cmt">// available operations</span>
+    <span class="str">execute_action</span>     <span class="cmt">// run (risk: HIGH)</span>
+    <span class="str">get_action_schema</span>  <span class="cmt">// input/output defs</span></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top: 16px">
+      <h3>Connector SDK Interface</h3>
+      <div class="code-block"><span class="kw">interface</span> <span class="type">WaggleConnector</span> {
+  <span class="kw">readonly</span> id: <span class="type">string</span>            <span class="cmt">// 'github', 'slack', ...</span>
+  <span class="kw">readonly</span> name: <span class="type">string</span>          <span class="cmt">// Display name</span>
+  <span class="kw">readonly</span> authType: <span class="str">'bearer'</span> | <span class="str">'oauth2'</span> | <span class="str">'api_key'</span> | <span class="str">'basic'</span>
+  <span class="kw">readonly</span> substrate: <span class="str">'waggle'</span> | <span class="str">'kvark'</span>
+  <span class="kw">readonly</span> actions: <span class="type">ConnectorAction</span>[]
+  <span class="fn">connect</span>(vault: <span class="type">VaultStore</span>): <span class="type">Promise</span>&lt;<span class="type">void</span>&gt;
+  <span class="fn">executeAction</span>(name: <span class="type">string</span>, input: <span class="type">unknown</span>): <span class="type">Promise</span>&lt;<span class="type">ConnectorResult</span>&gt;
+  <span class="fn">healthCheck</span>(): <span class="type">Promise</span>&lt;<span class="type">ConnectorHealth</span>&gt;
+}</div>
+    </div>
+  </div>
+
+  <!-- ═══════ TAB 4: Custom Skill Sources ═══════ -->
+  <div class="panel" id="panel-custom">
+    <h2 class="section-title">Custom Skill Lifecycle</h2>
+    <p class="section-desc">User-created SKILL.md files with hot-reload, usage tracking, auto-retirement after 90 days idle, and promotion from personal to enterprise scope.</p>
+    <div class="col2">
+      <div class="card">
+        <h3>Skill File Structure</h3>
+        <div class="code-block"><span class="cmt">~/.waggle/skills/my-skill.md</span>
+
+<span class="kw">---</span>
+<span class="kw">name:</span> <span class="str">Deploy Helper</span>
+<span class="kw">description:</span> <span class="str">Helps deploy apps</span>
+<span class="kw">scope:</span> <span class="str">personal</span>
+<span class="kw">permissions:</span>
+  <span class="kw">fileSystem:</span> <span class="str">true</span>
+  <span class="kw">network:</span> <span class="str">true</span>
+  <span class="kw">codeExecution:</span> <span class="str">true</span>
+  <span class="kw">externalServices:</span> <span class="str">false</span>
+  <span class="kw">secrets:</span> <span class="str">false</span>
+  <span class="kw">browserAutomation:</span> <span class="str">false</span>
+<span class="kw">---</span>
+
+<span class="cmt"># Deploy Helper</span>
+<span class="cmt">You are a deployment specialist...</span></div>
+      </div>
+      <div class="card">
+        <h3>Lifecycle Stages</h3>
+        <div style="display:flex; flex-direction: column; gap: 10px; margin-top: 8px;">
+          <div class="lc-item"><div class="lc-icon" style="background:rgba(167,139,250,.15)">&#9998;</div><div><strong style="color:#fff">Create</strong><br><span style="font-size:12px">User writes SKILL.md in ~/.waggle/skills/</span></div></div>
+          <div class="lc-item"><div class="lc-icon" style="background:rgba(52,211,153,.15)">&#128065;</div><div><strong style="color:#fff">Hot-Reload</strong><br><span style="font-size:12px">fs.watch detects changes, re-parses frontmatter instantly</span></div></div>
+          <div class="lc-item"><div class="lc-icon" style="background:rgba(229,160,0,.15)">&#128200;</div><div><strong style="color:#fff">Usage Tracking</strong><br><span style="font-size:12px">Each invocation logged with timestamp for activity analysis</span></div></div>
+          <div class="lc-item"><div class="lc-icon" style="background:rgba(248,113,113,.15)">&#128337;</div><div><strong style="color:#fff">Auto-Retirement</strong><br><span style="font-size:12px">Skills idle 90+ days flagged for cleanup to prevent bloat</span></div></div>
+        </div>
+      </div>
+    </div>
+    <h3 style="color: #fff; margin: 24px 0 12px;">Promotion Chain</h3>
+    <p class="section-desc">Skills are promoted one step at a time. Each promotion is recorded in <code style="color:var(--honey)">promoted_from[]</code> for audit trail. Demotion is not supported.</p>
+    <div class="promotion-chain">
+      <div class="promo-node promo-personal" data-tip="Initial scope. Only the creating user can see and use this skill." data-meta="Default scope for new skills">&#128100; Personal</div>
+      <span class="promo-arrow">&#8594;</span>
+      <div class="promo-node promo-workspace" data-tip="Available to all agents in the current workspace. Promoted by workspace admin." data-meta="promoted_from: ['personal']">&#128187; Workspace</div>
+      <span class="promo-arrow">&#8594;</span>
+      <div class="promo-node promo-team" data-tip="Shared across all workspaces for the team. Requires team admin approval." data-meta="promoted_from: ['personal', 'workspace']">&#128101; Team</div>
+      <span class="promo-arrow">&#8594;</span>
+      <div class="promo-node promo-enterprise" data-tip="Organization-wide standard. Available in KVARK deployments." data-meta="promoted_from: ['personal', 'workspace', 'team']">&#127970; Enterprise</div>
+    </div>
+    <div class="card" style="margin-top: 20px">
+      <h3>SkillFrontmatter Interface</h3>
+      <div class="code-block"><span class="kw">type</span> <span class="type">SkillScope</span> = <span class="str">'personal'</span> | <span class="str">'workspace'</span> | <span class="str">'team'</span> | <span class="str">'enterprise'</span>
+
+<span class="kw">interface</span> <span class="type">SkillFrontmatter</span> {
+  name?: <span class="type">string</span>
+  description?: <span class="type">string</span>
+  scope?: <span class="type">SkillScope</span>           <span class="cmt">// defaults to 'personal'</span>
+  promoted_from?: <span class="type">SkillScope</span>[] <span class="cmt">// append-only audit trail</span>
+  permissions?: {
+    fileSystem, network, codeExecution,
+    externalServices, secrets, browserAutomation
+  }
+}</div>
+    </div>
+  </div>
+
+  <!-- ═══════ TAB 5: Skill Auto-Extraction ═══════ -->
+  <div class="panel" id="panel-extraction">
+    <h2 class="section-title">Skill Auto-Extraction Pipeline</h2>
+    <p class="section-desc">Agent detects repeated patterns across conversations, extracts them into reusable SKILL.md files, and optionally enriches with LLM synthesis.</p>
+    <div class="extraction-vis">
+      <div class="ext-phase">
+        <div class="ext-num" style="background:rgba(167,139,250,.2); color:var(--accent)">1</div>
+        <div class="ext-content"><div class="ext-label">Pattern Detection</div><div class="ext-detail">Agent analyzes conversation history for repeated instruction patterns, common tool chains, and recurring workflows. Threshold: 3+ occurrences across sessions triggers extraction candidacy.</div></div>
+      </div>
+      <div class="ext-phase">
+        <div class="ext-num" style="background:rgba(229,160,0,.2); color:var(--honey)">2</div>
+        <div class="ext-content"><div class="ext-label">Skill Extraction</div><div class="ext-detail"><code style="color:var(--honey)">generateSkillMarkdown()</code> creates a structured SKILL.md with frontmatter (name, description, permissions) and body (instructions, examples, constraints).</div></div>
+      </div>
+      <div class="ext-phase">
+        <div class="ext-num" style="background:rgba(52,211,153,.2); color:var(--green)">3</div>
+        <div class="ext-content"><div class="ext-label">File Creation</div><div class="ext-detail">Writes to <code style="color:var(--honey)">~/.waggle/skills/{name}.md</code> with <code>scope: personal</code>. fs.watch triggers hot-reload so the skill is immediately available without restart.</div></div>
+      </div>
+      <div class="ext-phase">
+        <div class="ext-num" style="background:rgba(96,165,250,.2); color:var(--blue)">4</div>
+        <div class="ext-content"><div class="ext-label">LLM Enrichment (Optional)</div><div class="ext-detail">If enabled, the extracted skill is refined by an LLM pass: clearer instructions, better examples, edge case handling, and permission tightening. Costs one Haiku call (~$0.001).</div></div>
+      </div>
+      <div class="ext-phase">
+        <div class="ext-num" style="background:rgba(244,114,182,.2); color:var(--pink)">5</div>
+        <div class="ext-content"><div class="ext-label">Promotion Pipeline</div><div class="ext-detail">High-usage personal skills are candidates for promotion. Each step requires admin approval and appends to <code style="color:var(--honey)">promoted_from[]</code>.</div></div>
+      </div>
+    </div>
+    <div class="col2" style="margin-top: 16px">
+      <div class="card">
+        <h3>Detection Signals</h3>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+          <div class="sig-item"><span style="color:var(--accent);font-size:16px">&#9679;</span><span><strong style="color:#fff">Repeated instructions</strong> - Same phrasing across 3+ conversations</span></div>
+          <div class="sig-item"><span style="color:var(--honey);font-size:16px">&#9679;</span><span><strong style="color:#fff">Tool chains</strong> - Same sequence of tool calls in recurring patterns</span></div>
+          <div class="sig-item"><span style="color:var(--green);font-size:16px">&#9679;</span><span><strong style="color:#fff">Workflow templates</strong> - Multi-step processes that follow a fixed order</span></div>
+          <div class="sig-item"><span style="color:var(--blue);font-size:16px">&#9679;</span><span><strong style="color:#fff">Style preferences</strong> - Consistent formatting, tone, or output rules</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Generated Skill Example</h3>
+        <div class="code-block"><span class="kw">---</span>
+<span class="kw">name:</span> <span class="str">Git PR Workflow</span>
+<span class="kw">description:</span> <span class="str">Standard PR creation flow</span>
+<span class="kw">scope:</span> <span class="str">personal</span>
+<span class="kw">permissions:</span>
+  <span class="kw">codeExecution:</span> <span class="str">true</span>
+<span class="kw">---</span>
+
+<span class="cmt"># Git PR Workflow</span>
+<span class="cmt">When creating a pull request:</span>
+<span class="cmt">1. Run git diff to review changes</span>
+<span class="cmt">2. Write descriptive commit message</span>
+<span class="cmt">3. Push to feature branch</span>
+<span class="cmt">4. Create PR with summary + test plan</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ TAB 6: MCP Integration ═══════ -->
+  <div class="panel" id="panel-mcp">
+    <h2 class="section-title">MCP Integration</h2>
+    <p class="section-desc">148 curated MCP servers across 14 categories. Tool discovery, resource access, and prompt templates unified into the agent's tool pool.</p>
+    <div class="card">
+      <h3>MCP Server Catalog <span class="badge bg-mcp">148 entries</span></h3>
+      <p style="margin-bottom: 12px">Cross-referenced from 4 sources: official Anthropic repo, punkpeye/awesome-mcp-servers (77K stars), appcypher collection, and tolkonepiu/best-of (450 ranked, 34 categories). Dedup enforced via <code style="color:var(--honey)">assertCatalogUnique</code> at module load.</p>
+      <div class="mcp-cat-grid" id="mcp-categories"></div>
+    </div>
+    <div class="col2" style="margin-top: 16px">
+      <div class="card">
+        <h3>McpServer Interface</h3>
+        <div class="code-block"><span class="kw">interface</span> <span class="type">McpServer</span> {
+  id: <span class="type">string</span>
+  name: <span class="type">string</span>
+  description: <span class="type">string</span>
+  author: <span class="type">string</span>
+  category: <span class="type">string</span>      <span class="cmt">// one of 14 categories</span>
+  url: <span class="type">string</span>
+  installCmd: <span class="type">string</span>    <span class="cmt">// npx @mcp/...</span>
+  capabilities: <span class="type">string</span>[] <span class="cmt">// tools | resources | prompts</span>
+  official?: <span class="type">boolean</span>
+  logo?: <span class="type">string</span>          <span class="cmt">// emoji or brand initial</span>
+}</div>
+      </div>
+      <div class="card">
+        <h3>MCP Capabilities</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;margin-top:8px">
+          <div class="cap-block"><div class="cap-head"><span style="font-size:18px">&#128295;</span><strong style="color:var(--blue)">Tools</strong></div><span style="font-size:12px">Executable functions exposed by the server. Appear in agent tool pool with <code style="color:var(--honey)">mcp__{server}__{tool}</code> naming. Called via JSON-RPC <code>tools/call</code>.</span></div>
+          <div class="cap-block"><div class="cap-head"><span style="font-size:18px">&#128196;</span><strong style="color:var(--green)">Resources</strong></div><span style="font-size:12px">Data endpoints the server exposes (files, database rows, API results). Agent can read via <code>resources/read</code>. Supports subscriptions for live updates.</span></div>
+          <div class="cap-block"><div class="cap-head"><span style="font-size:18px">&#128172;</span><strong style="color:var(--accent)">Prompt Templates</strong></div><span style="font-size:12px">Pre-built prompt structures the server offers. Retrieved via <code>prompts/get</code>. Injected into system prompt alongside skill content.</span></div>
+        </div>
+      </div>
+    </div>
+    <h3 style="color: #fff; margin: 24px 0 12px;">Tool Pool Unification</h3>
+    <p class="section-desc">All extension types merge into a single tool pool that the agent sees. filterToolsForContext() applies persona allowlist/denylist before each chat turn.</p>
+    <div class="flow">
+      <div class="flow-step"><div class="flow-node" style="border-color: var(--accent)" data-tip="Skills inject instructions into system prompt. They guide agent behavior without adding callable tools." data-meta="Loaded from ~/.waggle/skills/"><span class="fn-icon" style="color:var(--accent)">&#128220;</span>Skills<span class="fn-label">System prompt</span></div></div>
+      <span class="flow-arrow">+</span>
+      <div class="flow-step"><div class="flow-node" style="border-color: var(--green)" data-tip="Plugin tools registered during activation. PluginToolDef: name + description + parameters + execute function." data-meta="Source: plugin-runtime.ts"><span class="fn-icon" style="color:var(--green)">&#128230;</span>Plugin Tools<span class="fn-label">Code modules</span></div></div>
+      <span class="flow-arrow">+</span>
+      <div class="flow-step"><div class="flow-node" style="border-color: var(--blue)" data-tip="MCP tools discovered via tools/list and added with mcp__{server}__{tool} prefix for namespace isolation." data-meta="Transport: stdio | SSE"><span class="fn-icon" style="color:var(--blue)">&#127760;</span>MCP Tools<span class="fn-label">External processes</span></div></div>
+      <span class="flow-arrow">+</span>
+      <div class="flow-step"><div class="flow-node" style="border-color: var(--orange)" data-tip="Connector actions registered as tools when connected and authenticated via Vault." data-meta="30 native + Composio 250+"><span class="fn-icon" style="color:var(--orange)">&#128268;</span>Connectors<span class="fn-label">API bridges</span></div></div>
+      <span class="flow-arrow">&#8594;</span>
+      <div class="flow-step"><div class="flow-node" style="border-color: var(--honey)" data-tip="filterToolsForContext() from tool-filter.ts applies persona allowlist/denylist. Only permitted tools reach the agent." data-meta="Source: tool-filter.ts"><span class="fn-icon" style="color:var(--honey)">&#9881;</span>filterTools<span class="fn-label">Persona filter</span></div></div>
+      <span class="flow-arrow">&#8594;</span>
+      <div class="flow-step"><div class="flow-node" style="border-color: #fff" data-tip="Agent sees the filtered tool pool for the current chat turn. Tools presented via LLM tool-use protocol." data-meta="Ready for tool_use calls"><span class="fn-icon">&#129302;</span>Agent<span class="fn-label">Unified pool</span></div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  var tabs = document.querySelectorAll('.tab');
+  var panels = document.querySelectorAll('.panel');
+  tabs.forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      var target = this.getAttribute('data-tab');
+      tabs.forEach(function(t) { t.classList.remove('active'); });
+      panels.forEach(function(p) { p.classList.remove('active'); });
+      this.classList.add('active');
+      var panel = document.getElementById('panel-' + target);
+      if (panel) panel.classList.add('active');
+    });
+  });
+
+  var tooltipEl = document.getElementById('tooltip');
+
+  function safeText(s) {
+    var d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  function positionTip(e) {
+    var x = e.clientX + 14, y = e.clientY + 14;
+    var w = tooltipEl.offsetWidth, h = tooltipEl.offsetHeight;
+    if (x + w > window.innerWidth - 12) x = e.clientX - w - 10;
+    if (y + h > window.innerHeight - 12) y = e.clientY - h - 10;
+    if (x < 4) x = 4;
+    if (y < 4) y = 4;
+    tooltipEl.style.left = x + 'px';
+    tooltipEl.style.top = y + 'px';
+  }
+
+  function showTip(el, e) {
+    var tip = el.getAttribute('data-tip');
+    var meta = el.getAttribute('data-meta');
+    if (!tip) return;
+    while (tooltipEl.firstChild) tooltipEl.removeChild(tooltipEl.firstChild);
+    var titleDiv = document.createElement('div');
+    titleDiv.style.cssText = 'color:#e5a000;font-weight:600;margin-bottom:4px';
+    titleDiv.textContent = tip;
+    tooltipEl.appendChild(titleDiv);
+    if (meta) {
+      var metaDiv = document.createElement('div');
+      metaDiv.style.cssText = 'color:#7f849e;font-size:12px';
+      metaDiv.textContent = meta;
+      tooltipEl.appendChild(metaDiv);
+    }
+    tooltipEl.classList.add('visible');
+    positionTip(e);
+  }
+
+  function attachTip(el) {
+    el.addEventListener('mouseenter', function(e) { showTip(this, e); });
+    el.addEventListener('mousemove', positionTip);
+    el.addEventListener('mouseleave', function() { tooltipEl.classList.remove('visible'); });
+  }
+
+  document.querySelectorAll('[data-tip]').forEach(attachTip);
+
+  // Build connector chips using DOM API
+  var connectors = [
+    ['GitHub','\uD83D\uDC19','development'],['GitLab','\uD83E\uDD8A','development'],
+    ['Bitbucket','\uD83E\uDE63','development'],['Slack','\uD83D\uDCAC','communication'],
+    ['Discord','\uD83C\uDFAE','communication'],['MS Teams','\uD83D\uDCE2','communication'],
+    ['Jira','\uD83D\uDCCB','productivity'],['Linear','\u26A1','productivity'],
+    ['Asana','\u2705','productivity'],['Trello','\uD83D\uDCCC','productivity'],
+    ['Monday','\uD83D\uDCC5','productivity'],['Notion','\uD83D\uDCD3','productivity'],
+    ['Confluence','\uD83D\uDCD6','productivity'],['Obsidian','\uD83D\uDC8E','productivity'],
+    ['HubSpot','\uD83E\uDD1D','crm'],['Salesforce','\u2601\uFE0F','crm'],
+    ['Pipedrive','\uD83D\uDCCA','crm'],['Airtable','\uD83D\uDDC3\uFE0F','data'],
+    ['Postgres','\uD83D\uDDC4\uFE0F','data'],['Gmail','\u2709\uFE0F','communication'],
+    ['Email','\uD83D\uDCE7','communication'],['Outlook','\uD83D\uDCEC','communication'],
+    ['Google Cal','\uD83D\uDCC6','productivity'],['Google Docs','\uD83D\uDDD2\uFE0F','productivity'],
+    ['Google Drive','\uD83D\uDCC2','storage'],['Google Sheets','\uD83D\uDCCA','data'],
+    ['Dropbox','\uD83D\uDCE6','storage'],['OneDrive','\u2601\uFE0F','storage'],
+    ['Composio','\uD83C\uDF10','integration']
+  ];
+
+  var cg = document.getElementById('native-connectors');
+  if (cg) {
+    connectors.forEach(function(c) {
+      var chip = document.createElement('div');
+      chip.className = 'connector-chip';
+      chip.setAttribute('data-tip', c[0] + ' connector - ' + c[2] + ' category');
+      chip.setAttribute('data-meta', 'Auth: Vault-based credential lookup');
+      var icon = document.createElement('span');
+      icon.className = 'cc-icon';
+      icon.textContent = c[1];
+      var wrap = document.createElement('span');
+      var nameText = document.createTextNode(c[0]);
+      var catSpan = document.createElement('span');
+      catSpan.className = 'cc-cat';
+      catSpan.textContent = c[2];
+      wrap.appendChild(nameText);
+      wrap.appendChild(catSpan);
+      chip.appendChild(icon);
+      chip.appendChild(wrap);
+      cg.appendChild(chip);
+      attachTip(chip);
+    });
+  }
+
+  // Build MCP category tiles using DOM API
+  var cats = [
+    ['\uD83D\uDCBE','Database',18],['\uD83D\uDCC1','Files',12],
+    ['\uD83C\uDF10','Web',14],['\uD83D\uDCBB','Code',16],
+    ['\uD83D\uDCAC','Communication',8],['\uD83D\uDCCB','Productivity',15],
+    ['\uD83D\uDCCA','Analytics',10],['\u2601\uFE0F','Cloud',11],
+    ['\uD83D\uDD27','DevTools',13],['\uD83D\uDCBC','Business',9],
+    ['\uD83E\uDD16','AI & ML',8],['\uD83D\uDD12','Security',5],
+    ['\uD83C\uDFA8','Media',4],['\u2699\uFE0F','Utilities',5]
+  ];
+
+  var mg = document.getElementById('mcp-categories');
+  if (mg) {
+    cats.forEach(function(c) {
+      var el = document.createElement('div');
+      el.className = 'mcp-cat';
+      el.setAttribute('data-tip', c[1] + ' category: ' + c[2] + ' MCP servers curated from 4 community sources');
+      el.setAttribute('data-meta', 'MCP_CATEGORIES from mcp-catalog.ts');
+      var emoji = document.createElement('span');
+      emoji.className = 'mc-emoji';
+      emoji.textContent = c[0];
+      var name = document.createElement('div');
+      name.className = 'mc-name';
+      name.textContent = c[1];
+      var count = document.createElement('div');
+      count.className = 'mc-count';
+      count.textContent = c[2] + ' servers';
+      el.appendChild(emoji);
+      el.appendChild(name);
+      el.appendChild(count);
+      mg.appendChild(el);
+      attachTip(el);
+    });
+  }
+
+  // Animated install flow highlight
+  var stages = document.querySelectorAll('.install-stage');
+  var cur = 0;
+  function animateInstall() {
+    stages.forEach(function(s) { s.classList.remove('highlight'); });
+    if (stages[cur]) stages[cur].classList.add('highlight');
+    cur = (cur + 1) % stages.length;
+  }
+  if (stages.length > 0) { animateInstall(); setInterval(animateInstall, 2000); }
+})();
+</script>
+</body>
+</html>
