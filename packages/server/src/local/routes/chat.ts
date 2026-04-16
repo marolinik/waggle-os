@@ -31,6 +31,9 @@ export { MAX_CONTEXT_MESSAGES, applyContextWindow, buildSkillPromptSection } fro
 
 export type AgentRunner = (config: AgentLoopConfig) => Promise<AgentResponse>;
 
+// Read once at plugin registration — consistent for the lifetime of the server
+const AUTO_APPROVE = process.env.WAGGLE_AUTO_APPROVE === '1' || process.env.WAGGLE_AUTO_APPROVE === 'true';
+
 export const chatRoutes: FastifyPluginAsync = async (server) => {
   // ── Use shared agent state from server ──────────────────────────────
   const {
@@ -758,7 +761,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
         // Register a per-request pre:tool hook for confirmation gates
         // This fires during the agent loop and pauses until user approves/denies
-        const autoApprove = process.env.WAGGLE_AUTO_APPROVE === '1' || process.env.WAGGLE_AUTO_APPROVE === 'true';
+        const autoApprove = AUTO_APPROVE;
         // Assignment (not declaration) — unregisterHook is declared at outer try scope
         // so the outer finally can always clean up regardless of which path we exit on.
         unregisterHook = hasCustomRunner ? undefined : hookRegistry.on('pre:tool', async (ctx) => {

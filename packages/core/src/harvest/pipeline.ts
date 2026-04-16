@@ -66,7 +66,7 @@ function batch<T>(items: T[], size: number): T[][] {
   return batches;
 }
 
-/** Run async tasks with a concurrency cap (sliding window). */
+/** Run async tasks with a concurrency cap (tumbling window — waits for full batch before next). */
 async function runWithConcurrency<T>(
   tasks: (() => Promise<T>)[],
   cap: number,

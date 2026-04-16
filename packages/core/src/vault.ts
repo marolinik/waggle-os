@@ -71,14 +71,17 @@ export class VaultStore {
     // icacls failures (e.g. icacls.exe not on PATH in a minimal Windows image).
     if (process.platform === 'win32') {
       try {
+        // Resolve the current user via whoami (safer than process.env.USERNAME
+        // which can be absent or spoofed in containerized/scripted setups)
+        const currentUser = execFileSync('whoami', { encoding: 'utf-8' }).trim();
         execFileSync('icacls', [
           this.keyPath,
           '/inheritance:r',
           '/grant:r',
-          `${process.env.USERNAME || 'CURRENT_USER'}:F`,
+          `${currentUser}:F`,
         ], { stdio: 'ignore' });
-      } catch {
-        log.warn('Could not restrict key file permissions via icacls');
+      } catch (err) {
+        log.warn('Could not restrict key file permissions via icacls — vault key may be readable by other users', err);
       }
     }
     return key;
