@@ -71,6 +71,13 @@ export class MindDB {
 
   /** Run incremental schema migrations for existing .mind databases */
   private runMigrations(): void {
+    // 2026-04-16: Ensure all tables from SCHEMA_SQL exist. Old .mind databases
+    // may predate tables added during sprint work (ai_interactions, execution_traces,
+    // evolution_runs, harvest_sources, procedures, improvement_signals, install_audit).
+    // SCHEMA_SQL uses CREATE TABLE/INDEX IF NOT EXISTS throughout, so re-running it
+    // is safe and idempotent — it only creates what's missing.
+    this.db.exec(SCHEMA_SQL);
+
     // W2.1: Add 'source' column to memory_frames (provenance tracking)
     const hasSourceCol = this.db.prepare(
       "SELECT COUNT(*) as cnt FROM pragma_table_info('memory_frames') WHERE name='source'"
