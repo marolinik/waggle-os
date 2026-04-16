@@ -1,0 +1,1322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Egzakta Group — Strategic Launch Sequence</title>
+<style>
+  :root {
+    --honey: #e5a000;
+    --honey-light: #f5c842;
+    --honey-dark: #b07d00;
+    --hive-950: #08090c;
+    --hive-900: #0f1117;
+    --hive-800: #1a1d26;
+    --hive-700: #252935;
+    --hive-600: #3a3f50;
+    --hive-500: #555b6e;
+    --hive-400: #7c8293;
+    --hive-300: #a3a8b5;
+    --hive-200: #d0d3da;
+    --hive-100: #e8eaee;
+    --accent: #a78bfa;
+    --accent-dim: #7c5cbf;
+    --green: #34d399;
+    --red: #f87171;
+    --orange: #fb923c;
+    --blue: #60a5fa;
+    --cyan: #22d3ee;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--hive-950);
+    color: var(--hive-200);
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* -- Header -- */
+  .header {
+    text-align: center;
+    padding: 48px 24px 24px;
+    border-bottom: 1px solid var(--hive-700);
+  }
+  .header h1 {
+    font-size: 2rem;
+    color: var(--honey);
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+  .header .subtitle {
+    color: var(--hive-400);
+    margin-top: 6px;
+    font-size: 0.95rem;
+  }
+  .header .thesis {
+    max-width: 720px;
+    margin: 16px auto 0;
+    color: var(--hive-300);
+    font-size: 0.88rem;
+    font-style: italic;
+    line-height: 1.7;
+    border-left: 3px solid var(--honey-dark);
+    padding-left: 16px;
+    text-align: left;
+  }
+
+  /* -- Navigation -- */
+  .nav {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    padding: 16px 24px;
+    flex-wrap: wrap;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--hive-950);
+    border-bottom: 1px solid var(--hive-800);
+  }
+  .nav button {
+    background: var(--hive-800);
+    border: 1px solid var(--hive-700);
+    color: var(--hive-300);
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: 500;
+    transition: all 0.2s;
+  }
+  .nav button:hover { background: var(--hive-700); color: var(--hive-100); }
+  .nav button.active {
+    background: var(--honey);
+    color: var(--hive-950);
+    border-color: var(--honey);
+    font-weight: 600;
+  }
+
+  /* -- Sections -- */
+  .section {
+    display: none;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 40px 24px 64px;
+  }
+  .section.active { display: block; }
+  .section h2 {
+    font-size: 1.4rem;
+    color: var(--honey);
+    margin-bottom: 8px;
+    font-weight: 600;
+  }
+  .section h3 {
+    font-size: 1.1rem;
+    color: var(--hive-100);
+    margin: 28px 0 12px;
+    font-weight: 600;
+  }
+  .section-intro {
+    color: var(--hive-400);
+    font-size: 0.88rem;
+    margin-bottom: 28px;
+  }
+
+  /* -- Phase Timeline -- */
+  .phase-timeline {
+    position: relative;
+    padding-left: 32px;
+  }
+  .phase-timeline::before {
+    content: '';
+    position: absolute;
+    left: 12px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: linear-gradient(to bottom, var(--honey), var(--accent), var(--green));
+  }
+  .phase-block {
+    position: relative;
+    margin-bottom: 40px;
+    background: var(--hive-900);
+    border: 1px solid var(--hive-700);
+    border-radius: 10px;
+    overflow: hidden;
+    transition: border-color 0.3s;
+  }
+  .phase-block:hover {
+    border-color: var(--hive-500);
+  }
+  .phase-block::before {
+    content: '';
+    position: absolute;
+    left: -26px;
+    top: 24px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid var(--hive-950);
+    z-index: 1;
+  }
+  .phase-block:nth-child(1)::before { background: var(--honey); }
+  .phase-block:nth-child(2)::before { background: var(--accent); }
+  .phase-block:nth-child(3)::before { background: var(--green); }
+
+  .phase-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 24px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .phase-header:hover { background: var(--hive-800); }
+  .phase-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    padding: 3px 10px;
+    border-radius: 4px;
+    margin-right: 14px;
+  }
+  .phase-1-color { background: rgba(229,160,0,0.15); color: var(--honey); }
+  .phase-2-color { background: rgba(167,139,250,0.15); color: var(--accent); }
+  .phase-3-color { background: rgba(52,211,153,0.15); color: var(--green); }
+
+  .phase-title {
+    flex: 1;
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: var(--hive-100);
+  }
+  .phase-timing {
+    font-size: 0.8rem;
+    color: var(--hive-400);
+    white-space: nowrap;
+  }
+  .phase-expand {
+    margin-left: 12px;
+    color: var(--hive-500);
+    font-size: 0.9rem;
+    transition: transform 0.3s;
+  }
+  .phase-block.open .phase-expand { transform: rotate(180deg); }
+
+  .phase-body {
+    display: none;
+    padding: 0 24px 24px;
+    border-top: 1px solid var(--hive-800);
+  }
+  .phase-block.open .phase-body { display: block; }
+
+  .action-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 16px;
+  }
+  @media (max-width: 768px) { .action-grid { grid-template-columns: 1fr; } }
+
+  .action-card {
+    background: var(--hive-800);
+    border: 1px solid var(--hive-700);
+    border-radius: 8px;
+    padding: 14px 16px;
+    transition: all 0.2s;
+    position: relative;
+  }
+  .action-card:hover {
+    border-color: var(--hive-500);
+    background: var(--hive-700);
+  }
+  .action-card .action-title {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--hive-100);
+    margin-bottom: 4px;
+  }
+  .action-card .action-desc {
+    font-size: 0.8rem;
+    color: var(--hive-400);
+    line-height: 1.5;
+  }
+
+  .target-strip {
+    display: flex;
+    gap: 16px;
+    margin-top: 20px;
+    flex-wrap: wrap;
+  }
+  .target-badge {
+    background: var(--hive-800);
+    border: 1px solid var(--hive-700);
+    border-radius: 8px;
+    padding: 12px 18px;
+    text-align: center;
+    min-width: 140px;
+  }
+  .target-badge .target-num {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--honey-light);
+  }
+  .target-badge .target-label {
+    font-size: 0.75rem;
+    color: var(--hive-400);
+    margin-top: 2px;
+  }
+
+  /* -- Escalation Ladder -- */
+  .ladder-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin-top: 16px;
+    position: relative;
+  }
+  .ladder-step {
+    display: flex;
+    align-items: stretch;
+    position: relative;
+  }
+  .ladder-bar {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    border-radius: 8px;
+    cursor: default;
+    transition: all 0.3s;
+    position: relative;
+  }
+  .ladder-bar:hover {
+    transform: translateX(4px);
+  }
+  .ladder-step:nth-child(1) .ladder-bar { margin-left: 0; }
+  .ladder-step:nth-child(2) .ladder-bar { margin-left: 40px; }
+  .ladder-step:nth-child(3) .ladder-bar { margin-left: 80px; }
+  .ladder-step:nth-child(4) .ladder-bar { margin-left: 120px; }
+  .ladder-step:nth-child(5) .ladder-bar { margin-left: 160px; }
+  .ladder-step:nth-child(6) .ladder-bar { margin-left: 200px; }
+
+  .ladder-name {
+    font-weight: 700;
+    font-size: 1rem;
+  }
+  .ladder-price {
+    font-size: 0.85rem;
+    opacity: 0.8;
+  }
+  .ladder-trigger {
+    font-size: 0.78rem;
+    opacity: 0.7;
+    font-style: italic;
+    max-width: 350px;
+    text-align: right;
+  }
+  .ladder-arrow {
+    width: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--hive-500);
+    font-size: 1.2rem;
+  }
+
+  .tier-free { background: linear-gradient(135deg, rgba(96,165,250,0.12), rgba(96,165,250,0.04)); border: 1px solid rgba(96,165,250,0.25); color: var(--blue); }
+  .tier-pro { background: linear-gradient(135deg, rgba(229,160,0,0.12), rgba(229,160,0,0.04)); border: 1px solid rgba(229,160,0,0.25); color: var(--honey-light); }
+  .tier-teams { background: linear-gradient(135deg, rgba(167,139,250,0.12), rgba(167,139,250,0.04)); border: 1px solid rgba(167,139,250,0.25); color: var(--accent); }
+  .tier-hive { background: linear-gradient(135deg, rgba(34,211,238,0.12), rgba(34,211,238,0.04)); border: 1px solid rgba(34,211,238,0.25); color: var(--cyan); }
+  .tier-kvark { background: linear-gradient(135deg, rgba(52,211,153,0.12), rgba(52,211,153,0.04)); border: 1px solid rgba(52,211,153,0.25); color: var(--green); }
+  .tier-lmtek { background: linear-gradient(135deg, rgba(248,113,113,0.12), rgba(248,113,113,0.04)); border: 1px solid rgba(248,113,113,0.25); color: var(--red); }
+
+  /* -- Moat Section -- */
+  .moat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+  }
+  .moat-card {
+    background: var(--hive-900);
+    border: 1px solid var(--hive-700);
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+  .moat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+  }
+  .moat-card:nth-child(1)::before { background: var(--honey); }
+  .moat-card:nth-child(2)::before { background: var(--accent); }
+  .moat-card:nth-child(3)::before { background: var(--green); }
+  .moat-card:nth-child(4)::before { background: var(--blue); }
+  .moat-card:nth-child(5)::before { background: var(--orange); }
+
+  .moat-card:hover {
+    border-color: var(--hive-500);
+    transform: translateY(-2px);
+  }
+  .moat-icon {
+    font-size: 1.8rem;
+    margin-bottom: 10px;
+  }
+  .moat-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--hive-100);
+    margin-bottom: 6px;
+  }
+  .moat-desc {
+    font-size: 0.8rem;
+    color: var(--hive-400);
+    line-height: 1.5;
+  }
+
+  /* -- Revenue Section -- */
+  .revenue-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 16px;
+    font-size: 0.85rem;
+  }
+  .revenue-table th {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 2px solid var(--hive-700);
+    color: var(--hive-300);
+    font-weight: 600;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .revenue-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--hive-800);
+    color: var(--hive-200);
+  }
+  .revenue-table tr:hover td {
+    background: var(--hive-900);
+  }
+  .revenue-table .total-row td {
+    border-top: 2px solid var(--honey-dark);
+    font-weight: 700;
+    color: var(--honey-light);
+    font-size: 0.95rem;
+  }
+
+  .waterfall-container {
+    margin-top: 28px;
+    padding: 20px 0;
+  }
+  .waterfall-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    height: 220px;
+    padding: 0 10px;
+    border-bottom: 1px solid var(--hive-700);
+    margin-bottom: 8px;
+  }
+  .waterfall-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    height: 100%;
+    position: relative;
+  }
+  .waterfall-bar {
+    width: 100%;
+    max-width: 80px;
+    border-radius: 4px 4px 0 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 8px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--hive-950);
+    transition: all 0.5s ease;
+    position: relative;
+  }
+  .waterfall-label {
+    font-size: 0.72rem;
+    color: var(--hive-400);
+    text-align: center;
+    margin-top: 6px;
+    line-height: 1.3;
+  }
+
+  /* -- Tooltip -- */
+  .tooltip-host {
+    position: relative;
+    cursor: help;
+  }
+  .tooltip-host .tooltip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 10px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--hive-700);
+    border: 1px solid var(--hive-600);
+    color: var(--hive-100);
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    white-space: normal;
+    width: 260px;
+    z-index: 200;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    pointer-events: none;
+  }
+  .tooltip-host .tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: var(--hive-700);
+  }
+  .tooltip-host:hover .tooltip { display: block; }
+
+  /* -- Sprint Checklist -- */
+  .sprint-list {
+    list-style: none;
+    margin-top: 16px;
+    counter-reset: sprint;
+  }
+  .sprint-item {
+    counter-increment: sprint;
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 14px 18px;
+    background: var(--hive-900);
+    border: 1px solid var(--hive-700);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    transition: all 0.2s;
+    cursor: pointer;
+  }
+  .sprint-item:hover {
+    border-color: var(--hive-500);
+    background: var(--hive-800);
+  }
+  .sprint-item.done {
+    opacity: 0.5;
+    border-color: var(--hive-800);
+  }
+  .sprint-item.done .sprint-check {
+    background: var(--green);
+    border-color: var(--green);
+  }
+  .sprint-item.done .sprint-check::after { content: '\2713'; }
+  .sprint-check {
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    border: 2px solid var(--hive-600);
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    color: var(--hive-950);
+    font-weight: 700;
+    transition: all 0.2s;
+    margin-top: 1px;
+  }
+  .sprint-num {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--hive-500);
+    min-width: 22px;
+    margin-top: 2px;
+  }
+  .sprint-num::before { content: counter(sprint) '.'; }
+  .sprint-text {
+    flex: 1;
+  }
+  .sprint-title {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--hive-100);
+  }
+  .sprint-desc {
+    font-size: 0.78rem;
+    color: var(--hive-400);
+    margin-top: 2px;
+  }
+  .sprint-tag {
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    margin-top: 2px;
+  }
+  .tag-p0 { background: rgba(248,113,113,0.15); color: var(--red); }
+  .tag-p1 { background: rgba(251,146,60,0.15); color: var(--orange); }
+  .tag-growth { background: rgba(52,211,153,0.15); color: var(--green); }
+  .tag-content { background: rgba(167,139,250,0.15); color: var(--accent); }
+
+  /* -- Footer -- */
+  .footer {
+    text-align: center;
+    padding: 32px 24px;
+    border-top: 1px solid var(--hive-700);
+    color: var(--hive-500);
+    font-size: 0.78rem;
+  }
+  .footer a {
+    color: var(--honey-dark);
+    text-decoration: none;
+  }
+  .footer a:hover { color: var(--honey); }
+
+  /* -- Misc -- */
+  .badge-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+  }
+  .badge-small {
+    font-size: 0.72rem;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+  .divider {
+    border: none;
+    border-top: 1px solid var(--hive-800);
+    margin: 28px 0;
+  }
+  .note-box {
+    background: rgba(229,160,0,0.06);
+    border: 1px solid rgba(229,160,0,0.2);
+    border-radius: 8px;
+    padding: 14px 18px;
+    font-size: 0.82rem;
+    color: var(--hive-300);
+    line-height: 1.6;
+    margin-top: 16px;
+  }
+  .note-box strong { color: var(--honey); }
+  .existing-label {
+    font-size: 0.7rem;
+    color: var(--hive-500);
+    padding: 2px 8px;
+    background: var(--hive-800);
+    border-radius: 4px;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+</style>
+</head>
+<body>
+
+<!-- ==================== HEADER ==================== -->
+<div class="header">
+  <h1>Egzakta Group &mdash; Strategic Launch Sequence</h1>
+  <p class="subtitle">Waggle OS Go-to-Market &middot; Q2-Q4 2026</p>
+  <div class="thesis">
+    "AI memory is the new lock-in. Every day a knowledge worker uses AI tools, they generate knowledge
+    that sits on someone else's servers. Waggle brings that memory home."
+  </div>
+</div>
+
+<!-- ==================== NAVIGATION ==================== -->
+<div class="nav">
+  <button class="active" onclick="show('phases')">Launch Phases</button>
+  <button onclick="show('ladder')">Escalation Ladder</button>
+  <button onclick="show('moat')">Competitive Moat</button>
+  <button onclick="show('revenue')">Revenue Targets</button>
+  <button onclick="show('sprint')">14-Day Sprint</button>
+</div>
+
+<!-- ==================== SECTION 1: LAUNCH PHASES ==================== -->
+<div id="phases" class="section active">
+  <h2>Three-Phase Launch Sequence</h2>
+  <p class="section-intro">
+    Progressive escalation from open-source community seeding through paid conversion to enterprise deals.
+    Each phase creates the demand for the next.
+  </p>
+
+  <div class="phase-timeline">
+
+    <!-- Phase 1 -->
+    <div class="phase-block open" id="p1">
+      <div class="phase-header" onclick="togglePhase('p1')">
+        <span class="phase-label phase-1-color">Phase 1</span>
+        <span class="phase-title">"Bring Your Memory Home"</span>
+        <span class="phase-timing">Weeks 1 &ndash; 4</span>
+        <span class="phase-expand">&#9662;</span>
+      </div>
+      <div class="phase-body">
+        <div class="action-grid">
+          <div class="action-card tooltip-host">
+            <div class="action-title">Open-Source hive-mind</div>
+            <div class="action-desc">Apache 2.0 memory MCP server published to npm + GitHub. FrameStore, HybridSearch, KnowledgeGraph, harvest adapters, wiki compiler skeleton.</div>
+            <div class="tooltip">Separate repo. Core memory primitives go open-source. Agent runtime, evolution stack, compliance PDF, marketplace, KVARK stay proprietary. Mastra-style dual-license pattern.</div>
+          </div>
+          <div class="action-card tooltip-host">
+            <div class="action-title">Waggle Desktop + Web Launch</div>
+            <div class="action-desc">Free tier: 5 workspaces, agents, built-in skills. Tauri 2.0 binary for Windows/macOS + web app. Memory + Harvest free forever.</div>
+            <div class="tooltip">Lock-in moat: memory and harvest are free forever. Users accumulate knowledge in Waggle. Agents generate memory. Skills and connectors are the upgrade trigger to Pro.</div>
+          </div>
+          <div class="action-card tooltip-host">
+            <div class="action-title">Harvest-First Onboarding</div>
+            <div class="action-desc">Import day one: ChatGPT, Claude, Claude Code, Gemini, Perplexity exports. 10 production adapters. First-run hook UX.</div>
+            <div class="tooltip">9 adapters + Perplexity = 10 production adapters. Universal/PDF/URL/Markdown/TXT baselines. Users see "18 months of AI history" become a structured wiki in minutes.</div>
+          </div>
+          <div class="action-card tooltip-host">
+            <div class="action-title">Knowledge Wiki Demo</div>
+            <div class="action-desc">"18 months of AI history &rarr; structured wiki" &mdash; the hero moment. Entity pages, concept synthesis, auto-compiled from harvest data.</div>
+            <div class="tooltip">Wiki Compiler v1 already built + tested with live Haiku synthesis. 8 pages generated from real data. Demo shows the "magic moment" that hooks new users.</div>
+          </div>
+          <div class="action-card tooltip-host">
+            <div class="action-title">LinkedIn 3-Post Sequence</div>
+            <div class="action-desc">Marko's 620K weekly impressions. Post 1: problem statement. Post 2: demo video. Post 3: GitHub launch.</div>
+            <div class="tooltip">Sequenced over 10 days to build narrative momentum. Each post references the previous. Goal: maximum organic reach before any paid spend.</div>
+          </div>
+          <div class="action-card tooltip-host">
+            <div class="action-title">Academic Paper #1: Memory</div>
+            <div class="action-desc">arXiv submission. I/P/B frame model, multi-mind isolation, contradiction detection, compliance-by-default, wiki compilation.</div>
+            <div class="tooltip">Architecture paper with formal properties. Empirical numbers pending v2 hypothesis benchmark. Structural narrative reviewable now. arXiv-style working paper at docs/research/02.</div>
+          </div>
+        </div>
+
+        <div class="target-strip">
+          <div class="target-badge">
+            <div class="target-num">5,000</div>
+            <div class="target-label">Users in 60 days</div>
+          </div>
+          <div class="target-badge">
+            <div class="target-num">1,000</div>
+            <div class="target-label">npm installs in 30 days</div>
+          </div>
+          <div class="target-badge">
+            <div class="target-num">10</div>
+            <div class="target-label">Harvest adapters live</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Phase 2 -->
+    <div class="phase-block" id="p2">
+      <div class="phase-header" onclick="togglePhase('p2')">
+        <span class="phase-label phase-2-color">Phase 2</span>
+        <span class="phase-title">"AI Act Ready in 60 Days"</span>
+        <span class="phase-timing">Weeks 5 &ndash; 12</span>
+        <span class="phase-expand">&#9662;</span>
+      </div>
+      <div class="phase-body">
+        <div class="action-grid">
+          <div class="action-card tooltip-host">
+            <div class="action-title">Compliance as Product Feature</div>
+            <div class="action-desc">EU AI Act compliance report built in. Free: executive summary. Pro: full audit trail with interaction logging + risk classification.</div>
+            <div class="tooltip">Aug 2, 2026 deadline. "Compliance by default" turns memory into a regulated-industry wedge. $2.2B governance market in 2025, growing 15.8% CAGR to $11B by 2036.</div>
+          </div>
+          <div class="action-card tooltip-host">
+            <div class="action-title">Pro &euro;19/mo + Teams &euro;49/seat</div>
+            <div class="action-desc">Pro: unlimited workspaces, wiki, personas, marketplace, all connectors. Teams: shared memory, WaggleDance, governance dashboards.</div>
+            <div class="tooltip">Stripe integration ready (stripe@^21.0.1 installed). Products + webhooks + tier enforcement to be wired. Free-to-Pro trigger: 5-workspace limit hit + marketplace lock.</div>
+          </div>
+          <div class="action-card tooltip-host">
+            <div class="action-title">HIVE Hardware Pre-Orders</div>
+            <div class="action-desc">&euro;500/mo. A6000 on-prem appliance. No external API calls. Full sovereign inference for regulated environments.</div>
+            <div class="tooltip">Hardware bridge between SaaS teams and full enterprise KVARK. CISOs who can't send data to cloud APIs. Pre-order model validates demand before inventory commitment.</div>
+          </div>
+          <div class="action-card tooltip-host">
+            <div class="action-title">Academic Paper #2: GEPA Evolution</div>
+            <div class="action-desc">arXiv submission. Genetic-Pareto evolution for prompt optimization. v2 hypothesis result: Gemma 4 + Waggle-evolved prompts matching Opus 4.6.</div>
+            <div class="tooltip">ICLR 2026 Oral (Agrawal et al., arXiv:2507.19457). Waggle's implementation: 4 blind judges ranked Gemma 4 + Waggle ABOVE raw Opus 4.6. C/A ratio: 108.8%. Reproducibility repo required day one.</div>
+          </div>
+        </div>
+
+        <div class="target-strip">
+          <div class="target-badge">
+            <div class="target-num">250</div>
+            <div class="target-label">Pro users</div>
+          </div>
+          <div class="target-badge">
+            <div class="target-num">&euro;4,750</div>
+            <div class="target-label">Pro MRR</div>
+          </div>
+          <div class="target-badge">
+            <div class="target-num">25</div>
+            <div class="target-label">Team subscriptions</div>
+          </div>
+          <div class="target-badge">
+            <div class="target-num">&euro;6,125</div>
+            <div class="target-label">Teams MRR</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Phase 3 -->
+    <div class="phase-block" id="p3">
+      <div class="phase-header" onclick="togglePhase('p3')">
+        <span class="phase-label phase-3-color">Phase 3</span>
+        <span class="phase-title">"Enterprise Escalation"</span>
+        <span class="phase-timing">Months 4 &ndash; 6</span>
+        <span class="phase-expand">&#9662;</span>
+      </div>
+      <div class="phase-body">
+        <div class="action-grid">
+          <div class="action-card tooltip-host">
+            <div class="action-title">Compliance Bridge to KVARK</div>
+            <div class="action-desc">Teams &rarr; governance ceiling &rarr; CISO conversation &rarr; KVARK deal. Compliance report becomes the enterprise sales document.</div>
+            <div class="tooltip">Natural escalation: team compliance dashboards surface gaps that only sovereign infrastructure can fill. "You've outgrown SaaS compliance. Let's talk about on-prem." KVARK is EUR 1.2M already contracted.</div>
+          </div>
+          <div class="action-card tooltip-host">
+            <div class="action-title">Partner Channel Activation</div>
+            <div class="action-desc">3-5 reseller partners + 2-3 delivery partners. Regional coverage for enterprise pipeline.</div>
+            <div class="tooltip">Partners handle local enterprise sales and implementation. Waggle provides the product + compliance story. Partners provide the relationships + local compliance knowledge.</div>
+          </div>
+          <div class="action-card tooltip-host">
+            <div class="action-title">ATOS/Mistral National Deal</div>
+            <div class="action-desc">If closes: national AI infrastructure reference customer. Sovereign compute + LM TEK GPU layer.</div>
+            <div class="tooltip">Strategic bet. Not counted in revenue projections. If it lands: reference deal that accelerates all enterprise conversations. Mistral Forge ARR trajectory ~$400M to $1B. Free-compute-on-customer-GPU model is pricing anchor for KVARK positioning.</div>
+          </div>
+          <div class="action-card tooltip-host">
+            <div class="action-title">LM TEK GPU Infrastructure</div>
+            <div class="action-desc">H200/B200 GPU infrastructure for enterprise customers requiring sovereign compute. Hardware layer of the full stack.</div>
+            <div class="tooltip">Complete vertical: consumer app (Waggle) to enterprise platform (KVARK) to GPU hardware (LM TEK). No competitor covers the full stack.</div>
+          </div>
+        </div>
+
+        <div class="target-strip">
+          <div class="target-badge">
+            <div class="target-num">2-3</div>
+            <div class="target-label">Enterprise deals</div>
+          </div>
+          <div class="target-badge">
+            <div class="target-num">&euro;300K</div>
+            <div class="target-label">New ARR target</div>
+          </div>
+          <div class="target-badge">
+            <div class="target-num">5-8</div>
+            <div class="target-label">Channel partners</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /phase-timeline -->
+</div>
+
+<!-- ==================== SECTION 2: ESCALATION LADDER ==================== -->
+<div id="ladder" class="section">
+  <h2>The Escalation Ladder</h2>
+  <p class="section-intro">
+    Each tier creates natural demand for the next. Free users generate memory, hit limits,
+    and upgrade. Enterprise buyers see compliance gaps and escalate to sovereign.
+  </p>
+
+  <div class="ladder-container">
+    <div class="ladder-step">
+      <div class="ladder-bar tier-free">
+        <div>
+          <div class="ladder-name">FREE</div>
+          <div class="ladder-price">&euro;0 / forever</div>
+        </div>
+        <div class="ladder-trigger">Harvests memory &rarr; hits 5-workspace limit</div>
+      </div>
+    </div>
+    <div style="height: 6px"></div>
+
+    <div class="ladder-step">
+      <div class="ladder-bar tier-pro">
+        <div>
+          <div class="ladder-name">PRO</div>
+          <div class="ladder-price">&euro;19 / month</div>
+        </div>
+        <div class="ladder-trigger">Unlimited workspaces, wiki, personas, marketplace</div>
+      </div>
+    </div>
+    <div style="height: 6px"></div>
+
+    <div class="ladder-step">
+      <div class="ladder-bar tier-teams">
+        <div>
+          <div class="ladder-name">TEAMS</div>
+          <div class="ladder-price">&euro;49 / seat / month</div>
+        </div>
+        <div class="ladder-trigger">Shared memory, WaggleDance, governance dashboards</div>
+      </div>
+    </div>
+    <div style="height: 6px"></div>
+
+    <div class="ladder-step">
+      <div class="ladder-bar tier-hive">
+        <div>
+          <div class="ladder-name">HIVE</div>
+          <div class="ladder-price">&euro;500 / month</div>
+        </div>
+        <div class="ladder-trigger">On-prem hardware, no external API, sovereign inference</div>
+      </div>
+    </div>
+    <div style="height: 6px"></div>
+
+    <div class="ladder-step">
+      <div class="ladder-bar tier-kvark">
+        <div>
+          <div class="ladder-name">KVARK</div>
+          <div class="ladder-price">&euro;25K / module</div>
+        </div>
+        <div class="ladder-trigger">Full sovereign, IAM inheritance, audit trail, compliance</div>
+      </div>
+    </div>
+    <div style="height: 6px"></div>
+
+    <div class="ladder-step">
+      <div class="ladder-bar tier-lmtek">
+        <div>
+          <div class="ladder-name">LM TEK</div>
+          <div class="ladder-price">Consultative</div>
+        </div>
+        <div class="ladder-trigger">H200/B200 GPU infrastructure &mdash; sovereign compute layer</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note-box">
+    <strong>Lock-in mechanics:</strong> Memory + Harvest is free forever. The more a user harvests,
+    the more valuable Waggle becomes and the harder it is to leave. Agents are free because they
+    <em>generate</em> memory. Skills and connectors are the upgrade trigger &mdash; not memory, not agents.
+  </div>
+
+  <hr class="divider">
+
+  <h3>Escalation Triggers</h3>
+  <div class="action-grid" style="margin-top: 12px;">
+    <div class="action-card">
+      <div class="action-title" style="color: var(--blue);">FREE &rarr; PRO</div>
+      <div class="action-desc">User hits 5-workspace limit, wants marketplace skills, needs unlimited wiki generation, or wants full compliance reports.</div>
+    </div>
+    <div class="action-card">
+      <div class="action-title" style="color: var(--honey);">PRO &rarr; TEAMS</div>
+      <div class="action-desc">Second colleague asks "can I see your workspace?" Shared memory + WaggleDance multi-agent orchestration + team governance.</div>
+    </div>
+    <div class="action-card">
+      <div class="action-title" style="color: var(--accent);">TEAMS &rarr; HIVE</div>
+      <div class="action-desc">IT security flags cloud API data residency. CISO requires on-prem inference. GDPR data localization mandate.</div>
+    </div>
+    <div class="action-card">
+      <div class="action-title" style="color: var(--green);">HIVE &rarr; KVARK</div>
+      <div class="action-desc">Organization needs IAM inheritance, multi-tenant governance, full audit trail, custom model fine-tuning, data pipeline injection.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SECTION 3: COMPETITIVE MOAT ==================== -->
+<div id="moat" class="section">
+  <h2>Why We Win</h2>
+  <p class="section-intro">
+    Five structural advantages that compound over time. No single competitor covers more than two.
+  </p>
+
+  <div class="moat-grid">
+    <div class="moat-card tooltip-host">
+      <div class="moat-icon" style="color: var(--honey);">&#9881;</div>
+      <div class="moat-title">Memory Harvest From ALL Platforms</div>
+      <div class="moat-desc">10 production adapters: ChatGPT, Claude, Claude Code, Gemini, Perplexity + universal formats. Nobody else aggregates cross-platform AI memory.</div>
+      <div class="tooltip">Competitive audit: mem0 (48K stars) does user memory but no cross-platform harvest. Letta does memory but single-platform. Rewind records screen but doesn't extract knowledge structure. Waggle is the only system that imports from all major AI platforms and compiles into a structured wiki.</div>
+    </div>
+    <div class="moat-card tooltip-host">
+      <div class="moat-icon" style="color: var(--accent);">&#9889;</div>
+      <div class="moat-title">GEPA Self-Evolution</div>
+      <div class="moat-desc">Cheap models reach flagship quality. Gemma 4 + Waggle-evolved prompts scored above raw Opus 4.6 in blind judging. C/A ratio: 108.8%.</div>
+      <div class="tooltip">Full evolution stack: execution traces, eval datasets, LLM-as-judge scoring, GEPA iterative optimization, EvolveSchema, constraint gates, deploy pipeline. 357 evolution tests. This is CORE feature, not tier-gated.</div>
+    </div>
+    <div class="moat-card tooltip-host">
+      <div class="moat-icon" style="color: var(--green);">&#9878;</div>
+      <div class="moat-title">EU AI Act Compliance by Default</div>
+      <div class="moat-desc">Aug 2, 2026 deadline. Interaction logging, risk classification, audit trail, compliance reports. Built in, not bolted on.</div>
+      <div class="tooltip">Dual-hook strategy: Memory Harvest for daily value + AI Act "compliance by default" for regulated buyers. Governance market: $2.2B (2025) growing 15.8% CAGR. Waggle's compliance report is FREE as summary, Pro for full audit.</div>
+    </div>
+    <div class="moat-card tooltip-host">
+      <div class="moat-icon" style="color: var(--blue);">&#9878;</div>
+      <div class="moat-title">Full Sovereign Stack</div>
+      <div class="moat-desc">Consumer &rarr; Enterprise &rarr; Hardware &rarr; GPU. Six-tier product ladder from free desktop app to H200 GPU infrastructure.</div>
+      <div class="tooltip">No competitor covers the full stack. OpenAI/Anthropic: SaaS only. Palantir: enterprise only ($5.2B FY26). Cohere: enterprise API ($240M ARR). Waggle + KVARK + LM TEK = consumer to GPU in one company.</div>
+    </div>
+    <div class="moat-card tooltip-host">
+      <div class="moat-icon" style="color: var(--orange);">&#9733;</div>
+      <div class="moat-title">"Never Say Agent" Positioning</div>
+      <div class="moat-desc">AI workspace, not AI agent. Accessible to non-technical users. "Your AI remembers. Your data stays yours. Your compliance trail writes itself."</div>
+      <div class="tooltip">Competitive positioning: Salesforce Agentforce ($125 add-on) sells "agents." Waggle sells an "AI workspace with persistent memory." The workspace framing captures a broader audience than the developer-focused "agent" framing.</div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <h3>Competitive Landscape</h3>
+  <div class="revenue-table" style="margin-top: 12px;">
+    <table style="width: 100%; border-collapse: collapse;">
+      <thead>
+        <tr>
+          <th style="text-align:left; padding:10px 14px; border-bottom:2px solid var(--hive-700); color:var(--hive-300); font-size:0.78rem; text-transform:uppercase; letter-spacing:0.5px;">Competitor</th>
+          <th style="text-align:left; padding:10px 14px; border-bottom:2px solid var(--hive-700); color:var(--hive-300); font-size:0.78rem; text-transform:uppercase; letter-spacing:0.5px;">Scale</th>
+          <th style="text-align:left; padding:10px 14px; border-bottom:2px solid var(--hive-700); color:var(--hive-300); font-size:0.78rem; text-transform:uppercase; letter-spacing:0.5px;">What They Lack</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding:10px 14px; border-bottom:1px solid var(--hive-800); color:var(--hive-100); font-weight:600;">mem0</td>
+          <td style="padding:10px 14px; border-bottom:1px solid var(--hive-800);">48K stars, $24M Series A</td>
+          <td style="padding:10px 14px; border-bottom:1px solid var(--hive-800);">No cross-platform harvest, no compliance, no desktop app</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 14px; border-bottom:1px solid var(--hive-800); color:var(--hive-100); font-weight:600;">Letta</td>
+          <td style="padding:10px 14px; border-bottom:1px solid var(--hive-800);">13K stars, $10M seed</td>
+          <td style="padding:10px 14px; border-bottom:1px solid var(--hive-800);">Single-platform memory, developer-only, no workspace UX</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 14px; border-bottom:1px solid var(--hive-800); color:var(--hive-100); font-weight:600;">Cohere North</td>
+          <td style="padding:10px 14px; border-bottom:1px solid var(--hive-800);">$240M ARR, 2026 IPO</td>
+          <td style="padding:10px 14px; border-bottom:1px solid var(--hive-800);">API-only, no desktop, no harvest, no self-evolution</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 14px; border-bottom:1px solid var(--hive-800); color:var(--hive-100); font-weight:600;">Palantir AIP</td>
+          <td style="padding:10px 14px; border-bottom:1px solid var(--hive-800);">$5.2B FY26 guidance</td>
+          <td style="padding:10px 14px; border-bottom:1px solid var(--hive-800);">Enterprise-only, no consumer funnel, no OSS layer</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 14px; border-bottom:1px solid var(--hive-800); color:var(--hive-100); font-weight:600;">Mistral Forge</td>
+          <td style="padding:10px 14px; border-bottom:1px solid var(--hive-800);">~$400M-1B ARR trajectory</td>
+          <td style="padding:10px 14px; border-bottom:1px solid var(--hive-800);">No memory layer, no harvest, model vendor not workspace</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ==================== SECTION 4: REVENUE TARGETS ==================== -->
+<div id="revenue" class="section">
+  <h2>Revenue Projections</h2>
+  <p class="section-intro">
+    ARR waterfall by product line. Excludes existing &euro;1.2M KVARK contracted revenue.
+  </p>
+
+  <h3>Month 6 Waterfall (&sim;&euro;290K new ARR)</h3>
+  <div class="waterfall-container">
+    <div class="waterfall-bars">
+      <div class="waterfall-col">
+        <div class="waterfall-bar" style="height: 20%; background: var(--blue);">&euro;0</div>
+        <div class="waterfall-label">Free<br>Tier</div>
+      </div>
+      <div class="waterfall-col">
+        <div class="waterfall-bar" style="height: 26%; background: var(--honey);">&euro;57K</div>
+        <div class="waterfall-label">Pro<br>&euro;19/mo</div>
+      </div>
+      <div class="waterfall-col">
+        <div class="waterfall-bar" style="height: 34%; background: var(--accent);">&euro;73.5K</div>
+        <div class="waterfall-label">Teams<br>&euro;49/seat</div>
+      </div>
+      <div class="waterfall-col">
+        <div class="waterfall-bar" style="height: 14%; background: var(--cyan);">&euro;30K</div>
+        <div class="waterfall-label">HIVE<br>&euro;500/mo</div>
+      </div>
+      <div class="waterfall-col">
+        <div class="waterfall-bar" style="height: 55%; background: var(--green);">&euro;125K</div>
+        <div class="waterfall-label">KVARK<br>New</div>
+      </div>
+      <div class="waterfall-col">
+        <div class="waterfall-bar" style="height: 3%; background: var(--hive-600);">&mdash;</div>
+        <div class="waterfall-label">LM TEK<br>TBD</div>
+      </div>
+    </div>
+  </div>
+
+  <table class="revenue-table">
+    <thead>
+      <tr>
+        <th>Product Line</th>
+        <th>Unit Price</th>
+        <th>Month 6 Units</th>
+        <th>Month 6 ARR</th>
+        <th>Month 12 Units</th>
+        <th>Month 12 ARR</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="color: var(--blue); font-weight: 600;">Free Tier</td>
+        <td>&euro;0</td>
+        <td>5,000+ users</td>
+        <td>&euro;0</td>
+        <td>15,000+ users</td>
+        <td>&euro;0</td>
+      </tr>
+      <tr>
+        <td style="color: var(--honey); font-weight: 600;">Pro</td>
+        <td>&euro;19/mo</td>
+        <td>250</td>
+        <td>&euro;57,000</td>
+        <td>750</td>
+        <td>&euro;171,000</td>
+      </tr>
+      <tr>
+        <td style="color: var(--accent); font-weight: 600;">Teams</td>
+        <td>&euro;49/seat/mo</td>
+        <td>125 seats</td>
+        <td>&euro;73,500</td>
+        <td>375 seats</td>
+        <td>&euro;220,500</td>
+      </tr>
+      <tr>
+        <td style="color: var(--cyan); font-weight: 600;">HIVE</td>
+        <td>&euro;500/mo</td>
+        <td>5 units</td>
+        <td>&euro;30,000</td>
+        <td>15 units</td>
+        <td>&euro;90,000</td>
+      </tr>
+      <tr>
+        <td style="color: var(--green); font-weight: 600;">KVARK (new)</td>
+        <td>&euro;25K+/module</td>
+        <td>2-3 deals</td>
+        <td>&euro;125,000</td>
+        <td>5-8 deals</td>
+        <td>&euro;600,000</td>
+      </tr>
+      <tr class="total-row">
+        <td>TOTAL (new ARR)</td>
+        <td></td>
+        <td></td>
+        <td>&euro;285,500</td>
+        <td></td>
+        <td>&euro;1,081,500</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note-box">
+    <strong>Existing KVARK:</strong> &euro;1.2M already contracted (Egzakta enterprise deals).
+    Not included in above projections. Combined Month 12 ARR including existing KVARK:
+    <strong>&sim;&euro;2.28M</strong>.
+  </div>
+
+  <hr class="divider">
+
+  <h3>Month 12 Waterfall (&sim;&euro;1.08M new ARR)</h3>
+  <div class="waterfall-container">
+    <div class="waterfall-bars">
+      <div class="waterfall-col">
+        <div class="waterfall-bar" style="height: 3%; background: var(--blue);">&euro;0</div>
+        <div class="waterfall-label">Free</div>
+      </div>
+      <div class="waterfall-col">
+        <div class="waterfall-bar" style="height: 16%; background: var(--honey);">&euro;171K</div>
+        <div class="waterfall-label">Pro</div>
+      </div>
+      <div class="waterfall-col">
+        <div class="waterfall-bar" style="height: 21%; background: var(--accent);">&euro;221K</div>
+        <div class="waterfall-label">Teams</div>
+      </div>
+      <div class="waterfall-col">
+        <div class="waterfall-bar" style="height: 9%; background: var(--cyan);">&euro;90K</div>
+        <div class="waterfall-label">HIVE</div>
+      </div>
+      <div class="waterfall-col">
+        <div class="waterfall-bar" style="height: 56%; background: var(--green);">&euro;600K</div>
+        <div class="waterfall-label">KVARK</div>
+      </div>
+      <div class="waterfall-col">
+        <div class="waterfall-bar" style="height: 3%; background: var(--hive-600);">TBD</div>
+        <div class="waterfall-label">LM TEK</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="action-grid" style="margin-top: 24px;">
+    <div class="action-card">
+      <div class="action-title" style="color: var(--honey);">Revenue Mix Insight</div>
+      <div class="action-desc">KVARK enterprise deals dominate ARR (~55% at M12). Pro+Teams provide steady base. HIVE bridges the gap. This is a enterprise-led business with a consumer funnel.</div>
+    </div>
+    <div class="action-card">
+      <div class="action-title" style="color: var(--green);">Funnel Economics</div>
+      <div class="action-desc">5% Free &rarr; Pro conversion. 10% Pro &rarr; Teams expansion. Enterprise deals sourced through compliance ceiling discovery in Teams tier.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SECTION 5: 14-DAY SPRINT ==================== -->
+<div id="sprint" class="section">
+  <h2>Immediate Actions &mdash; 14-Day Sprint</h2>
+  <p class="section-intro">
+    The critical path items that must ship before Phase 1 launch. Click items to toggle completion status.
+  </p>
+
+  <ol class="sprint-list">
+    <li class="sprint-item" onclick="this.classList.toggle('done')">
+      <div class="sprint-check"></div>
+      <div class="sprint-num"></div>
+      <div class="sprint-text">
+        <div class="sprint-title">Wire Stripe products + webhooks</div>
+        <div class="sprint-desc">Create Stripe products for Pro/Teams/HIVE. Wire webhook endpoints to tier enforcement in sidecar. Stripe SDK already installed.</div>
+      </div>
+      <div class="sprint-tag tag-p0">P0</div>
+    </li>
+    <li class="sprint-item" onclick="this.classList.toggle('done')">
+      <div class="sprint-check"></div>
+      <div class="sprint-num"></div>
+      <div class="sprint-text">
+        <div class="sprint-title">Code signing for desktop binaries</div>
+        <div class="sprint-desc">Windows + macOS code signing certificates. SmartScreen and Gatekeeper require signing for user trust. Tauri binary unsigned = blocked downloads.</div>
+      </div>
+      <div class="sprint-tag tag-p0">P0</div>
+    </li>
+    <li class="sprint-item" onclick="this.classList.toggle('done')">
+      <div class="sprint-check"></div>
+      <div class="sprint-num"></div>
+      <div class="sprint-text">
+        <div class="sprint-title">Harvest-first onboarding UX</div>
+        <div class="sprint-desc">Replace current 7-step wizard with harvest-first flow. Import before anything else. "See your AI history" as the first magic moment.</div>
+      </div>
+      <div class="sprint-tag tag-p0">P0</div>
+    </li>
+    <li class="sprint-item" onclick="this.classList.toggle('done')">
+      <div class="sprint-check"></div>
+      <div class="sprint-num"></div>
+      <div class="sprint-text">
+        <div class="sprint-title">Prepare hive-mind OSS repository</div>
+        <div class="sprint-desc">Extract memory primitives (FrameStore, HybridSearch, KnowledgeGraph, harvest adapters, wiki skeleton) into separate Apache 2.0 repo. README + npm publish prep.</div>
+      </div>
+      <div class="sprint-tag tag-p1">P1</div>
+    </li>
+    <li class="sprint-item" onclick="this.classList.toggle('done')">
+      <div class="sprint-check"></div>
+      <div class="sprint-num"></div>
+      <div class="sprint-text">
+        <div class="sprint-title">LinkedIn post sequence draft</div>
+        <div class="sprint-desc">Write 3-post sequence: problem statement, demo video script, GitHub launch announcement. Leverage 620K weekly impressions.</div>
+      </div>
+      <div class="sprint-tag tag-content">CONTENT</div>
+    </li>
+    <li class="sprint-item" onclick="this.classList.toggle('done')">
+      <div class="sprint-check"></div>
+      <div class="sprint-num"></div>
+      <div class="sprint-text">
+        <div class="sprint-title">Demo video: harvest &rarr; wiki</div>
+        <div class="sprint-desc">Record screencast: export ChatGPT data, import into Waggle, watch wiki compile. Show the "18 months of AI history" magic moment.</div>
+      </div>
+      <div class="sprint-tag tag-content">CONTENT</div>
+    </li>
+    <li class="sprint-item" onclick="this.classList.toggle('done')">
+      <div class="sprint-check"></div>
+      <div class="sprint-num"></div>
+      <div class="sprint-text">
+        <div class="sprint-title">Finalize arXiv Paper #1 (Memory)</div>
+        <div class="sprint-desc">Complete empirical sections, run benchmark suite, format for arXiv submission. Architecture narrative already reviewable.</div>
+      </div>
+      <div class="sprint-tag tag-growth">GROWTH</div>
+    </li>
+    <li class="sprint-item" onclick="this.classList.toggle('done')">
+      <div class="sprint-check"></div>
+      <div class="sprint-num"></div>
+      <div class="sprint-text">
+        <div class="sprint-title">Trial expiry &rarr; Free fallback flow</div>
+        <div class="sprint-desc">Verify trial timestamp enforcement. 15-day trial with all features, then graceful degradation to Free tier. Modal already built, verify end-to-end.</div>
+      </div>
+      <div class="sprint-tag tag-p1">P1</div>
+    </li>
+    <li class="sprint-item" onclick="this.classList.toggle('done')">
+      <div class="sprint-check"></div>
+      <div class="sprint-num"></div>
+      <div class="sprint-text">
+        <div class="sprint-title">Warm-list outreach (72h pre-launch)</div>
+        <div class="sprint-desc">Compile list of researchers, developers, and journalists for 72h pre-publication notification. Personal emails, not mass blast.</div>
+      </div>
+      <div class="sprint-tag tag-growth">GROWTH</div>
+    </li>
+    <li class="sprint-item" onclick="this.classList.toggle('done')">
+      <div class="sprint-check"></div>
+      <div class="sprint-num"></div>
+      <div class="sprint-text">
+        <div class="sprint-title">v2 hypothesis decisions (Q1-Q5)</div>
+        <div class="sprint-desc">Approve or amend the 5 hypothesis v2 decisions in docs/hypothesis-v2-decisions.md. Unblocks GEPA paper timeline and $200 4-day runbook.</div>
+      </div>
+      <div class="sprint-tag tag-growth">GROWTH</div>
+    </li>
+  </ol>
+
+  <div class="note-box">
+    <strong>Dependency chain:</strong> Items 1-3 are hard blockers for Phase 1 launch.
+    Item 4 (hive-mind repo) should launch 30-60 days after v2 hypothesis reveal to compound attention.
+    Items 5-6 (content) can be parallelized with engineering work.
+    Item 10 (hypothesis decisions) unblocks the entire GEPA/Paper #2 track.
+  </div>
+</div>
+
+<!-- ==================== FOOTER ==================== -->
+<div class="footer">
+  Egzakta Group &middot; Strategic Launch Sequence &middot; Q2-Q4 2026<br>
+  <a href="https://waggle-os.ai">waggle-os.ai</a> &middot; <a href="https://www.kvark.ai">kvark.ai</a><br>
+  <span style="margin-top: 6px; display: inline-block; color: var(--hive-600);">
+    Generated 2026-04-15 &middot; Hive Design System
+  </span>
+</div>
+
+<!-- ==================== SCRIPTS ==================== -->
+<script>
+function show(id) {
+  document.querySelectorAll('.section').forEach(function(s) { s.classList.remove('active'); });
+  document.querySelectorAll('.nav button').forEach(function(b) { b.classList.remove('active'); });
+  document.getElementById(id).classList.add('active');
+  var buttons = document.querySelectorAll('.nav button');
+  var map = { phases: 0, ladder: 1, moat: 2, revenue: 3, sprint: 4 };
+  if (map[id] !== undefined) { buttons[map[id]].classList.add('active'); }
+}
+
+function togglePhase(id) {
+  document.getElementById(id).classList.toggle('open');
+}
+
+/* Animate waterfall bars on section reveal */
+var observer = new IntersectionObserver(function(entries) {
+  entries.forEach(function(entry) {
+    if (entry.isIntersecting) {
+      var bars = entry.target.querySelectorAll('.waterfall-bar');
+      bars.forEach(function(bar, i) {
+        var h = bar.style.height;
+        bar.style.height = '0%';
+        setTimeout(function() { bar.style.height = h; }, 100 + i * 80);
+      });
+    }
+  });
+}, { threshold: 0.3 });
+
+document.querySelectorAll('.waterfall-container').forEach(function(c) {
+  observer.observe(c);
+});
+</script>
+
+</body>
+</html>
