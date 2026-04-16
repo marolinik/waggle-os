@@ -49,6 +49,16 @@
 | M9 | Contact ML peer reviewer for papers | Phase 6 | 1 day |
 | M10 | Greenlight launch date | Everything | Decision |
 
+### Block 1b: E2E Test Fix Sprint (do FIRST next session)
+
+| # | Task | Status |
+|---|------|--------|
+| E2E-1 | Delete stale .mind test data so server creates fresh DBs with full schema (ai_interactions table) | TODO |
+| E2E-2 | Fix 23 failing E2E tests: schema migration (compliance tables) + UI selector drift | TODO |
+| E2E-3 | Verify all E2E specs use canonical tier names (FREE/PRO/TEAMS/ENTERPRISE) — 5 files fixed, check remaining | DONE (5 files fixed in 5ccb96e) |
+| E2E-4 | Run full E2E suite → 101/101 green | TODO |
+| **GATE** | All E2E pass before any new feature work | |
+
 ### Block 2: Phase 1 — Harvest Marko's Real Data (~3 days, ~$50)
 
 | # | Task | Depends on |
