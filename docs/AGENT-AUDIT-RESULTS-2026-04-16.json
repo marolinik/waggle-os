@@ -1,0 +1,272 @@
+[
+  {
+    "session": 1,
+    "name": "Cold Start — First Message in Fresh Workspace",
+    "passed": 4,
+    "failed": 0,
+    "details": [
+      {
+        "name": "Agent responds",
+        "pass": true,
+        "detail": "1486 chars"
+      },
+      {
+        "name": "No error",
+        "pass": true,
+        "detail": "clean"
+      },
+      {
+        "name": "Has done event",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "GEPA behavior on first message",
+        "pass": true,
+        "detail": "GEPA did not fire (msg was detailed enough)"
+      }
+    ]
+  },
+  {
+    "session": 2,
+    "name": "Memory Formation — Agent Stores User Facts",
+    "passed": 5,
+    "failed": 0,
+    "details": [
+      {
+        "name": "Agent acknowledges",
+        "pass": true,
+        "detail": "324 chars"
+      },
+      {
+        "name": "Frames created",
+        "pass": true,
+        "detail": "1 frames"
+      },
+      {
+        "name": "Entities extracted",
+        "pass": true,
+        "detail": "17 entities"
+      },
+      {
+        "name": "No garbage person entities",
+        "pass": true,
+        "detail": "clean"
+      },
+      {
+        "name": "Marko extracted as person entity",
+        "pass": true,
+        "detail": "found"
+      }
+    ]
+  },
+  {
+    "session": 3,
+    "name": "Memory Recall — Agent Remembers Previous Facts",
+    "passed": 4,
+    "failed": 0,
+    "details": [
+      {
+        "name": "Agent responds",
+        "pass": true,
+        "detail": "618 chars"
+      },
+      {
+        "name": "Recall event emitted",
+        "pass": true,
+        "detail": "Recalling relevant memories..."
+      },
+      {
+        "name": "Mentions name",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "Mentions age or role",
+        "pass": true,
+        "detail": ""
+      }
+    ]
+  },
+  {
+    "session": 4,
+    "name": "Conversational Replies — GEPA Must NOT Expand",
+    "passed": 5,
+    "failed": 0,
+    "details": [
+      {
+        "name": "\"yes thats the story\" — GEPA blocked",
+        "pass": true,
+        "detail": "clean"
+      },
+      {
+        "name": "\"the first three\" — GEPA blocked",
+        "pass": true,
+        "detail": "clean"
+      },
+      {
+        "name": "\"ok continue\" — GEPA blocked",
+        "pass": true,
+        "detail": "clean"
+      },
+      {
+        "name": "\"sounds good\" — GEPA blocked",
+        "pass": true,
+        "detail": "clean"
+      },
+      {
+        "name": "\"no not that one\" — GEPA blocked",
+        "pass": true,
+        "detail": "clean"
+      }
+    ]
+  },
+  {
+    "session": 5,
+    "name": "Tool Usage — Agent Can Use Built-in Tools",
+    "passed": 2,
+    "failed": 0,
+    "details": [
+      {
+        "name": "Agent responds to tool request",
+        "pass": true,
+        "detail": "3527 chars"
+      },
+      {
+        "name": "Tool-related events present",
+        "pass": true,
+        "detail": "13 events"
+      }
+    ]
+  },
+  {
+    "session": 6,
+    "name": "Persona — Different Persona Gives Different Behavior",
+    "passed": 3,
+    "failed": 0,
+    "details": [
+      {
+        "name": "Default persona responds",
+        "pass": true,
+        "detail": "2316 chars"
+      },
+      {
+        "name": "Researcher persona responds",
+        "pass": true,
+        "detail": "2128 chars"
+      },
+      {
+        "name": "Both personas functional",
+        "pass": true,
+        "detail": ""
+      }
+    ]
+  },
+  {
+    "session": 7,
+    "name": "Entity Extraction Quality — No Garbage Entities",
+    "passed": 4,
+    "failed": 0,
+    "details": [
+      {
+        "name": "Agent responds",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "No garbage person entities",
+        "pass": true,
+        "detail": "clean (4 persons: Marko Markovic, Marko Markovic, Marko Markovic, Alice Johnson)"
+      },
+      {
+        "name": "Alice Johnson classified as person",
+        "pass": true,
+        "detail": "correct"
+      },
+      {
+        "name": "Microsoft not classified as person",
+        "pass": true,
+        "detail": "type: concept"
+      }
+    ]
+  },
+  {
+    "session": 8,
+    "name": "Evolution Pipeline — Trace Recording",
+    "passed": 4,
+    "failed": 0,
+    "details": [
+      {
+        "name": "Execution traces recorded",
+        "pass": true,
+        "detail": "15 traces"
+      },
+      {
+        "name": "Evolution runs endpoint accessible",
+        "pass": true,
+        "detail": "status 200"
+      },
+      {
+        "name": "Evolution status endpoint accessible",
+        "pass": true,
+        "detail": "status 200"
+      },
+      {
+        "name": "Evolution status has expected fields",
+        "pass": true,
+        "detail": "{\"counts\":{\"proposed\":0,\"accepted\":0,\"rejected\":0,\"deployed\":0,\"failed\":0},\"pendingCount\":0}"
+      }
+    ]
+  },
+  {
+    "session": 9,
+    "name": "Cross-Workspace Isolation",
+    "passed": 2,
+    "failed": 0,
+    "details": [
+      {
+        "name": "Workspace B responds",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "Cross-workspace behavior documented",
+        "pass": true,
+        "detail": "FALCON not in B (workspace isolation working)"
+      }
+    ]
+  },
+  {
+    "session": 10,
+    "name": "Edge Cases — Short Messages, Special Characters",
+    "passed": 4,
+    "failed": 1,
+    "details": [
+      {
+        "name": "Handles \"hi\"",
+        "pass": true,
+        "detail": "58 chars"
+      },
+      {
+        "name": "Handles special chars",
+        "pass": true,
+        "detail": ""
+      },
+      {
+        "name": "No XSS in response",
+        "pass": false,
+        "detail": ""
+      },
+      {
+        "name": "Handles whitespace message",
+        "pass": true,
+        "detail": "328 chars"
+      },
+      {
+        "name": "Handles long message",
+        "pass": true,
+        "detail": "2024 chars"
+      }
+    ]
+  }
+]
