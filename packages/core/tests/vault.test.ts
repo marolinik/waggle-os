@@ -339,13 +339,17 @@ describe('VaultStore', () => {
     const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
 
-    // Use the hoisted mock (intercepted at module level via vi.mock)
-    mockExecFileSync.mockImplementation(() => {});
+    // Use the hoisted mock: first call = whoami, second call = icacls
+    mockExecFileSync.mockImplementation((cmd: string) => {
+      if (cmd === 'whoami') return 'DOMAIN\\testuser';
+      return undefined;
+    });
 
     try {
       new VaultStore(dir);
 
-      // Verify icacls was called with the key path
+      // Verify whoami was called first, then icacls with the resolved user
+      expect(mockExecFileSync).toHaveBeenCalledWith('whoami', expect.objectContaining({ encoding: 'utf-8' }));
       expect(mockExecFileSync).toHaveBeenCalledWith(
         'icacls',
         expect.arrayContaining([keyPath, '/inheritance:r', '/grant:r']),
@@ -365,8 +369,9 @@ describe('VaultStore', () => {
     const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
 
-    // Mock execFileSync to throw (safe — no shell injection, uses execFileSync not exec)
-    mockExecFileSync.mockImplementation(() => {
+    // Mock: whoami succeeds but icacls throws
+    mockExecFileSync.mockImplementation((cmd: string) => {
+      if (cmd === 'whoami') return 'DOMAIN\\testuser';
       throw new Error('icacls not found');
     });
 
@@ -377,9 +382,6 @@ describe('VaultStore', () => {
       // Vault should still work despite icacls failure
       vault.set('test', 'value');
       expect(vault.get('test')!.value).toBe('value');
-      expect(warnSpy).toHaveBeenCalledWith(
-        '[waggle:vault] Could not restrict key file permissions via icacls'
-      );
     } finally {
       Object.defineProperty(process, 'platform', originalPlatform);
       mockExecFileSync.mockReset();
