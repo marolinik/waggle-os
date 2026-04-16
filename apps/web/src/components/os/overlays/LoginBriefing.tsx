@@ -56,6 +56,7 @@ function truncateHighlight(content: string): string {
 const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
   const [summaries, setSummaries] = useState<WorkspaceSummary[]>([]);
   const [highlights, setHighlights] = useState<MemoryHighlight[]>([]);
+  const [personalFrameCount, setPersonalFrameCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [greeting, setGreeting] = useState('');
 
@@ -70,10 +71,14 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
 
   const loadBriefing = async () => {
     try {
-      const [workspaces, frames] = await Promise.all([
+      const [workspaces, frames, stats] = await Promise.all([
         adapter.getWorkspaces(),
         adapter.searchMemory('important decision project plan', 'global').catch(() => []),
+        adapter.getMemoryStats().catch(() => null),
       ]);
+
+      const personalCount = (stats as any)?.personal?.frameCount ?? 0;
+      setPersonalFrameCount(personalCount);
 
       // Memory highlights — top 3 recent high-importance frames
       const topFrames = frames
@@ -86,10 +91,8 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
         }));
       setHighlights(topFrames);
 
-      // Workspace summaries
-      const sorted = workspaces
-        .filter((w: Workspace) => w.id !== 'default')
-        .slice(0, 5);
+      // Workspace summaries — show all, not just ones with content
+      const sorted = workspaces.slice(0, 5);
 
       const contextPromises = sorted.map(async (ws: Workspace) => {
         try {
@@ -116,13 +119,13 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
         }
       });
 
-      const results = await Promise.all(contextPromises);
-      setSummaries(results.filter(r => r.memoryCount > 0 || r.sessionCount > 0));
+      setSummaries(await Promise.all(contextPromises));
     } catch { /* ignore */ }
     finally { setLoading(false); }
   };
 
-  const totalMemories = summaries.reduce((acc, s) => acc + s.memoryCount, 0);
+  const workspaceMemories = summaries.reduce((acc, s) => acc + s.memoryCount, 0);
+  const totalMemories = personalFrameCount + workspaceMemories;
   const totalPending = summaries.reduce((acc, s) => acc + (s.pendingTasks?.length ?? 0), 0);
 
   return (

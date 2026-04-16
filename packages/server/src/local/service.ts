@@ -66,14 +66,15 @@ export function checkPortAvailable(port: number): Promise<boolean> {
  * P0-3 fix: Also checks vault to match getAnthropicKey() in anthropic-proxy.ts.
  */
 function hasAnthropicKey(dataDir: string, server?: FastifyInstance): boolean {
-  if (process.env.ANTHROPIC_API_KEY) return true;
-  // Check vault (encrypted storage from Settings UI)
+  // Vault first — encrypted storage is the canonical secret store
   if (server && (server as any).vault) {
     try {
       const entry = (server as any).vault.get('anthropic');
       if (entry?.value) return true;
     } catch { /* vault read failed */ }
   }
+  // Legacy fallbacks
+  if (process.env.ANTHROPIC_API_KEY) return true;
   try {
     const configPath = path.join(dataDir, 'config.json');
     if (fs.existsSync(configPath)) {

@@ -79,12 +79,13 @@ const OnboardingTooltips = ({ templateId, onDismiss }: OnboardingTooltipsProps) 
     <AnimatePresence>
       {!dismissed && (
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 20 }}
-          className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[100] w-full max-w-sm"
+          initial={{ opacity: 0, scale: 0.95, y: 10 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 10 }}
+          transition={{ type: 'spring', damping: 22, stiffness: 260 }}
+          className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100] w-full max-w-lg px-6"
         >
-          <div className="glass-strong rounded-xl px-5 py-4 shadow-xl">
+          <div className="glass-strong rounded-2xl px-8 py-7 shadow-2xl border border-primary/20">
             <AnimatePresence mode="wait">
               <motion.p
                 key={tipIndex}
@@ -92,7 +93,7 @@ const OnboardingTooltips = ({ templateId, onDismiss }: OnboardingTooltipsProps) 
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -10 }}
                 transition={{ duration: 0.15 }}
-                className="text-sm text-foreground mb-3"
+                className="text-lg text-foreground mb-5 leading-relaxed"
               >
                 {tips[tipIndex]}
               </motion.p>
@@ -100,27 +101,27 @@ const OnboardingTooltips = ({ templateId, onDismiss }: OnboardingTooltipsProps) 
 
             <div className="flex items-center justify-between">
               {/* Dot indicators */}
-              <div className="flex gap-1">
+              <div className="flex gap-1.5">
                 {tips.map((_, i) => (
                   <div
                     key={i}
-                    className={`w-1.5 h-1.5 rounded-full transition-colors ${
+                    className={`w-2 h-2 rounded-full transition-colors ${
                       i === tipIndex ? 'bg-primary' : 'bg-muted-foreground/30'
                     }`}
                   />
                 ))}
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-4">
                 <button
                   onClick={handleDismissAll}
-                  className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Dismiss all
                 </button>
                 <button
                   onClick={handleNext}
-                  className="px-3 py-1 rounded-lg bg-primary text-primary-foreground text-xs font-display font-semibold hover:bg-primary/80 transition-colors"
+                  className="px-4 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-display font-semibold hover:bg-primary/80 transition-colors"
                 >
                   {isLast ? 'Got it' : 'Next'}
                 </button>

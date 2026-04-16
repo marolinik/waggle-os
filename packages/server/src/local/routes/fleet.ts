@@ -50,7 +50,7 @@ export async function fleetRoutes(fastify: FastifyInstance) {
     const { task, persona, model, parentWorkspaceId } = request.body;
     if (!task) return reply.code(400).send({ error: 'task is required' });
 
-    const wsId = parentWorkspaceId || 'local-default';
+    const wsId = parentWorkspaceId || fastify.workspaceManager.getDefault() || fastify.workspaceManager.list()[0]?.id || 'default-workspace';
     const sessionManager = (fastify as any).sessionManager;
     if (!sessionManager) return reply.code(503).send({ error: 'Session manager not available' });
 

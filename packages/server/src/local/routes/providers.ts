@@ -39,6 +39,7 @@ const LLM_PROVIDERS: ProviderDef[] = [
   {
     id: 'anthropic', name: 'Anthropic', keyPrefix: 'sk-ant-', keyUrl: 'https://console.anthropic.com/settings/keys', badge: null, requiresKey: true,
     models: [
+      { id: 'claude-opus-4-7', name: 'Claude Opus 4.7', cost: '$$$', speed: 'slow' },
       { id: 'claude-opus-4-6', name: 'Claude Opus 4.6', cost: '$$$', speed: 'slow' },
       { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', cost: '$$', speed: 'medium' },
       { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', cost: '$', speed: 'fast' },

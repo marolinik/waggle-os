@@ -262,6 +262,28 @@ export class WorkspaceManager {
   }
 
   /**
+   * Ensure at least one workspace exists. If none, create a default one
+   * and mark it as the default. Idempotent — safe to call on every startup.
+   */
+  ensureDefault(options?: Partial<CreateWorkspaceOptions>): WorkspaceConfig {
+    const existing = this.list();
+    if (existing.length > 0) {
+      const defaultId = this.getDefault();
+      const found = defaultId ? this.get(defaultId) : null;
+      return found ?? existing[0];
+    }
+
+    const ws = this.create({
+      name: 'Default Workspace',
+      group: 'Personal',
+      personaId: 'researcher',
+      ...options,
+    });
+    this.setDefault(ws.id);
+    return ws;
+  }
+
+  /**
    * Generate a slug-based ID from a workspace name.
    * Handles duplicates by appending -2, -3, etc.
    */

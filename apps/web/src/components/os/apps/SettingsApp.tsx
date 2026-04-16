@@ -252,14 +252,14 @@ const SettingsApp = () => {
               <div className="flex gap-3">
                 <button
                   onClick={async () => {
-                    if (!confirm('Delete all collected telemetry data? This cannot be undone.')) return;
+                    if (!confirm('Clear all collected telemetry events? This cannot be undone. (Does not delete your memory, workspaces, chats, or vault.)')) return;
                     await adapter.clearTelemetry();
                     setTelemetryCount(0);
                   }}
                   className="flex items-center gap-1.5 text-[11px] text-destructive hover:text-destructive/80 transition-colors"
                 >
                   <Trash2 className="w-3 h-3" />
-                  Delete all data
+                  Clear telemetry events
                 </button>
               </div>
             </div>
@@ -310,7 +310,13 @@ const SettingsApp = () => {
             {/* Provider key status */}
             <div className="border-t border-border/30 pt-4">
               <h4 className="text-xs font-display font-semibold text-foreground mb-3">Provider API Keys</h4>
-              <p className="text-[11px] text-muted-foreground mb-3">Keys are encrypted in the Vault. Click <Lock className="w-3 h-3 inline" /> to manage keys.</p>
+
+              <div className="flex items-start gap-2.5 p-3 mb-3 rounded-lg bg-primary/10 border border-primary/30">
+                <Lock className="w-4 h-4 mt-0.5 text-primary shrink-0" />
+                <p className="text-xs text-foreground leading-relaxed">
+                  Keys are encrypted in the <strong className="text-primary">Vault</strong>. This list is read-only — to add, update, or remove a key, open the <strong className="text-primary">Vault</strong> app from the dock.
+                </p>
+              </div>
 
               <div className="space-y-1.5">
                 {providers.filter(p => p.requiresKey).map(p => (
@@ -332,10 +338,6 @@ const SettingsApp = () => {
                 ))}
               </div>
 
-              <p className="text-[11px] text-muted-foreground mt-3">
-                <Key className="w-3 h-3 inline mr-1" />
-                To add or update API keys, open the <strong>Vault</strong> app from the dock.
-              </p>
             </div>
 
             {/* Search provider status */}

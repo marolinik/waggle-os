@@ -2,20 +2,9 @@ import { useState, useCallback, useEffect } from 'react';
 import { adapter } from '@/lib/adapter';
 import type { Workspace } from '@/lib/types';
 
-const DEFAULT_WORKSPACE: Workspace = {
-  id: 'local-default',
-  name: 'Default Workspace',
-  group: 'Personal',
-  persona: 'researcher',
-  health: 'healthy',
-  memoryCount: 0,
-  sessionCount: 0,
-  lastActive: new Date().toISOString(),
-};
-
 export const useWorkspaces = () => {
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([DEFAULT_WORKSPACE]);
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(DEFAULT_WORKSPACE.id);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,13 +12,8 @@ export const useWorkspaces = () => {
     setLoading(true);
     try {
       const data = await adapter.getWorkspaces();
-      if (data.length > 0) {
-        setWorkspaces(data);
-        // Only auto-select if no active workspace or still on default
-        setActiveWorkspaceId(prev =>
-          (!prev || prev === DEFAULT_WORKSPACE.id) ? data[0].id : prev
-        );
-      }
+      setWorkspaces(data);
+      setActiveWorkspaceId(prev => prev ?? data[0]?.id ?? null);
       setError(null);
     } catch (err) {
       console.error('[useWorkspaces] fetch failed:', err);
@@ -43,7 +27,7 @@ export const useWorkspaces = () => {
   const createWorkspace = useCallback(async (data: { name: string; group: string; persona?: string; agentGroupId?: string; shared?: boolean; templateId?: string }) => {
     try {
       const ws = await adapter.createWorkspace(data);
-      setWorkspaces(prev => [...prev.filter(w => w.id !== DEFAULT_WORKSPACE.id), ws]);
+      setWorkspaces(prev => [...prev, ws]);
       setActiveWorkspaceId(ws.id);
       return ws;
     } catch (err) {
@@ -60,7 +44,7 @@ export const useWorkspaces = () => {
         sessionCount: 0,
         lastActive: new Date().toISOString(),
       };
-      setWorkspaces(prev => [...prev.filter(w => w.id !== DEFAULT_WORKSPACE.id), localWs]);
+      setWorkspaces(prev => [...prev, localWs]);
       setActiveWorkspaceId(localWs.id);
       return localWs;
     }

@@ -282,6 +282,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
 
   // Workspace manager
   const wsManager = new WorkspaceManager(fullConfig.dataDir);
+  wsManager.ensureDefault();
   server.decorate('workspaceManager', wsManager);
 
   // MultiMind — open personal mind, no workspace yet (selected via API)
@@ -336,6 +337,47 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   // Vault — encrypted secret storage
   const vault = new VaultStore(fullConfig.dataDir);
   server.decorate('vault', vault);
+
+  // Hydrate process.env from vault so the LiteLLM sidecar config
+  // (os.environ/OPENAI_API_KEY, etc.) resolves without needing a .env file.
+  // Vault is the canonical secret store; env is populated on boot as a
+  // convenience layer for downstream libraries that read process.env directly.
+  const VAULT_TO_ENV: Record<string, string[]> = {
+    anthropic: ['ANTHROPIC_API_KEY'],
+    openai: ['OPENAI_API_KEY'],
+    google: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
+    xai: ['XAI_API_KEY'],
+    deepseek: ['DEEPSEEK_API_KEY'],
+    mistral: ['MISTRAL_API_KEY'],
+    alibaba: ['DASHSCOPE_API_KEY'],
+    minimax: ['MINIMAX_API_KEY'],
+    zhipu: ['ZHIPU_API_KEY'],
+    moonshot: ['MOONSHOT_API_KEY'],
+    perplexity: ['PERPLEXITY_API_KEY'],
+    openrouter: ['OPENROUTER_API_KEY'],
+  };
+  let hydrated = 0;
+  for (const [vaultName, envNames] of Object.entries(VAULT_TO_ENV)) {
+    const entry = vault.get(vaultName);
+    if (!entry?.value) continue;
+    for (const envName of envNames) {
+      if (!process.env[envName]) {
+        process.env[envName] = entry.value;
+        hydrated++;
+      }
+    }
+  }
+  // Pass-through secrets whose vault name already matches the env var name
+  for (const passthrough of ['TAVILY_API_KEY', 'BRAVE_API_KEY']) {
+    const entry = vault.get(passthrough);
+    if (entry?.value && !process.env[passthrough]) {
+      process.env[passthrough] = entry.value;
+      hydrated++;
+    }
+  }
+  if (hydrated > 0) {
+    log.info(`Hydrated ${hydrated} env var(s) from vault for provider SDKs`);
+  }
 
   // M2-7: Telemetry — local, opt-in, privacy-first
   const waggleConfigForTelemetry = new WaggleConfig(fullConfig.dataDir);

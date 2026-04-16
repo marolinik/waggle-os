@@ -109,6 +109,35 @@ model_list:
       model: dashscope/qwen-max
       api_key: os.environ/DASHSCOPE_API_KEY
 
+  # ── MiniMax ────────────────────────────────────────────────────
+  - model_name: minimax-01
+    litellm_params:
+      model: openai/abab6.5s-chat
+      api_base: https://api.minimaxi.chat/v1
+      api_key: os.environ/MINIMAX_API_KEY
+
+  - model_name: minimax-2.7
+    litellm_params:
+      model: openai/MiniMax-Text-01
+      api_base: https://api.minimaxi.chat/v1
+      api_key: os.environ/MINIMAX_API_KEY
+
+  # ── GLM / Zhipu ────────────────────────────────────────────────
+  - model_name: glm-4-plus
+    litellm_params:
+      model: openai/glm-4-plus
+      api_base: https://open.bigmodel.cn/api/paas/v4
+      api_key: os.environ/ZHIPU_API_KEY
+
+  - model_name: glm-5
+    litellm_params:
+      model: openai/glm-5
+      api_base: https://open.bigmodel.cn/api/paas/v4
+      api_key: os.environ/ZHIPU_API_KEY
+
+  # ── Tavily (search — not LLM, but here for completeness) ───────
+  # Tavily is consumed by Waggle search routes, not LiteLLM.
+
 litellm_settings:
   drop_params: true
   request_timeout: 120
