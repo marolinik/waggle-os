@@ -109,6 +109,22 @@ model_list:
       model: dashscope/qwen-max
       api_key: os.environ/DASHSCOPE_API_KEY
 
+  # ── Mistral ────────────────────────────────────────────────────
+  - model_name: mistral-large-latest
+    litellm_params:
+      model: mistral/mistral-large-latest
+      api_key: os.environ/MISTRAL_API_KEY
+
+  - model_name: mistral-small-latest
+    litellm_params:
+      model: mistral/mistral-small-latest
+      api_key: os.environ/MISTRAL_API_KEY
+
+  - model_name: codestral-latest
+    litellm_params:
+      model: mistral/codestral-latest
+      api_key: os.environ/MISTRAL_API_KEY
+
   # ── MiniMax ────────────────────────────────────────────────────
   - model_name: minimax-01
     litellm_params:
