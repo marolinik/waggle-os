@@ -34,7 +34,7 @@ const PERSON_FIRST_NAMES = new Set([
   'james', 'john', 'robert', 'michael', 'david', 'william', 'richard', 'joseph', 'thomas', 'charles',
   'mary', 'patricia', 'jennifer', 'linda', 'elizabeth', 'barbara', 'susan', 'jessica', 'sarah', 'karen',
   'daniel', 'matthew', 'anthony', 'mark', 'donald', 'steven', 'paul', 'andrew', 'joshua', 'kenneth',
-  'maria', 'anna', 'lisa', 'nancy', 'betty', 'margaret', 'sandra', 'ashley', 'emily', 'donna',
+  'maria', 'anna', 'lisa', 'nancy', 'betty', 'margaret', 'sandra', 'ashley', 'emily', 'donna', 'alice',
   'alex', 'sam', 'chris', 'jordan', 'taylor', 'casey', 'morgan', 'riley', 'jamie', 'drew',
   'marko', 'ana', 'mia', 'stefan', 'nikola', 'elena', 'ivan', 'peter', 'georg', 'hans',
 ]);
@@ -54,9 +54,11 @@ function classifyProperNoun(name: string): ExtractedEntity['type'] {
   const matchCount = [isOrg, isConcept, isProject, isPerson].filter(Boolean).length;
 
   if (matchCount === 0) {
-    // No indicators — if 2-3 words with no concept/org words, likely a person
-    if (words.length >= 2 && words.length <= 3) return 'person';
-    return 'concept'; // Default ambiguous multi-word phrases to concept, not person
+    // No indicators — default to concept. Only classify as person if a known
+    // first name is present. Without this guard, document headings like
+    // "Current Situation" and "Key Issues" get misclassified as person entities.
+    if (isPerson) return 'person';
+    return 'concept';
   }
 
   if (matchCount === 1) {

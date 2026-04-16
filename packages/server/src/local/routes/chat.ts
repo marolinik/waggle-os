@@ -693,11 +693,21 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           }
         }
 
+        // Count prior user messages FIRST — needed by both GEPA and ambiguity guards.
+        // Q11:A — Mid-conversation follow-ups like "yes", "run it", "LGTM" are valid
+        // replies and should NOT be expanded or flagged as vague.
+        const priorUserMessages = history.filter((m: { role: string }) => m.role === 'user').length;
+        const isFirstUserMessage = priorUserMessages <= 1; // history already includes current message
+
         // ── GEPA Optimizer: classify + expand vague prompts ──────────
         // Uses @ax-llm/ax with cheapest model (Haiku) to optimize user input
         // before the main LLM call. Non-blocking — falls back gracefully.
+        // CRITICAL: Only run on the FIRST user message in a session. Mid-conversation
+        // replies ("yes", "the first three", "thats fine") must NOT be expanded —
+        // GEPA has no conversation context and will misinterpret them as standalone
+        // vague requests, generating phantom instructions the user never intended.
         let gepaExpanded: string | null = null;
-        if (!hasCustomRunner) {
+        if (!hasCustomRunner && isFirstUserMessage) {
           try {
             const optimizer = await getOptimizerService(server);
             if (optimizer) {
@@ -723,11 +733,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
         // Build system prompt (with workspace path awareness + recalled memories)
         // GAP-006: Prepend ambiguity guard when user message is too brief/vague
-        // Q11:A — Context-aware: only trigger ambiguity detection on the FIRST user
-        // message in a session. Mid-conversation follow-ups like "yes", "run it",
-        // "LGTM" are valid replies and should not be flagged.
-        const priorUserMessages = history.filter((m: { role: string }) => m.role === 'user').length;
-        const isFirstUserMessage = priorUserMessages <= 1; // history already includes current message
         const shouldCheckAmbiguity = isFirstUserMessage && !gepaExpanded; // Skip ambiguity check if GEPA already expanded
         const ambiguityPrefix = (!hasCustomRunner && shouldCheckAmbiguity && isAmbiguousMessage(agentMessage)) ? AMBIGUITY_PROMPT : '';
 
