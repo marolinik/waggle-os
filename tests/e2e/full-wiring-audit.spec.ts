@@ -158,7 +158,7 @@ test.describe('Backend API Endpoints', () => {
     const res = await request.get(`${API}/api/tier`);
     expect(res.ok()).toBeTruthy();
     const data = await res.json();
-    expect(['SOLO', 'BASIC', 'TEAMS', 'ENTERPRISE']).toContain(data.tier);
+    expect(['FREE', 'PRO', 'TEAMS', 'ENTERPRISE']).toContain(data.tier);
   });
 
   test('GET /api/hooks returns rules array', async ({ request }) => {

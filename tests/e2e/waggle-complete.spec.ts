@@ -75,7 +75,7 @@ test.describe('1. Core API Health', () => {
     expect(res.ok()).toBe(true);
     const data = await res.json();
     expect(data.tier).toBeDefined();
-    expect(['SOLO','BASIC','TEAMS','ENTERPRISE']).toContain(data.tier);
+    expect(['FREE','PRO','TEAMS','ENTERPRISE']).toContain(data.tier);
     expect(typeof data.teamsServerAvailable).toBe('boolean');
   });
 
@@ -129,16 +129,16 @@ test.describe('1. Core API Health', () => {
 // ══════════════════════════════════════════════════════════════════════════
 
 test.describe('2. Tier Enforcement (requireTier middleware)', () => {
-  test('2.1 POST /api/personas requires BASIC — SOLO gets 403', async ({ request }) => {
+  test('2.1 POST /api/personas requires PRO — FREE gets 403', async ({ request }) => {
     const res = await request.post(`${API}/api/personas`, {
       data: { name: 'Test', description: 'test', systemPrompt: 'test' },
     });
-    // If tier is SOLO → 403 TIER_INSUFFICIENT
-    // If tier is BASIC+ → 200/201
+    // If tier is FREE → 403 TIER_INSUFFICIENT
+    // If tier is PRO+ → 200/201
     if (res.status() === 403) {
       const data = await res.json();
       expect(data.error).toBe('TIER_INSUFFICIENT');
-      expect(data.required).toBe('BASIC');
+      expect(data.required).toBe('PRO');
       expect(data.upgradeUrl).toContain('waggle-os.ai');
     } else {
       // Already on paid tier — route accessible
@@ -146,7 +146,7 @@ test.describe('2. Tier Enforcement (requireTier middleware)', () => {
     }
   });
 
-  test('2.2 POST /api/fleet/spawn requires BASIC — returns 403 or succeeds', async ({ request }) => {
+  test('2.2 POST /api/fleet/spawn requires PRO — returns 403 or succeeds', async ({ request }) => {
     const res = await request.post(`${API}/api/fleet/spawn`, {
       data: { personaId: 'researcher' },
     });
@@ -158,12 +158,12 @@ test.describe('2. Tier Enforcement (requireTier middleware)', () => {
     }
   });
 
-  test('2.3 GET /api/costs requires BASIC', async ({ request }) => {
+  test('2.3 GET /api/costs requires PRO', async ({ request }) => {
     const res = await request.get(`${API}/api/costs`);
     if (res.status() === 403) {
       const data = await res.json();
       expect(data.error).toBe('TIER_INSUFFICIENT');
-      expect(data.required).toBe('BASIC');
+      expect(data.required).toBe('PRO');
     } else {
       expect(res.ok()).toBe(true);
       const data = await res.json();
@@ -227,9 +227,9 @@ test.describe('2. Tier Enforcement (requireTier middleware)', () => {
 // ══════════════════════════════════════════════════════════════════════════
 
 test.describe('3. Stripe Integration', () => {
-  test('3.1 POST /api/stripe/create-checkout-session — SOLO tier returns URL or 503', async ({ request }) => {
+  test('3.1 POST /api/stripe/create-checkout-session — FREE tier returns URL or 503', async ({ request }) => {
     const res = await request.post(`${API}/api/stripe/create-checkout-session`, {
-      data: { tier: 'BASIC', billingPeriod: 'monthly' },
+      data: { tier: 'PRO', billingPeriod: 'monthly' },
     });
     // 200 = Stripe configured, returns checkout URL
     // 503 = STRIPE_NOT_CONFIGURED (env not set)
@@ -245,9 +245,9 @@ test.describe('3. Stripe Integration', () => {
     }
   });
 
-  test('3.2 POST /api/stripe/create-checkout-session — SOLO tier is invalid', async ({ request }) => {
+  test('3.2 POST /api/stripe/create-checkout-session — FREE tier is invalid', async ({ request }) => {
     const res = await request.post(`${API}/api/stripe/create-checkout-session`, {
-      data: { tier: 'SOLO' },
+      data: { tier: 'FREE' },
     });
     expect([400, 503]).toContain(res.status());
     if (res.status() === 400) {
@@ -266,19 +266,19 @@ test.describe('3. Stripe Integration', () => {
     expect([400, 503]).toContain(res.status());
   });
 
-  test('3.4 POST /api/stripe/create-portal-session requires BASIC tier', async ({ request }) => {
+  test('3.4 POST /api/stripe/create-portal-session requires PRO tier', async ({ request }) => {
     const res = await request.post(`${API}/api/stripe/create-portal-session`, {
       data: {},
     });
-    // SOLO → 403 TIER_INSUFFICIENT
-    // BASIC+ without Stripe customer → 400 NO_STRIPE_CUSTOMER
-    // BASIC+ with Stripe → 200
+    // FREE → 403 TIER_INSUFFICIENT
+    // PRO+ without Stripe customer → 400 NO_STRIPE_CUSTOMER
+    // PRO+ with Stripe → 200
     // Stripe not configured → 503
     expect([200, 400, 403, 503]).toContain(res.status());
     if (res.status() === 403) {
       const data = await res.json();
       expect(data.error).toBe('TIER_INSUFFICIENT');
-      expect(data.required).toBe('BASIC');
+      expect(data.required).toBe('PRO');
     }
   });
 });
@@ -349,12 +349,12 @@ test.describe('4. Marketplace', () => {
     expect(res.status()).toBe(400);
   });
 
-  test('4.8 POST /api/marketplace/install requires BASIC tier', async ({ request }) => {
+  test('4.8 POST /api/marketplace/install requires PRO tier', async ({ request }) => {
     const res = await request.post(`${API}/api/marketplace/install`, {
       data: { packageId: 9999 },
     });
-    // 403 = SOLO tier
-    // 404 = package not found (BASIC+ tier)
+    // 403 = FREE tier
+    // 404 = package not found (PRO+ tier)
     expect([403, 404]).toContain(res.status());
     if (res.status() === 403) {
       const data = await res.json();
@@ -465,7 +465,7 @@ test.describe('6. Personas', () => {
     }
   });
 
-  test('6.5 POST /api/personas/generate requires BASIC tier', async ({ request }) => {
+  test('6.5 POST /api/personas/generate requires PRO tier', async ({ request }) => {
     const res = await request.post(`${API}/api/personas/generate`, {
       data: { description: 'A helpful assistant' },
     });
@@ -592,14 +592,14 @@ test.describe('8. Hooks API', () => {
 // ══════════════════════════════════════════════════════════════════════════
 
 test.describe('9. Cost Dashboard', () => {
-  test('9.1 GET /api/costs — accessible on BASIC+', async ({ request }) => {
+  test('9.1 GET /api/costs — accessible on PRO+', async ({ request }) => {
     const res = await request.get(`${API}/api/costs`);
     if (res.ok()) {
       const data = await res.json();
       expect(data.today ?? data.allTime).toBeDefined();
       expect(Array.isArray(data.daily)).toBe(true);
     } else {
-      expect(res.status()).toBe(403); // SOLO tier
+      expect(res.status()).toBe(403); // FREE tier
     }
   });
 

@@ -323,14 +323,14 @@ test.describe('Act 3 — Persona Bonding & Identity', () => {
 
 // ══════════════════════════════════════════════════════════════════════════════
 // ACT 4 — THE TIER WALL (FOMO Engineering)
-// SOLO user hits a paid feature. Must feel like a door, not a wall.
+// FREE user hits a paid feature. Must feel like a door, not a wall.
 // The upgrade path must be clear, immediate, and emotionally charged.
 // ══════════════════════════════════════════════════════════════════════════════
 
 test.describe('Act 4 — Tier Wall: FOMO & Upgrade Pressure', () => {
 
   test('U4.1 — 403 response shows WHAT they are missing (not just "upgrade required")', async ({ request }) => {
-    // Hit a gated endpoint as SOLO
+    // Hit a gated endpoint as FREE
     const res = await request.post(`${API}/api/personas`, {
       data: { name: 'Custom', description: 'test', systemPrompt: 'test' },
     });
@@ -338,7 +338,7 @@ test.describe('Act 4 — Tier Wall: FOMO & Upgrade Pressure', () => {
       const data = await res.json();
       // Must tell user what tier they need — not just "forbidden"
       expect(data.required).toBeDefined();
-      expect(['BASIC', 'TEAMS', 'ENTERPRISE']).toContain(data.required);
+      expect(['PRO', 'TEAMS', 'ENTERPRISE']).toContain(data.required);
       // Must give them a direct path to upgrade — no dead ends
       expect(data.upgradeUrl).toBeDefined();
       expect(data.upgradeUrl).toMatch(/https?:\/\//);
@@ -358,18 +358,18 @@ test.describe('Act 4 — Tier Wall: FOMO & Upgrade Pressure', () => {
     }
   });
 
-  test('U4.3 — Tier ladder is coherent (SOLO < BASIC < TEAMS < ENTERPRISE)', async ({ request }) => {
+  test('U4.3 — Tier ladder is coherent (FREE < PRO < TEAMS < ENTERPRISE)', async ({ request }) => {
     const res = await request.get(`${API}/api/tier`);
     expect(res.ok()).toBe(true);
     const data = await res.json();
     // Tier must be a known value — no typos in production
-    expect(['SOLO', 'BASIC', 'TEAMS', 'ENTERPRISE']).toContain(data.tier);
+    expect(['FREE', 'PRO', 'TEAMS', 'ENTERPRISE']).toContain(data.tier);
     // Capabilities object must exist
     expect(data.capabilities).toBeDefined();
   });
 
-  test('U4.4 — SOLO user can still do meaningful work (not a crippled demo)', async ({ request }) => {
-    // These must work on SOLO — otherwise no one stays to upgrade
+  test('U4.4 — FREE user can still do meaningful work (not a crippled demo)', async ({ request }) => {
+    // These must work on FREE — otherwise no one stays to upgrade
     const freeEndpoints = [
       `${API}/api/workspaces`,
       `${API}/api/personas`,
@@ -386,7 +386,7 @@ test.describe('Act 4 — Tier Wall: FOMO & Upgrade Pressure', () => {
 
   test('U4.5 — Stripe checkout session has a valid URL format', async ({ request }) => {
     const res = await request.post(`${API}/api/stripe/create-checkout-session`, {
-      data: { tier: 'BASIC', billingPeriod: 'monthly' },
+      data: { tier: 'PRO', billingPeriod: 'monthly' },
     });
     if (res.status() === 200) {
       const data = await res.json();
@@ -402,12 +402,12 @@ test.describe('Act 4 — Tier Wall: FOMO & Upgrade Pressure', () => {
     }
   });
 
-  test('U4.6 — Cost dashboard teases value before the wall (SOLO sees hint, not nothing)', async ({ request }) => {
+  test('U4.6 — Cost dashboard teases value before the wall (FREE sees hint, not nothing)', async ({ request }) => {
     const res = await request.get(`${API}/api/costs`);
     if (res.status() === 403) {
       const data = await res.json();
       expect(data.error).toBe('TIER_INSUFFICIENT');
-      expect(data.required).toBe('BASIC');
+      expect(data.required).toBe('PRO');
     } else if (res.ok()) {
       const data = await res.json();
       expect(data.today ?? data.allTime).toBeDefined();
@@ -716,7 +716,7 @@ test.describe('Act 7 — Power User Spiral: High Velocity', () => {
       // Admin overview must be fast — power users check it frequently
       expect(elapsed).toBeLessThan(1000);
     } else {
-      expect(res.status()).toBe(403); // SOLO tier — acceptable
+      expect(res.status()).toBe(403); // FREE tier — acceptable
     }
   });
 
@@ -910,7 +910,7 @@ test.describe('Act 9 — Workspace Identity & Ownership', () => {
     }
   });
 
-  test('U9.5 — User can have multiple active workspaces (no artificial limit on SOLO)', async ({ request }) => {
+  test('U9.5 — User can have multiple active workspaces (no artificial limit on FREE)', async ({ request }) => {
     const names = [
       `ws-alpha-${Date.now()}`,
       `ws-beta-${Date.now()}`,

@@ -77,8 +77,8 @@ test.describe('Phase 1 — Backend Fixes', () => {
 // ── Phase 2: Tier Gating ──────────────────────────────────────────────────
 
 test.describe('Phase 2 — Tier Gating', () => {
-  test('SOLO: Mission Control shows lock overlay', async ({ page }) => {
-    await setTier('SOLO');
+  test('FREE: Mission Control shows lock overlay', async ({ page }) => {
+    await setTier('FREE');
     await skipOnboarding(page);
     await page.goto(`${API}`);
     await waitForApp(page);
@@ -95,8 +95,8 @@ test.describe('Phase 2 — Tier Gating', () => {
     }
   });
 
-  test('SOLO: sidebar shows lock icon on Mission Control', async ({ page }) => {
-    await setTier('SOLO');
+  test('FREE: sidebar shows lock icon on Mission Control', async ({ page }) => {
+    await setTier('FREE');
     await skipOnboarding(page);
     await page.goto(`${API}`);
     await waitForApp(page);
@@ -109,8 +109,8 @@ test.describe('Phase 2 — Tier Gating', () => {
     }
   });
 
-  test('SOLO: /spawn not in command palette', async ({ page }) => {
-    await setTier('SOLO');
+  test('FREE: /spawn not in command palette', async ({ page }) => {
+    await setTier('FREE');
     await skipOnboarding(page);
     await page.goto(`${API}`);
     await waitForApp(page);
@@ -122,7 +122,7 @@ test.describe('Phase 2 — Tier Gating', () => {
     // Check if /spawn is hidden
     const spawnItem = page.locator('text=/spawn');
     const isVisible = await spawnItem.isVisible({ timeout: 2000 }).catch(() => false);
-    // On SOLO, /spawn should not be visible
+    // On FREE, /spawn should not be visible
     if (isVisible) {
       // If command palette didn't open or render differently, just log
       test.info().annotations.push({ type: 'note', description: '/spawn visibility check — palette may not have opened' });
@@ -133,7 +133,7 @@ test.describe('Phase 2 — Tier Gating', () => {
     const res = await fetch(`${API}/api/tier`);
     expect(res.ok).toBeTruthy();
     const data = await res.json();
-    expect(['SOLO', 'BASIC', 'TEAMS', 'ENTERPRISE']).toContain(data.tier);
+    expect(['FREE', 'PRO', 'TEAMS', 'ENTERPRISE']).toContain(data.tier);
     expect(data.capabilities).toBeDefined();
   });
 });
