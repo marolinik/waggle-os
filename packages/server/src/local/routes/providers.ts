@@ -14,6 +14,10 @@ interface ProviderModel {
   name: string;
   cost: '$' | '$$' | '$$$';
   speed: 'fast' | 'medium' | 'slow';
+  /** Provenance: 'local' (on this machine), 'cloud' (Ollama Cloud remote), or undefined (provider-native) */
+  source?: 'local' | 'cloud';
+  /** Approximate disk footprint in MB (Ollama only) */
+  sizeMB?: number;
 }
 
 interface ProviderDef {
@@ -143,11 +147,46 @@ const SEARCH_PROVIDERS: SearchProviderDef[] = [
   { id: 'duckduckgo', name: 'DuckDuckGo', vaultKey: '', priority: 4, requiresKey: false },
 ];
 
+/** Best-effort Ollama model discovery — returns [] if Ollama isn't running. */
+async function fetchOllamaModels(): Promise<{ models: ProviderModel[]; reachable: boolean }> {
+  const endpoint = process.env.OLLAMA_HOST?.replace(/\/+$/, '') ?? 'http://localhost:11434';
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 1500);
+  try {
+    const res = await fetch(`${endpoint}/api/tags`, { signal: controller.signal });
+    if (!res.ok) return { models: [], reachable: false };
+    const data = (await res.json()) as {
+      models?: Array<{ name: string; size?: number; remote_model?: string; remote_host?: string }>;
+    };
+    const models: ProviderModel[] = (data.models ?? []).map(m => {
+      // Ollama marks cloud-proxied models with a remote_host (e.g. https://ollama.com:443)
+      const isCloud = typeof m.remote_host === 'string' && m.remote_host.length > 0;
+      const sizeMB = isCloud ? 0 : Math.round((m.size ?? 0) / 1024 / 1024);
+      return {
+        id: m.name,
+        name: m.name,
+        cost: isCloud ? '$$' : '$',
+        speed: isCloud ? 'medium' : 'fast',
+        source: isCloud ? 'cloud' : 'local',
+        ...(sizeMB > 0 ? { sizeMB } : {}),
+      };
+    });
+    return { models, reachable: true };
+  } catch {
+    return { models: [], reachable: false };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export const providerRoutes: FastifyPluginAsync = async (fastify) => {
 
   // GET /api/providers — single source of truth for all providers, models, and key status
   fastify.get('/api/providers', async () => {
     const vault = fastify.vault;
+
+    // Fetch Ollama models live (fail silently if not running)
+    const ollama = await fetchOllamaModels();
 
     // Check which providers have keys in vault
     const providers = LLM_PROVIDERS.map(p => {
@@ -155,6 +194,16 @@ export const providerRoutes: FastifyPluginAsync = async (fastify) => {
       if (p.requiresKey && vault) {
         const entry = vault.get(p.id);
         hasKey = !!entry;
+      }
+      // Enrich Ollama with live model list from localhost:11434
+      if (p.id === 'ollama') {
+        return {
+          ...p,
+          hasKey: ollama.reachable,
+          reachable: ollama.reachable,
+          models: ollama.models.length > 0 ? ollama.models : p.models,
+          badge: ollama.reachable ? (ollama.models.length > 0 ? `${ollama.models.length} installed` : 'Running') : 'Not running',
+        };
       }
       return { ...p, hasKey };
     });
