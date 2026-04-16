@@ -64,7 +64,7 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
   });
 
   // C3: Cache the base system prompt per session to avoid rebuilding on every message
-  const systemPromptCache = new Map<string, { prompt: string; workspace: string | undefined; workspaceId: string | undefined; skillCount: number; personaId: string | null }>();
+  const systemPromptCache = new Map<string, { prompt: string; workspace: string | undefined; workspaceId: string | undefined; skillCount: number; personaId: string | null; historyLength: number | undefined }>();
 
   // Profile cache (review Major #4): was fs.readFileSync on every buildSystemPrompt call —
   // blocks the Node event loop on every concurrent SSE request. Load once per mtime change,
@@ -118,7 +118,7 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
     // Check cache: reuse if same session, workspace, workspaceId, skill count, and persona
     const cacheKey = sessionId ?? 'default';
     const cached = systemPromptCache.get(cacheKey);
-    if (cached && cached.workspace === workspacePath && cached.workspaceId === workspaceId && cached.skillCount === skills.length && cached.personaId === activePersonaId) {
+    if (cached && cached.workspace === workspacePath && cached.workspaceId === workspaceId && cached.skillCount === skills.length && cached.personaId === activePersonaId && cached.historyLength === historyLength) {
       return cached.prompt;
     }
     const now = new Date();
@@ -266,7 +266,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     }
 
     // C3: Cache the built prompt
-    systemPromptCache.set(cacheKey, { prompt, workspace: workspacePath, workspaceId, skillCount: skills.length, personaId: activePersonaId });
+    systemPromptCache.set(cacheKey, { prompt, workspace: workspacePath, workspaceId, skillCount: skills.length, personaId: activePersonaId, historyLength });
 
     return prompt;
   }

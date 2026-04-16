@@ -155,9 +155,20 @@ export class CognifyPipeline {
    */
   private upsertEntities(extracted: ExtractedEntity[]): number[] {
     const ids: number[] = [];
+    // Pre-fetch entities by type to avoid N queries in the loop
+    const typeCache = new Map<string, { id: number; name: string }[]>();
+    const types = new Set(extracted.map(e => e.type));
+    for (const type of types) {
+      typeCache.set(type, this.knowledge.getEntitiesByType(type).map(ent => ({
+        id: ent.id,
+        name: ent.name.toLowerCase(),
+      })));
+    }
+
     for (const e of extracted) {
-      const existing = this.knowledge.getEntitiesByType(e.type)
-        .find(ent => ent.name.toLowerCase() === e.name.toLowerCase());
+      const cached = typeCache.get(e.type) ?? [];
+      const nameLower = e.name.toLowerCase();
+      const existing = cached.find(ent => ent.name === nameLower);
       if (existing) {
         ids.push(existing.id);
       } else {
@@ -166,6 +177,8 @@ export class CognifyPipeline {
           source: 'cognify',
         });
         ids.push(created.id);
+        // Add to cache so subsequent dupes in this batch are caught
+        cached.push({ id: created.id, name: nameLower });
       }
     }
     return ids;

@@ -241,23 +241,28 @@
   .tooltip-container {
     position: relative;
   }
+  /* Hidden inline tooltips — content extracted by JS into floating tooltip */
   .tooltip {
-    position: absolute;
-    bottom: calc(100% + 10px);
-    left: 50%;
-    transform: translateX(-50%);
+    display: none;
+  }
+  /* Floating tooltip rendered at body level */
+  #floating-tooltip {
+    position: fixed;
     background: var(--hive-800);
     border: 1px solid var(--honey-dim);
     border-radius: 10px;
     padding: 14px 16px;
-    width: 280px;
-    z-index: 1000;
+    width: 300px;
+    z-index: 10000;
     pointer-events: none;
     opacity: 0;
-    transition: opacity 0.2s;
-    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    transition: opacity 0.15s;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(229,160,0,0.15);
   }
-  .tooltip::after {
+  #floating-tooltip.visible {
+    opacity: 1;
+  }
+  #floating-tooltip::after {
     content: '';
     position: absolute;
     top: 100%;
@@ -265,9 +270,6 @@
     transform: translateX(-50%);
     border: 6px solid transparent;
     border-top-color: var(--honey-dim);
-  }
-  .comp:hover .tooltip {
-    opacity: 1;
   }
   .tooltip-title {
     font-size: 13px;
@@ -1312,41 +1314,60 @@
   // Start with first layer expanded, rest collapsed
   // (already set via class="expanded" on #layer-user)
 
-  // ---- Tooltip positioning fix for edge cases ----
+  // ---- Floating tooltip system (body-level, never clipped) ----
+  const floatingTip = document.createElement('div');
+  floatingTip.id = 'floating-tooltip';
+  document.body.appendChild(floatingTip);
+
   document.querySelectorAll('.comp').forEach(comp => {
-    comp.addEventListener('mouseenter', () => {
-      const tooltip = comp.querySelector('.tooltip');
-      if (!tooltip) return;
-      const rect = tooltip.getBoundingClientRect();
-      // If tooltip goes off the left edge
-      if (rect.left < 8) {
-        tooltip.style.left = '0';
-        tooltip.style.transform = 'translateX(0)';
+    const inline = comp.querySelector('.tooltip');
+    if (!inline) return;
+    // Pre-extract content from inline tooltip (trusted static HTML authored in this file)
+    const tipTitle = inline.querySelector('.tooltip-title');
+    const tipBody = inline.querySelector('.tooltip-body');
+    const tipFile = inline.querySelector('.tooltip-file');
+    const titleText = tipTitle ? tipTitle.textContent : '';
+    const bodyText = tipBody ? tipBody.textContent : '';
+    const fileText = tipFile ? tipFile.textContent : '';
+
+    comp.addEventListener('mouseenter', (e) => {
+      // Build tooltip content using safe DOM methods
+      floatingTip.textContent = '';
+      const t = document.createElement('div');
+      t.className = 'tooltip-title';
+      t.textContent = titleText;
+      const b = document.createElement('div');
+      b.className = 'tooltip-body';
+      b.textContent = bodyText;
+      floatingTip.appendChild(t);
+      floatingTip.appendChild(b);
+      if (fileText) {
+        const f = document.createElement('div');
+        f.className = 'tooltip-file';
+        f.textContent = fileText;
+        floatingTip.appendChild(f);
       }
-      // If tooltip goes off the right edge
-      if (rect.right > window.innerWidth - 8) {
-        tooltip.style.left = 'auto';
-        tooltip.style.right = '0';
-        tooltip.style.transform = 'translateX(0)';
-      }
-      // If tooltip goes above viewport
-      if (rect.top < 8) {
-        tooltip.style.bottom = 'auto';
-        tooltip.style.top = 'calc(100% + 10px)';
-        // Move the arrow
-        const arrow = tooltip.querySelector('::after');
-      }
+      floatingTip.classList.add('visible');
+      positionTooltip(e);
     });
+    comp.addEventListener('mousemove', positionTooltip);
     comp.addEventListener('mouseleave', () => {
-      const tooltip = comp.querySelector('.tooltip');
-      if (!tooltip) return;
-      tooltip.style.left = '';
-      tooltip.style.right = '';
-      tooltip.style.transform = '';
-      tooltip.style.bottom = '';
-      tooltip.style.top = '';
+      floatingTip.classList.remove('visible');
     });
   });
+
+  function positionTooltip(e) {
+    const tipW = 300;
+    const tipH = floatingTip.offsetHeight || 120;
+    let x = e.clientX - tipW / 2;
+    let y = e.clientY - tipH - 16;
+    // Clamp to viewport
+    if (x < 8) x = 8;
+    if (x + tipW > window.innerWidth - 8) x = window.innerWidth - tipW - 8;
+    if (y < 8) { y = e.clientY + 20; } // flip below cursor if no room above
+    floatingTip.style.left = x + 'px';
+    floatingTip.style.top = y + 'px';
+  }
 
   // ---- Smooth expand all on load for demo feel ----
   let layerIndex = 0;
