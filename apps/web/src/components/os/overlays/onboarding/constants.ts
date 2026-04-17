@@ -79,27 +79,32 @@ export function getPersonasForTemplate(templateId: string): readonly OnboardingP
   ];
 }
 
+// QW-5: display labels renamed to avoid collision with billing tiers
+// (billing uses "Pro $19/mo", "Teams $49/seat"). Dock tiers describe how
+// many icons appear — they are UI layout, not billing. Internal enum
+// values ('simple' / 'professional' / 'power') stay the same so stored
+// user preferences keep working without migration.
 export const TIER_OPTIONS: readonly TierOption[] = [
   {
     id: 'simple' as UserTier,
-    name: 'Simple',
+    name: 'Essential',
     icon: Hexagon,
     color: 'text-sky-400',
     desc: 'Clean and focused. Just the essentials — chat, files, and home.',
   },
   {
     id: 'professional' as UserTier,
-    name: 'Professional',
+    name: 'Standard',
     icon: Zap,
     color: 'text-amber-400',
     desc: 'Agents, memory, and workspace tools. The full knowledge-worker kit.',
   },
   {
     id: 'power' as UserTier,
-    name: 'Full Control',
+    name: 'Everything',
     icon: Crown,
     color: 'text-violet-400',
-    desc: 'Everything. Ops console, scheduled jobs, marketplace.',
+    desc: 'All apps visible. Ops console, scheduled jobs, marketplace.',
   },
 ] as const;
 

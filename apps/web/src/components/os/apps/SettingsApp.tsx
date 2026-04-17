@@ -189,11 +189,14 @@ const SettingsApp = () => {
                 onChange={(e) => updateOnboarding({ tier: e.target.value as UserTier })}
                 className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
-                <option value="simple">Simple — essentials only</option>
-                <option value="professional">Professional — full workspace tools</option>
-                <option value="power">Full Control — everything visible</option>
+                <option value="simple">Essential — essentials only</option>
+                <option value="professional">Standard — full workspace tools</option>
+                <option value="power">Everything — all apps visible</option>
               </select>
-              <p className="text-[11px] text-muted-foreground mt-1.5">Controls which apps appear in the dock. All apps remain accessible via Ctrl+K.</p>
+              {/* QW-5: dock tier ≠ billing plan. Make that explicit. */}
+              <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">
+                Dock layout — controls which apps appear in your dock. Independent of your Pro/Teams billing plan. All apps remain accessible via Ctrl+K.
+              </p>
             </div>
 
             {/* Theme */}

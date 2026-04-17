@@ -7,10 +7,13 @@ const TierStep = ({ selectedTier, onSelectTier, goToStep }: TierStepProps) => (
   <motion.div key="step-2" {...fadeSlide} className="text-center">
     <Sparkles className="w-10 h-10 text-primary mx-auto mb-4" />
     <h2 className="text-2xl font-display font-bold text-foreground mb-2">
-      Choose Your Experience
+      Choose Your Dock Layout
     </h2>
-    <p className="text-sm text-muted-foreground mb-8">
-      You can change this anytime in Settings.
+    <p className="text-sm text-muted-foreground mb-1">
+      How many icons appear in your dock. You can change this anytime in Settings.
+    </p>
+    <p className="text-xs text-muted-foreground/70 mb-8">
+      Not your billing plan — Pro/Teams pricing is handled separately.
     </p>
 
     <div className="grid grid-cols-3 gap-4 mb-8">
