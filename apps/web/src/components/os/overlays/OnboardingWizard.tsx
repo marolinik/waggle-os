@@ -325,9 +325,24 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
         />
       </div>
 
-      {/* Top bar: step dots + skip */}
+      {/* Top bar: step dots + back + skip */}
       <div className="flex items-center justify-between px-6 py-4">
         <div className="flex items-center gap-3">
+          {/* QW-4: Back button on steps 2-6 so users can revise earlier choices
+              without losing their progress. Step 1 (why-waggle) is the first
+              real step — no point going back to the auto-advancing welcome. */}
+          {step >= 2 && step <= 6 && (
+            <button
+              onClick={() => {
+                clearTimeout(autoTimer.current);
+                goToStep(step - 1);
+              }}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors font-display px-3 py-2 rounded-md focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              aria-label="Go to previous step"
+            >
+              ← Back
+            </button>
+          )}
           {displayStep !== null && (
             <span className="text-xs font-display text-muted-foreground">
               Step {displayStep} of 6
