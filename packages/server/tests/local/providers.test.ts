@@ -221,6 +221,10 @@ describe('Model Validation', () => {
     const s1 = sessions.create('model-val-test');
     frames.createIFrame(s1.gop_id, 'Model validation test', 'normal');
     mind.close();
+    // Set TRIAL tier so we're not capped at the FREE limit (5 workspaces).
+    // Without this, ensureDefault() + 4 test workspaces = 5, making the next
+    // POST hit the tier limit (403) before reaching model validation (400).
+    fs.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify({ tier: 'TRIAL' }));
     server = await buildLocalServer({ dataDir: tmpDir });
   });
 

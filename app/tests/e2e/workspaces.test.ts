@@ -66,8 +66,11 @@ describe('Workspaces & Sessions E2E', () => {
 
     const list = JSON.parse(listRes.payload);
     expect(list).toBeInstanceOf(Array);
-    expect(list.length).toBe(1);
-    expect(list[0].name).toBe('Test Project');
+    // Server now auto-creates a Default Workspace on boot via
+    // WorkspaceManager.ensureDefault(), so the list contains both
+    // the default and the one this test just created.
+    const testWs = list.find((w: { name: string }) => w.name === 'Test Project');
+    expect(testWs).toBeDefined();
 
     // Get by ID
     const getRes = await injectWithAuth(server, {

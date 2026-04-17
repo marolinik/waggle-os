@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles, Zap, Gem, Check, ChevronRight, Loader2, ExternalLink, Lock, Cpu, Code2 } from 'lucide-react';
+import { Sparkles, Zap, Gem, Check, ChevronRight, Loader2, ExternalLink, Lock, Cpu, Code2, AlertCircle } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { Input } from '@/components/ui/input';
 import { fadeSlide } from './constants';
 
 /**
@@ -36,6 +37,9 @@ const ModelTierStep = ({ onFinish, goToStep, creatingWorkspace }: ModelTierStepP
   const [providers, setProviders] = useState<ProviderSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTier, setSelectedTier] = useState<TierId>('free');
+  const [customOpenInput, setCustomOpenInput] = useState(false);
+  const [customModelId, setCustomModelId] = useState('');
+  const [customModelStatus, setCustomModelStatus] = useState<'idle' | 'validating' | 'valid' | 'invalid'>('idle');
 
   useEffect(() => {
     adapter.getProviders()
@@ -63,6 +67,14 @@ const ModelTierStep = ({ onFinish, goToStep, creatingWorkspace }: ModelTierStepP
 
   const anthropic = providers.find(p => p.id === 'anthropic');
   const anthropicReady = !!anthropic?.hasKey;
+  const openrouter = providers.find(p => p.id === 'openrouter');
+  const openrouterReady = !!openrouter?.hasKey;
+
+  // When native Anthropic key is missing but OR is available, fall back
+  // to the OR-routed alias (defined in litellm-config.yaml).
+  const viaOpenRouter = !anthropicReady && openrouterReady;
+  const standardModel = anthropicReady ? 'claude-sonnet-4-6' : viaOpenRouter ? 'claude-sonnet-4-6-via-openrouter' : null;
+  const powerModel = anthropicReady ? 'claude-opus-4-7' : viaOpenRouter ? 'claude-opus-4-7-via-openrouter' : null;
 
   const ollama = providers.find(p => p.id === 'ollama');
   const gemmaLocal = ollama?.models.find(m => m.id.toLowerCase().startsWith('gemma'));
@@ -70,14 +82,34 @@ const ModelTierStep = ({ onFinish, goToStep, creatingWorkspace }: ModelTierStepP
   const selectedModelId = (() => {
     switch (selectedTier) {
       case 'free': return freeModel;
-      case 'standard': return anthropicReady ? 'claude-sonnet-4-6' : freeModel;
-      case 'power': return anthropicReady ? 'claude-opus-4-7' : freeModel;
+      case 'standard': return standardModel ?? freeModel;
+      case 'power': return powerModel ?? freeModel;
       case 'local': return gemmaLocal?.id ?? null;
-      case 'custom': return null;
+      case 'custom': return customModelStatus === 'valid' ? customModelId : null;
     }
   })();
 
   const canFinish = !!selectedModelId && !creatingWorkspace && !loading;
+
+  // Validate any OpenRouter model ID against the live catalog
+  const validateCustomModel = async () => {
+    const id = customModelId.trim();
+    if (!id.includes('/')) {
+      setCustomModelStatus('invalid');
+      return;
+    }
+    setCustomModelStatus('validating');
+    try {
+      const res = await fetch('https://openrouter.ai/api/v1/models');
+      if (!res.ok) throw new Error('catalog fetch failed');
+      const data = (await res.json()) as { data?: Array<{ id: string }> };
+      const exists = (data.data ?? []).some(m => m.id === id);
+      setCustomModelStatus(exists ? 'valid' : 'invalid');
+    } catch {
+      // Can't verify — accept optimistically so user isn't blocked offline
+      setCustomModelStatus('valid');
+    }
+  };
 
   return (
     <motion.div key="step-6-models" {...fadeSlide}>
@@ -111,31 +143,39 @@ const ModelTierStep = ({ onFinish, goToStep, creatingWorkspace }: ModelTierStepP
             accent="emerald"
           />
 
-          {/* ── STANDARD — Anthropic Sonnet ────────────────── */}
+          {/* ── STANDARD — Anthropic Sonnet (or OR-routed) ───── */}
           <TierCard
             id="standard"
             selected={selectedTier === 'standard'}
-            onSelect={() => anthropicReady && setSelectedTier('standard')}
+            onSelect={() => !!standardModel && setSelectedTier('standard')}
             icon={<Zap className="w-5 h-5" />}
             title="Standard"
             subtitle="Balanced speed + quality"
             modelLabel="Claude Sonnet 4.6"
-            modelSub={anthropicReady ? 'via Anthropic · $$/M tokens' : 'Needs Anthropic key — add in Vault'}
-            disabled={!anthropicReady}
+            modelSub={
+              anthropicReady ? 'via Anthropic · $$/M tokens' :
+              viaOpenRouter ? 'via OpenRouter · $$/M tokens (+OR markup)' :
+              'Add Anthropic or OpenRouter key in Vault'
+            }
+            disabled={!standardModel}
             accent="sky"
           />
 
-          {/* ── POWER — Anthropic Opus ─────────────────────── */}
+          {/* ── POWER — Anthropic Opus (or OR-routed) ────────── */}
           <TierCard
             id="power"
             selected={selectedTier === 'power'}
-            onSelect={() => anthropicReady && setSelectedTier('power')}
+            onSelect={() => !!powerModel && setSelectedTier('power')}
             icon={<Gem className="w-5 h-5" />}
             title="Power"
             subtitle="Deepest reasoning, best for hard problems"
             modelLabel="Claude Opus 4.7"
-            modelSub={anthropicReady ? 'via Anthropic · $$$/M tokens' : 'Needs Anthropic key — add in Vault'}
-            disabled={!anthropicReady}
+            modelSub={
+              anthropicReady ? 'via Anthropic · $$$/M tokens' :
+              viaOpenRouter ? 'via OpenRouter · $$$/M tokens (+OR markup)' :
+              'Add Anthropic or OpenRouter key in Vault'
+            }
+            disabled={!powerModel}
             accent="violet"
           />
 
@@ -157,22 +197,68 @@ const ModelTierStep = ({ onFinish, goToStep, creatingWorkspace }: ModelTierStepP
           )}
 
           {/* ── ADVANCED: Custom OpenRouter model ─────────── */}
-          <button
-            type="button"
-            onClick={() => setSelectedTier('custom')}
-            className="w-full text-left px-4 py-3 rounded-xl border border-border/30 bg-secondary/20 hover:bg-secondary/40 hover:border-primary/30 transition-all group"
+          <div
+            className={`w-full rounded-xl border transition-all ${
+              selectedTier === 'custom'
+                ? 'border-primary/50 bg-primary/5'
+                : 'border-border/30 bg-secondary/20 hover:border-primary/30'
+            }`}
           >
-            <div className="flex items-center gap-3">
-              <Code2 className="w-4 h-4 text-muted-foreground group-hover:text-primary" />
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedTier('custom');
+                setCustomOpenInput(true);
+              }}
+              className="w-full text-left px-4 py-3 flex items-center gap-3"
+            >
+              <Code2 className="w-4 h-4 text-muted-foreground" />
               <div className="flex-1">
                 <p className="text-xs font-display font-semibold text-foreground">Custom OpenRouter model</p>
                 <p className="text-[11px] text-muted-foreground">
-                  Pick any of 300+ models — set in Settings after onboarding
+                  Paste any OR model ID — 300+ available, including routed Claude / Gemini / Qwen
                 </p>
               </div>
-              <ExternalLink className="w-3 h-3 text-muted-foreground" />
-            </div>
-          </button>
+              {selectedTier === 'custom' && <Check className="w-4 h-4 text-primary" />}
+            </button>
+
+            {customOpenInput && (
+              <div className="px-4 pb-3 space-y-2">
+                <div className="flex gap-2">
+                  <Input
+                    value={customModelId}
+                    onChange={e => { setCustomModelId(e.target.value); setCustomModelStatus('idle'); }}
+                    placeholder="e.g. anthropic/claude-opus-4.7 or qwen/qwen3-coder:free"
+                    className="flex-1 bg-muted/30 rounded-lg font-mono text-xs h-auto py-1.5"
+                  />
+                  <button
+                    type="button"
+                    onClick={validateCustomModel}
+                    disabled={customModelId.trim().length < 3 || customModelStatus === 'validating'}
+                    className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-display font-semibold hover:bg-primary/80 disabled:opacity-40 transition-colors"
+                  >
+                    {customModelStatus === 'validating' ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Validate'}
+                  </button>
+                </div>
+                {customModelStatus === 'valid' && (
+                  <p className="text-[11px] text-emerald-400 flex items-center gap-1.5"><Check className="w-3 h-3" /> Model available on OpenRouter</p>
+                )}
+                {customModelStatus === 'invalid' && (
+                  <p className="text-[11px] text-amber-400 flex items-center gap-1.5">
+                    <AlertCircle className="w-3 h-3" /> Not found on OpenRouter — check the ID (format: <code className="font-mono">provider/model-slug</code>)
+                  </p>
+                )}
+                <a
+                  href="https://openrouter.ai/models"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <ExternalLink className="w-2.5 h-2.5" /> Browse all OpenRouter models
+                </a>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

@@ -97,6 +97,17 @@ model_list:
       model: openrouter/auto
       api_key: os.environ/OPENROUTER_API_KEY
 
+  # OpenRouter-routed aliases — usable when native provider key is missing
+  - model_name: claude-opus-4-7-via-openrouter
+    litellm_params:
+      model: openrouter/anthropic/claude-opus-4.7
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  - model_name: claude-sonnet-4-6-via-openrouter
+    litellm_params:
+      model: openrouter/anthropic/claude-sonnet-4.6
+      api_key: os.environ/OPENROUTER_API_KEY
+
   # ── Moonshot / Kimi ────────────────────────────────────────────
   - model_name: moonshot-v1
     litellm_params:
