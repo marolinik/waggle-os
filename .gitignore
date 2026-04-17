@@ -61,3 +61,4 @@ tests/screenshots/
 s*.png
 screen*.png
 tmp_bench_results.json
+tmp_bench_results-v5.json
