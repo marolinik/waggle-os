@@ -19,6 +19,19 @@ const FRAME_TYPES = ['fact', 'event', 'insight', 'decision', 'task', 'entity'];
 
 const importanceColors = ['text-muted-foreground', 'text-muted-foreground', 'text-foreground', 'text-primary', 'text-amber-400', 'text-destructive'];
 
+// QW-2: labeled tab bar for Memory app. Replaces the cramped icon-only
+// toggles in the sidebar. Each tab is icon + short label + tooltip for the
+// longer description.
+type MemoryView = 'timeline' | 'graph' | 'harvest' | 'weaver' | 'wiki' | 'evolution';
+const MEMORY_TABS: { id: MemoryView; label: string; icon: React.ComponentType<{ className?: string }>; tooltip: string }[] = [
+  { id: 'timeline', label: 'Timeline', icon: Clock, tooltip: 'Chronological frame list' },
+  { id: 'graph', label: 'Graph', icon: Network, tooltip: 'Knowledge Graph — entities and relations' },
+  { id: 'harvest', label: 'Harvest', icon: Download, tooltip: 'Import conversations from other AIs' },
+  { id: 'weaver', label: 'Weaver', icon: Activity, tooltip: 'Memory distillation and consolidation' },
+  { id: 'wiki', label: 'Wiki', icon: BookOpen, tooltip: 'Compiled knowledge pages' },
+  { id: 'evolution', label: 'Evolution', icon: Sparkles, tooltip: 'Self-evolving prompts and agents' },
+];
+
 interface MemoryAppProps {
   frames: MemoryFrame[];
   selectedFrame: MemoryFrame | null;
@@ -96,43 +109,9 @@ const MemoryApp = ({
               <button
                 onClick={() => setShowFilters(!showFilters)}
                 className={`p-1 rounded transition-colors ${showFilters ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                title="Filter timeline"
               >
                 <Filter className="w-3 h-3" />
-              </button>
-              <button
-                onClick={() => setView(view === 'graph' ? 'timeline' : 'graph')}
-                className={`p-1 rounded transition-colors ${view === 'graph' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
-                title="Knowledge Graph"
-              >
-                <Network className="w-3 h-3" />
-              </button>
-              <button
-                onClick={() => setView(view === 'harvest' ? 'timeline' : 'harvest')}
-                className={`p-1 rounded transition-colors ${view === 'harvest' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
-                title="Memory Harvest"
-              >
-                <Download className="w-3 h-3" />
-              </button>
-              <button
-                onClick={() => setView(view === 'weaver' ? 'timeline' : 'weaver')}
-                className={`p-1 rounded transition-colors ${view === 'weaver' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
-                title="Memory Weaver (Distillation)"
-              >
-                <Activity className="w-3 h-3" />
-              </button>
-              <button
-                onClick={() => setView(view === 'wiki' ? 'timeline' : 'wiki')}
-                className={`p-1 rounded transition-colors ${view === 'wiki' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
-                title="Wiki (Compiled Knowledge)"
-              >
-                <BookOpen className="w-3 h-3" />
-              </button>
-              <button
-                onClick={() => setView(view === 'evolution' ? 'timeline' : 'evolution')}
-                className={`p-1 rounded transition-colors ${view === 'evolution' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
-                title="Evolution (Self-Evolving Prompts)"
-              >
-                <Sparkles className="w-3 h-3" />
               </button>
             </div>
           </div>
@@ -205,7 +184,31 @@ const MemoryApp = ({
       </div>
 
       {/* Main content area */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* QW-2: labeled tab bar — icon + text per view */}
+        <div className="flex border-b border-border/50 bg-background/60">
+          {MEMORY_TABS.map(tab => {
+            const Icon = tab.icon;
+            const active = view === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setView(tab.id)}
+                title={tab.tooltip}
+                aria-pressed={active}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-display border-b-2 transition-colors ${
+                  active
+                    ? 'border-primary text-primary bg-primary/5'
+                    : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex-1 overflow-auto">
         {view === 'evolution' ? (
           <EvolutionTab />
         ) : view === 'wiki' ? (
@@ -265,6 +268,7 @@ const MemoryApp = ({
             <p className="text-sm text-muted-foreground">Select a memory frame to view details</p>
           </div>
         )}
+        </div>
       </div>
 
       {/* Context menu */}
