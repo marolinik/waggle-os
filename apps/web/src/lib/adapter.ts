@@ -111,7 +111,13 @@ class LocalAdapter {
   // --- Workspaces ---
   async getWorkspaces(): Promise<Workspace[]> {
     const res = await this.fetch('/api/workspaces');
-    return res.json();
+    const list = (await res.json()) as Array<Record<string, unknown>>;
+    // P1 (PDF 2026-04-17): server stores the selected persona as `personaId`.
+    // UI reads `ws.persona`, so normalise both here.
+    return list.map(ws => ({
+      ...ws,
+      persona: (ws.persona as string | undefined) ?? (ws.personaId as string | undefined),
+    })) as Workspace[];
   }
 
   // --- Workspace Templates ---
@@ -146,7 +152,11 @@ class LocalAdapter {
   }
 
   async createWorkspace(data: { name: string; group: string; persona?: string; agentGroupId?: string; templateId?: string; shared?: boolean; model?: string; personaId?: string }): Promise<Workspace> {
-    const res = await this.fetch('/api/workspaces', { method: 'POST', body: JSON.stringify(data) });
+    // P1 (PDF 2026-04-17): server expects `personaId` (see packages/core/src/workspace-config.ts),
+    // but onboarding + older call sites pass `persona`. Bridge both so the selected
+    // persona is actually persisted on the workspace record.
+    const payload = { ...data, personaId: data.personaId ?? data.persona };
+    const res = await this.fetch('/api/workspaces', { method: 'POST', body: JSON.stringify(payload) });
     return res.json();
   }
 

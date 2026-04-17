@@ -64,7 +64,11 @@ const CockpitApp = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const healthColor = data.health?.status === 'healthy' ? 'text-emerald-400' : data.health?.status === 'degraded' ? 'text-amber-400' : 'text-destructive';
+  // Accept common synonyms for healthy/degraded so "ok" isn't rendered as destructive-red.
+  const HEALTHY = new Set(['healthy', 'ok', 'green', 'up', 'online']);
+  const DEGRADED = new Set(['degraded', 'warning', 'warn', 'amber', 'yellow']);
+  const _healthStatus = (data.health?.status ?? '').toLowerCase();
+  const healthColor = HEALTHY.has(_healthStatus) ? 'text-emerald-400' : DEGRADED.has(_healthStatus) ? 'text-amber-400' : 'text-destructive';
 
   return (
     <div className="h-full overflow-auto p-4">

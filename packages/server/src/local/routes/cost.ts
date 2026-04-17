@@ -260,7 +260,8 @@ export const costRoutes: FastifyPluginAsync = async (server) => {
 
   // D2: Alias /api/costs → /api/cost/summary for API discoverability
   // Use internal routing instead of 302 redirect so clients get a direct 200 response
-  server.get('/api/costs', { preHandler: [requireTier('PRO')] }, async (request, reply) => {
+  // P22 (PDF 2026-04-17): usage/telemetry info is free for all tiers.
+  server.get('/api/costs', async (request, reply) => {
     const days = (request.query as Record<string, string>)?.days;
     const url = days ? `/api/cost/summary?days=${days}` : '/api/cost/summary';
     const response = await server.inject({ method: 'GET', url, headers: request.headers });

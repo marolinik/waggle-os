@@ -216,6 +216,13 @@ const CapabilitiesApp = () => {
             role="tab"
             aria-selected={tab === t}
             tabIndex={tab === t ? 0 : -1}
+            title={
+              t === 'installed' ? 'Skills & apps you have explicitly installed — active in every chat' :
+              t === 'starter' ? 'Curated skills & apps that ship with Waggle by default — always available on every tier' :
+              t === 'marketplace' ? 'Browse community + official packs (skills, plugins, connectors). Synced from registry periodically.' :
+              t === 'tools' ? 'Low-level tools agents can call (read_file, run_command, etc.). Not the same as skills.' :
+              'Install / uninstall history — who added what and when'
+            }
             className={`px-3 py-1.5 text-xs rounded-md font-display transition-colors capitalize ${
               tab === t ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
             }`}

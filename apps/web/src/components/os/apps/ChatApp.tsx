@@ -927,8 +927,8 @@ const ChatApp = ({
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
               placeholder="Message Waggle... (/ for commands)"
-              className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground resize-none min-h-[20px] max-h-[120px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-              rows={1}
+              className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground resize-none min-h-[64px] max-h-[300px] py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              rows={3}
             />
             <button
               onClick={handleSend}

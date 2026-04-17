@@ -119,10 +119,15 @@ const Desktop = () => {
 
   // Trial info from backend
   const [trialInfo, setTrialInfo] = useState<{ trialDaysRemaining?: number; trialExpired?: boolean }>({});
+  const [billingTier, setBillingTier] = useState<'FREE' | 'TRIAL' | 'PRO' | 'TEAMS' | 'ENTERPRISE'>('FREE');
   const [showTrialExpired, setShowTrialExpired] = useState(false);
   useEffect(() => {
     adapter.getTier().then(data => {
       setTrialInfo({ trialDaysRemaining: data.trialDaysRemaining, trialExpired: data.trialExpired });
+      const t = String(data.tier ?? 'FREE').toUpperCase();
+      if (t === 'FREE' || t === 'TRIAL' || t === 'PRO' || t === 'TEAMS' || t === 'ENTERPRISE') {
+        setBillingTier(t);
+      }
       if (data.trialExpired) setShowTrialExpired(true);
     }).catch(() => {});
   }, []);
@@ -349,7 +354,7 @@ const Desktop = () => {
         })}
       </AnimatePresence>
 
-      <Dock tier={currentTier}
+      <Dock tier={currentTier} billingTier={billingTier}
         onOpenApp={(id) => id === 'chat' ? wm.openChatForWorkspace(activeWorkspaceId || 'local-default', activeWorkspace?.name) : wm.openApp(id)}
         openApps={wm.openAppIds} minimizedApps={wm.minimizedAppIds}
         onSpawnAgent={() => ov.setShowSpawnAgent(true)} waggleBadgeCount={waggleUnacknowledged} />

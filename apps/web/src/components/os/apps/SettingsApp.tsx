@@ -88,6 +88,7 @@ const SettingsApp = () => {
 
   // M2-7: Telemetry state
   const [telemetryEnabled, setTelemetryEnabled] = useState(false);
+  const [debugLogging, setDebugLogging] = useState(false);
   const [telemetryCount, setTelemetryCount] = useState(0);
 
   // Load settings
@@ -691,10 +692,37 @@ const SettingsApp = () => {
               <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
                 <p className="text-xs font-display font-medium text-foreground mb-1">Data Directory</p>
                 <p className="text-[11px] text-muted-foreground font-mono">~/.waggle/</p>
+                <p className="text-[11px] text-muted-foreground mt-1">All workspaces, memory, vault, and config live here.</p>
               </div>
               <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
-                <p className="text-xs font-display font-medium text-foreground mb-1">Debug Logging</p>
-                <p className="text-[11px] text-muted-foreground">Verbose logging for troubleshooting agent behavior</p>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs font-display font-medium text-foreground">Debug Logging</p>
+                  <button
+                    onClick={async () => {
+                      const next = !debugLogging;
+                      setDebugLogging(next);
+                      try { await adapter.saveSettings({ debugLogging: next } as any); } catch { /* non-blocking */ }
+                    }}
+                    aria-pressed={debugLogging}
+                    className={`relative w-10 h-5 rounded-full transition-colors ${debugLogging ? 'bg-primary' : 'bg-muted'}`}
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${debugLogging ? 'left-5' : 'left-0.5'}`} />
+                  </button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">Verbose logging for troubleshooting agent behavior.</p>
+                <div className="flex gap-2 mt-2">
+                  <a
+                    href={`${adapter.getServerUrl()}/api/debug/logs`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg bg-muted/50 text-foreground hover:bg-muted transition-colors"
+                    title="Opens audit events + health snapshot in a new tab. Save with Ctrl+S to attach to a support ticket."
+                  >
+                    <Download className="w-3 h-3" />
+                    View / save logs
+                  </a>
+                  <span className="text-[10px] text-muted-foreground self-center">Attach to support tickets</span>
+                </div>
               </div>
             </div>
           </div>

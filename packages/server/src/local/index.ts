@@ -1793,6 +1793,27 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
     sessionToken: server.agentState.wsSessionToken,
   });
 
+  // P5 (PDF 2026-04-17): minimal debug-log viewer for support attachments.
+  // Returns health + last 500 audit events + recent cost entries as JSON.
+  server.get('/api/debug/logs', async (_request, reply) => {
+    const payload: Record<string, unknown> = {
+      timestamp: new Date().toISOString(),
+      version: '0.2.0',
+      platform: process.platform,
+    };
+    try { payload.health = await server.inject({ method: 'GET', url: '/health' }).then(r => JSON.parse(r.payload)); } catch { /* non-blocking */ }
+    try {
+      const raw = (server.auditStore as unknown as { db?: { prepare: (sql: string) => { all: () => unknown[] } } })?.db;
+      if (raw) {
+        payload.auditRecent = raw.prepare('SELECT * FROM install_audit ORDER BY timestamp DESC LIMIT 500').all();
+      }
+    } catch { /* non-blocking */ }
+    try { payload.providerKeys = server.vault?.list().map(e => ({ name: e.name, updatedAt: e.updatedAt })) ?? []; } catch { /* non-blocking */ }
+    reply.header('Content-Type', 'application/json; charset=utf-8');
+    reply.header('Content-Disposition', `attachment; filename="waggle-logs-${Date.now()}.json"`);
+    return payload;
+  });
+
   // Routes
   await server.register(workspaceRoutes);
   await server.register(chatRoutes);

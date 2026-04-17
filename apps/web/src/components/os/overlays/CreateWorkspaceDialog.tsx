@@ -770,6 +770,10 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
               ) : (() => {
                 const searchLower = templateSearch.trim().toLowerCase();
                 const filtered = templates
+                  // P12 (PDF 2026-04-17): the hardcoded "Blank" tile represents
+                  // the blank template already — drop any "blank"-id template
+                  // so it doesn't render twice.
+                  .filter(t => t.id !== 'blank')
                   .filter(t => categoryFilter === 'all' ? true : categoryFilter === 'custom' ? !t.builtIn : t.category === categoryFilter)
                   .filter(t => !searchLower || t.name.toLowerCase().includes(searchLower) || t.description.toLowerCase().includes(searchLower));
                 return (

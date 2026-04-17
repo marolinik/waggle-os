@@ -135,7 +135,8 @@ const CreateGroupForm = ({ agents, onSave, onCancel, initialData, editMode }: Cr
           </div>
         )}
         {availableAgents.length > 0 && (
-          <div className="max-h-28 overflow-y-auto scrollbar-thin space-y-1 rounded-lg border border-border/20 p-2 bg-secondary/10">
+          <div className="max-h-80 overflow-y-auto scrollbar-thin space-y-1 rounded-lg border border-border/20 p-2 bg-secondary/10">
+            {/* P11 (PDF 2026-04-17): max-h raised from 28 -> 80 so a full 22-agent catalog is usable with normal scrolling instead of looking truncated at 3 */}
             {availableAgents.map(a => (
               <button
                 key={a.id}

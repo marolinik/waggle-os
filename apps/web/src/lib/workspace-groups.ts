@@ -7,11 +7,12 @@
  * Users can create workspaces with custom groups beyond this list.
  * Dashboard dynamically includes any non-standard groups from existing workspaces.
  */
+// P13 (PDF 2026-04-17): only Personal / Work / Team are semantically distinct.
+// Projects and Research are topics, not workspace scopes — they belong on the
+// template selector, not here.
 export const STANDARD_GROUPS = [
   'Personal',
   'Work',
-  'Projects',
-  'Research',
   'Team',
 ] as const;
 

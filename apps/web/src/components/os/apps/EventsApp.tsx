@@ -295,6 +295,11 @@ const EventsApp = ({ steps, autoScroll, onToggleAutoScroll, filter, onFilterChan
               className={`flex-1 text-[11px] py-1 rounded font-display transition-colors capitalize ${
                 tab === t ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'
               }`}
+              title={
+                t === 'live' ? 'Stream of every think/tool call/response as the agent runs right now' :
+                t === 'tree' ? 'Hierarchical view showing how sub-agents spawned from each turn' :
+                'Group past runs by day — inspect or re-open a prior session\'s full trace'
+              }
             >
               {t}
             </button>

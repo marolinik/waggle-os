@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Wifi, WifiOff, Search, Bell } from "lucide-react";
+import { WifiOff, Search, Bell } from "lucide-react";
 import waggleLogo from "@/assets/waggle-logo.jpeg";
 
 interface StatusBarProps {
@@ -24,7 +24,7 @@ const StatusBar = ({ workspaceName, model, tokensUsed, costUsd, offline, unreadN
   }, []);
 
   const formatTime = (d: Date) =>
-    d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
   const formatDate = (d: Date) =>
     d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
 
@@ -67,8 +67,15 @@ const StatusBar = ({ workspaceName, model, tokensUsed, costUsd, offline, unreadN
             Trial expired
           </span>
         )}
-        <button onClick={onSearchClick} className="text-muted-foreground hover:text-primary transition-colors" aria-label="Search" title="Search (⌘K)">
-          <Search className="w-3.5 h-3.5" />
+        <button
+          onClick={onSearchClick}
+          className="flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-border/40 bg-secondary/40 text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors"
+          aria-label="Search"
+          title="Search (Ctrl+K)"
+        >
+          <Search className="w-3 h-3" />
+          <span className="text-[10px] font-display">Search</span>
+          <kbd className="text-[9px] px-1 py-0.5 rounded bg-muted border border-border/40 font-mono">Ctrl K</kbd>
         </button>
         <button onClick={onNotificationClick} className="relative text-muted-foreground hover:text-primary transition-colors" aria-label="Notifications">
           <Bell className="w-3.5 h-3.5" />
@@ -78,22 +85,18 @@ const StatusBar = ({ workspaceName, model, tokensUsed, costUsd, offline, unreadN
             </span>
           )}
         </button>
-        <div className="relative group">
-          {offline ? (
+        {offline && (
+          <div className="relative group">
             <button className="flex items-center gap-1 text-destructive" title="Backend offline — messages will be queued">
               <WifiOff className="w-3.5 h-3.5" />
               <span className="text-[10px] font-display animate-pulse">Offline</span>
             </button>
-          ) : (
-            <Wifi className="w-3.5 h-3.5 text-emerald-400" />
-          )}
-          {offline && (
             <div className="absolute top-full right-0 mt-2 w-48 p-2.5 rounded-xl glass-strong border border-border/50 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
               <p className="text-[11px] font-display font-semibold text-foreground mb-1">Backend Unreachable</p>
               <p className="text-[10px] text-muted-foreground">Messages will be queued and sent when the connection is restored.</p>
             </div>
-          )}
-        </div>
+          </div>
+        )}
         <span className="text-xs text-muted-foreground">{formatDate(time)}</span>
         <span className="text-xs text-foreground font-medium">{formatTime(time)}</span>
       </div>

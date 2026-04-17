@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Rocket } from 'lucide-react';
-import { getDockForTier, type AppId, type DockEntry, type UserTier } from '@/lib/dock-tiers';
+import { getDockForTier, type AppId, type BillingTier, type DockEntry, type UserTier } from '@/lib/dock-tiers';
 import DockTray from './DockTray';
 
 // Re-export for backward compatibility
@@ -9,6 +9,7 @@ export type { AppId } from '@/lib/dock-tiers';
 
 interface DockProps {
   tier: UserTier;
+  billingTier?: BillingTier;
   onOpenApp: (id: AppId) => void;
   openApps: AppId[];
   minimizedApps?: AppId[];
@@ -16,11 +17,11 @@ interface DockProps {
   waggleBadgeCount?: number;
 }
 
-const Dock = ({ tier, onOpenApp, openApps, minimizedApps = [], onSpawnAgent, waggleBadgeCount = 0 }: DockProps) => {
+const Dock = ({ tier, billingTier = 'FREE', onOpenApp, openApps, minimizedApps = [], onSpawnAgent, waggleBadgeCount = 0 }: DockProps) => {
   const [openZone, setOpenZone] = useState<string | null>(null);
   const [trayAnchor, setTrayAnchor] = useState<DOMRect | null>(null);
   const zoneRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-  const items = getDockForTier(tier);
+  const items = getDockForTier(tier, billingTier);
 
   // Close tray on outside click
   useEffect(() => {

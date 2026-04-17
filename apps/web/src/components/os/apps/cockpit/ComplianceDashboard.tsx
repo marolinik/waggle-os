@@ -144,7 +144,7 @@ const ComplianceDashboard = () => {
       <div className="p-4 rounded-xl bg-secondary/30 border border-border/30">
         <div className="flex items-center gap-2 mb-3">
           <Shield className="w-4 h-4 text-muted-foreground" />
-          <h4 className="text-xs font-display font-semibold text-foreground">AI Act Compliance</h4>
+          <h4 className="text-xs font-display font-semibold text-foreground">EU AI Act Compliance</h4>
         </div>
         <Loader2 className="w-4 h-4 animate-spin text-muted-foreground mx-auto" />
       </div>
@@ -156,7 +156,7 @@ const ComplianceDashboard = () => {
       <div className="p-4 rounded-xl bg-secondary/30 border border-border/30">
         <div className="flex items-center gap-2">
           <Shield className="w-4 h-4 text-muted-foreground" />
-          <h4 className="text-xs font-display font-semibold text-foreground">AI Act Compliance</h4>
+          <h4 className="text-xs font-display font-semibold text-foreground">EU AI Act Compliance</h4>
         </div>
         {error ? (
           <p className="text-[11px] text-destructive mt-2">{error}</p>
@@ -227,7 +227,7 @@ const ComplianceDashboard = () => {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2 min-w-0">
           <Shield className="w-4 h-4 text-primary shrink-0" />
-          <h4 className="text-xs font-display font-semibold text-foreground">AI Act Compliance</h4>
+          <h4 className="text-xs font-display font-semibold text-foreground">EU AI Act Compliance</h4>
           {lastRefreshed && (
             <span className="text-[11px] text-muted-foreground truncate">
               · updated {formatRelative(lastRefreshed)}
@@ -235,7 +235,16 @@ const ComplianceDashboard = () => {
           )}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <span className={`px-2 py-0.5 rounded-full text-[11px] font-display font-semibold border ${STATUS_COLORS[status.overall]}`}>
+          <span
+            className={`px-2 py-0.5 rounded-full text-[11px] font-display font-semibold border ${STATUS_COLORS[status.overall]}`}
+            title={
+              status.overall === 'warning'
+                ? 'One or more articles need attention — hover each card for details. Most commonly: no interactions logged yet (Article 12).'
+                : status.overall === 'non-compliant'
+                  ? 'Critical gap — at least one article requirement is unmet. See per-article cards below.'
+                  : 'All monitored articles meet their requirements.'
+            }
+          >
             {status.overall.toUpperCase()}
           </span>
           <button

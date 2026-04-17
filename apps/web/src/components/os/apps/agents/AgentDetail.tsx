@@ -51,7 +51,9 @@ const AgentDetail = ({ agent, localPersona, allTools, onEdit }: AgentDetailProps
           <Wrench className="w-3 h-3" /> Tools ({agentTools.length})
         </h4>
         {agentTools.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground italic">No tools assigned</p>
+          <p className="text-[11px] text-muted-foreground italic">
+            Inherits all tools — no explicit allowlist. Tool use is gated by the current workspace autonomy level (Normal / Trusted / YOLO) and any per-agent denylist.
+          </p>
         ) : (
           <div className="flex flex-wrap gap-1.5">
             {agentTools.map(t => (
@@ -72,11 +74,16 @@ const AgentDetail = ({ agent, localPersona, allTools, onEdit }: AgentDetailProps
         <div>
           <h4 className="text-[11px] font-display uppercase tracking-wider text-muted-foreground mb-2">Commands</h4>
           <div className="flex flex-wrap gap-1.5">
-            {agent.suggestedCommands.map(cmd => (
-              <span key={cmd} className="text-[11px] px-2 py-1 rounded-lg bg-accent/30 text-accent-foreground font-mono">
-                /{cmd}
-              </span>
-            ))}
+            {agent.suggestedCommands.map(cmd => {
+              // P7a (PDF 2026-04-17): backend already stores canonical `/cmd`.
+              // Don't prepend another slash.
+              const display = cmd.startsWith('/') ? cmd : `/${cmd}`;
+              return (
+                <span key={cmd} className="text-[11px] px-2 py-1 rounded-lg bg-accent/30 text-accent-foreground font-mono">
+                  {display}
+                </span>
+              );
+            })}
           </div>
         </div>
       )}
