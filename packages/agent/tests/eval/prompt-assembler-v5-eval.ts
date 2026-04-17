@@ -77,7 +77,13 @@ const JUDGE_MINIMAX = 'MiniMax-M2.7';
 const TEMPERATURE_GEN = 0.2;
 const TEMPERATURE_JUDGE = 0;
 const MAX_TOKENS_GEN = 1024;
-const MAX_TOKENS_JUDGE = 512;
+// Raised from 512 after dry run: thinking-mode judges (Gemini 3.1 Pro,
+// MiniMax M2.7) consume significant output budget for internal reasoning
+// BEFORE emitting the rubric JSON. 512 caused Gemini to truncate mid-JSON
+// ("{"correctness": 7, "procedure": 10, "conciseness") and MiniMax never
+// reached the JSON payload at all. 4096 gives headroom for reasoning +
+// a full rubric response including the 3-sentence feedback field.
+const MAX_TOKENS_JUDGE = 4096;
 const BASE_SEEDS = Number.parseInt(process.env.WAGGLE_EVAL_SEEDS ?? '3', 10);
 const SKIP_SECONDARY = process.env.WAGGLE_EVAL_SKIP_SECONDARY === '1';
 const SKIP_SLUG_PROBE = process.env.WAGGLE_EVAL_SKIP_SLUG_PROBE === '1';
@@ -391,12 +397,47 @@ interface JudgeWiring {
   available: boolean;
 }
 
+/**
+ * Strip interleaved-thinking blocks from a judge response.
+ *
+ * MiniMax M2.7 wraps its output in `<think>...</think>` blocks by default.
+ * Gemini 3.1 Pro sometimes emits similar blocks under its thinking modes.
+ * The LLMJudge parser expects clean JSON, so we unwrap before returning.
+ * Defensive: also handles nested or unclosed think blocks by stripping
+ * any remaining opening tags after close-pairing. No-op on outputs that
+ * don't contain think tags (Grok, GPT-5.4 under OpenAI-compat).
+ *
+ * Dry run on 2026-04-17 showed MiniMax at 15/18 parse failures entirely
+ * due to this wrapping; fix validated by re-probe.
+ */
+function stripThinkingBlocks(raw: string): string {
+  // Strip balanced <think>...</think> (non-greedy, multi-line).
+  let out = raw.replace(/<think>[\s\S]*?<\/think>\s*/gi, '');
+  // Defensive: if an opening <think> survived without a close (budget
+  // cutoff mid-reasoning), drop everything up to and including it.
+  const stray = out.lastIndexOf('<think>');
+  if (stray >= 0) out = out.slice(stray + '<think>'.length);
+  return out.trim();
+}
+
+/** Wrap a judge call to strip thinking tags from the response. */
+function withThinkingStripper(
+  fn: (prompt: string) => Promise<string>,
+): (prompt: string) => Promise<string> {
+  return async (prompt: string) => stripThinkingBlocks(await fn(prompt));
+}
+
 function buildJudgeWirings(): JudgeWiring[] {
+  // All judges get the thinking-block stripper applied uniformly.
+  // For Grok and GPT-5.4 it's a no-op; for MiniMax and Gemini it's
+  // the difference between a parsed score and a silent drop.
   return [
     {
       name: JUDGE_GEMINI,
       available: true,
-      call: (p) => callGemini(JUDGE_GEMINI, '', p, { maxTokens: MAX_TOKENS_JUDGE, temperature: TEMPERATURE_JUDGE }),
+      call: withThinkingStripper((p) =>
+        callGemini(JUDGE_GEMINI, '', p, { maxTokens: MAX_TOKENS_JUDGE, temperature: TEMPERATURE_JUDGE }),
+      ),
     },
     {
       name: JUDGE_GPT,
@@ -404,7 +445,7 @@ function buildJudgeWirings(): JudgeWiring[] {
       // GPT-5.4 is a reasoning-class model — must use max_completion_tokens
       // and omit temperature per OpenAI's current API contract (verified
       // via 400 response during slug probe 2026-04-17).
-      call: (p) =>
+      call: withThinkingStripper((p) =>
         callOpenAICompat(
           'https://api.openai.com/v1',
           process.env.OPENAI_API_KEY ?? '',
@@ -416,11 +457,12 @@ function buildJudgeWirings(): JudgeWiring[] {
           {},
           OPENAI_REASONING_SHAPE,
         ),
+      ),
     },
     {
       name: JUDGE_GROK,
       available: true,
-      call: (p) =>
+      call: withThinkingStripper((p) =>
         callOpenAICompat(
           'https://api.x.ai/v1',
           process.env.XAI_API_KEY ?? '',
@@ -432,11 +474,12 @@ function buildJudgeWirings(): JudgeWiring[] {
           // Per §11.2: explicitly enable Grok's reasoning mode for judging.
           { reasoning: { enabled: true } },
         ),
+      ),
     },
     {
       name: JUDGE_MINIMAX,
       available: true,
-      call: (p) =>
+      call: withThinkingStripper((p) =>
         callOpenAICompat(
           'https://api.minimaxi.chat/v1',
           process.env.MINIMAX_API_KEY ?? '',
@@ -446,6 +489,7 @@ function buildJudgeWirings(): JudgeWiring[] {
           p,
           { maxTokens: MAX_TOKENS_JUDGE, temperature: TEMPERATURE_JUDGE },
         ),
+      ),
     },
   ];
 }
