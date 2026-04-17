@@ -6,22 +6,40 @@
 
 ---
 
-## 🎯 CURRENT SESSION WORK (mid-session strategic PoC)
+## ✅ DONE — PromptAssembler v4 PoC (2026-04-17 session)
 
-**PromptAssembler v4 — tier-adaptive prompt packaging** — see `docs/specs/PROMPT-ASSEMBLER-V4.md`
+**Commits:** `7467e11` · `9d424cc` · `3a055f2` on top of `ac586f7`. Eval ran 60.2 min, 342 LLM calls, zero cleanup failures.
 
-**Why first:** Strategic fork. The v4 brief tests whether a sixth prompt-layer can close ≥40% of the Opus-4.7-vs-Gemma-4-31B quality gap on reasoning tasks. Eval run is part of the deliverable — 6 scenarios × 6 primary conditions (A/B/C/D/E/F) + 4 secondary (B'/C'/B''/C''), with clean-slate MindDB per scenario and priming via Sonnet 4.6.
+**Outcome: primary hypothesis FAILED** (gap closure −21.5% vs ≥40% target) with nuanced findings:
+- F > E on 5/6 scenarios (Opus 4.6 GAINS from PA — sign inverted)
+- Qwen3-30B-A3B +26.7pp on compare (reasoning-tuned small models benefit)
+- Gemma 4 31B specifically hurt by PA structure
+- Opus 4.7 beats Opus 4.6 by 22.46pp on Waggle reasoning (separate useful datapoint)
 
-**Outcome informs the fork:**
-- **If C closes ≥40% of the gap across Gemma 31B + Gemma 26B MoE + Qwen 30B** → structural effect is real. The "make small models act like Opus" thesis is validated. PromptAssembler ships as a CORE feature (like self-evolution). Launch narrative gets a second proof point.
-- **If partial** → some models benefit, others don't. Scenario iteration before project-kill decision.
-- **If none positive** → thesis wrong. Scrap the scaffold matrix, revisit taxonomy, or kill.
+**Artifacts:** `docs/specs/PROMPT-ASSEMBLER-V4.md`, `EVAL-RESULTS.md`, `tmp_bench_results.json` (gitignored), `project_session_handoff_0417_prompt_assembler.md` memory.
 
-**Feature-flagged, default off.** No risk to current behavior; rollback is `unset WAGGLE_PROMPT_ASSEMBLER`.
+**Feature flag default OFF confirmed correct.** Shipped as landed; not default on.
 
-**Budget:** 60–120 min eval runtime + ~$5-15 API spend (Opus 4.7, Opus 4.6, Sonnet 4.6 priming+judge, Gemma/Qwen via OpenRouter).
+---
 
-**Non-goals:** `packages/core/src/mind/*`, evolution stack, `composePersonaPrompt`, injection scanner. See §3 of brief.
+## 🔜 NEXT SESSION — EXPLORING MILESTONE (TBD — briefed at fresh-context start)
+
+Marko has one more exploring milestone queued before we return to the P0/P1/P2 backlog continuation. The brief will be provided in a fresh context window. This section is a placeholder so the backlog stays the single source of truth.
+
+**What to expect when fresh context starts:**
+1. Read this milestone file + the latest handoff
+2. Read Marko's brief for the exploring milestone
+3. Execute per that brief (code + eval/verification as applicable)
+4. Commit + handoff
+5. THEN return to the P0 critical path below
+
+**Constraint:** The exploring milestone is additive. It does not replace or de-prioritize any of the P0/P1/P2/P3 items below. When complete, the main plan continues.
+
+---
+
+## 📋 MAIN PLAN CONTINUATION (after exploring milestone)
+
+Everything below is the unchanged consolidated backlog. Resume here once the exploring milestone is shipped.
 
 ---
 
