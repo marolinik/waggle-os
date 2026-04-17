@@ -409,9 +409,14 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   try {
     const marketplaceDbTarget = path.join(fullConfig.dataDir, 'marketplace.db');
     if (!fs.existsSync(marketplaceDbTarget)) {
-      // Try to copy from monorepo packages/marketplace/marketplace.db
+      // Try to copy from monorepo packages/marketplace/marketplace.db.
+      // __dirname resolves to packages/server/src/local during tsx dev, and
+      // to packages/server/dist/local after a build — both need ../../..
+      // to reach the packages/ root, plus a fallback for the production bundle.
       const seedPaths = [
-        path.resolve(__dirname, '../../../../marketplace/marketplace.db'),
+        path.resolve(__dirname, '../../../marketplace/marketplace.db'),          // dev: tsx from src/local
+        path.resolve(__dirname, '../../../../marketplace/marketplace.db'),        // built: dist/local
+        path.resolve(__dirname, '../../../../packages/marketplace/marketplace.db'),
         path.resolve(__dirname, '../../../../../packages/marketplace/marketplace.db'),
       ];
       for (const seedPath of seedPaths) {
