@@ -165,6 +165,40 @@ model_list:
   # ── Tavily (search — not LLM, but here for completeness) ───────
   # Tavily is consumed by Waggle search routes, not LiteLLM.
 
+  # ── Added for PromptAssembler eval (v4) ────────────────────────
+  # Spec: docs/specs/PROMPT-ASSEMBLER-V4.md §11.2
+
+  # Claude Opus 4.7 — native Anthropic. Released 16 April 2026.
+  # NOTE: 20260416 date suffix assumed per brief §11.2. If Anthropic's
+  # /v1/models reports a different suffix for opus 4.7, update this line.
+  # Eval harness's slug probe step logs the substitution.
+  - model_name: claude-opus-4-7
+    litellm_params:
+      model: anthropic/claude-opus-4-7-20260416
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  # Gemma 4 31B Dense — OpenRouter (verified live 2026-04-17)
+  - model_name: gemma-4-31b
+    litellm_params:
+      model: openrouter/google/gemma-4-31b-it
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  # Gemma 4 26B MoE (3.8B active) — OpenRouter
+  # NOTE: live OpenRouter slug is `google/gemma-4-26b-a4b-it` (a4b middle)
+  # vs brief's suggested `gemma-4-26b-it`. Substitution logged 2026-04-17.
+  - model_name: gemma-4-26b-moe
+    litellm_params:
+      model: openrouter/google/gemma-4-26b-a4b-it
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  # Qwen3-30B-A3B (30B total / 3B active) — OpenRouter
+  # NOTE: live slug is `qwen/qwen3-30b-a3b-instruct-2507` (date-tagged)
+  # vs brief's suggested `qwen3-30b-a3b-instruct`. Substitution logged.
+  - model_name: qwen3-30b-a3b
+    litellm_params:
+      model: openrouter/qwen/qwen3-30b-a3b-instruct-2507
+      api_key: os.environ/OPENROUTER_API_KEY
+
 litellm_settings:
   drop_params: true
   request_timeout: 120
