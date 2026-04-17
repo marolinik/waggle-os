@@ -168,13 +168,12 @@ model_list:
   # ── Added for PromptAssembler eval (v4) ────────────────────────
   # Spec: docs/specs/PROMPT-ASSEMBLER-V4.md §11.2
 
-  # Claude Opus 4.7 — native Anthropic. Released 16 April 2026.
-  # NOTE: 20260416 date suffix assumed per brief §11.2. If Anthropic's
-  # /v1/models reports a different suffix for opus 4.7, update this line.
-  # Eval harness's slug probe step logs the substitution.
+  # Claude Opus 4.7 — native Anthropic. Plain family alias verified via
+  # /v1/models probe 2026-04-17 (brief's speculative date suffix 20260416
+  # returned 404; plain alias resolves).
   - model_name: claude-opus-4-7
     litellm_params:
-      model: anthropic/claude-opus-4-7-20260416
+      model: anthropic/claude-opus-4-7
       api_key: os.environ/ANTHROPIC_API_KEY
 
   # Gemma 4 31B Dense — OpenRouter (verified live 2026-04-17)
