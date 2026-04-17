@@ -24,6 +24,14 @@ export const FEATURE_FLAGS = {
 
   /** Automatically run Verifier agent after every Coordinator workflow */
   VERIFIER_AUTO_RUN: process.env['WAGGLE_AUTO_VERIFY'] === '1',
+
+  /**
+   * Enable PromptAssembler — tier-adaptive prompt packaging sixth layer.
+   * Default OFF. When ON, agent-loop uses Orchestrator.buildAssembledPrompt()
+   * instead of the raw buildSystemPrompt() + recallMemory() path.
+   * See docs/specs/PROMPT-ASSEMBLER-V4.md.
+   */
+  PROMPT_ASSEMBLER: process.env['WAGGLE_PROMPT_ASSEMBLER'] === '1',
 } as const;
 
 export type FeatureFlag = keyof typeof FEATURE_FLAGS;

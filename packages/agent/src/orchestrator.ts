@@ -2,6 +2,7 @@ import {
   type MindDB,
   type Importance,
   type MemoryFrame,
+  type ScoringProfile,
   IdentityLayer,
   AwarenessLayer,
   FrameStore,
@@ -17,6 +18,14 @@ import { buildSelfAwareness, type AgentCapabilities } from './self-awareness.js'
 import { buildAwarenessSummary, markSummarySurfaced, type AwarenessSummary } from './improvement-detector.js';
 import { CognifyPipeline } from './cognify.js';
 import { scanForInjection } from './injection-scanner.js';
+import { tierForModel, type ModelTier } from './model-tier.js';
+import type { AgentPersona } from './personas.js';
+import {
+  PromptAssembler,
+  type AssembleOptions,
+  type AssembledPrompt,
+  type RecalledMemory,
+} from './prompt-assembler.js';
 
 const logger = createCoreLogger('orchestrator');
 
@@ -44,6 +53,37 @@ export interface OrchestratorConfig {
   mode?: 'local' | 'team';
   version?: string;
   skills?: string[];
+}
+
+/**
+ * Typed context snapshot consumed by PromptAssembler. Keeps the legacy
+ * `loadRecentContext()` string-output path untouched for backwards compat.
+ *
+ * `stateFrames`: I-frames (identity/state snapshots).
+ * `recentChanges`: P-frames (deltas) + B-frames (background notes).
+ * `activeWork`: structured awareness items (tasks, actions, pending, flags).
+ * `keyEntities`: most-connected KG entities (workspace when active).
+ * `personalPreferences`: cross-workspace preference/correction frames.
+ */
+export interface ContextFrames {
+  stateFrames: MemoryFrame[];
+  recentChanges: MemoryFrame[];
+  activeWork: Array<{ category: string; content: string; priority: number }>;
+  keyEntities: Array<{ name: string; type: string }>;
+  personalPreferences: string[];
+}
+
+/**
+ * Options for tier-adaptive recall. When omitted, `recallMemory` behaves
+ * byte-identically to its pre-PromptAssembler implementation.
+ */
+export interface RecallOptions {
+  /** ScoringProfile forwarded to HybridSearch. Default: 'balanced'. */
+  profile?: ScoringProfile;
+  /** Drop results whose finalScore is below this floor. Default: no filter. */
+  scoreFloor?: number;
+  /** Model tier hint — recorded for downstream consumers (PromptAssembler). */
+  tier?: ModelTier;
 }
 
 /**
@@ -314,6 +354,87 @@ export class Orchestrator {
   }
 
   /**
+   * Typed counterpart to `loadRecentContext()`. Returns structured data for
+   * the PromptAssembler layer to compose into a model-tier-aware prompt.
+   *
+   * Sources (workspace when active, personal otherwise for frame queries;
+   * personal mind always for preferences):
+   * - stateFrames: I-frames (identity/state snapshots)
+   * - recentChanges: P-frames + B-frames (deltas, background notes)
+   * - activeWork: AwarenessLayer items (structured, not parsed from string)
+   * - keyEntities: KG entities ordered by relation count
+   * - personalPreferences: preference/correction/style-note frames
+   *
+   * Pure data — injection scanning is the caller's responsibility (PromptAssembler).
+   */
+  loadRecentContextFrames(limit = 10): ContextFrames {
+    const primaryDb = this.workspaceLayers?.db ?? this.db;
+    const raw = primaryDb.getDatabase();
+
+    const frameRows = raw.prepare(
+      `SELECT id, frame_type, gop_id, t, base_frame_id, content, importance, source,
+              access_count, created_at, last_accessed
+       FROM memory_frames
+       WHERE importance != 'deprecated'
+       ORDER BY
+         CASE importance
+           WHEN 'critical' THEN 0
+           WHEN 'important' THEN 1
+           WHEN 'normal' THEN 2
+           ELSE 3
+         END,
+         id DESC
+       LIMIT ?`
+    ).all(limit) as MemoryFrame[];
+
+    const stateFrames: MemoryFrame[] = [];
+    const recentChanges: MemoryFrame[] = [];
+    for (const f of frameRows) {
+      if (f.frame_type === 'I') stateFrames.push(f);
+      else recentChanges.push(f);
+    }
+
+    const awarenessItems = this.awareness.getAll();
+    const activeWork = awarenessItems.map(item => ({
+      category: item.category,
+      content: item.content,
+      priority: item.priority,
+    }));
+
+    const topEntities = raw.prepare(
+      `SELECT ke.name, ke.entity_type, COUNT(rc.entity_id) as rel_count
+       FROM knowledge_entities ke
+       LEFT JOIN (
+         SELECT source_id AS entity_id FROM knowledge_relations
+         UNION ALL
+         SELECT target_id AS entity_id FROM knowledge_relations
+       ) rc ON rc.entity_id = ke.id
+       GROUP BY ke.id ORDER BY rel_count DESC LIMIT 10`
+    ).all() as Array<{ name: string; entity_type: string; rel_count: number }>;
+
+    const keyEntities = topEntities.map(e => ({ name: e.name, type: e.entity_type }));
+
+    const prefDb = this.db.getDatabase();
+    const prefRows = prefDb.prepare(
+      `SELECT content FROM memory_frames
+       WHERE importance != 'deprecated'
+         AND (content LIKE 'User preference:%' OR content LIKE 'Correction from user:%'
+              OR content LIKE 'Style note:%' OR content LIKE 'Workspace topic:%')
+       ORDER BY id DESC LIMIT 5`
+    ).all() as Array<{ content: string }>;
+
+    const personalPreferences = prefRows.map(p => p.content);
+
+    return {
+      stateFrames,
+      recentChanges,
+      activeWork,
+      keyEntities,
+      personalPreferences,
+    };
+  }
+
+  /**
    * Return a cached section value if the input hasn't changed.
    * Avoids redundant string construction for stable sections (e.g., identity).
    */
@@ -376,6 +497,60 @@ export class Orchestrator {
   }
 
   /**
+   * PromptAssembler integration — produces a tier-adaptive, typed,
+   * scaffolded prompt via the new sixth layer.
+   *
+   * Consumers: agent-loop.ts when `isEnabled('PROMPT_ASSEMBLER')`.
+   * Feature-flagged, default off — callers outside that gate should keep
+   * using `buildSystemPrompt()` + `recallMemory()` directly.
+   */
+  async buildAssembledPrompt(
+    query: string,
+    persona: AgentPersona | null = null,
+    opts: AssembleOptions = {},
+  ): Promise<AssembledPrompt> {
+    const tier = tierForModel(this.model);
+    const corePrompt = this.buildSystemPrompt();
+    const context = this.loadRecentContextFrames();
+
+    // Direct search for raw frames (recallMemory returns formatted text;
+    // the assembler consumes MemoryFrame[] and applies its own rendering).
+    const personalResults = await this.search.search(query, { limit: 10, profile: 'balanced' });
+    const workspaceResults = this.workspaceLayers
+      ? await this.workspaceLayers.search.search(query, { limit: 10, profile: 'balanced' })
+      : [];
+
+    // Brief §8: run the injection scan here; assembler trusts scanSafe and
+    // must not re-scan. On a poisoned hit, frames still flow through but
+    // scanSafe=false causes the assembler to ignore the recall section.
+    const joinedContent = [
+      ...workspaceResults.map(r => r.frame.content),
+      ...personalResults.map(r => r.frame.content),
+    ].join('\n');
+    const scanSafe = joinedContent.length === 0
+      ? true
+      : scanForInjection(joinedContent, 'tool_output').safe;
+
+    const recalled: RecalledMemory = {
+      workspace: workspaceResults.map(r => r.frame),
+      personal: personalResults.map(r => r.frame),
+      scanSafe,
+    };
+
+    return new PromptAssembler().assemble(
+      {
+        corePrompt,
+        persona,
+        context,
+        recalled,
+        query,
+        tier,
+      },
+      opts,
+    );
+  }
+
+  /**
    * M8: Commit deferred signal markings after model call succeeds.
    * Call this after the LLM response is received. If the model call fails,
    * skip this call — signals stay actionable for the next turn.
@@ -391,8 +566,17 @@ export class Orchestrator {
    * Automatic memory recall: search for memories relevant to the user's query.
    * Searches BOTH personal and workspace minds when workspace is active.
    * Returns formatted recall text with source attribution.
+   *
+   * `opts` is optional — when omitted, behavior is byte-identical to the
+   * pre-PromptAssembler implementation (profile='balanced', no score floor).
    */
-  async recallMemory(query: string, limit = 10): Promise<{ text: string; count: number; recalled?: string[] }> {
+  async recallMemory(
+    query: string,
+    limit = 10,
+    opts?: RecallOptions,
+  ): Promise<{ text: string; count: number; recalled?: string[] }> {
+    const profile: ScoringProfile = opts?.profile ?? 'balanced';
+    const scoreFloor = opts?.scoreFloor;
     try {
       // Detect catch-up intent — these queries need importance-based recall, not literal text matching
       const catchUpPatterns = [
@@ -444,13 +628,21 @@ export class Orchestrator {
           score: 1,
           frame: { content: f.content, importance: f.importance, created_at: f.created_at },
         }));
-        personalResults = await this.search.search(query, { limit: 2, profile: 'balanced' });
+        personalResults = await this.search.search(query, { limit: 2, profile });
       } else {
         // Normal semantic search for specific queries
-        personalResults = await this.search.search(query, { limit, profile: 'balanced' });
+        personalResults = await this.search.search(query, { limit, profile });
         workspaceResults = this.workspaceLayers
-          ? await this.workspaceLayers.search.search(query, { limit, profile: 'balanced' })
+          ? await this.workspaceLayers.search.search(query, { limit, profile })
           : [];
+      }
+
+      // Apply optional score floor (PromptAssembler opt-in; byte-identical when absent).
+      if (scoreFloor !== undefined) {
+        const passes = (r: { finalScore?: number; score?: number }): boolean =>
+          (r.finalScore ?? r.score ?? 1) >= scoreFloor;
+        personalResults = personalResults.filter(passes);
+        workspaceResults = workspaceResults.filter(passes);
       }
 
       const allLines: string[] = [];
