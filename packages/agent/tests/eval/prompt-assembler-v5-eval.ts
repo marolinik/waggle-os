@@ -81,6 +81,8 @@ const MAX_TOKENS_JUDGE = 512;
 const BASE_SEEDS = Number.parseInt(process.env.WAGGLE_EVAL_SEEDS ?? '3', 10);
 const SKIP_SECONDARY = process.env.WAGGLE_EVAL_SKIP_SECONDARY === '1';
 const SKIP_SLUG_PROBE = process.env.WAGGLE_EVAL_SKIP_SLUG_PROBE === '1';
+const PROBE_ONLY = process.env.WAGGLE_EVAL_PROBE_ONLY === '1';
+const MAX_SCENARIOS = Number.parseInt(process.env.WAGGLE_EVAL_MAX_SCENARIOS ?? '0', 10);
 const MAX_JUDGE_MS = Number.parseInt(process.env.WAGGLE_EVAL_MAX_JUDGE_MS ?? '180000', 10);
 
 // Variance-retry threshold — if max-min of per-seed ensemble means
@@ -288,6 +290,21 @@ async function callOpenRouter(
   return data.choices[0]?.message?.content ?? '';
 }
 
+/**
+ * Body-shape flags for OpenAI-compatible endpoints.
+ *
+ * OpenAI's reasoning-class models (o-series, gpt-5.x) require
+ * `max_completion_tokens` instead of `max_tokens` and reject
+ * non-default `temperature`. xAI, MiniMax, and Gemini's shim still
+ * accept the classic shape. Use these flags to adapt per-endpoint.
+ */
+interface OpenAICompatBodyShape {
+  /** Use `max_completion_tokens` instead of `max_tokens`. Default false. */
+  useCompletionTokensParam?: boolean;
+  /** Omit `temperature` entirely. Required for OpenAI reasoning models. */
+  omitTemperature?: boolean;
+}
+
 async function callOpenAICompat(
   baseUrl: string,
   apiKey: string,
@@ -297,18 +314,17 @@ async function callOpenAICompat(
   userMsg: string,
   opts: CallOpts = {},
   extraBody: Record<string, unknown> = {},
+  shape: OpenAICompatBodyShape = {},
 ): Promise<string> {
   if (!apiKey) throw new Error(`${apiKeyName} not hydrated from vault`);
   const messages: Array<{ role: string; content: string }> = [];
   if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
   messages.push({ role: 'user', content: userMsg });
-  const body: Record<string, unknown> = {
-    model,
-    messages,
-    max_tokens: opts.maxTokens ?? MAX_TOKENS_JUDGE,
-    temperature: opts.temperature ?? TEMPERATURE_JUDGE,
-    ...extraBody,
-  };
+  const body: Record<string, unknown> = { model, messages, ...extraBody };
+  const tokenCount = opts.maxTokens ?? MAX_TOKENS_JUDGE;
+  if (shape.useCompletionTokensParam) body.max_completion_tokens = tokenCount;
+  else body.max_tokens = tokenCount;
+  if (!shape.omitTemperature) body.temperature = opts.temperature ?? TEMPERATURE_JUDGE;
   const response = await fetchWithTimeout(
     `${baseUrl}/chat/completions`,
     {
@@ -328,6 +344,12 @@ async function callOpenAICompat(
   const data = (await response.json()) as { choices: Array<{ message: { content: string } }> };
   return data.choices[0]?.message?.content ?? '';
 }
+
+/** GPT-5.4 and OpenAI o-series body shape (completion_tokens, no temperature). */
+const OPENAI_REASONING_SHAPE: OpenAICompatBodyShape = {
+  useCompletionTokensParam: true,
+  omitTemperature: true,
+};
 
 async function callGemini(
   model: string,
@@ -379,6 +401,9 @@ function buildJudgeWirings(): JudgeWiring[] {
     {
       name: JUDGE_GPT,
       available: true,
+      // GPT-5.4 is a reasoning-class model — must use max_completion_tokens
+      // and omit temperature per OpenAI's current API contract (verified
+      // via 400 response during slug probe 2026-04-17).
       call: (p) =>
         callOpenAICompat(
           'https://api.openai.com/v1',
@@ -387,7 +412,9 @@ function buildJudgeWirings(): JudgeWiring[] {
           JUDGE_GPT,
           '',
           p,
-          { maxTokens: MAX_TOKENS_JUDGE, temperature: TEMPERATURE_JUDGE },
+          { maxTokens: MAX_TOKENS_JUDGE },
+          {},
+          OPENAI_REASONING_SHAPE,
         ),
     },
     {
@@ -455,7 +482,11 @@ function buildSlugProbeSpecs(): SlugProbeSpec[] {
           JUDGE_GPT,
           '',
           trivial,
-          { maxTokens: 20 },
+          // Reasoning models need ≥ ~20 tokens minimum to produce any
+          // visible output after internal chain-of-thought.
+          { maxTokens: 200 },
+          {},
+          OPENAI_REASONING_SHAPE,
         ),
     },
     {
@@ -1004,12 +1035,22 @@ async function main(): Promise<void> {
     );
   }
 
+  // ── Probe-only mode: exit after vault hydration + slug probe ──
+  if (PROBE_ONLY) {
+    const okCount = slugProbe.filter(p => p.ok).length;
+    console.log(`\n[probe-only] ${okCount}/${slugProbe.length} slugs reachable.`);
+    console.log(`[probe-only] judges available: ${judgesAvailable.length}/4 (need ≥${MIN_JUDGES_REACHABLE}).`);
+    console.log('[probe-only] Exiting before any scenario generation.');
+    return;
+  }
+
   // ── Condition list ──
   const conditions: ConditionSpec[] = SKIP_SECONDARY
     ? PRIMARY_CONDITIONS
     : [...PRIMARY_CONDITIONS, ...SECONDARY_26B_CONDITIONS, ...SECONDARY_QWEN_CONDITIONS];
 
-  console.log(`\n[plan] ${SCENARIOS_V5.length} scenarios × ${conditions.length} conditions × ${BASE_SEEDS} seeds (+5 on retry)`);
+  const scenariosToRun = MAX_SCENARIOS > 0 ? SCENARIOS_V5.slice(0, MAX_SCENARIOS) : SCENARIOS_V5;
+  console.log(`\n[plan] ${scenariosToRun.length} scenarios × ${conditions.length} conditions × ${BASE_SEEDS} seeds (+5 on retry)`);
   console.log(`[plan] Output: ${RESULTS_JSON} + ${RESULTS_MD}`);
 
   const result: EvalResult = {
@@ -1023,8 +1064,8 @@ async function main(): Promise<void> {
     scenarios: [],
   };
 
-  for (const [idx, scenario] of SCENARIOS_V5.entries()) {
-    console.log(`\n[${idx + 1}/${SCENARIOS_V5.length}] === ${scenario.name} (${scenario.language}, ${scenario.shape}) ===`);
+  for (const [idx, scenario] of scenariosToRun.entries()) {
+    console.log(`\n[${idx + 1}/${scenariosToRun.length}] === ${scenario.name} (${scenario.language}, ${scenario.shape}) ===`);
 
     const setup = setupCleanScenario(scenario.name);
     const primingStart = Date.now();
