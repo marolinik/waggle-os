@@ -451,21 +451,26 @@ Do not recreate or expose outside gating.
 - `tiers.ts` shipped with 5-tier system (TRIAL/FREE/PRO/TEAMS/ENTERPRISE).
 - `feature-flags.ts` shipped.
 - Persona data/logic split (`persona-data.ts` ↔ `personas.ts`).
+- **All 4 new personas shipped** (general-purpose, planner, verifier, coordinator) — `persona-data.ts` verified.
+- **AgentPersona interface extended** with disallowedTools / failurePatterns / isReadOnly / tagline / bestFor / wontDo — verified in `personas.ts`.
+- **`behavioral-spec.ts` split** into named sections with `=== CRITICAL ===` markers; `COMPACTION_PROMPT` exported (34+ section markers, 2 COMPACTION_PROMPT references).
+- **Orchestrator section caching** shipped in `buildSystemPrompt()` — `sectionCache` verified.
+- **OnboardingWizard TEMPLATES expanded to 15** — `sales-pipeline` through `blank`, all wired to `PERSONAS`.
 - Stripe installed (`stripe@^21.0.1`) in root deps.
 - Evolution subsystem fully present (10+ files, closed loop end-to-end).
 - Docker/render.yaml production infra exists.
 - LiteLLM routing config exists.
+- **PromptAssembler v5 PoC complete** — H1 replicates under 4-judge no-Claude ensemble; ship recommendation: PA enabled for Claude, optional for Gemma, experimental for Qwen-thinking (analytical-only). See `docs/plans/POLISH-SPRINT-2026-04-18.md`.
 
 ### Open Work
 | # | File | What |
 |---|---|---|
-| 1 | `packages/agent/src/persona-data.ts` | Add 4 new personas (general-purpose, planner, verifier, coordinator) |
-| 2 | `packages/agent/src/personas.ts` | Extend `AgentPersona` with disallowedTools/failurePatterns/isReadOnly/tagline/bestFor/wontDo |
-| 3 | `packages/agent/src/behavioral-spec.ts` | Split into named sections; elevate memory-conflict to `=== CRITICAL ===`; export `COMPACTION_PROMPT` |
-| 4 | `packages/agent/src/orchestrator.ts` | Section caching in `buildSystemPrompt()` |
-| 5 | `apps/web/src/components/os/overlays/OnboardingWizard.tsx` | Expand TEMPLATES to 15; connect to real `PERSONAS` |
-| 6 | `apps/web/src/components/os/overlays/PersonaSwitcher.tsx` | Two-tier redesign |
-| 7 | Stripe webhooks / server side | Wire Stripe to tier enforcement (Stripe pkg present but endpoints likely need audit) |
+| 1 | `apps/web/src/components/os/overlays/PersonaSwitcher.tsx` | **Two-tier redesign** — UNIVERSAL MODES (8) + WORKSPACE SPECIALISTS (template-scoped), hover tooltip with tagline/bestFor/wontDo. Maps to backlog OW-6 / polish-sprint Phase C. |
+| 2 | Stripe webhooks / server side | Wire Stripe to tier enforcement — blocked on Marko creating Stripe products (M7 in consolidated backlog). |
+| 3 | Spawn Agent + Dock wiring | P35/P36 core bugs from PDF triage — "no models available" in SpawnAgentPanel + dock spawn-agent icon click. Polish-sprint Phase B. |
+| 4 | Light mode finish | P40/P41 + CR-2 — BootScreen logo/animation in light mode, header text styling, remaining hive-950 → semantic tokens. Polish-sprint Phase B. |
+
+For the full polish+launch backlog see `docs/plans/BACKLOG-CONSOLIDATED-2026-04-17.md` (~145 items) and current sprint sequencing in `docs/plans/POLISH-SPRINT-2026-04-18.md`.
 
 ---
 
