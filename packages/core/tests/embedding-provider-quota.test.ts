@@ -181,6 +181,70 @@ describe('Embedding Provider — Tier & Quota Enforcement', () => {
     });
   });
 
+  describe('WAGGLE_EVAL_MODE tier bypass (PA v5 §11.3)', () => {
+    // Defensive cleanup: never leak the flag across tests. If a prior run
+    // crashed mid-test, this block restores a known-clean baseline.
+    beforeEach(() => { delete process.env.WAGGLE_EVAL_MODE; });
+    afterEach(() => { delete process.env.WAGGLE_EVAL_MODE; });
+
+    it('without WAGGLE_EVAL_MODE: FREE + voyage still throws TierError (control)', async () => {
+      // Explicit sanity check that the normal gate is still live — baseline
+      // for the bypass test below.
+      expect(process.env.WAGGLE_EVAL_MODE).toBeUndefined();
+      await expect(
+        createEmbeddingProvider({
+          provider: 'voyage',
+          userTier: 'FREE',
+          quotaDb: db,
+          voyage: { apiKey: 'test-key' },
+        })
+      ).rejects.toThrow(TierError);
+    });
+
+    it('with WAGGLE_EVAL_MODE=1: FREE + voyage no longer throws TierError', async () => {
+      process.env.WAGGLE_EVAL_MODE = '1';
+      try {
+        await createEmbeddingProvider({
+          provider: 'voyage',
+          userTier: 'FREE',
+          quotaDb: db,
+          voyage: { apiKey: 'test-key' },
+        });
+      } catch (err) {
+        // Probe failure (no real voyage backend in tests) is fine — just not
+        // a TierError. The point: the tier gate is bypassed.
+        expect(err).not.toBeInstanceOf(TierError);
+      }
+    });
+
+    it('with WAGGLE_EVAL_MODE=1 and no userTier set: behaves as if unenforced', async () => {
+      process.env.WAGGLE_EVAL_MODE = '1';
+      const provider = await createEmbeddingProvider({
+        provider: 'auto',
+        quotaDb: db,
+      });
+      // Falls back to mock with no tier skip/probe; provider is constructed.
+      expect(provider.getActiveProvider()).toBeDefined();
+    });
+
+    it('only activates when env value is exactly "1" (defensive literal match)', async () => {
+      // Guard against accidental truthy-but-not-"1" values. Harness must use
+      // "1" exactly per §11.3.
+      for (const bad of ['true', 'yes', '0', '']) {
+        process.env.WAGGLE_EVAL_MODE = bad;
+        await expect(
+          createEmbeddingProvider({
+            provider: 'voyage',
+            userTier: 'FREE',
+            quotaDb: db,
+            voyage: { apiKey: 'test-key' },
+          })
+        ).rejects.toThrow(TierError);
+        delete process.env.WAGGLE_EVAL_MODE;
+      }
+    });
+  });
+
   describe('getMinimumTierForProvider', () => {
     it('inprocess requires TRIAL (first tier that allows it)', () => {
       expect(getMinimumTierForProvider('inprocess')).toBe('TRIAL');

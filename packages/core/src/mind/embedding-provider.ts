@@ -243,7 +243,13 @@ export async function createEmbeddingProvider(config?: EmbeddingProviderConfig):
   const userTier: Tier = cfg.userTier ?? 'FREE';
   const userId = cfg.userId ?? 'local';
   const quotaDb = cfg.quotaDb ?? null;
-  const tierEnforced = cfg.userTier !== undefined; // Only enforce tier when explicitly set
+  // Tier enforcement is normally ON only when userTier is explicitly passed.
+  // WAGGLE_EVAL_MODE=1 disables it unconditionally — the PA v5 eval harness
+  // sets this so user-tier gates never confound measurement validity. This
+  // env-var is eval-path-only; never set it in production code paths.
+  // See PromptAssembler v5 brief §11.3.
+  const evalModeActive = process.env.WAGGLE_EVAL_MODE === '1';
+  const tierEnforced = evalModeActive ? false : cfg.userTier !== undefined;
   const tierCaps = TIER_CAPABILITIES[userTier];
   const allowedProviders = tierCaps.embeddingProviders as readonly string[];
 
