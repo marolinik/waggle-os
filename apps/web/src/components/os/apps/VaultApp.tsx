@@ -243,7 +243,19 @@ const VaultApp = () => {
                 <RefreshCw className="w-3.5 h-3.5 text-muted-foreground" />
               </button>
             </div>
-            <p className="text-[11px] text-muted-foreground">AES-256-GCM encrypted. Values never sent to UI unless explicitly revealed (auto-hides after 10s).</p>
+            <div className="flex items-start gap-2.5 p-3 rounded-lg bg-primary/10 border border-primary/30">
+              <Shield className="w-4 h-4 mt-0.5 text-primary shrink-0" />
+              <div className="text-xs text-foreground leading-relaxed space-y-1">
+                <p>
+                  <strong className="text-primary">The Vault is the single source for API keys.</strong>
+                  {' '}Values are encrypted with <strong>AES-256-GCM</strong> and stored locally at{' '}
+                  <code className="px-1 py-0.5 rounded bg-muted text-[10px] text-primary">~/.waggle/vault</code>.
+                </p>
+                <p className="text-muted-foreground">
+                  Keys never leave your machine, never appear in logs, and are only decrypted in-memory when the LLM SDK needs them. Clicking <strong>Reveal</strong> shows the value for 10 seconds, then auto-hides.
+                </p>
+              </div>
+            </div>
 
             {/* Secrets list */}
             <div className="space-y-1">

@@ -11,7 +11,7 @@ import {
   ImportStep,
   TemplateStep,
   PersonaStep,
-  ApiKeyStep,
+  ModelTierStep,
   ReadyStep,
 } from './onboarding';
 
@@ -218,7 +218,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
     setSelectedTier(tier);
   };
 
-  const handleFinish = async () => {
+  const handleFinish = async (selectedModel?: string) => {
     setCreatingWorkspace(true);
     try {
       const template = TEMPLATES.find(t => t.id === selectedTemplate);
@@ -231,12 +231,19 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
           group: 'Personal',
           persona: selectedPersona || undefined,
           templateId: selectedTemplate || undefined,
+          ...(selectedModel ? { model: selectedModel } : {}),
         });
         wsId = ws.id;
         setCreateError(null);
       } catch {
         setCreateError('Could not connect to server — workspace created locally. Connect to sync later.');
         wsId = `local-${Date.now()}`;
+      }
+
+      // Persist the chosen model as the server's default so the chat
+      // route and future workspaces inherit it.
+      if (selectedModel) {
+        try { await adapter.saveSettings({ defaultModel: selectedModel } as any); } catch { /* non-blocking */ }
       }
 
       onUpdate({
@@ -247,7 +254,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
       trackTelemetry(serverBaseUrl, 'onboarding_complete', {
         templateId: selectedTemplate || null,
         personaId: selectedPersona || null,
-        apiKeySet: !!keySaved,
+        model: selectedModel ?? null,
       });
       goToStep(7);
     } finally {
@@ -408,16 +415,8 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
               />
             )}
             {step === 6 && (
-              <ApiKeyStep
-                selectedProvider={selectedProvider}
-                apiKey={apiKey}
-                validating={validating}
-                keyValid={keyValid}
-                keySaved={keySaved}
+              <ModelTierStep
                 creatingWorkspace={creatingWorkspace}
-                onSelectProvider={handleSelectProvider}
-                onApiKeyChange={handleApiKeyChange}
-                onValidateKey={handleValidateKey}
                 onFinish={handleFinish}
                 goToStep={goToStep}
               />

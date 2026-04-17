@@ -5,6 +5,7 @@ export { default as ImportStep } from './ImportStep';
 export { default as TemplateStep } from './TemplateStep';
 export { default as PersonaStep } from './PersonaStep';
 export { default as ApiKeyStep } from './ApiKeyStep';
+export { default as ModelTierStep } from './ModelTierStep';
 export { default as ReadyStep } from './ReadyStep';
 
 export type {

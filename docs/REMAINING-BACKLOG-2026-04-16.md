@@ -251,6 +251,14 @@ From `docs/UX-ASSESSMENT-2026-04-16.md` — 10 ranked issues + 5 quick wins + en
 | OW-6 | **PersonaSwitcher: two-tier redesign** | **TODO** | Still flat 2-column grid. Target: "UNIVERSAL MODES" (8) + "YOUR WORKSPACE SPECIALISTS" (template-scoped). Hover tooltip: tagline + bestFor + wontDo |
 | OW-7 | **Stripe webhooks audit** | **PARTIAL** | 5 files exist in server/src/stripe/ (checkout, webhook, portal, sync, index — 130+ LOC webhook). Needs smoke test against real Stripe dashboard. Blocked on M7 |
 
+### Block 3da: Installer Flow (deferred from Task 6)
+
+| # | Item | Source | Effort |
+|---|------|--------|--------|
+| INST-1 | **Ollama bundled installer path** — during Waggle install, offer "Install Ollama + pull Gemma 4" as optional step | 2026-04-17 ULTRATHINK | 1 day |
+| INST-2 | **Hardware scan** — read RAM/GPU at install, recommend which Ollama models fit locally (e.g. "gemma4:31b needs 20GB RAM — your machine has 32GB, you're good") | 2026-04-17 ULTRATHINK | 4-6 hr |
+| INST-3 | **Ollama daemon auto-start** — configure Ollama to run as Windows service / macOS launchd agent on boot | 2026-04-17 ULTRATHINK | 4-6 hr |
+
 ### Block 3e: Items Found in Cross-Reference (not in any prior backlog)
 
 | # | Item | Source | Effort |

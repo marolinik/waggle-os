@@ -145,7 +145,7 @@ class LocalAdapter {
     await this.fetch(`/api/workspace-templates/${id}`, { method: 'DELETE' });
   }
 
-  async createWorkspace(data: { name: string; group: string; persona?: string; agentGroupId?: string; templateId?: string; shared?: boolean }): Promise<Workspace> {
+  async createWorkspace(data: { name: string; group: string; persona?: string; agentGroupId?: string; templateId?: string; shared?: boolean; model?: string; personaId?: string }): Promise<Workspace> {
     const res = await this.fetch('/api/workspaces', { method: 'POST', body: JSON.stringify(data) });
     return res.json();
   }

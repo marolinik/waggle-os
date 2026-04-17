@@ -147,6 +147,53 @@ const SEARCH_PROVIDERS: SearchProviderDef[] = [
   { id: 'duckduckgo', name: 'DuckDuckGo', vaultKey: '', priority: 4, requiresKey: false },
 ];
 
+/**
+ * Best-effort OpenRouter free-model discovery — returns [] if offline or on error.
+ * Cached for 1 hour to avoid hammering OR's /v1/models endpoint (~500KB response).
+ */
+let openRouterCache: { at: number; models: ProviderModel[] } | null = null;
+const OPENROUTER_TTL_MS = 60 * 60 * 1000;
+
+async function fetchOpenRouterFreeModels(): Promise<ProviderModel[]> {
+  if (openRouterCache && Date.now() - openRouterCache.at < OPENROUTER_TTL_MS) {
+    return openRouterCache.models;
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 4000);
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/models', { signal: controller.signal });
+    if (!res.ok) return openRouterCache?.models ?? [];
+    const data = (await res.json()) as {
+      data?: Array<{
+        id: string;
+        name?: string;
+        context_length?: number;
+        pricing?: { prompt?: string | number; completion?: string | number };
+      }>;
+    };
+    const free = (data.data ?? []).filter(m => {
+      const p = parseFloat(String(m.pricing?.prompt ?? 0));
+      const c = parseFloat(String(m.pricing?.completion ?? 0));
+      return p === 0 && c === 0;
+    });
+    // Sort by context length desc (proxy for "best free")
+    free.sort((a, b) => (b.context_length ?? 0) - (a.context_length ?? 0));
+    const models: ProviderModel[] = free.slice(0, 20).map(m => ({
+      id: m.id,
+      name: m.name ?? m.id,
+      cost: '$',
+      speed: 'medium',
+      source: 'cloud',
+    }));
+    openRouterCache = { at: Date.now(), models };
+    return models;
+  } catch {
+    return openRouterCache?.models ?? [];
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 /** Best-effort Ollama model discovery — returns [] if Ollama isn't running. */
 async function fetchOllamaModels(): Promise<{ models: ProviderModel[]; reachable: boolean }> {
   const endpoint = process.env.OLLAMA_HOST?.replace(/\/+$/, '') ?? 'http://localhost:11434';
@@ -185,8 +232,12 @@ export const providerRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/api/providers', async () => {
     const vault = fastify.vault;
 
-    // Fetch Ollama models live (fail silently if not running)
-    const ollama = await fetchOllamaModels();
+    // Fetch live data in parallel (both fail silently)
+    const openrouterHasKey = !!(vault && vault.get('openrouter'));
+    const [ollama, openRouterFree] = await Promise.all([
+      fetchOllamaModels(),
+      openrouterHasKey ? fetchOpenRouterFreeModels() : Promise.resolve([] as ProviderModel[]),
+    ]);
 
     // Check which providers have keys in vault
     const providers = LLM_PROVIDERS.map(p => {
@@ -203,6 +254,16 @@ export const providerRoutes: FastifyPluginAsync = async (fastify) => {
           reachable: ollama.reachable,
           models: ollama.models.length > 0 ? ollama.models : p.models,
           badge: ollama.reachable ? (ollama.models.length > 0 ? `${ollama.models.length} installed` : 'Running') : 'Not running',
+        };
+      }
+      // Enrich OpenRouter with live free-tier model list
+      if (p.id === 'openrouter' && openRouterFree.length > 0) {
+        return {
+          ...p,
+          hasKey,
+          // Keep the static auto entry + append live free models
+          models: [...p.models, ...openRouterFree],
+          badge: `${openRouterFree.length} free models`,
         };
       }
       return { ...p, hasKey };
