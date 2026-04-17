@@ -190,9 +190,12 @@ const Desktop = () => {
   // typed. The wizard now passes the name directly so we don't have to find
   // it in the workspaces list (the hook's state may not have seen the new
   // workspace yet). Also kick a refresh so subsequent operations see it.
-  const handleOnboardingFinish = useCallback((workspaceId: string, workspaceName: string) => {
+  // QW-1: honor the starter message from the wizard. The template-specific
+  // hint ("Hello! What can you help me with?" etc) gets prefilled into the
+  // chat input so the user lands in a conversation, not an empty window.
+  const handleOnboardingFinish = useCallback((workspaceId: string, workspaceName: string, firstMessage?: string) => {
     selectWorkspace(workspaceId);
-    wm.openChatForWorkspace(workspaceId, workspaceName);
+    wm.openChatForWorkspace(workspaceId, workspaceName, undefined, firstMessage);
     refreshWorkspaces();
   }, [selectWorkspace, wm.openChatForWorkspace, refreshWorkspaces]);
 
@@ -209,6 +212,7 @@ const Desktop = () => {
             templateId={ws?.templateId}
             storageType={ws?.storageType}
             initialPersona={win.personaId}
+            initialMessage={win.initialMessage}
             onPersonaChange={(personaId) => wm.setWindowPersona(win.instanceId, personaId)}
             autonomyLevel={win.autonomyLevel ?? 'normal'}
             autonomyExpiresAt={win.autonomyExpiresAt ?? null}

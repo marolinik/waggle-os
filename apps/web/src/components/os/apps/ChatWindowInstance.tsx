@@ -51,6 +51,8 @@ interface ChatWindowInstanceProps {
   workspaceId: string;
   workspaceName?: string;
   initialPersona?: string;
+  /** QW-1: starter prompt prefilled into the chat input once on first mount. */
+  initialMessage?: string;
   templateId?: string;
   storageType?: 'virtual' | 'local' | 'team';
   /**
@@ -73,6 +75,7 @@ const ChatWindowInstance = ({
   workspaceId,
   workspaceName,
   initialPersona,
+  initialMessage,
   templateId,
   storageType,
   onPersonaChange,
@@ -239,6 +242,7 @@ const ChatWindowInstance = ({
       autonomyExpiresAt={autonomyExpiresAt}
       onAutonomyChange={onAutonomyChange}
       onContextRail={onContextRail}
+      initialMessage={initialMessage}
     />
   );
 };

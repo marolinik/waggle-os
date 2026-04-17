@@ -23,6 +23,12 @@ export interface WindowState {
   personaLabel?: string;
   templateLabel?: string;
   /**
+   * QW-1: optional starter prompt for chat windows. Consumed once on first
+   * render of ChatApp to prefill the input. Used by the onboarding wizard
+   * so the user lands in chat with the template's "hint" pre-typed.
+   */
+  initialMessage?: string;
+  /**
    * Phase B.5: per-window autonomy override. Controls how hard the
    * approval gate hits — 'normal' gates every write, 'trusted' lets
    * writes through but still gates git/install/cross-workspace,
@@ -207,6 +213,7 @@ export function useWindowManager(workspaces: Workspace[]) {
     workspaceId: string,
     workspaceName?: string,
     personaOverride?: string,
+    initialMessage?: string,
   ) => {
     const ws = workspaces.find(w => w.id === workspaceId);
     const initialPersonaId = personaOverride ?? ws?.persona ?? undefined;
@@ -234,6 +241,7 @@ export function useWindowManager(workspaces: Workspace[]) {
         personaId: initialPersonaId,
         personaLabel: personaLabelFor(initialPersonaId),
         templateLabel,
+        initialMessage,
         zIndex: z, minimized: false, cascadeOffset: offset,
       }];
     });

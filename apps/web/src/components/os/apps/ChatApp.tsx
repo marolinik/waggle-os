@@ -45,6 +45,8 @@ interface ChatAppProps {
   onAutonomyChange?: (level: AutonomyLevel, ttlMinutes: number | null) => void;
   /** ContextRail: triggered when user clicks a message to explore related context. */
   onContextRail?: (target: { type: 'message'; id: string; label: string }) => void;
+  /** QW-1: starter prompt prefilled into input once on first mount (used by onboarding). */
+  initialMessage?: string;
 }
 
 const TEMPLATE_DISPLAY: Record<string, { label: string; desc: string }> = {
@@ -391,8 +393,9 @@ const ChatApp = ({
   workspaceId, templateId, storageType,
   autonomyLevel = 'normal', autonomyExpiresAt = null, onAutonomyChange,
   onContextRail,
+  initialMessage,
 }: ChatAppProps) => {
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState(initialMessage ?? '');
   const [showSlash, setShowSlash] = useState(false);
   const [slashFilter, setSlashFilter] = useState('');
   const [slashIndex, setSlashIndex] = useState(0);
