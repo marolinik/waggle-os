@@ -327,3 +327,205 @@ describe('PromptAssembler.assemble', () => {
     expect(out.responseScaffold).not.toBeNull();
   });
 });
+
+// ── v5: scaffoldStyle (compression vs expansion) ─────────────────────
+//
+// See PromptAssembler v5 brief §7.3, §12.2.
+//
+// v5 adds an EXPANSION variant alongside v4's COMPRESSION scaffolds.
+// The hypothesis: dense instruction-tuned models (Gemma family) benefit
+// from expansion scaffolds that give them more structure to fill, rather
+// than compression scaffolds that tell them to say less.
+
+describe('PromptAssembler.assemble — v5 scaffoldStyle', () => {
+  const assembler = new PromptAssembler();
+
+  it('default style equals explicit compression (v4 parity)', () => {
+    const noStyle = assembler.assemble(
+      baseInput({ tier: 'small', taskShape: shape('compare', 0.8) }),
+    );
+    const explicit = assembler.assemble(
+      baseInput({ tier: 'small', taskShape: shape('compare', 0.8) }),
+      { scaffoldStyle: 'compression' },
+    );
+    expect(noStyle.responseScaffold).toBe(explicit.responseScaffold);
+    expect(noStyle.system).toBe(explicit.system);
+  });
+
+  it('compression + small + compare matches v4 text exactly (snapshot)', () => {
+    const out = assembler.assemble(
+      baseInput({ tier: 'small', taskShape: shape('compare', 0.8) }),
+      { scaffoldStyle: 'compression' },
+    );
+    // Byte-identical to v4 (now COMPRESSION_SCAFFOLDS[compare][small]).
+    expect(out.responseScaffold).toBe(
+      'State the assumption. List the trade-offs. Give the recommendation.',
+    );
+  });
+
+  it('compression + mid + plan-execute matches v4 text exactly (snapshot)', () => {
+    const out = assembler.assemble(
+      baseInput({ tier: 'mid', taskShape: shape('plan-execute', 0.8) }),
+      { scaffoldStyle: 'compression' },
+    );
+    expect(out.responseScaffold).toBe('State plan. Execute. Report.');
+  });
+
+  it('compression + small + research matches v4 text exactly (snapshot)', () => {
+    const out = assembler.assemble(
+      baseInput({ tier: 'small', taskShape: shape('research', 0.8) }),
+      { scaffoldStyle: 'compression' },
+    );
+    expect(out.responseScaffold).toBe(
+      'Cite the frame. Quote the relevant fragment. Answer directly.',
+    );
+  });
+
+  it('expansion + small + compare includes Factors and Confidence keywords', () => {
+    const out = assembler.assemble(
+      baseInput({ tier: 'small', taskShape: shape('compare', 0.8) }),
+      { scaffoldStyle: 'expansion' },
+    );
+    expect(out.responseScaffold).not.toBeNull();
+    expect(out.responseScaffold).toContain('Factors');
+    expect(out.responseScaffold).toContain('confidence');
+    expect(out.responseScaffold).toContain('Trade-offs');
+    expect(out.responseScaffold).toContain('Recommendation');
+    expect(out.responseScaffold).toContain('Assumption');
+  });
+
+  it('expansion + small + decide produces same template as compare (shared analysis block)', () => {
+    const compareOut = assembler.assemble(
+      baseInput({ tier: 'small', taskShape: shape('compare', 0.8) }),
+      { scaffoldStyle: 'expansion' },
+    );
+    const decideOut = assembler.assemble(
+      baseInput({ tier: 'small', taskShape: shape('decide', 0.8) }),
+      { scaffoldStyle: 'expansion' },
+    );
+    const reviewOut = assembler.assemble(
+      baseInput({ tier: 'small', taskShape: shape('review', 0.8) }),
+      { scaffoldStyle: 'expansion' },
+    );
+    expect(decideOut.responseScaffold).toBe(compareOut.responseScaffold);
+    expect(reviewOut.responseScaffold).toBe(compareOut.responseScaffold);
+  });
+
+  it('expansion + small + plan-execute uses named-phases template', () => {
+    const out = assembler.assemble(
+      baseInput({ tier: 'small', taskShape: shape('plan-execute', 0.8) }),
+      { scaffoldStyle: 'expansion' },
+    );
+    expect(out.responseScaffold).not.toBeNull();
+    expect(out.responseScaffold).toContain('named phases');
+    expect(out.responseScaffold).toContain('Goal');
+    expect(out.responseScaffold).toContain('Steps');
+    expect(out.responseScaffold).toContain('Dependencies');
+    expect(out.responseScaffold).toContain('Blockers');
+    expect(out.responseScaffold).toContain('timeline');
+    expect(out.responseScaffold).toContain('critical-path');
+  });
+
+  it('expansion + small + research uses three-part template', () => {
+    const out = assembler.assemble(
+      baseInput({ tier: 'small', taskShape: shape('research', 0.8) }),
+      { scaffoldStyle: 'expansion' },
+    );
+    expect(out.responseScaffold).not.toBeNull();
+    expect(out.responseScaffold).toContain('Direct answer');
+    expect(out.responseScaffold).toContain('Source');
+    expect(out.responseScaffold).toContain('Context');
+    expect(out.responseScaffold).toContain('three parts');
+  });
+
+  it('expansion + mid produces shorter variant than small for same shape', () => {
+    const small = assembler.assemble(
+      baseInput({ tier: 'small', taskShape: shape('compare', 0.8) }),
+      { scaffoldStyle: 'expansion' },
+    );
+    const mid = assembler.assemble(
+      baseInput({ tier: 'mid', taskShape: shape('compare', 0.8) }),
+      { scaffoldStyle: 'expansion' },
+    );
+    expect(mid.responseScaffold).not.toBeNull();
+    expect(mid.responseScaffold!.length).toBeLessThan(small.responseScaffold!.length);
+  });
+
+  it('expansion + draft shape → null at every tier (creative never scaffolded)', () => {
+    for (const tier of ['small', 'mid', 'frontier'] as const) {
+      const out = assembler.assemble(
+        baseInput({ tier, taskShape: shape('draft', 0.9) }),
+        { scaffoldStyle: 'expansion' },
+      );
+      expect(out.responseScaffold).toBeNull();
+      expect(out.debug.scaffoldApplied).toBe(false);
+    }
+  });
+
+  it('expansion + mixed shape → null at every tier', () => {
+    for (const tier of ['small', 'mid', 'frontier'] as const) {
+      const out = assembler.assemble(
+        baseInput({ tier, taskShape: shape('mixed', 0.9) }),
+        { scaffoldStyle: 'expansion' },
+      );
+      expect(out.responseScaffold).toBeNull();
+    }
+  });
+
+  it('expansion + frontier → null (expansion forced to compression at frontier)', () => {
+    // Per §7.3: "Frontier tier receives compression scaffold regardless of
+    // scaffoldStyle request." Since compression[*][frontier] = null in v4,
+    // expansion at frontier also yields null. Don't risk v4's F > E
+    // replication by applying expansion to frontier models.
+    for (const shapeType of ['compare', 'decide', 'review', 'plan-execute', 'research'] as const) {
+      const out = assembler.assemble(
+        baseInput({ tier: 'frontier', taskShape: shape(shapeType, 0.9) }),
+        { scaffoldStyle: 'expansion' },
+      );
+      expect(out.responseScaffold).toBeNull();
+    }
+  });
+
+  it('expansion respects confidence threshold (same gate as compression)', () => {
+    const out = assembler.assemble(
+      baseInput({ tier: 'small', taskShape: shape('compare', 0.1) }),
+      { scaffoldStyle: 'expansion' },
+    );
+    expect(out.responseScaffold).toBeNull();
+  });
+
+  it('debug.scaffoldStyle reflects the requested style', () => {
+    const defaultOut = assembler.assemble(
+      baseInput({ tier: 'small', taskShape: shape('compare', 0.8) }),
+    );
+    expect(defaultOut.debug.scaffoldStyle).toBe('compression');
+
+    const compressionOut = assembler.assemble(
+      baseInput({ tier: 'small', taskShape: shape('compare', 0.8) }),
+      { scaffoldStyle: 'compression' },
+    );
+    expect(compressionOut.debug.scaffoldStyle).toBe('compression');
+
+    const expansionOut = assembler.assemble(
+      baseInput({ tier: 'small', taskShape: shape('compare', 0.8) }),
+      { scaffoldStyle: 'expansion' },
+    );
+    expect(expansionOut.debug.scaffoldStyle).toBe('expansion');
+  });
+
+  it('debug.scaffoldStyle populated even when no scaffold is emitted (frontier / draft / low-conf)', () => {
+    const frontierOut = assembler.assemble(
+      baseInput({ tier: 'frontier', taskShape: shape('compare', 0.9) }),
+      { scaffoldStyle: 'expansion' },
+    );
+    expect(frontierOut.debug.scaffoldStyle).toBe('expansion');
+    expect(frontierOut.debug.scaffoldApplied).toBe(false);
+
+    const draftOut = assembler.assemble(
+      baseInput({ tier: 'small', taskShape: shape('draft', 0.9) }),
+      { scaffoldStyle: 'expansion' },
+    );
+    expect(draftOut.debug.scaffoldStyle).toBe('expansion');
+    expect(draftOut.debug.scaffoldApplied).toBe(false);
+  });
+});
