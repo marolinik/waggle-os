@@ -92,7 +92,7 @@ export class AwarenessLayer {
     const raw = this.db.getDatabase();
     const items = raw.prepare(`
       SELECT * FROM awareness
-      WHERE (expires_at IS NULL OR expires_at > datetime('now'))
+      WHERE (expires_at IS NULL OR datetime(expires_at) > datetime('now'))
       ORDER BY priority DESC
     `).all() as AwarenessItem[];
     return items.filter(item => {
@@ -116,7 +116,7 @@ export class AwarenessLayer {
   getAll(): AwarenessItem[] {
     return this.db.getDatabase().prepare(`
       SELECT * FROM awareness
-      WHERE expires_at IS NULL OR expires_at > datetime('now')
+      WHERE expires_at IS NULL OR datetime(expires_at) > datetime('now')
       ORDER BY priority DESC
       LIMIT ?
     `).all(MAX_ITEMS) as AwarenessItem[];
@@ -125,7 +125,7 @@ export class AwarenessLayer {
   getByCategory(category: AwarenessCategory): AwarenessItem[] {
     return this.db.getDatabase().prepare(`
       SELECT * FROM awareness
-      WHERE category = ? AND (expires_at IS NULL OR expires_at > datetime('now'))
+      WHERE category = ? AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))
       ORDER BY priority DESC
       LIMIT ?
     `).all(category, MAX_ITEMS) as AwarenessItem[];

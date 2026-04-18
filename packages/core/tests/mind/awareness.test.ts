@@ -119,6 +119,35 @@ describe('Awareness Layer (Layer 1)', () => {
       expect(items).toHaveLength(1);
       expect(items[0].content).toBe('Active');
     });
+
+    // Regression: ISO-8601 strings with `T` separator and `Z` suffix
+    // (what `new Date(...).toISOString()` returns) used to ASCII-sort
+    // greater than SQLite's `datetime('now')` output ("YYYY-MM-DD HH:MM:SS",
+    // space separator, no Z), because `T` (0x54) > ` ` (0x20). That meant any
+    // ISO-formatted `expires_at` silently never expired, regardless of its
+    // actual time value. The fix wraps `expires_at` in SQLite's `datetime()`
+    // to normalize both sides of the comparison.
+    it('filters out expired items written in ISO-8601 format with Z suffix', () => {
+      const oneMinuteAgoIso = new Date(Date.now() - 60_000).toISOString();
+      const oneMinuteHenceIso = new Date(Date.now() + 60_000).toISOString();
+
+      awareness.add('flag', 'ExpiredIso', 0, oneMinuteAgoIso);
+      awareness.add('flag', 'AliveIso', 0, oneMinuteHenceIso);
+
+      const items = awareness.getAll();
+      expect(items.map((i) => i.content)).toEqual(['AliveIso']);
+    });
+
+    it('filters by category while respecting ISO-format expiry', () => {
+      const oneMinuteAgoIso = new Date(Date.now() - 60_000).toISOString();
+      const oneMinuteHenceIso = new Date(Date.now() + 60_000).toISOString();
+
+      awareness.add('task', 'ExpiredTask', 0, oneMinuteAgoIso);
+      awareness.add('task', 'AliveTask', 0, oneMinuteHenceIso);
+
+      const tasks = awareness.getByCategory('task');
+      expect(tasks.map((t) => t.content)).toEqual(['AliveTask']);
+    });
   });
 
   describe('toContext', () => {
