@@ -158,6 +158,51 @@ describe('Chat Streaming API', () => {
     server.agentRunner = originalRunner;
   });
 
+  // H-07 G4 · agent errors must finalize the execution trace with
+  // outcome='abandoned'. Without this, the trace row stays 'pending' and
+  // the evolution dataset builder skips it, starving the loop of the
+  // counterexamples it needs to learn from.
+  it('finalizes execution trace with outcome=abandoned on agent error', async () => {
+    if (!server.traceStore) {
+      // Trace store is optional; skip if the decorator didn't mount.
+      return;
+    }
+    const beforeCounts = server.traceStore.outcomeCounts();
+    const originalRunner = server.agentRunner;
+    server.agentRunner = async () => {
+      throw new Error('H-07 regression: forced failure');
+    };
+
+    await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: { message: 'trigger-abandoned-trace' },
+    });
+
+    const afterCounts = server.traceStore.outcomeCounts();
+    expect(afterCounts.abandoned).toBeGreaterThan(beforeCounts.abandoned);
+    // Sanity: we didn't accidentally mark it 'success' or leave it 'pending'.
+    expect(afterCounts.success).toBe(beforeCounts.success);
+    expect(afterCounts.pending).toBe(beforeCounts.pending);
+
+    server.agentRunner = originalRunner;
+  });
+
+  it('finalizes execution trace with outcome=success on happy path', async () => {
+    if (!server.traceStore) return;
+    const beforeCounts = server.traceStore.outcomeCounts();
+
+    await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: { message: 'happy-path-trace' },
+    });
+
+    const afterCounts = server.traceStore.outcomeCounts();
+    expect(afterCounts.success).toBeGreaterThan(beforeCounts.success);
+    expect(afterCounts.pending).toBe(beforeCounts.pending);
+  });
+
   it('streams tool use events', async () => {
     const originalRunner = server.agentRunner;
     server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {

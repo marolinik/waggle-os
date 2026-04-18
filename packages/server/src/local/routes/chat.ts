@@ -5,7 +5,7 @@ import path from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
-import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, TraceRecorder } from '@waggle/agent';
+import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, TraceRecorder, type TraceHandle } from '@waggle/agent';
 import type { AgentLoopConfig, AgentResponse, Orchestrator, AutonomyLevel } from '@waggle/agent';
 import type { WorkspaceSession } from '../workspace-sessions.js';
 import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
@@ -419,6 +419,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // the hook into the shared hookRegistry, causing ghost confirmation prompts on every
     // subsequent request with closures pointing at dead sockets.
     let unregisterHook: (() => void) | undefined;
+
+    // H-07 G4: hoist trace recorder/handle so the outer catch can finalize
+    // aborted/errored traces with outcome='abandoned'. Without this, a failed
+    // turn leaves its row in the 'pending' state and EvalDatasetBuilder skips
+    // it, starving the evolution loop of negative examples.
+    let traceRecorder: TraceRecorder | null = null;
+    let traceHandle: TraceHandle | null = null;
+    let traceFinalized = false;
 
     try {
       const hasCustomRunner = !!server.agentRunner;
@@ -1139,10 +1147,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
         // ── Start execution trace (self-evolution substrate) ──
         // Lazy-created per request so unit tests with no traceStore decorator
-        // (legacy suites) still pass. Finalized in the success + error paths
-        // below so outcome labels are accurate.
-        const traceRecorder = server.traceStore ? new TraceRecorder(server.traceStore) : null;
-        const traceHandle = traceRecorder
+        // (legacy suites) still pass. Assigned to the hoisted outer-scope
+        // variables so the outer catch can finalize with outcome='abandoned'
+        // on any exception path (H-07 G4 fix).
+        traceRecorder = server.traceStore ? new TraceRecorder(server.traceStore) : null;
+        traceHandle = traceRecorder
           ? traceRecorder.start({
               sessionId,
               personaId: activePersonaId,
@@ -1236,6 +1245,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 output: result.usage.outputTokens,
               },
             });
+            traceFinalized = true;
           } catch { /* tracing is best-effort — don't fail the response */ }
         }
 
@@ -1405,6 +1415,20 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         });
       }
     } catch (err) {
+      // H-07 G4: finalize aborted trace so the evolution dataset builder can
+      // mine it as a negative example. Without this the row stays 'pending'
+      // and GEPA never sees it — starving the loop of counterexamples.
+      if (traceRecorder && traceHandle && !traceFinalized) {
+        try {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          traceRecorder.finalize(traceHandle, {
+            outcome: 'abandoned',
+            output: '',
+            correctionFeedback: errMsg.slice(0, 500),
+          });
+          traceFinalized = true;
+        } catch { /* best-effort */ }
+      }
       // Send user-friendly error event — never show raw traces
       let errorMessage: string;
       if (err instanceof Error) {
@@ -1431,6 +1455,16 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // hook into the shared hookRegistry on any exception path.
       if (unregisterHook) {
         try { unregisterHook(); } catch { /* registry already torn down — ignore */ }
+      }
+      // H-07 G4: defensive trace finalization. Catches SSE-disconnect and any
+      // exotic exit path where the outer catch didn't run. Outcome stays
+      // 'abandoned' because we don't know if the agent produced a usable
+      // output — the correction-detector can upgrade it later if appropriate.
+      if (traceRecorder && traceHandle && !traceFinalized) {
+        try {
+          traceRecorder.finalize(traceHandle, { outcome: 'abandoned', output: '' });
+          traceFinalized = true;
+        } catch { /* best-effort */ }
       }
     }
 
