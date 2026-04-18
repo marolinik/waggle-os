@@ -179,7 +179,7 @@ export class HarvestPipeline {
 
     // M3: run batches with concurrency cap instead of sequentially
     const tasks = batches.map((b, i) => async () => {
-      this.onProgress?.('classify', i * BATCH_SIZE, items.length);
+      this.onProgress?.('classify', i * this.batchSize, items.length);
       const prompt = CLASSIFY_PROMPT + b.map((item, idx) => (
         `\n--- Item ${idx} (id: ${item.id}) ---\nTitle: ${item.title}\nSource: ${item.source}\nType: ${item.type}\nContent (first 500 chars): ${item.content.slice(0, 500)}\n`
       )).join('');
@@ -228,7 +228,7 @@ export class HarvestPipeline {
 
     // M3: concurrent batches with cap
     const tasks = batches.map((b, i) => async () => {
-      this.onProgress?.('extract', i * BATCH_SIZE, classified.length);
+      this.onProgress?.('extract', i * this.batchSize, classified.length);
       const prompt = EXTRACT_PROMPT + b.map((c, idx) => (
         `\n--- Conversation ${idx} (id: ${c.item.id}, value: ${c.value}, categories: ${c.categories.join(',')}) ---\nTitle: ${c.item.title}\n${c.item.content.slice(0, 2000)}\n`
       )).join('');
@@ -291,7 +291,7 @@ export class HarvestPipeline {
 
     // M3: concurrent batches with cap
     const tasks = batches.map((b, i) => async () => {
-      this.onProgress?.('synthesize', i * BATCH_SIZE, extracted.length);
+      this.onProgress?.('synthesize', i * this.batchSize, extracted.length);
       const serialized = b.map((ec, idx) => {
         const json = JSON.stringify(ec, null, 2);
         const trimmed = json.length > PER_ITEM_BUDGET
