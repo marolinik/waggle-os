@@ -1,6 +1,8 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, useCallback } from "react";
-import waggleLogo from "@/assets/waggle-logo.jpeg";
+import waggleLogoDark from "@/assets/waggle-logo.jpeg";
+import waggleLogoLight from "@/assets/waggle-logo.png";
+import { useIsLightTheme } from "@/hooks/useIsLightTheme";
 
 const PHASES = [
   "Initializing core systems…",
@@ -19,6 +21,11 @@ const BootScreen = ({ onComplete }: { onComplete: () => void }) => {
   const [phase, setPhase] = useState(0);
   const [done, setDone] = useState(false);
   const [showSkipHint, setShowSkipHint] = useState(false);
+  // Logo asset varies by theme: jpeg (solid dark backing, honey W) reads well
+  // on the hive-950 dark background; png (transparent, black "WAGGLE" text)
+  // reads well on the cream light background.
+  const isLight = useIsLightTheme();
+  const waggleLogo = isLight ? waggleLogoLight : waggleLogoDark;
 
   const handleSkip = useCallback(() => {
     onComplete();
@@ -60,6 +67,7 @@ const BootScreen = ({ onComplete }: { onComplete: () => void }) => {
       exit={{ opacity: 0, scale: 1.05 }}
       transition={{ duration: 0.5, ease: "easeInOut" }}
       className="fixed inset-0 z-[9999] bg-background flex flex-col items-center justify-center cursor-pointer"
+      data-testid="boot-screen"
       onClick={handleSkip}
     >
       {/* Subtle radial glow */}

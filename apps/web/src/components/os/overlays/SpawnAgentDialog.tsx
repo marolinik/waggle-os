@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Rocket, RefreshCw, ChevronDown, ChevronRight, ArrowLeft, Zap } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Rocket, RefreshCw, ChevronDown, ChevronRight, ArrowLeft, Zap, Key } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { PERSONAS } from '@/lib/personas';
 import type { Workspace, ModelPricing } from '@/lib/types';
@@ -26,6 +26,9 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
   const [step, setStep] = useState<'config' | 'confirm'>('config');
   const [models, setModels] = useState<string[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
+  const [modelsError, setModelsError] = useState<string | null>(null);
+  /** How many providers have a vault key configured — drives the empty-state copy. */
+  const [providersWithKeys, setProvidersWithKeys] = useState<number | null>(null);
   const [pricing, setPricing] = useState<ModelPricing[]>([]);
   const [showPersona, setShowPersona] = useState(false);
   const [form, setForm] = useState({
@@ -37,32 +40,40 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
     newWorkspaceName: '',
   });
 
-  // Fetch models from backend and default model to active workspace's model
-  useEffect(() => {
-    if (open) {
-      if (activeWorkspaceId) {
-        setForm(f => ({ ...f, workspaceId: f.workspaceId || activeWorkspaceId }));
-      }
-
-      // Find the active workspace's model to use as default
-      const activeWs = workspaces.find(w => w.id === activeWorkspaceId);
-      const wsModel = activeWs?.model;
-
-      setLoadingModels(true);
-      Promise.all([
+  // Fetch models + providers. Models alone don't tell us why the list might
+  // be empty — we also need the provider list to know whether the user has
+  // any keys configured, so the empty-state copy can be actionable rather
+  // than "check backend config".
+  const fetchModels = useCallback(async () => {
+    setLoadingModels(true);
+    setModelsError(null);
+    const activeWs = workspaces.find(w => w.id === activeWorkspaceId);
+    const wsModel = activeWs?.model;
+    try {
+      const [m, p, providers] = await Promise.all([
         adapter.getModels(),
         adapter.getModelPricing().catch(() => [] as ModelPricing[]),
-      ])
-        .then(([m, p]) => {
-          setModels(m);
-          setPricing(p);
-          const defaultModel = wsModel && m.includes(wsModel) ? wsModel : m[0] || '';
-          setForm(f => ({ ...f, model: f.model || defaultModel }));
-        })
-        .catch(() => {})
-        .finally(() => setLoadingModels(false));
+        adapter.getProviders().catch(() => ({ providers: [] as Array<{ hasKey: boolean }> })),
+      ]);
+      setModels(m);
+      setPricing(p);
+      setProvidersWithKeys(providers.providers.filter(pr => pr.hasKey).length);
+      const defaultModel = wsModel && m.includes(wsModel) ? wsModel : m[0] || '';
+      setForm(f => ({ ...f, model: f.model || defaultModel }));
+    } catch (err) {
+      setModelsError(err instanceof Error ? err.message : 'Failed to fetch models');
+    } finally {
+      setLoadingModels(false);
     }
-  }, [open, activeWorkspaceId, workspaces]);
+  }, [activeWorkspaceId, workspaces]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (activeWorkspaceId) {
+      setForm(f => ({ ...f, workspaceId: f.workspaceId || activeWorkspaceId }));
+    }
+    void fetchModels();
+  }, [open, activeWorkspaceId, fetchModels]);
 
   const handleSpawn = async () => {
     if (!form.task.trim()) return;
@@ -108,7 +119,7 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) { setStep('config'); onClose(); } }}>
-      <DialogContent className="sm:max-w-md bg-background border-border">
+      <DialogContent className="sm:max-w-md bg-background border-border" data-testid="spawn-agent-dialog">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-foreground">
             <Rocket className="w-5 h-5 text-primary" />
@@ -240,11 +251,36 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
                   )}
                 </div>
                 {loadingModels ? (
-                  <p className="text-xs text-muted-foreground">Loading models…</p>
+                  <p className="text-xs text-muted-foreground" data-testid="spawn-models-loading">Loading models…</p>
+                ) : modelsError ? (
+                  <div className="flex items-center gap-2" data-testid="spawn-models-error">
+                    <p className="text-xs text-destructive flex-1">Failed to load models: {modelsError}</p>
+                    <Button size="sm" variant="ghost" onClick={() => void fetchModels()} className="h-7 px-2 gap-1">
+                      <RefreshCw className="w-3 h-3" /> Retry
+                    </Button>
+                  </div>
                 ) : models.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">No models available — check backend config</p>
+                  providersWithKeys === 0 ? (
+                    <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20" data-testid="spawn-no-keys-cta">
+                      <Key className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-xs text-foreground font-medium">No API keys configured</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">Add a provider key in Settings → Vault, or install Ollama for free local models.</p>
+                      </div>
+                      <Button size="sm" variant="ghost" onClick={() => void fetchModels()} className="h-7 px-2 gap-1 shrink-0">
+                        <RefreshCw className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2" data-testid="spawn-no-models-cta">
+                      <p className="text-xs text-muted-foreground flex-1">Keys configured but no models returned — the LiteLLM proxy may not be running.</p>
+                      <Button size="sm" variant="ghost" onClick={() => void fetchModels()} className="h-7 px-2 gap-1">
+                        <RefreshCw className="w-3 h-3" /> Retry
+                      </Button>
+                    </div>
+                  )
                 ) : (
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="flex flex-wrap gap-1.5" data-testid="spawn-models-list">
                     {models.map(m => (
                       <button
                         key={m}

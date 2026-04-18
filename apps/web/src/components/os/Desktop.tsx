@@ -9,7 +9,8 @@ import type { UserTier } from "@/lib/dock-tiers";
 import type { AppId } from "@/lib/dock-tiers";
 import wallpaperDark from "@/assets/wallpaper.jpg";
 import wallpaperLight from "@/assets/wallpaper-light.jpg";
-import waggleLogo from "@/assets/waggle-logo.jpeg";
+import waggleLogoDark from "@/assets/waggle-logo.jpeg";
+import waggleLogoLight from "@/assets/waggle-logo.png";
 import StatusBar from "./StatusBar";
 import Dock from "./Dock";
 import AppWindow from "./AppWindow";
@@ -296,7 +297,7 @@ const Desktop = () => {
       {wm.windows.length === 0 && (
         <div className="absolute inset-0 flex flex-col items-center pointer-events-none z-[1]" style={{ paddingTop: "3vh" }}>
           <div className="relative w-40 h-40">
-            <img src={waggleLogo} alt="Waggle AI" className="w-40 h-40"
+            <img src={theme === 'light' ? waggleLogoLight : waggleLogoDark} alt="Waggle AI" className="w-40 h-40"
               style={{ borderRadius: 0, background: "transparent",
                 maskImage: "radial-gradient(circle, rgba(0,0,0,0.8) 30%, rgba(0,0,0,0.3) 60%, transparent 80%)",
                 WebkitMaskImage: "radial-gradient(circle, rgba(0,0,0,0.8) 30%, rgba(0,0,0,0.3) 60%, transparent 80%)" }} />

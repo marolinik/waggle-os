@@ -135,6 +135,7 @@ const Dock = ({ tier, billingTier = 'FREE', onOpenApp, openApps, minimizedApps =
             <div className="w-px h-6 bg-border/30 mx-1" />
             <motion.button
               aria-label="Spawn Agent"
+              data-testid="dock-spawn-agent"
               onClick={onSpawnAgent}
               className="relative flex flex-col items-center group p-2 rounded-xl hover:bg-muted/50 transition-colors"
               whileHover={{ scale: 1.2, y: -8 }}

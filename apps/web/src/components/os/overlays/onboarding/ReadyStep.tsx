@@ -1,9 +1,14 @@
 import { motion } from 'framer-motion';
-import waggleLogo from '@/assets/waggle-logo.jpeg';
+import waggleLogoDark from '@/assets/waggle-logo.jpeg';
+import waggleLogoLight from '@/assets/waggle-logo.png';
+import { useIsLightTheme } from '@/hooks/useIsLightTheme';
 import { fadeSlide } from './constants';
 import type { ReadyStepProps } from './types';
 
-const ReadyStep = ({ createError, onLetsGo }: ReadyStepProps) => (
+const ReadyStep = ({ createError, onLetsGo }: ReadyStepProps) => {
+  const isLight = useIsLightTheme();
+  const waggleLogo = isLight ? waggleLogoLight : waggleLogoDark;
+  return (
   <motion.div key="step-7" {...fadeSlide} className="text-center">
     <motion.div
       initial={{ scale: 0.8, opacity: 0 }}
@@ -35,6 +40,7 @@ const ReadyStep = ({ createError, onLetsGo }: ReadyStepProps) => (
       </button>
     </motion.div>
   </motion.div>
-);
+  );
+};
 
 export default ReadyStep;

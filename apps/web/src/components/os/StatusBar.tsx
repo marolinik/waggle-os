@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { WifiOff, Search, Bell } from "lucide-react";
-import waggleLogo from "@/assets/waggle-logo.jpeg";
+import waggleLogoDark from "@/assets/waggle-logo.jpeg";
+import waggleLogoLight from "@/assets/waggle-logo.png";
+import { useIsLightTheme } from "@/hooks/useIsLightTheme";
 
 interface StatusBarProps {
   workspaceName?: string;
@@ -17,6 +19,8 @@ interface StatusBarProps {
 
 const StatusBar = ({ workspaceName, model, tokensUsed, costUsd, offline, unreadNotifications = 0, trialDaysRemaining: trialDays, trialExpired, onSearchClick, onNotificationClick }: StatusBarProps) => {
   const [time, setTime] = useState(new Date());
+  const isLight = useIsLightTheme();
+  const waggleLogo = isLight ? waggleLogoLight : waggleLogoDark;
 
   useEffect(() => {
     const interval = setInterval(() => setTime(new Date()), 1000);

@@ -1,9 +1,14 @@
 import { motion } from 'framer-motion';
-import waggleLogo from '@/assets/waggle-logo.jpeg';
+import waggleLogoDark from '@/assets/waggle-logo.jpeg';
+import waggleLogoLight from '@/assets/waggle-logo.png';
+import { useIsLightTheme } from '@/hooks/useIsLightTheme';
 import { fadeSlide } from './constants';
 import type { WelcomeStepProps } from './types';
 
-const WelcomeStep = ({ onClickAnywhere }: WelcomeStepProps) => (
+const WelcomeStep = ({ onClickAnywhere }: WelcomeStepProps) => {
+  const isLight = useIsLightTheme();
+  const waggleLogo = isLight ? waggleLogoLight : waggleLogoDark;
+  return (
   <motion.div
     key="step-0"
     {...fadeSlide}
@@ -42,6 +47,7 @@ const WelcomeStep = ({ onClickAnywhere }: WelcomeStepProps) => (
       or click anywhere
     </p>
   </motion.div>
-);
+  );
+};
 
 export default WelcomeStep;
