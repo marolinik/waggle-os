@@ -4,6 +4,8 @@
 
 **Scope:** Closes H-33 in `docs/plans/BACKLOG-MASTER-2026-04-18.md`.
 
+**Status (2026-04-18):** ✅ **EXECUTED — 7/7 green.** See [Executed results](#executed-results-2026-04-18) at the bottom. The canonical automated replay is `packages/server/tests/stripe/smoke-e2e.test.ts` — run the one-liner in that section to re-verify at any time.
+
 ---
 
 ## Prerequisites
@@ -129,3 +131,55 @@ Expected: `{ "url": "https://billing.stripe.com/..." }`. Requires the user to ha
 
 - Production Stripe products don't exist yet ([M]-01 blocker). The sandbox smoke covers signature validation, tier mapping, idempotency, and routing. Production price IDs must be plugged in for real customer checkouts.
 - Windows code-signing cert ([M]-08) needed before distribution; unrelated to Stripe smoke.
+
+## Executed results (2026-04-18)
+
+Egzakta sandbox `acct_1SzHlbC0mmjh4oEM` (test mode, CLI key expires 2026-05-11).
+
+**Test-mode price IDs** — created via `stripe prices create` during the H-33 execution:
+
+| Tier | Amount | Price ID |
+|---|---|---|
+| PRO   | $19 USD/mo | `price_1TNZfkC0mmjh4oEMGAZ2PDbc` |
+| TEAMS | $49 USD/mo | `price_1TNZfpC0mmjh4oEMH10c02YB` |
+
+These are sandbox-only. Production price IDs will be separate ([M]-01).
+
+**Execution transcript** (from `packages/server/tests/stripe/smoke-e2e.test.ts`):
+
+```
+=== H-33 Stripe smoke checklist ===
+  [x] 1. checkout.session.completed — tier=PRO + customer=cus_smoke_1
+  [x] 2. customer.subscription.updated — PRICE_TEAMS → tier=TEAMS
+  [x] 3. customer.subscription.deleted — tier reverted to FREE
+  [x] 4. duplicate event dedup — resending evt_smoke_checkout_1 left tier on TEAMS (duplicate skipped)
+  [x] 5. signature validation — bogus signature → 400 INVALID_SIGNATURE
+  [x] 6. create-checkout-session — URL = https://checkout.stripe.com/c/pay/cs_test_b1...
+  [x] 7. create-portal-session — customer=cus_<live> · URL = https://billing.stripe.com/p/session/test_...
+```
+
+**Coverage:** Signature validation, tier mapping (checkout-metadata + price-id paths), FREE revert on cancellation, dedup via `.stripe-processed-events.json`, 403 tier gate before checkout/portal, real Stripe API reachability (both checkout.sessions.create and billingPortal.sessions.create round-tripped cleanly).
+
+### Re-running the smoke
+
+```sh
+# Required env — never commit these values.
+STRIPE_KEY=$(stripe config --list | awk -F"'" '/test_mode_api_key/{print $2}')
+cd D:/Projects/waggle-os
+
+STRIPE_SECRET_KEY="$STRIPE_KEY" \
+STRIPE_PRICE_PRO="price_1TNZfkC0mmjh4oEMGAZ2PDbc" \
+STRIPE_PRICE_TEAMS="price_1TNZfpC0mmjh4oEMH10c02YB" \
+WAGGLE_STRIPE_SMOKE=1 \
+  npx vitest run packages/server/tests/stripe/smoke-e2e.test.ts
+```
+
+Without `WAGGLE_STRIPE_SMOKE=1` + the env vars the suite self-skips so CI stays green on developer machines that don't have a Stripe sandbox wired up.
+
+### Production cutover checklist ([M]-01)
+
+1. Create production products + prices in the Stripe dashboard. Use the canonical tier names — `Waggle Pro` ($19) and `Waggle Teams` ($49).
+2. Replace `STRIPE_PRICE_PRO` / `STRIPE_PRICE_TEAMS` in the production env with the new `price_...` IDs.
+3. Configure a production webhook endpoint at `https://<prod-host>/api/stripe/webhook` with signing secret piped into `STRIPE_WEBHOOK_SECRET`.
+4. Re-run this smoke against production **exactly once**, then archive the price IDs in `docs/OPS/stripe-production.md` (new).
+5. Wire the upgrade CTA in `SettingsApp.tsx` — already integrated via `useBilling.startCheckout`.
