@@ -117,6 +117,7 @@ import { seedDefaultCrons } from './setup-crons.js';
 import { registerConnectors } from './setup-connectors.js';
 import { securityMiddleware } from './security-middleware.js';
 import { LocalScheduler } from './cron.js';
+import { EvolutionService, isEvolutionAutoEnabled } from './services/evolution-service.js';
 import {
   generateMorningBriefing,
   checkStaleWorkspaces,
@@ -244,6 +245,8 @@ declare module 'fastify' {
     embeddingProvider: import('@waggle/core').EmbeddingProviderInstance;
     skillHashStore: import('@waggle/core').SkillHashStore;
     scheduler: import('./cron.js').LocalScheduler;
+    /** H-10 G1: autonomous evolution daemon. Inert unless WAGGLE_EVOLUTION_AUTO_ENABLED=1. */
+    evolutionService: import('./services/evolution-service.js').EvolutionService;
     marketplace: import('@waggle/marketplace').MarketplaceDB | null;
     offlineManager: OfflineManager;
     rateLimiter: import('./security-middleware.js').RateLimiter;
@@ -1760,6 +1763,33 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   scheduler.start();
   server.decorate('scheduler', scheduler);
 
+  // H-10 G1: Evolution service — autonomous self-evolution daemon.
+  // Disabled by default; opt-in via WAGGLE_EVOLUTION_AUTO_ENABLED=1 so
+  // existing deployments don't start burning Anthropic credits silently.
+  // Even when enabled, the service only produces `proposed` runs — accept
+  // still happens manually via the Memory → Evolution UI.
+  const evolutionService = new EvolutionService(
+    {
+      traceStore,
+      runStore: evolutionStore,
+      getApiKey: () => server.vault?.get('anthropic')?.value ?? null,
+      getActiveBehavioralSpec: () => (server as unknown as { activeBehavioralSpec: Record<string, unknown> }).activeBehavioralSpec,
+      log: (level, msg) => {
+        if (level === 'warn') log.warn(`[evolution-service] ${msg}`);
+        else log.info(`[evolution-service] ${msg}`);
+      },
+    },
+    {
+      tickIntervalMs: parseInt(process.env.WAGGLE_EVOLUTION_TICK_INTERVAL_MS ?? '', 10) || undefined,
+      minTracesPerTarget: parseInt(process.env.WAGGLE_EVOLUTION_MIN_TRACES ?? '', 10) || undefined,
+    },
+  );
+  server.decorate('evolutionService', evolutionService);
+  if (isEvolutionAutoEnabled()) {
+    evolutionService.start();
+    log.info('[evolution-service] autonomous evolution enabled (WAGGLE_EVOLUTION_AUTO_ENABLED=1)');
+  }
+
   // F2: Daily audit event cleanup (retain 90 days by default)
   const auditRetentionDays = parseInt(process.env.WAGGLE_AUDIT_RETENTION_DAYS ?? '90', 10);
   const auditCleanupTimer = setInterval(() => {
@@ -2202,6 +2232,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   server.addHook('onClose', async () => {
     // Stop cron scheduler
     scheduler.stop();
+    evolutionService.stop();
     offlineManager.stop();
     clearInterval(auditCleanupTimer);
 
