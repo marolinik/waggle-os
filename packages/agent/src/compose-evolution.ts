@@ -38,6 +38,7 @@ import {
 } from './iterative-optimizer.js';
 import type { LLMJudge, JudgeScore } from './judge.js';
 import type { EvalExample } from './eval-dataset.js';
+import { RUNNING_JUDGE_BRAND, isRunningJudge } from './evolution-llm-wiring.js';
 
 // ── Types ───────────────────────────────────────────────────────
 
@@ -130,7 +131,7 @@ export function filterJudgeFeedback(
   judge: Pick<LLMJudge, 'score'>,
   filter: FeedbackFilter = defaultFeedbackFilter,
 ): Pick<LLMJudge, 'score'> {
-  return {
+  const wrapped: Pick<LLMJudge, 'score'> & Partial<Record<symbol, unknown>> = {
     async score(args) {
       const raw = await judge.score(args);
       const filteredFeedback = stripStructuralLines(raw.feedback, filter);
@@ -138,6 +139,14 @@ export function filterJudgeFeedback(
       return result;
     },
   };
+  // H-09 G3: preserve the running-judge brand so IterativeGEPA's check
+  // still passes after feedback filtering. Without this, wrapping a
+  // running judge with filterJudgeFeedback would silently strip the
+  // brand and GEPA would reject it.
+  if (isRunningJudge(judge)) {
+    wrapped[RUNNING_JUDGE_BRAND] = true;
+  }
+  return wrapped;
 }
 
 /** Public helper — strips structural lines from a feedback string. */

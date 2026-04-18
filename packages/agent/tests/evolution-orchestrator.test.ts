@@ -88,6 +88,7 @@ function baseComposeOptions() {
       examples: [] as never[],
       judge: makeJudge(),
       mutate: mutateAppend,
+      allowBareJudge: true,
       populationSize: 2, generations: 1,
       microScreenSize: 3, miniEvalSize: 3, anchorEvalSize: 3,
     },

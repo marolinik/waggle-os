@@ -404,11 +404,30 @@ export function buildSchemaExecuteFn(llm: EvolutionLLM): SchemaExecuteFn {
  * Pareto population treats the candidate as a loser without crashing the
  * whole generation.
  */
+/**
+ * Phantom property that marks a judge as running-capable (i.e. it executes
+ * the candidate prompt against a real LLM before scoring). IterativeGEPA
+ * checks for this to prevent regressions where a bare prompt-text-similarity
+ * judge is passed by mistake.
+ *
+ * Symbol-keyed to avoid accidental conflicts with user-defined fields.
+ */
+export const RUNNING_JUDGE_BRAND = Symbol.for('waggle.runningJudge');
+
+export interface RunningJudge extends Pick<LLMJudge, 'score'> {
+  readonly [RUNNING_JUDGE_BRAND]: true;
+}
+
+export function isRunningJudge(j: Pick<LLMJudge, 'score'> | RunningJudge): j is RunningJudge {
+  return (j as Record<symbol, unknown>)[RUNNING_JUDGE_BRAND] === true;
+}
+
 export function makeRunningJudge(
   baseJudge: Pick<LLMJudge, 'score'>,
   llm: EvolutionLLM,
-): Pick<LLMJudge, 'score'> {
+): RunningJudge {
   return {
+    [RUNNING_JUDGE_BRAND]: true as const,
     async score(args: JudgeInput): Promise<JudgeScore> {
       // `args.actual` is the candidate prompt supplied by GEPA. Treat it as
       // a system prompt, run it against the example input via the LLM, and

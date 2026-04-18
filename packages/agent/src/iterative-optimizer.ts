@@ -27,6 +27,7 @@
 
 import type { EvalExample } from './eval-dataset.js';
 import type { LLMJudge, JudgeScore } from './judge.js';
+import { isRunningJudge } from './evolution-llm-wiring.js';
 
 // ── Types ───────────────────────────────────────────────────────
 
@@ -109,6 +110,15 @@ export interface IterativeGEPAOptions {
   judge: Pick<LLMJudge, 'score'>;
   /** Function that produces a mutated prompt from a parent + weakness feedback. */
   mutate: MutateFn;
+  /**
+   * Opt-in escape hatch that disables the running-judge safety check.
+   * Only set to true for unit tests with mock judges whose `score()` does
+   * not need a real LLM call. Production code paths (evolving real prompts)
+   * must always pass a `makeRunningJudge(...)`-wrapped judge; otherwise
+   * GEPA optimizes prompt-text similarity to the expected output — a
+   * meaningless gradient that produces nonsense winners.
+   */
+  allowBareJudge?: boolean;
   /** What we're optimizing (tunes mutation + gate policy). Default 'generic'. */
   targetKind?: EvolutionTarget;
   /** Candidates per generation. Default 5. */
@@ -160,6 +170,19 @@ export class IterativeGEPA {
    * length penalty, i.e. the more concise one wins).
    */
   async run(options: IterativeGEPAOptions): Promise<GEPARunResult> {
+    // H-09 G3 · reject bare judges — without makeRunningJudge the judge
+    // scores prompt-text-vs-expected-output, which is a meaningless
+    // gradient. Any caller evolving real prompts must wrap their judge.
+    // Tests pass `allowBareJudge: true` to bypass.
+    if (!options.allowBareJudge && !isRunningJudge(options.judge)) {
+      throw new Error(
+        'IterativeGEPA: judge is not a running judge. Wrap with ' +
+        'makeRunningJudge(baseJudge, llm) before passing to .run(), or ' +
+        'pass `allowBareJudge: true` for tests with mock judges. ' +
+        'See evolution-llm-wiring.ts:makeRunningJudge for rationale.',
+      );
+    }
+
     const config = normalizeOptions(options);
     const rng = makeRng(config.seed);
 
@@ -586,6 +609,7 @@ function normalizeOptions(opts: IterativeGEPAOptions): Required<Omit<IterativeGE
     onProgress: opts.onProgress,
     signal: opts.signal,
     concurrency: Math.max(1, opts.concurrency ?? 1),
+    allowBareJudge: opts.allowBareJudge ?? false,
   };
 }
 

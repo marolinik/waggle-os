@@ -8,10 +8,21 @@ import {
   pickSample,
   type Candidate,
   type CandidateScore,
+  type IterativeGEPAOptions,
   type MutateFn,
 } from '../src/iterative-optimizer.js';
 import type { EvalExample } from '../src/eval-dataset.js';
 import type { JudgeScore } from '../src/judge.js';
+
+/**
+ * H-09 G3 — unit tests mock the judge, so they opt into the running-judge
+ * safety-check bypass. Production code paths must still wrap with
+ * makeRunningJudge(); the check in IterativeGEPA enforces that.
+ */
+function runGEPA(options: Omit<IterativeGEPAOptions, 'allowBareJudge'>) {
+  const gepa = new IterativeGEPA();
+  return gepa.run({ ...options, allowBareJudge: true });
+}
 
 // ── Fixtures ───────────────────────────────────────────────────
 
@@ -391,7 +402,7 @@ describe('IterativeGEPA with concurrency', () => {
     };
     const mutate: MutateFn = async ({ parent, strategy }) => `${parent.prompt} :: ${strategy}`;
 
-    await new IterativeGEPA().run({
+    await runGEPA({
       baseline: 'base',
       examples: makeExamples(8),
       judge,
@@ -405,6 +416,58 @@ describe('IterativeGEPA with concurrency', () => {
     });
 
     expect(peakInFlight).toBe(3);
+  });
+});
+
+// ── H-09 G3 · running-judge guard ──────────────────────────────
+
+describe('IterativeGEPA.run · running-judge guard (H-09 G3)', () => {
+  it('throws when a bare judge is passed without allowBareJudge', async () => {
+    const bareJudge = {
+      async score(): Promise<JudgeScore> {
+        return {
+          overall: 0.5, weighted: 0.5, correctness: 0.5,
+          procedureFollowing: 0.5, conciseness: 0.5, lengthPenalty: 1,
+          feedback: '', parsed: true,
+        };
+      },
+    };
+    const mutate: MutateFn = async ({ parent }) => `${parent.prompt} mutated`;
+    await expect(
+      new IterativeGEPA().run({
+        baseline: 'seed',
+        examples: makeExamples(3),
+        judge: bareJudge,
+        mutate,
+      }),
+    ).rejects.toThrow(/not a running judge|makeRunningJudge/);
+  });
+
+  it('accepts a judge wrapped with makeRunningJudge', async () => {
+    const { makeRunningJudge } = await import('../src/evolution-llm-wiring.js');
+    const baseJudge = {
+      async score(): Promise<JudgeScore> {
+        return {
+          overall: 0.8, weighted: 0.8, correctness: 0.8,
+          procedureFollowing: 0.8, conciseness: 0.8, lengthPenalty: 1,
+          feedback: '', parsed: true,
+        };
+      },
+    };
+    const fakeLLM = { complete: async () => 'LLM output' };
+    const wrapped = makeRunningJudge(baseJudge, fakeLLM);
+    const mutate: MutateFn = async ({ parent }) => `${parent.prompt} v2`;
+    // Should not throw — the wrapped judge carries the brand.
+    const result = await new IterativeGEPA().run({
+      baseline: 'seed',
+      examples: makeExamples(3),
+      judge: wrapped,
+      mutate,
+      populationSize: 1,
+      generations: 1,
+      microScreenSize: 1, miniEvalSize: 1, anchorEvalSize: 1,
+    });
+    expect(result.winner).toBeDefined();
   });
 });
 
@@ -422,7 +485,7 @@ describe('IterativeGEPA.run', () => {
     };
 
     const progress: string[] = [];
-    const result = await new IterativeGEPA().run({
+    const result = await runGEPA({
       baseline,
       examples,
       judge,
@@ -452,7 +515,7 @@ describe('IterativeGEPA.run', () => {
     // Mutate doubles length each time
     const mutate: MutateFn = async ({ parent }) => `${parent.prompt} ${parent.prompt}more`;
 
-    const result = await new IterativeGEPA().run({
+    const result = await runGEPA({
       baseline,
       examples,
       judge,
@@ -477,7 +540,7 @@ describe('IterativeGEPA.run', () => {
       return `${parent.prompt} mutated`;
     };
 
-    await new IterativeGEPA().run({
+    await runGEPA({
       baseline: 'baseline',
       examples: makeExamples(10),
       judge: makeFakeJudge(),
@@ -506,7 +569,7 @@ describe('IterativeGEPA.run', () => {
       return `${parent.prompt} ok`;
     };
 
-    const result = await new IterativeGEPA().run({
+    const result = await runGEPA({
       baseline: 'baseline',
       examples: makeExamples(5),
       judge: makeFakeJudge(),
@@ -528,7 +591,7 @@ describe('IterativeGEPA.run', () => {
     const mutate: MutateFn = vi.fn(async () => 'should never run');
 
     ctrl.abort(); // abort before starting generations
-    const result = await new IterativeGEPA().run({
+    const result = await runGEPA({
       baseline: 'baseline',
       examples: makeExamples(5),
       judge: makeFakeJudge(),
@@ -551,7 +614,7 @@ describe('IterativeGEPA.run', () => {
     const judge = makeFakeJudge();
     const mutate: MutateFn = async ({ parent, strategy }) => `${parent.prompt}::${strategy}`;
 
-    const run = () => new IterativeGEPA().run({
+    const run = () => runGEPA({
       baseline: 'seed',
       examples,
       judge,
@@ -572,7 +635,7 @@ describe('IterativeGEPA.run', () => {
   });
 
   it('produces history containing baseline and all mutated children', async () => {
-    const result = await new IterativeGEPA().run({
+    const result = await runGEPA({
       baseline: 'base',
       examples: makeExamples(5),
       judge: makeFakeJudge(),
