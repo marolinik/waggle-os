@@ -11,7 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import chalk from 'chalk';
 import { MindDB, WaggleConfig, createLiteLLMEmbedder } from '@waggle/core';
-import { Orchestrator, ModelRouter, runAgentLoop, createSystemTools, createPlanTools, createGitTools, Workspace, ensureIdentity, loadSystemPrompt, loadSkills, CostTracker, HookRegistry, loadHooksFromConfig, needsConfirmation } from '@waggle/agent';
+import { Orchestrator, ModelRouter, runAgentLoop, createSystemTools, createPlanTools, createGitTools, Workspace, ensureIdentity, loadSystemPromptWithOverrides, assertOverridesReachActiveSpec, loadSkills, CostTracker, HookRegistry, loadHooksFromConfig, needsConfirmation } from '@waggle/agent';
 import { parseCommand, COMMANDS } from './commands.js';
 import { renderMarkdown } from './renderer.js';
 import { AdminClient, formatTable } from './commands/admin.js';
@@ -65,9 +65,13 @@ export async function startRepl(options: ReplOptions = {}): Promise<void> {
   const workspace = new Workspace(process.cwd());
   workspace.init();
 
-  // Load user customizations from ~/.waggle/
+  // Load user customizations from ~/.waggle/ — H-08 G2: override-aware,
+  // so any deployed behavioral-spec or persona evolution takes effect at
+  // startup.
   const waggleHome = path.join(os.homedir(), '.waggle');
-  const userSystemPrompt = loadSystemPrompt(waggleHome);
+  const composedPrompt = loadSystemPromptWithOverrides(waggleHome);
+  const userSystemPrompt = composedPrompt.userPromptMd;
+  assertOverridesReachActiveSpec(waggleHome, composedPrompt.behavioralSpec);
   const skills = loadSkills(waggleHome);
 
   // Load user-configurable hooks from ~/.waggle/hooks.json

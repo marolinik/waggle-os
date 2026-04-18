@@ -18,7 +18,14 @@ export { runAgentLoop, type AgentLoopConfig, type AgentResponse, type AgentMessa
 export { createTeamTools, type TeamToolDeps } from './team-tools.js';
 export { ensureIdentity, type IdentityConfig } from './auto-identity.js';
 export { buildSelfAwareness, type AgentCapabilities } from './self-awareness.js';
-export { loadSystemPrompt, loadSkills, type LoadedSkill } from './prompt-loader.js';
+export {
+  loadSystemPrompt,
+  loadSystemPromptWithOverrides,
+  assertOverridesReachActiveSpec,
+  loadSkills,
+  type ComposedSystemPrompt,
+  type LoadedSkill,
+} from './prompt-loader.js';
 export { LoopGuard, type LoopGuardConfig } from './loop-guard.js';
 export { scanForInjection, type ScanResult } from './injection-scanner.js';
 export { CostTracker, DEFAULT_MODEL_PRICING, type ModelPricing, type UsageStats, type UsageEntry } from './cost-tracker.js';
