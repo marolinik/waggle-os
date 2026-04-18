@@ -34,7 +34,7 @@ const SettingsApp = () => {
   const [budgetModel, setBudgetModel] = useState<string | null>(null);
   const [budgetThreshold, setBudgetThreshold] = useState(0.8);
   const [dailyBudget, setDailyBudget] = useState<string>('');
-  const [tier, setTier] = useState('solo');
+  const [tier, setTier] = useState('FREE');
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
 
@@ -99,7 +99,7 @@ const SettingsApp = () => {
       setBudgetModel(s.budgetModel ?? null);
       setBudgetThreshold(s.budgetThreshold ?? 0.8);
       setDailyBudget(s.dailyBudget != null ? String(s.dailyBudget) : '');
-      setTier(s.tier ?? 'solo');
+      setTier(s.tier ?? 'FREE');
       setYoloMode(s.yoloMode ?? false);
     }).catch(() => {});
 
@@ -374,15 +374,17 @@ const SettingsApp = () => {
                 <div>
                   <p className="text-xs font-display font-medium text-foreground">Current Plan</p>
                   <p className="text-[11px] text-muted-foreground mt-0.5">
-                    {billing.tier === 'SOLO' && 'Free tier — upgrade to unlock all features'}
-                    {billing.tier === 'BASIC' && '$15/mo — all individual features unlocked'}
-                    {billing.tier === 'TEAMS' && '$79/mo per seat — team features and shared context'}
+                    {billing.tier === 'FREE' && 'Free tier — upgrade to unlock all features'}
+                    {billing.tier === 'TRIAL' && 'Trial — 15 days of everything unlocked'}
+                    {billing.tier === 'PRO' && '$19/mo — unlimited workspaces, marketplace, all connectors'}
+                    {billing.tier === 'TEAMS' && '$49/mo per seat — shared workspaces, WaggleDance, governance'}
                     {billing.tier === 'ENTERPRISE' && 'Enterprise — KVARK sovereign deployment'}
                   </p>
                 </div>
                 <span className={`px-3 py-1 rounded-full text-xs font-display font-semibold ${
-                  billing.tier === 'SOLO' ? 'bg-muted text-muted-foreground' :
-                  billing.tier === 'BASIC' ? 'bg-primary/20 text-primary' :
+                  billing.tier === 'FREE' ? 'bg-muted text-muted-foreground' :
+                  billing.tier === 'TRIAL' ? 'bg-honey/20 text-honey' :
+                  billing.tier === 'PRO' ? 'bg-primary/20 text-primary' :
                   billing.tier === 'TEAMS' ? 'bg-violet-500/20 text-violet-400' :
                   'bg-amber-500/20 text-amber-400'
                 }`}>
@@ -406,33 +408,33 @@ const SettingsApp = () => {
               </div>
             )}
 
-            {/* Upgrade buttons for SOLO users */}
-            {billing.tier === 'SOLO' && (
+            {/* Upgrade buttons for FREE / TRIAL users */}
+            {(billing.tier === 'FREE' || billing.tier === 'TRIAL') && (
               <div className="space-y-2">
                 <p className="text-xs font-display font-medium text-foreground">Upgrade</p>
                 <div className="grid grid-cols-2 gap-3">
                   <button
-                    onClick={() => billing.startCheckout('BASIC')}
+                    onClick={() => billing.startCheckout('PRO')}
                     className="p-4 rounded-xl bg-primary/10 border border-primary/30 text-left hover:bg-primary/20 transition-colors"
                   >
-                    <p className="text-xs font-display font-semibold text-primary">Basic</p>
-                    <p className="text-[11px] text-muted-foreground mt-1">$15/mo</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">Unlimited workspaces, agents, and custom skills</p>
+                    <p className="text-xs font-display font-semibold text-primary">Pro</p>
+                    <p className="text-[11px] text-muted-foreground mt-1">$19/mo</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Unlimited workspaces, marketplace, all connectors</p>
                   </button>
                   <button
                     onClick={() => billing.startCheckout('TEAMS')}
                     className="p-4 rounded-xl bg-violet-500/10 border border-violet-500/30 text-left hover:bg-violet-500/20 transition-colors"
                   >
                     <p className="text-xs font-display font-semibold text-violet-400">Teams</p>
-                    <p className="text-[11px] text-muted-foreground mt-1">$79/mo per seat</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">Shared context, team skills, cloud sync</p>
+                    <p className="text-[11px] text-muted-foreground mt-1">$49/mo per seat</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Shared workspaces, WaggleDance, governance</p>
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Upgrade to Teams for BASIC users */}
-            {billing.tier === 'BASIC' && (
+            {/* Upgrade to Teams for PRO users */}
+            {billing.tier === 'PRO' && (
               <div className="space-y-3">
                 <button
                   onClick={() => billing.startCheckout('TEAMS')}
@@ -441,7 +443,7 @@ const SettingsApp = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-xs font-display font-semibold text-violet-400">Upgrade to Teams</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">$79/mo per seat — shared context, governance, KVARK funnel</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">$49/mo per seat — shared workspaces, governance, KVARK funnel</p>
                     </div>
                     <span className="text-violet-400 text-xs">&#8594;</span>
                   </div>
@@ -450,7 +452,7 @@ const SettingsApp = () => {
             )}
 
             {/* Manage Subscription for paid users */}
-            {(billing.tier === 'BASIC' || billing.tier === 'TEAMS') && (
+            {(billing.tier === 'PRO' || billing.tier === 'TEAMS') && (
               <div className="pt-2 border-t border-border/30">
                 <button
                   onClick={() => billing.openPortal()}

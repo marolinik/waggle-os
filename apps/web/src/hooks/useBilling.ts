@@ -18,7 +18,7 @@ export interface BillingState {
 
 export function useBilling() {
   const [state, setState] = useState<BillingState>({
-    tier: 'SOLO',
+    tier: 'FREE',
     loading: true,
     error: null,
     syncing: false,
@@ -54,7 +54,7 @@ export function useBilling() {
   }, []);
 
   /** Open Stripe checkout for a tier upgrade. Returns the checkout URL. */
-  const startCheckout = useCallback(async (tier: 'BASIC' | 'TEAMS') => {
+  const startCheckout = useCallback(async (tier: 'PRO' | 'TEAMS') => {
     try {
       const { url } = await adapter.createCheckoutSession(tier);
       if (url) {

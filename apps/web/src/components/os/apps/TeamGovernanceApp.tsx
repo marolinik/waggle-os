@@ -35,7 +35,7 @@ const TeamGovernanceApp = () => {
         </div>
       </div>
       <div className="mt-6 px-4 py-2 rounded-xl bg-primary/10 border border-primary/30">
-        <p className="text-xs font-display text-primary">Available on Teams ($79/mo) and Enterprise tiers</p>
+        <p className="text-xs font-display text-primary">Available on Teams ($49/mo per seat) and Enterprise tiers</p>
       </div>
     </div>
   );
