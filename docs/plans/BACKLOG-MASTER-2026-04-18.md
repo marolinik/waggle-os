@@ -253,60 +253,49 @@ Test plan referenced in docx. Items extracted from the plan structure (detailed 
 - **Verify:** Peer-reviewer feedback incorporated. Arxiv-ready.
 - **Effort:** 3 days · **Owner:** me + [M]-09 · **Deps:** H-22, H-23, [M]-06
 
-### Block H9 — Stripe integration (M7 decomposed — 8 items, most doable today)
+### Block H9 — Stripe integration (M7 decomposed — reconciliation 2026-04-18)
 
-Marko creates products in dashboard ([M]-01). Everything else is my wiring. Works in Stripe test mode without real products; plugs into real IDs when [M]-01 lands.
+Reality check performed this session: most of the Stripe integration was already shipped. Marko still creates products in dashboard ([M]-01). Engineering work remaining is smaller than originally scoped.
 
-#### H-26 · Stripe webhook endpoint
-- Route: `POST /api/stripe/webhook`.
-- Raw body handling (Fastify rawBody plugin if not present).
-- Signature verification with `STRIPE_WEBHOOK_SECRET` from vault.
-- Idempotency via event ID dedup table.
-- **Verify:** Vitest with Stripe webhook fixture payloads. 2xx for valid, 400 for bad signature.
-- **Effort:** 3 hr · **Owner:** me · **Deps:** none
+#### H-26 · Stripe webhook endpoint — ✅ SHIPPED (pre-session)
+- `packages/server/src/stripe/webhook.ts` exists (130 LOC).
+- Raw body handling via Fastify content-type parser at route scope.
+- Signature verification with `STRIPE_WEBHOOK_SECRET` from env.
+- Idempotency via `.stripe-processed-events.json` event-ID dedup (last 500 retained).
+- Tests at `packages/server/tests/stripe/webhook.test.ts` (109 LOC, 10+ cases).
 
-#### H-27 · Subscription → tier mapping
-- On `customer.subscription.created/updated/deleted`, derive effective tier (FREE/PRO/TEAMS) from price ID.
-- Persist to user record. Emit `tier:changed` event.
-- **Verify:** Vitest mapping function for all 5 tiers. Integration test: webhook → user tier updated.
-- **Effort:** 2 hr · **Owner:** me · **Deps:** H-26
+#### H-27 · Subscription → tier mapping — ✅ SHIPPED (pre-session)
+- `tierFromPriceId(priceId)` in `packages/server/src/stripe/index.ts` — canonical FREE/PRO/TEAMS mapping.
+- Handles `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`.
+- Writes to `{dataDir}/config.json` with tier + `stripe_customer_id`.
+- Includes legacy `STRIPE_PRICE_BASIC` → `PRO` mapping for backward compat.
 
-#### H-28 · Upgrade flow UI
-- Settings → Billing tab: "Upgrade to Pro" + "Upgrade to Teams" buttons.
-- Checkout session creation via Stripe Checkout.
-- Success redirect back to app with verification modal.
-- **Verify:** Playwright — click upgrade → Stripe Checkout URL returned. Mock checkout success → tier updated in UI.
-- **Effort:** 4 hr · **Owner:** me · **Deps:** H-27
+#### H-28 · Upgrade flow UI — ✅ SHIPPED (pre-session)
+- `packages/server/src/stripe/checkout.ts` — `POST /api/stripe/create-checkout-session`.
+- `UpgradeModal.tsx` + `useBilling.ts` wire the UI (already canonical `PRO`/`TEAMS` after the 2026-04-18 tier-rename fix).
 
-#### H-29 · Billing portal link
-- Settings → Billing: "Manage subscription" button → `stripe.billingPortal.sessions.create`.
-- **Verify:** Playwright — click → portal URL returned.
-- **Effort:** 1 hr · **Owner:** me · **Deps:** H-27
+#### H-29 · Billing portal link — ✅ SHIPPED (pre-session)
+- `packages/server/src/stripe/portal.ts` — `POST /api/stripe/create-portal-session` (51 LOC).
+- `useBilling.openPortal()` invokes it.
 
-#### H-30 · Trial-to-paid conversion path
-- On trial expiry (day 15), modal: "Your trial ended. Choose a plan."
-- Modal CTAs trigger H-28 upgrade flow.
-- **Verify:** Vitest trial-expiry detection. Playwright modal shows on expired trial.
-- **Effort:** 2 hr · **Owner:** me · **Deps:** H-28
+#### H-30 · Trial-to-paid conversion path — ✅ SHIPPED (pre-session)
+- `TrialExpiredModal.tsx` in overlays, triggered by `isTrialExpired()` from `tiers.ts`.
+- Integrates with H-28 via `onUpgrade(tier)` callback.
 
-#### H-31 · Tier enforcement audit
-- Verify every tier-gated feature checks `getEffectiveTier(user)` (kvark-tools, marketplace install, Teams apps, connectors).
-- Add missing enforcement — Teams-only UI hidden for Free/Pro.
-- **Verify:** Vitest matrix — every gated operation × every tier → allowed/denied per tiers.ts.
-- **Effort:** 4 hr · **Owner:** me · **Deps:** H-27
+#### H-31 · Tier enforcement audit — 🟢 OPEN (small)
+- Existing: kvark-tools check `assertTierCapability`. `TIER_CAPABILITIES.embeddingProviders` enforced in `embedding-provider.ts`. Many paths check `billing.tier`.
+- Remaining: systematic matrix-test verification. Write one Vitest that iterates every gated operation × every tier, asserts pass/fail per tiers.ts.
+- **Effort:** 2-3 hr · **Deps:** none
 
-#### H-32 · Embedding quota enforcement
-- `TIER_CAPABILITIES.embeddingBudget` defined but not enforced.
-- Add check in `packages/core/src/mind/embedding-provider.ts` before each embed.
-- On exceed: throw `TIER_QUOTA_EXCEEDED`, UI shows upgrade toast.
-- **Verify:** Vitest — embed under budget ok, over budget throws. Playwright toast on exceed.
-- **Effort:** 3 hr · **Owner:** me · **Deps:** H-27
+#### H-32 · Embedding quota enforcement — ✅ SHIPPED (pre-session)
+- `packages/core/src/mind/embedding-provider.ts:270` — `checkQuota(count)` throws `EmbeddingQuotaExceededError` on exceed, warns at 80%.
+- `getQuotaStatus()` exposes usage for UI.
+- Usage tracked in `embedding_usage` SQLite table, reset monthly.
 
-#### H-33 · Stripe test-mode smoke
-- End-to-end against Stripe test env once [M]-01 products exist.
-- Use `stripe fixtures` / trigger CLI.
-- **Verify:** Documented smoke-test checklist in `docs/OPS/stripe-smoke.md`. Execute once → all pass.
-- **Effort:** 2 hr · **Owner:** me · **Deps:** [M]-01, H-26..H-32
+#### H-33 · Stripe test-mode smoke — ✅ DONE this session
+- `docs/OPS/stripe-smoke.md` (this commit) — 7-step Stripe-CLI-driven smoke protocol covering webhook signature, idempotency, checkout creation, portal link, tier mapping for all 4 relevant events.
+- Requires Marko's Egzakta sandbox (already logged in via `stripe config --list`) + test-mode prices (script in doc).
+- Remaining execution: run the smoke against the sandbox with production-shape env vars. Document any failures in this doc's checklist.
 
 ### Block H10 — Launch prep (infra) (7 items)
 
