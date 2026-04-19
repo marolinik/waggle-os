@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ChevronUp, ThumbsUp, ThumbsDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Upload, Code, FileText, Users, X, Bot, Cpu, Layers, Pin, PinOff, Shield, Zap, MoreHorizontal } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
@@ -9,6 +9,7 @@ import { BlockRenderer } from './chat-blocks';
 import WorkspaceBriefing from '@/components/os/WorkspaceBriefing';
 import { useContainerWidth } from '@/hooks/useContainerWidth';
 import { shouldCollapseChatHeader } from '@/lib/chat-header-layout';
+import { extractSuggestedActions } from '@/lib/suggested-actions';
 
 export interface TeamMember {
   id: string;
@@ -419,6 +420,17 @@ const ChatApp = ({
   const overflowRef = useRef<HTMLDivElement>(null);
   const headerWidth = useContainerWidth(headerRef);
   const isHeaderCompact = shouldCollapseChatHeader(headerWidth);
+
+  // M-28 / ENG-7: suggested next-actions extracted from the most
+  // recent assistant message. Empty array → no chips. Hidden while
+  // the assistant is still streaming to avoid flickering chips as
+  // text arrives.
+  const suggestedActions = useMemo(() => {
+    if (isLoading) return [];
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== 'assistant' || !last.content) return [];
+    return extractSuggestedActions(last.content);
+  }, [messages, isLoading]);
 
   const persona = currentPersona ? getPersonaById(currentPersona) : PERSONAS[0];
 
@@ -981,6 +993,33 @@ const ChatApp = ({
                 )}
                 {msg.role === 'assistant' && msg.content && (
                   <FeedbackButtons messageId={msg.id} messageIndex={msgIdx} sessionId={activeSessionId ?? undefined} feedback={msg.feedback} />
+                )}
+                {/* M-28 / ENG-7: clickable next-action chips on the last
+                    assistant turn — fill the input on click so the user
+                    can edit before sending. */}
+                {msg.role === 'assistant'
+                  && msgIdx === messages.length - 1
+                  && suggestedActions.length > 0 && (
+                  <div
+                    className="mt-1.5 flex flex-wrap gap-1.5"
+                    data-testid="chat-suggested-actions"
+                  >
+                    {suggestedActions.map((action, idx) => (
+                      <button
+                        key={`${idx}-${action}`}
+                        type="button"
+                        onClick={() => {
+                          setInput(action);
+                          inputRef.current?.focus();
+                        }}
+                        data-testid="chat-suggested-action"
+                        className="px-2.5 py-1 text-[11px] rounded-full border border-primary/30 bg-primary/5 text-foreground hover:bg-primary/15 hover:border-primary/50 transition-colors max-w-full truncate"
+                        title={action}
+                      >
+                        {action}
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>
