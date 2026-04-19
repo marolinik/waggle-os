@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Zap, Eye, ArrowRightLeft, Lightbulb, AlertTriangle, Radio, RefreshCw, Check, Send } from 'lucide-react';
 import { useWaggleDance } from '@/hooks/useWaggleDance';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { WaggleSignal } from '@/lib/types';
+import { sortSignalsForDisplay } from '@/lib/waggle-signals';
 
 const typeConfig: Record<WaggleSignal['type'], { icon: React.ElementType; color: string; label: string }> = {
   discovery: { icon: Eye, color: 'text-amber-400', label: 'Discovery' },
@@ -19,6 +20,8 @@ const filterTypes: (WaggleSignal['type'] | 'all')[] = ['all', 'discovery', 'hand
 const WaggleDanceApp = () => {
   const { signals, allSignals, loading, filter, setFilter, refresh, acknowledge } = useWaggleDance();
   const [selectedSignal, setSelectedSignal] = useState<WaggleSignal | null>(null);
+  // M-41 / P18 — unacknowledged first, severity desc, then recency.
+  const orderedSignals = useMemo(() => sortSignalsForDisplay(signals), [signals]);
 
   const unacknowledgedCount = allSignals.filter(s => !s.acknowledged).length;
 
@@ -74,7 +77,7 @@ const WaggleDanceApp = () => {
                 <p className="text-[11px] opacity-70">Signals appear when agents share findings across workspaces</p>
               </div>
             )}
-            {signals.map(signal => {
+            {orderedSignals.map(signal => {
               const cfg = typeConfig[signal.type];
               const Icon = cfg.icon;
               const isSelected = selectedSignal?.id === signal.id;
