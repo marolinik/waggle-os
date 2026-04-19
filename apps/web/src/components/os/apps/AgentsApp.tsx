@@ -80,7 +80,7 @@ const AgentsApp = () => {
       await adapter.createPersona({ name: data.name, description: data.description, icon: data.icon, systemPrompt: data.systemPrompt, tools: data.tools });
       setShowCreate(false);
       await loadData();
-    } catch (err) { console.error('[AgentsApp] create agent failed:', err); setError('Failed to create agent'); }
+    } catch (err) { console.error('[AgentsApp] create persona failed:', err); setError('Failed to create persona'); }
   };
 
   const handleUpdate = async (data: { name: string; description: string; icon: string; tools: string[]; systemPrompt: string }) => {
@@ -89,7 +89,7 @@ const AgentsApp = () => {
       await adapter.updatePersona(editingAgent.id, data);
       setEditingAgent(null);
       await loadData();
-    } catch (err) { console.error('[AgentsApp] update agent failed:', err); setError('Failed to update agent'); }
+    } catch (err) { console.error('[AgentsApp] update persona failed:', err); setError('Failed to update persona'); }
   };
 
   const handleDelete = async (id: string) => {
@@ -97,7 +97,7 @@ const AgentsApp = () => {
       await adapter.deletePersona(id);
       if (selectedId === id) setSelectedId(null);
       await loadData();
-    } catch (err) { console.error('[AgentsApp] delete agent failed:', err); setError('Failed to delete agent'); }
+    } catch (err) { console.error('[AgentsApp] delete persona failed:', err); setError('Failed to delete persona'); }
   };
 
   const handleCreateGroup = async (data: { name: string; description: string; strategy: 'parallel' | 'sequential' | 'coordinator'; members: { agentId: string; roleInGroup: string; executionOrder: number }[] }) => {
@@ -172,8 +172,8 @@ const AgentsApp = () => {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Bot className="w-4 h-4 text-primary" />
-          <h2 className="text-sm font-display font-bold text-foreground">Agents</h2>
-          <div className="flex items-center gap-0.5 ml-2 bg-secondary/30 rounded-lg p-0.5" role="tablist" aria-label="Agent sections">
+          <h2 className="text-sm font-display font-bold text-foreground">Personas</h2>
+          <div className="flex items-center gap-0.5 ml-2 bg-secondary/30 rounded-lg p-0.5" role="tablist" aria-label="Persona sections">
             <button
               onClick={() => resetSelections('agents')}
               role="tab"
@@ -183,7 +183,7 @@ const AgentsApp = () => {
                 tab === 'agents' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              <Bot className="w-3 h-3 inline mr-1" />Agents ({agents.length})
+              <Bot className="w-3 h-3 inline mr-1" />Personas ({agents.length})
             </button>
             <button
               onClick={() => resetSelections('groups')}
@@ -206,7 +206,7 @@ const AgentsApp = () => {
             }`}
           >
             {showCreate ? <X className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
-            {showCreate ? 'Cancel' : 'New Agent'}
+            {showCreate ? 'Cancel' : 'New Persona'}
           </button>
         ) : (
           <button
@@ -240,7 +240,7 @@ const AgentsApp = () => {
             <Input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder={tab === 'agents' ? 'Search agents...' : 'Search groups...'}
+              placeholder={tab === 'agents' ? 'Search personas...' : 'Search groups...'}
               className="w-full text-xs bg-secondary/30 pl-8 pr-3"
             />
           </div>
@@ -257,7 +257,7 @@ const AgentsApp = () => {
                     onDelete={agent.custom ? () => handleDelete(agent.id) : undefined}
                   />
                 ))}
-                {filtered.length === 0 && <p className="text-[11px] text-muted-foreground text-center py-6">No agents found</p>}
+                {filtered.length === 0 && <p className="text-[11px] text-muted-foreground text-center py-6">No personas found</p>}
               </AnimatePresence>
             ) : (
               <AnimatePresence>
@@ -299,7 +299,7 @@ const AgentsApp = () => {
               <div className="flex-1 flex items-center justify-center text-muted-foreground">
                 <div className="text-center">
                   <Bot className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                  <p className="text-xs">Select an agent to view details</p>
+                  <p className="text-xs">Select a persona to view details</p>
                   <p className="text-[11px] mt-1">or create a new one with AI</p>
                 </div>
               </div>

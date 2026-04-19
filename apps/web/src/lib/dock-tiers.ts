@@ -43,7 +43,7 @@ const POWER_CONFIG: DockEntry[] = [
   { type: 'separator', key: 'sep-0', label: '' },
   { type: 'app', key: 'chat', appId: 'chat', icon: MessageSquare, label: 'Chat', color: 'text-primary' },
   { type: 'app', key: 'room', appId: 'room', icon: Users, label: 'Room', color: 'text-violet-400' },
-  { type: 'app', key: 'agents', appId: 'agents', icon: Bot, label: 'Agents', color: 'text-orange-400' },
+  { type: 'app', key: 'agents', appId: 'agents', icon: Bot, label: 'Personas', color: 'text-orange-400' },
   { type: 'app', key: 'files', appId: 'files', icon: FolderOpen, label: 'Files', color: 'text-amber-300' },
   { type: 'app', key: 'dance', appId: 'waggle-dance', icon: Zap, label: 'Waggle Dance', color: 'text-amber-400' },
   { type: 'separator', key: 'sep-1', label: '' },
@@ -87,7 +87,7 @@ export const TIER_DOCK_CONFIG: Record<UserTier, DockEntry[]> = {
   professional: [
     { type: 'app', key: 'home', appId: 'dashboard', icon: LayoutDashboard, label: 'Home', color: 'text-sky-400' },
     { type: 'app', key: 'chat', appId: 'chat', icon: MessageSquare, label: 'Chat', color: 'text-primary' },
-    { type: 'app', key: 'agents', appId: 'agents', icon: Bot, label: 'Agents', color: 'text-orange-400' },
+    { type: 'app', key: 'agents', appId: 'agents', icon: Bot, label: 'Personas', color: 'text-orange-400' },
     { type: 'app', key: 'files', appId: 'files', icon: FolderOpen, label: 'Files', color: 'text-amber-300' },
     { type: 'separator', key: 'sep-1', label: '' },
     { type: 'app', key: 'memory', appId: 'memory', icon: Brain, label: 'Memory', color: 'text-amber-300' },

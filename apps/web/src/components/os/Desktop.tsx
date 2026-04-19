@@ -80,7 +80,7 @@ const appConfig: Record<string, { title: string; icon: React.ReactNode; pos: { x
   "capabilities": { title: "Skills & Apps", icon: <Package className="w-3.5 h-3.5 text-violet-400" />, pos: { x: 150, y: 80 }, size: { w: "560px", h: "480px" } },
   "waggle-dance": { title: "Waggle Dance", icon: <Zap className="w-3.5 h-3.5 text-amber-400" />, pos: { x: 160, y: 50 }, size: { w: "580px", h: "460px" } },
   "files": { title: "Files", icon: <FolderOpen className="w-3.5 h-3.5 text-amber-300" />, pos: { x: 140, y: 55 }, size: { w: "620px", h: "440px" } },
-  "agents": { title: "Agents", icon: <Bot className="w-3.5 h-3.5 text-orange-400" />, pos: { x: 170, y: 65 }, size: { w: "640px", h: "480px" } },
+  "agents": { title: "Personas", icon: <Bot className="w-3.5 h-3.5 text-orange-400" />, pos: { x: 170, y: 65 }, size: { w: "640px", h: "480px" } },
   "vault": { title: "Vault", icon: <Lock className="w-3.5 h-3.5 text-amber-400" />, pos: { x: 240, y: 70 }, size: { w: "560px", h: "480px" } },
   "profile": { title: "My Profile", icon: <UserCircle className="w-3.5 h-3.5 text-sky-400" />, pos: { x: 200, y: 60 }, size: { w: "560px", h: "520px" } },
   "connectors": { title: "Connectors", icon: <Plug className="w-3.5 h-3.5 text-emerald-400" />, pos: { x: 220, y: 80 }, size: { w: "580px", h: "500px" } },
