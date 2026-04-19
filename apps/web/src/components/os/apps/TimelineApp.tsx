@@ -1,10 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
-import {
-  Clock, Zap, Brain, FileText, Bot, Shield, CheckCircle2,
-  XCircle, Loader2, ChevronRight, Filter,
-} from 'lucide-react';
+import { Clock, Loader2, ChevronRight, Filter } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import type { TimelineEvent } from '@/lib/types';
+import {
+  iconForEvent,
+  colorForEvent,
+  describeEvent,
+} from '@/lib/timeline-events';
 
 interface TimelineAppProps {
   workspaceId?: string;
@@ -18,30 +20,6 @@ const RANGE_LABELS: Record<TimeRange, string> = {
   day: 'Last 24h',
   week: 'Last 7 days',
   all: 'All time',
-};
-
-const EVENT_ICONS: Record<string, React.ElementType> = {
-  tool_call: Zap,
-  memory_save: Brain,
-  agent_spawned: Bot,
-  approval_granted: CheckCircle2,
-  approval_denied: XCircle,
-  skill_installed: FileText,
-  workflow_execution: Zap,
-  user_action: FileText,
-  knowledge_created: Brain,
-  connector_activated: Zap,
-  error: XCircle,
-};
-
-const EVENT_COLORS: Record<string, string> = {
-  tool_call: 'text-primary border-primary/30',
-  memory_save: 'text-amber-400 border-amber-400/30',
-  agent_spawned: 'text-violet-400 border-violet-400/30',
-  approval_granted: 'text-emerald-400 border-emerald-400/30',
-  approval_denied: 'text-destructive border-destructive/30',
-  skill_installed: 'text-sky-400 border-sky-400/30',
-  error: 'text-destructive border-destructive/30',
 };
 
 function getSinceDate(range: TimeRange): string | undefined {
@@ -84,33 +62,6 @@ function groupByDay(events: TimelineEvent[]): Map<string, TimelineEvent[]> {
     groups.set(day, list);
   }
   return groups;
-}
-
-function describeEvent(e: TimelineEvent): string {
-  switch (e.eventType) {
-    case 'tool_call':
-      return e.toolName ? `Used ${e.toolName}` : 'Tool call';
-    case 'memory_save':
-      return 'Saved memory';
-    case 'agent_spawned':
-      return 'Spawned sub-agent';
-    case 'approval_granted':
-      return `Approved: ${e.toolName ?? 'action'}`;
-    case 'approval_denied':
-      return `Denied: ${e.toolName ?? 'action'}`;
-    case 'skill_installed':
-      return 'Installed skill';
-    case 'workflow_execution':
-      return 'Ran workflow';
-    case 'knowledge_created':
-      return 'Created knowledge entity';
-    case 'connector_activated':
-      return 'Activated connector';
-    case 'error':
-      return 'Error occurred';
-    default:
-      return e.eventType.replace(/_/g, ' ');
-  }
 }
 
 const TimelineApp = ({ workspaceId, workspaceName }: TimelineAppProps) => {
@@ -234,8 +185,8 @@ const TimelineApp = ({ workspaceId, workspaceName }: TimelineAppProps) => {
 
                 <div className="relative pl-4 border-l border-border/30 space-y-1">
                   {dayEvents.map(event => {
-                    const Icon = EVENT_ICONS[event.eventType] ?? Zap;
-                    const color = EVENT_COLORS[event.eventType] ?? 'text-muted-foreground border-border/30';
+                    const Icon = iconForEvent(event.eventType);
+                    const color = colorForEvent(event.eventType);
                     const isExpanded = expandedId === event.id;
 
                     return (
