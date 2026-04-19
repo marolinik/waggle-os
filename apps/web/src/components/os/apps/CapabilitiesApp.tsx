@@ -3,6 +3,10 @@ import { Package, Download, CheckCircle2, Shield, Star, Search, Loader2, Store, 
 import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
 import type { SkillPack } from '@/lib/types';
+import {
+  describeTrust,
+  summariseSkills,
+} from '@/lib/skill-pack-display';
 
 interface AuditEntry { id: number; name: string; source: string; outcome: string; timestamp: string }
 
@@ -61,6 +65,8 @@ const CapabilitiesApp = () => {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [testResult, setTestResult] = useState<{ name: string; preview: string; metadata?: Record<string, unknown> } | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
+  /** M-45 / P29 — pack detail drawer target. Null when closed. */
+  const [selectedPack, setSelectedPack] = useState<SkillPack | null>(null);
 
   const handleTestSkill = async (skillName: string) => {
     setTesting(skillName);
@@ -141,7 +147,12 @@ const CapabilitiesApp = () => {
     const trust = trustBadges[pack.trust] || trustBadges.community;
     const TrustIcon = trust.icon;
     return (
-      <div className={`p-3 rounded-xl bg-secondary/30 border border-border/30 ${viewMode === 'list' ? '' : ''}`}>
+      <button
+        type="button"
+        onClick={() => setSelectedPack(pack)}
+        data-testid="skill-pack-card"
+        className={`w-full text-left p-3 rounded-xl bg-secondary/30 border border-border/30 hover:border-primary/40 hover:bg-secondary/50 transition-colors ${viewMode === 'list' ? '' : ''}`}
+      >
         <div className="flex items-start justify-between mb-1.5">
           <div className="flex items-center gap-2">
             <Package className="w-4 h-4 text-primary" />
@@ -155,6 +166,7 @@ const CapabilitiesApp = () => {
             {pack.skills.slice(0, 3).map(s => (
               <button
                 key={s}
+                type="button"
                 onClick={(e) => { e.stopPropagation(); handleTestSkill(s); }}
                 disabled={testing === s}
                 className="px-1.5 py-0.5 rounded text-[11px] bg-muted text-muted-foreground hover:bg-primary/20 hover:text-primary transition-colors"
@@ -174,7 +186,8 @@ const CapabilitiesApp = () => {
             <span className="text-[11px] text-emerald-400 flex items-center gap-0.5"><CheckCircle2 className="w-3 h-3" /> Installed</span>
           ) : (
             <button
-              onClick={() => onInstall(pack.id || pack.name)}
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onInstall(pack.id || pack.name); }}
               disabled={installing === (pack.id || pack.name)}
               className="flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg bg-primary/20 text-primary hover:bg-primary/30 disabled:opacity-50 transition-colors"
             >
@@ -182,6 +195,93 @@ const CapabilitiesApp = () => {
               Install
             </button>
           )}
+        </div>
+      </button>
+    );
+  };
+
+  // M-45 / P29 — detail drawer content. Rendered as a fixed overlay so
+  // it doesn't affect list layout.
+  const PackDetail = ({ pack }: { pack: SkillPack }) => {
+    const trust = describeTrust(pack.trust);
+    return (
+      <div
+        className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm flex items-center justify-center p-6"
+        onClick={() => setSelectedPack(null)}
+        data-testid="skill-pack-detail-backdrop"
+      >
+        <div
+          className="w-full max-w-lg bg-card border border-border rounded-2xl shadow-xl p-5 space-y-4"
+          onClick={(e) => e.stopPropagation()}
+          data-testid="skill-pack-detail"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <Package className="w-5 h-5 text-primary shrink-0" />
+              <h3 className="text-base font-display font-semibold text-foreground truncate">{pack.name}</h3>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedPack(null)}
+              className="p-1 rounded hover:bg-muted/50 text-muted-foreground"
+              aria-label="Close detail"
+              data-testid="skill-pack-detail-close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <p className="text-sm text-foreground/90">{pack.description || 'No description provided.'}</p>
+          <div className="flex flex-wrap gap-2 text-[11px]">
+            <span className={`px-2 py-0.5 rounded font-display capitalize ${categoryColors[pack.category] || 'bg-muted text-muted-foreground'}`}>
+              {pack.category || 'uncategorised'}
+            </span>
+            <span className="px-2 py-0.5 rounded font-display bg-muted/50 text-muted-foreground" title={trust.explainer}>
+              {trust.label}
+            </span>
+            <span className="px-2 py-0.5 rounded font-display bg-muted/50 text-muted-foreground">
+              {summariseSkills(pack.skills)}
+            </span>
+          </div>
+          <p className="text-[11px] text-muted-foreground">{trust.explainer}</p>
+          {pack.skills && pack.skills.length > 0 && (
+            <div>
+              <p className="text-[11px] font-display uppercase tracking-wide text-muted-foreground mb-1.5">Bundled skills</p>
+              <div className="flex flex-wrap gap-1">
+                {pack.skills.map(s => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => { handleTestSkill(s); }}
+                    disabled={testing === s}
+                    className="px-2 py-0.5 rounded text-[11px] bg-muted text-muted-foreground hover:bg-primary/20 hover:text-primary transition-colors"
+                    title={`Test skill: ${s}`}
+                  >
+                    {testing === s ? '...' : s}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="flex items-center justify-end gap-2 pt-1">
+            {pack.installed ? (
+              <span className="text-[11px] text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Installed</span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  const id = pack.id || pack.name;
+                  setSelectedPack(null);
+                  if (tab === 'marketplace') handleMarketplaceInstall(id);
+                  else handleInstall(id);
+                }}
+                disabled={installing === (pack.id || pack.name)}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-50 transition-colors font-display"
+                data-testid="skill-pack-detail-install"
+              >
+                <Download className="w-3 h-3" /> Install
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -304,6 +404,9 @@ const CapabilitiesApp = () => {
       {tab === 'audit' && (
         <AuditTab log={auditLog} onLoad={setAuditLog} />
       )}
+
+      {/* M-45 / P29 — pack detail drawer */}
+      {selectedPack && <PackDetail pack={selectedPack} />}
 
       {/* Skill Test Preview */}
       {testResult && (
