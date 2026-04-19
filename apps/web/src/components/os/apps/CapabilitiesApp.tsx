@@ -7,6 +7,7 @@ import {
   describeTrust,
   summariseSkills,
 } from '@/lib/skill-pack-display';
+import { dedupePacks } from '@/lib/dedupe-packs';
 
 interface AuditEntry { id: number; name: string; source: string; outcome: string; timestamp: string }
 
@@ -115,8 +116,14 @@ const CapabilitiesApp = () => {
             installed: installedNames.has(s.id || s.name),
           })));
         }
-        setPacks(all);
-        if (marketplace.status === 'fulfilled') setMarketplacePacks(marketplace.value);
+        // L-17 C4 — de-dup by id||name. `all` merges 3 catalogs (installed
+        // skills, starter packs, capability packs) that can overlap. The
+        // installed list is pushed first so its installed:true marker wins
+        // when the same pack appears in a catalog.
+        setPacks(dedupePacks(all));
+        if (marketplace.status === 'fulfilled') {
+          setMarketplacePacks(dedupePacks(marketplace.value));
+        }
       })
       .finally(() => setLoading(false));
   }, []);
@@ -349,7 +356,6 @@ const CapabilitiesApp = () => {
         </div>
       )}
 
-      {/* TODO: Marketplace tab may show duplicate data if getMarketplacePacks() returns same content as getSkills() — needs backend fix to serve distinct catalog */}
       <div className={viewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 gap-2' : 'space-y-2'}>
         {filtered.map((pack, index) => (
           <PackCard
