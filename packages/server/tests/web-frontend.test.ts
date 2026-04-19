@@ -47,10 +47,11 @@ describe('Web Frontend Static Serving', () => {
   });
 
   it('WAGGLE_FRONTEND_DIR env var is respected', () => {
-    // The server reads WAGGLE_FRONTEND_DIR to locate the frontend
+    // The server reads WAGGLE_FRONTEND_DIR to locate the frontend.
+    // When not set, it falls back to <root>/dist (canonical since Apr-12
+    // apps/web migration — commit a883050); app/dist is a legacy fallback.
     const envDir = process.env.WAGGLE_FRONTEND_DIR;
-    // When not set, it should fallback to app/dist relative to cwd
-    const fallback = path.resolve(process.cwd(), 'app', 'dist');
+    const fallback = path.resolve(process.cwd(), 'dist');
     const resolved = envDir ?? fallback;
     expect(typeof resolved).toBe('string');
     expect(resolved.length).toBeGreaterThan(0);

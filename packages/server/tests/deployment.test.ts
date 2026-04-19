@@ -23,12 +23,13 @@ describe('Docker Deployment', () => {
   it('Dockerfile builds frontend in builder stage', () => {
     const content = fs.readFileSync(path.join(ROOT, 'Dockerfile'), 'utf-8');
     expect(content).toContain('npm run build');
-    expect(content).toContain('COPY --from=builder /app/app/dist app/dist');
+    // Root `dist/` is canonical since apps/web frontend migration (Apr-12, commit a883050).
+    expect(content).toContain('COPY --from=builder /app/dist dist');
   });
 
   it('Dockerfile sets WAGGLE_FRONTEND_DIR for static serving', () => {
     const content = fs.readFileSync(path.join(ROOT, 'Dockerfile'), 'utf-8');
-    expect(content).toContain('WAGGLE_FRONTEND_DIR=/app/app/dist');
+    expect(content).toContain('WAGGLE_FRONTEND_DIR=/app/dist');
   });
 
   it('production docker-compose.yml exists with required services', () => {

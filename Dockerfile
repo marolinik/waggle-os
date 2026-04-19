@@ -30,8 +30,9 @@ COPY app/ app/
 COPY tsconfig*.json ./
 COPY vitest*.ts ./
 
-# Build the React frontend
-RUN cd app && npm run build
+# Build the React frontend (apps/web is the canonical source since Apr-12 migration;
+# root `npm run build` → <root>/dist per package.json)
+RUN npm run build
 
 # ── Native module build stage ───────────────────────────────────
 FROM node:20-alpine AS native-builder
@@ -83,9 +84,9 @@ COPY packages/waggle-dance/package.json packages/waggle-dance/
 COPY packages/ui/package.json packages/ui/
 COPY packages/launcher/package.json packages/launcher/
 
-# Copy source + built frontend
+# Copy source + built frontend (root dist/ is canonical since Apr-12)
 COPY packages/ packages/
-COPY --from=builder /app/app/dist app/dist
+COPY --from=builder /app/dist dist
 
 # Create data directory and non-root user
 RUN mkdir -p /data \
@@ -94,7 +95,7 @@ RUN mkdir -p /data \
 
 # Set environment
 ENV NODE_ENV=production
-ENV WAGGLE_FRONTEND_DIR=/app/app/dist
+ENV WAGGLE_FRONTEND_DIR=/app/dist
 ENV WAGGLE_DATA_DIR=/data
 
 # Expose server port
