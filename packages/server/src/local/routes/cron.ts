@@ -141,6 +141,13 @@ export const cronRoutes: FastifyPluginAsync = async (server) => {
   });
 
   // POST /api/cron/:id/trigger — manually trigger a schedule
+  //
+  // M-43 / P25: triggering a disabled job auto-enables it before
+  // execution. Rationale (Marko 2026-04-19): if the user is reaching
+  // for "Run now" they want the job running, and leaving it disabled
+  // after manual trigger produces the confusing "toggle stays off"
+  // effect the PDF-E2E issue list flagged. The response includes the
+  // post-trigger job state so clients can sync without a refetch.
   server.post<{
     Params: { id: string };
   }>('/api/cron/:id/trigger', async (request, reply) => {
@@ -149,10 +156,18 @@ export const cronRoutes: FastifyPluginAsync = async (server) => {
       return reply.status(400).send({ error: 'Invalid ID' });
     }
 
-    const schedule = server.cronStore.getById(id);
-    if (!schedule) {
+    const existing = server.cronStore.getById(id);
+    if (!existing) {
       return reply.status(404).send({ error: 'Schedule not found' });
     }
+
+    // Auto-enable if disabled — do this BEFORE executeJob so the scheduler
+    // sees the current semantic state and any downstream side effects run
+    // against the enabled schedule row.
+    const wasDisabled = existing.enabled !== 1;
+    const schedule = wasDisabled
+      ? server.cronStore.update(id, { enabled: true })
+      : existing;
 
     try {
       // W5.11: Actually execute the job handler (not just mark as run)
@@ -164,7 +179,13 @@ export const cronRoutes: FastifyPluginAsync = async (server) => {
         category: 'cron',
         actionUrl: '/cockpit',
       });
-      return { triggered: true, id, nextRunAt: updated?.next_run_at };
+      return {
+        triggered: true,
+        id,
+        nextRunAt: updated?.next_run_at,
+        autoEnabled: wasDisabled,
+        schedule: updated ? toResponse(updated) : undefined,
+      };
     } catch (err) {
       return reply.status(500).send({
         error: err instanceof Error ? err.message : 'Trigger failed',

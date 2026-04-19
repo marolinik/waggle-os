@@ -547,8 +547,12 @@ class LocalAdapter {
     await this.fetch(`/api/cron/${id}`, { method: 'DELETE' });
   }
 
-  async triggerCronJob(id: string): Promise<void> {
-    await this.fetch(`/api/cron/${id}/trigger`, { method: 'POST' });
+  async triggerCronJob(id: string): Promise<{ triggered: boolean; autoEnabled?: boolean; schedule?: CronJob }> {
+    // Server auto-enables a disabled job on trigger (M-43 / P25). The
+    // response carries the post-trigger `schedule` so callers can sync
+    // local state without a round-trip refetch.
+    const res = await this.fetch(`/api/cron/${id}/trigger`, { method: 'POST' });
+    return res.json();
   }
 
   // --- Notifications ---

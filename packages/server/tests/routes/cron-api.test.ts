@@ -167,4 +167,65 @@ describe('Cron REST API Routes', () => {
     const body = JSON.parse(res.body);
     expect(body.triggered).toBe(true);
   });
+
+  // M-43 / P25 regression: triggering a disabled job must auto-enable it
+  // before executing and return the enabled state to the client so the UI
+  // toggle stops visually snapping back to off.
+  it('POST /api/cron/:id/trigger auto-enables a disabled schedule', async () => {
+    const createRes = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/cron',
+      payload: {
+        name: 'Auto-enable on trigger',
+        cronExpr: '0 0 1 1 *',
+        jobType: 'memory_consolidation',
+        enabled: false,
+      },
+    });
+    const created = JSON.parse(createRes.body);
+    expect(created.enabled).toBe(false);
+
+    const triggerRes = await injectWithAuth(server, {
+      method: 'POST',
+      url: `/api/cron/${created.id}/trigger`,
+    });
+    expect(triggerRes.statusCode).toBe(200);
+    const body = JSON.parse(triggerRes.body);
+    expect(body.triggered).toBe(true);
+    expect(body.autoEnabled).toBe(true);
+    expect(body.schedule).toBeDefined();
+    expect(body.schedule.enabled).toBe(true);
+
+    // Persisted: subsequent GET reflects enabled state.
+    const getRes = await injectWithAuth(server, {
+      method: 'GET',
+      url: `/api/cron/${created.id}`,
+    });
+    expect(getRes.statusCode).toBe(200);
+    const fresh = JSON.parse(getRes.body);
+    expect(fresh.enabled).toBe(true);
+  });
+
+  it('POST /api/cron/:id/trigger does not set autoEnabled when job is already enabled', async () => {
+    const createRes = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/cron',
+      payload: {
+        name: 'Already enabled trigger',
+        cronExpr: '0 0 1 1 *',
+        jobType: 'memory_consolidation',
+        enabled: true,
+      },
+    });
+    const created = JSON.parse(createRes.body);
+
+    const triggerRes = await injectWithAuth(server, {
+      method: 'POST',
+      url: `/api/cron/${created.id}/trigger`,
+    });
+    const body = JSON.parse(triggerRes.body);
+    expect(body.triggered).toBe(true);
+    expect(body.autoEnabled).toBe(false);
+    expect(body.schedule?.enabled).toBe(true);
+  });
 });

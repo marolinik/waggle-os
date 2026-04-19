@@ -60,8 +60,17 @@ const ScheduledJobsApp = () => {
   const handleTrigger = async (id: string) => {
     setTriggering(id);
     try {
-      await adapter.triggerCronJob(id);
-      toast({ title: 'Job triggered', description: 'Running now' });
+      const result = await adapter.triggerCronJob(id);
+      // M-43 / P25: server auto-enables a disabled job on trigger.
+      // Sync local state from the response so the toggle flips to
+      // enabled immediately without an extra refetch round-trip.
+      if (result.schedule) {
+        setJobs(prev => prev.map(j => j.id === result.schedule!.id ? result.schedule! : j));
+      }
+      toast({
+        title: 'Job triggered',
+        description: result.autoEnabled ? 'Running now — job re-enabled' : 'Running now',
+      });
     } catch {
       toast({ title: 'Failed to trigger job', variant: 'destructive' });
     }
