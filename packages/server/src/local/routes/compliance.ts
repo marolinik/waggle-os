@@ -42,9 +42,15 @@ export async function complianceRoutes(fastify: FastifyInstance) {
 
     const interactionStore = new InteractionStore(personalDb);
     const harvestStore = new HarvestSourceStore(personalDb);
+    const wsManager = (fastify as any).workspaceManager as
+      | { get: (id: string) => { name?: string; riskLevel?: string; riskClassifiedAt?: string } | null }
+      | undefined;
     const generator = new ReportGenerator({
       interactionStore,
       harvestStore,
+      getWorkspaceName: (id) => wsManager?.get(id)?.name ?? id,
+      getWorkspaceRisk: (id) => (wsManager?.get(id)?.riskLevel as any) ?? 'minimal',
+      getWorkspaceRiskClassifiedAt: (id) => wsManager?.get(id)?.riskClassifiedAt ?? null,
     });
 
     const report = generator.generate({

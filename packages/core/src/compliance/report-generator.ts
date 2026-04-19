@@ -18,6 +18,12 @@ export interface ReportGeneratorDeps {
   harvestStore: HarvestSourceStore;
   getWorkspaceRisk?: (workspaceId: string) => AIActRiskLevel;
   getWorkspaceName?: (workspaceId: string) => string;
+  /**
+   * Return the ISO timestamp of the last risk classification for this
+   * workspace, or null if the workspace has no persisted classification
+   * date (e.g., was created before the field existed).
+   */
+  getWorkspaceRiskClassifiedAt?: (workspaceId: string) => string | null;
 }
 
 export class ReportGenerator {
@@ -25,12 +31,14 @@ export class ReportGenerator {
   private harvest: HarvestSourceStore;
   private getWorkspaceRisk: (id: string) => AIActRiskLevel;
   private getWorkspaceName: (id: string) => string;
+  private getWorkspaceRiskClassifiedAt: (id: string) => string | null;
 
   constructor(deps: ReportGeneratorDeps) {
     this.interactions = deps.interactionStore;
     this.harvest = deps.harvestStore;
     this.getWorkspaceRisk = deps.getWorkspaceRisk ?? (() => 'minimal');
     this.getWorkspaceName = deps.getWorkspaceName ?? ((id) => id);
+    this.getWorkspaceRiskClassifiedAt = deps.getWorkspaceRiskClassifiedAt ?? (() => null);
   }
 
   /** Generate a full audit report. */
@@ -49,7 +57,7 @@ export class ReportGenerator {
         id: request.workspaceId,
         name: this.getWorkspaceName(request.workspaceId),
         riskLevel: this.getWorkspaceRisk(request.workspaceId),
-        riskClassifiedAt: null, // TODO: track classification date in workspace config
+        riskClassifiedAt: this.getWorkspaceRiskClassifiedAt(request.workspaceId),
       } : null,
       complianceStatus,
       modelInventory: [],

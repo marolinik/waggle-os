@@ -95,6 +95,58 @@ describe('WorkspaceManager', () => {
     });
   });
 
+  describe('AI Act risk classification (L-17 C2)', () => {
+    it('stamps riskClassifiedAt on create when riskLevel is provided', () => {
+      const before = Date.now();
+      const ws = manager.create({ name: 'HR App', group: 'Work', riskLevel: 'high-risk' });
+      const after = Date.now();
+
+      expect(ws.riskLevel).toBe('high-risk');
+      expect(ws.riskClassifiedAt).toBeTruthy();
+      const t = Date.parse(ws.riskClassifiedAt!);
+      expect(t).toBeGreaterThanOrEqual(before);
+      expect(t).toBeLessThanOrEqual(after);
+    });
+
+    it('does not stamp riskClassifiedAt on create when riskLevel is omitted', () => {
+      const ws = manager.create({ name: 'Minimal App', group: 'Work' });
+      expect(ws.riskLevel).toBeUndefined();
+      expect(ws.riskClassifiedAt).toBeUndefined();
+    });
+
+    it('auto-stamps riskClassifiedAt when update changes riskLevel', async () => {
+      manager.create({ name: 'App', group: 'Work', riskLevel: 'minimal' });
+      const initial = manager.get('app')!.riskClassifiedAt;
+      expect(initial).toBeTruthy();
+
+      // Wait enough for a different ISO timestamp (millisecond-resolution)
+      await new Promise((r) => setTimeout(r, 5));
+
+      manager.update('app', { riskLevel: 'high-risk' });
+
+      const after = manager.get('app')!;
+      expect(after.riskLevel).toBe('high-risk');
+      expect(after.riskClassifiedAt).toBeTruthy();
+      expect(after.riskClassifiedAt).not.toBe(initial);
+      expect(Date.parse(after.riskClassifiedAt!)).toBeGreaterThan(Date.parse(initial!));
+    });
+
+    it('leaves riskClassifiedAt unchanged when update does not change riskLevel', async () => {
+      manager.create({ name: 'Stable', group: 'Work', riskLevel: 'limited' });
+      const initial = manager.get('stable')!.riskClassifiedAt;
+
+      await new Promise((r) => setTimeout(r, 5));
+
+      // Update something else
+      manager.update('stable', { name: 'Stable Renamed' });
+      expect(manager.get('stable')!.riskClassifiedAt).toBe(initial);
+
+      // Update riskLevel to the same value — still no change
+      manager.update('stable', { riskLevel: 'limited' });
+      expect(manager.get('stable')!.riskClassifiedAt).toBe(initial);
+    });
+  });
+
   describe('delete', () => {
     it('deletes workspace and removes directory', () => {
       manager.create({ name: 'To Delete', group: 'Temp' });

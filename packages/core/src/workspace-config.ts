@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import type { AIActRiskLevel } from './compliance/types.js';
 
 export interface WorkspaceConfig {
   id: string;
@@ -48,6 +49,12 @@ export interface WorkspaceConfig {
   optimizationEnabled?: boolean;
   /** Daily optimization budget in cents (default 100 = $1/day). Only used when optimizationEnabled is true. */
   optimizationBudget?: number;
+
+  // --- AI Act compliance (L-17 C2) ---
+  /** EU AI Act risk classification for this workspace. */
+  riskLevel?: AIActRiskLevel;
+  /** ISO timestamp of the last risk classification change. Auto-stamped by WorkspaceManager. */
+  riskClassifiedAt?: string;
 }
 
 export interface CreateWorkspaceOptions {
@@ -77,6 +84,10 @@ export interface CreateWorkspaceOptions {
 
   // --- Budget ---
   budget?: number | null;
+
+  // --- AI Act compliance (L-17 C2) ---
+  /** Initial risk level (usually derived from template). */
+  riskLevel?: AIActRiskLevel;
 
   // --- Optimization fields (GEPA/Ax) ---
   optimizationEnabled?: boolean;
@@ -140,6 +151,10 @@ export class WorkspaceManager {
       ...(options.tone !== undefined && { tone: options.tone }),
       ...(options.optimizationEnabled !== undefined && { optimizationEnabled: options.optimizationEnabled }),
       ...(options.optimizationBudget !== undefined && { optimizationBudget: options.optimizationBudget }),
+      ...(options.riskLevel !== undefined && {
+        riskLevel: options.riskLevel,
+        riskClassifiedAt: new Date().toISOString(),
+      }),
       created: new Date().toISOString(),
     };
 
@@ -201,12 +216,19 @@ export class WorkspaceManager {
 
   /**
    * Partially update a workspace config.
+   * When `riskLevel` changes, `riskClassifiedAt` is auto-stamped with the
+   * current ISO timestamp (EU AI Act Art. 14 provenance requirement).
    */
   update(id: string, updates: Partial<Omit<WorkspaceConfig, 'id' | 'created'>>): void {
     const existing = this.get(id);
     if (!existing) throw new Error(`Workspace not found: ${id}`);
 
-    const updated = { ...existing, ...updates };
+    const stamped: Partial<WorkspaceConfig> =
+      'riskLevel' in updates && updates.riskLevel !== existing.riskLevel
+        ? { ...updates, riskClassifiedAt: new Date().toISOString() }
+        : updates;
+
+    const updated = { ...existing, ...stamped };
     const configPath = path.join(this.workspacesDir, id, 'workspace.json');
     fs.writeFileSync(configPath, JSON.stringify(updated, null, 2), 'utf-8');
   }
