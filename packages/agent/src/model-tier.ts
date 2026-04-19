@@ -15,6 +15,7 @@ const SMALL_PREFIXES = [
   'gemma-4-',
   'qwen3-',
   'qwen3.5-',
+  'qwen3.6-',
   'llama-3',
   'llama-4',
 ] as const;

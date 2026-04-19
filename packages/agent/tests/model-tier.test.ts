@@ -34,6 +34,18 @@ describe('tierForModel', () => {
     expect(tierForModel('qwen3-32b')).toBe('small');
   });
 
+  // LOCKED 2026-04-19 target model — consistent with Qwen3 family tier
+  // convention (small). Despite Opus-class standalone benchmarks, stay
+  // conservative on scaffold behavior until empirical PA/memory signal
+  // says otherwise.
+  it('qwen3.6-35b-a3b → small', () => {
+    expect(tierForModel('qwen3.6-35b-a3b')).toBe('small');
+  });
+
+  it('qwen3.6-35b-a3b case-insensitive → small', () => {
+    expect(tierForModel('Qwen3.6-35B-A3B')).toBe('small');
+  });
+
   it('unknown-model-xyz → mid (default)', () => {
     expect(tierForModel('unknown-model-xyz')).toBe('mid');
   });

@@ -33,6 +33,30 @@ describe('familyForModel — §12.1 required cases', () => {
     expect(familyForModel('qwen3-30b-a3b-thinking-2507')).toBe('qwen-reasoning');
   });
 
+  // LOCKED 2026-04-19 target model. Qwen3.6-A3B unified thinking+base into a
+  // single SKU with default-on reasoning, so its slug has no reasoning marker
+  // yet it must be classified as qwen-reasoning for scaffold-style selection.
+  it('qwen3.6-35b-a3b → qwen-reasoning (unified thinking SKU)', () => {
+    expect(familyForModel('qwen3.6-35b-a3b')).toBe('qwen-reasoning');
+  });
+
+  it('qwen3.6-35b-a3b (provider-prefixed) → qwen-reasoning', () => {
+    expect(familyForModel('qwen/qwen3.6-35b-a3b')).toBe('qwen-reasoning');
+    expect(familyForModel('openrouter/qwen/qwen3.6-35b-a3b')).toBe('qwen-reasoning');
+  });
+
+  it('qwen3.6-35b-a3b case-insensitive → qwen-reasoning', () => {
+    expect(familyForModel('Qwen3.6-35B-A3B')).toBe('qwen-reasoning');
+    expect(familyForModel('QWEN3.6-35B-A3B')).toBe('qwen-reasoning');
+  });
+
+  it('hypothetical qwen3.6 non-A3B variant stays qwen-instruction by default', () => {
+    // Conservative: the 3.6-series unified thinking SKU claim only applies to
+    // A3B variants per HF model card. Other 3.6 variants fall back to the
+    // generic qwen family rule.
+    expect(familyForModel('qwen3.6-7b-chat')).toBe('qwen-instruction');
+  });
+
   it('qwq-32b → qwen-reasoning', () => {
     expect(familyForModel('qwq-32b')).toBe('qwen-reasoning');
   });

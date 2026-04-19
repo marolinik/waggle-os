@@ -59,6 +59,12 @@ export function familyForModel(model: string): ModelFamily {
   // QwQ is Qwen's dedicated reasoning family — check before generic qwen prefix.
   if (bare.startsWith('qwq-') || bare === 'qwq') return 'qwen-reasoning';
 
+  // Qwen3.6-A3B series unified thinking+base into one SKU with default-on
+  // reasoning (per HF model card + LOCKED 2026-04-19 target-model decision).
+  // The slug lacks explicit reasoning markers, so special-case the A3B
+  // variants of the 3.6 family before the generic qwen prefix check.
+  if (bare.startsWith('qwen3.6-') && bare.includes('a3b')) return 'qwen-reasoning';
+
   if (bare.startsWith('qwen')) {
     const hasReasoningMarker = QWEN_REASONING_MARKERS.some(marker => bare.includes(marker));
     return hasReasoningMarker ? 'qwen-reasoning' : 'qwen-instruction';
