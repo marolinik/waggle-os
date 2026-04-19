@@ -120,6 +120,21 @@ describe('Provider API', () => {
       }
     });
 
+    // LOCKED 2026-04-19 target model. Guards against accidental removal
+    // from the alibaba provider catalog — this model is the canonical
+    // engine for Waggle Pro/Teams default + KVARK prod + Track 2
+    // benchmarks, and the server route is what the SpawnAgentDialog +
+    // onboarding picker read from.
+    it('alibaba provider includes qwen3.6-35b-a3b (LOCKED target)', async () => {
+      const res = await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
+      const { providers } = res.json();
+      const alibaba = providers.find((p: any) => p.id === 'alibaba');
+
+      expect(alibaba).toBeDefined();
+      const modelIds = alibaba.models.map((m: any) => m.id);
+      expect(modelIds).toContain('qwen3.6-35b-a3b');
+    });
+
     it('returns search providers with priority', async () => {
       const res = await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
       const { search, activeSearch } = res.json();

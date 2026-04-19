@@ -92,6 +92,11 @@ const LLM_PROVIDERS: ProviderDef[] = [
   {
     id: 'alibaba', name: 'Alibaba / Qwen', keyPrefix: null, keyUrl: 'https://dashscope.console.aliyun.com/apiKey', badge: null, requiresKey: true,
     models: [
+      // LOCKED 2026-04-19 target model. 35B total / 3B active MoE,
+      // Apache-2.0, thinking mode default ON. Opus-class standalone
+      // benchmarks (GPQA 86 / AIME 92.7 / SWE-bench 73.4). Routed via
+      // DashScope — not published on OpenRouter.
+      { id: 'qwen3.6-35b-a3b', name: 'Qwen3.6 35B-A3B', cost: '$$', speed: 'slow' },
       { id: 'qwen-max', name: 'Qwen Max', cost: '$$', speed: 'medium' },
       { id: 'qwen-plus', name: 'Qwen Plus', cost: '$', speed: 'fast' },
       { id: 'qwen-turbo', name: 'Qwen Turbo', cost: '$', speed: 'fast' },

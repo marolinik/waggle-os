@@ -206,15 +206,17 @@ model_list:
   # Thinking mode default ON, togglable via `enable_thinking: false`.
   # HF source (verified 2026-04-19):
   #   https://huggingface.co/Qwen/Qwen3.6-35B-A3B
-  # OpenRouter slug: expected `qwen/qwen3.6-35b-a3b` — live slug
-  # verification pending (Marko confirms HF release source in parallel).
-  # Entry is config-only; production routing stays on existing models
-  # until HF verification drops ("ne dirati production deployment
-  # dok ne padne potvrda").
+  #
+  # ROUTING: Alibaba DashScope — the model is NOT published on
+  # OpenRouter (verified 2026-04-19 by Marko). The DashScope slug
+  # follows the HF model name. Vault key: `alibaba` provider id,
+  # which the server's providers.ts route also enumerates. Entry is
+  # config-only; production routing stays on existing models until
+  # a DASHSCOPE_API_KEY is provisioned.
   - model_name: qwen3.6-35b-a3b
     litellm_params:
-      model: openrouter/qwen/qwen3.6-35b-a3b
-      api_key: os.environ/OPENROUTER_API_KEY
+      model: dashscope/qwen3.6-35b-a3b
+      api_key: os.environ/DASHSCOPE_API_KEY
 
   # ── Added for PromptAssembler v5 eval ──────────────────────────
   # Spec: v5 brief §11.2. Entries verified live via provider docs on
