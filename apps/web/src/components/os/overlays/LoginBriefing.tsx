@@ -13,6 +13,12 @@ import {
 import { adapter } from '@/lib/adapter';
 import type { Workspace } from '@/lib/types';
 import { selectBriefingHighlights } from '@/lib/briefing-highlights';
+import {
+  computeBragSummary,
+  formatBragLine,
+  timeAgo as bragTimeAgo,
+  type BragSummary,
+} from '@/lib/login-briefing-brag';
 
 interface LoginBriefingProps {
   /**
@@ -42,18 +48,10 @@ interface MemoryHighlight {
   timestamp: string;
 }
 
-function timeAgo(iso: string): string {
-  if (!iso) return '';
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 60) return 'just now';
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days === 1) return 'yesterday';
-  if (days < 7) return `${days}d ago`;
-  return `${Math.floor(days / 7)}w ago`;
-}
+// timeAgo was moved into @/lib/login-briefing-brag (shared with the brag
+// summary so the header and per-frame labels use one formatter). Keep a
+// local alias so callsites below read naturally.
+const timeAgo = bragTimeAgo;
 
 function truncateHighlight(content: string): string {
   const firstLine = content.split('\n')[0].trim();
@@ -63,7 +61,7 @@ function truncateHighlight(content: string): string {
 const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
   const [summaries, setSummaries] = useState<WorkspaceSummary[]>([]);
   const [highlights, setHighlights] = useState<MemoryHighlight[]>([]);
-  const [personalFrameCount, setPersonalFrameCount] = useState(0);
+  const [brag, setBrag] = useState<BragSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [greeting, setGreeting] = useState('');
 
@@ -83,9 +81,6 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
         adapter.searchMemory('important decision project plan', 'global').catch(() => []),
         adapter.getMemoryStats().catch(() => null),
       ]);
-
-      const personalCount = (stats as any)?.personal?.frameCount ?? 0;
-      setPersonalFrameCount(personalCount);
 
       // L-22: rank by importance desc, break ties by recency. Concrete
       // content only (≥20 chars). Limit 3.
@@ -130,14 +125,20 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
         }
       });
 
-      setSummaries(await Promise.all(contextPromises));
+      const resolved = await Promise.all(contextPromises);
+      setSummaries(resolved);
+
+      // L-22: build the richer "N memories · N entities · N relations
+      // across N workspaces · active Xago" header. computeBragSummary
+      // reads adapter.getMemoryStats()'s normalised shape and the
+      // workspace summaries we just built.
+      setBrag(computeBragSummary(stats, resolved));
     } catch { /* ignore */ }
     finally { setLoading(false); }
   };
 
-  const workspaceMemories = summaries.reduce((acc, s) => acc + s.memoryCount, 0);
-  const totalMemories = personalFrameCount + workspaceMemories;
-  const totalPending = summaries.reduce((acc, s) => acc + (s.pendingTasks?.length ?? 0), 0);
+  const bragLine = brag ? formatBragLine(brag) : null;
+  const totalPending = brag?.pendingCount ?? 0;
 
   return (
     <AnimatePresence>
@@ -158,15 +159,20 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
         >
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
-            <div>
+            <div className="min-w-0">
               <h2 className="text-lg font-display font-bold text-foreground">{greeting}</h2>
-              <p className="text-xs text-muted-foreground">
-                <Brain className="w-3 h-3 inline mr-1" />
-                {totalMemories} memories across {summaries.length} workspace{summaries.length !== 1 ? 's' : ''}
-                {totalPending > 0 && <span className="text-amber-400 ml-2"><AlertTriangle className="w-3 h-3 inline mr-0.5" />{totalPending} pending</span>}
+              <p className="text-xs text-muted-foreground flex items-center flex-wrap gap-x-1 gap-y-0.5" data-testid="login-briefing-brag-line">
+                <Brain className="w-3 h-3 inline mr-0.5 shrink-0" />
+                <span>{bragLine ?? 'Loading…'}</span>
+                {totalPending > 0 && (
+                  <span className="text-amber-400 inline-flex items-center gap-0.5">
+                    <AlertTriangle className="w-3 h-3" />
+                    {totalPending} pending
+                  </span>
+                )}
               </p>
             </div>
-            <button onClick={onDismiss} className="p-1 rounded-lg hover:bg-muted/50 transition-colors">
+            <button onClick={onDismiss} className="p-1 rounded-lg hover:bg-muted/50 transition-colors shrink-0">
               <X className="w-4 h-4 text-muted-foreground" />
             </button>
           </div>
