@@ -142,6 +142,7 @@ const FeedbackButtons = ({ messageId, messageIndex, sessionId, feedback }: {
 }) => {
   const [vote, setVote] = useState(feedback);
   const [showReasons, setShowReasons] = useState(false);
+  const [focusedReason, setFocusedReason] = useState(0);
 
   const handleVote = (rating: 'up' | 'down', reason?: string) => {
     const newVote = vote === rating ? null : rating;
@@ -149,6 +150,24 @@ const FeedbackButtons = ({ messageId, messageIndex, sessionId, feedback }: {
     setShowReasons(false);
     if (newVote && sessionId) {
       adapter.submitFeedback({ sessionId, messageIndex, rating: newVote, reason });
+    }
+  };
+
+  // L-12 / A11Y-7: arrow-key navigation + Escape-to-close on the
+  // feedback reason dropdown.
+  const handleReasonKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setFocusedReason(i => (i + 1) % FEEDBACK_REASONS.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setFocusedReason(i => (i - 1 + FEEDBACK_REASONS.length) % FEEDBACK_REASONS.length);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      handleVote('down', FEEDBACK_REASONS[focusedReason].id);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setShowReasons(false);
     }
   };
 
@@ -172,12 +191,21 @@ const FeedbackButtons = ({ messageId, messageIndex, sessionId, feedback }: {
         <ThumbsDown className="w-3 h-3" />
       </button>
       {showReasons && (
-        <div className="absolute bottom-full left-0 mb-1 bg-card border border-border rounded-lg shadow-xl z-20 py-1 w-36">
-          {FEEDBACK_REASONS.map(r => (
+        <div
+          className="absolute bottom-full left-0 mb-1 bg-card border border-border rounded-lg shadow-xl z-20 py-1 w-36"
+          role="menu"
+          aria-label="Feedback reason"
+          onKeyDown={handleReasonKey}
+          data-testid="feedback-reason-menu"
+        >
+          {FEEDBACK_REASONS.map((r, i) => (
             <button
               key={r.id}
+              role="menuitem"
               onClick={() => handleVote('down', r.id)}
-              className="w-full text-left px-3 py-1.5 text-[11px] text-foreground hover:bg-muted/50 transition-colors"
+              onMouseEnter={() => setFocusedReason(i)}
+              autoFocus={i === focusedReason}
+              className={`w-full text-left px-3 py-1.5 text-[11px] text-foreground hover:bg-muted/50 transition-colors ${i === focusedReason ? 'bg-muted/50' : ''}`}
             >
               {r.label}
             </button>
