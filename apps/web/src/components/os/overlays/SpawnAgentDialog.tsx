@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Rocket, RefreshCw, ChevronDown, ChevronRight, ArrowLeft, Zap, Key } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { PERSONAS } from '@/lib/personas';
+import { countProvidersWithKeys, selectDefaultModel } from '@/lib/spawn-agent-helpers';
 import type { Workspace, ModelPricing } from '@/lib/types';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -57,8 +58,8 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
       ]);
       setModels(m);
       setPricing(p);
-      setProvidersWithKeys(providers.providers.filter(pr => pr.hasKey).length);
-      const defaultModel = wsModel && m.includes(wsModel) ? wsModel : m[0] || '';
+      setProvidersWithKeys(countProvidersWithKeys(providers.providers));
+      const defaultModel = selectDefaultModel(wsModel, m);
       setForm(f => ({ ...f, model: f.model || defaultModel }));
     } catch (err) {
       setModelsError(err instanceof Error ? err.message : 'Failed to fetch models');
