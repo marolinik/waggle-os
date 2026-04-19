@@ -66,7 +66,10 @@ const Dock = ({ tier, billingTier = 'FREE', onOpenApp, openApps, minimizedApps =
   const openZoneEntry = items.find(e => e.key === openZone && e.type === 'zone-parent');
 
   return (
-    <div className="fixed bottom-3 left-1/2 -translate-x-1/2 z-50">
+    // L-01 / R-1: constrain to 95vw and scroll horizontally when the
+    // dock's rendered width would exceed the viewport (power tier at
+    // <768px viewports). Keeps the fixed center-bottom position.
+    <div className="fixed bottom-3 left-1/2 -translate-x-1/2 z-50 max-w-[95vw] overflow-x-auto">
       {/* Tray popover */}
       {openZone && openZoneEntry?.children && trayAnchor && (
         <DockTray

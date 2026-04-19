@@ -54,7 +54,16 @@ const AppWindow = ({
   const [isDragging, setIsDragging] = useState(false);
   const [snapZone, setSnapZone] = useState<SnapZone>(null);
   const [snapPreview, setSnapPreview] = useState<SnapZone>(null);
-  const [size, setSize] = useState({ w: parsePx(defaultSize.w), h: parsePx(defaultSize.h) });
+  // L-05 / R-5: clamp default size to ≤90vw × ≤80vh so narrow
+  // viewports don't open a window wider than the screen.
+  const [size, setSize] = useState(() => {
+    const w = parsePx(defaultSize.w);
+    const h = parsePx(defaultSize.h);
+    if (typeof window === 'undefined') return { w, h };
+    const maxW = Math.floor(window.innerWidth * 0.9);
+    const maxH = Math.floor(window.innerHeight * 0.8);
+    return { w: Math.min(w, maxW), h: Math.min(h, maxH) };
+  });
   const [isResizing, setIsResizing] = useState(false);
   const dragControls = useDragControls();
 
