@@ -104,7 +104,18 @@ const PERSONA_SHORT: Record<string, string> = {
   'marketer': 'Marketer',
 };
 
-export function useWindowManager(workspaces: Workspace[]) {
+export interface UseWindowManagerOptions {
+  /**
+   * P4: default autonomy level inherited by newly-created chat windows.
+   * 'normal' is treated as "no inheritance" (window gets the regular default).
+   * Any elevated level is stamped with expiresAt:null so it sticks until the
+   * window is closed (matching the per-window "Until I close" TTL choice).
+   */
+  defaultAutonomy?: AutonomyLevel;
+}
+
+export function useWindowManager(workspaces: Workspace[], opts: UseWindowManagerOptions = {}) {
+  const { defaultAutonomy = 'normal' } = opts;
   // Phase A.4: restore the window list synchronously on first render so there
   // is no empty-desktop flicker between mount and the restoration effect.
   const [windows, setWindows] = useState<WindowState[]>(() => loadPersistedWindows());
@@ -235,6 +246,11 @@ export function useWindowManager(workspaces: Workspace[]) {
       const z = nextZ();
       const instanceId = `chat-${workspaceId}-${Date.now()}`;
       setFocusedInstanceId(instanceId);
+      // P4: inherit defaultAutonomy on the new window. Normal is the baseline
+      // (no inheritance needed); elevated levels stamp expiresAt:null so the
+      // level persists until the window closes, matching the ChatApp picker's
+      // "Until I close" option.
+      const inheritAutonomy = defaultAutonomy !== 'normal';
       return [...prev, {
         instanceId, appId: 'chat' as AppId,
         workspaceId, workspaceName,
@@ -242,10 +258,14 @@ export function useWindowManager(workspaces: Workspace[]) {
         personaLabel: personaLabelFor(initialPersonaId),
         templateLabel,
         initialMessage,
+        ...(inheritAutonomy && {
+          autonomyLevel: defaultAutonomy,
+          autonomyExpiresAt: null,
+        }),
         zIndex: z, minimized: false, cascadeOffset: offset,
       }];
     });
-  }, [workspaces]);
+  }, [workspaces, defaultAutonomy]);
 
   /**
    * Phase A.2: update the persona on a specific window without touching

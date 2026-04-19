@@ -77,8 +77,11 @@ const SettingsApp = () => {
     ...(isEnterpriseLocked ? { enterprise: { feature: 'audit-trail', label: 'Enterprise Features', prompt: 'Enterprise feature — contact sales for audit trail, compliance, and governance' } } : {}),
   };
 
-  // Permissions state
-  const [yoloMode, setYoloMode] = useState(false);
+  // P4: permissions state. `defaultAutonomy` replaces the old yoloMode
+  // binary — it's the inherited level new chat windows start at. Per-window
+  // overrides in Chat's AutonomyPicker always beat this.
+  type AutonomyLevel = 'normal' | 'trusted' | 'yolo';
+  const [defaultAutonomy, setDefaultAutonomy] = useState<AutonomyLevel>('normal');
   const [externalGates, setExternalGates] = useState<string[]>([]);
   const [newGate, setNewGate] = useState('');
 
@@ -110,14 +113,20 @@ const SettingsApp = () => {
 
   // Load settings
   useEffect(() => {
-    adapter.getSettings().then((s: { defaultModel?: string; model?: string; dailyBudget?: number; tier?: string; yoloMode?: boolean; fallbackModel?: string; budgetModel?: string; budgetThreshold?: number }) => {
+    adapter.getSettings().then((s: { defaultModel?: string; model?: string; dailyBudget?: number; tier?: string; fallbackModel?: string; budgetModel?: string; budgetThreshold?: number }) => {
       setDefaultModel(s.defaultModel ?? s.model ?? '');
       setFallbackModel(s.fallbackModel ?? null);
       setBudgetModel(s.budgetModel ?? null);
       setBudgetThreshold(s.budgetThreshold ?? 0.8);
       setDailyBudget(s.dailyBudget != null ? String(s.dailyBudget) : '');
       setTier(s.tier ?? 'FREE');
-      setYoloMode(s.yoloMode ?? false);
+    }).catch(() => {});
+
+    // P4: permissions now live on /api/settings/permissions (separate from
+    // /api/settings). Load defaultAutonomy + externalGates here.
+    adapter.getPermissions().then(p => {
+      setDefaultAutonomy(p.defaultAutonomy);
+      setExternalGates(p.externalGates);
     }).catch(() => {});
 
     adapter.getTeamStatus().then(s => setTeamConnected(s.connected)).catch(() => {});
@@ -144,10 +153,10 @@ const SettingsApp = () => {
     finally { setSaving(false); }
   };
 
-  const handleSavePermissions = async () => {
+  const handleSavePermissions = async (next?: { defaultAutonomy?: AutonomyLevel; externalGates?: string[] }) => {
     setSaving(true);
     try {
-      await adapter.saveSettings({ yoloMode });
+      await adapter.savePermissions(next ?? { defaultAutonomy, externalGates });
       setSaveMsg('Permissions saved');
       setTimeout(() => setSaveMsg(''), 2000);
     } catch { setSaveMsg('Failed to save'); }
@@ -509,22 +518,52 @@ const SettingsApp = () => {
           <div className="space-y-4">
             <h3 className="text-sm font-display font-semibold text-foreground">Permissions</h3>
 
-            {/* YOLO mode */}
-            <div className="flex items-center justify-between p-3 rounded-xl bg-secondary/30 border border-border/30">
-              <div>
-                <p className="text-sm text-foreground">Auto-Approve Mode</p>
-                <p className="text-xs text-muted-foreground">Skip approval gates for all tool calls</p>
+            {/* P4: default autonomy for new chat windows (3-level) */}
+            <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
+              <p className="text-sm text-foreground mb-1">Default approval level</p>
+              <p className="text-[11px] text-muted-foreground mb-3">
+                Inherited by <em>new</em> chat windows. Each window has its own per-session override in
+                the chat header — change one window without affecting the rest.
+              </p>
+              <div className="space-y-1.5" role="radiogroup" aria-label="Default approval level">
+                {([
+                  { value: 'normal',  label: 'Ask every time',      copy: 'Approve every write, edit, and mutating tool call' },
+                  { value: 'trusted', label: 'Ask only for risky',  copy: 'Auto-pass writes/edits; still gate git push, install, cross-workspace' },
+                  { value: 'yolo',    label: 'Never ask',           copy: 'Auto-pass everything except a hardcoded critical blacklist' },
+                ] as const).map(opt => {
+                  const active = defaultAutonomy === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => {
+                        setDefaultAutonomy(opt.value);
+                        handleSavePermissions({ defaultAutonomy: opt.value, externalGates });
+                      }}
+                      data-testid={`default-autonomy-${opt.value}`}
+                      className={`w-full text-left flex items-start gap-2 px-2.5 py-2 rounded-lg border transition-colors ${
+                        active
+                          ? 'bg-primary/15 border-primary/50'
+                          : 'bg-muted/20 border-border/20 hover:border-border/40'
+                      }`}
+                    >
+                      <div className={`mt-0.5 w-3.5 h-3.5 rounded-full border shrink-0 ${active ? 'bg-primary border-primary' : 'border-muted-foreground/40'}`} />
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-xs font-display ${active ? 'text-foreground' : 'text-foreground/80'}`}>{opt.label}</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">{opt.copy}</p>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
-              <button onClick={() => { setYoloMode(!yoloMode); handleSavePermissions(); }}
-                className={`w-10 h-5 rounded-full transition-colors ${yoloMode ? 'bg-primary' : 'bg-muted'}`}>
-                <div className={`w-4 h-4 rounded-full bg-foreground transition-transform mx-0.5 ${yoloMode ? 'translate-x-5' : ''}`} />
-              </button>
             </div>
 
             {/* External gates */}
             <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
               <p className="text-xs font-display font-medium text-foreground mb-2">Mutation Gates</p>
-              <p className="text-[11px] text-muted-foreground mb-2">Operations that always require approval (even in auto-approve mode)</p>
+              <p className="text-[11px] text-muted-foreground mb-2">Operations that always require approval, regardless of the default level above</p>
               <div className="space-y-1 mb-2">
                 {externalGates.map((gate, i) => (
                   <div key={i} className="flex items-center justify-between px-2 py-1 rounded bg-muted/30">

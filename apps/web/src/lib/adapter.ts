@@ -708,6 +708,26 @@ class LocalAdapter {
     await this.fetch('/api/settings', { method: 'PUT', body: JSON.stringify(settings) });
   }
 
+  // P4 — Permissions: defaultAutonomy + externalGates + workspaceOverrides.
+  // Separate from /api/settings because the permissions surface has its own
+  // lifecycle (YOLO/trusted is a safety concern, not a preference).
+  async getPermissions(): Promise<{
+    defaultAutonomy: 'normal' | 'trusted' | 'yolo';
+    externalGates: string[];
+    workspaceOverrides: Record<string, string[]>;
+  }> {
+    const res = await this.fetch('/api/settings/permissions');
+    return res.json();
+  }
+
+  async savePermissions(data: Partial<{
+    defaultAutonomy: 'normal' | 'trusted' | 'yolo';
+    externalGates: string[];
+    workspaceOverrides: Record<string, string[]>;
+  }>): Promise<void> {
+    await this.fetch('/api/settings/permissions', { method: 'PUT', body: JSON.stringify(data) });
+  }
+
   async testApiKey(provider: string, key: string): Promise<{ valid: boolean }> {
     const res = await this.fetch('/api/settings/test-key', { method: 'POST', body: JSON.stringify({ provider, apiKey: key }) });
     return res.json();

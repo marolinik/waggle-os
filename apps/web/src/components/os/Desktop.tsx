@@ -137,8 +137,17 @@ const Desktop = () => {
     }).catch(() => {});
   }, []);
 
+  // P4: default autonomy inherited by new chat windows. Fetched once on
+  // mount; SettingsApp writes via /api/settings/permissions, so a user who
+  // flips the setting has to open a fresh window for it to take effect.
+  // Existing windows keep their own state.
+  const [defaultAutonomy, setDefaultAutonomy] = useState<'normal' | 'trusted' | 'yolo'>('normal');
+  useEffect(() => {
+    adapter.getPermissions().then(p => setDefaultAutonomy(p.defaultAutonomy)).catch(() => {});
+  }, []);
+
   // Window management (extracted hook)
-  const wm = useWindowManager(workspaces);
+  const wm = useWindowManager(workspaces, { defaultAutonomy });
 
   // Phase B.1: the Files app has its own "active" workspace separate from
   // the global activeWorkspace, so browsing another workspace's files
