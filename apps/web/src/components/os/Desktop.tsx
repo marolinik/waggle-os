@@ -253,6 +253,7 @@ const Desktop = () => {
             minImportance={memory.filters.minImportance} onMinImportanceChange={(val) => memory.setFilters({ ...memory.filters, minImportance: val })}
             knowledgeGraph={{ nodes: kg.nodes, edges: kg.edges }} onRefreshKG={kg.refresh}
             kgScope={kg.scope} onKGScopeChange={kg.setScope}
+            kgLoading={kg.loading && kg.nodes.length === 0} kgError={kg.error}
             onContextRail={(target) => setContextRailTarget({ ...target, workspaceId: activeWorkspaceId ?? undefined })} />
         );
       case 'events':
