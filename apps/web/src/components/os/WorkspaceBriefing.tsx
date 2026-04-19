@@ -7,10 +7,14 @@
 import { useState, useEffect } from 'react';
 import {
   Brain, Clock, CheckCircle2, AlertTriangle, MessageSquare,
-  Lightbulb, Loader2, ChevronRight, Sparkles,
+  Lightbulb, Loader2, ChevronRight, Sparkles, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import type { WorkspaceContext } from '@/lib/types';
+import {
+  readWorkspaceBriefingCollapsed,
+  writeWorkspaceBriefingCollapsed,
+} from '@/lib/workspace-briefing-state';
 
 interface WorkspaceBriefingProps {
   workspaceId: string;
@@ -21,14 +25,24 @@ interface WorkspaceBriefingProps {
 const WorkspaceBriefing = ({ workspaceId, onSendMessage, onSelectSession }: WorkspaceBriefingProps) => {
   const [ctx, setCtx] = useState<WorkspaceContext | null>(null);
   const [loading, setLoading] = useState(true);
+  // M-23 / ENG-2: collapse state persists per-workspace so it survives
+  // reload and stays scoped to the current workspace.
+  const [collapsed, setCollapsedState] = useState(() => readWorkspaceBriefingCollapsed(workspaceId));
 
   useEffect(() => {
     setLoading(true);
+    setCollapsedState(readWorkspaceBriefingCollapsed(workspaceId));
     adapter.getWorkspaceContext(workspaceId)
       .then(setCtx)
       .catch(() => setCtx(null))
       .finally(() => setLoading(false));
   }, [workspaceId]);
+
+  const toggleCollapsed = () => {
+    const next = !collapsed;
+    setCollapsedState(next);
+    writeWorkspaceBriefingCollapsed(workspaceId, next);
+  };
 
   if (loading) {
     return (
@@ -50,19 +64,50 @@ const WorkspaceBriefing = ({ workspaceId, onSendMessage, onSelectSession }: Work
 
   const hasContent = ctx.greeting || ctx.summary || (ctx.recentMemories?.length ?? 0) > 0 || (ctx.suggestedPrompts?.length ?? 0) > 0;
 
+  if (collapsed) {
+    return (
+      <div className="shrink-0 p-3 flex items-center justify-between border-b border-border/30" data-testid="workspace-briefing-collapsed">
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          data-testid="workspace-briefing-expand"
+          aria-expanded="false"
+        >
+          <ChevronDown className="w-3.5 h-3.5" />
+          <span className="font-display">
+            {ctx.greeting || `Briefing for ${ctx.workspace?.name ?? 'workspace'}`}
+          </span>
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex-1 overflow-auto p-6 max-w-2xl mx-auto">
-      {/* Greeting */}
-      <div className="mb-6">
-        <h2 className="text-lg font-display font-bold text-foreground mb-1">
-          {ctx.greeting || `Welcome to ${ctx.workspace?.name ?? 'workspace'}`}
-        </h2>
-        {ctx.summary && (
-          <p className="text-sm text-muted-foreground">{ctx.summary}</p>
-        )}
-        {ctx.welcomeMessage && !ctx.summary && (
-          <p className="text-sm text-muted-foreground">{ctx.welcomeMessage}</p>
-        )}
+    <div className="flex-1 overflow-auto p-6 max-w-2xl mx-auto" data-testid="workspace-briefing-expanded">
+      {/* Greeting with collapse toggle */}
+      <div className="mb-6 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-display font-bold text-foreground mb-1">
+            {ctx.greeting || `Welcome to ${ctx.workspace?.name ?? 'workspace'}`}
+          </h2>
+          {ctx.summary && (
+            <p className="text-sm text-muted-foreground">{ctx.summary}</p>
+          )}
+          {ctx.welcomeMessage && !ctx.summary && (
+            <p className="text-sm text-muted-foreground">{ctx.welcomeMessage}</p>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          className="shrink-0 flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded hover:bg-muted/40"
+          title="Hide briefing"
+          data-testid="workspace-briefing-collapse"
+          aria-expanded="true"
+        >
+          <ChevronUp className="w-3 h-3" /> Hide
+        </button>
       </div>
 
       {/* Stats bar */}
