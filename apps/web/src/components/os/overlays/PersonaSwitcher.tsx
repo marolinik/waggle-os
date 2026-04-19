@@ -94,6 +94,7 @@ const PersonaSwitcher = ({ open, onClose, currentPersona, currentGroupId, onSele
       key={p.id}
       onClick={() => { if (!locked) { onSelect(p.id); onClose(); } }}
       disabled={locked}
+      aria-disabled={locked}
       aria-label={locked ? `${p.name} — locked, upgrade to Teams to unlock` : p.name}
       className={`flex items-center gap-3 p-3 rounded-xl transition-all text-left focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
         locked
