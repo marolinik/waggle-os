@@ -3,7 +3,21 @@ import path from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
 import { WaggleConfig } from '@waggle/core';
 import { type Tier, TIERS, TIER_CAPABILITIES, parseTier, getCapabilities, getEffectiveTier, trialDaysRemaining } from '@waggle/shared';
+import type { AutonomyLevel } from '@waggle/agent';
 import { requireTier } from '../../middleware/assert-tier.js';
+
+const VALID_AUTONOMY: AutonomyLevel[] = ['normal', 'trusted', 'yolo'];
+
+/** P4: migrate legacy `yoloMode: boolean` to the three-level enum. */
+function coerceDefaultAutonomy(parsed: Record<string, unknown>): AutonomyLevel {
+  const raw = parsed.defaultAutonomy;
+  if (typeof raw === 'string' && (VALID_AUTONOMY as readonly string[]).includes(raw)) {
+    return raw as AutonomyLevel;
+  }
+  // Legacy: yoloMode === true migrates to 'yolo', false to 'normal'.
+  if (parsed.yoloMode === true) return 'yolo';
+  return 'normal';
+}
 
 function maskApiKey(key: string): string {
   if (!key || key.length < 8) return '****';
@@ -201,7 +215,7 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
   // ── Permission settings ─────────────────────────────────────────────
 
   const DEFAULTS: PermissionsData = {
-    yoloMode: false,
+    defaultAutonomy: 'normal',
     externalGates: [],
     workspaceOverrides: {},
   };
@@ -215,11 +229,13 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
     try {
       if (fs.existsSync(filePath)) {
         const raw = fs.readFileSync(filePath, 'utf-8');
-        const parsed = JSON.parse(raw);
+        const parsed = JSON.parse(raw) as Record<string, unknown>;
         return {
-          yoloMode: parsed.yoloMode ?? DEFAULTS.yoloMode,
-          externalGates: parsed.externalGates ?? DEFAULTS.externalGates,
-          workspaceOverrides: parsed.workspaceOverrides ?? DEFAULTS.workspaceOverrides,
+          defaultAutonomy: coerceDefaultAutonomy(parsed),
+          externalGates: (parsed.externalGates as string[] | undefined) ?? DEFAULTS.externalGates,
+          workspaceOverrides:
+            (parsed.workspaceOverrides as Record<string, string[]> | undefined) ??
+            DEFAULTS.workspaceOverrides,
         };
       }
     } catch {
@@ -238,15 +254,35 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
     return readPermissions();
   });
 
-  // PUT /api/settings/permissions — save permission settings
+  // PUT /api/settings/permissions — save permission settings.
+  // Accepts the new `defaultAutonomy` enum and the legacy `yoloMode` boolean
+  // so older clients don't 400 during a deploy. Legacy values migrate via
+  // coerceDefaultAutonomy() on the way in.
   server.put<{
-    Body: { yoloMode?: boolean; externalGates?: string[]; workspaceOverrides?: Record<string, string[]> };
-  }>('/api/settings/permissions', async (request) => {
-    const { yoloMode, externalGates, workspaceOverrides } = request.body ?? {};
+    Body: {
+      defaultAutonomy?: AutonomyLevel;
+      yoloMode?: boolean;
+      externalGates?: string[];
+      workspaceOverrides?: Record<string, string[]>;
+    };
+  }>('/api/settings/permissions', async (request, reply) => {
+    const { defaultAutonomy, yoloMode, externalGates, workspaceOverrides } = request.body ?? {};
     const current = readPermissions();
 
+    let nextAutonomy: AutonomyLevel = current.defaultAutonomy;
+    if (defaultAutonomy !== undefined) {
+      if (!(VALID_AUTONOMY as readonly string[]).includes(defaultAutonomy)) {
+        return reply.status(400).send({
+          error: `defaultAutonomy must be one of ${VALID_AUTONOMY.join(', ')}`,
+        });
+      }
+      nextAutonomy = defaultAutonomy;
+    } else if (yoloMode !== undefined) {
+      nextAutonomy = yoloMode ? 'yolo' : 'normal';
+    }
+
     const updated: PermissionsData = {
-      yoloMode: yoloMode ?? current.yoloMode,
+      defaultAutonomy: nextAutonomy,
       externalGates: externalGates ?? current.externalGates,
       workspaceOverrides: workspaceOverrides ?? current.workspaceOverrides,
     };
@@ -416,7 +452,14 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
 };
 
 interface PermissionsData {
-  yoloMode: boolean;
+  /**
+   * P4: three-level default autonomy for newly-created chat windows.
+   *   - normal  = gate every write + risky op
+   *   - trusted = auto-pass writes/edits, still gate git push / install / xws
+   *   - yolo    = auto-pass everything except the critical blacklist
+   * Per-window overrides in Chat take precedence over this default.
+   */
+  defaultAutonomy: AutonomyLevel;
   externalGates: string[];
   workspaceOverrides: Record<string, string[]>;
 }

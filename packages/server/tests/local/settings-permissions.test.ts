@@ -38,25 +38,26 @@ describe('Permission settings API', () => {
     });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
-    expect(body.yoloMode).toBe(false);
+    expect(body.defaultAutonomy).toBe('normal');
     expect(body.externalGates).toEqual([]);
     expect(body.workspaceOverrides).toEqual({});
+    // P4: dead yoloMode field is gone from responses
+    expect(body.yoloMode).toBeUndefined();
   });
 
-  it('PUT /api/settings/permissions persists changes', async () => {
-    // Write new permissions
+  it('PUT /api/settings/permissions persists defaultAutonomy change', async () => {
     const putRes = await injectWithAuth(server, {
       method: 'PUT',
       url: '/api/settings/permissions',
       payload: {
-        yoloMode: true,
+        defaultAutonomy: 'trusted',
         externalGates: ['git push', 'rm -rf'],
         workspaceOverrides: { 'ws-1': ['deploy'] },
       },
     });
     expect(putRes.statusCode).toBe(200);
     const putBody = JSON.parse(putRes.body);
-    expect(putBody.yoloMode).toBe(true);
+    expect(putBody.defaultAutonomy).toBe('trusted');
     expect(putBody.externalGates).toEqual(['git push', 'rm -rf']);
     expect(putBody.workspaceOverrides).toEqual({ 'ws-1': ['deploy'] });
 
@@ -67,9 +68,7 @@ describe('Permission settings API', () => {
     });
     expect(getRes.statusCode).toBe(200);
     const getBody = JSON.parse(getRes.body);
-    expect(getBody.yoloMode).toBe(true);
-    expect(getBody.externalGates).toEqual(['git push', 'rm -rf']);
-    expect(getBody.workspaceOverrides).toEqual({ 'ws-1': ['deploy'] });
+    expect(getBody.defaultAutonomy).toBe('trusted');
   });
 
   it('PUT /api/settings/permissions merges partial updates', async () => {
@@ -78,7 +77,7 @@ describe('Permission settings API', () => {
       method: 'PUT',
       url: '/api/settings/permissions',
       payload: {
-        yoloMode: true,
+        defaultAutonomy: 'yolo',
         externalGates: ['git push'],
         workspaceOverrides: {},
       },
@@ -94,17 +93,82 @@ describe('Permission settings API', () => {
     });
     expect(putRes.statusCode).toBe(200);
     const body = JSON.parse(putRes.body);
-    // yoloMode should be preserved from previous write
-    expect(body.yoloMode).toBe(true);
+    // defaultAutonomy should be preserved from previous write
+    expect(body.defaultAutonomy).toBe('yolo');
     expect(body.externalGates).toEqual(['curl POST', 'deploy']);
   });
 
-  it('permissions.json file is created on disk', async () => {
+  it('permissions.json file is created on disk with new schema', async () => {
     const permPath = path.join(tmpDir, 'permissions.json');
     expect(fs.existsSync(permPath)).toBe(true);
     const data = JSON.parse(fs.readFileSync(permPath, 'utf-8'));
-    expect(data).toHaveProperty('yoloMode');
+    expect(data).toHaveProperty('defaultAutonomy');
     expect(data).toHaveProperty('externalGates');
     expect(data).toHaveProperty('workspaceOverrides');
+    expect(data.yoloMode).toBeUndefined();
+  });
+
+  // ── P4: legacy migration & validation ───────────────────────────────
+
+  it('PUT accepts legacy yoloMode=true body and migrates to defaultAutonomy="yolo"', async () => {
+    const res = await injectWithAuth(server, {
+      method: 'PUT',
+      url: '/api/settings/permissions',
+      payload: { yoloMode: true },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).defaultAutonomy).toBe('yolo');
+  });
+
+  it('PUT accepts legacy yoloMode=false and migrates to defaultAutonomy="normal"', async () => {
+    const res = await injectWithAuth(server, {
+      method: 'PUT',
+      url: '/api/settings/permissions',
+      payload: { yoloMode: false },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).defaultAutonomy).toBe('normal');
+  });
+
+  it('PUT with both fields prefers the explicit defaultAutonomy over legacy yoloMode', async () => {
+    const res = await injectWithAuth(server, {
+      method: 'PUT',
+      url: '/api/settings/permissions',
+      payload: { defaultAutonomy: 'trusted', yoloMode: true },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).defaultAutonomy).toBe('trusted');
+  });
+
+  it('PUT rejects invalid defaultAutonomy values with 400', async () => {
+    const res = await injectWithAuth(server, {
+      method: 'PUT',
+      url: '/api/settings/permissions',
+      payload: { defaultAutonomy: 'wild' as unknown as 'normal' },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = JSON.parse(res.body);
+    expect(body.error).toContain('defaultAutonomy must be one of');
+  });
+
+  it('GET migrates legacy permissions.json with yoloMode=true to defaultAutonomy="yolo"', async () => {
+    // Simulate a file that predates P4 by writing raw yoloMode=true
+    const permPath = path.join(tmpDir, 'permissions.json');
+    fs.writeFileSync(
+      permPath,
+      JSON.stringify({ yoloMode: true, externalGates: ['x'], workspaceOverrides: {} }, null, 2),
+      'utf-8',
+    );
+
+    const res = await injectWithAuth(server, {
+      method: 'GET',
+      url: '/api/settings/permissions',
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.defaultAutonomy).toBe('yolo');
+    expect(body.externalGates).toEqual(['x']);
+    // Response should NOT carry the stale field forward
+    expect(body.yoloMode).toBeUndefined();
   });
 });

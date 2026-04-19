@@ -295,8 +295,6 @@ export interface Settings {
   apiKey?: string;
   tokenLimit: number;
   theme: 'dark' | 'light';
-  yoloMode: boolean;
-  mutationGates: boolean;
   teamServerUrl?: string;
   teamToken?: string;
 }
