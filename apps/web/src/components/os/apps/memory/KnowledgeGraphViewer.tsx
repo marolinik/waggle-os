@@ -11,9 +11,10 @@ import {
   forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide,
   type SimulationNodeDatum, type SimulationLinkDatum,
 } from 'd3-force';
-import { Network, ZoomIn, ZoomOut, Maximize2, Minimize2, RotateCcw, Search, Globe } from 'lucide-react';
+import { Network, ZoomIn, ZoomOut, Maximize2, Minimize2, RotateCcw, Search, Globe, Download, AlertTriangle, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import type { KGNode, KGEdge } from '@/lib/types';
+import { downloadKgSvg } from '@/lib/kg-export';
 
 // ── Type colors from waggle-theme.css KG tokens ──
 
@@ -73,6 +74,12 @@ interface KnowledgeGraphViewerProps {
   onNodeClick?: (nodeId: string) => void;
   scope?: KGScope;
   onScopeChange?: (scope: KGScope) => void;
+  /** Render a loading skeleton instead of the canvas. Parent controls the fetch lifecycle. */
+  loading?: boolean;
+  /** Render an error state. Null/undefined hides the error panel. */
+  error?: string | null;
+  /** Parent-provided retry handler. Only shown when `error` is set. */
+  onRetry?: () => void;
 }
 
 const MIN_ZOOM = 0.2;
@@ -92,7 +99,10 @@ function chooseDefaultLimit(total: number): NodeLimit {
   return 200;
 }
 
-const KnowledgeGraphViewer = ({ nodes, edges, onNodeClick, scope, onScopeChange }: KnowledgeGraphViewerProps) => {
+const KnowledgeGraphViewer = ({
+  nodes, edges, onNodeClick, scope, onScopeChange,
+  loading = false, error = null, onRetry,
+}: KnowledgeGraphViewerProps) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -353,6 +363,61 @@ const KnowledgeGraphViewer = ({ nodes, edges, onNodeClick, scope, onScopeChange 
     return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
   }, []);
 
+  // ── Export handler ──
+  // Reads the current svgRef and serializes it (with theme vars resolved) into
+  // a standalone .svg file the user can open/share. No PNG conversion — SVG is
+  // lossless and browsers render it natively.
+  const exportSvg = useCallback(() => {
+    if (!svgRef.current) return;
+    try {
+      downloadKgSvg(svgRef.current);
+    } catch {
+      // Best-effort. If the browser blocked the download we just no-op;
+      // surfacing a toast would require a parent-provided notifier and that
+      // wasn't in M-30 scope.
+    }
+  }, []);
+
+  // ── Error state ──
+  // Error wins over loading (the parent told us the fetch failed — don't
+  // display a skeleton that implies work is still in-flight).
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-center p-4" role="alert">
+        <AlertTriangle className="w-10 h-10 text-destructive/70 mb-3" />
+        <p className="text-xs text-foreground">Couldn’t load the knowledge graph</p>
+        <p className="text-[11px] text-muted-foreground/80 mt-1 max-w-xs">{error}</p>
+        {onRetry && (
+          <button
+            onClick={onRetry}
+            className="mt-3 px-3 py-1 rounded-md bg-primary/20 text-primary text-[11px] hover:bg-primary/30 transition-colors"
+          >
+            Retry
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // ── Loading state ──
+  // Simple animated-pulse skeleton. No data yet, so we can't render the real
+  // simulation; matches the bg-muted/40 skeleton pattern used across the app.
+
+  if (loading) {
+    return (
+      <div
+        className="flex flex-col items-center justify-center h-full text-center p-4"
+        role="status"
+        aria-live="polite"
+        aria-label="Loading knowledge graph"
+      >
+        <Loader2 className="w-8 h-8 text-primary/70 mb-3 animate-spin" />
+        <p className="text-xs text-muted-foreground">Loading knowledge graph…</p>
+      </div>
+    );
+  }
+
   // ── Empty state ──
 
   if (nodes.length === 0) {
@@ -448,6 +513,15 @@ const KnowledgeGraphViewer = ({ nodes, edges, onNodeClick, scope, onScopeChange 
             </button>
             <button onClick={resetView} className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors" title="Reset view">
               <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={exportSvg}
+              className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+              title="Export as SVG"
+              aria-label="Export graph as SVG"
+              data-testid="kg-export-svg"
+            >
+              <Download className="w-3.5 h-3.5" />
             </button>
             <button onClick={toggleFullscreen} className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors" title="Toggle fullscreen">
               {fullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
