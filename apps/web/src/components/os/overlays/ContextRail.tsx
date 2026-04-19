@@ -2,27 +2,20 @@ import { useState, useEffect } from 'react';
 import { X, Brain, Loader2, ChevronRight, FileText, Zap, Link2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { adapter } from '@/lib/adapter';
+import {
+  fetchContextRailItems,
+  type ContextRailTarget as FetchTarget,
+  type ContextRailItem,
+} from '@/lib/context-rail-fetch';
 
-export interface ContextRailTarget {
-  type: 'file' | 'frame' | 'entity' | 'message';
-  id: string;
-  label: string;
-  workspaceId?: string;
-}
+export type ContextRailTarget = FetchTarget;
 
 interface ContextRailProps {
   target: ContextRailTarget | null;
   onClose: () => void;
 }
 
-interface ContextItem {
-  id: string;
-  kind: 'memory' | 'entity' | 'relation';
-  title: string;
-  content: string;
-  importance?: string;
-  timestamp?: string;
-}
+type ContextItem = ContextRailItem;
 
 const KIND_ICONS: Record<string, React.ElementType> = {
   memory: Brain,
@@ -48,24 +41,7 @@ const ContextRail = ({ target, onClose }: ContextRailProps) => {
     setExpandedId(null);
 
     (async () => {
-      const results: ContextItem[] = [];
-
-      try {
-        const frames = await adapter.searchMemory(target.label, 'all');
-        for (const f of frames.slice(0, 10)) {
-          results.push({
-            id: `frame-${f.id}`,
-            kind: 'memory',
-            title: typeof f.content === 'string'
-              ? f.content.split('\n')[0].slice(0, 80)
-              : (f.title ?? 'Memory'),
-            content: typeof f.content === 'string' ? f.content : JSON.stringify(f.content),
-            importance: f.importance,
-            timestamp: f.created_at ?? f.timestamp,
-          });
-        }
-      } catch { /* memory search failed */ }
-
+      const results = await fetchContextRailItems(target, adapter);
       if (!cancelled) {
         setItems(results);
         setLoading(false);
