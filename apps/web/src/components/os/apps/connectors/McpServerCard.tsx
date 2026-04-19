@@ -12,10 +12,11 @@
  */
 
 import { useState } from 'react';
-import { ExternalLink, Check, Copy } from 'lucide-react';
+import { ExternalLink, Check, Copy, Info } from 'lucide-react';
 import BrandTile from './BrandTile';
 import { getBrandIdentity } from './brand-identity';
 import type { McpServer } from './mcp-registry';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface McpServerCardProps {
   server: McpServer;
@@ -94,6 +95,25 @@ const McpServerCard = ({ server }: McpServerCardProps) => {
 
       {/* Install command strip */}
       <div className="flex items-center gap-2 rounded-lg border border-border/30 bg-background/60 px-2 py-1.5">
+        <Tooltip delayDuration={200}>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label="How to install"
+              className="shrink-0 rounded-md p-0.5 text-muted-foreground/70 transition-colors hover:bg-primary/10 hover:text-primary"
+            >
+              <Info className="h-3 w-3" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top" align="start" className="max-w-[260px] text-xs p-3 space-y-1.5">
+            <p className="font-display font-semibold text-foreground">Install an MCP server</p>
+            <ol className="list-decimal list-inside space-y-0.5 text-muted-foreground">
+              <li>Copy the command below</li>
+              <li>Run it in your terminal</li>
+              <li>Restart Waggle — the server auto-appears in Connectors</li>
+            </ol>
+          </TooltipContent>
+        </Tooltip>
         <span className="shrink-0 font-mono text-[10px] text-primary/70">$</span>
         <code className="flex-1 truncate font-mono text-[10px] text-foreground/90">
           {server.installCmd}
@@ -101,11 +121,11 @@ const McpServerCard = ({ server }: McpServerCardProps) => {
         <button
           onClick={handleCopy}
           className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-primary transition-colors hover:bg-primary/10"
-          aria-label={copied ? 'Copied' : 'Copy install command'}
+          aria-label={copied ? 'Copied — paste in terminal' : 'Copy install command'}
         >
           {copied ? (
             <>
-              <Check className="h-2.5 w-2.5" /> Copied
+              <Check className="h-2.5 w-2.5" /> Copied — paste in terminal
             </>
           ) : (
             <>
