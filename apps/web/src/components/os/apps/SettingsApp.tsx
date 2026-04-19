@@ -12,6 +12,10 @@ import { useProviders } from '@/hooks/useProviders';
 import { useOnboarding } from '@/hooks/useOnboarding';
 import { useDeveloperMode } from '@/hooks/useDeveloperMode';
 import { useDockLabels } from '@/hooks/useDockLabels';
+import {
+  readLoginBriefingDismissed,
+  writeLoginBriefingDismissed,
+} from '@/lib/login-briefing';
 import type { UserTier } from '@/lib/dock-tiers';
 import ModelSelector from '@/components/os/ModelSelector';
 import ModelPilotCard from '@/components/os/ModelPilotCard';
@@ -96,6 +100,12 @@ const SettingsApp = () => {
   // M-19 / UX-4: dock-label visibility (auto heuristic / pinned always).
   const dockLabels = useDockLabels();
   const dockLabelsPinned = dockLabels.mode === 'always';
+  // M-25 / ENG-4: LoginBriefing persistent dismiss. Local state mirrors
+  // localStorage so the toggle reflects the current flag without a
+  // remount; SettingsApp is the only writer on the Settings side.
+  const [loginBriefingDismissed, setLoginBriefingDismissedState] = useState(() => {
+    try { return readLoginBriefingDismissed(); } catch { return false; }
+  });
   const [telemetryCount, setTelemetryCount] = useState(0);
 
   // Load settings
@@ -705,6 +715,28 @@ const SettingsApp = () => {
                 <p className="text-xs font-display font-medium text-foreground mb-1">Data Directory</p>
                 <p className="text-[11px] text-muted-foreground font-mono">~/.waggle/</p>
                 <p className="text-[11px] text-muted-foreground mt-1">All workspaces, memory, vault, and config live here.</p>
+              </div>
+              <div className="p-3 rounded-xl bg-secondary/30 border border-border/30" data-testid="login-briefing-setting">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs font-display font-medium text-foreground">Show login briefing on each launch</p>
+                  <button
+                    onClick={() => {
+                      // The toggle reads as "Show on launch", so ON means NOT
+                      // dismissed. We store the INVERSE of the visible label
+                      // so the default (no key) means "show briefing".
+                      const nextDismissed = !loginBriefingDismissed ? true : false;
+                      writeLoginBriefingDismissed(nextDismissed);
+                      setLoginBriefingDismissedState(nextDismissed);
+                    }}
+                    aria-pressed={!loginBriefingDismissed}
+                    aria-label="Toggle login briefing visibility"
+                    data-testid="login-briefing-toggle"
+                    className={`relative w-10 h-5 rounded-full transition-colors ${!loginBriefingDismissed ? 'bg-primary' : 'bg-muted'}`}
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${!loginBriefingDismissed ? 'left-5' : 'left-0.5'}`} />
+                  </button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">On: brief summary appears on each session. Off after clicking "Don't show again" in the briefing.</p>
               </div>
               <div className="p-3 rounded-xl bg-secondary/30 border border-border/30" data-testid="dock-labels-setting">
                 <div className="flex items-center justify-between mb-1">

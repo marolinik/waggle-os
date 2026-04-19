@@ -48,6 +48,7 @@ import KeyboardShortcutsHelp from "./overlays/KeyboardShortcutsHelp";
 import OnboardingWizard from "./overlays/OnboardingWizard";
 import OnboardingTooltips from "./overlays/OnboardingTooltips";
 import LoginBriefing from "./overlays/LoginBriefing";
+import { writeLoginBriefingDismissed } from "@/lib/login-briefing";
 import ContextRail from "./overlays/ContextRail";
 import type { ContextRailTarget } from "./overlays/ContextRail";
 import UpgradeModal from "./overlays/UpgradeModal";
@@ -406,8 +407,15 @@ const Desktop = () => {
         />
       )}
       {onboardingState.completed && ov.showLoginBriefing && (
-        <LoginBriefing onDismiss={() => ov.setShowLoginBriefing(false)}
-          onOpenWorkspace={(wsId) => { selectWorkspace(wsId); wm.openChatForWorkspace(wsId); ov.setShowLoginBriefing(false); }} />
+        <LoginBriefing
+          onDismiss={(permanent) => {
+            // M-25 / ENG-4: `permanent=true` → persist the flag so the
+            // briefing stays hidden across future sessions.
+            if (permanent) writeLoginBriefingDismissed(true);
+            ov.setShowLoginBriefing(false);
+          }}
+          onOpenWorkspace={(wsId) => { selectWorkspace(wsId); wm.openChatForWorkspace(wsId); ov.setShowLoginBriefing(false); }}
+        />
       )}
 
       {/* Phase C.1: Context Rail */}

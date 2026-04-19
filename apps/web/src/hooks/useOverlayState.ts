@@ -1,20 +1,20 @@
 import { useState, useCallback } from 'react';
+import {
+  shouldShowLoginBriefing,
+  readLoginBriefingDismissed,
+  readSkipBriefingParam,
+} from '@/lib/login-briefing';
 
 /**
- * E2E-only: `?skipBriefing=true` suppresses the LoginBriefing overlay that
- * otherwise covers the desktop and intercepts dock clicks on every load.
- * Mirrors the `?skipOnboarding=true` bypass in `useOnboarding.ts` so
- * Playwright can interact with the dock without tearing down overlays.
+ * Briefing visibility is decided once on mount and persists until the
+ * user dismisses. Per-session behaviour is implicit: React state resets
+ * on every page load, so the briefing reappears each session unless
+ * the user has permanently opted out via "Don't show again"
+ * (localStorage `waggle:login-briefing-dismissed`).
+ *
+ * `?skipBriefing=true` stays as an E2E escape hatch so Playwright can
+ * interact with the dock without tearing down overlays.
  */
-function readSkipBriefing(): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    const params = new URLSearchParams(window.location.search);
-    return params.get('skipBriefing') === 'true';
-  } catch {
-    return false;
-  }
-}
 
 export function useOverlayState() {
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
@@ -24,7 +24,12 @@ export function useOverlayState() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
   const [showSpawnAgent, setShowSpawnAgent] = useState(false);
-  const [showLoginBriefing, setShowLoginBriefing] = useState(() => !readSkipBriefing());
+  const [showLoginBriefing, setShowLoginBriefing] = useState(() =>
+    shouldShowLoginBriefing({
+      skipBriefing: readSkipBriefingParam(),
+      permanentlyDismissed: readLoginBriefingDismissed(),
+    }),
+  );
 
   const toggleGlobalSearch = useCallback(() => setShowGlobalSearch(p => !p), []);
   const togglePersonaSwitcher = useCallback(() => setShowPersonaSwitcher(p => !p), []);

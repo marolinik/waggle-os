@@ -14,7 +14,13 @@ import { adapter } from '@/lib/adapter';
 import type { Workspace } from '@/lib/types';
 
 interface LoginBriefingProps {
-  onDismiss: () => void;
+  /**
+   * Called when the user closes the briefing. `permanent=true` signals
+   * that the user picked "Don't show again" and the caller should set
+   * the persistent dismiss flag; `permanent=false` (default) hides for
+   * this session only and the briefing will reappear on next launch.
+   */
+  onDismiss: (permanent?: boolean) => void;
   onOpenWorkspace: (workspaceId: string) => void;
 }
 
@@ -237,10 +243,20 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
           )}
 
           {/* Footer */}
-          <div className="mt-4 pt-3 border-t border-border/30 flex justify-between items-center">
-            <p className="text-[11px] text-muted-foreground">Waggle remembers everything important.</p>
-            <button onClick={onDismiss}
-              className="px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 transition-colors font-display">
+          <div className="mt-4 pt-3 border-t border-border/30 flex justify-between items-center gap-3">
+            <button
+              onClick={() => onDismiss(true)}
+              data-testid="login-briefing-dont-show-again"
+              className="text-[11px] text-muted-foreground hover:text-foreground transition-colors font-display"
+              title="Hide the briefing permanently. Re-enable in Settings → Advanced."
+            >
+              Don't show again
+            </button>
+            <button
+              onClick={() => onDismiss(false)}
+              data-testid="login-briefing-dismiss"
+              className="px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 transition-colors font-display"
+            >
               Start Working
             </button>
           </div>
