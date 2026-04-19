@@ -41,16 +41,18 @@ const StatusBar = ({ workspaceName, model, tokensUsed, costUsd, offline, unreadN
       <div className="flex items-center gap-3">
         <img src={waggleLogo} alt="Waggle" className="w-4 h-4 rounded-sm" />
         <span className="text-xs font-display font-semibold text-foreground">Waggle AI</span>
+        {/* L-02: hide workspace + model below md (~768px) so the logo
+            + "Waggle AI" stay visible on narrow windows. */}
         {workspaceName && (
           <>
-            <span className="text-muted-foreground text-[11px]">·</span>
-            <span className="text-[11px] text-muted-foreground">{workspaceName}</span>
+            <span className="text-muted-foreground text-[11px] hidden md:inline">·</span>
+            <span className="text-[11px] text-muted-foreground hidden md:inline">{workspaceName}</span>
           </>
         )}
         {model && (
           <>
-            <span className="text-muted-foreground text-[11px]">·</span>
-            <span className="text-[11px] text-primary/80 font-display">{model}</span>
+            <span className="text-muted-foreground text-[11px] hidden md:inline">·</span>
+            <span className="text-[11px] text-primary/80 font-display hidden md:inline">{model}</span>
           </>
         )}
         {developerMode && tokensUsed !== undefined && tokensUsed > 0 && (
@@ -105,7 +107,7 @@ const StatusBar = ({ workspaceName, model, tokensUsed, costUsd, offline, unreadN
             </div>
           </div>
         )}
-        <span className="text-xs text-muted-foreground">{formatDate(time)}</span>
+        <span className="text-xs text-muted-foreground hidden md:inline">{formatDate(time)}</span>
         <span className="text-xs text-foreground font-medium">{formatTime(time)}</span>
       </div>
     </div>

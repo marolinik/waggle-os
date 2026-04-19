@@ -34,7 +34,7 @@ const TemplateStep = ({
       </div>
     </div>
 
-    <div className="grid grid-cols-5 gap-2 mb-5">
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 mb-5">
       {TEMPLATES.map((t) => {
         const Icon = t.icon;
         const selected = selectedTemplate === t.id;
