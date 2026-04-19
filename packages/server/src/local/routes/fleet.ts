@@ -29,7 +29,7 @@ export async function fleetRoutes(fastify: FastifyInstance) {
         lastActivity: s.lastActivity,
         durationMs: Date.now() - s.lastActivity,
         toolCount: s.tools?.length ?? 0,
-        tokensUsed: 0, // TODO: track per-session tokens
+        tokensUsed: s.tokensUsed ?? 0,
         costEstimate: Math.round(wsCost * 10000) / 10000,
       };
     });

@@ -152,4 +152,67 @@ describe('WorkspaceSessionManager', () => {
     const manager = new WorkspaceSessionManager(3);
     expect(manager.close('nonexistent')).toBe(false);
   });
+
+  describe('addTokens (L-17 C3)', () => {
+    it('initializes new sessions with tokensUsed = 0', () => {
+      const manager = new WorkspaceSessionManager(3);
+      const s = manager.create('ws-1', createMockMind(), createMockOrchestrator(), createMockTools());
+      expect(s.tokensUsed).toBe(0);
+    });
+
+    it('accumulates tokens across multiple calls', () => {
+      const manager = new WorkspaceSessionManager(3);
+      manager.create('ws-1', createMockMind(), createMockOrchestrator(), createMockTools());
+
+      manager.addTokens('ws-1', 120);
+      manager.addTokens('ws-1', 80);
+      manager.addTokens('ws-1', 50);
+
+      expect(manager.get('ws-1')!.tokensUsed).toBe(250);
+    });
+
+    it('tracks tokens per workspace independently', () => {
+      const manager = new WorkspaceSessionManager(3);
+      manager.create('ws-1', createMockMind(), createMockOrchestrator(), createMockTools());
+      manager.create('ws-2', createMockMind(), createMockOrchestrator(), createMockTools());
+
+      manager.addTokens('ws-1', 100);
+      manager.addTokens('ws-2', 200);
+      manager.addTokens('ws-1', 50);
+
+      expect(manager.get('ws-1')!.tokensUsed).toBe(150);
+      expect(manager.get('ws-2')!.tokensUsed).toBe(200);
+    });
+
+    it('no-ops silently when the session does not exist', () => {
+      const manager = new WorkspaceSessionManager(3);
+      expect(() => manager.addTokens('nonexistent', 500)).not.toThrow();
+    });
+
+    it('ignores zero, negative, NaN, and Infinity deltas', () => {
+      const manager = new WorkspaceSessionManager(3);
+      manager.create('ws-1', createMockMind(), createMockOrchestrator(), createMockTools());
+
+      manager.addTokens('ws-1', 0);
+      manager.addTokens('ws-1', -50);
+      manager.addTokens('ws-1', NaN);
+      manager.addTokens('ws-1', Infinity);
+      manager.addTokens('ws-1', -Infinity);
+
+      expect(manager.get('ws-1')!.tokensUsed).toBe(0);
+    });
+
+    it('persists accumulated tokens across pause/resume', () => {
+      const manager = new WorkspaceSessionManager(3);
+      manager.create('ws-1', createMockMind(), createMockOrchestrator(), createMockTools());
+      manager.addTokens('ws-1', 300);
+
+      manager.pause('ws-1');
+      expect(manager.get('ws-1')!.tokensUsed).toBe(300);
+
+      manager.resume('ws-1');
+      manager.addTokens('ws-1', 200);
+      expect(manager.get('ws-1')!.tokensUsed).toBe(500);
+    });
+  });
 });

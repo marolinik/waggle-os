@@ -68,6 +68,7 @@ describe('Fleet Routes', () => {
             status: 'running',
             lastActivity: now - 5000,
             tools: ['search_memory', 'bash'],
+            tokensUsed: 4200,
           },
           {
             workspaceId: 'ws-2',
@@ -93,10 +94,13 @@ describe('Fleet Routes', () => {
       expect(body.sessions[0].toolCount).toBe(2);
       expect(typeof body.sessions[0].durationMs).toBe('number');
       expect(body.sessions[0].durationMs).toBeGreaterThanOrEqual(5000);
+      // L-17 C3: per-session token total should flow through
+      expect(body.sessions[0].tokensUsed).toBe(4200);
 
-      // Second session — no tools array
+      // Second session — no tools array, no tokensUsed field -> defaults to 0
       expect(body.sessions[1].workspaceId).toBe('ws-2');
       expect(body.sessions[1].toolCount).toBe(0);
+      expect(body.sessions[1].tokensUsed).toBe(0);
     });
   });
 

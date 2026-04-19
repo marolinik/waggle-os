@@ -1232,6 +1232,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // Track cost with the ACTUALLY used model
         costTracker.addUsage(resolvedModel, result.usage.inputTokens, result.usage.outputTokens, effectiveWorkspace);
 
+        // L-17 C3: per-session token accumulation for /api/fleet visibility.
+        // costTracker is per-workspace cost; sessionManager holds per-session
+        // token totals that persist for the life of the active session.
+        server.sessionManager?.addTokens(
+          effectiveWorkspace,
+          (result.usage.inputTokens ?? 0) + (result.usage.outputTokens ?? 0),
+        );
+
         // ── Finalize the execution trace (self-evolution substrate) ──
         // Default outcome is 'success'; correction-detector may downgrade to
         // 'corrected' on the next turn via traceStore.markCorrected().

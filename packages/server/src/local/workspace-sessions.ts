@@ -28,6 +28,8 @@ export interface WorkspaceSession {
   lastActivity: number;
   personaId: string | null;
   status: 'active' | 'paused' | 'error';
+  /** L-17 C3: cumulative LLM tokens (prompt + completion) for this session. */
+  tokensUsed: number;
 }
 
 export class WorkspaceSessionManager {
@@ -109,9 +111,23 @@ export class WorkspaceSessionManager {
       lastActivity: Date.now(),
       personaId: personaId ?? null,
       status: 'active',
+      tokensUsed: 0,
     };
     this.sessions.set(workspaceId, session);
     return session;
+  }
+
+  /**
+   * L-17 C3: accumulate tokens against a session's `tokensUsed` counter.
+   * Silently no-ops if the session has been closed between the LLM call
+   * and its accounting — token accounting is best-effort telemetry.
+   * Negative or non-finite deltas are ignored.
+   */
+  addTokens(workspaceId: string, delta: number): void {
+    if (!Number.isFinite(delta) || delta <= 0) return;
+    const session = this.sessions.get(workspaceId);
+    if (!session) return;
+    session.tokensUsed += delta;
   }
 
   /**
