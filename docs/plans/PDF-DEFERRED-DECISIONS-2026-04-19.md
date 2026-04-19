@@ -36,11 +36,10 @@ risky ones / never ask" as one unified control.
 **Recommendation.** Option 1. The current split is the source of the
 confusion; adding a rename doesn't fix the architecture. Option 2 over-models
 a case that's rare in practice.
-
 **Effort (post-decision).** ~1 d engineering. Settings UI refactor + Chat
 prompt removal + `toolRiskLevel` classifier on ~40 tools in `packages/agent`.
 
-**Decision:** `__________` (options: 1 / 2 / 3)
+**Decision:** `option 1` (options: 1 / 2 / 3)
 
 ---
 
@@ -69,7 +68,7 @@ Option 3 is fine if you're comfortable carrying the risk until H-35.
 
 **Effort (post-decision).** ~2 hr for option 1, ~1 hr for option 2, 0 for option 3.
 
-**Decision:** `__________` (options: 1 / 2 / 3)
+**Decision:** `option 1` (options: 1 / 2 / 3)
 
 ---
 
@@ -100,7 +99,7 @@ pre-revenue. Option 3 is fine if calendar is tighter than brand polish.
 **Effort (post-decision).** ~2 hr for option 2 (prompt iteration + batch run +
 integration). Option 1 is mostly your time writing the brief. Option 3 is 0.
 
-**Decision:** `__________` (options: 1 / 2 / 3)
+**Decision:** `option 2` (options: 1 / 2 / 3)
 
 ---
 
@@ -133,7 +132,7 @@ a drive-picker for a niche need. Option 2 is over-engineering for v1.
 **Effort (post-decision).** ~1 hr for option 1 (capability update + resigning).
 ~1 d for option 2. 0 for option 3.
 
-**Decision:** `__________` (options: 1 / 2 / 3)
+**Decision:** `option 1` (options: 1 / 2 / 3)
 
 ---
 
@@ -167,7 +166,7 @@ thinking than a single deferred-item decision justifies.
 **Effort (post-decision).** ~20 min for option 3. If escalates to option 2,
 +1 hr. Option 1 is ~3 hr.
 
-**Decision:** `__________` (options: 1 / 2 / 3)
+**Decision:** `option 2` (options: 1 / 2 / 3)
 
 ---
 
@@ -200,7 +199,7 @@ Explorer; high cost for launch. Option 3 doesn't actually fix the problem.
 **Effort (post-decision).** ~1 d for option 2 (tab component + per-tab state +
 local-create tools). ~4 d for option 1. ~2 hr for option 3.
 
-**Decision:** `__________` (options: 1 / 2 / 3)
+**Decision:** `option 2` (options: 1 / 2 / 3)
 
 ---
 
@@ -231,7 +230,7 @@ on a form input ≠ tooltip) is real.
 **Effort (post-decision).** ~1 hr for option 1 per badge (including test).
 ~2 d for option 2. ~6 hr for option 3.
 
-**Your top-5 picks:** `__________` (write item numbers from the PDF, or "all"
+**Your top-5 picks:** `option 2` (write item numbers from the PDF, or "all"
 for option 2, or "codemod" for option 3)
 
 ---
@@ -251,3 +250,4 @@ for option 2, or "codemod" for option 3)
 **Fastest session-end answer:** "P15=3 (investigate viewport), P17 top 5=<your picks>,
 defer rest." That unblocks ~2 hours of work right now and leaves the big
 decisions for when you have time.
+
