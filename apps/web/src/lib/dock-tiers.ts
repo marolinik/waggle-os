@@ -69,7 +69,11 @@ const POWER_CONFIG: DockEntry[] = [
     ],
   },
   { type: 'separator', key: 'sep-2', label: '' },
-  { type: 'app', key: 'approvals', appId: 'approvals', icon: Shield, label: 'Approvals', color: 'text-amber-400' },
+  // P34: Approvals is the Teams+ trust control surface. Individual Pro users
+  // already get inline approvals in Chat; the standalone inbox mainly serves
+  // compliance / audit review, which is a TEAMS-tier concern. Hiding it on
+  // Pro keeps the dock focused on what each tier actually uses.
+  { type: 'app', key: 'approvals', appId: 'approvals', icon: Shield, label: 'Approvals', color: 'text-amber-400', minBillingTier: 'TEAMS' },
   { type: 'app', key: 'vault', appId: 'vault', icon: Lock, label: 'Vault', color: 'text-amber-400' },
   { type: 'app', key: 'system', appId: 'settings', icon: Settings, label: 'Settings', color: 'text-muted-foreground' },
 ];
