@@ -73,7 +73,13 @@ function AgentTile({ agent, workspaceName }: { agent: RoomAgent; workspaceName?:
   const elapsed = formatElapsed(agent.startedAt, agent.completedAt);
 
   return (
-    <div className="p-3 rounded-xl bg-secondary/30 border border-border/30 hover:border-primary/30 transition-colors min-w-0">
+    <div
+      className="p-3 rounded-xl bg-secondary/30 border border-border/30 hover:border-primary/30 transition-colors min-w-0"
+      data-testid="room-agent-tile"
+      data-agent-id={agent.id}
+      data-agent-status={agent.status}
+      data-agent-role={agent.role}
+    >
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-2 min-w-0">
           <div className={`w-2 h-2 rounded-full shrink-0 ${STATUS_DOT_COLORS[agent.status]}`} />
@@ -149,13 +155,13 @@ const RoomApp = ({ workspaceId, workspaceNames = {} }: RoomAppProps) => {
   const recentCount = recentAgents.length;
 
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-background">
+    <div className="h-full flex flex-col overflow-hidden bg-background" data-testid="room-root">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/30 shrink-0">
         <div className="flex items-center gap-2">
           <Users className="w-4 h-4 text-primary" />
           <h3 className="text-sm font-display font-semibold text-foreground">Room</h3>
-          <span className="text-[11px] text-muted-foreground">
+          <span className="text-[11px] text-muted-foreground" data-testid="room-live-count">
             {liveCount} live
             {recentCount > 0 && <> · {recentCount} recent</>}
             {totalLive === 0 && recentCount === 0 && <> · no agents running</>}

@@ -10,25 +10,15 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { adapter } from '@/lib/adapter';
+import {
+  applyStatusEvent,
+  pruneRecent,
+  type RoomAgent as _RoomAgent,
+  type WorkspaceAgents,
+} from '@/lib/room-state-reducer';
 
-export interface RoomAgent {
-  id: string;
-  name: string;
-  role: string;
-  status: 'pending' | 'running' | 'done' | 'failed';
-  task: string;
-  toolsUsed: string[];
-  startedAt?: number;
-  completedAt?: number;
-}
-
-interface WorkspaceAgents {
-  live: RoomAgent[];
-  recent: RoomAgent[];
-  lastUpdatedAt: number;
-}
-
-const RECENT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+// Re-export the type at the old import path so RoomApp doesn't need changes.
+export type RoomAgent = _RoomAgent;
 
 export function useRoomState() {
   const [workspaceMap, setWorkspaceMap] = useState<Map<string, WorkspaceAgents>>(() => new Map());
@@ -39,37 +29,10 @@ export function useRoomState() {
       unsub = adapter.subscribeSubagentStatus((event) => {
         setWorkspaceMap(prev => {
           const next = new Map(prev);
-          const current = next.get(event.workspaceId) ?? {
-            live: [],
-            recent: [],
-            lastUpdatedAt: 0,
-          };
-
-          // Completed agents from the previous live set move into recent.
-          const previouslyLive = current.live;
-          const stillLive = event.agents.filter(a => a.status === 'pending' || a.status === 'running');
-          const newlyDone: RoomAgent[] = [];
-          for (const agent of event.agents) {
-            if (agent.status === 'done' || agent.status === 'failed') {
-              newlyDone.push(agent);
-            }
-          }
-          // Also sweep agents that were live before and aren't in the new event — they finished.
-          for (const prev of previouslyLive) {
-            const inNew = event.agents.find(a => a.id === prev.id);
-            if (!inNew && prev.status !== 'done' && prev.status !== 'failed') {
-              newlyDone.push({ ...prev, status: 'done', completedAt: Date.now() });
-            }
-          }
-
-          const mergedRecent = dedupeAgents([...newlyDone, ...current.recent]);
-          const prunedRecent = pruneRecent(mergedRecent);
-
-          next.set(event.workspaceId, {
-            live: stillLive,
-            recent: prunedRecent,
-            lastUpdatedAt: Date.now(),
-          });
+          const current = next.get(event.workspaceId);
+          // Pure reducer drives the actual state math; see room-state-reducer.ts.
+          const updated = applyStatusEvent(current, event);
+          next.set(event.workspaceId, updated);
           return next;
         });
       });
@@ -109,23 +72,4 @@ export function useRoomState() {
   const getWorkspace = (workspaceId: string): WorkspaceAgents | undefined => workspaceMap.get(workspaceId);
 
   return { workspaceMap, allWorkspaceIds, totalLive, getWorkspace };
-}
-
-function dedupeAgents(agents: RoomAgent[]): RoomAgent[] {
-  const seen = new Set<string>();
-  const out: RoomAgent[] = [];
-  for (const a of agents) {
-    if (seen.has(a.id)) continue;
-    seen.add(a.id);
-    out.push(a);
-  }
-  return out;
-}
-
-function pruneRecent(agents: RoomAgent[]): RoomAgent[] {
-  const cutoff = Date.now() - RECENT_WINDOW_MS;
-  return agents.filter(a => {
-    const t = a.completedAt ?? a.startedAt ?? Date.now();
-    return t >= cutoff;
-  });
 }
