@@ -29,7 +29,7 @@ import MissionControlApp from "./apps/MissionControlApp";
 import CapabilitiesApp from "./apps/CapabilitiesApp";
 import WaggleDanceApp from "./apps/WaggleDanceApp";
 import AgentsApp from "./apps/AgentsApp";
-import FilesApp from "./apps/FilesApp";
+import FilesAppTabs from "./apps/FilesAppTabs";
 import ScheduledJobsApp from "./apps/ScheduledJobsApp";
 import MarketplaceApp from "./apps/MarketplaceApp";
 import VoiceApp from "./apps/VoiceApp";
@@ -283,10 +283,10 @@ const Desktop = () => {
         const wsId = filesViewWorkspaceId ?? activeWorkspaceId ?? 'local-default';
         const ws = workspaces.find(w => w.id === wsId);
         return (
-          <FilesApp
+          <FilesAppTabs
             workspaceId={wsId}
             workspaceName={ws?.name}
-            storageType={ws?.storageType}
+            defaultStorageType={ws?.storageType}
             workspaces={workspaces}
             onSelectWorkspace={setFilesViewWorkspaceId}
             onContextRail={(target) => setContextRailTarget({ ...target, workspaceId: wsId })}
