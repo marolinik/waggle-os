@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ChevronUp, ThumbsUp, ThumbsDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Upload, Code, FileText, Users, X, Bot, Cpu, Layers, Pin, PinOff, Shield, Zap } from 'lucide-react';
+import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ChevronUp, ThumbsUp, ThumbsDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Upload, Code, FileText, Users, X, Bot, Cpu, Layers, Pin, PinOff, Shield, Zap, MoreHorizontal } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getPersonaById, PERSONAS } from '@/lib/personas';
@@ -7,6 +7,8 @@ import { adapter } from '@/lib/adapter';
 import type { ChatMessage, ToolExecution, ApprovalRequest } from '@/lib/types';
 import { BlockRenderer } from './chat-blocks';
 import WorkspaceBriefing from '@/components/os/WorkspaceBriefing';
+import { useContainerWidth } from '@/hooks/useContainerWidth';
+import { shouldCollapseChatHeader } from '@/lib/chat-header-layout';
 
 export interface TeamMember {
   id: string;
@@ -404,11 +406,19 @@ const ChatApp = ({
   const [showAgentProfile, setShowAgentProfile] = useState(false);
   const [showPersonaPicker, setShowPersonaPicker] = useState(false);
   const [showModelPicker, setShowModelPicker] = useState(false);
+  const [showHeaderOverflow, setShowHeaderOverflow] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const personaPickerRef = useRef<HTMLDivElement>(null);
   const modelPickerRef = useRef<HTMLDivElement>(null);
+  // M-21 / UX-6: observe the header container to decide whether the
+  // informational chips (storage badge, team presence) should fold into
+  // a ⋯ overflow menu.
+  const headerRef = useRef<HTMLDivElement>(null);
+  const overflowRef = useRef<HTMLDivElement>(null);
+  const headerWidth = useContainerWidth(headerRef);
+  const isHeaderCompact = shouldCollapseChatHeader(headerWidth);
 
   const persona = currentPersona ? getPersonaById(currentPersona) : PERSONAS[0];
 
@@ -447,10 +457,22 @@ const ChatApp = ({
       if (showModelPicker && modelPickerRef.current && !modelPickerRef.current.contains(e.target as Node)) {
         setShowModelPicker(false);
       }
+      if (showHeaderOverflow && overflowRef.current && !overflowRef.current.contains(e.target as Node)) {
+        setShowHeaderOverflow(false);
+      }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [showPersonaPicker, showModelPicker]);
+  }, [showPersonaPicker, showModelPicker, showHeaderOverflow]);
+
+  // Auto-close the overflow popover once the header widens past the
+  // compact threshold — without this, the popover stays open over an
+  // empty slot when the user resizes.
+  useEffect(() => {
+    if (!isHeaderCompact && showHeaderOverflow) {
+      setShowHeaderOverflow(false);
+    }
+  }, [isHeaderCompact, showHeaderOverflow]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -601,7 +623,12 @@ const ChatApp = ({
 
       <div className="flex flex-col flex-1 min-w-0">
         {/* Header bar */}
-        <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border/30 shrink-0">
+        <div
+          ref={headerRef}
+          className="flex items-center gap-2 px-3 py-1.5 border-b border-border/30 shrink-0"
+          data-testid="chat-header"
+          data-compact={isHeaderCompact ? 'true' : 'false'}
+        >
           {sessions && (
             <button onClick={() => setShowSessions(p => !p)} className="text-muted-foreground hover:text-foreground transition-colors">
               <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showSessions ? 'rotate-0' : '-rotate-90'}`} />
@@ -654,19 +681,26 @@ const ChatApp = ({
             )}
           </div>
 
-          {storageType && (
-            <span className={`text-[10px] px-1.5 py-0.5 rounded font-display ${
-              storageType === 'local' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-              : storageType === 'team' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/30'
-              : 'bg-violet-500/10 text-violet-400 border border-violet-500/30'
-            }`}>
+          {/* M-21 / UX-6: storage + team presence render inline at full
+              width, or behind a ⋯ overflow menu when the header is
+              too narrow. Interactive controls (persona, autonomy,
+              model) stay always visible. */}
+          {!isHeaderCompact && storageType && (
+            <span
+              data-testid="chat-header-storage-badge"
+              className={`text-[10px] px-1.5 py-0.5 rounded font-display ${
+                storageType === 'local' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                : storageType === 'team' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/30'
+                : 'bg-violet-500/10 text-violet-400 border border-violet-500/30'
+              }`}
+            >
               {storageType === 'local' ? 'Linked' : storageType === 'team' ? 'Team' : 'Virtual'}
             </span>
           )}
 
           {/* Team presence */}
-          {teamPresence && teamPresence.length > 0 && (
-            <div className="flex items-center gap-1 mx-1">
+          {!isHeaderCompact && teamPresence && teamPresence.length > 0 && (
+            <div className="flex items-center gap-1 mx-1" data-testid="chat-header-team-presence">
               <div className="flex -space-x-1.5">
                 {teamPresence.slice(0, 4).map(m => (
                   <div key={m.id} className="relative group">
@@ -683,6 +717,60 @@ const ChatApp = ({
               </div>
               {teamPresence.length > 4 && (
                 <span className="text-[11px] text-muted-foreground ml-1">+{teamPresence.length - 4}</span>
+              )}
+            </div>
+          )}
+
+          {/* ⋯ overflow menu — only rendered in compact mode and only
+              when there's at least one informational chip to show. */}
+          {isHeaderCompact && (storageType || (teamPresence && teamPresence.length > 0)) && (
+            <div className="relative" ref={overflowRef}>
+              <button
+                onClick={() => setShowHeaderOverflow(p => !p)}
+                className="flex items-center justify-center w-6 h-6 rounded-md text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors"
+                aria-label="More chat header info"
+                data-testid="chat-header-overflow-trigger"
+              >
+                <MoreHorizontal className="w-3.5 h-3.5" />
+              </button>
+              {showHeaderOverflow && (
+                <div
+                  className="absolute top-full left-0 mt-1 w-56 bg-card border border-border rounded-xl shadow-xl z-20 p-2 space-y-2"
+                  data-testid="chat-header-overflow-menu"
+                >
+                  {storageType && (
+                    <div className="flex items-center justify-between gap-2 px-1">
+                      <span className="text-[11px] font-display text-muted-foreground">Storage</span>
+                      <span
+                        data-testid="chat-header-storage-badge"
+                        className={`text-[10px] px-1.5 py-0.5 rounded font-display ${
+                          storageType === 'local' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                          : storageType === 'team' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/30'
+                          : 'bg-violet-500/10 text-violet-400 border border-violet-500/30'
+                        }`}
+                      >
+                        {storageType === 'local' ? 'Linked' : storageType === 'team' ? 'Team' : 'Virtual'}
+                      </span>
+                    </div>
+                  )}
+                  {teamPresence && teamPresence.length > 0 && (
+                    <div className="px-1" data-testid="chat-header-team-presence">
+                      <p className="text-[11px] font-display text-muted-foreground mb-1">In this room</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {teamPresence.map(m => (
+                          <div key={m.id} className="flex items-center gap-1.5 text-[11px] text-foreground">
+                            <Avatar className="w-4 h-4 border border-card">
+                              {m.avatar ? <AvatarImage src={m.avatar} /> : null}
+                              <AvatarFallback className="text-[10px] bg-sky-500/20 text-sky-400">{m.name[0]}</AvatarFallback>
+                            </Avatar>
+                            <span className="truncate max-w-[8ch]">{m.name}</span>
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${m.status === 'online' ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}
