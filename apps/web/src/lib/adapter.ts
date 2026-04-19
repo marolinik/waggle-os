@@ -29,6 +29,20 @@ const IMPORTANCE_MAP: Record<string, number> = {
   low: 1, normal: 2, high: 3, critical: 4,
 };
 
+/** Normalize a backend cron schedule row to the frontend CronJob shape. */
+function normalizeCronJob(raw: Record<string, unknown>): CronJob {
+  return {
+    id: String(raw.id ?? ''),
+    name: String(raw.name ?? ''),
+    // Server emits `cronExpr`; legacy client contract named it `schedule`.
+    schedule: (raw.schedule as string) ?? (raw.cronExpr as string) ?? '',
+    workspaceId: (raw.workspaceId as string) ?? '',
+    enabled: raw.enabled === true || raw.enabled === 1,
+    lastRun: (raw.lastRun as string) ?? (raw.lastRunAt as string) ?? undefined,
+    nextRun: (raw.nextRun as string) ?? (raw.nextRunAt as string) ?? undefined,
+  };
+}
+
 /** Normalize a backend memory frame to the frontend MemoryFrame shape */
 function normalizeFrame(raw: any): MemoryFrame {
   const content = raw.content ?? '';
@@ -528,14 +542,28 @@ class LocalAdapter {
   }
 
   // --- Cron ---
+  // Server emits { cronExpr, lastRunAt, nextRunAt, jobType, ... } but the
+  // UI reads legacy field names (`schedule`, `lastRun`, `nextRun`). Keep
+  // the client contract stable by remapping on read.
   async getCronJobs(): Promise<CronJob[]> {
     const res = await this.fetch('/api/cron');
-    return unwrapArray(await res.json());
+    const rows = unwrapArray(await res.json()) as Array<Record<string, unknown>>;
+    return rows.map(normalizeCronJob);
   }
 
-  async createCronJob(data: Omit<CronJob, 'id'>): Promise<CronJob> {
-    const res = await this.fetch('/api/cron', { method: 'POST', body: JSON.stringify(data) });
-    return res.json();
+  async createCronJob(input: {
+    name: string;
+    cronExpr: string;
+    jobType: import('./cron-presets').CronJobType;
+    jobConfig?: Record<string, unknown>;
+    workspaceId?: string;
+    enabled?: boolean;
+  }): Promise<CronJob> {
+    // M-44 / P26 fix: the POST /api/cron endpoint requires `cronExpr` +
+    // `jobType`. The previous signature forwarded `{ schedule, ... }`
+    // from Omit<CronJob, 'id'>, which the server rejected with 400.
+    const res = await this.fetch('/api/cron', { method: 'POST', body: JSON.stringify(input) });
+    return normalizeCronJob(await res.json() as Record<string, unknown>);
   }
 
   async updateCronJob(id: string, data: Partial<CronJob>): Promise<CronJob> {

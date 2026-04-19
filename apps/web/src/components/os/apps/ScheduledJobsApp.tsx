@@ -1,9 +1,19 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Clock, Plus, Trash2, Play, Loader2, ToggleLeft, ToggleRight } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Clock, Plus, Trash2, Play, Loader2, ToggleLeft, ToggleRight, Info } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
 import { useToast } from '@/hooks/use-toast';
 import type { CronJob } from '@/lib/types';
+import {
+  CRON_SCHEDULE_PRESETS,
+  CRON_JOB_TYPES,
+  DEFAULT_CRON_PRESET_ID,
+  DEFAULT_CRON_JOB_TYPE,
+  getCronPreset,
+  describeCronExpr,
+  isPlausibleCronExpr,
+  type CronJobType,
+} from '@/lib/cron-presets';
 
 const ScheduledJobsApp = () => {
   const { toast } = useToast();
@@ -11,8 +21,19 @@ const ScheduledJobsApp = () => {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
-  const [newSchedule, setNewSchedule] = useState('0 8 * * *');
+  const [presetId, setPresetId] = useState<string>(DEFAULT_CRON_PRESET_ID);
+  const [customCronExpr, setCustomCronExpr] = useState('');
+  const [newJobType, setNewJobType] = useState<CronJobType>(DEFAULT_CRON_JOB_TYPE);
   const [triggering, setTriggering] = useState<string | null>(null);
+
+  // Resolve the effective cron expression — preset unless user picked
+  // 'custom' from the dropdown.
+  const newCronExpr = useMemo(() => {
+    if (presetId === 'custom') return customCronExpr.trim();
+    return getCronPreset(presetId)?.cronExpr ?? '';
+  }, [presetId, customCronExpr]);
+  const scheduleSummary = useMemo(() => describeCronExpr(newCronExpr), [newCronExpr]);
+  const selectedJobType = useMemo(() => CRON_JOB_TYPES.find(j => j.id === newJobType), [newJobType]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -27,14 +48,34 @@ const ScheduledJobsApp = () => {
 
   const handleCreate = async () => {
     if (!newName.trim()) return;
+    if (!isPlausibleCronExpr(newCronExpr)) {
+      toast({
+        title: 'Pick a schedule',
+        description: 'Choose a preset or enter a 5-field cron expression.',
+        variant: 'destructive',
+      });
+      return;
+    }
     try {
-      const job = await adapter.createCronJob({ name: newName, schedule: newSchedule, workspaceId: '', enabled: true });
+      const job = await adapter.createCronJob({
+        name: newName.trim(),
+        cronExpr: newCronExpr,
+        jobType: newJobType,
+        enabled: true,
+      });
       setJobs(prev => [...prev, job]);
       setNewName('');
+      setPresetId(DEFAULT_CRON_PRESET_ID);
+      setCustomCronExpr('');
+      setNewJobType(DEFAULT_CRON_JOB_TYPE);
       setCreating(false);
       toast({ title: 'Job created', description: newName });
-    } catch {
-      toast({ title: 'Failed to create job', variant: 'destructive' });
+    } catch (err) {
+      toast({
+        title: 'Failed to create job',
+        description: err instanceof Error ? err.message : undefined,
+        variant: 'destructive',
+      });
     }
   };
 
@@ -107,24 +148,77 @@ const ScheduledJobsApp = () => {
           </div>
         )}
 
-        {/* Create form */}
+        {/* Create form — M-44 / P26 clarity pass */}
         {creating && (
-          <div className="p-3 rounded-xl border border-primary/30 bg-primary/5 space-y-2">
-            <Input
-              value={newName}
-              onChange={e => setNewName(e.target.value)}
-              placeholder="Job name"
-              className="w-full bg-muted/30 h-auto py-1.5"
-              autoFocus
-            />
-            <Input
-              value={newSchedule}
-              onChange={e => setNewSchedule(e.target.value)}
-              placeholder="Cron expression (0 8 * * *)"
-              className="w-full bg-muted/30 text-xs font-mono h-auto py-1.5"
-            />
-            <div className="flex gap-2">
-              <button onClick={handleCreate} className="px-3 py-1 text-[11px] font-display rounded-lg bg-primary text-primary-foreground">Create</button>
+          <div className="p-3 rounded-xl border border-primary/30 bg-primary/5 space-y-2" data-testid="scheduled-job-create-form">
+            <div className="space-y-1">
+              <label className="text-[10px] font-display uppercase tracking-wide text-muted-foreground">Job name</label>
+              <Input
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+                placeholder="e.g. Nightly memory consolidation"
+                className="w-full bg-muted/30 h-auto py-1.5"
+                autoFocus
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] font-display uppercase tracking-wide text-muted-foreground">What it does</label>
+              <select
+                value={newJobType}
+                onChange={e => setNewJobType(e.target.value as CronJobType)}
+                data-testid="scheduled-job-type"
+                className="w-full bg-muted/30 text-xs py-1.5 px-2 rounded-md border border-border/40 text-foreground"
+              >
+                {CRON_JOB_TYPES.map(j => (
+                  <option key={j.id} value={j.id}>{j.label}</option>
+                ))}
+              </select>
+              {selectedJobType && (
+                <p className="text-[10px] text-muted-foreground flex items-start gap-1 mt-0.5">
+                  <Info className="w-2.5 h-2.5 mt-0.5 shrink-0" /> {selectedJobType.description}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] font-display uppercase tracking-wide text-muted-foreground">When it runs</label>
+              <select
+                value={presetId}
+                onChange={e => setPresetId(e.target.value)}
+                data-testid="scheduled-job-preset"
+                className="w-full bg-muted/30 text-xs py-1.5 px-2 rounded-md border border-border/40 text-foreground"
+              >
+                {CRON_SCHEDULE_PRESETS.map(p => (
+                  <option key={p.id} value={p.id}>{p.label}</option>
+                ))}
+                <option value="custom">Custom cron expression…</option>
+              </select>
+              {presetId === 'custom' && (
+                <Input
+                  value={customCronExpr}
+                  onChange={e => setCustomCronExpr(e.target.value)}
+                  placeholder="e.g. 0 8 * * *"
+                  className="w-full bg-muted/30 text-xs font-mono h-auto py-1.5"
+                  data-testid="scheduled-job-custom-cron"
+                />
+              )}
+              <p
+                className="text-[10px] text-muted-foreground mt-0.5"
+                data-testid="scheduled-job-schedule-summary"
+              >
+                {scheduleSummary}
+              </p>
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={handleCreate}
+                disabled={!newName.trim() || !isPlausibleCronExpr(newCronExpr)}
+                className="px-3 py-1 text-[11px] font-display rounded-lg bg-primary text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Create
+              </button>
               <button onClick={() => setCreating(false)} className="px-3 py-1 text-[11px] font-display rounded-lg text-muted-foreground hover:text-foreground">Cancel</button>
             </div>
           </div>
