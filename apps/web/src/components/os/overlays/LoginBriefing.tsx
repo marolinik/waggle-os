@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import type { Workspace } from '@/lib/types';
+import { selectBriefingHighlights } from '@/lib/briefing-highlights';
 
 interface LoginBriefingProps {
   /**
@@ -86,15 +87,19 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
       const personalCount = (stats as any)?.personal?.frameCount ?? 0;
       setPersonalFrameCount(personalCount);
 
-      // Memory highlights — top 3 recent high-importance frames
-      const topFrames = frames
-        .filter((f: any) => f.content && f.content.length > 20)
-        .slice(0, 3)
-        .map((f: any) => ({
-          content: truncateHighlight(f.content),
-          workspace: f.workspaceName,
-          timestamp: f.timestamp ?? '',
-        }));
+      // L-22: rank by importance desc, break ties by recency. Concrete
+      // content only (≥20 chars). Limit 3.
+      const ranked = selectBriefingHighlights(frames as unknown as Array<{
+        content?: string | null;
+        importance?: string | number | null;
+        timestamp?: string | number | null;
+        workspaceName?: string | null;
+      }>);
+      const topFrames = ranked.map((f) => ({
+        content: truncateHighlight(f.content ?? ''),
+        workspace: f.workspaceName ?? undefined,
+        timestamp: (typeof f.timestamp === 'string' ? f.timestamp : '') ?? '',
+      }));
       setHighlights(topFrames);
 
       // Workspace summaries — show all, not just ones with content
