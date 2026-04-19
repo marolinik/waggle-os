@@ -12,6 +12,7 @@ import wallpaperLight from "@/assets/wallpaper-light.jpg";
 import waggleLogoDark from "@/assets/waggle-logo.jpeg";
 import waggleLogoLight from "@/assets/waggle-logo.png";
 import StatusBar from "./StatusBar";
+import { buildStatusBarFocus } from "@/lib/status-bar-focus";
 import Dock from "./Dock";
 import AppWindow from "./AppWindow";
 import AppErrorBoundary from "./ErrorBoundary";
@@ -346,6 +347,16 @@ const Desktop = () => {
       )}
 
       <StatusBar workspaceName={activeWorkspace?.name}
+        focusedWindowLabel={(() => {
+          const fw = wm.windows.find(w => w.instanceId === wm.focusedInstanceId);
+          if (!fw) return null;
+          const config = appConfig[fw.appId];
+          if (!config) return null;
+          return buildStatusBarFocus({
+            focused: { appId: fw.appId, title: wm.getWindowTitle(fw, config.title), minimized: fw.minimized },
+            workspaceName: activeWorkspace?.name,
+          });
+        })()}
         model={agentStatus.model !== 'unknown' ? agentStatus.model : activeWorkspace?.model}
         tokensUsed={agentStatus.tokensUsed} costUsd={agentStatus.costUsd} offline={offline}
         unreadNotifications={unreadCount}

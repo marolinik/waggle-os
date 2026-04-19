@@ -7,6 +7,8 @@ import { useDeveloperMode } from "@/hooks/useDeveloperMode";
 
 interface StatusBarProps {
   workspaceName?: string;
+  /** P39: label of the currently focused window — Chat title, Files, etc. */
+  focusedWindowLabel?: string | null;
   model?: string;
   tokensUsed?: number;
   costUsd?: number;
@@ -18,7 +20,7 @@ interface StatusBarProps {
   onNotificationClick?: () => void;
 }
 
-const StatusBar = ({ workspaceName, model, tokensUsed, costUsd, offline, unreadNotifications = 0, trialDaysRemaining: trialDays, trialExpired, onSearchClick, onNotificationClick }: StatusBarProps) => {
+const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costUsd, offline, unreadNotifications = 0, trialDaysRemaining: trialDays, trialExpired, onSearchClick, onNotificationClick }: StatusBarProps) => {
   const [time, setTime] = useState(new Date());
   const isLight = useIsLightTheme();
   const waggleLogo = isLight ? waggleLogoLight : waggleLogoDark;
@@ -47,6 +49,18 @@ const StatusBar = ({ workspaceName, model, tokensUsed, costUsd, offline, unreadN
           <>
             <span className="text-muted-foreground text-[11px] hidden md:inline">·</span>
             <span className="text-[11px] text-muted-foreground hidden md:inline">{workspaceName}</span>
+          </>
+        )}
+        {focusedWindowLabel && (
+          <>
+            <span className="text-muted-foreground text-[11px] hidden md:inline">·</span>
+            <span
+              className="text-[11px] text-foreground/80 font-display hidden md:inline truncate max-w-[240px]"
+              data-testid="statusbar-focused-window"
+              title={focusedWindowLabel}
+            >
+              {focusedWindowLabel}
+            </span>
           </>
         )}
         {model && (
