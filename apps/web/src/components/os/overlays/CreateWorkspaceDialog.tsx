@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   X, Plus, Users, Cloud, HardDrive, Server, FolderOpen, Folder,
   FolderPlus, ChevronRight, Home, Check, Loader2, LayoutTemplate,
@@ -9,7 +9,7 @@ import {
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { PERSONAS } from '@/lib/personas';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useDragControls } from 'framer-motion';
 import { adapter } from '@/lib/adapter';
 import { useFeatureGate } from '@/hooks/useFeatureGate';
 import { useWorkspaces } from '@/hooks/useWorkspaces';
@@ -432,24 +432,48 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
     }
   };
 
+  // P15: make the modal repositionable via the header so it can be moved
+  // off the dashboard content. `useDragControls` + `dragListener={false}`
+  // means only the header triggers drag, not clicks on form fields.
+  const dragControls = useDragControls();
+  const backdropRef = useRef<HTMLDivElement>(null);
+
   if (!open) return null;
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+    <motion.div
+      ref={backdropRef}
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="fixed inset-0 z-[110] flex items-center justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-      <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 10 }}
+        drag
+        dragListener={false}
+        dragControls={dragControls}
+        dragMomentum={false}
+        dragConstraints={backdropRef}
         className="relative w-full max-w-lg glass-strong rounded-2xl shadow-2xl overflow-hidden"
         onClick={e => e.stopPropagation()}>
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-border/30">
+        {/* Header — also the drag handle. */}
+        <div
+          className="flex items-center justify-between px-5 py-3.5 border-b border-border/30 cursor-move select-none"
+          data-testid="template-modal-drag-handle"
+          onPointerDown={e => dragControls.start(e)}
+        >
           <div className="flex items-center gap-2">
             <Wand2 className="w-4 h-4 text-primary" />
             <h3 className="text-sm font-display font-semibold text-foreground">{editingTemplate ? 'Edit Template' : 'Create Template'}</h3>
           </div>
-          <button onClick={onClose} className="p-1 rounded-lg text-muted-foreground hover:text-foreground"><X className="w-3.5 h-3.5" /></button>
+          <button
+            onClick={onClose}
+            onPointerDown={e => e.stopPropagation()}
+            className="p-1 rounded-lg text-muted-foreground hover:text-foreground"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
 
         {/* AI Generation */}
