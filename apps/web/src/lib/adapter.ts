@@ -364,6 +364,13 @@ class LocalAdapter {
     await this.fetch(`/api/memory/frames/${id}`, { method: 'DELETE' });
   }
 
+  async incrementFrameAccess(id: string, workspaceId?: string): Promise<{ accessCount: number }> {
+    const qs = workspaceId ? `?workspace=${encodeURIComponent(workspaceId)}` : '';
+    const res = await this.fetch(`/api/memory/frames/${id}/access${qs}`, { method: 'PATCH' });
+    const body = await res.json() as { accessCount?: number };
+    return { accessCount: typeof body.accessCount === 'number' ? body.accessCount : 0 };
+  }
+
   async searchMemory(query: string, scope?: string): Promise<MemoryFrame[]> {
     const res = await this.fetch(`/api/memory/search?q=${encodeURIComponent(query)}${scope ? `&scope=${scope}` : ''}`);
     return unwrapArray(await res.json()).map(normalizeFrame);

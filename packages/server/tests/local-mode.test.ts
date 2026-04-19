@@ -231,6 +231,46 @@ describe('Local Server Mode', () => {
         expect(frame.timestamp).toBeDefined();
       }
     });
+
+    it('PATCH /api/memory/frames/:id/access atomically increments access count', async () => {
+      // Find an existing personal-mind frame id
+      const listRes = await injectWithAuth(server, {
+        method: 'GET',
+        url: '/api/memory/frames?limit=1',
+      });
+      const frames = JSON.parse(listRes.body).results;
+      expect(frames.length).toBeGreaterThan(0);
+      const { id, accessCount: before } = frames[0];
+      const start = typeof before === 'number' ? before : 0;
+
+      // First call -> start + 1
+      const r1 = await injectWithAuth(server, { method: 'PATCH', url: `/api/memory/frames/${id}/access` });
+      expect(r1.statusCode).toBe(200);
+      const b1 = JSON.parse(r1.body);
+      expect(b1.accessed).toBe(true);
+      expect(b1.accessCount).toBe(start + 1);
+      expect(b1.mind).toBe('personal');
+
+      // Second call -> start + 2 (atomic)
+      const r2 = await injectWithAuth(server, { method: 'PATCH', url: `/api/memory/frames/${id}/access` });
+      expect(JSON.parse(r2.body).accessCount).toBe(start + 2);
+    });
+
+    it('PATCH on a missing frame returns 404', async () => {
+      const res = await injectWithAuth(server, {
+        method: 'PATCH',
+        url: '/api/memory/frames/999999/access',
+      });
+      expect(res.statusCode).toBe(404);
+    });
+
+    it('PATCH with invalid id returns 400', async () => {
+      const res = await injectWithAuth(server, {
+        method: 'PATCH',
+        url: '/api/memory/frames/not-a-number/access',
+      });
+      expect(res.statusCode).toBe(400);
+    });
   });
 
   // --- Settings ---

@@ -121,11 +121,13 @@ export class FrameStore {
     return { iframe, pframes };
   }
 
-  touch(id: number): void {
-    this.db.getDatabase().prepare(`
+  touch(id: number): number | undefined {
+    const row = this.db.getDatabase().prepare(`
       UPDATE memory_frames SET access_count = access_count + 1, last_accessed = datetime('now')
       WHERE id = ?
-    `).run(id);
+      RETURNING access_count AS accessCount
+    `).get(id) as { accessCount: number } | undefined;
+    return row?.accessCount;
   }
 
   getImportanceMultiplier(importance: Importance): number {

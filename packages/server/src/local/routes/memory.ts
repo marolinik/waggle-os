@@ -504,6 +504,41 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
     return { ...normalizeFrame({ ...updated, _mind: mindLabel }), updated: true };
   });
 
+  // C5: PATCH /api/memory/frames/:id/access — atomic access_count increment.
+  // Replaces the previous PUT-with-local-count read-modify-write dance, which
+  // had a race under concurrent access. SQL `access_count = access_count + 1`
+  // is serialized by SQLite.
+  server.patch<{
+    Params: { id: string };
+    Querystring: { workspace?: string; workspaceId?: string };
+  }>('/api/memory/frames/:id/access', async (request, reply) => {
+    const frameId = parseInt(request.params.id, 10);
+    if (isNaN(frameId)) {
+      return reply.status(400).send({ error: 'Invalid frame ID' });
+    }
+
+    const workspace = request.query.workspace ?? request.query.workspaceId;
+
+    let newCount: number | undefined;
+    let mindLabel = 'personal';
+    if (workspace) {
+      const wsDb = server.agentState.getWorkspaceMindDb(workspace);
+      if (wsDb) {
+        newCount = new FrameStore(wsDb).touch(frameId);
+        if (newCount !== undefined) mindLabel = 'workspace';
+      }
+    }
+    if (newCount === undefined) {
+      newCount = new FrameStore(server.multiMind.personal).touch(frameId);
+    }
+
+    if (newCount === undefined) {
+      return reply.status(404).send({ error: 'Frame not found' });
+    }
+
+    return { frameId, accessed: true, accessCount: newCount, mind: mindLabel };
+  });
+
   // L2: DELETE /api/memory/frames/:id — delete a memory frame by ID
   server.delete<{
     Params: { id: string };
