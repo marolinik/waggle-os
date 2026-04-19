@@ -65,6 +65,15 @@ const healthColors: Record<string, string> = {
   error: 'bg-destructive',
 };
 
+// L-11 / A11Y-6: shape + label per status so colorblind users can
+// distinguish without relying on colour alone. The unicode glyph
+// doubles as a visual signal independent of colour channels.
+const healthShape: Record<string, { glyph: string; label: string }> = {
+  healthy: { glyph: '●', label: 'Healthy' },
+  degraded: { glyph: '◐', label: 'Degraded' },
+  error: { glyph: '▲', label: 'Error' },
+};
+
 const groupColors: Record<string, string> = {
   Personal: 'bg-primary/20 text-primary',
   Work: 'bg-sky-500/20 text-sky-400',
@@ -210,7 +219,14 @@ const DashboardApp = ({ workspaces, activeWorkspaceId, onSelectWorkspace, onCrea
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span className="text-sm font-display font-medium text-foreground truncate">{ws.name}</span>
-                        <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${healthColors[ws.health || 'healthy']}`} />
+                        <span
+                          className={`text-[11px] leading-none shrink-0 ${healthColors[ws.health || 'healthy'].replace('bg-', 'text-')}`}
+                          role="img"
+                          aria-label={`${healthShape[ws.health || 'healthy'].label} workspace`}
+                          title={healthShape[ws.health || 'healthy'].label}
+                        >
+                          {healthShape[ws.health || 'healthy'].glyph}
+                        </span>
                         {ws.shared && (
                           <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-sky-500/15 text-sky-400 text-[11px] font-display shrink-0">
                             <Users className="w-2.5 h-2.5" /> Team
