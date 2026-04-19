@@ -130,3 +130,4 @@ test.describe('H-02 P35 · Spawn-agent models empty-state', () => {
     await expect(page.getByTestId('spawn-models-list')).toContainText('claude-sonnet-4-6');
   });
 });
+
