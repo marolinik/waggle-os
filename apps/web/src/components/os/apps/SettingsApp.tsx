@@ -728,8 +728,9 @@ const SettingsApp = () => {
                       writeLoginBriefingDismissed(nextDismissed);
                       setLoginBriefingDismissedState(nextDismissed);
                     }}
-                    aria-pressed={!loginBriefingDismissed}
-                    aria-label="Toggle login briefing visibility"
+                    role="switch"
+                    aria-checked={!loginBriefingDismissed}
+                    aria-label="Show login briefing on each launch"
                     data-testid="login-briefing-toggle"
                     className={`relative w-10 h-5 rounded-full transition-colors ${!loginBriefingDismissed ? 'bg-primary' : 'bg-muted'}`}
                   >
@@ -743,8 +744,9 @@ const SettingsApp = () => {
                   <p className="text-xs font-display font-medium text-foreground">Always show dock labels</p>
                   <button
                     onClick={() => dockLabels.setMode(dockLabelsPinned ? 'auto' : 'always')}
-                    aria-pressed={dockLabelsPinned}
-                    aria-label="Toggle always-show dock labels"
+                    role="switch"
+                    aria-checked={dockLabelsPinned}
+                    aria-label="Always show dock labels"
                     data-testid="dock-labels-toggle"
                     className={`relative w-10 h-5 rounded-full transition-colors ${dockLabelsPinned ? 'bg-primary' : 'bg-muted'}`}
                   >
@@ -758,8 +760,9 @@ const SettingsApp = () => {
                   <p className="text-xs font-display font-medium text-foreground">Developer Mode</p>
                   <button
                     onClick={() => setDeveloperMode(!developerMode)}
-                    aria-pressed={developerMode}
-                    aria-label="Toggle developer mode"
+                    role="switch"
+                    aria-checked={developerMode}
+                    aria-label="Developer mode"
                     data-testid="developer-mode-toggle"
                     className={`relative w-10 h-5 rounded-full transition-colors ${developerMode ? 'bg-primary' : 'bg-muted'}`}
                   >
@@ -777,7 +780,9 @@ const SettingsApp = () => {
                       setDebugLogging(next);
                       try { await adapter.saveSettings({ debugLogging: next } as any); } catch { /* non-blocking */ }
                     }}
-                    aria-pressed={debugLogging}
+                    role="switch"
+                    aria-checked={debugLogging}
+                    aria-label="Debug logging"
                     className={`relative w-10 h-5 rounded-full transition-colors ${debugLogging ? 'bg-primary' : 'bg-muted'}`}
                   >
                     <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${debugLogging ? 'left-5' : 'left-0.5'}`} />

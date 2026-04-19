@@ -68,6 +68,9 @@ const BootScreen = ({ onComplete }: { onComplete: () => void }) => {
       transition={{ duration: 0.5, ease: "easeInOut" }}
       className="fixed inset-0 z-[9999] bg-background flex flex-col items-center justify-center cursor-pointer"
       data-testid="boot-screen"
+      role="status"
+      aria-live="polite"
+      aria-label={`Waggle booting — ${PHASES[phase]}. Click or press any key to skip.`}
       onClick={handleSkip}
     >
       {/* Subtle radial glow */}

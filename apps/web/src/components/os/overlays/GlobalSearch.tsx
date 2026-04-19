@@ -241,6 +241,10 @@ const GlobalSearch = ({ open, onClose, onNavigate }: GlobalSearchProps) => {
           className="relative w-full max-w-lg overflow-hidden rounded-2xl shadow-2xl"
           style={{ backgroundColor: 'var(--hive-850)', border: '1px solid var(--hive-700)' }}
           onClick={e => e.stopPropagation()}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Global search"
+          data-testid="global-search-dialog"
         >
           {/* Search input */}
           <div className="flex items-center gap-3 px-4 py-3" style={{ borderBottom: '1px solid var(--hive-700)' }}>

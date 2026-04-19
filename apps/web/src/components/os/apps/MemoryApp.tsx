@@ -163,7 +163,11 @@ const MemoryApp = ({
                 <span className="font-display font-medium text-foreground truncate flex-1">{f.title}</span>
               </div>
               <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
-                <span className={importanceColors[Math.min(f.importance, 5)]}> {'●'.repeat(Math.min(f.importance, 5))}</span>
+                <span
+                  className={importanceColors[Math.min(f.importance, 5)]}
+                  aria-label={`Importance ${Math.min(f.importance, 5)} of 5`}
+                  role="img"
+                > {'●'.repeat(Math.min(f.importance, 5))}</span>
                 <span className="flex items-center gap-0.5"><Clock className="w-2.5 h-2.5" />{new Date(f.timestamp).toLocaleDateString()}</span>
               </div>
             </button>
