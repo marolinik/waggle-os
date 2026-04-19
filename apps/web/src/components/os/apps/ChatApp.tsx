@@ -10,6 +10,12 @@ import WorkspaceBriefing from '@/components/os/WorkspaceBriefing';
 import { useContainerWidth } from '@/hooks/useContainerWidth';
 import { shouldCollapseChatHeader } from '@/lib/chat-header-layout';
 import { extractSuggestedActions } from '@/lib/suggested-actions';
+import {
+  buildRecallQuery,
+  previewRecall,
+  shouldFireMemoryRecall,
+} from '@/lib/memory-recall-toast';
+import { useToast } from '@/hooks/use-toast';
 
 export interface TeamMember {
   id: string;
@@ -431,6 +437,36 @@ const ChatApp = ({
     if (!last || last.role !== 'assistant' || !last.content) return [];
     return extractSuggestedActions(last.content);
   }, [messages, isLoading]);
+
+  // M-22 / ENG-1: surface a relevant memory on the 5th user message of
+  // a session. Reset when the workspace or session changes so each
+  // session gets one chance to wow.
+  const { toast } = useToast();
+  const [recallFired, setRecallFired] = useState(false);
+  useEffect(() => {
+    setRecallFired(false);
+  }, [workspaceId, activeSessionId]);
+  useEffect(() => {
+    const userCount = messages.filter(m => m.role === 'user').length;
+    if (!shouldFireMemoryRecall({ userMessageCount: userCount, alreadyFired: recallFired })) return;
+    const query = buildRecallQuery(messages);
+    if (!query) return;
+    let cancelled = false;
+    const scope = workspaceId ?? 'global';
+    adapter.searchMemory(query, scope).then(frames => {
+      if (cancelled) return;
+      const top = frames[0];
+      if (!top?.content) return;
+      const preview = previewRecall(top.content);
+      if (!preview) return;
+      toast({
+        title: 'I just remembered something relevant',
+        description: preview,
+      });
+      setRecallFired(true);
+    }).catch(() => { /* quiet — memory search is best-effort */ });
+    return () => { cancelled = true; };
+  }, [messages, recallFired, workspaceId, toast]);
 
   const persona = currentPersona ? getPersonaById(currentPersona) : PERSONAS[0];
 
