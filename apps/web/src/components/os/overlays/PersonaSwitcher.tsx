@@ -1,10 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { PERSONAS } from '@/lib/personas';
 import { adapter } from '@/lib/adapter';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, Users, Loader2, Lock } from 'lucide-react';
+import { Bot, Users, Loader2, Lock, Sparkles, ChevronDown } from 'lucide-react';
 import { useFeatureGate } from '@/hooks/useFeatureGate';
+import {
+  UNIVERSAL_MODE_IDS,
+  ALL_SPECIALIST_IDS,
+  getSpecialistsForTemplate,
+} from '@/lib/persona-tier';
 
 interface BackendPersona {
   id: string;
@@ -26,28 +31,120 @@ interface PersonaSwitcherProps {
   onClose: () => void;
   currentPersona?: string;
   currentGroupId?: string;
+  /** Active workspace template id — controls which specialists are promoted. */
+  currentTemplateId?: string;
   onSelect: (personaId: string) => void;
   onSelectGroup?: (groupId: string) => void;
 }
 
 const FREE_PERSONA_IDS = ['researcher', 'writer', 'analyst'];
 
-const UNIVERSAL_IDS = ['general-purpose', 'planner', 'verifier', 'coordinator'];
-const KNOWLEDGE_IDS = ['researcher', 'writer', 'analyst', 'coder'];
+type PersonaCard = {
+  id: string;
+  name: string;
+  description: string;
+  icon?: string;
+  avatar?: string;
+};
 
-function getPersonaTier(id: string): 'universal' | 'knowledge' | 'domain' {
-  if (UNIVERSAL_IDS.includes(id)) return 'universal';
-  if (KNOWLEDGE_IDS.includes(id)) return 'knowledge';
-  return 'domain';
+interface PersonaAgentsListProps {
+  personas: PersonaCard[];
+  currentTemplateId?: string;
+  showAllSpecialists: boolean;
+  onToggleShowAll: () => void;
+  allPersonasUnlocked: boolean;
+  renderPersonaCard: (p: PersonaCard, locked: boolean) => React.ReactNode;
+  isLocked: (id: string) => boolean;
 }
 
-const PersonaSwitcher = ({ open, onClose, currentPersona, currentGroupId, onSelect, onSelectGroup }: PersonaSwitcherProps) => {
+/**
+ * M-01 two-tier layout: UNIVERSAL MODES (8) + YOUR WORKSPACE SPECIALISTS
+ * (template-scoped). When a workspace template is active, the Specialists
+ * section surfaces only the mapped specialists; a "Show all specialists"
+ * toggle expands the full roster on demand.
+ */
+const PersonaAgentsList = ({
+  personas, currentTemplateId, showAllSpecialists, onToggleShowAll,
+  allPersonasUnlocked, renderPersonaCard, isLocked,
+}: PersonaAgentsListProps) => {
+  const personaById = useMemo(() => new Map(personas.map(p => [p.id, p])), [personas]);
+  const universalCards = UNIVERSAL_MODE_IDS
+    .map(id => personaById.get(id))
+    .filter((p): p is PersonaCard => p !== undefined);
+
+  const availableSpecialistIds = ALL_SPECIALIST_IDS.filter(id => personaById.has(id));
+  const { primary, others, hasMapping } = useMemo(
+    () => getSpecialistsForTemplate(currentTemplateId, availableSpecialistIds),
+    [currentTemplateId, availableSpecialistIds],
+  );
+
+  const visibleSpecialists = (hasMapping && !showAllSpecialists ? primary : [...primary, ...others])
+    .map(id => personaById.get(id))
+    .filter((p): p is PersonaCard => p !== undefined);
+
+  return (
+    <div className="max-h-[380px] overflow-y-auto scrollbar-thin space-y-4">
+      {/* Universal Modes — always 8, same for every workspace */}
+      <div>
+        <h3 className="text-[11px] font-display font-bold text-muted-foreground uppercase tracking-wider mb-2 px-1">
+          Universal Modes
+        </h3>
+        <div className="grid grid-cols-2 gap-2">
+          {universalCards.map(p => renderPersonaCard(p, isLocked(p.id)))}
+        </div>
+      </div>
+
+      {/* Specialists — template-scoped */}
+      {visibleSpecialists.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-2 px-1">
+            <h3 className="text-[11px] font-display font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+              {hasMapping && <Sparkles className="w-3 h-3 text-primary" aria-hidden="true" />}
+              {hasMapping ? 'Your Workspace Specialists' : 'Specialists'}
+            </h3>
+            {hasMapping && others.length > 0 && (
+              <button
+                onClick={onToggleShowAll}
+                aria-expanded={showAllSpecialists}
+                className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                data-testid="persona-show-all-specialists"
+              >
+                {showAllSpecialists ? 'Hide others' : `Show all (${others.length} more)`}
+                <ChevronDown
+                  className={`w-3 h-3 transition-transform ${showAllSpecialists ? 'rotate-180' : ''}`}
+                  aria-hidden="true"
+                />
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {visibleSpecialists.map(p => renderPersonaCard(p, isLocked(p.id)))}
+          </div>
+        </div>
+      )}
+
+      {!allPersonasUnlocked && (
+        <p className="text-[11px] text-muted-foreground text-center py-1">
+          Upgrade to Teams to unlock all personas
+        </p>
+      )}
+    </div>
+  );
+};
+
+const PersonaSwitcher = ({
+  open, onClose, currentPersona, currentGroupId, currentTemplateId,
+  onSelect, onSelectGroup,
+}: PersonaSwitcherProps) => {
   const [tab, setTab] = useState<'agents' | 'groups'>('agents');
   const { isEnabled } = useFeatureGate();
   const allPersonasUnlocked = isEnabled('all-personas');
   const [backendPersonas, setBackendPersonas] = useState<BackendPersona[] | null>(null);
   const [groups, setGroups] = useState<AgentGroupOption[]>([]);
   const [loading, setLoading] = useState(false);
+  // Template-scoping: when a template is active, only the mapped specialists
+  // render by default. User can expand to see the full roster.
+  const [showAllSpecialists, setShowAllSpecialists] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -171,49 +268,15 @@ const PersonaSwitcher = ({ open, onClose, currentPersona, currentGroupId, onSele
               <Loader2 className="w-5 h-5 animate-spin text-primary" />
             </div>
           ) : tab === 'agents' ? (
-            <div className="max-h-[380px] overflow-y-auto scrollbar-thin space-y-4">
-              {/* Universal Modes */}
-              <div>
-                <h3 className="text-[11px] font-display font-bold text-muted-foreground uppercase tracking-wider mb-2 px-1">
-                  Universal Modes
-                </h3>
-                <div className="grid grid-cols-2 gap-2">
-                  {personas
-                    .filter(p => UNIVERSAL_IDS.includes(p.id))
-                    .map(p => renderPersonaCard(p, isLocked(p.id)))}
-                </div>
-              </div>
-
-              {/* Knowledge Workers */}
-              <div>
-                <h3 className="text-[11px] font-display font-bold text-muted-foreground uppercase tracking-wider mb-2 px-1">
-                  Knowledge Workers
-                </h3>
-                <div className="grid grid-cols-2 gap-2">
-                  {personas
-                    .filter(p => KNOWLEDGE_IDS.includes(p.id))
-                    .map(p => renderPersonaCard(p, isLocked(p.id)))}
-                </div>
-              </div>
-
-              {/* Domain Specialists */}
-              <div>
-                <h3 className="text-[11px] font-display font-bold text-muted-foreground uppercase tracking-wider mb-2 px-1">
-                  Specialists
-                </h3>
-                <div className="grid grid-cols-2 gap-2">
-                  {personas
-                    .filter(p => getPersonaTier(p.id) === 'domain')
-                    .map(p => renderPersonaCard(p, isLocked(p.id)))}
-                </div>
-              </div>
-
-              {!allPersonasUnlocked && (
-                <p className="text-[11px] text-muted-foreground text-center py-1">
-                  Upgrade to Teams to unlock all personas
-                </p>
-              )}
-            </div>
+            <PersonaAgentsList
+              personas={personas}
+              currentTemplateId={currentTemplateId}
+              showAllSpecialists={showAllSpecialists}
+              onToggleShowAll={() => setShowAllSpecialists(v => !v)}
+              allPersonasUnlocked={allPersonasUnlocked}
+              renderPersonaCard={renderPersonaCard}
+              isLocked={isLocked}
+            />
           ) : (
             <div className="space-y-2 max-h-[320px] overflow-y-auto scrollbar-thin">
               {groups.length === 0 ? (

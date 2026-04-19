@@ -390,6 +390,7 @@ const Desktop = () => {
         return (
           <PersonaSwitcher open={ov.showPersonaSwitcher} onClose={() => ov.setShowPersonaSwitcher(false)}
             currentPersona={currentPersonaForSwitcher} currentGroupId={activeWorkspace?.agentGroupId}
+            currentTemplateId={activeWorkspace?.templateId}
             onSelect={(personaId) => {
               if (focusedChatWin) {
                 wm.setWindowPersona(focusedChatWin.instanceId, personaId);
