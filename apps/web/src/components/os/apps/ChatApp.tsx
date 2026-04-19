@@ -640,7 +640,7 @@ const ChatApp = ({
 
       {/* Session sidebar */}
       {sessions && sessions.length > 0 && (
-        <div className={`${showSessions ? 'w-48' : 'w-0'} transition-all overflow-hidden border-r border-border/50 shrink-0`}>
+        <div className={`${showSessions ? 'w-32 sm:w-48' : 'w-0'} transition-all overflow-hidden border-r border-border/50 shrink-0`} data-testid="chat-session-sidebar">
           <div className="p-2 space-y-1">
             <button onClick={onNewSession} className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 mb-2 w-full">
               <Plus className="w-3 h-3" /> New Session
