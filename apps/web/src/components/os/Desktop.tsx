@@ -49,6 +49,8 @@ import OnboardingWizard from "./overlays/OnboardingWizard";
 import OnboardingTooltips from "./overlays/OnboardingTooltips";
 import LoginBriefing from "./overlays/LoginBriefing";
 import { writeLoginBriefingDismissed } from "@/lib/login-briefing";
+import { useDockNudge } from "@/hooks/useDockNudge";
+import { useToast } from "@/hooks/use-toast";
 import ContextRail from "./overlays/ContextRail";
 import type { ContextRailTarget } from "./overlays/ContextRail";
 import UpgradeModal from "./overlays/UpgradeModal";
@@ -144,6 +146,15 @@ const Desktop = () => {
 
   // Overlay state (extracted hook)
   const ov = useOverlayState();
+
+  // M-24 / ENG-3: show a one-time toast at session 10 and 50 pointing
+  // the user at dock zones they may not have explored.
+  const { toast } = useToast();
+  useDockNudge({
+    onNudge: (_milestone, copy) => {
+      toast({ title: copy.title, description: copy.description });
+    },
+  });
 
   // Phase C.1: Context Rail — right panel showing all context for a clicked item
   const [contextRailTarget, setContextRailTarget] = useState<ContextRailTarget | null>(null);
