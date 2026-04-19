@@ -2,29 +2,16 @@
  * P6 regression — Room canvas visualises multiple parallel sub-agents
  * correctly, without cross-contamination.
  *
- * PARKED: currently fails because the Playwright webServer serves the
- * stale Tauri build from `app/dist/` (see packages/server/src/local/index.ts
- * around line 1910), whereas the current Room component lives in
- * `apps/web/src/`. Running `npm run build` in apps/web writes to
- * `<root>/dist/`, not `app/dist/`, so the test sees the old component
- * tree and never finds `[data-testid="room-root"]`.
+ * Mocks the adapter's /health handshake and replaces window.EventSource
+ * with a stub that emits one `subagent_status` event carrying two
+ * simultaneously-running agents. Then asserts the Room renders two
+ * distinct tiles with the right role badges + running status.
  *
- * The P6 invariants Marko cares about — "two parallel agents render
- * as distinct tiles, no state cross-contamination" — are already
- * covered at the unit level by:
- *   apps/web/src/lib/room-state-reducer.test.ts (12 tests)
- * which drives the exact reducer `useRoomState` consumes in the hook.
+ * Pairs with `apps/web/src/lib/room-state-reducer.test.ts` (12 unit
+ * tests covering the reducer directly). This E2E adds the render-path
+ * guarantee on top.
  *
- * When the build-output path gets unified (separate backlog), this spec
- * should light up without changes because the mocks + test IDs are already
- * in place:
- *   - /health mock fulfils the adapter connect gate
- *   - window.EventSource stub delivers the 2-agent roster event
- *   - data-testid="room-root" + data-testid="room-agent-tile" land on
- *     the rendered RoomApp (confirmed in apps/web/src/components/os/apps/RoomApp.tsx)
- *
- * Run once build is unified:
- *   npx playwright test tests/e2e/room-parallel-agents.spec.ts --reporter=list
+ * Run: npx playwright test tests/e2e/room-parallel-agents.spec.ts --reporter=list
  */
 import { test, expect, type Page } from '@playwright/test';
 
@@ -149,10 +136,7 @@ async function openRoom(page: Page) {
   await expect(page.locator('[data-testid="room-root"]')).toBeVisible({ timeout: 5000 });
 }
 
-// Parked until the Playwright webServer serves apps/web's build — see
-// the top-of-file note. Skipping the suite keeps the spec visible and
-// ready-to-run without failing every CI pass.
-test.describe.skip('Room — parallel agent visualization (P6)', () => {
+test.describe('Room — parallel agent visualization (P6)', () => {
   test('renders two simultaneous agents with distinct tiles', async ({ page }) => {
     await installSseMock(page);
     await page.goto(`${BASE}/?skipOnboarding=true&tier=power`);

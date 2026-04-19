@@ -1903,16 +1903,24 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(complianceRoutes);
 
   // ── Static file serving for web mode ──────────────────────────
-  // When WAGGLE_FRONTEND_DIR is set (or app/dist exists), serve the React frontend
-  // as static files. This enables `npx waggle` and Docker web mode.
+  // When WAGGLE_FRONTEND_DIR is set, serve the React frontend as static files.
+  // Otherwise probe likely build outputs. The canonical build (per root
+  // package.json `build` script) is `<root>/dist`, which apps/web/vite
+  // writes to. `app/dist` is kept as a fallback for legacy Tauri-shell
+  // builds but is no longer the primary source — if both exist, root dist wins.
   const frontendDir = process.env.WAGGLE_FRONTEND_DIR
     ?? [
+      // Root `dist/` — primary build target from `npm run build`
+      path.resolve(process.cwd(), 'dist'),                     // from monorepo root
+      path.resolve(process.cwd(), '..', '..', 'dist'),         // from packages/server/
+      path.resolve(process.cwd(), '..', 'dist'),               // from packages/
+      ...(typeof process.argv[1] === 'string' ? [path.resolve(path.dirname(process.argv[1]), '..', '..', '..', '..', 'dist')] : []),
+      // Legacy `app/dist/` — Tauri shell build, kept as fallback
       path.resolve(process.cwd(), 'app', 'dist'),              // from monorepo root
       path.resolve(process.cwd(), '..', '..', 'app', 'dist'),  // from packages/server/
       path.resolve(process.cwd(), '..', 'app', 'dist'),        // from packages/
-      // F1: script-relative fallback — works regardless of CWD
       ...(typeof process.argv[1] === 'string' ? [path.resolve(path.dirname(process.argv[1]), '..', '..', '..', '..', 'app', 'dist')] : []),
-    ].find(d => fs.existsSync(path.join(d, 'index.html'))) ?? path.resolve(process.cwd(), 'app', 'dist');
+    ].find(d => fs.existsSync(path.join(d, 'index.html'))) ?? path.resolve(process.cwd(), 'dist');
   if (fs.existsSync(frontendDir) && fs.existsSync(path.join(frontendDir, 'index.html'))) {
     await server.register(fastifyStatic, {
       root: frontendDir,

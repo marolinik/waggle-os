@@ -11,15 +11,13 @@
  *   npx playwright test tests/e2e                    # E2E user journeys only
  *   npx playwright test --update-snapshots           # Update visual baselines
  *
- * The webServer config auto-starts the Waggle server (with --skip-litellm for CI).
- * The server serves the built frontend from app/dist/ at localhost:3333.
+ * The webServer config builds apps/web and auto-starts the Waggle server
+ * (with --skip-litellm for CI). The server serves the freshly-built React
+ * frontend from <root>/dist/ at localhost:3333 — matching the canonical
+ * `npm run build` target so tests always run against the latest source.
  */
 
 import { defineConfig, devices } from '@playwright/test';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   testDir: './tests',
@@ -51,17 +49,21 @@ export default defineConfig({
 
   /* Auto-start the Waggle server before tests run.
    * --skip-litellm ensures tests don't need a real LLM provider.
-   * The server serves the built React frontend from app/dist/ as static files. */
+   *
+   * The command builds apps/web first (root `npm run build` → <root>/dist)
+   * so Playwright always runs against the current source. `reuseExisting-
+   * Server: true` skips this when a dev server is already running on :3333
+   * (developer runs `npm run dev` in another terminal + `npx playwright test`;
+   * the config notices the port is occupied and skips build+start).
+   *
+   * The server auto-detects <root>/dist per packages/server/src/local/
+   * index.ts — no WAGGLE_FRONTEND_DIR override needed. */
   webServer: {
-    command: 'npx tsx packages/server/src/local/start.ts --skip-litellm',
+    command: 'npm run build && npx tsx packages/server/src/local/start.ts --skip-litellm',
     port: 3333,
     reuseExistingServer: true,
-    timeout: 30_000,
+    timeout: 120_000, // 2 min — Vite build (~30-60s) + server boot (~5-10s)
     stdout: 'pipe',
     stderr: 'pipe',
-    env: {
-      ...process.env,
-      WAGGLE_FRONTEND_DIR: path.resolve(__dirname, 'apps/web/dist'),
-    },
   },
 });
