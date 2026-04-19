@@ -21,6 +21,11 @@ dist-ssr
 .waggle/
 *.mind
 marketplace.db
+# SQLite WAL/SHM companions — always match the *.db they accompany
+marketplace.db-shm
+marketplace.db-wal
+*.db-shm
+*.db-wal
 
 # Non-production workspace (planning, reviews, session docs, archives)
 .workspace/
