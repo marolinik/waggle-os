@@ -37,11 +37,6 @@ export const STORAGE_LABELS: Record<StorageType, { label: string; icon: ElementT
   team: { label: 'Team', icon: Server, color: 'text-sky-400' },
 };
 
-export const MOCK_FILES: FileEntry[] = [
-  { name: 'attachments', path: '/attachments', type: 'directory', modifiedAt: '2026-03-25T10:00:00Z' },
-  { name: 'exports', path: '/exports', type: 'directory', modifiedAt: '2026-03-24T14:30:00Z' },
-  { name: 'notes', path: '/notes', type: 'directory', modifiedAt: '2026-03-23T09:15:00Z' },
-  { name: 'meeting-notes.md', path: '/meeting-notes.md', type: 'file', size: 4200, mimeType: 'text/markdown', modifiedAt: '2026-03-25T08:00:00Z' },
-  { name: 'report.pdf', path: '/report.pdf', type: 'file', size: 245000, mimeType: 'application/pdf', modifiedAt: '2026-03-24T16:20:00Z' },
-  { name: 'data.csv', path: '/data.csv', type: 'file', size: 18300, mimeType: 'text/csv', modifiedAt: '2026-03-22T11:45:00Z' },
-];
+// MOCK_FILES demo-seed export removed 2026-04-19 (L-17 audit): no consumers
+// in apps/web/src or tests. FilesApp reads from the real adapter.getDocuments()
+// path now; this array was a leftover from the pre-adapter stub UI.
