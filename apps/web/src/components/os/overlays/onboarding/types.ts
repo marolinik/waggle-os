@@ -12,7 +12,15 @@ export interface WelcomeStepProps extends StepNavigation {
 }
 
 /* ─── WhyWaggleStep ─── */
-export interface WhyWaggleStepProps extends StepNavigation {}
+export interface WhyWaggleStepProps extends StepNavigation {
+  /**
+   * "Skip and set me up" (M-18 / UX-1): bypass steps 2-6 and land on
+   * Ready with sensible defaults. Disabled while the wizard is
+   * already creating a workspace.
+   */
+  readonly onSkipSetup?: () => void;
+  readonly skipDisabled?: boolean;
+}
 
 /* ─── TierStep ─── */
 export interface TierStepProps extends StepNavigation {

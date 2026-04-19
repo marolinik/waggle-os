@@ -4,6 +4,7 @@ import type { UserTier } from '@/lib/dock-tiers';
 import { adapter } from '@/lib/adapter';
 import type { OnboardingState } from '@/hooks/useOnboarding';
 import { TEMPLATES, TEMPLATE_PERSONA } from './onboarding/constants';
+import { SKIP_SETUP_DEFAULTS } from '@/lib/onboarding-skip';
 import {
   WelcomeStep,
   WhyWaggleStep,
@@ -218,6 +219,48 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
     setSelectedTier(tier);
   };
 
+  /**
+   * M-18 / UX-1 — "Skip and set me up" escape hatch from WhyWaggle.
+   * Applies SKIP_SETUP_DEFAULTS (blank template, general-purpose persona)
+   * and lands on the Ready step after workspace creation. Bypasses the
+   * state-driven handleFinish path because React setState is async and
+   * handleFinish reads selectedTemplate/selectedPersona from closure.
+   */
+  const handleSkipSetup = useCallback(async () => {
+    setCreatingWorkspace(true);
+    try {
+      setSelectedTemplate(SKIP_SETUP_DEFAULTS.templateId);
+      setSelectedPersona(SKIP_SETUP_DEFAULTS.personaId);
+      let wsId: string;
+      try {
+        const ws = await adapter.createWorkspace({
+          name: SKIP_SETUP_DEFAULTS.workspaceName,
+          group: SKIP_SETUP_DEFAULTS.group,
+          persona: SKIP_SETUP_DEFAULTS.personaId,
+          templateId: SKIP_SETUP_DEFAULTS.templateId,
+        });
+        wsId = ws.id;
+        setCreateError(null);
+      } catch {
+        setCreateError('Could not connect to server — workspace created locally. Connect to sync later.');
+        wsId = `local-${Date.now()}`;
+      }
+      onUpdate({
+        workspaceId: wsId,
+        templateId: SKIP_SETUP_DEFAULTS.templateId,
+        personaId: SKIP_SETUP_DEFAULTS.personaId,
+      });
+      trackTelemetry(serverBaseUrl, 'onboarding_skip_setup', {
+        atStep: step,
+        templateId: SKIP_SETUP_DEFAULTS.templateId,
+        personaId: SKIP_SETUP_DEFAULTS.personaId,
+      });
+      goToStep(7);
+    } finally {
+      setCreatingWorkspace(false);
+    }
+  }, [goToStep, onUpdate, serverBaseUrl, step]);
+
   const handleFinish = async (selectedModel?: string) => {
     setCreatingWorkspace(true);
     try {
@@ -385,7 +428,13 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
                 onClickAnywhere={() => { clearTimeout(autoTimer.current); goToStep(1); }}
               />
             )}
-            {step === 1 && <WhyWaggleStep goToStep={goToStep} />}
+            {step === 1 && (
+              <WhyWaggleStep
+                goToStep={goToStep}
+                onSkipSetup={handleSkipSetup}
+                skipDisabled={creatingWorkspace}
+              />
+            )}
             {step === 2 && (
               <TierStep
                 selectedTier={selectedTier}
