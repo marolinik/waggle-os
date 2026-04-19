@@ -3,6 +3,7 @@ import { WifiOff, Search, Bell } from "lucide-react";
 import waggleLogoDark from "@/assets/waggle-logo.jpeg";
 import waggleLogoLight from "@/assets/waggle-logo.png";
 import { useIsLightTheme } from "@/hooks/useIsLightTheme";
+import { useDeveloperMode } from "@/hooks/useDeveloperMode";
 
 interface StatusBarProps {
   workspaceName?: string;
@@ -21,6 +22,9 @@ const StatusBar = ({ workspaceName, model, tokensUsed, costUsd, offline, unreadN
   const [time, setTime] = useState(new Date());
   const isLight = useIsLightTheme();
   const waggleLogo = isLight ? waggleLogoLight : waggleLogoDark;
+  // M-20 / UX-5: token + cost are developer-facing signal. Hidden by
+  // default; Settings → Advanced → Developer mode flips them on.
+  const [developerMode] = useDeveloperMode();
 
   useEffect(() => {
     const interval = setInterval(() => setTime(new Date()), 1000);
@@ -49,14 +53,14 @@ const StatusBar = ({ workspaceName, model, tokensUsed, costUsd, offline, unreadN
             <span className="text-[11px] text-primary/80 font-display">{model}</span>
           </>
         )}
-        {tokensUsed !== undefined && tokensUsed > 0 && (
+        {developerMode && tokensUsed !== undefined && tokensUsed > 0 && (
           <>
             <span className="text-muted-foreground text-[11px]">·</span>
-            <span className="text-[11px] text-muted-foreground">{tokensUsed.toLocaleString()} tok</span>
+            <span className="text-[11px] text-muted-foreground" data-testid="statusbar-tokens">{tokensUsed.toLocaleString()} tok</span>
           </>
         )}
-        {costUsd !== undefined && costUsd > 0 && (
-          <span className="text-[11px] text-muted-foreground">${costUsd.toFixed(4)}</span>
+        {developerMode && costUsd !== undefined && costUsd > 0 && (
+          <span className="text-[11px] text-muted-foreground" data-testid="statusbar-cost">${costUsd.toFixed(4)}</span>
         )}
       </div>
 

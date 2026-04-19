@@ -10,6 +10,7 @@ import { adapter } from '@/lib/adapter';
 import { Input } from '@/components/ui/input';
 import { useProviders } from '@/hooks/useProviders';
 import { useOnboarding } from '@/hooks/useOnboarding';
+import { useDeveloperMode } from '@/hooks/useDeveloperMode';
 import type { UserTier } from '@/lib/dock-tiers';
 import ModelSelector from '@/components/os/ModelSelector';
 import ModelPilotCard from '@/components/os/ModelPilotCard';
@@ -89,6 +90,8 @@ const SettingsApp = () => {
   // M2-7: Telemetry state
   const [telemetryEnabled, setTelemetryEnabled] = useState(false);
   const [debugLogging, setDebugLogging] = useState(false);
+  // M-20 / UX-5: developer mode toggle. Persisted via hook in localStorage.
+  const [developerMode, setDeveloperMode] = useDeveloperMode();
   const [telemetryCount, setTelemetryCount] = useState(0);
 
   // Load settings
@@ -698,6 +701,21 @@ const SettingsApp = () => {
                 <p className="text-xs font-display font-medium text-foreground mb-1">Data Directory</p>
                 <p className="text-[11px] text-muted-foreground font-mono">~/.waggle/</p>
                 <p className="text-[11px] text-muted-foreground mt-1">All workspaces, memory, vault, and config live here.</p>
+              </div>
+              <div className="p-3 rounded-xl bg-secondary/30 border border-border/30" data-testid="developer-mode-setting">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs font-display font-medium text-foreground">Developer Mode</p>
+                  <button
+                    onClick={() => setDeveloperMode(!developerMode)}
+                    aria-pressed={developerMode}
+                    aria-label="Toggle developer mode"
+                    data-testid="developer-mode-toggle"
+                    className={`relative w-10 h-5 rounded-full transition-colors ${developerMode ? 'bg-primary' : 'bg-muted'}`}
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${developerMode ? 'left-5' : 'left-0.5'}`} />
+                  </button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">Show token counts and per-call cost in the status bar. Off by default.</p>
               </div>
               <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
                 <div className="flex items-center justify-between mb-1">
