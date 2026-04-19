@@ -11,12 +11,11 @@
 import type { FastifyInstance } from 'fastify';
 import fs from 'node:fs';
 import path from 'node:path';
-
-interface BrowseEntry {
-  name: string;
-  path: string;
-  type: 'directory' | 'file';
-}
+import {
+  listWindowsDrives,
+  shouldListDrives,
+  type BrowseEntry,
+} from './browse-helpers.js';
 
 export async function browseRoutes(server: FastifyInstance) {
 
@@ -25,6 +24,13 @@ export async function browseRoutes(server: FastifyInstance) {
     '/api/browse/local',
     async (request, reply) => {
       const dirPath = request.query.path || '/';
+
+      // P14: on Windows the abstract root '/' collapses to whichever
+      // drive the sidecar's CWD is on, hiding the others. Return the
+      // full drive list instead so the UI can navigate across drives.
+      if (shouldListDrives(process.platform, dirPath)) {
+        return { entries: listWindowsDrives(), current: '/' };
+      }
 
       // Basic security: resolve and prevent listing sensitive system dirs
       const resolved = path.resolve(dirPath);

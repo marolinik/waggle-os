@@ -14,6 +14,7 @@ import { adapter } from '@/lib/adapter';
 import { useFeatureGate } from '@/hooks/useFeatureGate';
 import { useWorkspaces } from '@/hooks/useWorkspaces';
 import LockedFeature from '@/components/os/LockedFeature';
+import { buildBreadcrumbs } from '@/lib/browse-breadcrumbs';
 import type { StorageType, WorkspaceTemplate, Connector, TemplateCategory } from '@/lib/types';
 
 /** Use native OS folder picker when running inside Tauri, falls back to custom browse modal. */
@@ -245,17 +246,14 @@ function FolderPickerModal({ open, storageType, currentPath, onSelect, onClose }
     }
   }, [browsePath, newFolderName, storageType, fetchEntries]);
 
-  const breadcrumbs = (() => {
-    if (browsePath === '/') return [{ label: rootLabel, path: '/' }];
-    const parts = browsePath.split('/').filter(Boolean);
-    const crumbs = [{ label: rootLabel, path: '/' }];
-    let acc = '';
-    parts.forEach(part => {
-      acc = storageType === 'local' ? `${acc}/${part}` : (acc ? `${acc}/${part}` : part);
-      crumbs.push({ label: part, path: acc });
-    });
-    return crumbs;
-  })();
+  // P14: Windows paths (C:\Users\Marko...) need separator-aware splitting.
+  // The old inline logic split only on '/' and collapsed Windows paths into
+  // a single unusable crumb. Pure helper handles both separator styles.
+  const breadcrumbs = buildBreadcrumbs(
+    browsePath,
+    rootLabel,
+    storageType as 'local' | 'virtual' | 'team',
+  );
 
   if (!open) return null;
 
