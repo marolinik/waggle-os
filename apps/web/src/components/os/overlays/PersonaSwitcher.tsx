@@ -3,19 +3,25 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { PERSONAS } from '@/lib/personas';
 import { adapter } from '@/lib/adapter';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, Users, Loader2, Lock, Sparkles, ChevronDown } from 'lucide-react';
+import { Bot, Users, Loader2, Lock, Sparkles, ChevronDown, Eye } from 'lucide-react';
 import { useFeatureGate } from '@/hooks/useFeatureGate';
 import {
   UNIVERSAL_MODE_IDS,
   ALL_SPECIALIST_IDS,
   getSpecialistsForTemplate,
 } from '@/lib/persona-tier';
+import { buildPersonaTooltip } from '@/lib/persona-tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface BackendPersona {
   id: string;
   name: string;
   description: string;
   icon?: string;
+  tagline?: string;
+  bestFor?: string[];
+  wontDo?: string;
+  isReadOnly?: boolean;
 }
 
 interface AgentGroupOption {
@@ -45,6 +51,10 @@ type PersonaCard = {
   description: string;
   icon?: string;
   avatar?: string;
+  tagline?: string;
+  bestFor?: string[];
+  wontDo?: string;
+  isReadOnly?: boolean;
 };
 
 interface PersonaAgentsListProps {
@@ -178,7 +188,7 @@ const PersonaSwitcher = ({
   const isLocked = (id: string) => !allPersonasUnlocked && !FREE_PERSONA_IDS.includes(id);
 
   // Use backend personas if available, fall back to local
-  const personas: { id: string; name: string; description: string; icon?: string; avatar?: string }[] =
+  const personas: PersonaCard[] =
     backendPersonas
       ? backendPersonas.map(bp => {
           const local = PERSONAS.find(p => p.id === bp.id);
@@ -186,37 +196,80 @@ const PersonaSwitcher = ({
         })
       : PERSONAS.map(p => ({ id: p.id, name: p.name, description: p.description, avatar: p.avatar }));
 
-  const renderPersonaCard = (p: typeof personas[0], locked: boolean) => (
-    <button
-      key={p.id}
-      onClick={() => { if (!locked) { onSelect(p.id); onClose(); } }}
-      disabled={locked}
-      aria-disabled={locked}
-      aria-label={locked ? `${p.name} — locked, upgrade to Teams to unlock` : p.name}
-      className={`flex items-center gap-3 p-3 rounded-xl transition-all text-left focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
-        locked
-          ? 'bg-secondary/10 border border-transparent cursor-not-allowed grayscale'
-          : currentPersona === p.id && !currentGroupId
-          ? 'bg-primary/20 border border-primary/50'
-          : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
-      }`}
-      title={p.description}
-    >
-      <Avatar className="w-10 h-10 shrink-0">
-        {p.avatar ? <AvatarImage src={p.avatar} alt="" /> : (
-          <AvatarFallback className="text-[11px] bg-primary/20">{p.icon || p.name[0]}</AvatarFallback>
-        )}
-      </Avatar>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1">
-          <p className={`text-xs font-display font-medium truncate ${locked ? 'text-muted-foreground' : 'text-foreground'}`}>{p.name}</p>
-          {locked && <Lock className="w-3 h-3 text-muted-foreground shrink-0" aria-hidden="true" />}
+  const renderPersonaCard = (p: PersonaCard, locked: boolean) => {
+    const tooltip = buildPersonaTooltip(p);
+    const card = (
+      <button
+        key={p.id}
+        onClick={() => { if (!locked) { onSelect(p.id); onClose(); } }}
+        disabled={locked}
+        aria-disabled={locked}
+        aria-label={locked ? `${p.name} — locked, upgrade to Teams to unlock` : p.name}
+        className={`flex items-center gap-3 p-3 rounded-xl transition-all text-left focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+          locked
+            ? 'bg-secondary/10 border border-transparent cursor-not-allowed grayscale'
+            : currentPersona === p.id && !currentGroupId
+            ? 'bg-primary/20 border border-primary/50'
+            : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
+        }`}
+        // Fall back to description-only title when we don't have rich content;
+        // Radix Tooltip handles the rich case below.
+        title={tooltip.hasRichContent ? undefined : p.description}
+      >
+        <Avatar className="w-10 h-10 shrink-0">
+          {p.avatar ? <AvatarImage src={p.avatar} alt="" /> : (
+            <AvatarFallback className="text-[11px] bg-primary/20">{p.icon || p.name[0]}</AvatarFallback>
+          )}
+        </Avatar>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1">
+            <p className={`text-xs font-display font-medium truncate ${locked ? 'text-muted-foreground' : 'text-foreground'}`}>{p.name}</p>
+            {locked && <Lock className="w-3 h-3 text-muted-foreground shrink-0" aria-hidden="true" />}
+            {tooltip.isReadOnly && !locked && (
+              <Eye className="w-3 h-3 text-sky-400/80 shrink-0" aria-label="Read-only persona" />
+            )}
+          </div>
+          {/* A11y audit #5: bumped text-[11px] → text-xs for readability floor */}
+          <p className={`text-xs truncate ${locked ? 'text-muted-foreground/70' : 'text-muted-foreground'}`}>{p.description}</p>
         </div>
-        {/* A11y audit #5: bumped text-[11px] → text-xs for readability floor */}
-        <p className={`text-xs truncate ${locked ? 'text-muted-foreground/70' : 'text-muted-foreground'}`}>{p.description}</p>
-      </div>
-    </button>
-  );
+      </button>
+    );
+
+    if (!tooltip.hasRichContent) return card;
+
+    return (
+      <Tooltip key={p.id} delayDuration={250}>
+        <TooltipTrigger asChild>{card}</TooltipTrigger>
+        <TooltipContent side="right" align="start" className="max-w-[280px] text-xs p-3 space-y-2" sideOffset={6}>
+          <div>
+            <p className="font-display font-semibold text-foreground">{tooltip.name}</p>
+            <p className="text-muted-foreground mt-0.5">{tooltip.headline}</p>
+          </div>
+          {tooltip.bestFor.length > 0 && (
+            <div>
+              <p className="text-[10px] font-display font-semibold uppercase tracking-wider text-primary/80 mb-1">Best for</p>
+              <ul className="space-y-0.5">
+                {tooltip.bestFor.map(item => (
+                  <li key={item} className="text-muted-foreground leading-tight">• {item}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {tooltip.wontDo && (
+            <div>
+              <p className="text-[10px] font-display font-semibold uppercase tracking-wider text-destructive/80 mb-1">Won’t do</p>
+              <p className="text-muted-foreground leading-tight">{tooltip.wontDo}</p>
+            </div>
+          )}
+          {tooltip.isReadOnly && (
+            <p className="text-[10px] text-sky-400/90 flex items-center gap-1">
+              <Eye className="w-3 h-3" aria-hidden="true" />Read-only — never writes files or runs commands
+            </p>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    );
+  };
 
   return (
     <AnimatePresence>

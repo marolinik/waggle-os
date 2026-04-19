@@ -258,6 +258,17 @@ export interface Persona {
   name: string;
   description: string;
   avatar?: string;
+  /** One-line differentiator shown in the switcher hover card. */
+  tagline?: string;
+  /** 3-4 example tasks this persona is best suited for. */
+  bestFor?: string[];
+  /** Hard boundary statement — what this persona will not do. */
+  wontDo?: string;
+  /** True when the persona has no write/execute tools; rendered as a badge. */
+  isReadOnly?: boolean;
+  icon?: string;
+  workspaceAffinity?: string[];
+  suggestedCommands?: string[];
 }
 
 export interface SystemHealth {

@@ -9,6 +9,9 @@ import { requireTier } from '../../middleware/assert-tier.js';
  */
 export const personaRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /api/personas — list all available personas (no system prompts)
+  // tagline / bestFor / wontDo / isReadOnly are small strings that power the
+  // PersonaSwitcher hover card (M-01). systemPrompt stays omitted (large +
+  // sensitive); failurePatterns stays omitted (internal).
   fastify.get('/api/personas', async () => {
     const personas = listPersonas().map((p) => ({
       id: p.id,
@@ -17,6 +20,10 @@ export const personaRoutes: FastifyPluginAsync = async (fastify) => {
       icon: p.icon,
       workspaceAffinity: p.workspaceAffinity,
       suggestedCommands: p.suggestedCommands,
+      tagline: p.tagline,
+      bestFor: p.bestFor,
+      wontDo: p.wontDo,
+      isReadOnly: p.isReadOnly,
     }));
     return { personas };
   });
