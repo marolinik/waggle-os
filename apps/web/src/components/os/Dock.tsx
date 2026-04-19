@@ -105,7 +105,7 @@ const Dock = ({ tier, billingTier = 'FREE', onOpenApp, openApps, minimizedApps =
                   onOpenApp(entry.appId);
                 }
               }}
-              className={`relative flex flex-col items-center group p-2 rounded-xl hover:bg-muted/50 transition-colors ${
+              className={`relative flex flex-col items-center justify-center group p-2 min-w-[44px] min-h-[44px] rounded-xl hover:bg-muted/50 transition-colors ${
                 isZoneOpen ? 'ring-1 ring-primary/40 bg-muted/30' : ''
               }`}
               whileHover={{ scale: 1.2, y: -8 }}
@@ -147,7 +147,7 @@ const Dock = ({ tier, billingTier = 'FREE', onOpenApp, openApps, minimizedApps =
               aria-label="Spawn Agent"
               data-testid="dock-spawn-agent"
               onClick={onSpawnAgent}
-              className="relative flex flex-col items-center group p-2 rounded-xl hover:bg-muted/50 transition-colors"
+              className="relative flex flex-col items-center justify-center group p-2 min-w-[44px] min-h-[44px] rounded-xl hover:bg-muted/50 transition-colors"
               whileHover={{ scale: 1.2, y: -8 }}
               whileTap={{ scale: 0.95 }}
               transition={{ type: 'spring', stiffness: 400, damping: 17 }}
