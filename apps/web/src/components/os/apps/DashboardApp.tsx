@@ -5,6 +5,13 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getPersonaById } from '@/lib/personas';
 import type { Workspace } from '@/lib/types';
 import { getAllGroups } from '@/lib/workspace-groups';
+import {
+  computeBrainHealth,
+  brainHealthTier,
+  brainHealthBreakdown,
+  TIER_LABELS,
+  type BrainHealthCounts,
+} from '@/lib/brain-health';
 
 const TEMPLATE_LABELS: Record<string, string> = {
   'sales-pipeline': 'Sales',
@@ -68,12 +75,21 @@ const DashboardApp = ({ workspaces, activeWorkspaceId, onSelectWorkspace, onCrea
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<string>('All');
   const [tasks, setTasks] = useState<Array<{ id: string; title: string; status: string; workspaceName: string; updatedAt: string }>>([]);
+  const [brainCounts, setBrainCounts] = useState<BrainHealthCounts>({ frames: 0, entities: 0, relations: 0 });
 
   useEffect(() => {
     fetch(`${adapter.getServerUrl()}/api/tasks?status=open`)
       .then(r => r.json())
       .then(data => setTasks((data.tasks ?? []).slice(0, 8)))
       .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    adapter.getMemoryStats().then(stats => {
+      if (!cancelled) setBrainCounts(stats.total);
+    });
+    return () => { cancelled = true; };
   }, []);
 
   // Get group names: standard groups first, then any custom, with "All" at front
@@ -93,8 +109,44 @@ const DashboardApp = ({ workspaces, activeWorkspaceId, onSelectWorkspace, onCrea
     return acc;
   }, {});
 
+  const brainScore = computeBrainHealth(brainCounts);
+  const brainTier = brainHealthTier(brainScore);
+  const brainParts = brainHealthBreakdown(brainCounts);
+
   return (
     <div className="h-full overflow-auto p-4">
+      {/* M-27 / ENG-6 · Brain Health — weighted saturation across
+          frames, entities, relations. Per-dimension contribution in
+          the title tooltip so the user can see WHICH dimension is
+          lagging when the score is low. */}
+      <div
+        className="mb-4 rounded-xl border border-border/30 bg-secondary/20 px-3 py-2.5"
+        data-testid="brain-health-card"
+        title={`Frames: ${brainCounts.frames.toLocaleString()} (+${brainParts.frames} pts) · Entities: ${brainCounts.entities.toLocaleString()} (+${brainParts.entities}) · Relations: ${brainCounts.relations.toLocaleString()} (+${brainParts.relations})`}
+      >
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center gap-2">
+            <Brain className="w-3.5 h-3.5 text-primary" />
+            <span className="text-[11px] font-display font-semibold text-foreground">Brain Health</span>
+            <span className="text-[10px] text-muted-foreground" data-testid="brain-health-tier">
+              {TIER_LABELS[brainTier]}
+            </span>
+          </div>
+          <span
+            className="text-xs font-display font-semibold text-primary tabular-nums"
+            data-testid="brain-health-score"
+          >
+            {brainScore}%
+          </span>
+        </div>
+        <div className="h-1 rounded-full bg-muted overflow-hidden">
+          <div
+            className="h-full bg-primary transition-[width] duration-500"
+            style={{ width: `${brainScore}%` }}
+          />
+        </div>
+      </div>
+
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-display font-semibold text-foreground">Workspaces</h2>
         <button

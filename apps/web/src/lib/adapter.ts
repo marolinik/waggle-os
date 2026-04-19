@@ -911,10 +911,31 @@ class LocalAdapter {
 
   // --- Memory Stats ---
   async getMemoryStats(): Promise<{ personal: { frames: number; entities: number; relations: number }; workspace: { frames: number; entities: number; relations: number }; total: { frames: number; entities: number; relations: number } }> {
+    const zero = { frames: 0, entities: 0, relations: 0 };
+    // Server emits snake-case {frameCount, entityCount, relationCount} and
+    // can return `workspace: null` when no workspace filter is provided.
+    // Normalise both shape and nullability here so callers (useMemory,
+    // DashboardApp, Brain Health metric) can rely on the typed fields.
+    const normalize = (b: unknown): { frames: number; entities: number; relations: number } => {
+      if (!b || typeof b !== 'object') return { ...zero };
+      const r = b as Record<string, unknown>;
+      return {
+        frames: typeof r.frameCount === 'number' ? r.frameCount : (typeof r.frames === 'number' ? r.frames : 0),
+        entities: typeof r.entityCount === 'number' ? r.entityCount : (typeof r.entities === 'number' ? r.entities : 0),
+        relations: typeof r.relationCount === 'number' ? r.relationCount : (typeof r.relations === 'number' ? r.relations : 0),
+      };
+    };
     try {
       const res = await this.fetch('/api/memory/stats');
-      return res.json();
-    } catch { return { personal: { frames: 0, entities: 0, relations: 0 }, workspace: { frames: 0, entities: 0, relations: 0 }, total: { frames: 0, entities: 0, relations: 0 } }; }
+      const raw = (await res.json()) as { personal?: unknown; workspace?: unknown; total?: unknown };
+      return {
+        personal: normalize(raw.personal),
+        workspace: normalize(raw.workspace),
+        total: normalize(raw.total),
+      };
+    } catch {
+      return { personal: { ...zero }, workspace: { ...zero }, total: { ...zero } };
+    }
   }
 
   // --- Event Stats ---
