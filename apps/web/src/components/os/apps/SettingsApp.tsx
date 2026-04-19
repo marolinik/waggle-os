@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { useProviders } from '@/hooks/useProviders';
 import { useOnboarding } from '@/hooks/useOnboarding';
 import { useDeveloperMode } from '@/hooks/useDeveloperMode';
+import { useDockLabels } from '@/hooks/useDockLabels';
 import type { UserTier } from '@/lib/dock-tiers';
 import ModelSelector from '@/components/os/ModelSelector';
 import ModelPilotCard from '@/components/os/ModelPilotCard';
@@ -92,6 +93,9 @@ const SettingsApp = () => {
   const [debugLogging, setDebugLogging] = useState(false);
   // M-20 / UX-5: developer mode toggle. Persisted via hook in localStorage.
   const [developerMode, setDeveloperMode] = useDeveloperMode();
+  // M-19 / UX-4: dock-label visibility (auto heuristic / pinned always).
+  const dockLabels = useDockLabels();
+  const dockLabelsPinned = dockLabels.mode === 'always';
   const [telemetryCount, setTelemetryCount] = useState(0);
 
   // Load settings
@@ -701,6 +705,21 @@ const SettingsApp = () => {
                 <p className="text-xs font-display font-medium text-foreground mb-1">Data Directory</p>
                 <p className="text-[11px] text-muted-foreground font-mono">~/.waggle/</p>
                 <p className="text-[11px] text-muted-foreground mt-1">All workspaces, memory, vault, and config live here.</p>
+              </div>
+              <div className="p-3 rounded-xl bg-secondary/30 border border-border/30" data-testid="dock-labels-setting">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs font-display font-medium text-foreground">Always show dock labels</p>
+                  <button
+                    onClick={() => dockLabels.setMode(dockLabelsPinned ? 'auto' : 'always')}
+                    aria-pressed={dockLabelsPinned}
+                    aria-label="Toggle always-show dock labels"
+                    data-testid="dock-labels-toggle"
+                    className={`relative w-10 h-5 rounded-full transition-colors ${dockLabelsPinned ? 'bg-primary' : 'bg-muted'}`}
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${dockLabelsPinned ? 'left-5' : 'left-0.5'}`} />
+                  </button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">Off: labels auto-hide after 20 sessions or 7 days. On: always visible.</p>
               </div>
               <div className="p-3 rounded-xl bg-secondary/30 border border-border/30" data-testid="developer-mode-setting">
                 <div className="flex items-center justify-between mb-1">

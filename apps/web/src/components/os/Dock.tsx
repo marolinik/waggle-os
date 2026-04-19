@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Rocket } from 'lucide-react';
 import { getDockForTier, type AppId, type BillingTier, type DockEntry, type UserTier } from '@/lib/dock-tiers';
+import { useDockLabels } from '@/hooks/useDockLabels';
 import DockTray from './DockTray';
 
 // Re-export for backward compatibility
@@ -22,6 +23,9 @@ const Dock = ({ tier, billingTier = 'FREE', onOpenApp, openApps, minimizedApps =
   const [trayAnchor, setTrayAnchor] = useState<DOMRect | null>(null);
   const zoneRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const items = getDockForTier(tier, billingTier);
+  // M-19 / UX-4: show icon labels while user is "new" (<20 sessions
+  // OR <7 days installed), or when Settings pins them on.
+  const { visible: showDockLabels } = useDockLabels();
 
   // Close tray on outside click
   useEffect(() => {
@@ -119,7 +123,13 @@ const Dock = ({ tier, billingTier = 'FREE', onOpenApp, openApps, minimizedApps =
                   {waggleBadgeCount > 99 ? '99+' : waggleBadgeCount}
                 </span>
               )}
-              <span className="absolute -top-7 text-[11px] text-foreground bg-card px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap font-display">
+              <span
+                className={`absolute -top-7 text-[11px] text-foreground bg-card px-2 py-0.5 rounded transition-opacity whitespace-nowrap font-display ${
+                  showDockLabels ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                }`}
+                data-testid={`dock-label-${entry.key}`}
+                data-pinned={showDockLabels ? 'true' : 'false'}
+              >
                 {entry.label}
               </span>
               {(isOpen || hasOpenChild) && (
