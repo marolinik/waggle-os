@@ -58,7 +58,26 @@ once we're sure nothing in `scripts/` or `packages/` references them.
 
 ## What's orphaned (your call needed)
 
-### `packages/ui/` + `app/public/brand/` — 159M of unused brand assets
+### `packages/ui/` + `app/public/brand/` — 159M of unused brand assets — ✅ DELETED 2026-04-20
+
+**Decision (Marko, 2026-04-20):** option 1 — delete both.
+
+**What was deleted:**
+- `packages/ui/` (12M) — entire workspace package, only consumer was dead `app/`
+- `app/public/brand/` (159M) — 26 bee sprites + 18 app icons + hex textures
+- `app/tests/e2e/regression.test.ts` — the only file that imported `@waggle/ui`
+- `"@waggle/ui": "*"` removed from `app/package.json` deps
+- `package-lock.json` regenerated from scratch (0 remaining refs)
+
+**What's preserved:**
+- `app/tests/e2e/{chat,startup,workspaces}.test.ts` — server integration tests that import from `@waggle/server`, unrelated to dead UI
+- `apps/www/public/brand/` — landing-page brand assets (separate directory, unrelated)
+- P10 bee persona sprites in `apps/web/src/assets/personas/` — different size/style for 64px avatars, unrelated
+
+**Follow-up noted:**
+- `bun.lock` still has `@waggle/ui` workspace entries (couldn't regen — bun install network-blocked in this session). Stale entries are harmless since npm is the primary package manager per CLAUDE.md, but next successful `bun install` will clean them up.
+
+**Below — the original audit text preserved for history:**
 
 **Found:** `app/public/brand/` contains 26 bee sprites (dark + light
 variants for 13 personas: analyst, architect, builder, celebrating,
