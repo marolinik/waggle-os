@@ -29,13 +29,26 @@ export interface TierStepProps extends StepNavigation {
 }
 
 /* ─── ImportStep ─── */
+/**
+ * M-10: source string is now wide (matches harvest UniversalAdapter sources).
+ * Was narrowed to 'chatgpt' | 'claude' when the onboarding step only offered
+ * those two tiles; the broader tile set now offers Gemini, Perplexity,
+ * Cursor and Claude Code in addition.
+ */
 export interface ImportStepProps extends StepNavigation {
-  readonly importSource: 'chatgpt' | 'claude' | null;
+  readonly importSource: string | null;
   readonly importPreview: readonly unknown[];
   readonly importDone: boolean;
   readonly importing: boolean;
-  readonly onFileImport: (file: File, source: 'chatgpt' | 'claude') => void;
+  readonly onFileImport: (file: File, source: string) => void;
   readonly onImportCommit: () => void;
+  /**
+   * M-10: Claude Code auto-detect status surfaced from the wizard. When
+   * non-null and `found:true`, ImportStep renders a banner with a one-click
+   * harvest button — same flow as MemoryApp's HarvestTab uses.
+   */
+  readonly claudeCodeDetected?: { found: boolean; itemCount: number; path: string } | null;
+  readonly onClaudeCodeHarvest?: () => void;
 }
 
 /* ─── TemplateStep ─── */

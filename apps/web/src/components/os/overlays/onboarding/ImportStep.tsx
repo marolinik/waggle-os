@@ -1,7 +1,22 @@
 import { motion } from 'framer-motion';
-import { Brain, Upload, FileJson, Loader2, Check } from 'lucide-react';
+import { Brain, Upload, FileJson, Loader2, Check, Zap, ExternalLink } from 'lucide-react';
 import { fadeSlide } from './constants';
 import type { ImportStepProps } from './types';
+
+/**
+ * M-10: source tiles widened from 2 (ChatGPT, Claude) to 6 + auto-detect.
+ * Each tile maps to a `UniversalAdapter`-supported source string. File pickers
+ * accept .json, .txt, .md, .csv (matching HarvestTab's accept set) so non-JSON
+ * exports (Cursor pastes, markdown threads) flow through the same handler.
+ */
+const SOURCE_TILES: ReadonlyArray<{ id: string; name: string; desc: string }> = [
+  { id: 'chatgpt',    name: 'ChatGPT',    desc: 'OpenAI export (.json)' },
+  { id: 'claude',     name: 'Claude',     desc: 'Anthropic export (.json)' },
+  { id: 'gemini',     name: 'Gemini',     desc: 'Google Takeout (.json)' },
+  { id: 'perplexity', name: 'Perplexity', desc: 'Threads export' },
+  { id: 'cursor',     name: 'Cursor',     desc: 'Editor history' },
+  { id: 'unknown',    name: 'Other',      desc: 'Any text or JSON' },
+];
 
 const ImportStep = ({
   importSource,
@@ -10,40 +25,63 @@ const ImportStep = ({
   importing,
   onFileImport,
   onImportCommit,
+  claudeCodeDetected,
+  onClaudeCodeHarvest,
   goToStep,
 }: ImportStepProps) => (
   <motion.div key="step-3" {...fadeSlide}>
     <div className="text-center mb-6">
       <Brain className="w-10 h-10 text-primary mx-auto mb-3" />
       <h2 className="text-2xl font-display font-bold text-foreground mb-2">
-        Bring your AI memories
+        Where does your AI life live?
       </h2>
       <p className="text-sm text-muted-foreground">
-        Import conversation history from other AI assistants
+        Bring your existing conversations — Waggle extracts decisions, preferences, and knowledge into your persistent memory.
       </p>
     </div>
 
+    {/* M-10: Claude Code auto-detect banner — only when sidecar found local files. */}
+    {!importDone && claudeCodeDetected?.found && (
+      <div className="mb-5 p-3 rounded-xl bg-primary/10 border border-primary/30">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <Zap className="w-4 h-4 text-primary shrink-0" />
+            <div className="min-w-0">
+              <p className="text-xs font-display font-medium text-foreground">Claude Code detected</p>
+              <p className="text-[11px] text-muted-foreground truncate">
+                Found {claudeCodeDetected.itemCount} items at {claudeCodeDetected.path}
+              </p>
+            </div>
+          </div>
+          {onClaudeCodeHarvest && (
+            <button
+              onClick={onClaudeCodeHarvest}
+              disabled={importing}
+              className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-display font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 shrink-0"
+            >
+              {importing ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Harvest'}
+            </button>
+          )}
+        </div>
+      </div>
+    )}
+
     {!importSource && !importDone && (
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        {[
-          { id: 'chatgpt' as const, name: 'ChatGPT Export', desc: 'Import from OpenAI' },
-          { id: 'claude' as const, name: 'Claude Export', desc: 'Import from Anthropic' },
-        ].map((src) => (
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mb-6">
+        {SOURCE_TILES.map((src) => (
           <label
             key={src.id}
-            className="glass-strong rounded-xl p-5 cursor-pointer hover:border-primary/40 transition-colors text-left group"
+            className="glass-strong rounded-xl p-3.5 cursor-pointer hover:border-primary/40 transition-colors text-left group flex flex-col gap-1"
           >
-            <FileJson className="w-5 h-5 text-primary mb-2" />
-            <h3 className="text-sm font-display font-semibold text-foreground mb-1">
-              {src.name}
-            </h3>
-            <p className="text-xs text-muted-foreground mb-3">{src.desc}</p>
-            <div className="flex items-center gap-1.5 text-xs text-primary group-hover:text-primary/80">
-              <Upload className="w-3 h-3" /> Choose .json file
+            <FileJson className="w-4 h-4 text-primary mb-0.5" />
+            <h3 className="text-xs font-display font-semibold text-foreground">{src.name}</h3>
+            <p className="text-[11px] text-muted-foreground">{src.desc}</p>
+            <div className="flex items-center gap-1 text-[11px] text-primary group-hover:text-primary/80 mt-0.5">
+              <Upload className="w-3 h-3" /> Choose file
             </div>
             <input
               type="file"
-              accept=".json"
+              accept=".json,.txt,.md,.csv"
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0];
@@ -91,6 +129,17 @@ const ImportStep = ({
       <div className="glass-strong rounded-xl p-4 mb-6 text-center">
         <Check className="w-6 h-6 text-primary mx-auto mb-2" />
         <p className="text-sm text-foreground font-display">Memories imported!</p>
+      </div>
+    )}
+
+    {/* M-10: pointer to MemoryApp's HarvestTab for the long tail of sources
+        (Grok, Manus, GenSpark, Qwen, MiniMax, etc.) — kept below tiles so it
+        doesn't compete with the primary picks. */}
+    {!importSource && !importDone && (
+      <div className="mb-4 text-center">
+        <p className="text-[11px] text-muted-foreground">
+          Have history elsewhere? <span className="text-foreground/70">Open Memory → Harvest after setup for 14+ more sources <ExternalLink className="w-2.5 h-2.5 inline-block ml-0.5" /></span>
+        </p>
       </div>
     )}
 

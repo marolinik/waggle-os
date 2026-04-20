@@ -54,11 +54,17 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
   const [keyValid, setKeyValid] = useState<boolean | null>(null);
   const [keySaved, setKeySaved] = useState(false);
 
-  const [importSource, setImportSource] = useState<'chatgpt' | 'claude' | null>(null);
+  // M-10: source widened from chatgpt|claude to the harvest UniversalAdapter
+  // source set so onboarding can accept Gemini/Perplexity/Cursor/Claude Code.
+  const [importSource, setImportSource] = useState<string | null>(null);
   const [importData, setImportData] = useState<unknown>(null);
   const [importPreview, setImportPreview] = useState<unknown[]>([]);
   const [importing, setImporting] = useState(false);
   const [importDone, setImportDone] = useState(false);
+  // M-10: Claude Code auto-detect status (mirrors HarvestTab pattern). Banner
+  // surfaces above source tiles when found so users see "we already see your
+  // history" before they bother choosing a tile.
+  const [claudeCodeDetected, setClaudeCodeDetected] = useState<{ found: boolean; itemCount: number; path: string } | null>(null);
 
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -137,14 +143,20 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
   }, [selectedTemplate]);
 
   /* ─── Handlers ─── */
-  const handleFileImport = async (file: File, source: 'chatgpt' | 'claude') => {
+  // M-10: switched from /api/import/* to /api/harvest/* so onboarding shares
+  // the same UniversalAdapter pipeline as MemoryApp's HarvestTab. The harvest
+  // preview shape is `{ source, itemCount, types, preview: [{id, title, type}] }`
+  // so we surface `result.preview` instead of the legacy `knowledgeExtracted`.
+  // Falls back to raw text for non-JSON sources (Cursor pastes, markdown, txt).
+  const handleFileImport = async (file: File, source: string) => {
     try {
       const text = await file.text();
-      const data = JSON.parse(text);
+      let data: unknown;
+      try { data = JSON.parse(text); } catch { data = text; }
       setImportData(data);
       setImportSource(source);
-      const result = await adapter.importPreview(data, source);
-      setImportPreview(result.knowledgeExtracted || []);
+      const result = await adapter.harvestPreview(data, source);
+      setImportPreview(result.preview || []);
     } catch { /* ignore parse errors */ }
   };
 
@@ -152,7 +164,32 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
     if (!importData || !importSource) return;
     setImporting(true);
     try {
-      await adapter.importCommit(importData, importSource);
+      await adapter.harvestCommit(importData, importSource);
+      setImportDone(true);
+      setTimeout(() => goToStep(4), 800);
+    } catch { /* ignore */ }
+    finally { setImporting(false); }
+  };
+
+  // M-10: Claude Code auto-detect on mount. If found, ImportStep shows a
+  // banner with a one-click harvest button so users with Claude Code
+  // installed don't have to figure out the file-export dance.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await adapter.scanClaudeCode();
+        if (!cancelled) setClaudeCodeDetected(data);
+      } catch { /* sidecar offline — banner just stays hidden */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleClaudeCodeHarvest = async () => {
+    setImporting(true);
+    setImportSource('claude-code');
+    try {
+      await adapter.harvestCommit({ scanLocal: true }, 'claude-code');
       setImportDone(true);
       setTimeout(() => goToStep(4), 800);
     } catch { /* ignore */ }
@@ -456,6 +493,8 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
                 importing={importing}
                 onFileImport={handleFileImport}
                 onImportCommit={handleImportCommit}
+                claudeCodeDetected={claudeCodeDetected}
+                onClaudeCodeHarvest={handleClaudeCodeHarvest}
                 goToStep={goToStep}
               />
             )}
