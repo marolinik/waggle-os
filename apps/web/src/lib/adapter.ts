@@ -1393,6 +1393,22 @@ class LocalAdapter {
     return res.json();
   }
 
+  /**
+   * M-02: download an AI-Act-compliance PDF. Accepts the same request
+   * shape as exportComplianceReport. Returns a Blob so the caller can
+   * trigger a browser download via URL.createObjectURL.
+   */
+  async exportComplianceReportPdf(request: any): Promise<Blob> {
+    const res = await this.fetch('/api/compliance/export-pdf', {
+      method: 'POST', body: JSON.stringify(request),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(body.error ?? `PDF export failed (${res.status})`);
+    }
+    return res.blob();
+  }
+
   async exportComplianceReport(request: any): Promise<any> {
     const res = await this.fetch('/api/compliance/export', { method: 'POST', body: JSON.stringify(request) });
     return res.json();

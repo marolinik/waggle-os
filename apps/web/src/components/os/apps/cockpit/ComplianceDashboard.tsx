@@ -8,7 +8,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Shield, CheckCircle2, AlertTriangle, XCircle, Download,
-  Loader2, Activity, Eye, Clock, Database, RefreshCw, HardDrive,
+  Loader2, Activity, Eye, Clock, Database, RefreshCw, HardDrive, FileText, Settings as SettingsIcon,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
@@ -73,9 +73,38 @@ const ComplianceDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [exportNotice, setExportNotice] = useState<string | null>(null);
+  // M-04: report options. Defaults to the last 30 days of data with all
+  // major sections on. FRIA (Fundamental Rights Impact Assessment) is off
+  // by default — it's only relevant for high-risk systems.
+  const [showOptions, setShowOptions] = useState(false);
+  const defaultFrom = () => new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const defaultTo = () => new Date().toISOString().split('T')[0];
+  const [fromDate, setFromDate] = useState<string>(defaultFrom());
+  const [toDate, setToDate] = useState<string>(defaultTo());
+  const [includeInteractions, setIncludeInteractions] = useState(true);
+  const [includeOversight, setIncludeOversight] = useState(true);
+  const [includeModels, setIncludeModels] = useState(true);
+  const [includeProvenance, setIncludeProvenance] = useState(true);
+  const [includeRiskAssessment, setIncludeRiskAssessment] = useState(true);
+  const [includeFria, setIncludeFria] = useState(false);
+
+  const buildExportRequest = useCallback(() => ({
+    from: fromDate,
+    to: toDate,
+    format: 'json' as const,
+    include: {
+      interactions: includeInteractions,
+      oversight: includeOversight,
+      models: includeModels,
+      provenance: includeProvenance,
+      riskAssessment: includeRiskAssessment,
+      fria: includeFria,
+    },
+  }), [fromDate, toDate, includeInteractions, includeOversight, includeModels, includeProvenance, includeRiskAssessment, includeFria]);
 
   const fetchStatus = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     if (!silent) setRefreshing(true);
@@ -106,36 +135,47 @@ const ComplianceDashboard = () => {
     setExporting(true);
     setExportNotice(null);
     try {
-      const now = new Date();
-      const sixMonthsAgo = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
-      const report = await adapter.exportComplianceReport({
-        from: sixMonthsAgo.toISOString().split('T')[0],
-        to: now.toISOString().split('T')[0],
-        format: 'json',
-        include: {
-          interactions: true,
-          oversight: true,
-          models: true,
-          provenance: true,
-          riskAssessment: true,
-          fria: false,
-        },
-      });
+      const request = buildExportRequest();
+      const report = await adapter.exportComplianceReport(request);
 
       // Download as JSON file
       const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `waggle-compliance-report-${now.toISOString().split('T')[0]}.json`;
+      a.download = `waggle-compliance-report-${request.from}-to-${request.to}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      setExportNotice('Report downloaded');
+      setExportNotice('JSON report downloaded');
     } catch (err) {
       setExportNotice(err instanceof Error ? `Export failed: ${err.message}` : 'Export failed');
     } finally {
       setExporting(false);
       // Clear the toast after 4s so the surface stays clean
+      setTimeout(() => setExportNotice(null), 4000);
+    }
+  };
+
+  // M-02 / M-04: download the same AuditReport rendered through pdfmake
+  // as a Hive-DS-styled boardroom PDF. Uses the current Report Options
+  // state so users can scope the output.
+  const handleExportPdf = async () => {
+    setExportingPdf(true);
+    setExportNotice(null);
+    try {
+      const request = buildExportRequest();
+      const blob = await adapter.exportComplianceReportPdf(request);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ai-act-compliance-${request.from}-to-${request.to}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setExportNotice('PDF report downloaded');
+    } catch (err) {
+      setExportNotice(err instanceof Error ? `PDF export failed: ${err.message}` : 'PDF export failed');
+    } finally {
+      setExportingPdf(false);
       setTimeout(() => setExportNotice(null), 4000);
     }
   };
@@ -261,17 +301,87 @@ const ComplianceDashboard = () => {
               <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
             </button>
           </HintTooltip>
-          <HintTooltip content="Export audit report (last 180 days)">
+          <HintTooltip content="Report options">
+            <button
+              onClick={() => setShowOptions(s => !s)}
+              className={`p-1 rounded-lg transition-colors ${
+                showOptions ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+              }`}
+            >
+              <SettingsIcon className="w-3.5 h-3.5" />
+            </button>
+          </HintTooltip>
+          <HintTooltip content="Download JSON report">
             <button
               onClick={handleExport}
-              disabled={exporting}
+              disabled={exporting || exportingPdf}
               className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors disabled:opacity-50"
             >
               {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
             </button>
           </HintTooltip>
+          <HintTooltip content="Download PDF report (boardroom-styled)">
+            <button
+              onClick={handleExportPdf}
+              disabled={exporting || exportingPdf}
+              className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors disabled:opacity-50"
+            >
+              {exportingPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+            </button>
+          </HintTooltip>
         </div>
       </div>
+
+      {/* M-04: report options — expanded when the user clicks the gear */}
+      {showOptions && (
+        <div className="mb-3 p-3 rounded-lg bg-background/40 border border-border/30 space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] uppercase tracking-wide text-muted-foreground">From</label>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={e => setFromDate(e.target.value)}
+                max={toDate}
+                className="w-full px-2 py-1 mt-0.5 bg-background/60 border border-border/40 rounded text-[11px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] uppercase tracking-wide text-muted-foreground">To</label>
+              <input
+                type="date"
+                value={toDate}
+                onChange={e => setToDate(e.target.value)}
+                min={fromDate}
+                max={defaultTo()}
+                className="w-full px-2 py-1 mt-0.5 bg-background/60 border border-border/40 rounded text-[11px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+              />
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {([
+              ['Interactions', includeInteractions, setIncludeInteractions],
+              ['Oversight', includeOversight, setIncludeOversight],
+              ['Models', includeModels, setIncludeModels],
+              ['Provenance', includeProvenance, setIncludeProvenance],
+              ['Risk', includeRiskAssessment, setIncludeRiskAssessment],
+              ['FRIA', includeFria, setIncludeFria],
+            ] as const).map(([label, on, setOn]) => (
+              <button
+                key={label}
+                onClick={() => setOn(!on)}
+                className={`px-2 py-0.5 rounded text-[10px] border transition-colors ${
+                  on
+                    ? 'bg-primary/20 text-primary border-primary/30'
+                    : 'bg-background/30 text-muted-foreground border-border/30 hover:text-foreground'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Stale-data + export notice strip */}
       {(error || exportNotice) && (
