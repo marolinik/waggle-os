@@ -26,17 +26,48 @@ function getHarvestCacheDir(dataDir: string): string {
   return path.join(dataDir, 'harvest-cache');
 }
 
-function writeHarvestCache(dataDir: string, cacheKey: string, data: unknown): string {
+/**
+ * M-08 BLOCKER-2 fix: atomic write via tmp + rename.
+ * A plain fs.writeFileSync leaves a partial JSON file on power-loss, SIGKILL,
+ * or full-disk mid-write; resume then fails on JSON.parse with a crash that
+ * the caller surfaces as 500. Writing to `.tmp` first and renaming atomically
+ * (same volume, MoveFileEx MOVEFILE_REPLACE_EXISTING on Windows) means the
+ * final file either exists complete or not at all. A leftover `.tmp` from a
+ * mid-write crash is never read by readHarvestCache (which only looks at the
+ * final path) and a future sweep can clean it up.
+ */
+export function writeHarvestCache(dataDir: string, cacheKey: string, data: unknown): string {
   const dir = getHarvestCacheDir(dataDir);
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, `${cacheKey}.json`);
-  fs.writeFileSync(file, JSON.stringify(data), 'utf-8');
+  const tmp = `${file}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(data), 'utf-8');
+  try {
+    fs.renameSync(tmp, file);
+  } catch (err) {
+    try { fs.unlinkSync(tmp); } catch { /* already gone */ }
+    throw err;
+  }
   return file;
 }
 
-function readHarvestCache(file: string): unknown {
-  const raw = fs.readFileSync(file, 'utf-8');
-  return JSON.parse(raw);
+/**
+ * Returns the parsed payload, or `null` if the cache file is missing or its
+ * contents are not valid JSON (caller responds 410 Gone). Never throws on
+ * missing/corrupted — only on genuinely unexpected I/O failures.
+ */
+export function readHarvestCache(file: string): unknown | null {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(file, 'utf-8');
+  } catch {
+    return null;
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
 }
 
 function deleteHarvestCache(file: string | null): void {
@@ -133,10 +164,15 @@ export async function harvestRoutes(fastify: FastifyInstance) {
       if (prior.status === 'completed' || prior.status === 'abandoned') {
         return reply.code(409).send({ error: `Run ${prior.id} is already ${prior.status}` });
       }
-      if (!prior.inputCachePath || !fs.existsSync(prior.inputCachePath)) {
+      if (!prior.inputCachePath) {
         return reply.code(410).send({ error: 'Cached input for this run is no longer available' });
       }
-      data = readHarvestCache(prior.inputCachePath);
+      const cached = readHarvestCache(prior.inputCachePath);
+      if (cached === null) {
+        // Missing, unreadable, or corrupted (partial-write from a prior crash).
+        return reply.code(410).send({ error: 'Cached input for this run is no longer available' });
+      }
+      data = cached;
       source = prior.source;
       resumingRunId = prior.id;
     } else {
