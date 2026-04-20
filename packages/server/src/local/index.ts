@@ -248,6 +248,9 @@ declare module 'fastify' {
     /** H-10 G1: autonomous evolution daemon. Inert unless WAGGLE_EVOLUTION_AUTO_ENABLED=1. */
     evolutionService: import('./services/evolution-service.js').EvolutionService;
     marketplace: import('@waggle/marketplace').MarketplaceDB | null;
+    /** Shared per-workspace mind cache. Routes use this to reach an arbitrary
+     * workspace's mind (e.g. FileIndexer for L-20 auto-indexing). */
+    mindCache: import('@waggle/core').MultiMindCache;
     offlineManager: OfflineManager;
     rateLimiter: import('./security-middleware.js').RateLimiter;
     telemetry: import('@waggle/core').TelemetryStore;
@@ -1049,6 +1052,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     getMindPath: (id) => wsManager.getMindPath(id),
     allowedRoot: path.join(fullConfig.dataDir, 'workspaces'),
   });
+  server.decorate('mindCache', mindCache);
   let activeWorkspaceId: string | null = null;
 
   // ── TeamSync cache — one TeamSync instance per team workspace ──

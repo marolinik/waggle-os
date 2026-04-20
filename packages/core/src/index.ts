@@ -73,6 +73,7 @@ export {
 } from './mind/concept-tracker.js';
 export { processImport, parseChatGPTExport, parseClaudeExport, extractKnowledge } from './memory-import.js';
 export { createFileStore, LocalFileStore, LinkedDirStore, S3FileStore, type FileStore, type FileEntry, type StorageInfo, type S3Config } from './file-store.js';
+export { FileIndexer, MAX_CONTENT_BYTES, type FileIndexRow, type FileIndexResult } from './file-indexer.js';
 export type { ImportSource, ImportResult, ExtractedKnowledge, ParsedConversation, ConversationMessage } from './memory-import.js';
 export {
   OptimizationLogStore, OPTIMIZATION_LOG_TABLE_SQL,

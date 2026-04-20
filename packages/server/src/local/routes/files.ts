@@ -15,6 +15,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getStorageProvider, MAX_UPLOAD_SIZE } from '../storage/index.js';
 import { lookup } from '../utils/mime.js';
 import path from 'node:path';
+import { FileIndexer } from '@waggle/core';
 
 interface WorkspaceParams { workspaceId: string }
 interface PathQuery { path?: string }
@@ -39,6 +40,35 @@ function resolveWorkspace(server: FastifyInstance, workspaceId: string) {
 
   const provider = getStorageProvider(workspace, dataDir);
   return { provider, workspace };
+}
+
+/**
+ * Resolve (lazily) a FileIndexer for the given workspace's mind.
+ * Returns null when the workspace mind is unavailable — indexing then becomes
+ * a no-op rather than failing the upload. Indexing is a best-effort side
+ * effect of file writes (L-20); user-facing file ops must not fail because
+ * of it.
+ */
+function resolveIndexer(server: FastifyInstance, workspaceId: string): FileIndexer | null {
+  try {
+    const cache = server.mindCache;
+    const mind = cache?.getOrOpen(workspaceId);
+    return mind ? new FileIndexer(mind) : null;
+  } catch {
+    return null;
+  }
+}
+
+function safeIndex(indexer: FileIndexer | null, op: () => void): void {
+  if (!indexer) return;
+  try {
+    op();
+  } catch {
+    // Intentional: indexing is a side-effect. Failures are swallowed so a
+    // bad frame insert doesn't break the user's file operation. Failures
+    // here are rare (bad UTF-8, full disk, etc.) and recoverable by a
+    // manual re-index in the future.
+  }
 }
 
 export async function fileRoutes(server: FastifyInstance) {
@@ -97,6 +127,8 @@ export async function fileRoutes(server: FastifyInstance) {
 
           const targetPath = (targetDir ?? '/').replace(/\/$/, '') + '/' + filename;
           const entry = await provider.write(targetPath, fileData, lookup(filename));
+          const indexer = resolveIndexer(server, workspaceId);
+          safeIndex(indexer, () => indexer!.indexFile(targetPath, fileData, lookup(filename)));
           return reply.status(201).send(entry);
         }
 
@@ -113,6 +145,8 @@ export async function fileRoutes(server: FastifyInstance) {
 
         const targetPath = body.path.replace(/\/$/, '') + '/' + body.name;
         const entry = await provider.write(targetPath, fileData, lookup(body.name));
+        const indexer = resolveIndexer(server, workspaceId);
+        safeIndex(indexer, () => indexer!.indexFile(targetPath, fileData, lookup(body.name)));
         return reply.status(201).send(entry);
       } catch (err: any) {
         if (err.message?.includes('Invalid path')) {
@@ -197,6 +231,8 @@ export async function fileRoutes(server: FastifyInstance) {
       try {
         const { provider } = resolveWorkspace(server, workspaceId);
         await provider.delete(targetPath);
+        const indexer = resolveIndexer(server, workspaceId);
+        safeIndex(indexer, () => indexer!.removeFile(targetPath));
         return reply.status(204).send();
       } catch (err: any) {
         if (err.message?.includes('Invalid path')) {
@@ -221,6 +257,8 @@ export async function fileRoutes(server: FastifyInstance) {
       try {
         const { provider } = resolveWorkspace(server, workspaceId);
         const entry = await provider.move(from, to);
+        const indexer = resolveIndexer(server, workspaceId);
+        safeIndex(indexer, () => indexer!.moveFile(from, to));
         return entry;
       } catch (err: any) {
         if (err.message?.includes('Invalid path') || err.message?.includes('not found')) {
@@ -245,6 +283,18 @@ export async function fileRoutes(server: FastifyInstance) {
       try {
         const { provider } = resolveWorkspace(server, workspaceId);
         const entry = await provider.copy(from, to);
+        // Re-read the copied file and index it independently (the copy may be
+        // read-only, paged across a provider, etc. — don't assume we already
+        // have the bytes in memory).
+        const indexer = resolveIndexer(server, workspaceId);
+        if (indexer && FileIndexer.shouldIndex(to)) {
+          try {
+            const data = await provider.read(to);
+            safeIndex(indexer, () => indexer.indexFile(to, data, lookup(to)));
+          } catch {
+            // Provider might not support read after copy — skip silently.
+          }
+        }
         return entry;
       } catch (err: any) {
         if (err.message?.includes('Invalid path') || err.message?.includes('not found')) {
