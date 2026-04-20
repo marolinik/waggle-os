@@ -143,3 +143,51 @@ describe('buildComplianceDocDefinition — gap H', () => {
     expect(styles).toContain('#E5A000'); // HIVE_HONEY
   });
 });
+
+describe('buildComplianceDocDefinition — M-03 template overrides', () => {
+  it('overrides workspace name with templateOrgName in title + header + cover', () => {
+    const doc = buildComplianceDocDefinition(sampleReport(), { orgName: 'KVARK Sovereign Cloud' });
+    expect(doc.info?.title).toContain('KVARK Sovereign Cloud');
+    expect(doc.info?.title).not.toContain('Alpha Corp Legal');
+    const flat = JSON.stringify(doc.content);
+    expect(flat).toContain('KVARK Sovereign Cloud');
+  });
+
+  it('overrides workspace risk level with templateRiskClassification', () => {
+    const doc = buildComplianceDocDefinition(sampleReport(), { riskClassification: 'minimal' });
+    const flat = JSON.stringify(doc.content);
+    expect(flat).toContain('MINIMAL');
+    // Original workspace risk (HIGH-RISK) should no longer appear on the cover
+    // since the cover only renders the override.
+    expect(flat).not.toContain('HIGH-RISK');
+  });
+
+  it('appends footerText to the rendered footer', () => {
+    const doc = buildComplianceDocDefinition(sampleReport(), {
+      footerText: 'Confidential — board only',
+    });
+    // pdfmake `footer` is a function (currentPage, pageCount) => Content.
+    // Invoke it to get the rendered cell tree and stringify that.
+    const footerFn = doc.footer as ((currentPage: number, pageCount: number) => unknown) | undefined;
+    expect(typeof footerFn).toBe('function');
+    const footerContent = JSON.stringify(footerFn!(1, 1));
+    expect(footerContent).toContain('Confidential — board only');
+  });
+
+  it('blank overrides fall back to workspace defaults', () => {
+    const doc = buildComplianceDocDefinition(sampleReport(), {
+      orgName: '',
+      footerText: '',
+      riskClassification: null,
+    });
+    const flat = JSON.stringify(doc.content);
+    expect(flat).toContain('Alpha Corp Legal'); // workspace name still used
+    expect(flat).toContain('HIGH-RISK'); // workspace risk still used
+  });
+
+  it('ignores undefined overrides (no-op call path)', () => {
+    const baseline = buildComplianceDocDefinition(sampleReport());
+    const overridden = buildComplianceDocDefinition(sampleReport(), undefined);
+    expect(JSON.stringify(overridden.info)).toBe(JSON.stringify(baseline.info));
+  });
+});

@@ -14,8 +14,34 @@ import {
   HarvestSourceStore, ComplianceTemplateStore,
   type RecordInteractionInput, type AuditReportRequest,
   type CreateComplianceTemplateInput, type UpdateComplianceTemplateInput,
+  type AIActRiskLevel,
 } from '@waggle/core';
-import { renderComplianceReportPdf } from '@waggle/agent';
+import { renderComplianceReportPdf, type PdfTemplateOverrides } from '@waggle/agent';
+
+/**
+ * M-03: the `/export` and `/export-pdf` routes accept three optional template-
+ * sourced overrides on the request body. They do not change section selection
+ * (which is already merged client-side into `include`) — they only affect how
+ * the PDF renders org name, footer text, and the risk-classification label.
+ */
+interface TemplateOverrideFields {
+  templateOrgName?: string | null;
+  templateFooterText?: string | null;
+  templateRiskClassification?: AIActRiskLevel | null;
+}
+
+function extractPdfOverrides(body: unknown): PdfTemplateOverrides | undefined {
+  if (!body || typeof body !== 'object') return undefined;
+  const b = body as TemplateOverrideFields;
+  if (b.templateOrgName == null && b.templateFooterText == null && b.templateRiskClassification == null) {
+    return undefined;
+  }
+  return {
+    orgName: b.templateOrgName ?? null,
+    footerText: b.templateFooterText ?? null,
+    riskClassification: b.templateRiskClassification ?? null,
+  };
+}
 
 const sectionsSchema = z.object({
   interactions: z.boolean(),
@@ -183,7 +209,7 @@ export async function complianceRoutes(fastify: FastifyInstance) {
     });
 
     try {
-      const pdfBuffer = await renderComplianceReportPdf(report);
+      const pdfBuffer = await renderComplianceReportPdf(report, extractPdfOverrides(body));
       const filename = `ai-act-compliance-${body.from.slice(0, 10)}-to-${body.to.slice(0, 10)}.pdf`;
       return reply
         .header('Content-Type', 'application/pdf')

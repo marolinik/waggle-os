@@ -18,8 +18,19 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { AuditReport, ComplianceStatus, ArticleStatus } from '@waggle/core';
+import type { AuditReport, ComplianceStatus, ArticleStatus, AIActRiskLevel } from '@waggle/core';
 import type { TDocumentDefinitions, Content, TableCell } from 'pdfmake/interfaces.js';
+
+/**
+ * Optional template-sourced overrides (M-03). Applied over the workspace-derived
+ * values so a single workspace can render under multiple branded templates without
+ * mutating the underlying WorkspaceConfig. Logo is deferred to Bucket 2.
+ */
+export interface PdfTemplateOverrides {
+  orgName?: string | null;
+  footerText?: string | null;
+  riskClassification?: AIActRiskLevel | null;
+}
 
 /** Hive DS color palette — match design-system conventions */
 const HIVE_HONEY = '#E5A000';
@@ -49,9 +60,9 @@ function statusBadge(status: ArticleStatus['status']): Content {
   return { text: label, bold: true, color, fontSize: 9 };
 }
 
-function coverContent(report: AuditReport): Content[] {
-  const wsName = report.workspace?.name ?? 'Personal Mind';
-  const riskLevel = (report.workspace?.riskLevel ?? 'minimal').toUpperCase();
+function coverContent(report: AuditReport, overrides?: PdfTemplateOverrides): Content[] {
+  const wsName = (overrides?.orgName && overrides.orgName.trim()) || report.workspace?.name || 'Personal Mind';
+  const riskLevel = (overrides?.riskClassification ?? report.workspace?.riskLevel ?? 'minimal').toUpperCase();
   return [
     { text: 'AI ACT COMPLIANCE AUDIT', style: 'titleKicker', margin: [0, 120, 0, 6] },
     { text: wsName, style: 'title', margin: [0, 0, 0, 12] },
@@ -202,9 +213,14 @@ function provenanceTable(report: AuditReport): Content {
 }
 
 /** Build the pdfmake document definition. Exported for unit-test introspection. */
-export function buildComplianceDocDefinition(report: AuditReport): TDocumentDefinitions {
+export function buildComplianceDocDefinition(
+  report: AuditReport,
+  overrides?: PdfTemplateOverrides,
+): TDocumentDefinitions {
+  const wsName = (overrides?.orgName && overrides.orgName.trim()) || report.workspace?.name || 'Personal';
+  const footerExtra = overrides?.footerText?.trim() || null;
   const content: Content[] = [
-    ...coverContent(report),
+    ...coverContent(report, overrides),
 
     { text: 'Compliance Status', style: 'h1', margin: [0, 0, 0, 6] },
     {
@@ -249,7 +265,7 @@ export function buildComplianceDocDefinition(report: AuditReport): TDocumentDefi
 
   return {
     info: {
-      title: `Waggle AI Act Compliance Audit — ${report.workspace?.name ?? 'Personal'}`,
+      title: `Waggle AI Act Compliance Audit — ${wsName}`,
       author: 'Waggle OS',
       creator: 'Waggle OS Compliance Module',
       subject: `AI Act compliance audit for period ${report.report.period.from} → ${report.report.period.to}`,
@@ -259,12 +275,17 @@ export function buildComplianceDocDefinition(report: AuditReport): TDocumentDefi
     header: (currentPage: number) => currentPage > 1 ? {
       columns: [
         { text: 'Waggle — AI Act Compliance Audit', fontSize: 8, color: '#95A5A6', margin: [50, 20, 0, 0] },
-        { text: report.workspace?.name ?? 'Personal', alignment: 'right', fontSize: 8, color: '#95A5A6', margin: [0, 20, 50, 0] },
+        { text: wsName, alignment: 'right', fontSize: 8, color: '#95A5A6', margin: [0, 20, 50, 0] },
       ],
     } : undefined,
     footer: (currentPage: number, pageCount: number) => ({
       columns: [
-        { text: `Generated ${report.report.generatedAt.slice(0, 10)}`, fontSize: 8, color: '#95A5A6', margin: [50, 0, 0, 0] },
+        {
+          text: footerExtra
+            ? `Generated ${report.report.generatedAt.slice(0, 10)} · ${footerExtra}`
+            : `Generated ${report.report.generatedAt.slice(0, 10)}`,
+          fontSize: 8, color: '#95A5A6', margin: [50, 0, 0, 0],
+        },
         { text: `${currentPage} / ${pageCount}`, alignment: 'right', fontSize: 8, color: '#95A5A6', margin: [0, 0, 50, 0] },
       ],
     }),
@@ -285,8 +306,11 @@ export function buildComplianceDocDefinition(report: AuditReport): TDocumentDefi
  * Render an AuditReport to a PDF Buffer.
  * Uses dynamic import so pdfmake is only loaded when PDF generation runs.
  */
-export async function renderComplianceReportPdf(report: AuditReport): Promise<Buffer> {
-  const docDef = buildComplianceDocDefinition(report);
+export async function renderComplianceReportPdf(
+  report: AuditReport,
+  overrides?: PdfTemplateOverrides,
+): Promise<Buffer> {
+  const docDef = buildComplianceDocDefinition(report, overrides);
   const pdfMakeModule = await import('pdfmake/build/pdfmake.js');
   const pdfMake = (pdfMakeModule.default ?? pdfMakeModule) as any;
   const printer = pdfMake.createPdf(docDef);
@@ -299,8 +323,12 @@ export async function renderComplianceReportPdf(report: AuditReport): Promise<Bu
 }
 
 /** Convenience: write the PDF to disk. Returns the absolute path. */
-export async function writeComplianceReportPdf(report: AuditReport, outputPath: string): Promise<string> {
-  const buffer = await renderComplianceReportPdf(report);
+export async function writeComplianceReportPdf(
+  report: AuditReport,
+  outputPath: string,
+  overrides?: PdfTemplateOverrides,
+): Promise<string> {
+  const buffer = await renderComplianceReportPdf(report, overrides);
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
   fs.writeFileSync(outputPath, buffer);
   return path.resolve(outputPath);

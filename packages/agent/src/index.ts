@@ -224,6 +224,7 @@ export {
   buildComplianceDocDefinition,
   renderComplianceReportPdf,
   writeComplianceReportPdf,
+  type PdfTemplateOverrides,
 } from './compliance-pdf.js';
 export {
   watchSkillDirectory,
