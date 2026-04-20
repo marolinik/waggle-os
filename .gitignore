@@ -22,6 +22,15 @@ dist-ssr
 *.mind
 marketplace.db
 
+# Preflight gate per-query raw JSONs carry retrieved frame previews that
+# originate from Marko's personal AI exports. The report .md stays commit-
+# eligible (adapter counts, timing, verbatim questions + model answers
+# only); per-query JSONs and scratch dirs do not.
+preflight-results/stage-0-query-*.json
+preflight-results/stage-0-tmp/
+preflight-results/stage-*-attempt-*.md
+preflight-results/stage-*-exclusions.md
+
 # Benchmark harness — data + run outputs stay local
 benchmarks/data/*
 !benchmarks/data/.gitkeep
