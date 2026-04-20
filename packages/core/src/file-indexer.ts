@@ -129,36 +129,48 @@ export class FileIndexer {
     const truncated = content.length > MAX_CONTENT_BYTES;
     const frameBody = this.buildFrameContent(filePath, normalized, truncated, mime);
     const gopId = this.ensureSession();
-    const frame = this.frames.createIFrame(gopId, frameBody, 'normal', 'system');
+    // Atomicity contract (L-20 BLOCKER-1 fix): createIFrame → (conditional
+    // old-frame delete) → UPDATE/INSERT on file_index must commit as one unit.
+    // If any step throws mid-callback, better-sqlite3 rolls back the new frame
+    // and the index-row write, leaving the table in its pre-call state. Without
+    // this, a crash between the delete and the UPDATE would leave file_index
+    // pointing at a deleted frame_id (dangling) or an uncommitted new frame
+    // orphaned in the frames table.
+    const mutate = raw.transaction(() => {
+      const frame = this.frames.createIFrame(gopId, frameBody, 'normal', 'system');
 
-    if (existingRow) {
-      // Overwrite path: delete the old frame before we swap the row, unless
-      // the dedup coalesced two paths onto the same frame (leave that frame
-      // alone in that case — the other path still references it).
-      const oldFrameId = Number(existingRow.frame_id);
-      if (oldFrameId !== frame.id) {
-        const otherRef = raw.prepare('SELECT 1 FROM file_index WHERE frame_id = ? AND file_path != ? LIMIT 1').get(oldFrameId, filePath);
-        if (!otherRef) {
-          this.frames.delete(oldFrameId);
+      if (existingRow) {
+        // Overwrite path: delete the old frame before we swap the row, unless
+        // the dedup coalesced two paths onto the same frame (leave that frame
+        // alone in that case — the other path still references it).
+        const oldFrameId = Number(existingRow.frame_id);
+        if (oldFrameId !== frame.id) {
+          const otherRef = raw.prepare('SELECT 1 FROM file_index WHERE frame_id = ? AND file_path != ? LIMIT 1').get(oldFrameId, filePath);
+          if (!otherRef) {
+            this.frames.delete(oldFrameId);
+          }
         }
+        raw.prepare(`
+          UPDATE file_index SET
+            frame_id = ?,
+            mime_type = ?,
+            size_bytes = ?,
+            content_hash = ?,
+            indexed_at = datetime('now')
+          WHERE file_path = ?
+        `).run(frame.id, mime ?? null, content.length, hash, filePath);
+      } else {
+        raw.prepare(`
+          INSERT INTO file_index (file_path, frame_id, mime_type, size_bytes, content_hash)
+          VALUES (?, ?, ?, ?, ?)
+        `).run(filePath, frame.id, mime ?? null, content.length, hash);
       }
-      raw.prepare(`
-        UPDATE file_index SET
-          frame_id = ?,
-          mime_type = ?,
-          size_bytes = ?,
-          content_hash = ?,
-          indexed_at = datetime('now')
-        WHERE file_path = ?
-      `).run(frame.id, mime ?? null, content.length, hash, filePath);
-    } else {
-      raw.prepare(`
-        INSERT INTO file_index (file_path, frame_id, mime_type, size_bytes, content_hash)
-        VALUES (?, ?, ?, ?, ?)
-      `).run(filePath, frame.id, mime ?? null, content.length, hash);
-    }
 
-    return { skipped: false, frameId: frame.id, truncated };
+      return frame.id;
+    });
+
+    const frameId = mutate();
+    return { skipped: false, frameId, truncated };
   }
 
   /** Remove a file's frame + index row. Returns true if anything was removed. */

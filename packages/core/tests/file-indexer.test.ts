@@ -5,7 +5,7 @@
  * shared-content dedup safety, and the underlying file_index table.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MindDB } from '../src/mind/db.js';
 import { FrameStore } from '../src/mind/frames.js';
 import { FileIndexer, MAX_CONTENT_BYTES } from '../src/file-indexer.js';
@@ -132,6 +132,46 @@ describe('FileIndexer', () => {
       expect(emptyResult.skipped).toBe(true);
       if (emptyResult.skipped) expect(emptyResult.reason).toBe('empty');
       expect(indexer.getRow('/a.md')).toBeNull();
+    });
+
+    it('rolls back atomically when a mutation throws mid-overwrite (L-20 BLOCKER-1)', () => {
+      // Index a file, then simulate a crash during the overwrite path by
+      // making frames.delete throw. The whole transaction (new frame +
+      // old-frame delete + file_index UPDATE) must roll back together. Table
+      // state after the throw must match state before the throw.
+      const first = indexer.indexFile('/a.md', Buffer.from('original'));
+      expect(first.skipped).toBe(false);
+      if (first.skipped) return;
+      const originalFrameId = first.frameId;
+
+      const raw = db.getDatabase();
+      const framesBefore = (raw.prepare('SELECT COUNT(*) as c FROM memory_frames').get() as { c: number }).c;
+      const indexBefore = (raw.prepare('SELECT COUNT(*) as c FROM file_index').get() as { c: number }).c;
+
+      // Inject crash mid-transaction: the old-frame delete step throws.
+      const framesProp = (indexer as unknown as { frames: FrameStore }).frames;
+      const deleteSpy = vi.spyOn(framesProp, 'delete').mockImplementation(() => {
+        throw new Error('simulated crash mid-overwrite');
+      });
+
+      try {
+        expect(() => indexer.indexFile('/a.md', Buffer.from('updated'))).toThrow('simulated crash mid-overwrite');
+      } finally {
+        deleteSpy.mockRestore();
+      }
+
+      // Rollback invariants:
+      // 1. Frame-table row count unchanged (new frame not committed).
+      // 2. Old frame still present (delete was rolled back).
+      // 3. file_index row count unchanged + row still points at original frame.
+      const framesAfter = (raw.prepare('SELECT COUNT(*) as c FROM memory_frames').get() as { c: number }).c;
+      const indexAfter = (raw.prepare('SELECT COUNT(*) as c FROM file_index').get() as { c: number }).c;
+      expect(framesAfter).toBe(framesBefore);
+      expect(indexAfter).toBe(indexBefore);
+
+      const framesStore = new FrameStore(db);
+      expect(framesStore.getById(originalFrameId)).toBeTruthy();
+      expect(indexer.getRow('/a.md')!.frameId).toBe(originalFrameId);
     });
   });
 
