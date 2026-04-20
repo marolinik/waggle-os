@@ -182,7 +182,7 @@ export interface AgentState {
    * Optional `orchForMindTools` replaces the shared-orchestrator mind tools with a
    * session-specific orchestrator's tools so concurrent sessions don't collide.
    */
-  buildToolsForWorkspace: (workspacePath: string, orchForMindTools?: Orchestrator) => ToolDefinition[];
+  buildToolsForWorkspace: (workspacePath: string, orchForMindTools?: Orchestrator, workspaceId?: string) => ToolDefinition[];
   /**
    * Create a fresh Orchestrator for a workspace session with the given mind mounted.
    * Each session gets its own instance (Option Y fix from docs/plans/phase-a-the-room.md §9).
@@ -907,12 +907,49 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   // Skill hot-reload callback (set after agentState is created)
   let reloadSkills: ((fresh: LoadedSkill[]) => void) | undefined;
 
+  // L-18: Resolve a FileBackend for a workspace's storage type. Team (S3/MinIO)
+  // workspaces return a provider-backed FileBackend so the agent's file tools
+  // route through the shared bucket instead of the local filesystem. Local /
+  // virtual workspaces return undefined — system-tools falls back to fs.*
+  // and existing behavior is unchanged.
+  const buildFileBackendForWorkspace = (workspaceId: string | undefined) => {
+    if (!workspaceId) return undefined;
+    try {
+      const wsMeta = wsManager.get(workspaceId);
+      if (!wsMeta || wsMeta.storageType !== 'team') return undefined;
+      // Lazy-import to avoid dragging storage code into the hot path on
+      // non-team workspaces.
+      const { getStorageProvider } = require('./storage/index.js') as typeof import('./storage/index.js');
+      const provider = getStorageProvider(
+        {
+          id: wsMeta.id,
+          storageType: wsMeta.storageType,
+          storagePath: wsMeta.storagePath,
+          storageConfig: (wsMeta as unknown as { storageConfig?: Record<string, unknown> }).storageConfig,
+        },
+        fullConfig.dataDir,
+      );
+      return {
+        read: (p: string) => provider.read(p),
+        write: async (p: string, data: Buffer, mime?: string) => {
+          await provider.write(p, data, mime);
+        },
+        exists: (p: string) => provider.exists(p),
+        delete: (p: string) => provider.delete(p),
+      };
+    } catch (err) {
+      server.log.warn({ err, workspaceId }, 'Failed to build FileBackend for workspace');
+      return undefined;
+    }
+  };
+
   // Factory to rebuild workspace-scoped tools for a given directory.
   // Optional `orchForMindTools` replaces the shared-orchestrator mind tools with
   // a session-specific orchestrator's tools (Option Y fix from Phase A.1 plan).
   const buildToolsForWorkspace = (
     wsPath: string,
     orchForMindTools?: Orchestrator,
+    workspaceId?: string,
   ): ToolDefinition[] => {
     // Dynamic connector tools (only for connected connectors)
     const connectorTools = connectorRegistry.generateTools();
@@ -924,9 +961,13 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
       ? orchForMindTools.getTools()
       : mindTools;
 
+    // L-18: when the workspace is team-backed, route file tools through the
+    // shared provider. Otherwise pass only the cwd (fs fallback).
+    const fileBackend = buildFileBackendForWorkspace(workspaceId);
+
     const wsBase = [
       ...mindToolsForRequest,
-      ...createSystemTools(wsPath),
+      ...createSystemTools({ workspace: wsPath, fileBackend }),
       ...createPlanTools(),
       ...createGitTools(wsPath),
       ...createDocumentTools(wsPath),
@@ -1022,7 +1063,9 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     wsPath: string,
     sourceWorkspaceId?: string,
   ): ToolDefinition[] => {
-    const base = buildToolsForWorkspace(wsPath, sessionOrch);
+    // L-18: pass sourceWorkspaceId through so buildToolsForWorkspace can resolve
+    // the workspace's storage type and thread a FileBackend for team storage.
+    const base = buildToolsForWorkspace(wsPath, sessionOrch, sourceWorkspaceId);
     if (!sourceWorkspaceId) return base;
 
     const crossTools = createCrossWorkspaceTools({

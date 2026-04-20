@@ -10,6 +10,32 @@ import {
   checkDeniedBinaries, createSanitizedEnv, truncateOutput, resolveSafe,
 } from './system-tools-helpers.js';
 
+/**
+ * L-18: Storage abstraction the file-touching tools (read/write/edit) can
+ * optionally route through instead of `fs.*`. Satisfied structurally by
+ * `packages/server/src/local/storage`'s `StorageProvider`, so the server
+ * can pass its own provider through without a cross-package import.
+ *
+ * When `createSystemTools` is called with a `fileBackend`, workspaces
+ * backed by non-local storage (team S3/MinIO in particular) route file
+ * ops through the provider. When absent, the tools fall back to the
+ * legacy `fs.*` path so callers that haven't migrated keep working.
+ */
+export interface FileBackend {
+  read(filePath: string): Promise<Buffer>;
+  write(filePath: string, data: Buffer, mime?: string): Promise<void>;
+  exists(filePath: string): Promise<boolean>;
+  delete(filePath: string): Promise<void>;
+}
+
+export interface SystemToolDeps {
+  /** Absolute filesystem path used as cwd for bash + fallback fs ops. */
+  workspace: string;
+  /** Optional storage backend (team S3/MinIO). If present, file-content
+   * tools route through it instead of node:fs. */
+  fileBackend?: FileBackend;
+}
+
 // Module-level instances — shared across all tool invocations
 const searchCache = new SearchCache(300_000); // 5 min TTL
 const searchRateLimiter = new RateLimiter(10, 60_000); // 10 searches per minute
@@ -66,7 +92,27 @@ export function cleanupStaleTasks(): number {
   return removed;
 }
 
-export function createSystemTools(workspace: string): ToolDefinition[] {
+export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefinition[] {
+  const deps: SystemToolDeps = typeof wsOrDeps === 'string' ? { workspace: wsOrDeps } : wsOrDeps;
+  const { workspace, fileBackend } = deps;
+
+  // Normalize a user-supplied path to a backend key. The fs-level resolveSafe
+  // can't be used here because backend keys are virtual paths (e.g. S3 object
+  // keys), not paths inside the process cwd. We still need path-traversal
+  // defense — reject any segment equal to `..`.
+  const resolveBackendKey = (userPath: string): string => {
+    if (typeof userPath !== 'string' || !userPath) {
+      throw new Error('Invalid path');
+    }
+    // Forward slashes throughout; providers expect POSIX-style keys.
+    const normalized = userPath.replace(/\\/g, '/');
+    const parts = normalized.split('/').filter(p => p.length > 0);
+    if (parts.some(p => p === '..')) {
+      throw new Error(`Path resolves outside workspace: ${userPath}`);
+    }
+    return '/' + parts.join('/');
+  };
+
   return [
     // 1. bash — Execute shell commands
     {
@@ -185,31 +231,50 @@ export function createSystemTools(workspace: string): ToolDefinition[] {
       execute: async (args) => {
         try {
           const filePath = args.path as string;
-          const resolved = resolveSafe(workspace, filePath);
-          const ext = path.extname(resolved).toLowerCase();
+          const ext = path.extname(filePath).toLowerCase();
 
-          // Image file detection — don't read binary content
-          if (IMAGE_EXTENSIONS.has(ext)) {
-            const stat = fs.statSync(resolved);
-            return `[Image file: ${filePath}, ${stat.size} bytes]`;
-          }
+          // Image / PDF branches are fs-only for v1. Team-storage users will see
+          // backend routing for text files; images/PDFs stay on local disk until
+          // Bucket 2 adds binary-stream support in the backend contract.
+          if (!fileBackend) {
+            const resolved = resolveSafe(workspace, filePath);
 
-          // PDF file detection
-          if (ext === '.pdf') {
-            const stat = fs.statSync(resolved);
-            try {
-              const pdfParse = await import('pdf-parse');
-              const buffer = fs.readFileSync(resolved);
-              const parseFn = (pdfParse as any).default ?? pdfParse;
-              const data = await parseFn(buffer);
-              const text = data.text as string;
-              return text || `[PDF file: ${filePath}, ${stat.size} bytes, no text content extracted]`;
-            } catch {
-              return `[PDF file: ${filePath}, ${stat.size} bytes. Install pdf-parse for text extraction: npm install pdf-parse]`;
+            if (IMAGE_EXTENSIONS.has(ext)) {
+              const stat = fs.statSync(resolved);
+              return `[Image file: ${filePath}, ${stat.size} bytes]`;
+            }
+            if (ext === '.pdf') {
+              const stat = fs.statSync(resolved);
+              try {
+                const pdfParse = await import('pdf-parse');
+                const buffer = fs.readFileSync(resolved);
+                const parseFn = (pdfParse as any).default ?? pdfParse;
+                const data = await parseFn(buffer);
+                const text = data.text as string;
+                return text || `[PDF file: ${filePath}, ${stat.size} bytes, no text content extracted]`;
+              } catch {
+                return `[PDF file: ${filePath}, ${stat.size} bytes. Install pdf-parse for text extraction: npm install pdf-parse]`;
+              }
             }
           }
 
-          const content = fs.readFileSync(resolved, 'utf-8');
+          // Text read — branch on backend presence.
+          let content: string;
+          if (fileBackend) {
+            if (IMAGE_EXTENSIONS.has(ext)) {
+              return `[Image file: ${filePath}, binary content not read over storage backend]`;
+            }
+            if (ext === '.pdf') {
+              return `[PDF file: ${filePath}, backend-routed read does not yet extract PDF text. Download the file to inspect it.]`;
+            }
+            const key = resolveBackendKey(filePath);
+            const buf = await fileBackend.read(key);
+            content = buf.toString('utf-8');
+          } else {
+            const resolved = resolveSafe(workspace, filePath);
+            content = fs.readFileSync(resolved, 'utf-8');
+          }
+
           let lines = content.split('\n');
 
           const offset = (args.offset as number) ?? 1;
@@ -257,10 +322,17 @@ export function createSystemTools(workspace: string): ToolDefinition[] {
       },
       execute: async (args) => {
         try {
-          const resolved = resolveSafe(workspace, args.path as string);
-          fs.mkdirSync(path.dirname(resolved), { recursive: true });
-          fs.writeFileSync(resolved, args.content as string);
-          return `Successfully wrote ${args.path}`;
+          const filePath = args.path as string;
+          const contentStr = args.content as string;
+          if (fileBackend) {
+            const key = resolveBackendKey(filePath);
+            await fileBackend.write(key, Buffer.from(contentStr, 'utf-8'));
+          } else {
+            const resolved = resolveSafe(workspace, filePath);
+            fs.mkdirSync(path.dirname(resolved), { recursive: true });
+            fs.writeFileSync(resolved, contentStr);
+          }
+          return `Successfully wrote ${filePath}`;
         } catch (err: any) {
           return `Error: ${err.message}`;
         }
@@ -284,29 +356,45 @@ export function createSystemTools(workspace: string): ToolDefinition[] {
       },
       execute: async (args) => {
         try {
-          const resolved = resolveSafe(workspace, args.path as string);
+          const filePath = args.path as string;
           const oldStr = args.old_string as string;
           const newStr = args.new_string as string;
           const replaceAll = (args.replace_all as boolean) ?? false;
 
-          const content = fs.readFileSync(resolved, 'utf-8');
+          let content: string;
+          if (fileBackend) {
+            const key = resolveBackendKey(filePath);
+            const buf = await fileBackend.read(key);
+            content = buf.toString('utf-8');
+          } else {
+            const resolved = resolveSafe(workspace, filePath);
+            content = fs.readFileSync(resolved, 'utf-8');
+          }
+
           const occurrences = content.split(oldStr).length - 1;
 
           if (occurrences === 0) {
-            return `Error: old_string not found in ${args.path}`;
+            return `Error: old_string not found in ${filePath}`;
           }
 
           if (!replaceAll && occurrences > 1) {
-            return `Error: old_string found multiple times (${occurrences}) in ${args.path}. Must appear exactly once. Use replace_all: true to replace all occurrences.`;
+            return `Error: old_string found multiple times (${occurrences}) in ${filePath}. Must appear exactly once. Use replace_all: true to replace all occurrences.`;
           }
 
           const updated = replaceAll
             ? content.split(oldStr).join(newStr)
             : content.replace(oldStr, newStr);
-          fs.writeFileSync(resolved, updated);
+
+          if (fileBackend) {
+            const key = resolveBackendKey(filePath);
+            await fileBackend.write(key, Buffer.from(updated, 'utf-8'));
+          } else {
+            const resolved = resolveSafe(workspace, filePath);
+            fs.writeFileSync(resolved, updated);
+          }
 
           const countMsg = replaceAll && occurrences > 1 ? ` (${occurrences} occurrences)` : '';
-          return `Successfully edited ${args.path}${countMsg}`;
+          return `Successfully edited ${filePath}${countMsg}`;
         } catch (err: any) {
           return `Error: ${err.message}`;
         }
@@ -676,19 +764,26 @@ export function createSystemTools(workspace: string): ToolDefinition[] {
             return 'Error: No edits provided';
           }
 
-          // Phase 1: Read all files and validate all old_strings exist exactly once
+          // Phase 1: Read all files and validate all old_strings exist exactly once.
+          // Route through fileBackend when present; otherwise fs. Key in the maps
+          // is the logical identifier (backend key, or resolved fs path).
           const fileContents = new Map<string, string>();
-          const resolvedPaths = new Map<string, string>();
+          const resolvedKeys = new Map<string, string>();
 
           for (const edit of edits) {
-            const resolved = resolveSafe(workspace, edit.file_path);
-            resolvedPaths.set(edit.file_path, resolved);
+            const key = fileBackend
+              ? resolveBackendKey(edit.file_path)
+              : resolveSafe(workspace, edit.file_path);
+            resolvedKeys.set(edit.file_path, key);
 
-            if (!fileContents.has(resolved)) {
-              fileContents.set(resolved, fs.readFileSync(resolved, 'utf-8'));
+            if (!fileContents.has(key)) {
+              const content = fileBackend
+                ? (await fileBackend.read(key)).toString('utf-8')
+                : fs.readFileSync(key, 'utf-8');
+              fileContents.set(key, content);
             }
 
-            const content = fileContents.get(resolved)!;
+            const content = fileContents.get(key)!;
             const occurrences = content.split(edit.old_string).length - 1;
 
             if (occurrences === 0) {
@@ -701,14 +796,18 @@ export function createSystemTools(workspace: string): ToolDefinition[] {
 
           // Phase 2: Apply all edits (in memory first)
           for (const edit of edits) {
-            const resolved = resolvedPaths.get(edit.file_path)!;
-            const content = fileContents.get(resolved)!;
-            fileContents.set(resolved, content.replace(edit.old_string, edit.new_string));
+            const key = resolvedKeys.get(edit.file_path)!;
+            const content = fileContents.get(key)!;
+            fileContents.set(key, content.replace(edit.old_string, edit.new_string));
           }
 
           // Phase 3: Write all files
-          for (const [resolved, content] of fileContents) {
-            fs.writeFileSync(resolved, content);
+          for (const [key, content] of fileContents) {
+            if (fileBackend) {
+              await fileBackend.write(key, Buffer.from(content, 'utf-8'));
+            } else {
+              fs.writeFileSync(key, content);
+            }
           }
 
           // Summarize
