@@ -216,9 +216,14 @@ const Desktop = () => {
   // QW-1: honor the starter message from the wizard. The template-specific
   // hint ("Hello! What can you help me with?" etc) gets prefilled into the
   // chat input so the user lands in a conversation, not an empty window.
-  const handleOnboardingFinish = useCallback((workspaceId: string, workspaceName: string, firstMessage?: string) => {
+  // P1 fix: accept personaId from the wizard so the first chat window opens
+  // with the chosen persona instead of falling back to 'general-purpose'.
+  // useWindowManager.openChatForWorkspace's `ws?.persona` lookup misses here
+  // because refreshWorkspaces() hasn't landed the new workspace into the
+  // closure list yet — passing personaOverride bypasses the lookup.
+  const handleOnboardingFinish = useCallback((workspaceId: string, workspaceName: string, firstMessage?: string, personaId?: string) => {
     selectWorkspace(workspaceId);
-    wm.openChatForWorkspace(workspaceId, workspaceName, undefined, firstMessage);
+    wm.openChatForWorkspace(workspaceId, workspaceName, personaId, firstMessage);
     refreshWorkspaces();
   }, [selectWorkspace, wm.openChatForWorkspace, refreshWorkspaces]);
 

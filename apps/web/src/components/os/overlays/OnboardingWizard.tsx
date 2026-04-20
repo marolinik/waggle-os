@@ -23,7 +23,7 @@ interface OnboardingWizardProps {
   onUpdate: (updates: Partial<OnboardingState>) => void;
   onComplete: (serverBaseUrl: string) => void;
   onDismiss: () => void;
-  onFinish: (workspaceId: string, workspaceName: string, firstMessage: string) => void;
+  onFinish: (workspaceId: string, workspaceName: string, firstMessage: string, personaId?: string) => void;
 }
 
 /* ─── M2-7: Fire-and-forget telemetry via adapter ─── */
@@ -315,8 +315,14 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
     // open with an empty title. We prefer the user-entered name, fall back
     // to the template name, and finally to a readable default.
     const wsName = workspaceName || template?.name || 'My Workspace';
-    onFinish(wsId, wsName, hint);
-  }, [serverBaseUrl, onComplete, onFinish, state.workspaceId, state.templateId, selectedTemplate, workspaceName]);
+    // P1 fix: forward the persona explicitly so Desktop's openChatForWorkspace
+    // can seed the first window with it. Without this, useWindowManager looks
+    // up the workspace in its (stale) closure list and falls back to
+    // 'general-purpose'. Prefer onboarding state (latest persisted value) over
+    // the local selectedPersona ref so manual restarts pick up the right id.
+    const personaId = state.personaId || selectedPersona || undefined;
+    onFinish(wsId, wsName, hint, personaId);
+  }, [serverBaseUrl, onComplete, onFinish, state.workspaceId, state.templateId, state.personaId, selectedTemplate, selectedPersona, workspaceName]);
 
   /* ── Bug #3: if the vault pre-check already saved a key before the
        user reaches step 6, auto-advance straight past the API-key
