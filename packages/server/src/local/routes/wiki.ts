@@ -5,7 +5,11 @@ import {
   HybridSearch,
   createEmbeddingProvider,
 } from '@waggle/core';
-import { WikiCompiler, CompilationState, resolveSynthesizer, writeToObsidianVault } from '@waggle/wiki-compiler';
+import {
+  WikiCompiler, CompilationState, resolveSynthesizer,
+  writeToObsidianVault, writeToNotionWorkspace, extractNotionPageId,
+  type NotionStateHelpers,
+} from '@waggle/wiki-compiler';
 import * as path from 'node:path';
 
 export const wikiRoutes: FastifyPluginAsync = async (server) => {
@@ -116,6 +120,57 @@ export const wikiRoutes: FastifyPluginAsync = async (server) => {
     try {
       const result = writeToObsidianVault(pages, outDir);
       return reply.send(result);
+    } catch (err) {
+      return reply.status(500).send({
+        error: err instanceof Error ? err.message : 'Export failed',
+      });
+    }
+  });
+
+  // POST /api/wiki/export/notion — M-13: write compiled pages as child
+  // pages under a user-chosen Notion root. Reads `notion-wiki-token` from
+  // Vault; root is supplied as a notion.so URL or raw page id.
+  server.post<{ Body: { rootPageUrl?: string } }>('/api/wiki/export/notion', async (req, reply) => {
+    const rootPageUrl = req.body?.rootPageUrl?.trim();
+    if (!rootPageUrl) {
+      return reply.status(400).send({ error: 'rootPageUrl is required' });
+    }
+
+    const rootPageId = extractNotionPageId(rootPageUrl);
+    if (!rootPageId) {
+      return reply.status(400).send({
+        error: 'Could not parse a Notion page id from rootPageUrl. Paste the URL of a page you shared with your integration.',
+      });
+    }
+
+    const token = server.vault?.get('notion-wiki-token')?.value;
+    if (!token) {
+      return reply.status(503).send({
+        error: 'notion-wiki-token not set. Create an internal integration at notion.so/my-integrations, share your root page with it, and save the token in Vault as `notion-wiki-token`.',
+      });
+    }
+
+    const db = getPersonalDb();
+    const state = new CompilationState(db);
+    const pages = state.getAllPages();
+    if (pages.length === 0) {
+      return reply.status(409).send({
+        error: 'No compiled pages to export. Run compile first.',
+      });
+    }
+
+    // NotionStateHelpers adapter — delegates all the delta-tracking
+    // bookkeeping to CompilationState so the adapter stays stateless.
+    const helpers: NotionStateHelpers = {
+      getNotionPageId: (slug) => state.getNotionPageId(slug),
+      setNotionPageId: (slug, id) => state.setNotionPageId(slug, id),
+      clearNotionPageId: (slug) => state.clearNotionPageId(slug),
+      getPageContentHash: (slug) => state.getPageContentHash(slug),
+    };
+
+    try {
+      const stats = await writeToNotionWorkspace(pages, { token, rootPageId }, helpers);
+      return reply.send(stats);
     } catch (err) {
       return reply.status(500).send({
         error: err instanceof Error ? err.message : 'Export failed',

@@ -1361,6 +1361,31 @@ class LocalAdapter {
     return res.json();
   }
 
+  /**
+   * M-13: export all compiled wiki pages as child pages under a Notion
+   * root page. Requires `notion-wiki-token` in Vault (paste from
+   * notion.so/my-integrations) and a root page URL that has been shared
+   * with the integration. Delta-aware — unchanged pages skip API calls.
+   */
+  async exportWikiToNotion(rootPageUrl: string): Promise<{
+    pagesCreated: number;
+    pagesUpdated: number;
+    pagesUnchanged: number;
+    pagesFailed: number;
+    byType: Record<string, number>;
+    errors: { slug: string; message: string }[];
+  }> {
+    const res = await this.fetch('/api/wiki/export/notion', {
+      method: 'POST',
+      body: JSON.stringify({ rootPageUrl }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(body.error ?? `Notion export failed (${res.status})`);
+    }
+    return res.json();
+  }
+
   // --- Compliance ---
   async getComplianceStatus(workspaceId?: string): Promise<any> {
     const url = workspaceId ? `/api/compliance/status?workspaceId=${workspaceId}` : '/api/compliance/status';

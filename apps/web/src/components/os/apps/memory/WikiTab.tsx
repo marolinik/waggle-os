@@ -8,7 +8,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   BookOpen, RefreshCw, Loader2, Search, FileText,
-  Heart, ChevronRight, Zap, Network, Lightbulb, Download,
+  Heart, ChevronRight, Zap, Network, Lightbulb, Download, Upload,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { renderSimpleMarkdown } from '@/lib/render-markdown';
@@ -168,6 +168,37 @@ export default function WikiTab() {
     }
   }, []);
 
+  // M-13: Notion export. Prompt for the root page URL; the token lives in
+  // Vault as `notion-wiki-token` and is set up separately via Settings →
+  // Vault. The 503 response carries a hint if the token is missing.
+  const handleExportNotion = useCallback(async () => {
+    const rootPageUrl = window.prompt(
+      'Notion page URL to export under (share this page with your Waggle integration first):',
+      '',
+    );
+    if (!rootPageUrl?.trim()) return;
+    try {
+      const result = await adapter.exportWikiToNotion(rootPageUrl.trim());
+      setPageContent(
+        `# Notion Export Complete\n\n` +
+        `- **Pages created:** ${result.pagesCreated}\n` +
+        `- **Pages updated:** ${result.pagesUpdated}\n` +
+        `- **Pages unchanged:** ${result.pagesUnchanged}\n` +
+        `- **Pages failed:** ${result.pagesFailed}\n` +
+        (Object.keys(result.byType).length > 0
+          ? `- **By type:** ${Object.entries(result.byType).map(([k, v]) => `${k}=${v}`).join(', ')}\n`
+          : '') +
+        (result.errors.length > 0
+          ? `\n## Errors\n\n${result.errors.map(e => `- **${e.slug}**: ${e.message}`).join('\n')}\n`
+          : ''),
+      );
+      setSelectedSlug(null);
+      setHealth(null);
+    } catch (err) {
+      setPageContent(`# Notion Export Failed\n\n${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
+  }, []);
+
   // Filter pages
   const filtered = pages.filter(p => {
     if (filterType && p.pageType !== filterType) return false;
@@ -219,6 +250,15 @@ export default function WikiTab() {
                   className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30"
                 >
                   <Download className="w-3.5 h-3.5" />
+                </button>
+              </HintTooltip>
+              <HintTooltip content="Export to Notion workspace">
+                <button
+                  onClick={handleExportNotion}
+                  disabled={pages.length === 0}
+                  className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30"
+                >
+                  <Upload className="w-3.5 h-3.5" />
                 </button>
               </HintTooltip>
               <HintTooltip content="Refresh">
