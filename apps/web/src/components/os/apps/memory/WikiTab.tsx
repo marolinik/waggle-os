@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { renderSimpleMarkdown } from '@/lib/render-markdown';
+import { HintTooltip } from '@/components/ui/hint-tooltip';
 
 interface WikiPage {
   slug: string;
@@ -151,28 +152,31 @@ export default function WikiTab() {
               <span className="text-[11px] text-muted-foreground">({pages.length})</span>
             </div>
             <div className="flex gap-1">
-              <button
-                onClick={handleLoadHealth}
-                className="p-1 rounded text-muted-foreground hover:text-green-400 transition-colors"
-                title="Health Report"
-              >
-                <Heart className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={handleCompile}
-                disabled={compiling}
-                className="p-1 rounded text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
-                title="Compile Wiki"
-              >
-                {compiling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
-              </button>
-              <button
-                onClick={loadPages}
-                className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors"
-                title="Refresh"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-              </button>
+              <HintTooltip content="Health Report">
+                <button
+                  onClick={handleLoadHealth}
+                  className="p-1 rounded text-muted-foreground hover:text-green-400 transition-colors"
+                >
+                  <Heart className="w-3.5 h-3.5" />
+                </button>
+              </HintTooltip>
+              <HintTooltip content="Compile Wiki">
+                <button
+                  onClick={handleCompile}
+                  disabled={compiling}
+                  className="p-1 rounded text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
+                >
+                  {compiling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+                </button>
+              </HintTooltip>
+              <HintTooltip content="Refresh">
+                <button
+                  onClick={loadPages}
+                  className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+              </HintTooltip>
             </div>
           </div>
 

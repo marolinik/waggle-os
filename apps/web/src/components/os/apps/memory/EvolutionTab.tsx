@@ -14,6 +14,7 @@ import {
   AlertTriangle, Ban, CheckCircle2, Clock, Zap, Plus,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { HintTooltip } from '@/components/ui/hint-tooltip';
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -306,21 +307,23 @@ export default function EvolutionTab() {
               <h3 className="text-xs font-display font-semibold text-foreground">Evolution</h3>
             </div>
             <div className="flex items-center gap-0.5">
-              <button
-                onClick={() => setRunModalOpen(true)}
-                className="p-1 rounded text-primary hover:bg-primary/10 transition-colors"
-                title="New Run"
-              >
-                <Plus className="w-3 h-3" />
-              </button>
-              <button
-                onClick={handleRefresh}
-                className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors"
-                title="Refresh"
-                disabled={loading}
-              >
-                <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
-              </button>
+              <HintTooltip content="New Run">
+                <button
+                  onClick={() => setRunModalOpen(true)}
+                  className="p-1 rounded text-primary hover:bg-primary/10 transition-colors"
+                >
+                  <Plus className="w-3 h-3" />
+                </button>
+              </HintTooltip>
+              <HintTooltip content="Refresh">
+                <button
+                  onClick={handleRefresh}
+                  className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors"
+                  disabled={loading}
+                >
+                  <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+                </button>
+              </HintTooltip>
             </div>
           </div>
 

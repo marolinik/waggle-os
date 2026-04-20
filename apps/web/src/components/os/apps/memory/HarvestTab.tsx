@@ -11,6 +11,7 @@ import {
   Loader2, Plus, Zap, Brain, Trash2, Pause, Play,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { HintTooltip } from '@/components/ui/hint-tooltip';
 
 interface HarvestSource {
   id: number;
@@ -328,26 +329,28 @@ const HarvestTab = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    onClick={async () => {
-                      await adapter.toggleHarvestAutoSync(s.source, !s.autoSync);
-                      fetchSources();
-                    }}
-                    className={`p-1 rounded transition-colors ${s.autoSync ? 'text-primary hover:text-primary/70' : 'text-muted-foreground hover:text-foreground'}`}
-                    title={s.autoSync ? 'Pause auto-sync' : 'Enable auto-sync'}
-                  >
-                    {s.autoSync ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
-                  </button>
-                  <button
-                    onClick={async () => {
-                      await adapter.removeHarvestSource(s.source);
-                      fetchSources();
-                    }}
-                    className="p-1 rounded text-muted-foreground hover:text-destructive transition-colors"
-                    title="Remove source"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
+                  <HintTooltip content={s.autoSync ? 'Pause auto-sync' : 'Enable auto-sync'}>
+                    <button
+                      onClick={async () => {
+                        await adapter.toggleHarvestAutoSync(s.source, !s.autoSync);
+                        fetchSources();
+                      }}
+                      className={`p-1 rounded transition-colors ${s.autoSync ? 'text-primary hover:text-primary/70' : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                      {s.autoSync ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                    </button>
+                  </HintTooltip>
+                  <HintTooltip content="Remove source">
+                    <button
+                      onClick={async () => {
+                        await adapter.removeHarvestSource(s.source);
+                        fetchSources();
+                      }}
+                      className="p-1 rounded text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </HintTooltip>
                 </div>
               </div>
             ))}

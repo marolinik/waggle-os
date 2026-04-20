@@ -6,6 +6,7 @@ import type { MemoryFrame, KGNode, KGEdge } from '@/lib/types';
 import { renderSimpleMarkdown } from '@/lib/render-markdown';
 import ContextMenu, { type ContextMenuItem } from '@/components/os/ContextMenu';
 import KnowledgeGraphViewer from './memory/KnowledgeGraphViewer';
+import { HintTooltip } from '@/components/ui/hint-tooltip';
 import HarvestTab from './memory/HarvestTab';
 import WeaverPanel from './memory/WeaverPanel';
 import WikiTab from './memory/WikiTab';
@@ -110,13 +111,14 @@ const MemoryApp = ({
               {(stats.relations ?? 0) > 0 && <span> · {stats.relations} relations</span>}
             </p>
             <div className="flex gap-1">
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                className={`p-1 rounded transition-colors ${showFilters ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
-                title="Filter timeline"
-              >
-                <Filter className="w-3 h-3" />
-              </button>
+              <HintTooltip content="Filter timeline">
+                <button
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={`p-1 rounded transition-colors ${showFilters ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  <Filter className="w-3 h-3" />
+                </button>
+              </HintTooltip>
             </div>
           </div>
           {showFilters && (
@@ -199,20 +201,20 @@ const MemoryApp = ({
             const Icon = tab.icon;
             const active = view === tab.id;
             return (
-              <button
-                key={tab.id}
-                onClick={() => setView(tab.id)}
-                title={tab.tooltip}
-                aria-pressed={active}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-display border-b-2 transition-colors ${
-                  active
-                    ? 'border-primary text-primary bg-primary/5'
-                    : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30'
-                }`}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                <span>{tab.label}</span>
-              </button>
+              <HintTooltip key={tab.id} content={tab.tooltip}>
+                <button
+                  onClick={() => setView(tab.id)}
+                  aria-pressed={active}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-display border-b-2 transition-colors ${
+                    active
+                      ? 'border-primary text-primary bg-primary/5'
+                      : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30'
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  <span>{tab.label}</span>
+                </button>
+              </HintTooltip>
             );
           })}
         </div>

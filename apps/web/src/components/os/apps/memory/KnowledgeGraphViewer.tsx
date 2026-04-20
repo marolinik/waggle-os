@@ -13,6 +13,7 @@ import {
 } from 'd3-force';
 import { Network, ZoomIn, ZoomOut, Maximize2, Minimize2, RotateCcw, Search, Globe, Download, AlertTriangle, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { HintTooltip } from '@/components/ui/hint-tooltip';
 import type { KGNode, KGEdge } from '@/lib/types';
 import { downloadKgSvg } from '@/lib/kg-export';
 
@@ -460,18 +461,21 @@ const KnowledgeGraphViewer = ({
           <div className="flex items-center gap-0.5 bg-muted/50 rounded-md px-1 py-0.5">
             <span className="text-[10px] text-muted-foreground px-1">Show top</span>
             {LIMIT_OPTIONS.map(opt => (
-              <button
+              <HintTooltip
                 key={String(opt)}
-                onClick={() => setNodeLimit(opt)}
-                className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${
-                  nodeLimit === opt
-                    ? 'bg-primary/20 text-primary'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                title={opt === 'all' ? `Show all ${nodes.length.toLocaleString()} nodes` : `Show top ${opt} by connections`}
+                content={opt === 'all' ? `Show all ${nodes.length.toLocaleString()} nodes` : `Show top ${opt} by connections`}
               >
-                {opt === 'all' ? 'All' : opt}
-              </button>
+                <button
+                  onClick={() => setNodeLimit(opt)}
+                  className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${
+                    nodeLimit === opt
+                      ? 'bg-primary/20 text-primary'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {opt === 'all' ? 'All' : opt}
+                </button>
+              </HintTooltip>
             ))}
           </div>
 
@@ -504,28 +508,37 @@ const KnowledgeGraphViewer = ({
 
           {/* Zoom controls */}
           <div className="flex items-center gap-0.5 ml-2">
-            <button onClick={zoomOut} className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors" title="Zoom out">
-              <ZoomOut className="w-3.5 h-3.5" />
-            </button>
+            <HintTooltip content="Zoom out">
+              <button onClick={zoomOut} className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors">
+                <ZoomOut className="w-3.5 h-3.5" />
+              </button>
+            </HintTooltip>
             <span className="text-[11px] text-muted-foreground w-10 text-center">{Math.round(zoom * 100)}%</span>
-            <button onClick={zoomIn} className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors" title="Zoom in">
-              <ZoomIn className="w-3.5 h-3.5" />
-            </button>
-            <button onClick={resetView} className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors" title="Reset view">
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={exportSvg}
-              className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
-              title="Export as SVG"
-              aria-label="Export graph as SVG"
-              data-testid="kg-export-svg"
-            >
-              <Download className="w-3.5 h-3.5" />
-            </button>
-            <button onClick={toggleFullscreen} className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors" title="Toggle fullscreen">
-              {fullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-            </button>
+            <HintTooltip content="Zoom in">
+              <button onClick={zoomIn} className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors">
+                <ZoomIn className="w-3.5 h-3.5" />
+              </button>
+            </HintTooltip>
+            <HintTooltip content="Reset view">
+              <button onClick={resetView} className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors">
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            </HintTooltip>
+            <HintTooltip content="Export as SVG">
+              <button
+                onClick={exportSvg}
+                className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Export graph as SVG"
+                data-testid="kg-export-svg"
+              >
+                <Download className="w-3.5 h-3.5" />
+              </button>
+            </HintTooltip>
+            <HintTooltip content="Toggle fullscreen">
+              <button onClick={toggleFullscreen} className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors">
+                {fullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+              </button>
+            </HintTooltip>
           </div>
         </div>
       </div>
@@ -663,40 +676,44 @@ const KnowledgeGraphViewer = ({
               Entity Types
             </p>
             {hiddenTypes.size > 0 && (
-              <button
-                onClick={resetHiddenTypes}
-                className="text-[11px] text-primary hover:text-primary/80 transition-colors"
-                title="Reset all type filters"
-              >
-                Reset
-              </button>
+              <HintTooltip content="Reset all type filters">
+                <button
+                  onClick={resetHiddenTypes}
+                  className="text-[11px] text-primary hover:text-primary/80 transition-colors"
+                >
+                  Reset
+                </button>
+              </HintTooltip>
             )}
           </div>
           <div className="flex flex-wrap gap-x-2 gap-y-1">
             {uniqueTypes.map(type => {
               const hidden = hiddenTypes.has(type);
               return (
-                <button
+                <HintTooltip
                   key={type}
-                  onClick={() => toggleHideType(type)}
-                  className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded transition-colors ${
-                    hidden
-                      ? 'opacity-40 hover:opacity-70'
-                      : 'hover:bg-muted/60'
-                  }`}
-                  title={hidden ? `Show ${getNodeLabel(type)}` : `Hide ${getNodeLabel(type)}`}
+                  content={hidden ? `Show ${getNodeLabel(type)}` : `Hide ${getNodeLabel(type)}`}
                 >
-                  <div
-                    className="w-2.5 h-2.5 rounded-full shrink-0"
-                    style={{ backgroundColor: getNodeColor(type) }}
-                  />
-                  <span className="text-[11px] text-muted-foreground capitalize">
-                    {getNodeLabel(type)}
-                  </span>
-                  <span className="text-[11px] text-muted-foreground/60">
-                    {typeCounts[type].toLocaleString()}
-                  </span>
-                </button>
+                  <button
+                    onClick={() => toggleHideType(type)}
+                    className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded transition-colors ${
+                      hidden
+                        ? 'opacity-40 hover:opacity-70'
+                        : 'hover:bg-muted/60'
+                    }`}
+                  >
+                    <div
+                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{ backgroundColor: getNodeColor(type) }}
+                    />
+                    <span className="text-[11px] text-muted-foreground capitalize">
+                      {getNodeLabel(type)}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground/60">
+                      {typeCounts[type].toLocaleString()}
+                    </span>
+                  </button>
+                </HintTooltip>
               );
             })}
           </div>
