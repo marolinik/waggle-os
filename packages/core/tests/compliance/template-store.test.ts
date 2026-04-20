@@ -7,7 +7,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { MindDB } from '../../src/mind/db.js';
-import { ComplianceTemplateStore } from '../../src/compliance/template-store.js';
+import { ComplianceTemplateStore, KVARK_TEMPLATE_NAME } from '../../src/compliance/template-store.js';
 import type { ComplianceTemplateSections } from '../../src/compliance/types.js';
 
 const ALL_ON: ComplianceTemplateSections = {
@@ -199,6 +199,34 @@ describe('ComplianceTemplateStore', () => {
           riskClassification: 'super-dangerous' as never,
         }),
       ).toThrow(); // better-sqlite3 surfaces the CHECK violation
+    });
+  });
+
+  describe('seedKvarkTemplateIfMissing (M-06)', () => {
+    it('creates the KVARK template on first run', () => {
+      const seeded = store.seedKvarkTemplateIfMissing();
+      expect(seeded).not.toBeNull();
+      expect(seeded!.name).toBe(KVARK_TEMPLATE_NAME);
+      expect(seeded!.riskClassification).toBe('high-risk');
+      expect(seeded!.sections.fria).toBe(true);
+      expect(seeded!.orgName).toContain('KVARK');
+      expect(seeded!.footerText).toContain('sovereign');
+    });
+
+    it('is idempotent — second call returns null', () => {
+      store.seedKvarkTemplateIfMissing();
+      expect(store.seedKvarkTemplateIfMissing()).toBeNull();
+      // Only one KVARK row exists.
+      const all = store.list().filter(t => t.name === KVARK_TEMPLATE_NAME);
+      expect(all).toHaveLength(1);
+    });
+
+    it('does not seed when the user already created a same-named template', () => {
+      store.create({
+        name: KVARK_TEMPLATE_NAME,
+        sections: ALL_OFF,
+      });
+      expect(store.seedKvarkTemplateIfMissing()).toBeNull();
     });
   });
 

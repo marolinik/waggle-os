@@ -10,7 +10,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
-import { MindDB, MultiMind, MultiMindCache, WorkspaceManager, WaggleConfig, createEmbeddingProvider, type EmbeddingProviderConfig, type EmbeddingProviderInstance, FrameStore, SessionStore, InstallAuditStore, CronStore, AwarenessLayer, VaultStore, SkillHashStore, OptimizationLogStore, ImprovementSignalStore, HarvestSourceStore, ClaudeCodeAdapter, reconcileIndexes, TeamSync, TelemetryStore, TELEMETRY_EVENTS, ExecutionTraceStore, EvolutionRunStore } from '@waggle/core';
+import { MindDB, MultiMind, MultiMindCache, WorkspaceManager, WaggleConfig, createEmbeddingProvider, type EmbeddingProviderConfig, type EmbeddingProviderInstance, FrameStore, SessionStore, InstallAuditStore, CronStore, AwarenessLayer, VaultStore, SkillHashStore, OptimizationLogStore, ImprovementSignalStore, HarvestSourceStore, ClaudeCodeAdapter, reconcileIndexes, TeamSync, TelemetryStore, TELEMETRY_EVENTS, ExecutionTraceStore, EvolutionRunStore, ComplianceTemplateStore } from '@waggle/core';
 import { ALLOWED_ORIGINS } from './cors-config.js';
 import { MemoryWeaver } from '@waggle/weaver';
 import {
@@ -299,6 +299,17 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   // Install audit store — persistent trail for capability install events
   const auditStore = new InstallAuditStore(multiMind.personal);
   server.decorate('auditStore', auditStore);
+
+  // M-06: seed the built-in KVARK enterprise template on first boot.
+  // Idempotent — subsequent boots see the row and no-op.
+  try {
+    const templateStore = new ComplianceTemplateStore(multiMind.personal);
+    templateStore.seedKvarkTemplateIfMissing();
+  } catch (err) {
+    // Non-fatal: users can create the template manually from the UI if the
+    // seed fails (disk full, schema drift, etc.).
+    server.log.warn({ err }, 'Failed to seed KVARK compliance template');
+  }
 
   // Cron store — SQLite-backed schedule persistence for Solo
   const cronStore = new CronStore(multiMind.personal);

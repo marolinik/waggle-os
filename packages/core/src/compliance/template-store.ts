@@ -51,6 +51,12 @@ const DEFAULT_SECTIONS: ComplianceTemplateSections = {
   fria: false,
 };
 
+/**
+ * Canonical name for the seeded KVARK template. Used for idempotency — the
+ * seed only fires when no row with this exact name exists.
+ */
+export const KVARK_TEMPLATE_NAME = 'KVARK Enterprise Audit';
+
 export class ComplianceTemplateStore {
   private db: MindDB;
 
@@ -174,6 +180,44 @@ export class ComplianceTemplateStore {
 
   private normalizeSections(s: Partial<ComplianceTemplateSections> | undefined): ComplianceTemplateSections {
     return { ...DEFAULT_SECTIONS, ...(s ?? {}) };
+  }
+
+  /**
+   * Idempotent: seed the built-in "KVARK Enterprise Audit" template if no
+   * template with that exact name exists yet (M-06).
+   *
+   * The KVARK template is a sensible-default shape for sovereign enterprise
+   * deployments — every section on (including FRIA, since KVARK serves
+   * high-risk enterprise systems), risk pinned at `high-risk`, and org/footer
+   * text that signals the sovereign-deployment narrative.
+   *
+   * Custom KVARK-specific sections (per-department risk breakdown, IAM
+   * audit columns, data-residency attestation text) are deferred to
+   * Bucket 2 along with the logo field — the current template schema
+   * doesn't support custom sections yet.
+   *
+   * Returns the seeded template, or null if one already existed.
+   */
+  seedKvarkTemplateIfMissing(): ComplianceTemplate | null {
+    const raw = this.db.getDatabase();
+    const existing = raw.prepare(
+      'SELECT id FROM compliance_templates WHERE name = ? LIMIT 1',
+    ).get(KVARK_TEMPLATE_NAME) as { id: number } | undefined;
+    if (existing) return null;
+    return this.create({
+      name: KVARK_TEMPLATE_NAME,
+      description:
+        'Sovereign AI Act audit shape for enterprise on-prem deployments. ' +
+        'Includes all monitored articles (12/14/19/26/50) plus FRIA since KVARK ' +
+        'customers typically operate high-risk systems. Data never leaves the ' +
+        "customer perimeter; this template's org + footer text signal that " +
+        'posture directly on every exported report.',
+      sections: { ...DEFAULT_SECTIONS, fria: true },
+      riskClassification: 'high-risk',
+      orgName: 'KVARK Sovereign — Enterprise Deployment',
+      footerText:
+        'Confidential · EU AI Act attestation · KVARK sovereign deployment · Data remains within customer perimeter',
+    });
   }
 
   private rowToTemplate(row: Record<string, unknown>): ComplianceTemplate {
