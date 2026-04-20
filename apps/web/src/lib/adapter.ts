@@ -1236,6 +1236,26 @@ class LocalAdapter {
     return res.json();
   }
 
+  /**
+   * M-09: Trigger LLM extraction of structured identity fields (name, role,
+   * company, industry, bio) from recent harvest frames. Persists as pending
+   * profile.identitySuggestions. Accept/dismiss reuses updateProfile with
+   * the filtered suggestion array.
+   */
+  async extractHarvestIdentity(): Promise<{
+    suggestions: Array<{
+      field: 'name' | 'role' | 'company' | 'industry' | 'bio';
+      value: string;
+      confidence: number;
+      sourceHint: string;
+      extractedAt: string;
+    }>;
+    note?: string;
+  }> {
+    const res = await this.fetch('/api/harvest/extract-identity', { method: 'POST' });
+    return res.json();
+  }
+
   async removeHarvestSource(source: string): Promise<void> {
     await this.fetch(`/api/harvest/sources/${encodeURIComponent(source)}`, { method: 'DELETE' });
   }

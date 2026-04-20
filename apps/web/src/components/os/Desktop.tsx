@@ -149,6 +149,18 @@ const Desktop = () => {
   // Window management (extracted hook)
   const wm = useWindowManager(workspaces, { defaultAutonomy });
 
+  // M-09: cross-component "open me" channel. HarvestTab (and other sources)
+  // can dispatch `waggle:open-app` with { appId, tab? } to raise a window.
+  // Tab switching is handled inside the target app via the same event.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { appId?: AppId } | undefined;
+      if (detail?.appId) wm.openApp(detail.appId);
+    };
+    window.addEventListener('waggle:open-app', handler);
+    return () => window.removeEventListener('waggle:open-app', handler);
+  }, [wm.openApp]);
+
   // Phase B.1: the Files app has its own "active" workspace separate from
   // the global activeWorkspace, so browsing another workspace's files
   // doesn't disrupt the active chat. Null falls back to activeWorkspaceId.

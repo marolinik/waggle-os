@@ -8,7 +8,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Upload, RefreshCw, Clock, CheckCircle2, AlertCircle,
-  Loader2, Plus, Zap, Brain, Trash2, Pause, Play,
+  Loader2, Plus, Zap, Brain, Trash2, Pause, Play, Sparkles,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
@@ -90,6 +90,10 @@ const HarvestTab = () => {
   // M-07: live progress streamed from /api/harvest/progress during commit.
   // Resets to null when no import is in flight.
   const [progress, setProgress] = useState<{ phase: string; current: number; total: number; source: string } | null>(null);
+  // M-09: pending identity suggestions extracted from recent harvest frames.
+  // Surfaced as a banner after a successful commit; cleared on next import start.
+  // The suggestions themselves live in UserProfile — we only hold the count here.
+  const [identitySuggestionCount, setIdentitySuggestionCount] = useState(0);
 
   const claudeCodeSource = sources.find(s => s.source === 'claude-code') ?? null;
 
@@ -155,6 +159,16 @@ const HarvestTab = () => {
     }
   };
 
+  // M-09: post-commit identity extraction. Non-blocking — if the Anthropic
+  // key is missing or the LLM call fails, suggestions stay at 0 and the
+  // banner simply doesn't render. Called from both import paths.
+  const runIdentityExtraction = useCallback(async () => {
+    try {
+      const { suggestions } = await adapter.extractHarvestIdentity();
+      setIdentitySuggestionCount(suggestions.length);
+    } catch { /* non-fatal */ }
+  }, []);
+
   // Commit import — always uses the retained pendingData, never the preview
   // shape (server cannot re-parse the preview response).
   const handleCommit = async () => {
@@ -162,6 +176,7 @@ const HarvestTab = () => {
     setImporting(true);
     setError(null);
     setProgress(null);
+    setIdentitySuggestionCount(0);
 
     // M-07: subscribe BEFORE the POST so the server-side listener is
     // registered before the pipeline starts emitting events.
@@ -174,6 +189,7 @@ const HarvestTab = () => {
       setPreview(null);
       setPendingData(null);
       await fetchSources();
+      if (result?.saved > 0) await runIdentityExtraction();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Import failed');
     } finally {
@@ -195,6 +211,7 @@ const HarvestTab = () => {
     setError(null);
     setImportResult(null);
     setProgress(null);
+    setIdentitySuggestionCount(0);
 
     // M-07: same subscribe-before-POST ordering as handleCommit.
     const sub = adapter.subscribeHarvestProgress(setProgress);
@@ -207,6 +224,7 @@ const HarvestTab = () => {
       // Refresh the detect banner so "Found N items" reflects the
       // current state (already-harvested vs. pending).
       await detectClaudeCode();
+      if (result?.saved > 0) await runIdentityExtraction();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Claude Code harvest failed');
     } finally {
@@ -214,6 +232,16 @@ const HarvestTab = () => {
       setImporting(false);
       setProgress(null);
     }
+  };
+
+  // M-09: open the Profile app on the Identity tab, where the suggestions
+  // banner is rendered. Cross-component via `waggle:open-app` — Desktop
+  // owns the window raise; UserProfileApp owns the tab switch.
+  const handleReviewIdentity = () => {
+    window.dispatchEvent(new CustomEvent('waggle:open-app', {
+      detail: { appId: 'profile', tab: 'identity' },
+    }));
+    setIdentitySuggestionCount(0);
   };
 
   if (loading) {
@@ -323,6 +351,29 @@ const HarvestTab = () => {
               }}
             />
           </div>
+        </div>
+      )}
+
+      {/* M-09: identity suggestion nudge — appears after a successful commit
+          when at least one structured identity fact surfaced. Click routes to
+          UserProfileApp → Identity tab where the user accepts/dismisses. */}
+      {identitySuggestionCount > 0 && (
+        <div className="p-3 rounded-lg bg-accent/10 border border-accent/30 flex items-center gap-3">
+          <Sparkles className="w-4 h-4 text-accent shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-display font-medium text-foreground">
+              We learned {identitySuggestionCount} thing{identitySuggestionCount !== 1 ? 's' : ''} about you
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              Review &amp; confirm in your profile
+            </p>
+          </div>
+          <button
+            onClick={handleReviewIdentity}
+            className="px-3 py-1.5 rounded-lg bg-accent text-accent-foreground text-xs font-display hover:bg-accent/90 transition-colors shrink-0"
+          >
+            Open Profile →
+          </button>
         </div>
       )}
 

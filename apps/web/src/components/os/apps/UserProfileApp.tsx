@@ -2,10 +2,22 @@ import { useState, useEffect } from 'react';
 import {
   User, PenLine, Palette, Heart, Save, Loader2, Search,
   Upload, Sparkles, CheckCircle2, Globe, Clock, MessageSquare,
-  FileText, Presentation, FileSpreadsheet, FileDown,
+  FileText, Presentation, FileSpreadsheet, FileDown, Check, X,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
+
+interface IdentitySuggestion {
+  field: 'name' | 'role' | 'company' | 'industry' | 'bio';
+  value: string;
+  confidence: number;
+  sourceHint: string;
+  extractedAt: string;
+}
+
+const FIELD_LABELS: Record<IdentitySuggestion['field'], string> = {
+  name: 'Name', role: 'Role', company: 'Company', industry: 'Industry', bio: 'Bio',
+};
 
 type ProfileTab = 'identity' | 'style' | 'brand' | 'interests';
 
@@ -35,8 +47,13 @@ const UserProfileApp = () => {
     communicationStyle?: string; language?: string; interests?: string[];
     brand?: { primaryColor?: string; secondaryColor?: string; accentColor?: string; fontHeading?: string; fontBody?: string; description?: string };
     writingStyle?: { tone?: string; vocabulary?: string; structurePreference?: string; examples?: string[] };
+    identitySuggestions?: IdentitySuggestion[];
   }
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  // M-09: local mirror of profile.identitySuggestions so accept/dismiss can
+  // update the UI immediately without a full profile refetch. Sync'd on load
+  // and on every mutation.
+  const [suggestions, setSuggestions] = useState<IdentitySuggestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
@@ -80,7 +97,23 @@ const UserProfileApp = () => {
       setAccentColor(p.brand?.accentColor ?? '#3b82f6');
       setFontHeading(p.brand?.fontHeading ?? 'Inter');
       setFontBody(p.brand?.fontBody ?? 'Inter');
+      setSuggestions(p.identitySuggestions ?? []);
     }).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  // M-09: respond to `waggle:open-app` detail.tab so the HarvestTab "Open
+  // Profile" button lands the user on the Identity tab where suggestions
+  // are rendered. Pairs with Desktop.tsx which owns the window raise.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { appId?: string; tab?: string } | undefined;
+      if (detail?.appId === 'profile' && detail.tab) {
+        const next = detail.tab as ProfileTab;
+        if (['identity', 'style', 'brand', 'interests'].includes(next)) setTab(next);
+      }
+    };
+    window.addEventListener('waggle:open-app', handler);
+    return () => window.removeEventListener('waggle:open-app', handler);
   }, []);
 
   const handleSave = async () => {
@@ -96,6 +129,41 @@ const UserProfileApp = () => {
       setTimeout(() => setSaveMsg(''), 2000);
     } catch { setSaveMsg('Failed'); }
     finally { setSaving(false); }
+  };
+
+  // M-09: accept one suggestion — populates the corresponding field and
+  // persists both the field value + the shrunk suggestion list in a single
+  // PUT so a refresh never shows the same suggestion twice.
+  const acceptSuggestion = async (s: IdentitySuggestion) => {
+    const remaining = suggestions.filter(x => x.field !== s.field);
+    const updates: Record<string, unknown> = { identitySuggestions: remaining };
+    switch (s.field) {
+      case 'name': setName(s.value); updates.name = s.value; break;
+      case 'role': setRole(s.value); updates.role = s.value; break;
+      case 'company': setCompany(s.value); updates.company = s.value; break;
+      case 'industry': setIndustry(s.value); updates.industry = s.value; break;
+      case 'bio': setBio(s.value); updates.bio = s.value; break;
+    }
+    setSuggestions(remaining);
+    try {
+      await adapter.updateProfile(updates);
+      setSaveMsg(`Accepted ${FIELD_LABELS[s.field]}`);
+      setTimeout(() => setSaveMsg(''), 2000);
+    } catch {
+      setSaveMsg('Save failed');
+      setSuggestions([...remaining, s]); // Rollback local state on failure
+    }
+  };
+
+  // M-09: dismiss drops the suggestion without touching the field value.
+  const dismissSuggestion = async (s: IdentitySuggestion) => {
+    const remaining = suggestions.filter(x => x.field !== s.field);
+    setSuggestions(remaining);
+    try {
+      await adapter.updateProfile({ identitySuggestions: remaining });
+    } catch {
+      setSuggestions([...remaining, s]); // Rollback
+    }
   };
 
   const handleAnalyzeStyle = async () => {
@@ -175,6 +243,58 @@ const UserProfileApp = () => {
           <div className="space-y-4 max-w-lg">
             <h3 className="text-sm font-display font-semibold text-foreground">Who Are You?</h3>
             <p className="text-[11px] text-muted-foreground">This helps the agent personalize responses and remember you across workspaces.</p>
+
+            {/* M-09: suggestions block — rendered above the manual fields
+                so the user sees "here's what we learned" before seeing the
+                blank inputs. Each row: label + value + confidence dot +
+                accept / dismiss. Block auto-hides when all are handled. */}
+            {suggestions.length > 0 && (
+              <div className="rounded-xl bg-accent/10 border border-accent/30 p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-3.5 h-3.5 text-accent" />
+                  <p className="text-xs font-display font-medium text-foreground">Suggested from Harvest</p>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  We extracted these from your imported AI history. Accept to fill the field, or dismiss to ignore.
+                </p>
+                <div className="space-y-1.5">
+                  {suggestions.map(s => (
+                    <div key={s.field} className="flex items-start gap-2 p-2 rounded-lg bg-background/40 border border-border/30">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] font-display font-medium text-foreground">{FIELD_LABELS[s.field]}</span>
+                          <span
+                            className={`inline-block w-1.5 h-1.5 rounded-full ${s.confidence >= 0.8 ? 'bg-emerald-400' : s.confidence >= 0.6 ? 'bg-amber-400' : 'bg-muted-foreground'}`}
+                            aria-label={`Confidence ${Math.round(s.confidence * 100)}%`}
+                          />
+                          <span className="text-[10px] text-muted-foreground">{Math.round(s.confidence * 100)}%</span>
+                        </div>
+                        <p className="text-[12px] text-foreground break-words">{s.value}</p>
+                        <p className="text-[10px] text-muted-foreground italic truncate">{s.sourceHint}</p>
+                      </div>
+                      <div className="flex gap-1 shrink-0">
+                        <button
+                          onClick={() => acceptSuggestion(s)}
+                          className="p-1 rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-colors"
+                          title={`Accept ${FIELD_LABELS[s.field]}`}
+                          aria-label={`Accept suggested ${FIELD_LABELS[s.field]}: ${s.value}`}
+                        >
+                          <Check className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={() => dismissSuggestion(s)}
+                          className="p-1 rounded-lg bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                          title={`Dismiss ${FIELD_LABELS[s.field]} suggestion`}
+                          aria-label={`Dismiss suggested ${FIELD_LABELS[s.field]}`}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div>
