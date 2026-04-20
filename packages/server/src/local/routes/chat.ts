@@ -5,7 +5,7 @@ import path from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
-import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, TraceRecorder, type TraceHandle } from '@waggle/agent';
+import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, TraceRecorder, generateTurnId, logTurnEvent, type TraceHandle } from '@waggle/agent';
 import type { AgentLoopConfig, AgentResponse, Orchestrator, AutonomyLevel } from '@waggle/agent';
 import type { WorkspaceSession } from '../workspace-sessions.js';
 import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
@@ -314,6 +314,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         autonomyLevel = autonomyRaw.level;
       }
     }
+
+    // H-AUDIT-1: generate per-turn trace ID at the conceptual turn boundary
+    // (POST /api/chat entry). Propagated explicitly into agent-loop,
+    // orchestrator, retrieval, prompt-assembler, cognify, and each tool
+    // call. Every stage logs a structured event tagged with this turnId
+    // so the full turn graph is reconstructable from a single correlation
+    // key. Also satisfies EU AI Act Art. 14 traceability requirements.
+    const turnId = generateTurnId();
+    logTurnEvent(turnId, { stage: 'chat.turn.start', workspace, model, messageChars: (message ?? '').length });
 
     // A2: Resolve workspace directory — use explicit path, workspace config, or virtual storage
     // NEVER fall back to user homedir — use managed storage instead
@@ -1044,6 +1053,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           governancePolicies,
           pluginTools: server.agentState.pluginRuntimeManager,
           signal: abortController.signal,
+          turnId, // H-AUDIT-1: propagate trace ID into the loop
+
           onToken: (token: string) => {
             sendEvent('token', { content: token });
           },

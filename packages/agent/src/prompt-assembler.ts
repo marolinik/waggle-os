@@ -19,6 +19,7 @@ import type { AgentPersona } from './personas.js';
 import type { ModelTier } from './model-tier.js';
 import { detectTaskShape, type TaskShape, type TaskShapeType } from './task-shape.js';
 import type { ContextFrames } from './orchestrator.js';
+import { logTurnEvent } from './turn-context.js';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -82,6 +83,8 @@ export interface AssembleOptions {
    * byte-identically when unset or explicitly 'compression'.
    */
   scaffoldStyle?: ScaffoldStyle;
+  /** H-AUDIT-1: per-turn trace ID (UUID v4). Logs prompt-assembly stage. */
+  turnId?: string;
 }
 
 // ── Constants ────────────────────────────────────────────────────────
@@ -405,6 +408,19 @@ export class PromptAssembler {
 
     const sectionsIncluded = sections.map(s => s.name);
     const framesUsed = sections.reduce((sum, s) => sum + s.frameCount, 0);
+
+    // H-AUDIT-1: log assembled-prompt shape. Cheap, high-signal — ties the
+    // turnId to the exact prompt shape that went to the LLM.
+    logTurnEvent(opts.turnId, {
+      stage: 'prompt-assembler.assemble',
+      tier,
+      taskShape: taskShape?.type ?? null,
+      scaffoldApplied: scaffold !== null,
+      scaffoldStyle,
+      sectionsIncluded,
+      framesUsed,
+      totalChars: system.length,
+    });
 
     return {
       system,

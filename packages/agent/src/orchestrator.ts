@@ -18,6 +18,13 @@ import { buildSelfAwareness, type AgentCapabilities } from './self-awareness.js'
 import { buildAwarenessSummary, markSummarySurfaced, type AwarenessSummary } from './improvement-detector.js';
 import { CognifyPipeline } from './cognify.js';
 import { scanForInjection } from './injection-scanner.js';
+// H-AUDIT-1 contract: turnId is a per-turn trace ID (UUID v4) generated at
+// chat-route turn entry and propagated EXPLICITLY through every downstream
+// stage (agent-loop → orchestrator → retrieval → prompt-assembler → cognify
+// → tool-calls). No AsyncLocalStorage, no globals — propagation is
+// tsc-verifiable via optional `turnId?: string` params on each entry
+// function. See `turn-context.ts` for the generator + logging helpers.
+import { logTurnEvent } from './turn-context.js';
 import { tierForModel, type ModelTier } from './model-tier.js';
 import type { AgentPersona } from './personas.js';
 import {
@@ -84,6 +91,8 @@ export interface RecallOptions {
   scoreFloor?: number;
   /** Model tier hint — recorded for downstream consumers (PromptAssembler). */
   tier?: ModelTier;
+  /** H-AUDIT-1: per-turn trace ID (UUID v4). Logs memory-recall stage. */
+  turnId?: string;
 }
 
 /**
@@ -577,6 +586,7 @@ export class Orchestrator {
   ): Promise<{ text: string; count: number; recalled?: string[] }> {
     const profile: ScoringProfile = opts?.profile ?? 'balanced';
     const scoreFloor = opts?.scoreFloor;
+    logTurnEvent(opts?.turnId, { stage: 'orchestrator.recallMemory.enter', queryChars: query.length, limit, profile });
     try {
       // Detect catch-up intent — these queries need importance-based recall, not literal text matching
       const catchUpPatterns = [
@@ -667,7 +677,10 @@ export class Orchestrator {
       }
 
       const totalCount = personalResults.length + workspaceResults.length;
-      if (totalCount === 0) return { text: '', count: 0, recalled: [] };
+      if (totalCount === 0) {
+        logTurnEvent(opts?.turnId, { stage: 'orchestrator.recallMemory.exit', totalCount: 0, blocked: false });
+        return { text: '', count: 0, recalled: [] };
+      }
 
       // Collect content snippets for UI display (B5 fix)
       const recalled: string[] = [];
@@ -686,6 +699,7 @@ export class Orchestrator {
           flags: scan.flags,
           count: totalCount,
         });
+        logTurnEvent(opts?.turnId, { stage: 'orchestrator.recallMemory.exit', totalCount, blocked: true, injectionScore: scan.score });
         return { text: '', count: 0, recalled: [] };
       }
 
@@ -695,6 +709,13 @@ export class Orchestrator {
         + 'Do NOT ignore relevant memories. Do NOT present memory content as your own reasoning — attribute it.\n\n'
         + joinedLines;
 
+      logTurnEvent(opts?.turnId, {
+        stage: 'orchestrator.recallMemory.exit',
+        totalCount,
+        workspaceHits: workspaceResults.length,
+        personalHits: personalResults.length,
+        textChars: text.length,
+      });
       return { text, count: totalCount, recalled };
     } catch (err) {
       // M5: surface failures visibly — silent empty results cause "I don't remember" hallucinations

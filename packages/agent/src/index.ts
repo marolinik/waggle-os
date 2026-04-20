@@ -1,4 +1,12 @@
 export { Orchestrator, type OrchestratorConfig } from './orchestrator.js';
+export {
+  generateTurnId,
+  logTurnEvent,
+  startTurnCapture,
+  stopTurnCapture,
+  type TurnLogPayload,
+  type TurnEventRecord,
+} from './turn-context.js';
 export { createMindTools, createToolUtilizationTracker, formatCombinedResult, type ToolDefinition, type MindToolDeps, type ToolUtilizationTracker, type ConfidenceLevel } from './tools.js';
 export { createSystemTools, type FileBackend, type SystemToolDeps } from './system-tools.js';
 export {

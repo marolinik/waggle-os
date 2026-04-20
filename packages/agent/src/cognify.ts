@@ -8,6 +8,7 @@ import type {
 import { createCoreLogger } from '@waggle/core';
 import { extractEntities, extractRelations, type ExtractedEntity } from './entity-extractor.js';
 import { MemoryLinker, type MemoryLink } from './memory-linker.js';
+import { logTurnEvent } from './turn-context.js';
 
 const log = createCoreLogger('cognify');
 
@@ -45,12 +46,15 @@ export class CognifyPipeline {
 
   /**
    * Full cognify pipeline: save frame -> extract entities -> enrich graph -> index for search.
+   * H-AUDIT-1: optional turnId threads trace propagation through entity + relation extraction.
    */
   async cognify(
     content: string,
     importance: Importance = 'normal',
     gopId?: string,
+    turnId?: string,
   ): Promise<CognifyResult> {
+    logTurnEvent(turnId, { stage: 'cognify.enter', contentChars: content.length, importance, gopId });
     // 1. Ensure a session exists
     const resolvedGopId = gopId ?? this.ensureSession();
 
@@ -84,19 +88,23 @@ export class CognifyPipeline {
       relatedFrames = relatedFrames.filter(r => r.frameId !== frame.id);
     }
 
-    return {
+    const result = {
       frameId: frame.id,
       entitiesExtracted: entityIds.length,
       relationsCreated,
       relatedFrames,
     };
+    logTurnEvent(turnId, { stage: 'cognify.exit', frameId: frame.id, entitiesExtracted: entityIds.length, relationsCreated });
+    return result;
   }
 
   /**
    * Cognify an existing frame — extract entities, build relations, re-index.
    * Used for post-harvest processing of imported frames.
+   * H-AUDIT-1: optional turnId for trace propagation.
    */
-  async cognifyFrame(frameId: number): Promise<CognifyResult | null> {
+  async cognifyFrame(frameId: number, turnId?: string): Promise<CognifyResult | null> {
+    logTurnEvent(turnId, { stage: 'cognify.frame.enter', frameId });
     const frame = this.frames.getById(frameId);
     if (!frame) return null;
 
@@ -115,29 +123,34 @@ export class CognifyPipeline {
       log.warn(`indexFrame failed for frame ${frame.id}`, err);
     }
 
-    return {
+    const frameResult = {
       frameId: frame.id,
       entitiesExtracted: entityIds.length,
       relationsCreated,
     };
+    logTurnEvent(turnId, { stage: 'cognify.frame.exit', frameId: frame.id, entitiesExtracted: entityIds.length, relationsCreated });
+    return frameResult;
   }
 
   /**
    * Cognify a batch of existing frames. Returns summary stats.
+   * H-AUDIT-1: optional turnId propagates into per-frame cognify calls.
    */
-  async cognifyBatch(frameIds: number[]): Promise<{ processed: number; entities: number; relations: number }> {
+  async cognifyBatch(frameIds: number[], turnId?: string): Promise<{ processed: number; entities: number; relations: number }> {
+    logTurnEvent(turnId, { stage: 'cognify.batch.enter', frameCount: frameIds.length });
     let processed = 0;
     let entities = 0;
     let relations = 0;
     // Sequential: each frame's cognify may produce entities used by the next frame's relation linking
     for (const id of frameIds) {
-      const result = await this.cognifyFrame(id);
+      const result = await this.cognifyFrame(id, turnId);
       if (result) {
         processed++;
         entities += result.entitiesExtracted;
         relations += result.relationsCreated;
       }
     }
+    logTurnEvent(turnId, { stage: 'cognify.batch.exit', processed, entities, relations });
     return { processed, entities, relations };
   }
 

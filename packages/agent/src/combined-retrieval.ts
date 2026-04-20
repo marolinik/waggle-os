@@ -17,6 +17,7 @@ import {
   type KvarkClientLike,
   type KvarkStructuredResult,
 } from './kvark-tools.js';
+import { logTurnEvent } from './turn-context.js';
 
 // ── Public types ──────────────────────────────────────────────────────────
 
@@ -56,6 +57,8 @@ export interface CombinedSearchOptions {
   limit?: number;
   profile?: string;
   scope?: 'all' | 'personal' | 'workspace';
+  /** H-AUDIT-1: per-turn trace ID (UUID v4). Enables correlation across stages. */
+  turnId?: string;
 }
 
 /**
@@ -209,7 +212,8 @@ export class CombinedRetrieval {
   }
 
   async search(query: string, opts: CombinedSearchOptions = {}): Promise<CombinedRetrievalResult> {
-    const { limit = 10, profile = 'balanced', scope = 'all' } = opts;
+    const { limit = 10, profile = 'balanced', scope = 'all', turnId } = opts;
+    logTurnEvent(turnId, { stage: 'retrieval.enter', queryChars: query.length, limit, profile, scope });
 
     // 1. Search workspace memory
     const workspaceResults = await this.searchWorkspace(query, limit, profile, scope);
@@ -223,6 +227,13 @@ export class CombinedRetrieval {
     const callKvark = shouldQueryKvark(this.deps.kvarkClient, scope, localResults);
 
     if (!callKvark) {
+      logTurnEvent(turnId, {
+        stage: 'retrieval.exit',
+        workspaceHits: workspaceResults.length,
+        personalHits: personalResults.length,
+        kvarkHits: 0,
+        kvarkSkipped: kvarkAvailable,
+      });
       return {
         query,
         workspaceResults,
@@ -240,6 +251,14 @@ export class CombinedRetrieval {
     // 5. Detect potential conflict between workspace memory and KVARK
     const conflictNote = detectConflict(workspaceResults, kvarkResults);
 
+    logTurnEvent(turnId, {
+      stage: 'retrieval.exit',
+      workspaceHits: workspaceResults.length,
+      personalHits: personalResults.length,
+      kvarkHits: kvarkResults.length,
+      kvarkError: kvarkError ?? null,
+      hasConflict: conflictNote !== null,
+    });
     return {
       query,
       workspaceResults,

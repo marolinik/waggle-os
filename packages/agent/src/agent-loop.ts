@@ -4,6 +4,7 @@ import { scanForInjection } from './injection-scanner.js';
 import type { HookRegistry } from './hooks.js';
 import type { CapabilityRouter } from './capability-router.js';
 import type { TraceRecorder, TraceHandle } from './trace-recorder.js';
+import { logTurnEvent } from './turn-context.js';
 
 /** Minimal interface for plugin runtime integration (from @waggle/sdk) */
 export interface PluginToolProvider {
@@ -70,6 +71,13 @@ export interface AgentLoopConfig {
     recorder: TraceRecorder;
     handle: TraceHandle;
   };
+  /**
+   * H-AUDIT-1: per-turn trace ID (UUID v4). When provided, the loop logs
+   * structured events tagged with this turnId at loop entry, each LLM
+   * request, and each tool call. Enables full turn-graph reconstruction
+   * across all agent stages from a single correlation key.
+   */
+  turnId?: string;
 }
 
 export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentResponse> {
@@ -89,7 +97,17 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     hooks,
     pluginTools: pluginToolProvider,
     traceRecording,
+    turnId,
   } = config;
+
+  logTurnEvent(turnId, {
+    stage: 'agent-loop.enter',
+    model,
+    maxTurns,
+    toolCount: configTools.length,
+    messageCount: inputMessages.length,
+    systemPromptChars: systemPrompt.length,
+  });
 
   // Review C1: surface the honest contract for allowedSources. Admins set this
   // via the TEAMS/ENTERPRISE governance UI believing data-source restrictions
@@ -363,6 +381,13 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       if (!stream && onToken && content) {
         onToken(content);
       }
+      logTurnEvent(turnId, {
+        stage: 'agent-loop.exit',
+        contentChars: content.length,
+        toolsUsed,
+        inputTokens: totalInputTokens,
+        outputTokens: totalOutputTokens,
+      });
       return {
         content,
         toolsUsed,
@@ -450,10 +475,13 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       if (!guard.check(fnName, fnArgs)) {
         result = `Error: Loop detected — called ${fnName} with identical arguments too many times. Try a different approach.`;
       } else if (tool) {
+        logTurnEvent(turnId, { stage: 'agent-loop.tool.enter', toolName: fnName, argsKeys: Object.keys(fnArgs) });
         try {
           result = await tool.execute(fnArgs);
+          logTurnEvent(turnId, { stage: 'agent-loop.tool.exit', toolName: fnName, resultChars: result.length, error: false });
         } catch (err) {
           result = `Error executing ${fnName}: ${(err as Error).message}`;
+          logTurnEvent(turnId, { stage: 'agent-loop.tool.exit', toolName: fnName, error: true, errorMessage: (err as Error).message });
         }
         toolsUsed.push(fnName);
       } else if (config.capabilityRouter) {
