@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
+import { HintTooltip } from '@/components/ui/hint-tooltip';
 import { PERSONAS } from '@/lib/personas';
 import { motion, AnimatePresence, useDragControls } from 'framer-motion';
 import { adapter } from '@/lib/adapter';
@@ -831,37 +832,40 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                           </button>
                         </Tooltip>
                         <div className="absolute top-0.5 right-0.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setDuplicatingTemplate(tmpl); setEditingTemplate(null); setShowTemplateCreator(true); }}
-                            className="p-0.5 rounded bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
-                            title="Duplicate"
-                          >
-                            <Copy className="w-2.5 h-2.5" />
-                          </button>
+                          <HintTooltip content="Duplicate">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setDuplicatingTemplate(tmpl); setEditingTemplate(null); setShowTemplateCreator(true); }}
+                              className="p-0.5 rounded bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              <Copy className="w-2.5 h-2.5" />
+                            </button>
+                          </HintTooltip>
                           {!tmpl.builtIn && (
                             <>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setEditingTemplate(tmpl); setDuplicatingTemplate(null); setShowTemplateCreator(true); }}
-                                className="p-0.5 rounded bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
-                                title="Edit"
-                              >
-                                <Pencil className="w-2.5 h-2.5" />
-                              </button>
-                              <button
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  if (!confirm(`Delete template "${tmpl.name}"?`)) return;
-                                  try {
-                                    await adapter.deleteWorkspaceTemplate(tmpl.id);
-                                    setTemplates(prev => prev.filter(t => t.id !== tmpl.id));
-                                    if (selectedTemplate === tmpl.id) setSelectedTemplate(null);
-                                  } catch { /* ignore */ }
-                                }}
-                                className="p-0.5 rounded bg-muted/80 text-muted-foreground hover:text-destructive transition-colors"
-                                title="Delete"
-                              >
-                                <Trash2 className="w-2.5 h-2.5" />
-                              </button>
+                              <HintTooltip content="Edit">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setEditingTemplate(tmpl); setDuplicatingTemplate(null); setShowTemplateCreator(true); }}
+                                  className="p-0.5 rounded bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
+                                >
+                                  <Pencil className="w-2.5 h-2.5" />
+                                </button>
+                              </HintTooltip>
+                              <HintTooltip content="Delete">
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    if (!confirm(`Delete template "${tmpl.name}"?`)) return;
+                                    try {
+                                      await adapter.deleteWorkspaceTemplate(tmpl.id);
+                                      setTemplates(prev => prev.filter(t => t.id !== tmpl.id));
+                                      if (selectedTemplate === tmpl.id) setSelectedTemplate(null);
+                                    } catch { /* ignore */ }
+                                  }}
+                                  className="p-0.5 rounded bg-muted/80 text-muted-foreground hover:text-destructive transition-colors"
+                                >
+                                  <Trash2 className="w-2.5 h-2.5" />
+                                </button>
+                              </HintTooltip>
                             </>
                           )}
                         </div>
@@ -882,27 +886,33 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                     <div className="flex items-start justify-between mb-1">
                       <p className="text-[11px] text-foreground font-medium">{tmpl.name}</p>
                       <div className="flex gap-1">
-                        <button onClick={() => { setDuplicatingTemplate(tmpl); setEditingTemplate(null); setShowTemplateCreator(true); }}
-                          className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors" title="Duplicate">
-                          <Copy className="w-3 h-3" />
-                        </button>
+                        <HintTooltip content="Duplicate">
+                          <button onClick={() => { setDuplicatingTemplate(tmpl); setEditingTemplate(null); setShowTemplateCreator(true); }}
+                            className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors">
+                            <Copy className="w-3 h-3" />
+                          </button>
+                        </HintTooltip>
                         {!tmpl.builtIn && (
                           <>
-                            <button onClick={() => { setEditingTemplate(tmpl); setDuplicatingTemplate(null); setShowTemplateCreator(true); }}
-                              className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors" title="Edit">
-                              <Pencil className="w-3 h-3" />
-                            </button>
-                            <button onClick={async () => {
-                              if (!confirm(`Delete "${tmpl.name}"?`)) return;
-                              try {
-                                await adapter.deleteWorkspaceTemplate(tmpl.id);
-                                setTemplates(prev => prev.filter(t => t.id !== tmpl.id));
-                                setSelectedTemplate(null);
-                              } catch { /* ignore */ }
-                            }}
-                              className="p-0.5 rounded text-muted-foreground hover:text-destructive transition-colors" title="Delete">
-                              <Trash2 className="w-3 h-3" />
-                            </button>
+                            <HintTooltip content="Edit">
+                              <button onClick={() => { setEditingTemplate(tmpl); setDuplicatingTemplate(null); setShowTemplateCreator(true); }}
+                                className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors">
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                            </HintTooltip>
+                            <HintTooltip content="Delete">
+                              <button onClick={async () => {
+                                if (!confirm(`Delete "${tmpl.name}"?`)) return;
+                                try {
+                                  await adapter.deleteWorkspaceTemplate(tmpl.id);
+                                  setTemplates(prev => prev.filter(t => t.id !== tmpl.id));
+                                  setSelectedTemplate(null);
+                                } catch { /* ignore */ }
+                              }}
+                                className="p-0.5 rounded text-muted-foreground hover:text-destructive transition-colors">
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </HintTooltip>
                           </>
                         )}
                       </div>
@@ -983,7 +993,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                       setShowFolderPicker(true);
                     }}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-secondary/50 border border-border/40 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/70 transition-colors shrink-0"
-                    title={storageType === 'local' ? 'Browse local folders' : 'Browse remote storage'}>
+                    aria-label={storageType === 'local' ? 'Browse local folders' : 'Browse remote storage'}>
                     <FolderOpen className="w-3.5 h-3.5" /><span className="text-[11px]">Browse</span>
                   </button>
                 </div>

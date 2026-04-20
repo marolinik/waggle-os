@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { Hexagon, ChevronRight, Zap } from 'lucide-react';
 import { fadeSlide, VALUE_PROPS } from './constants';
 import type { WhyWaggleStepProps } from './types';
+import { HintTooltip } from '@/components/ui/hint-tooltip';
 
 const WhyWaggleStep = ({ goToStep, onSkipSetup, skipDisabled }: WhyWaggleStepProps) => (
   <motion.div key="step-1" {...fadeSlide} className="text-center">
@@ -37,15 +38,16 @@ const WhyWaggleStep = ({ goToStep, onSkipSetup, skipDisabled }: WhyWaggleStepPro
         Continue <ChevronRight className="w-4 h-4" />
       </button>
       {onSkipSetup && (
-        <button
-          onClick={onSkipSetup}
-          disabled={skipDisabled}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-display text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          data-testid="onboarding-skip-setup"
-          title="Skip the walkthrough and land on the desktop with sensible defaults."
-        >
-          <Zap className="w-3.5 h-3.5" /> Skip and set me up
-        </button>
+        <HintTooltip content="Skip the walkthrough and land on the desktop with sensible defaults.">
+          <button
+            onClick={onSkipSetup}
+            disabled={skipDisabled}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-display text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            data-testid="onboarding-skip-setup"
+          >
+            <Zap className="w-3.5 h-3.5" /> Skip and set me up
+          </button>
+        </HintTooltip>
       )}
     </div>
   </motion.div>

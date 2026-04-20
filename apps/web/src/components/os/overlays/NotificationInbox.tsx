@@ -1,6 +1,7 @@
 import { Bell, Check, CheckCheck, X, CheckCircle2 } from 'lucide-react';
 import type { Notification } from '@/lib/types';
 import { motion, AnimatePresence } from 'framer-motion';
+import { HintTooltip } from '@/components/ui/hint-tooltip';
 
 interface NotificationInboxProps {
   open: boolean;
@@ -40,9 +41,11 @@ const NotificationInbox = ({ open, onClose, notifications, onMarkRead, onMarkAll
               <span className="text-sm font-display font-semibold text-foreground">Notifications</span>
             </div>
             <div className="flex items-center gap-1">
-              <button onClick={onMarkAllRead} className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors" title="Mark all read">
-                <CheckCheck className="w-3.5 h-3.5" />
-              </button>
+              <HintTooltip content="Mark all read">
+                <button onClick={onMarkAllRead} className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors">
+                  <CheckCheck className="w-3.5 h-3.5" />
+                </button>
+              </HintTooltip>
               <button onClick={onClose} className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors">
                 <X className="w-3.5 h-3.5" />
               </button>

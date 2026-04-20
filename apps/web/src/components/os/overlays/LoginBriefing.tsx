@@ -13,6 +13,7 @@ import {
 import { adapter } from '@/lib/adapter';
 import type { Workspace } from '@/lib/types';
 import { selectBriefingHighlights } from '@/lib/briefing-highlights';
+import { HintTooltip } from '@/components/ui/hint-tooltip';
 import {
   computeBragSummary,
   formatBragLine,
@@ -255,14 +256,15 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
 
           {/* Footer */}
           <div className="mt-4 pt-3 border-t border-border/30 flex justify-between items-center gap-3">
-            <button
-              onClick={() => onDismiss(true)}
-              data-testid="login-briefing-dont-show-again"
-              className="text-[11px] text-muted-foreground hover:text-foreground transition-colors font-display"
-              title="Hide the briefing permanently. Re-enable in Settings → Advanced."
-            >
-              Don't show again
-            </button>
+            <HintTooltip content="Hide the briefing permanently. Re-enable in Settings → Advanced.">
+              <button
+                onClick={() => onDismiss(true)}
+                data-testid="login-briefing-dont-show-again"
+                className="text-[11px] text-muted-foreground hover:text-foreground transition-colors font-display"
+              >
+                Don't show again
+              </button>
+            </HintTooltip>
             <button
               onClick={() => onDismiss(false)}
               data-testid="login-briefing-dismiss"
