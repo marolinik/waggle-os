@@ -17,6 +17,7 @@ import {
   type ImportSourceType, type UniversalImportItem,
   type SourceAdapter, type FilesystemAdapter,
 } from '@waggle/core';
+import { loadProfile, saveProfile, type IdentitySuggestion } from './profile.js';
 
 function getAdapter(source: ImportSourceType): SourceAdapter {
   switch (source) {
@@ -257,6 +258,110 @@ export async function harvestRoutes(fastify: FastifyInstance) {
     });
   });
 
+  // POST /api/harvest/extract-identity — M-09: scan recent harvest frames,
+  // LLM-extract structured identity (name/role/company/industry/bio), and
+  // persist as pending `profile.identitySuggestions` for the user to review
+  // in UserProfileApp. Mirrors the profile.analyze-style pattern (internal
+  // Haiku proxy call).
+  fastify.post('/api/harvest/extract-identity', async (_request, reply) => {
+    const personalDb = (fastify as any).multiMind?.personal;
+    if (!personalDb) {
+      return reply.code(503).send({ error: 'Personal mind not available' });
+    }
+
+    const { FrameStore } = await import('@waggle/core');
+    const frameStore = new FrameStore(personalDb);
+    // getGopFrames returns ASC; the most recent 50 harvest frames are the tail.
+    const harvestFrames = frameStore.getGopFrames('harvest').slice(-50);
+
+    const dataDir = fastify.localConfig.dataDir;
+    if (harvestFrames.length === 0) {
+      return { suggestions: loadProfile(dataDir).identitySuggestions };
+    }
+
+    const apiKey = fastify.vault?.get('anthropic')?.value;
+    if (!apiKey) {
+      // Surface empty suggestions rather than 503 — absence of key is a
+      // degraded-but-known state (same user may still review manually).
+      return { suggestions: loadProfile(dataDir).identitySuggestions, note: 'no_anthropic_key' };
+    }
+
+    const concat = harvestFrames
+      .map((f, i) => `[Frame ${i + 1}]\n${f.content.slice(0, 500)}`)
+      .join('\n\n---\n\n');
+
+    const prompt = `Extract identity facts about the user from these harvested memory frames.
+
+Return ONLY valid JSON in this exact shape:
+{
+  "suggestions": [
+    { "field": "name" | "role" | "company" | "industry" | "bio",
+      "value": "extracted value (concise — for bio, 2-3 sentences max)",
+      "confidence": 0.0..1.0,
+      "sourceHint": "brief evidence note (e.g., 'mentioned in 3 frames')" }
+  ]
+}
+
+Rules:
+- Only include fields with confidence >= 0.5.
+- Name: the user's own name (first + last if available).
+- Role: job title or functional role.
+- Company: employer or organization.
+- Industry: the industry the user works in.
+- Bio: 2-3 sentence professional summary.
+- Skip fields where evidence is unclear or contradictory.
+- If no identity facts surface, return { "suggestions": [] }.
+
+Frames:
+${concat}`;
+
+    let extracted: IdentitySuggestion[] = [];
+    try {
+      const port = fastify.server.address()?.toString().split(':').pop() ?? '3333';
+      const proxyUrl = `http://127.0.0.1:${port}/v1/chat/completions`;
+      const res = await fetch(proxyUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5',
+          max_tokens: 600,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json() as any;
+        const content = data.choices?.[0]?.message?.content ?? '';
+        const match = content.match(/\{[\s\S]*\}/);
+        if (match) {
+          const parsed = JSON.parse(match[0]) as { suggestions?: unknown[] };
+          if (Array.isArray(parsed.suggestions)) {
+            const now = new Date().toISOString();
+            extracted = parsed.suggestions
+              .filter(isValidSuggestionShape)
+              .map(s => ({ ...s, extractedAt: now }));
+          }
+        }
+      }
+    } catch { /* return current suggestions unchanged */ }
+
+    // Merge into profile. Rule: per-field, keep highest confidence. Drop any
+    // suggestion whose value already matches the manually-set profile field
+    // (no point showing "suggested: X" when the user already has X).
+    const profile = loadProfile(dataDir);
+    const byField = new Map<IdentitySuggestion['field'], IdentitySuggestion>();
+    for (const existing of profile.identitySuggestions) byField.set(existing.field, existing);
+    for (const incoming of extracted) {
+      const currentValue = profile[incoming.field];
+      if (typeof currentValue === 'string' && currentValue.trim() === incoming.value.trim()) continue;
+      const prior = byField.get(incoming.field);
+      if (!prior || incoming.confidence > prior.confidence) byField.set(incoming.field, incoming);
+    }
+    profile.identitySuggestions = Array.from(byField.values());
+    saveProfile(dataDir, profile);
+
+    return { suggestions: profile.identitySuggestions };
+  });
+
   // POST /api/harvest/scan-claude-code — scan local Claude Code directory
   fastify.post('/api/harvest/scan-claude-code', async (_request, reply) => {
     const claudeDir = path.join(os.homedir(), '.claude');
@@ -287,4 +392,20 @@ function countByField(items: UniversalImportItem[], field: keyof UniversalImport
     counts[val] = (counts[val] ?? 0) + 1;
   }
   return counts;
+}
+
+const VALID_IDENTITY_FIELDS: ReadonlyArray<IdentitySuggestion['field']> = [
+  'name', 'role', 'company', 'industry', 'bio',
+];
+
+function isValidSuggestionShape(x: unknown): x is Omit<IdentitySuggestion, 'extractedAt'> {
+  if (!x || typeof x !== 'object') return false;
+  const s = x as Record<string, unknown>;
+  return (
+    typeof s.field === 'string' &&
+    (VALID_IDENTITY_FIELDS as ReadonlyArray<string>).includes(s.field) &&
+    typeof s.value === 'string' && s.value.trim().length > 0 &&
+    typeof s.confidence === 'number' && s.confidence >= 0 && s.confidence <= 1 &&
+    typeof s.sourceHint === 'string'
+  );
 }

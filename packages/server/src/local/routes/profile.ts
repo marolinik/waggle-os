@@ -18,6 +18,21 @@ import type { FastifyPluginAsync } from 'fastify';
 import fs from 'node:fs';
 import path from 'node:path';
 
+/**
+ * Identity suggestion extracted from harvested memory frames.
+ * Surfaced in UserProfileApp's Identity tab as a pending-review banner until
+ * the user accepts (populates the field) or dismisses the suggestion.
+ */
+export interface IdentitySuggestion {
+  field: 'name' | 'role' | 'company' | 'industry' | 'bio';
+  value: string;
+  /** 0..1 — self-reported by the LLM extractor, used as a hint next to each suggestion. */
+  confidence: number;
+  /** Short note on the evidence (e.g. "3 harvest frames mention Egzakta"). */
+  sourceHint: string;
+  extractedAt: string;
+}
+
 export interface UserProfile {
   // Identity
   name: string;
@@ -26,6 +41,12 @@ export interface UserProfile {
   industry: string;
   bio: string;
   avatarUrl: string;
+  /**
+   * M-09: Identity facts extracted from memory harvest, awaiting user
+   * review. Empty until the user runs harvest and the extraction route
+   * produces at least one suggestion.
+   */
+  identitySuggestions: IdentitySuggestion[];
 
   // Writing Style
   writingStyle: {
@@ -74,6 +95,7 @@ const DEFAULT_PROFILE: UserProfile = {
   industry: '',
   bio: '',
   avatarUrl: '',
+  identitySuggestions: [],
   writingStyle: {
     tone: 'professional',
     sentenceLength: 'medium',
@@ -107,11 +129,11 @@ const DEFAULT_PROFILE: UserProfile = {
   updatedAt: new Date().toISOString(),
 };
 
-function getProfilePath(dataDir: string): string {
+export function getProfilePath(dataDir: string): string {
   return path.join(dataDir, 'profile.json');
 }
 
-function loadProfile(dataDir: string): UserProfile {
+export function loadProfile(dataDir: string): UserProfile {
   const filePath = getProfilePath(dataDir);
   try {
     if (fs.existsSync(filePath)) {
@@ -122,7 +144,7 @@ function loadProfile(dataDir: string): UserProfile {
   return { ...DEFAULT_PROFILE };
 }
 
-function saveProfile(dataDir: string, profile: UserProfile): void {
+export function saveProfile(dataDir: string, profile: UserProfile): void {
   profile.updatedAt = new Date().toISOString();
   const filePath = getProfilePath(dataDir);
   fs.writeFileSync(filePath, JSON.stringify(profile, null, 2), 'utf-8');
@@ -153,6 +175,7 @@ export const profileRoutes: FastifyPluginAsync = async (fastify) => {
     if (updates.language != null) profile.language = updates.language;
     if (updates.timezone != null) profile.timezone = updates.timezone;
     if (updates.questionnaireCompleted != null) profile.questionnaireCompleted = updates.questionnaireCompleted;
+    if (updates.identitySuggestions != null) profile.identitySuggestions = updates.identitySuggestions;
 
     if (updates.writingStyle) {
       profile.writingStyle = { ...profile.writingStyle, ...updates.writingStyle };
