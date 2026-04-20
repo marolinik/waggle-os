@@ -1,0 +1,38 @@
+{
+  "qwen3.6-35b-a3b": {
+    "id": "qwen3.6-35b-a3b",
+    "displayName": "Qwen3.6-35B-A3B (canonical)",
+    "provider": "alibaba",
+    "litellmModel": "dashscope/qwen3.6-35b-a3b",
+    "pricePerMillionInput": 0.20,
+    "pricePerMillionOutput": 0.80,
+    "contextWindow": 262144
+  },
+  "qwen3.6-35b-a3b-local": {
+    "id": "qwen3.6-35b-a3b-local",
+    "displayName": "Qwen3.6-35B-A3B (local vLLM)",
+    "provider": "local",
+    "litellmModel": "openai/qwen3.6-35b-a3b",
+    "pricePerMillionInput": 0.0,
+    "pricePerMillionOutput": 0.0,
+    "contextWindow": 262144
+  },
+  "llama-3.1-8b-instruct": {
+    "id": "llama-3.1-8b-instruct",
+    "displayName": "Llama 3.1 8B Instruct (Week 2 placeholder)",
+    "provider": "local",
+    "litellmModel": "openai/llama-3.1-8b-instruct",
+    "pricePerMillionInput": 0.0,
+    "pricePerMillionOutput": 0.0,
+    "contextWindow": 131072
+  },
+  "claude-opus-4-6": {
+    "id": "claude-opus-4-6",
+    "displayName": "Claude Opus 4.6 (Week 2 placeholder, frontier baseline)",
+    "provider": "anthropic",
+    "litellmModel": "claude-opus-4-6",
+    "pricePerMillionInput": 15.0,
+    "pricePerMillionOutput": 75.0,
+    "contextWindow": 200000
+  }
+}

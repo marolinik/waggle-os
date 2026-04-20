@@ -1,0 +1,27 @@
+{
+  "name": "@waggle/benchmarks-harness",
+  "version": "0.1.0",
+  "description": "Four-cell ablation harness for Waggle memory + evolution benchmarks",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "main": "dist/runner.js",
+  "bin": {
+    "waggle-bench": "./dist/runner.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "bench": "tsx src/runner.ts"
+  },
+  "dependencies": {
+    "@waggle/agent": "0.1.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  }
+}

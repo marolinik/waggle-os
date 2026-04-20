@@ -1,0 +1,20 @@
+{
+  "synthetic": {
+    "id": "synthetic",
+    "displayName": "Synthetic scaffold dataset (60 instances, built-in)",
+    "dataPath": "synthetic/placeholder.jsonl",
+    "source": "synthetic"
+  },
+  "locomo": {
+    "id": "locomo",
+    "displayName": "LoCoMo (snap-research/locomo)",
+    "dataPath": "locomo/locomo.jsonl",
+    "source": "external"
+  },
+  "longmemeval": {
+    "id": "longmemeval",
+    "displayName": "LongMemEval",
+    "dataPath": "longmemeval/longmemeval.jsonl",
+    "source": "external"
+  }
+}

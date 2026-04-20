@@ -21,6 +21,7 @@ export default defineConfig({
       'tests/**/*.test.ts',
       'app/scripts/**/*.test.ts',
       'app/tests/**/*.test.ts',
+      'benchmarks/*/tests/**/*.test.ts',
     ],
     exclude: ['apps/**', 'node_modules/**'],
     coverage: {

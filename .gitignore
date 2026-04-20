@@ -21,6 +21,13 @@ dist-ssr
 .waggle/
 *.mind
 marketplace.db
+
+# Benchmark harness — data + run outputs stay local
+benchmarks/data/*
+!benchmarks/data/.gitkeep
+benchmarks/results/*
+!benchmarks/results/.gitkeep
+test-regression-*.log
 # SQLite WAL/SHM companions — always match the *.db they accompany
 marketplace.db-shm
 marketplace.db-wal

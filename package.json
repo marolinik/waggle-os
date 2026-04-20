@@ -12,6 +12,7 @@
     "packages/*"
   ],
   "scripts": {
+    "bench": "npx tsx benchmarks/harness/src/runner.ts",
     "dev": "cd apps/web && npx vite",
     "build": "cd apps/web && npx vite build --outDir ../../dist --emptyOutDir",
     "build:dev": "cd apps/web && npx vite build --mode development --outDir ../../dist --emptyOutDir",

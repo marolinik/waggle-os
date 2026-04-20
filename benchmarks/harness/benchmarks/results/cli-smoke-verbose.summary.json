@@ -1,0 +1,25 @@
+{
+  "run": {
+    "kind": "control",
+    "name": "verbose-fixed",
+    "dataset": "locomo",
+    "model": "qwen3.6-35b-a3b",
+    "seed": 42,
+    "startedAt": "2026-04-20T16:00:45.979Z",
+    "finishedAt": "2026-04-20T16:00:45.985Z"
+  },
+  "counts": {
+    "total": 50,
+    "completed": 50,
+    "failed": 0,
+    "budgetStoppedAt": null
+  },
+  "metrics": {
+    "meanAccuracy": 1,
+    "p50LatencyMs": 1,
+    "p95LatencyMs": 1,
+    "totalUsd": 0.001087,
+    "meanUsdPerQuery": 0.000022
+  },
+  "failureModes": {}
+}
