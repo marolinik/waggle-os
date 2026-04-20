@@ -3,7 +3,6 @@ import {
   FrameStore,
   KnowledgeGraph,
   HybridSearch,
-  createEmbeddingProvider,
 } from '@waggle/core';
 import {
   WikiCompiler, CompilationState, resolveSynthesizer,
@@ -46,12 +45,23 @@ export const wikiRoutes: FastifyPluginAsync = async (server) => {
     return reply.send({ slug: req.params.slug, markdown: row.markdown });
   });
 
-  // POST /api/wiki/compile — trigger compilation
+  // POST /api/wiki/compile — trigger compilation.
+  // M-11 BLOCKER-5: skip compile entirely if the server has no real embedder
+  // (active provider is 'mock'). Running with zero-vector embeddings produces
+  // pages with a silently broken semantic relevance layer — explicit skip
+  // with a reason is the correct degraded-state response.
   server.post<{ Body: { mode?: 'incremental' | 'full'; concepts?: string[] } }>('/api/wiki/compile', async (req, reply) => {
+    const embedder = server.embeddingProvider;
+    if (!embedder || embedder.getActiveProvider() === 'mock') {
+      return reply.status(503).send({
+        error: 'Wiki compile requires a real embedding provider. Configure a Voyage / OpenAI key in Vault, or an Ollama embedding model, before compiling.',
+        skippedReason: 'no_real_embedder',
+      });
+    }
+
     const db = getPersonalDb();
     const kg = new KnowledgeGraph(db);
     const frames = new FrameStore(db);
-    const embedder = await createEmbeddingProvider({ provider: 'mock' });
     const search = new HybridSearch(db, embedder);
     const state = new CompilationState(db);
     const synth = await resolveSynthesizer();
@@ -72,12 +82,23 @@ export const wikiRoutes: FastifyPluginAsync = async (server) => {
     });
   });
 
-  // GET /api/wiki/health — health report
+  // GET /api/wiki/health — health report.
+  // M-11 BLOCKER-5: same policy as /compile — no mock embedder in a read
+  // path that feeds a relevance signal to the user. Report the degraded
+  // state explicitly so the UI can surface an actionable "add embedding
+  // key" prompt instead of misleading health numbers.
   server.get('/api/wiki/health', async (_req, reply) => {
+    const embedder = server.embeddingProvider;
+    if (!embedder || embedder.getActiveProvider() === 'mock') {
+      return reply.status(503).send({
+        error: 'Wiki health requires a real embedding provider.',
+        skippedReason: 'no_real_embedder',
+      });
+    }
+
     const db = getPersonalDb();
     const kg = new KnowledgeGraph(db);
     const frames = new FrameStore(db);
-    const embedder = await createEmbeddingProvider({ provider: 'mock' });
     const search = new HybridSearch(db, embedder);
     const state = new CompilationState(db);
     const synth = await resolveSynthesizer();

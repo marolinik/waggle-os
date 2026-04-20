@@ -364,32 +364,45 @@ export async function harvestRoutes(fastify: FastifyInstance) {
         // Cognify failure is non-fatal — frames are already saved
       }
 
-      // M-11: post-harvest wiki recompile. Incremental compile uses the
-      // watermark to skip entity pages that no new frames mention, so it's
+      // M-11 BLOCKER-5: post-harvest wiki recompile. Incremental compile uses
+      // the watermark to skip entity pages that no new frames mention, so it's
       // cheap. Fail-soft: if the synthesizer has no LLM configured the whole
       // block short-circuits without affecting the harvest response.
+      //
+      // Embedder policy: use the server's real embeddingProvider (created at
+      // startup from Vault + env keys). If the active provider is 'mock'
+      // (no real keys available), skip the compile entirely — a run with
+      // zero-vector embeddings produces pages with a silently broken semantic
+      // relevance layer and no UI signal that anything is wrong. Explicit
+      // skip with a reason code is the correct degraded-state behavior.
       let wikiStats = { pagesCreated: 0, pagesUpdated: 0, pagesUnchanged: 0 };
+      let wikiSkippedReason: string | null = null;
       try {
-        const { KnowledgeGraph, HybridSearch, createEmbeddingProvider } = await import('@waggle/core');
-        const { WikiCompiler, CompilationState, resolveSynthesizer } = await import('@waggle/wiki-compiler');
-        const embedder = await createEmbeddingProvider({ provider: 'mock' });
-        const state = new CompilationState(personalDb);
-        const synth = await resolveSynthesizer();
-        const compiler = new WikiCompiler(
-          new KnowledgeGraph(personalDb),
-          frameStore,
-          new HybridSearch(personalDb, embedder),
-          state,
-          { synthesize: synth.synthesize },
-        );
-        emitHarvestProgress({ phase: 'wiki-compile', current: 0, total: 1, source });
-        const result = await compiler.compile({ incremental: true });
-        wikiStats = {
-          pagesCreated: result.pagesCreated,
-          pagesUpdated: result.pagesUpdated,
-          pagesUnchanged: result.pagesUnchanged,
-        };
-        emitHarvestProgress({ phase: 'wiki-compile', current: 1, total: 1, source });
+        const embedder = fastify.embeddingProvider;
+        if (!embedder || embedder.getActiveProvider() === 'mock') {
+          wikiSkippedReason = 'no_real_embedder';
+          emitHarvestProgress({ phase: 'wiki-compile', current: 1, total: 1, source });
+        } else {
+          const { KnowledgeGraph, HybridSearch } = await import('@waggle/core');
+          const { WikiCompiler, CompilationState, resolveSynthesizer } = await import('@waggle/wiki-compiler');
+          const state = new CompilationState(personalDb);
+          const synth = await resolveSynthesizer();
+          const compiler = new WikiCompiler(
+            new KnowledgeGraph(personalDb),
+            frameStore,
+            new HybridSearch(personalDb, embedder),
+            state,
+            { synthesize: synth.synthesize },
+          );
+          emitHarvestProgress({ phase: 'wiki-compile', current: 0, total: 1, source });
+          const result = await compiler.compile({ incremental: true });
+          wikiStats = {
+            pagesCreated: result.pagesCreated,
+            pagesUpdated: result.pagesUpdated,
+            pagesUnchanged: result.pagesUnchanged,
+          };
+          emitHarvestProgress({ phase: 'wiki-compile', current: 1, total: 1, source });
+        }
       } catch {
         // Wiki compile failure is non-fatal — frames + entities still saved.
       }
@@ -407,8 +420,11 @@ export async function harvestRoutes(fastify: FastifyInstance) {
         entitiesExtracted: cognifyStats.entities,
         relationsCreated: cognifyStats.relations,
         wikiCompiled: wikiStats,
+        wikiSkippedReason,
         runId,
-        message: `Imported ${saved} items from ${source}, cognified ${cognifyStats.processed} frames, wiki ${wikiStats.pagesCreated + wikiStats.pagesUpdated} pages updated`,
+        message: wikiSkippedReason
+          ? `Imported ${saved} items from ${source}, cognified ${cognifyStats.processed} frames, wiki skipped (${wikiSkippedReason})`
+          : `Imported ${saved} items from ${source}, cognified ${cognifyStats.processed} frames, wiki ${wikiStats.pagesCreated + wikiStats.pagesUpdated} pages updated`,
       };
     } catch (err) {
       // M-08: record the failure with however many items we got through.
