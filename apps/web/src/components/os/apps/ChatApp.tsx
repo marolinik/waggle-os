@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ChevronUp, ThumbsUp, ThumbsDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Upload, Code, FileText, Users, X, Bot, Cpu, Layers, Pin, PinOff, Shield, Zap, MoreHorizontal } from 'lucide-react';
+import { HintTooltip } from '@/components/ui/hint-tooltip';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getPersonaById, PERSONAS } from '@/lib/personas';
@@ -173,23 +174,25 @@ const FeedbackButtons = ({ messageId, messageIndex, sessionId, feedback }: {
 
   return (
     <div className="flex items-center gap-1 mt-1 relative">
-      <button
-        onClick={() => handleVote('up')}
-        className={`p-0.5 rounded transition-colors ${vote === 'up' ? 'text-emerald-400' : 'text-muted-foreground/40 hover:text-muted-foreground'}`}
-        title="Good response"
-      >
-        <ThumbsUp className="w-3 h-3" />
-      </button>
-      <button
-        onClick={() => {
-          if (vote === 'down') { handleVote('down'); return; }
-          setShowReasons(s => !s);
-        }}
-        className={`p-0.5 rounded transition-colors ${vote === 'down' ? 'text-destructive' : 'text-muted-foreground/40 hover:text-muted-foreground'}`}
-        title="Poor response"
-      >
-        <ThumbsDown className="w-3 h-3" />
-      </button>
+      <HintTooltip content="Good response">
+        <button
+          onClick={() => handleVote('up')}
+          className={`p-0.5 rounded transition-colors ${vote === 'up' ? 'text-emerald-400' : 'text-muted-foreground/40 hover:text-muted-foreground'}`}
+        >
+          <ThumbsUp className="w-3 h-3" />
+        </button>
+      </HintTooltip>
+      <HintTooltip content="Poor response">
+        <button
+          onClick={() => {
+            if (vote === 'down') { handleVote('down'); return; }
+            setShowReasons(s => !s);
+          }}
+          className={`p-0.5 rounded transition-colors ${vote === 'down' ? 'text-destructive' : 'text-muted-foreground/40 hover:text-muted-foreground'}`}
+        >
+          <ThumbsDown className="w-3 h-3" />
+        </button>
+      </HintTooltip>
       {showReasons && (
         <div
           className="absolute bottom-full left-0 mb-1 bg-card border border-border rounded-lg shadow-xl z-20 py-1 w-36"
@@ -261,13 +264,14 @@ const ApprovalGate = ({
         >
           Allow once
         </button>
-        <button
-          onClick={() => onRespond(request.requestId, true, { always: true })}
-          className="px-3 py-1 text-xs rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition-colors"
-          title="Save this decision and skip the prompt next time for this tool + target."
-        >
-          Always allow
-        </button>
+        <HintTooltip content="Save this decision and skip the prompt next time for this tool + target.">
+          <button
+            onClick={() => onRespond(request.requestId, true, { always: true })}
+            className="px-3 py-1 text-xs rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition-colors"
+          >
+            Always allow
+          </button>
+        </HintTooltip>
         <button
           onClick={() => onRespond(request.requestId, false)}
           className="px-3 py-1 text-xs rounded-lg bg-destructive text-foreground hover:bg-destructive/80 transition-colors"
@@ -338,16 +342,17 @@ const AutonomyToggle = ({
 
   return (
     <div className="relative">
-      <button
-        onClick={() => setOpen(o => !o)}
-        className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-display border ${config.bg} ${config.color} ${config.border} hover:brightness-110 transition`}
-        title={config.tagline}
-      >
-        <Icon className="w-3 h-3" />
-        <span>{config.label}</span>
-        {countdown && <span className="opacity-60">· {countdown}</span>}
-        <ChevronDown className="w-3 h-3" />
-      </button>
+      <HintTooltip content={config.tagline}>
+        <button
+          onClick={() => setOpen(o => !o)}
+          className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-display border ${config.bg} ${config.color} ${config.border} hover:brightness-110 transition`}
+        >
+          <Icon className="w-3 h-3" />
+          <span>{config.label}</span>
+          {countdown && <span className="opacity-60">· {countdown}</span>}
+          <ChevronDown className="w-3 h-3" />
+        </button>
+      </HintTooltip>
 
       {open && (
         <>
@@ -1028,26 +1033,28 @@ const ChatApp = ({
                   )}
                   {/* Copy button */}
                   {msg.content && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(msg.content); }}
-                      className="absolute top-1 right-1 p-1 rounded opacity-0 group-hover/msg:opacity-60 hover:!opacity-100 transition-opacity bg-background/50"
-                      title="Copy message"
-                    >
-                      <Code className="w-3 h-3" />
-                    </button>
+                    <HintTooltip content="Copy message">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(msg.content); }}
+                        className="absolute top-1 right-1 p-1 rounded opacity-0 group-hover/msg:opacity-60 hover:!opacity-100 transition-opacity bg-background/50"
+                      >
+                        <Code className="w-3 h-3" />
+                      </button>
+                    </HintTooltip>
                   )}
                   {msg.content && msg.role === 'assistant' && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handlePin(msg); }}
-                      className={`absolute top-1 right-7 p-1 rounded transition-opacity bg-background/50 ${
-                        pins.some(p => p.messageContent === msg.content)
-                          ? 'opacity-80 text-primary'
-                          : 'opacity-0 group-hover/msg:opacity-60 hover:!opacity-100'
-                      }`}
-                      title={pins.some(p => p.messageContent === msg.content) ? 'Unpin' : 'Pin message'}
-                    >
-                      <Pin className="w-3 h-3" />
-                    </button>
+                    <HintTooltip content={pins.some(p => p.messageContent === msg.content) ? 'Unpin' : 'Pin message'}>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handlePin(msg); }}
+                        className={`absolute top-1 right-7 p-1 rounded transition-opacity bg-background/50 ${
+                          pins.some(p => p.messageContent === msg.content)
+                            ? 'opacity-80 text-primary'
+                            : 'opacity-0 group-hover/msg:opacity-60 hover:!opacity-100'
+                        }`}
+                      >
+                        <Pin className="w-3 h-3" />
+                      </button>
+                    </HintTooltip>
                   )}
                 </div>
                 {msg.tools && msg.tools.length > 0 && (!msg.blocks || msg.blocks.length === 0) && (
@@ -1069,19 +1076,19 @@ const ChatApp = ({
                     data-testid="chat-suggested-actions"
                   >
                     {suggestedActions.map((action, idx) => (
-                      <button
-                        key={`${idx}-${action}`}
-                        type="button"
-                        onClick={() => {
-                          setInput(action);
-                          inputRef.current?.focus();
-                        }}
-                        data-testid="chat-suggested-action"
-                        className="px-2.5 py-1 text-[11px] rounded-full border border-primary/30 bg-primary/5 text-foreground hover:bg-primary/15 hover:border-primary/50 transition-colors max-w-full truncate"
-                        title={action}
-                      >
-                        {action}
-                      </button>
+                      <HintTooltip key={`${idx}-${action}`} content={action}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setInput(action);
+                            inputRef.current?.focus();
+                          }}
+                          data-testid="chat-suggested-action"
+                          className="px-2.5 py-1 text-[11px] rounded-full border border-primary/30 bg-primary/5 text-foreground hover:bg-primary/15 hover:border-primary/50 transition-colors max-w-full truncate"
+                        >
+                          {action}
+                        </button>
+                      </HintTooltip>
                     ))}
                   </div>
                 )}
