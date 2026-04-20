@@ -10,6 +10,7 @@ import {
   Lightbulb, Loader2, ChevronRight, Sparkles, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { HintTooltip } from '@/components/ui/hint-tooltip';
 import type { WorkspaceContext } from '@/lib/types';
 import {
   readWorkspaceBriefingCollapsed,
@@ -98,16 +99,17 @@ const WorkspaceBriefing = ({ workspaceId, onSendMessage, onSelectSession }: Work
             <p className="text-sm text-muted-foreground">{ctx.welcomeMessage}</p>
           )}
         </div>
-        <button
-          type="button"
-          onClick={toggleCollapsed}
-          className="shrink-0 flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded hover:bg-muted/40"
-          title="Hide briefing"
-          data-testid="workspace-briefing-collapse"
-          aria-expanded="true"
-        >
-          <ChevronUp className="w-3 h-3" /> Hide
-        </button>
+        <HintTooltip content="Hide briefing">
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            className="shrink-0 flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded hover:bg-muted/40"
+            data-testid="workspace-briefing-collapse"
+            aria-expanded="true"
+          >
+            <ChevronUp className="w-3 h-3" /> Hide
+          </button>
+        </HintTooltip>
       </div>
 
       {/* Stats bar */}

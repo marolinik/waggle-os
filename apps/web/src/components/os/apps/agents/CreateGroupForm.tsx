@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, X, Users, GripVertical, ChevronUp, ChevronDown } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { HintTooltip } from '@/components/ui/hint-tooltip';
 import type { AgentGroupMember, BackendPersona } from './types';
 import { STRATEGY_CONFIG } from './types';
 
@@ -111,12 +112,16 @@ const CreateGroupForm = ({ agents, onSave, onCancel, initialData, editMode }: Cr
                   <span className="text-[11px] font-mono text-muted-foreground w-4 text-center">{m.executionOrder + 1}</span>
                   <span className="text-[11px] font-medium text-foreground flex-1 truncate">{agent?.name ?? m.agentId}</span>
                   <div className="flex items-center gap-0.5">
-                    <button onClick={() => moveMember(idx, idx - 1)} disabled={idx === 0} className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-20 transition-opacity" title="Move up">
-                      <ChevronUp className="w-3 h-3" />
-                    </button>
-                    <button onClick={() => moveMember(idx, idx + 1)} disabled={idx === members.length - 1} className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-20 transition-opacity" title="Move down">
-                      <ChevronDown className="w-3 h-3" />
-                    </button>
+                    <HintTooltip content="Move up">
+                      <button onClick={() => moveMember(idx, idx - 1)} disabled={idx === 0} className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-20 transition-opacity">
+                        <ChevronUp className="w-3 h-3" />
+                      </button>
+                    </HintTooltip>
+                    <HintTooltip content="Move down">
+                      <button onClick={() => moveMember(idx, idx + 1)} disabled={idx === members.length - 1} className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-20 transition-opacity">
+                        <ChevronDown className="w-3 h-3" />
+                      </button>
+                    </HintTooltip>
                   </div>
                   <button
                     onClick={() => toggleRole(m.agentId)}

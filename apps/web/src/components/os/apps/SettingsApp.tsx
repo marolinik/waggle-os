@@ -8,6 +8,7 @@ import { useBilling } from '@/hooks/useBilling';
 import LockedFeature from '@/components/os/LockedFeature';
 import { adapter } from '@/lib/adapter';
 import { Input } from '@/components/ui/input';
+import { HintTooltip } from '@/components/ui/hint-tooltip';
 import { useProviders } from '@/hooks/useProviders';
 import { useOnboarding } from '@/hooks/useOnboarding';
 import { useDeveloperMode } from '@/hooks/useDeveloperMode';
@@ -829,16 +830,17 @@ const SettingsApp = () => {
                 </div>
                 <p className="text-[11px] text-muted-foreground">Verbose logging for troubleshooting agent behavior.</p>
                 <div className="flex gap-2 mt-2">
-                  <a
-                    href={`${adapter.getServerUrl()}/api/debug/logs`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg bg-muted/50 text-foreground hover:bg-muted transition-colors"
-                    title="Opens audit events + health snapshot in a new tab. Save with Ctrl+S to attach to a support ticket."
-                  >
-                    <Download className="w-3 h-3" />
-                    View / save logs
-                  </a>
+                  <HintTooltip content="Opens audit events + health snapshot in a new tab. Save with Ctrl+S to attach to a support ticket.">
+                    <a
+                      href={`${adapter.getServerUrl()}/api/debug/logs`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg bg-muted/50 text-foreground hover:bg-muted transition-colors"
+                    >
+                      <Download className="w-3 h-3" />
+                      View / save logs
+                    </a>
+                  </HintTooltip>
                   <span className="text-[10px] text-muted-foreground self-center">Attach to support tickets</span>
                 </div>
               </div>

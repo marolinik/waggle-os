@@ -6,6 +6,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
 import { useToast } from '@/hooks/use-toast';
+import { HintTooltip } from '@/components/ui/hint-tooltip';
 
 interface VaultSecret {
   name: string;
@@ -277,15 +278,21 @@ const VaultApp = () => {
                       {revealedSecret === s.name && (
                         <span className="text-[11px] text-foreground font-mono mr-2 max-w-[180px] truncate">{revealedValue}</span>
                       )}
-                      <button onClick={() => { setNewName(s.name); setNewType(s.type ?? 'api_key'); setNewValue(''); }} className="p-1 rounded hover:bg-muted/50" title="Update value">
-                        <Pencil className="w-3 h-3 text-muted-foreground" />
-                      </button>
-                      <button onClick={() => handleReveal(s.name)} className="p-1 rounded hover:bg-muted/50" title={revealedSecret === s.name ? 'Hide' : 'Reveal (10s)'}>
-                        {revealedSecret === s.name ? <EyeOff className="w-3 h-3 text-muted-foreground" /> : <Eye className="w-3 h-3 text-muted-foreground" />}
-                      </button>
-                      <button onClick={() => handleDeleteSecret(s.name)} className="p-1 rounded hover:bg-destructive/20" title="Delete">
-                        <Trash2 className="w-3 h-3 text-destructive" />
-                      </button>
+                      <HintTooltip content="Update value">
+                        <button onClick={() => { setNewName(s.name); setNewType(s.type ?? 'api_key'); setNewValue(''); }} className="p-1 rounded hover:bg-muted/50">
+                          <Pencil className="w-3 h-3 text-muted-foreground" />
+                        </button>
+                      </HintTooltip>
+                      <HintTooltip content={revealedSecret === s.name ? 'Hide' : 'Reveal (10s)'}>
+                        <button onClick={() => handleReveal(s.name)} className="p-1 rounded hover:bg-muted/50">
+                          {revealedSecret === s.name ? <EyeOff className="w-3 h-3 text-muted-foreground" /> : <Eye className="w-3 h-3 text-muted-foreground" />}
+                        </button>
+                      </HintTooltip>
+                      <HintTooltip content="Delete">
+                        <button onClick={() => handleDeleteSecret(s.name)} className="p-1 rounded hover:bg-destructive/20">
+                          <Trash2 className="w-3 h-3 text-destructive" />
+                        </button>
+                      </HintTooltip>
                     </div>
                   </div>
                 );

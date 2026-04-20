@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { Wrench, Pencil } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { HintTooltip } from '@/components/ui/hint-tooltip';
 import type { BackendPersona, ToolDef } from './types';
 import type { PersonaConfig } from '@/lib/personas';
 
@@ -57,13 +58,14 @@ const AgentDetail = ({ agent, localPersona, allTools, onEdit }: AgentDetailProps
         ) : (
           <div className="flex flex-wrap gap-1.5">
             {agentTools.map(t => (
-              <span
-                key={t.name}
-                className="text-[11px] px-2 py-1 rounded-lg bg-muted/50 border border-border/30 text-foreground"
-                title={t.description}
-              >
-                {t.name}
-              </span>
+              <HintTooltip key={t.name} content={t.description}>
+                <span
+                  className="text-[11px] px-2 py-1 rounded-lg bg-muted/50 border border-border/30 text-foreground"
+                  tabIndex={0}
+                >
+                  {t.name}
+                </span>
+              </HintTooltip>
             ))}
           </div>
         )}

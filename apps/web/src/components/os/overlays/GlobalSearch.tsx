@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
 import { motion, AnimatePresence } from 'framer-motion';
 import { fuzzyMatch } from '@/lib/fuzzy-match';
+import { HintTooltip } from '@/components/ui/hint-tooltip';
 
 /* ── Types ── */
 type SearchCategory = 'command' | 'workspace' | 'memory' | 'session' | 'skill';
@@ -258,17 +259,18 @@ const GlobalSearch = ({ open, onClose, onNavigate }: GlobalSearchProps) => {
               className="flex-1 bg-transparent text-sm border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0"
             />
             {memoryLoading && <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'var(--honey-500)' }} />}
-            <button
-              onClick={() => setGlobalScope(g => !g)}
-              title={globalScope ? 'Searching all workspaces' : 'Searching current workspace'}
-              className="p-1 rounded-md transition-colors"
-              style={{
-                backgroundColor: globalScope ? 'rgba(229,160,0,0.15)' : 'transparent',
-                color: globalScope ? 'var(--honey-500)' : 'var(--hive-500)',
-              }}
-            >
-              <Globe className="w-4 h-4" />
-            </button>
+            <HintTooltip content={globalScope ? 'Searching all workspaces' : 'Searching current workspace'}>
+              <button
+                onClick={() => setGlobalScope(g => !g)}
+                className="p-1 rounded-md transition-colors"
+                style={{
+                  backgroundColor: globalScope ? 'rgba(229,160,0,0.15)' : 'transparent',
+                  color: globalScope ? 'var(--honey-500)' : 'var(--hive-500)',
+                }}
+              >
+                <Globe className="w-4 h-4" />
+              </button>
+            </HintTooltip>
             <kbd className="px-1.5 py-0.5 text-[11px] rounded font-display" style={{ backgroundColor: 'var(--hive-800)', color: 'var(--hive-400)' }}>ESC</kbd>
           </div>
 

@@ -3,6 +3,7 @@ import { Clock, Plus, Trash2, Play, Loader2, ToggleLeft, ToggleRight, Info } fro
 import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
 import { useToast } from '@/hooks/use-toast';
+import { HintTooltip } from '@/components/ui/hint-tooltip';
 import type { CronJob } from '@/lib/types';
 import {
   CRON_SCHEDULE_PRESETS,
@@ -227,12 +228,14 @@ const ScheduledJobsApp = () => {
         {/* Job list */}
         {jobs.map(job => (
           <div key={job.id} className="flex items-center gap-3 p-3 rounded-xl border border-border/30 bg-secondary/20">
-            <button onClick={() => handleToggle(job)} className="shrink-0" title={job.enabled ? 'Disable' : 'Enable'}>
-              {job.enabled
-                ? <ToggleRight className="w-5 h-5 text-emerald-400" />
-                : <ToggleLeft className="w-5 h-5 text-muted-foreground" />
-              }
-            </button>
+            <HintTooltip content={job.enabled ? 'Disable' : 'Enable'}>
+              <button onClick={() => handleToggle(job)} className="shrink-0">
+                {job.enabled
+                  ? <ToggleRight className="w-5 h-5 text-emerald-400" />
+                  : <ToggleLeft className="w-5 h-5 text-muted-foreground" />
+                }
+              </button>
+            </HintTooltip>
             <div className="flex-1 min-w-0">
               <p className={`text-sm font-display ${job.enabled ? 'text-foreground' : 'text-muted-foreground'}`}>{job.name}</p>
               <div className="flex items-center gap-2 mt-0.5">
@@ -240,21 +243,23 @@ const ScheduledJobsApp = () => {
                 {job.lastRun && <span className="text-[11px] text-muted-foreground/60">Last: {new Date(job.lastRun).toLocaleDateString()}</span>}
               </div>
             </div>
-            <button
-              onClick={() => handleTrigger(job.id)}
-              disabled={triggering === job.id}
-              className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
-              title="Run now"
-            >
-              {triggering === job.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-            </button>
-            <button
-              onClick={() => handleDelete(job.id)}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive transition-colors"
-              title="Delete"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            <HintTooltip content="Run now">
+              <button
+                onClick={() => handleTrigger(job.id)}
+                disabled={triggering === job.id}
+                className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+              >
+                {triggering === job.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+              </button>
+            </HintTooltip>
+            <HintTooltip content="Delete">
+              <button
+                onClick={() => handleDelete(job.id)}
+                className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </HintTooltip>
           </div>
         ))}
       </div>

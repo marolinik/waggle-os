@@ -3,6 +3,7 @@ import { WifiOff, Search, Bell } from "lucide-react";
 import waggleLogoDark from "@/assets/waggle-logo.jpeg";
 import waggleLogoLight from "@/assets/waggle-logo.png";
 import { useIsLightTheme } from "@/hooks/useIsLightTheme";
+import { HintTooltip } from "@/components/ui/hint-tooltip";
 import { useDeveloperMode } from "@/hooks/useDeveloperMode";
 
 interface StatusBarProps {
@@ -54,13 +55,15 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
         {focusedWindowLabel && (
           <>
             <span className="text-muted-foreground text-[11px] hidden md:inline">·</span>
-            <span
-              className="text-[11px] text-foreground/80 font-display hidden md:inline truncate max-w-[240px]"
-              data-testid="statusbar-focused-window"
-              title={focusedWindowLabel}
-            >
-              {focusedWindowLabel}
-            </span>
+            <HintTooltip content={focusedWindowLabel}>
+              <span
+                className="text-[11px] text-foreground/80 font-display hidden md:inline truncate max-w-[240px]"
+                data-testid="statusbar-focused-window"
+                tabIndex={0}
+              >
+                {focusedWindowLabel}
+              </span>
+            </HintTooltip>
           </>
         )}
         {model && (
@@ -91,16 +94,17 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
             Trial expired
           </span>
         )}
-        <button
-          onClick={onSearchClick}
-          className="flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-border/40 bg-secondary/40 text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors"
-          aria-label="Search"
-          title="Search (Ctrl+K)"
-        >
-          <Search className="w-3 h-3" />
-          <span className="text-[10px] font-display">Search</span>
-          <kbd className="text-[9px] px-1 py-0.5 rounded bg-muted border border-border/40 font-mono">Ctrl K</kbd>
-        </button>
+        <HintTooltip content="Search (Ctrl+K)">
+          <button
+            onClick={onSearchClick}
+            className="flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-border/40 bg-secondary/40 text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors"
+            aria-label="Search"
+          >
+            <Search className="w-3 h-3" />
+            <span className="text-[10px] font-display">Search</span>
+            <kbd className="text-[9px] px-1 py-0.5 rounded bg-muted border border-border/40 font-mono">Ctrl K</kbd>
+          </button>
+        </HintTooltip>
         <button onClick={onNotificationClick} className="relative text-muted-foreground hover:text-primary transition-colors" aria-label="Notifications">
           <Bell className="w-3.5 h-3.5" />
           {unreadNotifications > 0 && (
@@ -111,7 +115,7 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
         </button>
         {offline && (
           <div className="relative group">
-            <button className="flex items-center gap-1 text-destructive" title="Backend offline — messages will be queued">
+            <button className="flex items-center gap-1 text-destructive" aria-label="Backend offline — messages will be queued">
               <WifiOff className="w-3.5 h-3.5" />
               <span className="text-[10px] font-display animate-pulse">Offline</span>
             </button>

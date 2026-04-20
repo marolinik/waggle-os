@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Activity, Clock, Brain, ChevronRight, Users, Sparkles, CheckCircle2, Circle } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { HintTooltip } from '@/components/ui/hint-tooltip';
 import { getPersonaById } from '@/lib/personas';
 import type { Workspace } from '@/lib/types';
 import { getAllGroups } from '@/lib/workspace-groups';
@@ -128,10 +129,11 @@ const DashboardApp = ({ workspaces, activeWorkspaceId, onSelectWorkspace, onCrea
           frames, entities, relations. Per-dimension contribution in
           the title tooltip so the user can see WHICH dimension is
           lagging when the score is low. */}
+      <HintTooltip content={`Frames: ${brainCounts.frames.toLocaleString()} (+${brainParts.frames} pts) · Entities: ${brainCounts.entities.toLocaleString()} (+${brainParts.entities}) · Relations: ${brainCounts.relations.toLocaleString()} (+${brainParts.relations})`}>
       <div
         className="mb-4 rounded-xl border border-border/30 bg-secondary/20 px-3 py-2.5"
         data-testid="brain-health-card"
-        title={`Frames: ${brainCounts.frames.toLocaleString()} (+${brainParts.frames} pts) · Entities: ${brainCounts.entities.toLocaleString()} (+${brainParts.entities}) · Relations: ${brainCounts.relations.toLocaleString()} (+${brainParts.relations})`}
+        tabIndex={0}
       >
         <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-2">
@@ -155,6 +157,7 @@ const DashboardApp = ({ workspaces, activeWorkspaceId, onSelectWorkspace, onCrea
           />
         </div>
       </div>
+      </HintTooltip>
 
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-display font-semibold text-foreground">Workspaces</h2>
@@ -219,14 +222,16 @@ const DashboardApp = ({ workspaces, activeWorkspaceId, onSelectWorkspace, onCrea
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span className="text-sm font-display font-medium text-foreground truncate">{ws.name}</span>
-                        <span
-                          className={`text-[11px] leading-none shrink-0 ${healthColors[ws.health || 'healthy'].replace('bg-', 'text-')}`}
-                          role="img"
-                          aria-label={`${healthShape[ws.health || 'healthy'].label} workspace`}
-                          title={healthShape[ws.health || 'healthy'].label}
-                        >
-                          {healthShape[ws.health || 'healthy'].glyph}
-                        </span>
+                        <HintTooltip content={healthShape[ws.health || 'healthy'].label}>
+                          <span
+                            className={`text-[11px] leading-none shrink-0 ${healthColors[ws.health || 'healthy'].replace('bg-', 'text-')}`}
+                            role="img"
+                            aria-label={`${healthShape[ws.health || 'healthy'].label} workspace`}
+                            tabIndex={0}
+                          >
+                            {healthShape[ws.health || 'healthy'].glyph}
+                          </span>
+                        </HintTooltip>
                         {ws.shared && (
                           <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-sky-500/15 text-sky-400 text-[11px] font-display shrink-0">
                             <Users className="w-2.5 h-2.5" /> Team

@@ -1,6 +1,7 @@
 import { motion, useDragControls, PanInfo } from "framer-motion";
 import { useState, useCallback, useRef, useEffect } from "react";
 import { savePosition } from "@/lib/window-positions";
+import { HintTooltip } from "@/components/ui/hint-tooltip";
 
 type SnapZone = "left" | "right" | "top" | null;
 
@@ -279,30 +280,33 @@ const AppWindow = ({
             <span className="text-xs font-display font-medium text-foreground">{title}</span>
           </div>
           <div className="flex items-center gap-0">
-            <button
-              onClick={onMinimize}
-              className="w-6 h-6 flex items-center justify-center"
-              aria-label="Minimize window"
-              title="Minimize"
-            >
-              <span className="w-3 h-3 rounded-full bg-primary/40 hover:bg-primary/60 transition-colors" />
-            </button>
-            <button
-              onClick={() => { setSnapZone(null); setIsMaximized(!isMaximized); }}
-              className="w-6 h-6 flex items-center justify-center"
-              aria-label="Toggle fullscreen"
-              title="Maximize"
-            >
-              <span className="w-3 h-3 rounded-full bg-primary/40 hover:bg-primary/60 transition-colors" />
-            </button>
-            <button
-              onClick={onClose}
-              className="w-6 h-6 flex items-center justify-center"
-              aria-label="Close window"
-              title="Close"
-            >
-              <span className="w-3 h-3 rounded-full bg-destructive/60 hover:bg-destructive transition-colors" />
-            </button>
+            <HintTooltip content="Minimize">
+              <button
+                onClick={onMinimize}
+                className="w-6 h-6 flex items-center justify-center"
+                aria-label="Minimize window"
+              >
+                <span className="w-3 h-3 rounded-full bg-primary/40 hover:bg-primary/60 transition-colors" />
+              </button>
+            </HintTooltip>
+            <HintTooltip content="Maximize">
+              <button
+                onClick={() => { setSnapZone(null); setIsMaximized(!isMaximized); }}
+                className="w-6 h-6 flex items-center justify-center"
+                aria-label="Toggle fullscreen"
+              >
+                <span className="w-3 h-3 rounded-full bg-primary/40 hover:bg-primary/60 transition-colors" />
+              </button>
+            </HintTooltip>
+            <HintTooltip content="Close">
+              <button
+                onClick={onClose}
+                className="w-6 h-6 flex items-center justify-center"
+                aria-label="Close window"
+              >
+                <span className="w-3 h-3 rounded-full bg-destructive/60 hover:bg-destructive transition-colors" />
+              </button>
+            </HintTooltip>
           </div>
         </div>
 

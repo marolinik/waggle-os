@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { Activity, Loader2, CheckCircle2, XCircle, Zap, MessageSquare, Clock, ChevronRight, StopCircle, GitBranch, Circle } from 'lucide-react';
 import type { AgentStep } from '@/lib/types';
 import { decodeHtmlEntities } from '@/lib/decode-entities';
+import { HintTooltip } from '@/components/ui/hint-tooltip';
 
 const stepIcons: Record<string, React.ElementType> = {
   think: Activity,
@@ -54,13 +55,14 @@ const StepCard = ({ step, onAbort }: { step: AgentStep; onAbort?: () => void }) 
           </div>
         </div>
         {step.status === 'running' && onAbort && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onAbort(); }}
-            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-destructive/20 text-destructive text-[11px] font-display hover:bg-destructive/30 transition-colors shrink-0"
-            title="Cancel execution"
-          >
-            <StopCircle className="w-3 h-3" /> Cancel
-          </button>
+          <HintTooltip content="Cancel execution">
+            <button
+              onClick={(e) => { e.stopPropagation(); onAbort(); }}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-destructive/20 text-destructive text-[11px] font-display hover:bg-destructive/30 transition-colors shrink-0"
+            >
+              <StopCircle className="w-3 h-3" /> Cancel
+            </button>
+          </HintTooltip>
         )}
         {step.details && (
           <ChevronRight className={`w-3 h-3 text-muted-foreground transition-transform ${expanded ? 'rotate-90' : ''}`} />
@@ -289,20 +291,23 @@ const EventsApp = ({ steps, autoScroll, onToggleAutoScroll, filter, onFilterChan
         {/* Tabs */}
         <div className="flex gap-0.5 mb-3 p-0.5 rounded-lg bg-muted/50">
           {(['live', 'tree', 'replay'] as const).map(t => (
-            <button
+            <HintTooltip
               key={t}
-              onClick={() => setTab(t)}
-              className={`flex-1 text-[11px] py-1 rounded font-display transition-colors capitalize ${
-                tab === t ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'
-              }`}
-              title={
+              content={
                 t === 'live' ? 'Stream of every think/tool call/response as the agent runs right now' :
                 t === 'tree' ? 'Hierarchical view showing how sub-agents spawned from each turn' :
                 'Group past runs by day — inspect or re-open a prior session\'s full trace'
               }
             >
-              {t}
-            </button>
+              <button
+                onClick={() => setTab(t)}
+                className={`flex-1 text-[11px] py-1 rounded font-display transition-colors capitalize ${
+                  tab === t ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'
+                }`}
+              >
+                {t}
+              </button>
+            </HintTooltip>
           ))}
         </div>
 

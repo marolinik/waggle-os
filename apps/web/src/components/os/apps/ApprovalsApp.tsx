@@ -17,6 +17,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Shield, ShieldCheck, Clock, X as XIcon, AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { useToast } from '@/hooks/use-toast';
+import { HintTooltip } from '@/components/ui/hint-tooltip';
 
 interface PendingApproval {
   requestId: string;
@@ -161,14 +162,15 @@ const ApprovalsApp = () => {
           >
             Grants {grants.length > 0 && <span className="ml-1 text-[10px] text-muted-foreground">({grants.length})</span>}
           </button>
-          <button
-            onClick={refresh}
-            disabled={loading}
-            className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors disabled:opacity-50"
-            title="Refresh"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+          <HintTooltip content="Refresh">
+            <button
+              onClick={refresh}
+              disabled={loading}
+              className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </HintTooltip>
         </div>
       </div>
 
@@ -267,13 +269,14 @@ const ApprovalsApp = () => {
                   {grant.expiresAt && <> · expires {formatRelative(grant.expiresAt)}</>}
                 </p>
               </div>
-              <button
-                onClick={() => revokeGrant(grant)}
-                className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
-                title="Revoke this grant"
-              >
-                <XIcon className="w-3.5 h-3.5" />
-              </button>
+              <HintTooltip content="Revoke this grant">
+                <button
+                  onClick={() => revokeGrant(grant)}
+                  className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
+                >
+                  <XIcon className="w-3.5 h-3.5" />
+                </button>
+              </HintTooltip>
             </div>
           ))}
         </div>

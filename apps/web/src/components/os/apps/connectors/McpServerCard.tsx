@@ -13,6 +13,7 @@
 
 import { useState } from 'react';
 import { ExternalLink, Check, Copy, Info } from 'lucide-react';
+import { HintTooltip } from '@/components/ui/hint-tooltip';
 import BrandTile from './BrandTile';
 import { getBrandIdentity } from './brand-identity';
 import type { McpServer } from './mcp-registry';
@@ -57,16 +58,17 @@ const McpServerCard = ({ server }: McpServerCardProps) => {
                 {server.category} · {server.author}
               </p>
             </div>
-            <a
-              href={server.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="shrink-0 rounded-lg p-1 text-muted-foreground/70 transition-colors hover:bg-primary/10 hover:text-primary"
-              title="View source repository"
-            >
-              <ExternalLink className="h-3 w-3" />
-            </a>
+            <HintTooltip content="View source repository">
+              <a
+                href={server.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="shrink-0 rounded-lg p-1 text-muted-foreground/70 transition-colors hover:bg-primary/10 hover:text-primary"
+              >
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </HintTooltip>
           </div>
 
           <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-muted-foreground">

@@ -103,8 +103,7 @@ const McpCatalog = () => {
                 }
                 className={`${bg} relative h-full transition-all hover:brightness-125`}
                 style={{ width: `${pct}%` }}
-                title={`${cat.name} — ${cat.count} (${pct.toFixed(0)}%)`}
-                aria-label={`${cat.name}: ${cat.count} servers`}
+                aria-label={`${cat.name}: ${cat.count} servers (${pct.toFixed(0)}%)`}
               />
             );
           })}

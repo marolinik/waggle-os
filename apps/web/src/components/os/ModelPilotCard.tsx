@@ -12,6 +12,7 @@ import {
   Zap, Shield, Coins, ChevronDown, Info, ToggleLeft, ToggleRight, Key,
 } from 'lucide-react';
 import type { Provider } from '@/hooks/useProviders';
+import { HintTooltip } from '@/components/ui/hint-tooltip';
 
 interface ModelPilotCardProps {
   defaultModel: string;
@@ -152,12 +153,14 @@ const LaneDropdown = ({
                   {disabled ? (
                     <span className="text-muted-foreground/40">Add key in Vault</span>
                   ) : (
-                    <span
-                      className={COST_COLORS[m.cost] ?? ''}
-                      title={COST_TOOLTIPS[m.cost] ?? ''}
-                    >
-                      {m.cost}
-                    </span>
+                    <HintTooltip content={COST_TOOLTIPS[m.cost] ?? ''}>
+                      <span
+                        className={COST_COLORS[m.cost] ?? ''}
+                        tabIndex={0}
+                      >
+                        {m.cost}
+                      </span>
+                    </HintTooltip>
                   )}
                 </span>
               </button>
@@ -245,26 +248,28 @@ const ModelPilotCard = ({
         <div className="flex items-center gap-2">
           <Zap className="w-4 h-4 text-primary" />
           <h3 className="text-sm font-display font-semibold text-foreground">Model Pilot</h3>
-          <button
-            onClick={() => setShowInfo(!showInfo)}
-            className="text-muted-foreground hover:text-foreground transition-colors"
-            title="What is Model Pilot?"
-          >
-            <Info className="w-3.5 h-3.5" />
-          </button>
+          <HintTooltip content="What is Model Pilot?">
+            <button
+              onClick={() => setShowInfo(!showInfo)}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Info className="w-3.5 h-3.5" />
+            </button>
+          </HintTooltip>
         </div>
-        <button
-          onClick={toggleSingleMode}
-          className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-          title={singleMode ? 'Enable fallback chain' : 'Use single model only'}
-        >
-          {singleMode ? (
-            <ToggleLeft className="w-4 h-4" />
-          ) : (
-            <ToggleRight className="w-4 h-4 text-primary" />
-          )}
-          {singleMode ? 'Single model' : 'Fallback chain'}
-        </button>
+        <HintTooltip content={singleMode ? 'Enable fallback chain' : 'Use single model only'}>
+          <button
+            onClick={toggleSingleMode}
+            className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {singleMode ? (
+              <ToggleLeft className="w-4 h-4" />
+            ) : (
+              <ToggleRight className="w-4 h-4 text-primary" />
+            )}
+            {singleMode ? 'Single model' : 'Fallback chain'}
+          </button>
+        </HintTooltip>
       </div>
 
       {/* Info tooltip */}
@@ -308,12 +313,14 @@ const ModelPilotCard = ({
                     </p>
                     <div className="flex items-center justify-end gap-1">
                       {cost && (
-                        <span
-                          className={`text-[11px] ${COST_COLORS[cost] ?? ''}`}
-                          title={COST_TOOLTIPS[cost] ?? ''}
-                        >
-                          {cost}
-                        </span>
+                        <HintTooltip content={COST_TOOLTIPS[cost] ?? ''}>
+                          <span
+                            className={`text-[11px] ${COST_COLORS[cost] ?? ''}`}
+                            tabIndex={0}
+                          >
+                            {cost}
+                          </span>
+                        </HintTooltip>
                       )}
                       {isFree && (
                         <span className="px-1 rounded text-[11px] font-display font-bold bg-emerald-500/20 text-emerald-400 leading-none">

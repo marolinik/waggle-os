@@ -11,6 +11,7 @@ import {
   Loader2, Activity, Eye, Clock, Database, RefreshCw, HardDrive,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { HintTooltip } from '@/components/ui/hint-tooltip';
 
 interface ArticleStatus {
   status: 'compliant' | 'warning' | 'non-compliant';
@@ -235,9 +236,8 @@ const ComplianceDashboard = () => {
           )}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <span
-            className={`px-2 py-0.5 rounded-full text-[11px] font-display font-semibold border ${STATUS_COLORS[status.overall]}`}
-            title={
+          <HintTooltip
+            content={
               status.overall === 'warning'
                 ? 'One or more articles need attention — hover each card for details. Most commonly: no interactions logged yet (Article 12).'
                 : status.overall === 'non-compliant'
@@ -245,24 +245,31 @@ const ComplianceDashboard = () => {
                   : 'All monitored articles meet their requirements.'
             }
           >
-            {status.overall.toUpperCase()}
-          </span>
-          <button
-            onClick={() => fetchStatus()}
-            disabled={refreshing}
-            className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors disabled:opacity-50"
-            title="Refresh compliance status"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-          </button>
-          <button
-            onClick={handleExport}
-            disabled={exporting}
-            className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors disabled:opacity-50"
-            title="Export audit report (last 180 days)"
-          >
-            {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-          </button>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[11px] font-display font-semibold border ${STATUS_COLORS[status.overall]}`}
+              tabIndex={0}
+            >
+              {status.overall.toUpperCase()}
+            </span>
+          </HintTooltip>
+          <HintTooltip content="Refresh compliance status">
+            <button
+              onClick={() => fetchStatus()}
+              disabled={refreshing}
+              className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+          </HintTooltip>
+          <HintTooltip content="Export audit report (last 180 days)">
+            <button
+              onClick={handleExport}
+              disabled={exporting}
+              className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors disabled:opacity-50"
+            >
+              {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            </button>
+          </HintTooltip>
         </div>
       </div>
 
@@ -278,21 +285,22 @@ const ComplianceDashboard = () => {
       {/* Article status grid */}
       <div className="grid grid-cols-2 gap-2">
         {articles.map(art => (
-          <div
-            key={art.key}
-            className="p-2 rounded-lg bg-background/50 border border-border/20"
-            title={art.data.detail}
-          >
-            <div className="flex items-center justify-between mb-1">
-              <div className="flex items-center gap-1 text-muted-foreground">
-                {art.icon}
-                <span className="text-[11px]">{art.label}</span>
+          <HintTooltip key={art.key} content={art.data.detail}>
+            <div
+              className="p-2 rounded-lg bg-background/50 border border-border/20"
+              tabIndex={0}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-1 text-muted-foreground">
+                  {art.icon}
+                  <span className="text-[11px]">{art.label}</span>
+                </div>
+                {STATUS_ICONS[art.data.status]}
               </div>
-              {STATUS_ICONS[art.data.status]}
+              <p className="text-sm font-display font-semibold text-foreground">{art.metric}</p>
+              <p className="text-[10px] text-muted-foreground/70 truncate">{art.hint}</p>
             </div>
-            <p className="text-sm font-display font-semibold text-foreground">{art.metric}</p>
-            <p className="text-[10px] text-muted-foreground/70 truncate">{art.hint}</p>
-          </div>
+          </HintTooltip>
         ))}
       </div>
 

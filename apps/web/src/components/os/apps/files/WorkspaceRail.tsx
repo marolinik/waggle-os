@@ -13,6 +13,7 @@
 
 import { useState } from 'react';
 import { HardDrive, Folder, FolderOpen, Cloud, Users } from 'lucide-react';
+import { HintTooltip } from '@/components/ui/hint-tooltip';
 import type { Workspace } from '@/lib/types';
 
 interface WorkspaceRailProps {
@@ -64,28 +65,28 @@ const WorkspaceRail = ({ workspaces, activeWorkspaceId, onSelect, onDropFiles }:
           const isActive = ws.id === activeWorkspaceId;
           const isDropTarget = dropTarget === ws.id;
           return (
-            <button
-              key={ws.id}
-              onClick={() => onSelect(ws.id)}
-              onDragEnter={handleDragEnter(ws.id)}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop(ws.id)}
-              className={`w-full text-left px-3 py-2 flex items-center gap-2 transition-colors border-l-2 ${
-                isActive
-                  ? 'bg-primary/15 border-primary text-foreground'
-                  : isDropTarget
-                  ? 'bg-primary/20 border-primary/60 text-foreground'
-                  : 'border-transparent text-muted-foreground hover:bg-muted/40 hover:text-foreground'
-              }`}
-              title={ws.name}
-            >
-              <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-primary' : ''}`} />
-              <span className="text-xs truncate flex-1">{ws.name}</span>
-              {ws.storageType === 'team' && (
-                <span className="text-[10px] text-emerald-400 uppercase tracking-wide font-display">team</span>
-              )}
-            </button>
+            <HintTooltip key={ws.id} content={ws.name} side="right">
+              <button
+                onClick={() => onSelect(ws.id)}
+                onDragEnter={handleDragEnter(ws.id)}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop(ws.id)}
+                className={`w-full text-left px-3 py-2 flex items-center gap-2 transition-colors border-l-2 ${
+                  isActive
+                    ? 'bg-primary/15 border-primary text-foreground'
+                    : isDropTarget
+                    ? 'bg-primary/20 border-primary/60 text-foreground'
+                    : 'border-transparent text-muted-foreground hover:bg-muted/40 hover:text-foreground'
+                }`}
+              >
+                <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-primary' : ''}`} />
+                <span className="text-xs truncate flex-1">{ws.name}</span>
+                {ws.storageType === 'team' && (
+                  <span className="text-[10px] text-emerald-400 uppercase tracking-wide font-display">team</span>
+                )}
+              </button>
+            </HintTooltip>
           );
         })}
         {workspaces.length === 0 && (
