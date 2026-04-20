@@ -1256,6 +1256,44 @@ class LocalAdapter {
     return res.json();
   }
 
+  /**
+   * M-08: fetch the latest interrupted harvest run (null if none). UI uses
+   * this on HarvestTab mount to decide whether to render the Resume banner.
+   */
+  async getLatestInterruptedHarvestRun(): Promise<{
+    run: {
+      id: number;
+      source: string;
+      status: 'running' | 'failed';
+      totalItems: number;
+      itemsSaved: number;
+      startedAt: string;
+      updatedAt: string;
+      errorMessage: string | null;
+    } | null;
+  }> {
+    const res = await this.fetch('/api/harvest/runs/latest-interrupted');
+    return res.json();
+  }
+
+  /**
+   * M-08: resume an interrupted harvest run. Hits /api/harvest/commit with
+   * `resumeFromRun: runId`; the server replays the cached input payload.
+   * FrameStore dedup makes already-saved frames no-ops.
+   */
+  async resumeHarvestRun(runId: number): Promise<any> {
+    const res = await this.fetch('/api/harvest/commit', {
+      method: 'POST',
+      body: JSON.stringify({ resumeFromRun: runId }),
+    });
+    return res.json();
+  }
+
+  /** M-08: discard an interrupted run — marks abandoned + deletes cached input. */
+  async abandonHarvestRun(runId: number): Promise<void> {
+    await this.fetch(`/api/harvest/runs/${runId}/abandon`, { method: 'POST' });
+  }
+
   async removeHarvestSource(source: string): Promise<void> {
     await this.fetch(`/api/harvest/sources/${encodeURIComponent(source)}`, { method: 'DELETE' });
   }

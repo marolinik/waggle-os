@@ -8,7 +8,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Upload, RefreshCw, Clock, CheckCircle2, AlertCircle,
-  Loader2, Plus, Zap, Brain, Trash2, Pause, Play, Sparkles,
+  Loader2, Plus, Zap, Brain, Trash2, Pause, Play, Sparkles, RotateCcw, XCircle,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
@@ -94,6 +94,12 @@ const HarvestTab = () => {
   // Surfaced as a banner after a successful commit; cleared on next import start.
   // The suggestions themselves live in UserProfile — we only hold the count here.
   const [identitySuggestionCount, setIdentitySuggestionCount] = useState(0);
+  // M-08: interrupted run ready for resume — shown on mount if one exists
+  // and cleared once the user picks Resume or Discard.
+  const [interruptedRun, setInterruptedRun] = useState<{
+    id: number; source: string; status: 'running' | 'failed';
+    totalItems: number; itemsSaved: number; startedAt: string;
+  } | null>(null);
 
   const claudeCodeSource = sources.find(s => s.source === 'claude-code') ?? null;
 
@@ -114,10 +120,21 @@ const HarvestTab = () => {
     } catch { /* not available */ }
   }, []);
 
+  // M-08: check for interrupted runs on mount so the banner can offer
+  // Resume/Discard. Best-effort — silent on error since the feature is
+  // additive and shouldn't block the rest of HarvestTab from rendering.
+  const fetchInterruptedRun = useCallback(async () => {
+    try {
+      const { run } = await adapter.getLatestInterruptedHarvestRun();
+      setInterruptedRun(run);
+    } catch { /* no server, no run */ }
+  }, []);
+
   useEffect(() => {
     fetchSources();
     detectClaudeCode();
-  }, [fetchSources, detectClaudeCode]);
+    fetchInterruptedRun();
+  }, [fetchSources, detectClaudeCode, fetchInterruptedRun]);
 
   // Handle file upload
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -168,6 +185,46 @@ const HarvestTab = () => {
       setIdentitySuggestionCount(suggestions.length);
     } catch { /* non-fatal */ }
   }, []);
+
+  // M-08: resume an interrupted run. Replays the cached input through the
+  // same commit pipeline; FrameStore dedup handles already-saved items so
+  // the user doesn't see double frames.
+  const handleResumeRun = async () => {
+    if (!interruptedRun) return;
+    setImporting(true);
+    setError(null);
+    setProgress(null);
+    setImportResult(null);
+    setInterruptedRun(null);
+    setIdentitySuggestionCount(0);
+
+    const sub = adapter.subscribeHarvestProgress(setProgress);
+    await sub.ready;
+
+    try {
+      const result = await adapter.resumeHarvestRun(interruptedRun.id);
+      setImportResult(result);
+      await fetchSources();
+      if (result?.saved > 0) await runIdentityExtraction();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Resume failed');
+      // Re-fetch — the run may have moved to failed state with a new error.
+      await fetchInterruptedRun();
+    } finally {
+      sub.close();
+      setImporting(false);
+      setProgress(null);
+    }
+  };
+
+  // M-08: discard an interrupted run so the banner stops showing.
+  const handleDiscardRun = async () => {
+    if (!interruptedRun) return;
+    try {
+      await adapter.abandonHarvestRun(interruptedRun.id);
+    } catch { /* swallow — banner hides either way */ }
+    setInterruptedRun(null);
+  };
 
   // Commit import — always uses the retained pendingData, never the preview
   // shape (server cannot re-parse the preview response).
@@ -266,6 +323,41 @@ const HarvestTab = () => {
           <RefreshCw className="w-3.5 h-3.5" />
         </button>
       </div>
+
+      {/* M-08: Resume banner — shows when a prior run was interrupted.
+          Resumes replay the cached input (server-side); FrameStore dedup
+          handles already-saved frames. Discard deletes the cache. */}
+      {interruptedRun && !importing && (
+        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-2">
+          <div className="flex items-start gap-2">
+            <RotateCcw className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-display font-medium text-foreground">
+                Last harvest interrupted
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                {interruptedRun.source} — saved {interruptedRun.itemsSaved} of {interruptedRun.totalItems} items. Resume picks up where it left off.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleResumeRun}
+              disabled={importing}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-500 text-amber-950 text-xs font-display hover:bg-amber-400 transition-colors disabled:opacity-50"
+            >
+              <RotateCcw className="w-3 h-3" /> Resume
+            </button>
+            <button
+              onClick={handleDiscardRun}
+              disabled={importing}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-secondary text-foreground text-xs hover:bg-secondary/70 transition-colors disabled:opacity-50"
+            >
+              <XCircle className="w-3 h-3" /> Discard
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Privacy headline — Report 3 principle #6 */}
       <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
