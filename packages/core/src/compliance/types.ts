@@ -129,6 +129,53 @@ export interface AuditReport {
   interactionCount: number;
 }
 
+// ── Compliance Templates (M-03) ──
+//
+// Templates let a user save a preferred audit-report shape (sections + risk class +
+// org/footer overrides) and re-apply it to exports. Sections MERGE (union) with the
+// user's runtime section toggles — a template only turns sections ON, never off.
+// `riskClassification` overrides the workspace's risk level for that one report.
+// Logo support is deferred to Bucket 2 (post-launch).
+
+export interface ComplianceTemplateSections {
+  interactions: boolean;
+  oversight: boolean;
+  models: boolean;
+  provenance: boolean;
+  riskAssessment: boolean;
+  fria: boolean;
+}
+
+export interface ComplianceTemplate {
+  id: number;
+  name: string;
+  description: string | null;
+  sections: ComplianceTemplateSections;
+  riskClassification: AIActRiskLevel | null;
+  orgName: string | null;
+  footerText: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateComplianceTemplateInput {
+  name: string;
+  description?: string | null;
+  sections: ComplianceTemplateSections;
+  riskClassification?: AIActRiskLevel | null;
+  orgName?: string | null;
+  footerText?: string | null;
+}
+
+export interface UpdateComplianceTemplateInput {
+  name?: string;
+  description?: string | null;
+  sections?: ComplianceTemplateSections;
+  riskClassification?: AIActRiskLevel | null;
+  orgName?: string | null;
+  footerText?: string | null;
+}
+
 // ── Template auto-suggestion ──
 
 export const TEMPLATE_RISK_MAP: Record<string, AIActRiskLevel> = {

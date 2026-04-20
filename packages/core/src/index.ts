@@ -103,9 +103,12 @@ export type {
 export { InteractionStore } from './compliance/interaction-store.js';
 export { ComplianceStatusChecker } from './compliance/status-checker.js';
 export { ReportGenerator, type ReportGeneratorDeps } from './compliance/report-generator.js';
+export { ComplianceTemplateStore } from './compliance/template-store.js';
 export { TEMPLATE_RISK_MAP } from './compliance/types.js';
 export type {
   AIActRiskLevel, HumanAction, AIInteraction, RecordInteractionInput,
   ComplianceStatus, ArticleStatus, AuditReport, AuditReportRequest,
   ModelInventoryEntry, OversightLogEntry, HarvestProvenanceEntry,
+  ComplianceTemplate, ComplianceTemplateSections,
+  CreateComplianceTemplateInput, UpdateComplianceTemplateInput,
 } from './compliance/types.js';
