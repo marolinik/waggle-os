@@ -1,1 +1,0 @@
-{"turnId":"7823b15d-8696-4a42-be2c-d6764dd32e4c","cell":"raw","instance_id":"synthetic_025","model":"qwen3.6-35b-a3b","seed":42,"accuracy":1,"p50_latency_ms":1,"p95_latency_ms":1,"usd_per_query":0.000017,"failure_mode":null}

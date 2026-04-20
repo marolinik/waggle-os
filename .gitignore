@@ -27,6 +27,9 @@ benchmarks/data/*
 !benchmarks/data/.gitkeep
 benchmarks/results/*
 !benchmarks/results/.gitkeep
+# Also catch nested mis-CWD writes (e.g. ran from benchmarks/harness/)
+**/benchmarks/results/
+**/benchmarks/data/
 test-regression-*.log
 # SQLite WAL/SHM companions — always match the *.db they accompany
 marketplace.db-shm
