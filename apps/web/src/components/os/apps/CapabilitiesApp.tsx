@@ -8,6 +8,7 @@ import {
   summariseSkills,
 } from '@/lib/skill-pack-display';
 import { dedupePacks } from '@/lib/dedupe-packs';
+import { HintTooltip } from '@/components/ui/hint-tooltip';
 
 interface AuditEntry { id: number; name: string; source: string; outcome: string; timestamp: string }
 
@@ -171,16 +172,16 @@ const CapabilitiesApp = () => {
         {pack.skills && pack.skills.length > 0 && (
           <div className="flex flex-wrap gap-1 mb-2">
             {pack.skills.slice(0, 3).map(s => (
-              <button
-                key={s}
-                type="button"
-                onClick={(e) => { e.stopPropagation(); handleTestSkill(s); }}
-                disabled={testing === s}
-                className="px-1.5 py-0.5 rounded text-[11px] bg-muted text-muted-foreground hover:bg-primary/20 hover:text-primary transition-colors"
-                title={`Test skill: ${s}`}
-              >
-                {testing === s ? '...' : s}
-              </button>
+              <HintTooltip key={s} content={`Test skill: ${s}`}>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); handleTestSkill(s); }}
+                  disabled={testing === s}
+                  className="px-1.5 py-0.5 rounded text-[11px] bg-muted text-muted-foreground hover:bg-primary/20 hover:text-primary transition-colors"
+                >
+                  {testing === s ? '...' : s}
+                </button>
+              </HintTooltip>
             ))}
             {pack.skills.length > 3 && <span className="text-[11px] text-muted-foreground">+{pack.skills.length - 3}</span>}
           </div>
@@ -242,9 +243,11 @@ const CapabilitiesApp = () => {
             <span className={`px-2 py-0.5 rounded font-display capitalize ${categoryColors[pack.category] || 'bg-muted text-muted-foreground'}`}>
               {pack.category || 'uncategorised'}
             </span>
-            <span className="px-2 py-0.5 rounded font-display bg-muted/50 text-muted-foreground" title={trust.explainer}>
-              {trust.label}
-            </span>
+            <HintTooltip content={trust.explainer}>
+              <span className="px-2 py-0.5 rounded font-display bg-muted/50 text-muted-foreground" tabIndex={0}>
+                {trust.label}
+              </span>
+            </HintTooltip>
             <span className="px-2 py-0.5 rounded font-display bg-muted/50 text-muted-foreground">
               {summariseSkills(pack.skills)}
             </span>
@@ -255,16 +258,16 @@ const CapabilitiesApp = () => {
               <p className="text-[11px] font-display uppercase tracking-wide text-muted-foreground mb-1.5">Bundled skills</p>
               <div className="flex flex-wrap gap-1">
                 {pack.skills.map(s => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => { handleTestSkill(s); }}
-                    disabled={testing === s}
-                    className="px-2 py-0.5 rounded text-[11px] bg-muted text-muted-foreground hover:bg-primary/20 hover:text-primary transition-colors"
-                    title={`Test skill: ${s}`}
-                  >
-                    {testing === s ? '...' : s}
-                  </button>
+                  <HintTooltip key={s} content={`Test skill: ${s}`}>
+                    <button
+                      type="button"
+                      onClick={() => { handleTestSkill(s); }}
+                      disabled={testing === s}
+                      className="px-2 py-0.5 rounded text-[11px] bg-muted text-muted-foreground hover:bg-primary/20 hover:text-primary transition-colors"
+                    >
+                      {testing === s ? '...' : s}
+                    </button>
+                  </HintTooltip>
                 ))}
               </div>
             </div>
@@ -317,26 +320,29 @@ const CapabilitiesApp = () => {
       {/* Tabs */}
       <div className="flex gap-1 mb-4 p-0.5 rounded-lg bg-muted/50 w-fit" role="tablist" aria-label="Capability sections">
         {(['installed', 'starter', 'marketplace', 'tools', 'audit'] as const).map(t => (
-          <button
+          <HintTooltip
             key={t}
-            onClick={() => setTab(t)}
-            role="tab"
-            aria-selected={tab === t}
-            tabIndex={tab === t ? 0 : -1}
-            title={
+            content={
               t === 'installed' ? 'Skills & apps you have explicitly installed — active in every chat' :
               t === 'starter' ? 'Curated skills & apps that ship with Waggle by default — always available on every tier' :
               t === 'marketplace' ? 'Browse community + official packs (skills, plugins, connectors). Synced from registry periodically.' :
               t === 'tools' ? 'Low-level tools agents can call (read_file, run_command, etc.). Not the same as skills.' :
               'Install / uninstall history — who added what and when'
             }
-            className={`px-3 py-1.5 text-xs rounded-md font-display transition-colors capitalize ${
-              tab === t ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
-            }`}
           >
-            {t === 'marketplace' && <Store className="w-3 h-3 inline mr-1" />}
-            {t}
-          </button>
+            <button
+              onClick={() => setTab(t)}
+              role="tab"
+              aria-selected={tab === t}
+              tabIndex={tab === t ? 0 : -1}
+              className={`px-3 py-1.5 text-xs rounded-md font-display transition-colors capitalize ${
+                tab === t ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {t === 'marketplace' && <Store className="w-3 h-3 inline mr-1" />}
+              {t}
+            </button>
+          </HintTooltip>
         ))}
       </div>
 

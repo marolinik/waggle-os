@@ -15,6 +15,7 @@ import type { FileEntry, StorageType, Workspace } from '@/lib/types';
 import { adapter } from '@/lib/adapter';
 import { getFileIcon, formatSize, STORAGE_LABELS } from './files/file-utils';
 import { useToast } from '@/hooks/use-toast';
+import { HintTooltip } from '@/components/ui/hint-tooltip';
 
 import FileTree from './files/FileTree';
 import FilePreview from './files/FilePreview';
@@ -558,12 +559,22 @@ const FilesApp = ({
                   <span className="text-[11px] text-muted-foreground">({formatSize(selectedTotalSize)})</span>
                 </div>
                 <div className="h-4 w-px bg-border/30" />
-                <button onClick={handleBulkDownload} className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-foreground hover:bg-muted/50 transition-colors" title="Download selected files"><Download className="w-3 h-3" /> Download</button>
-                <button onClick={handleBulkCopy} className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-foreground hover:bg-muted/50 transition-colors" title="Copy selected"><Copy className="w-3 h-3" /> Copy</button>
-                <button onClick={handleBulkCut} className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-foreground hover:bg-muted/50 transition-colors" title="Cut selected"><Scissors className="w-3 h-3" /> Cut</button>
-                <button onClick={() => setShowMoveDialog(true)} className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-foreground hover:bg-muted/50 transition-colors" title="Move selected to folder"><FolderInput className="w-3 h-3" /> Move</button>
+                <HintTooltip content="Download selected files">
+                  <button onClick={handleBulkDownload} className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-foreground hover:bg-muted/50 transition-colors"><Download className="w-3 h-3" /> Download</button>
+                </HintTooltip>
+                <HintTooltip content="Copy selected">
+                  <button onClick={handleBulkCopy} className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-foreground hover:bg-muted/50 transition-colors"><Copy className="w-3 h-3" /> Copy</button>
+                </HintTooltip>
+                <HintTooltip content="Cut selected">
+                  <button onClick={handleBulkCut} className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-foreground hover:bg-muted/50 transition-colors"><Scissors className="w-3 h-3" /> Cut</button>
+                </HintTooltip>
+                <HintTooltip content="Move selected to folder">
+                  <button onClick={() => setShowMoveDialog(true)} className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-foreground hover:bg-muted/50 transition-colors"><FolderInput className="w-3 h-3" /> Move</button>
+                </HintTooltip>
                 <div className="h-4 w-px bg-border/30" />
-                <button onClick={handleBulkDelete} className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-destructive hover:bg-destructive/10 transition-colors" title="Delete selected"><Trash2 className="w-3 h-3" /> Delete</button>
+                <HintTooltip content="Delete selected">
+                  <button onClick={handleBulkDelete} className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-destructive hover:bg-destructive/10 transition-colors"><Trash2 className="w-3 h-3" /> Delete</button>
+                </HintTooltip>
                 <div className="flex-1" />
                 <button onClick={handleSelectAll} className="text-[11px] text-muted-foreground hover:text-foreground transition-colors">Select all</button>
                 <button onClick={() => setSelectedFiles(new Set())} className="flex items-center gap-0.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"><XSquare className="w-3 h-3" /> Clear</button>

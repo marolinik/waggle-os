@@ -9,6 +9,7 @@ import {
   FolderPlus, Upload, List, Grid3X3, Info,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { HintTooltip } from '@/components/ui/hint-tooltip';
 import type { StorageType } from '@/lib/types';
 import { STORAGE_LABELS } from './file-utils';
 
@@ -135,12 +136,16 @@ const FileActions = ({
             <Search className="w-3.5 h-3.5" />
           </button>
         )}
-        <button onClick={onCreateFolder} className="p-1 rounded hover:bg-muted/50" title="New Folder">
-          <FolderPlus className="w-3.5 h-3.5" />
-        </button>
-        <button onClick={() => fileInputRef.current?.click()} className="p-1 rounded hover:bg-muted/50" title="Upload">
-          <Upload className="w-3.5 h-3.5" />
-        </button>
+        <HintTooltip content="New Folder">
+          <button onClick={onCreateFolder} className="p-1 rounded hover:bg-muted/50">
+            <FolderPlus className="w-3.5 h-3.5" />
+          </button>
+        </HintTooltip>
+        <HintTooltip content="Upload">
+          <button onClick={() => fileInputRef.current?.click()} className="p-1 rounded hover:bg-muted/50">
+            <Upload className="w-3.5 h-3.5" />
+          </button>
+        </HintTooltip>
         <input ref={fileInputRef} type="file" multiple className="hidden" onChange={e => {
           const target = e.target as HTMLInputElement;
           if (target.files) {
@@ -158,7 +163,7 @@ const FileActions = ({
         </button>
         <div className="w-px h-4 bg-border/30 mx-0.5" />
         <div className="relative group">
-          <button className="p-1 rounded hover:bg-muted/50" title="Keyboard Shortcuts">
+          <button className="p-1 rounded hover:bg-muted/50" aria-label="Keyboard Shortcuts">
             <Info className="w-3.5 h-3.5 text-muted-foreground" />
           </button>
           <div className="absolute right-0 top-full mt-1 w-56 rounded-lg border border-border/40 bg-popover p-3 text-popover-foreground shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity z-50">
