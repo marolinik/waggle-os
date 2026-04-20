@@ -87,6 +87,9 @@ const HarvestTab = () => {
   const [pasteMode, setPasteMode] = useState(false);
   const [pasteContent, setPasteContent] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // M-07: live progress streamed from /api/harvest/progress during commit.
+  // Resets to null when no import is in flight.
+  const [progress, setProgress] = useState<{ phase: string; current: number; total: number; source: string } | null>(null);
 
   const claudeCodeSource = sources.find(s => s.source === 'claude-code') ?? null;
 
@@ -158,6 +161,12 @@ const HarvestTab = () => {
     if (pendingData === null) return;
     setImporting(true);
     setError(null);
+    setProgress(null);
+
+    // M-07: subscribe BEFORE the POST so the server-side listener is
+    // registered before the pipeline starts emitting events.
+    const sub = adapter.subscribeHarvestProgress(setProgress);
+    await sub.ready;
 
     try {
       const result = await adapter.harvestCommit(pendingData, selectedSource);
@@ -168,7 +177,9 @@ const HarvestTab = () => {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Import failed');
     } finally {
+      sub.close();
       setImporting(false);
+      setProgress(null);
     }
   };
 
@@ -183,6 +194,11 @@ const HarvestTab = () => {
     setImporting(true);
     setError(null);
     setImportResult(null);
+    setProgress(null);
+
+    // M-07: same subscribe-before-POST ordering as handleCommit.
+    const sub = adapter.subscribeHarvestProgress(setProgress);
+    await sub.ready;
 
     try {
       const result = await adapter.harvestCommit({ scanLocal: true }, 'claude-code');
@@ -194,7 +210,9 @@ const HarvestTab = () => {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Claude Code harvest failed');
     } finally {
+      sub.close();
       setImporting(false);
+      setProgress(null);
     }
   };
 
@@ -276,6 +294,35 @@ const HarvestTab = () => {
         <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 flex items-start gap-2">
           <AlertCircle className="w-3.5 h-3.5 text-destructive mt-0.5 shrink-0" />
           <p className="text-[11px] text-destructive">{error}</p>
+        </div>
+      )}
+
+      {/* M-07: Live progress — visible only while a commit is in flight. */}
+      {progress && (
+        <div
+          className="p-3 rounded-lg bg-primary/5 border border-primary/20 space-y-1.5"
+          role="progressbar"
+          aria-valuenow={progress.current}
+          aria-valuemin={0}
+          aria-valuemax={progress.total}
+          aria-label={`${progress.phase} ${progress.current} of ${progress.total}`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-foreground capitalize font-display">
+              {progress.phase}…
+            </span>
+            <span className="text-[11px] text-muted-foreground font-mono">
+              {progress.current}/{progress.total}
+            </span>
+          </div>
+          <div className="h-1 rounded-full bg-muted overflow-hidden">
+            <div
+              className="h-full bg-primary transition-[width] duration-200"
+              style={{
+                width: `${Math.min(100, (progress.current / Math.max(1, progress.total)) * 100)}%`,
+              }}
+            />
+          </div>
         </div>
       )}
 

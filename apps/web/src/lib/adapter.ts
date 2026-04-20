@@ -634,6 +634,43 @@ class LocalAdapter {
     };
   }
 
+  /**
+   * M-07: subscribe to live harvest progress events.
+   *
+   * Server emits `data: {phase, current, total, source}` (un-named SSE) on
+   * `GET /api/harvest/progress` for every step of `harvest/commit`. The
+   * `ready` promise resolves when the SSE handshake completes (or after 1s
+   * safety timeout) so the caller can defer the POST until the listener is
+   * registered server-side. Otherwise early events would fire before any
+   * client is subscribed.
+   */
+  subscribeHarvestProgress(
+    onEvent: (data: { phase: string; current: number; total: number; source: string }) => void,
+  ): { ready: Promise<void>; close: () => void } {
+    if (!this._connected) {
+      return { ready: Promise.resolve(), close: () => {} };
+    }
+    const url = `${this.baseUrl}/api/harvest/progress`;
+    const es = new EventSource(url);
+
+    let resolved = false;
+    const ready = new Promise<void>((resolve) => {
+      const finish = () => { if (!resolved) { resolved = true; resolve(); } };
+      if (es.readyState === EventSource.OPEN) return finish();
+      es.addEventListener('open', finish, { once: true });
+      // Safety: if the handshake stalls, proceed anyway after 1s so a
+      // flaky SSE doesn't block the actual import indefinitely.
+      setTimeout(finish, 1000);
+    });
+
+    es.onmessage = (e) => {
+      try { onEvent(JSON.parse(e.data)); } catch { /* skip malformed */ }
+    };
+    es.onerror = () => { /* keep open — server may reconnect; close handled by caller */ };
+
+    return { ready, close: () => es.close() };
+  }
+
   async getNotificationHistory(): Promise<Notification[]> {
     const res = await this.fetch('/api/notifications/history');
     return unwrapArray(await res.json()).map((n: any) => ({
