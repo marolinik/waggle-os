@@ -372,6 +372,45 @@ export class WikiCompiler {
       }
     }
 
+    // M-14: stale_page check. A page is stale when its compiledAt is older
+    // than STALE_DAYS ago AND the watermark shows new frames have arrived
+    // since. The watermark-vs-frame-count heuristic avoids false positives
+    // for pages whose topic genuinely hasn't changed — they're not stale,
+    // just stable.
+    const STALE_DAYS = 30;
+    const staleCutoff = Date.now() - STALE_DAYS * 24 * 60 * 60 * 1000;
+    const latestFrameId = Math.max(0, ...allPages.flatMap(p => {
+      try { return (JSON.parse(p.frameIds) as number[]) ?? []; } catch { return []; }
+    }));
+    const newestIndexedFrameId = this.state.getWatermark().lastFrameId;
+    const hasNewerFramesOverall = newestIndexedFrameId > latestFrameId;
+
+    for (const page of allPages) {
+      if (page.pageType === 'index' || page.pageType === 'health') continue;
+      const compiledMs = Date.parse(page.compiledAt);
+      if (Number.isFinite(compiledMs) && compiledMs < staleCutoff && hasNewerFramesOverall) {
+        issues.push({
+          type: 'stale_page',
+          severity: 'medium',
+          description: `Page "${page.name}" was compiled ${Math.round((Date.now() - compiledMs) / (24 * 60 * 60 * 1000))} days ago and new frames have arrived since`,
+          entity: page.name,
+          suggestion: 'Recompile to refresh with recent context',
+        });
+      }
+    }
+
+    // M-14: coverage ratio — pages / compilable entities (entities with
+    // ≥1 relation OR entity_type person/project, matching the missing_page
+    // threshold above). Reports a 0-1 fraction; UI renders it as %.
+    const compilableEntities = entities.filter(e => {
+      const rels = this.kg.getRelationsFrom(e.id);
+      return rels.length > 0 || e.entity_type === 'person' || e.entity_type === 'project';
+    }).length;
+    const coverage = compilableEntities > 0
+      ? Math.min(1, allPages.filter(p => p.pageType === 'entity').length / compilableEntities)
+      : 0;
+    const stalePageCount = issues.filter(i => i.type === 'stale_page').length;
+
     // Data quality score
     const hasEntities = entityCount > 0 ? 20 : 0;
     const hasFrames = frameStats.total > 10 ? 20 : frameStats.total > 0 ? 10 : 0;
@@ -384,6 +423,8 @@ export class WikiCompiler {
       totalEntities: entityCount,
       totalFrames: frameStats.total,
       totalPages: allPages.length,
+      coverage,
+      stalePageCount,
       issues,
       dataQualityScore,
       compiledAt: new Date().toISOString(),

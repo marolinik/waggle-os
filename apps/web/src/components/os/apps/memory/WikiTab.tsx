@@ -30,8 +30,25 @@ interface HealthReport {
   totalEntities: number;
   totalFrames: number;
   totalPages: number;
+  /** M-14: 0..1 — entity pages / compilable entities. */
+  coverage?: number;
+  /** M-14: count of stale-page issues. */
+  stalePageCount?: number;
   issues: { type: string; severity: string; description: string; suggestion?: string }[];
   compiledAt: string;
+}
+
+function formatRelativeHealth(iso: string): string {
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return 'unknown';
+  const delta = Date.now() - ms;
+  if (delta < 60_000) return 'just now';
+  const min = Math.round(delta / 60_000);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.round(hr / 24);
+  return `${day}d ago`;
 }
 
 const typeIcons: Record<string, React.ReactNode> = {
@@ -266,22 +283,42 @@ export default function WikiTab() {
             <div className="flex items-center gap-2">
               <Heart className="w-5 h-5 text-green-400" />
               <h3 className="text-sm font-display font-semibold">Wiki Health Report</h3>
-              <span className={`ml-auto text-lg font-bold ${
-                health.dataQualityScore >= 80 ? 'text-green-400' :
-                health.dataQualityScore >= 50 ? 'text-amber-400' : 'text-destructive'
-              }`}>
-                {health.dataQualityScore}/100
+              <span className="ml-auto flex items-center gap-2">
+                {/* M-14: "Last compile Nm ago" prominent chip */}
+                <span className="text-[11px] text-muted-foreground font-mono">
+                  Last compile {formatRelativeHealth(health.compiledAt)}
+                </span>
+                <span className={`text-lg font-bold ${
+                  health.dataQualityScore >= 80 ? 'text-green-400' :
+                  health.dataQualityScore >= 50 ? 'text-amber-400' : 'text-destructive'
+                }`}>
+                  {health.dataQualityScore}/100
+                </span>
               </span>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            {/* M-14: stats row — 5 cards (Frames, Entities, Pages, Coverage %, Stale) */}
+            <div className="grid grid-cols-5 gap-2">
               {[
-                { label: 'Frames', value: health.totalFrames },
-                { label: 'Entities', value: health.totalEntities },
-                { label: 'Pages', value: health.totalPages },
+                { label: 'Frames', value: health.totalFrames, color: 'text-foreground' },
+                { label: 'Entities', value: health.totalEntities, color: 'text-foreground' },
+                { label: 'Pages', value: health.totalPages, color: 'text-foreground' },
+                {
+                  label: 'Coverage',
+                  value: health.coverage != null ? `${Math.round(health.coverage * 100)}%` : '—',
+                  color: health.coverage != null && health.coverage >= 0.75 ? 'text-green-400'
+                    : health.coverage != null && health.coverage >= 0.4 ? 'text-amber-400'
+                    : 'text-muted-foreground',
+                },
+                {
+                  label: 'Stale',
+                  value: health.stalePageCount ?? 0,
+                  color: (health.stalePageCount ?? 0) === 0 ? 'text-green-400'
+                    : (health.stalePageCount ?? 0) < 5 ? 'text-amber-400' : 'text-destructive',
+                },
               ].map(stat => (
                 <div key={stat.label} className="p-3 rounded-lg bg-secondary/30 border border-border/30 text-center">
-                  <p className="text-lg font-bold text-foreground">{stat.value}</p>
+                  <p className={`text-lg font-bold ${stat.color}`}>{stat.value}</p>
                   <p className="text-[11px] text-muted-foreground">{stat.label}</p>
                 </div>
               ))}

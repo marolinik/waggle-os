@@ -109,6 +109,10 @@ export interface HealthReport {
   totalEntities: number;
   totalFrames: number;
   totalPages: number;
+  /** M-14: entity pages / compilable entities, 0..1. UI renders as %. */
+  coverage: number;
+  /** M-14: count of pages flagged with `stale_page` issue. */
+  stalePageCount: number;
   issues: HealthIssue[];
   dataQualityScore: number; // 0-100
   compiledAt: string;
