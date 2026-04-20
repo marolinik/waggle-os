@@ -9,9 +9,11 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Shield, CheckCircle2, AlertTriangle, XCircle, Download,
   Loader2, Activity, Eye, Clock, Database, RefreshCw, HardDrive, FileText, Settings as SettingsIcon,
+  LayoutTemplate,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
+import { ComplianceTemplateModal, type ComplianceTemplate, type ComplianceTemplateSections } from './ComplianceTemplateModal';
 
 interface ArticleStatus {
   status: 'compliant' | 'warning' | 'non-compliant';
@@ -92,19 +94,69 @@ const ComplianceDashboard = () => {
   const [includeRiskAssessment, setIncludeRiskAssessment] = useState(true);
   const [includeFria, setIncludeFria] = useState(false);
 
-  const buildExportRequest = useCallback(() => ({
-    from: fromDate,
-    to: toDate,
-    format: 'json' as const,
-    include: {
+  // M-03: template picker. When a template is chosen, its sections MERGE (union)
+  // with the runtime toggles above — a template can only add sections, never hide
+  // ones the user toggled on. Risk class + org name + footer text from the template
+  // flow through the export body.
+  const [templates, setTemplates] = useState<ComplianceTemplate[]>([]);
+  const [templateId, setTemplateId] = useState<number | null>(null);
+  const [templatesModalOpen, setTemplatesModalOpen] = useState(false);
+
+  const refreshTemplates = useCallback(async () => {
+    try {
+      const { templates: list } = await adapter.listComplianceTemplates();
+      setTemplates(list as ComplianceTemplate[]);
+    } catch {
+      // Non-fatal: leave templates empty and let the picker show "no templates".
+      setTemplates([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshTemplates();
+  }, [refreshTemplates]);
+
+  const selectedTemplate = templateId !== null
+    ? templates.find(t => t.id === templateId) ?? null
+    : null;
+
+  const mergeSections = (
+    template: ComplianceTemplateSections,
+    runtime: ComplianceTemplateSections,
+  ): ComplianceTemplateSections => ({
+    interactions: template.interactions || runtime.interactions,
+    oversight: template.oversight || runtime.oversight,
+    models: template.models || runtime.models,
+    provenance: template.provenance || runtime.provenance,
+    riskAssessment: template.riskAssessment || runtime.riskAssessment,
+    fria: template.fria || runtime.fria,
+  });
+
+  const buildExportRequest = useCallback(() => {
+    const runtime: ComplianceTemplateSections = {
       interactions: includeInteractions,
       oversight: includeOversight,
       models: includeModels,
       provenance: includeProvenance,
       riskAssessment: includeRiskAssessment,
       fria: includeFria,
-    },
-  }), [fromDate, toDate, includeInteractions, includeOversight, includeModels, includeProvenance, includeRiskAssessment, includeFria]);
+    };
+    const include = selectedTemplate
+      ? mergeSections(selectedTemplate.sections, runtime)
+      : runtime;
+    return {
+      from: fromDate,
+      to: toDate,
+      format: 'json' as const,
+      include,
+      // Template-sourced overrides travel in the body so the server can use them
+      // when rendering the PDF header/footer. /export (JSON) ignores these today
+      // but accepts them without error.
+      templateOrgName: selectedTemplate?.orgName ?? null,
+      templateFooterText: selectedTemplate?.footerText ?? null,
+      templateRiskClassification: selectedTemplate?.riskClassification ?? null,
+    };
+  }, [fromDate, toDate, includeInteractions, includeOversight, includeModels, includeProvenance, includeRiskAssessment, includeFria, selectedTemplate]);
 
   const fetchStatus = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     if (!silent) setRefreshing(true);
@@ -335,6 +387,42 @@ const ComplianceDashboard = () => {
       {/* M-04: report options — expanded when the user clicks the gear */}
       {showOptions && (
         <div className="mb-3 p-3 rounded-lg bg-background/40 border border-border/30 space-y-2">
+          {/* M-03: template picker + manage button */}
+          <div className="flex items-end gap-2">
+            <div className="flex-1 min-w-0">
+              <label className="text-[10px] uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+                <LayoutTemplate className="w-3 h-3" />
+                Template
+              </label>
+              <select
+                value={templateId ?? ''}
+                onChange={e => setTemplateId(e.target.value ? Number(e.target.value) : null)}
+                className="w-full px-2 py-1 mt-0.5 bg-background/60 border border-border/40 rounded text-[11px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+              >
+                <option value="">No template (runtime toggles only)</option>
+                {templates.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                    {t.riskClassification ? ` · ${t.riskClassification}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <HintTooltip content="Create or edit templates">
+              <button
+                onClick={() => setTemplatesModalOpen(true)}
+                className="px-2 py-1 rounded text-[11px] text-muted-foreground hover:text-foreground hover:bg-muted/50 border border-border/40 transition-colors shrink-0"
+              >
+                Manage
+              </button>
+            </HintTooltip>
+          </div>
+          {selectedTemplate && (
+            <p className="text-[10px] text-muted-foreground/80 leading-tight">
+              Template sections merge with runtime toggles (union). Template can add sections, never hide them.
+            </p>
+          )}
+
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="text-[10px] uppercase tracking-wide text-muted-foreground">From</label>
@@ -419,6 +507,14 @@ const ComplianceDashboard = () => {
         <span className="text-[11px] text-muted-foreground">Art. 50 Model Transparency</span>
         {STATUS_ICONS[status.art50Transparency.status]}
       </div>
+
+      <ComplianceTemplateModal
+        open={templatesModalOpen}
+        onClose={() => setTemplatesModalOpen(false)}
+        onChange={() => {
+          void refreshTemplates();
+        }}
+      />
 
       {/* Harvest provenance — shows the actual imported memory surface so
           the dashboard is not a wall of zeros when no chat interactions

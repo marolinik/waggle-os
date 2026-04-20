@@ -1424,6 +1424,42 @@ class LocalAdapter {
     return res.json();
   }
 
+  // --- Compliance templates (M-03) ---
+  async listComplianceTemplates(): Promise<{ templates: any[] }> {
+    const res = await this.fetch('/api/compliance/templates');
+    return res.json();
+  }
+
+  async createComplianceTemplate(input: any): Promise<{ template: any }> {
+    const res = await this.fetch('/api/compliance/templates', {
+      method: 'POST', body: JSON.stringify(input),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(body.error ?? `Create template failed (${res.status})`);
+    }
+    return res.json();
+  }
+
+  async updateComplianceTemplate(id: number, patch: any): Promise<{ template: any }> {
+    const res = await this.fetch(`/api/compliance/templates/${id}`, {
+      method: 'PATCH', body: JSON.stringify(patch),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(body.error ?? `Update template failed (${res.status})`);
+    }
+    return res.json();
+  }
+
+  async deleteComplianceTemplate(id: number): Promise<void> {
+    const res = await this.fetch(`/api/compliance/templates/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(body.error ?? `Delete template failed (${res.status})`);
+    }
+  }
+
   // --- WebSocket ---
   connectWebSocket(onMessage: (data: unknown) => void): () => void {
     const wsUrl = this.baseUrl.replace('http', 'ws') + `/ws?token=${this.authToken}`;
