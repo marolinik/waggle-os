@@ -51,6 +51,39 @@ export class CompilationState {
     } catch {
       raw.prepare("ALTER TABLE wiki_pages ADD COLUMN markdown TEXT NOT NULL DEFAULT ''").run();
     }
+    // M-13: Notion export delta tracking — add notion_page_id column if
+    // missing. Nullable because most pages haven't been exported.
+    try {
+      raw.prepare("SELECT notion_page_id FROM wiki_pages LIMIT 0").get();
+    } catch {
+      raw.prepare("ALTER TABLE wiki_pages ADD COLUMN notion_page_id TEXT").run();
+    }
+  }
+
+  /** M-13: read the Notion page id previously written for `slug`, or null. */
+  getNotionPageId(slug: string): string | null {
+    const raw = this.db.getDatabase();
+    const row = raw.prepare('SELECT notion_page_id FROM wiki_pages WHERE slug = ?').get(slug) as { notion_page_id: string | null } | undefined;
+    return row?.notion_page_id ?? null;
+  }
+
+  /** M-13: record the Notion page id created for `slug`. */
+  setNotionPageId(slug: string, pageId: string): void {
+    const raw = this.db.getDatabase();
+    raw.prepare('UPDATE wiki_pages SET notion_page_id = ? WHERE slug = ?').run(pageId, slug);
+  }
+
+  /** M-13: clear stored Notion page id (used when we archive + recreate on change). */
+  clearNotionPageId(slug: string): void {
+    const raw = this.db.getDatabase();
+    raw.prepare('UPDATE wiki_pages SET notion_page_id = NULL WHERE slug = ?').run(slug);
+  }
+
+  /** M-13: get a page's current content_hash (used by Notion exporter for delta). */
+  getPageContentHash(slug: string): string | null {
+    const raw = this.db.getDatabase();
+    const row = raw.prepare('SELECT content_hash FROM wiki_pages WHERE slug = ?').get(slug) as { content_hash: string } | undefined;
+    return row?.content_hash ?? null;
   }
 
   // ── Watermark ─────────────────────────────────────────────────
