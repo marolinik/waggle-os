@@ -29,12 +29,19 @@ export interface CrossWorkspaceToolDeps {
     size?: number;
     modifiedAt?: string;
   }>>;
+  /**
+   * L-21: read a file from another workspace. Optional dependency — if not
+   * wired, `read_other_workspace_file` surfaces a clear error instead of
+   * failing silently. Resolves to file content as a UTF-8 string (callers
+   * that need binary should extend this signature before wiring it).
+   */
+  readWorkspaceFile?: (workspaceId: string, relativePath: string) => Promise<string>;
   /** The embedder used for semantic search. */
   embedder: import('@waggle/core').Embedder;
 }
 
 export function createCrossWorkspaceTools(deps: CrossWorkspaceToolDeps): ToolDefinition[] {
-  const { sourceWorkspaceId, getMindForWorkspace, listWorkspaces, listWorkspaceFiles, embedder } = deps;
+  const { sourceWorkspaceId, getMindForWorkspace, listWorkspaces, listWorkspaceFiles, readWorkspaceFile, embedder } = deps;
 
   const readOtherWorkspace: ToolDefinition = {
     name: 'read_other_workspace',
@@ -228,5 +235,84 @@ export function createCrossWorkspaceTools(deps: CrossWorkspaceToolDeps): ToolDef
     },
   };
 
-  return [readOtherWorkspace, listWorkspacesTool, listWorkspaceFilesTool];
+  // L-21: read_other_workspace_file. Read-only file access in another
+  // workspace. Gated by the same confirmation pattern as the memory
+  // reader (key = tool name, registered in ALWAYS_CONFIRM).
+  const readOtherWorkspaceFile: ToolDefinition = {
+    name: 'read_other_workspace_file',
+    description: [
+      'Read the contents of a file in ANOTHER workspace. READ-ONLY.',
+      'Use after list_workspace_files has shown the file exists — paths',
+      'are relative to the target workspace root.',
+      'First use on a new target workspace prompts the user for approval.',
+      'Returns the file as a UTF-8 string; binary files surface as a',
+      'warning rather than raw bytes.',
+    ].join(' '),
+    parameters: {
+      type: 'object' as const,
+      required: ['target_workspace_id', 'path'],
+      properties: {
+        target_workspace_id: {
+          type: 'string' as const,
+          description: 'The workspace ID to read from. Call list_workspaces to discover IDs.',
+        },
+        path: {
+          type: 'string' as const,
+          description: 'Path relative to the target workspace root.',
+        },
+      },
+    },
+    offlineCapable: false,
+    execute: async (args: Record<string, unknown>) => {
+      const targetId = String(args.target_workspace_id ?? '').trim();
+      const relativePath = String(args.path ?? '').trim();
+
+      if (!targetId) {
+        return JSON.stringify({
+          error: 'target_workspace_id is required',
+          hint: 'Call list_workspaces to see valid IDs.',
+        });
+      }
+      if (!relativePath) {
+        return JSON.stringify({
+          error: 'path is required',
+          hint: 'Call list_workspace_files to discover file paths first.',
+        });
+      }
+      if (targetId === sourceWorkspaceId) {
+        return JSON.stringify({
+          error: 'Target workspace is the same as the source. Use read_file on a local path instead.',
+        });
+      }
+      if (!readWorkspaceFile) {
+        return JSON.stringify({
+          error: 'Cross-workspace file reading is not available (readWorkspaceFile not wired).',
+        });
+      }
+
+      try {
+        const content = await readWorkspaceFile(targetId, relativePath);
+        const targetName = listWorkspaces().find(w => w.id === targetId)?.name ?? targetId;
+        // Cap at 100KB so a huge file doesn't blow the agent's context.
+        const MAX_CHARS = 100_000;
+        const truncated = content.length > MAX_CHARS;
+        const body = truncated ? content.slice(0, MAX_CHARS) : content;
+        return JSON.stringify({
+          sourceWorkspace: sourceWorkspaceId,
+          targetWorkspace: targetId,
+          targetWorkspaceName: targetName,
+          path: relativePath,
+          size: content.length,
+          truncated,
+          content: body,
+        });
+      } catch (err) {
+        return JSON.stringify({
+          error: `Cross-workspace file read failed: ${(err as Error).message}`,
+        });
+      }
+    },
+  };
+
+  return [readOtherWorkspace, listWorkspacesTool, listWorkspaceFilesTool, readOtherWorkspaceFile];
 }

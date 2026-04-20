@@ -14,8 +14,8 @@ const ALWAYS_CONFIRM = new Set([
   'write_file', 'edit_file', 'generate_docx',
   'git_commit', 'git_push', 'git_pr', 'git_merge',
   'install_capability',
-  // Cross-workspace reads (Phase B.2)
-  'read_other_workspace', 'list_workspace_files',
+  // Cross-workspace reads (Phase B.2 + L-21)
+  'read_other_workspace', 'list_workspace_files', 'read_other_workspace_file',
 ]);
 
 // Connector action name patterns that indicate write operations
@@ -164,6 +164,7 @@ const TRUSTED_AUTOPASS = new Set<string>([
   'edit_file',
   'generate_docx',
   'read_other_workspace',
+  'read_other_workspace_file',
 ]);
 
 /**
