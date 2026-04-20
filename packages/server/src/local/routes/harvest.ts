@@ -256,6 +256,36 @@ export async function harvestRoutes(fastify: FastifyInstance) {
         // Cognify failure is non-fatal — frames are already saved
       }
 
+      // M-11: post-harvest wiki recompile. Incremental compile uses the
+      // watermark to skip entity pages that no new frames mention, so it's
+      // cheap. Fail-soft: if the synthesizer has no LLM configured the whole
+      // block short-circuits without affecting the harvest response.
+      let wikiStats = { pagesCreated: 0, pagesUpdated: 0, pagesUnchanged: 0 };
+      try {
+        const { KnowledgeGraph, HybridSearch, createEmbeddingProvider } = await import('@waggle/core');
+        const { WikiCompiler, CompilationState, resolveSynthesizer } = await import('@waggle/wiki-compiler');
+        const embedder = await createEmbeddingProvider({ provider: 'mock' });
+        const state = new CompilationState(personalDb);
+        const synth = await resolveSynthesizer();
+        const compiler = new WikiCompiler(
+          new KnowledgeGraph(personalDb),
+          frameStore,
+          new HybridSearch(personalDb, embedder),
+          state,
+          { synthesize: synth.synthesize },
+        );
+        emitHarvestProgress({ phase: 'wiki-compile', current: 0, total: 1, source });
+        const result = await compiler.compile({ incremental: true });
+        wikiStats = {
+          pagesCreated: result.pagesCreated,
+          pagesUpdated: result.pagesUpdated,
+          pagesUnchanged: result.pagesUnchanged,
+        };
+        emitHarvestProgress({ phase: 'wiki-compile', current: 1, total: 1, source });
+      } catch {
+        // Wiki compile failure is non-fatal — frames + entities still saved.
+      }
+
       // M-08: finalize run and delete cache so getLatestInterrupted stops
       // surfacing this one.
       runStore.complete(runId, saved);
@@ -268,8 +298,9 @@ export async function harvestRoutes(fastify: FastifyInstance) {
         cognified: cognifyStats.processed,
         entitiesExtracted: cognifyStats.entities,
         relationsCreated: cognifyStats.relations,
+        wikiCompiled: wikiStats,
         runId,
-        message: `Imported ${saved} items from ${source}, cognified ${cognifyStats.processed} frames`,
+        message: `Imported ${saved} items from ${source}, cognified ${cognifyStats.processed} frames, wiki ${wikiStats.pagesCreated + wikiStats.pagesUpdated} pages updated`,
       };
     } catch (err) {
       // M-08: record the failure with however many items we got through.
