@@ -1,0 +1,918 @@
+{
+  "_meta": {
+    "description": "Stage 2 preflight 4-cell sample lock. Istih 50 LoCoMo instanci preko sva 4 ćelije (raw / memory-only / evolve-only / full-stack).",
+    "brief": "PM-Waggle-OS/briefs/2026-04-20-cc-preflight-prep-tasks.md Task 1",
+    "locked_decision": "decisions/2026-04-20-preflight-oq-resolutions-locked.md §OQ-PF-1",
+    "source": "https://raw.githubusercontent.com/snap-research/locomo/main/data/locomo10.json",
+    "source_reference": "Maharana et al. 2024, ACL-2024, \"Evaluating Very Long-Term Conversational Memory of LLM Agents\"",
+    "seed": 42,
+    "selection_algorithm": "Bucket LoCoMo qa entries by category (mapping verified via task_eval/evaluation.py + paper §4.1); within each category sort by instance_id ascending (canonical order), apply Fisher-Yates shuffle with xorshift32(seed=42), then take first N per category. Fisher-Yates PRNG is shared across buckets — key iteration order is fixed (single-hop, multi-hop, temporal, open-ended) to keep the selection stable against re-runs. instance_id = locomo_<sample_id>_q<3-digit qa-array index>.",
+    "distribution": {
+      "single-hop": 13,
+      "multi-hop": 13,
+      "temporal": 12,
+      "open-ended": 12
+    },
+    "total": 50,
+    "locomo_category_map": {
+      "1": "multi-hop",
+      "2": "temporal",
+      "3": "open-ended",
+      "4": "single-hop",
+      "5": "adversarial (excluded)"
+    },
+    "context_assembly": "Evidence dia_ids are grouped by session, prefixed with session_N_date_time for temporal anchoring, and rendered as \"speaker: text\" lines. Images are preserved via blip_caption tags."
+  },
+  "instances": [
+    {
+      "id": "locomo_conv-26_q110",
+      "category": "single-hop",
+      "context": "Session 8 (1:51 pm on 15 July, 2023):\nMelanie: The kids loved it! They were so excited to get their hands dirty and make something with clay. It was special to watch their creativity and imagination come to life, they made this! [image: a photo of a cup with a dog face on it]",
+      "question": "What kind of pot did Mel and her kids make with clay?",
+      "ground_truth_answer": "a cup with a dog face on it",
+      "locomo_metadata": {
+        "sample_id": "conv-26",
+        "qa_index": 110,
+        "locomo_category": 4,
+        "evidence": [
+          "D8:4"
+        ],
+        "speaker_a": "Caroline",
+        "speaker_b": "Melanie"
+      }
+    },
+    {
+      "id": "locomo_conv-41_q104",
+      "category": "single-hop",
+      "context": "Session 17 (11:51 am on 3 June, 2023):\nJohn: Hey Maria, long time no talk! Life's been pretty wild lately. The toughest thing to deal with is that we had to say goodbye to Max. He was such an important part of our family for 10 years and it's so hard to think he's not here wagging that tail anymore.",
+      "question": "How long was Max a part of John's family?",
+      "ground_truth_answer": "10 years",
+      "locomo_metadata": {
+        "sample_id": "conv-41",
+        "qa_index": 104,
+        "locomo_category": 4,
+        "evidence": [
+          "D17:1"
+        ],
+        "speaker_a": "John",
+        "speaker_b": "Maria"
+      }
+    },
+    {
+      "id": "locomo_conv-44_q073",
+      "category": "single-hop",
+      "context": "Session 7 (11:27 am on 2 June, 2023):\nAndrew: I'm still on the hunt, but it's tough finding a pet-friendly spot in the city. Been checking out some places, but no luck so far. A bit discouraged but I'm determined to find the right place and dog.",
+      "question": "What challenge is Andrew facing in their search for a pet?",
+      "ground_truth_answer": "Finding a pet-friendly spot in the city",
+      "locomo_metadata": {
+        "sample_id": "conv-44",
+        "qa_index": 73,
+        "locomo_category": 4,
+        "evidence": [
+          "D7:8"
+        ],
+        "speaker_a": "Audrey",
+        "speaker_b": "Andrew"
+      }
+    },
+    {
+      "id": "locomo_conv-26_q132",
+      "category": "single-hop",
+      "context": "Session 16 (12:09 am on 13 September, 2023):\nCaroline: Since I was 17 or so. I find it soempowering and cathartic. It's amazing how art can show things that are hard to put into words. How long have you been into art?",
+      "question": "How long has Melanie been creating art?",
+      "ground_truth_answer": "7 years",
+      "locomo_metadata": {
+        "sample_id": "conv-26",
+        "qa_index": 132,
+        "locomo_category": 4,
+        "evidence": [
+          "D16:7"
+        ],
+        "speaker_a": "Caroline",
+        "speaker_b": "Melanie"
+      }
+    },
+    {
+      "id": "locomo_conv-42_q108",
+      "category": "single-hop",
+      "context": "Session 5 (6:59 pm on 18 March, 2022):\nNate: No, not really. Just keep their area clean, feed them properly, and make sure they get enough light. It's actually kind of fun.",
+      "question": "How does Nate describe the process of taking care of turtles?",
+      "ground_truth_answer": "Not tough; keep their area clean, feed them properly, give them enough light.",
+      "locomo_metadata": {
+        "sample_id": "conv-42",
+        "qa_index": 108,
+        "locomo_category": 4,
+        "evidence": [
+          "D5:8"
+        ],
+        "speaker_a": "Joanna",
+        "speaker_b": "Nate"
+      }
+    },
+    {
+      "id": "locomo_conv-48_q151",
+      "category": "single-hop",
+      "context": "Session 19 (12:52 am on 19 August, 2023):\nDeborah: Reminds me of when I used to play games with my husband. We'd take turns and it was a great way to bond and make memories. Gaming really can bring people closer, right?",
+      "question": "What did Deborah and her husband use to play to bond and make memories?",
+      "ground_truth_answer": "video games",
+      "locomo_metadata": {
+        "sample_id": "conv-48",
+        "qa_index": 151,
+        "locomo_category": 4,
+        "evidence": [
+          "D19:11"
+        ],
+        "speaker_a": "Deborah",
+        "speaker_b": "Jolene"
+      }
+    },
+    {
+      "id": "locomo_conv-47_q123",
+      "category": "single-hop",
+      "context": "Session 23 (9:23 pm on 4 September, 2022):\nJames: At only $10 per class, it's very cheap! Also, I made meringue there and they taught us how to make the dough.",
+      "question": "What did James learn to make in the cooking class besides omelette and meringue?",
+      "ground_truth_answer": "Dough",
+      "locomo_metadata": {
+        "sample_id": "conv-47",
+        "qa_index": 123,
+        "locomo_category": 4,
+        "evidence": [
+          "D23:15"
+        ],
+        "speaker_a": "James",
+        "speaker_b": "John"
+      }
+    },
+    {
+      "id": "locomo_conv-44_q067",
+      "category": "single-hop",
+      "context": "Session 5 (10:47 am on 6 May, 2023):\nAndrew: I'm looking for a place near a park or woods, so I can stay close to nature and give the dog a large open space to run around",
+      "question": "Where does Andrew want to live to give their dog a large, open space to run around?",
+      "ground_truth_answer": "near a park or woods",
+      "locomo_metadata": {
+        "sample_id": "conv-44",
+        "qa_index": 67,
+        "locomo_category": 4,
+        "evidence": [
+          "D5:7"
+        ],
+        "speaker_a": "Audrey",
+        "speaker_b": "Andrew"
+      }
+    },
+    {
+      "id": "locomo_conv-48_q129",
+      "category": "single-hop",
+      "context": "Session 12 (4:30 pm on 9 April, 2023):\nDeborah: Hey Jolene! Great to see you! Had a blast biking nearby with my neighbor last week - was so freeing and beautiful. Checked out an art show with a friend today - really cool and inspiring stuff. Reminded me of my mom. [image: a photo of a large brown and white photo of a person]",
+      "question": "Which show did Deborah go to with a friend on 9 April, 2023?",
+      "ground_truth_answer": "an art show",
+      "locomo_metadata": {
+        "sample_id": "conv-48",
+        "qa_index": 129,
+        "locomo_category": 4,
+        "evidence": [
+          "D12:1"
+        ],
+        "speaker_a": "Deborah",
+        "speaker_b": "Jolene"
+      }
+    },
+    {
+      "id": "locomo_conv-50_q109",
+      "category": "single-hop",
+      "context": "Session 18 (10:56 am on 13 September, 2023):\nCalvin: Thanks Dave! Lots of cool stuff happening. Next up, a tour - so excited! After that, I'm off to explore and grow my brand. Can't wait to see what the future has in store!",
+      "question": "What is Calvin excited about after the tour?",
+      "ground_truth_answer": "exploring and growing his brand",
+      "locomo_metadata": {
+        "sample_id": "conv-50",
+        "qa_index": 109,
+        "locomo_category": 4,
+        "evidence": [
+          "D18:7"
+        ],
+        "speaker_a": "Calvin",
+        "speaker_b": "Dave"
+      }
+    },
+    {
+      "id": "locomo_conv-47_q103",
+      "category": "single-hop",
+      "context": "Session 16 (5:13 pm on 9 July, 2022):\nJames: Yeah, staying balanced can be tough. I'm trying to take breaks from my hobbies and do other things. Lately I've become interested in extreme sports. Yesterday, for example, I was doing rope jumping. The highest height I jumped from was 150 meters!",
+      "question": "What new hobby did James become interested in on 9 July, 2022?",
+      "ground_truth_answer": "Extreme sports",
+      "locomo_metadata": {
+        "sample_id": "conv-47",
+        "qa_index": 103,
+        "locomo_category": 4,
+        "evidence": [
+          "D16:5"
+        ],
+        "speaker_a": "James",
+        "speaker_b": "John"
+      }
+    },
+    {
+      "id": "locomo_conv-42_q193",
+      "category": "single-hop",
+      "context": "Session 28 (5:54 pm on 9 November, 2022):\nJoanna: Thanks, Nate! I took that pic on a hike last summer near Fort Wayne. The sunset and the surrounding beauty were just incredible. It was an awesome reminder of nature's beauty.",
+      "question": "What inspired Joanna to take a picture of the sunset in the field near Fort Wayne?",
+      "ground_truth_answer": "The incredible sunset and surrounding beauty",
+      "locomo_metadata": {
+        "sample_id": "conv-42",
+        "qa_index": 193,
+        "locomo_category": 4,
+        "evidence": [
+          "D28:22"
+        ],
+        "speaker_a": "Joanna",
+        "speaker_b": "Nate"
+      }
+    },
+    {
+      "id": "locomo_conv-49_q139",
+      "category": "single-hop",
+      "context": "Session 21 (4:25 pm on 26 December, 2023):\nSam: Ooh, Evan, I'd put a GPS sensor on your keys!",
+      "question": "What did Sam suggest Evan should do with his keys?",
+      "ground_truth_answer": "put a GPS sensor on them",
+      "locomo_metadata": {
+        "sample_id": "conv-49",
+        "qa_index": 139,
+        "locomo_category": 4,
+        "evidence": [
+          "D21:21"
+        ],
+        "speaker_a": "Evan",
+        "speaker_b": "Sam"
+      }
+    },
+    {
+      "id": "locomo_conv-26_q039",
+      "category": "multi-hop",
+      "context": "Session 5 (1:36 pm on 3 July, 2023):\nCaroline: Since we last spoke, some big things have happened. Last week I went to an LGBTQ+ pride parade. Everyone was so happy and it made me feel like I belonged. It showed me how much our community has grown, it was amazing!\n\nSession 9 (2:31 pm on 17 July, 2023):\nCaroline: Yay! Next month I'm having an LGBTQ art show with my paintings - can't wait!\nCaroline: Hey Melanie! That sounds great! Last weekend I joined a mentorship program for LGBTQ youth - it's really rewarding to help the community.\n\nSession 10 (8:56 pm on 20 July, 2023):\nCaroline: Hey Mel! A lot's happened since we last chatted - I just joined a new LGBTQ activist group last Tues. I'm meeting so many cool people who are as passionate as I am about rights and community support. I'm giving my voice and making a real difference, plus it's fulfilling in so many ways. It's just great, you know?",
+      "question": "In what ways is Caroline participating in the LGBTQ community?",
+      "ground_truth_answer": "Joining activist group, going to pride parades, participating in an art show, mentoring program",
+      "locomo_metadata": {
+        "sample_id": "conv-26",
+        "qa_index": 39,
+        "locomo_category": 1,
+        "evidence": [
+          "D10:3",
+          "D5:1",
+          "D9:12",
+          "D9:2"
+        ],
+        "speaker_a": "Caroline",
+        "speaker_b": "Melanie"
+      }
+    },
+    {
+      "id": "locomo_conv-30_q031",
+      "category": "multi-hop",
+      "context": "Session 1 (4:04 pm on 20 January, 2023):\nJon: Hey Gina! Good to see you too. Lost my job as a banker yesterday, so I'm gonna take a shot at starting my own business.\n\nSession 15 (10:04 am on 19 June, 2023):\nJon: Yeah! Let's make some awesome memories tomorrow at the grand opening! [image: a photo of a man in a native costume is giving another man a high five]",
+      "question": "How long did it take for Jon to open his studio?",
+      "ground_truth_answer": "six months",
+      "locomo_metadata": {
+        "sample_id": "conv-30",
+        "qa_index": 31,
+        "locomo_category": 1,
+        "evidence": [
+          "D1:2",
+          "D15:13"
+        ],
+        "speaker_a": "Jon",
+        "speaker_b": "Gina"
+      }
+    },
+    {
+      "id": "locomo_conv-50_q005",
+      "category": "multi-hop",
+      "context": "Session 4 (6:24 pm on 1 May, 2023):\nDave: Thanks! Appreciate the support. My dream was to open a shop and it's a step towards my other dream of working on classic cars. I love their design and engineering.\nDave: Thanks! Appreciate the support. My dream was to open a shop and it's a step towards my other dream of working on classic cars. I love their design and engineering.\n\nSession 5 (1:16 pm on 3 May, 2023):\nDave: Thanks Calvin! Appreciate the support. I'm gonna keep learning more about auto engineering, maybe even build a custom car from scratch someday - that's the dream! For now, just gonna keep working on this project and assisting customers.",
+      "question": "What are Dave's dreams?",
+      "ground_truth_answer": "open a car maintenance shop, work on classic cars, build a custom car from scratch",
+      "locomo_metadata": {
+        "sample_id": "conv-50",
+        "qa_index": 5,
+        "locomo_category": 1,
+        "evidence": [
+          "D4:5",
+          "D4:5",
+          "D5:5"
+        ],
+        "speaker_a": "Calvin",
+        "speaker_b": "Dave"
+      }
+    },
+    {
+      "id": "locomo_conv-50_q018",
+      "category": "multi-hop",
+      "context": "Session 6 (11:50 am on 16 May, 2023):\nCalvin: Thanks, Dave. Appreciate the support. Waiting on insurance to kick in so I can start repairs - fingers crossed it won't take too long. Take a look at my creative haven, where I pour my heart into the music. [image: a photo of a music studio with a keyboard, synthesizer, and other musical equipment]\n\nSession 9 (3:15 pm on 21 June, 2023):\nCalvin: Hi Dave! Nice to hear from you. Since last chat, some things have happened. I had a lil car accident last Friday, kinda upsetting but no one was hurt. I've been dealing with insurance and repairs - taking up a lot of time and energy. Look at this photo! [image: a photo of a red car with a black rim parked on a sidewalk]",
+      "question": "How many times has Calvin had to deal with insurance paperwork?",
+      "ground_truth_answer": "two times",
+      "locomo_metadata": {
+        "sample_id": "conv-50",
+        "qa_index": 18,
+        "locomo_category": 1,
+        "evidence": [
+          "D6:5",
+          "D9:1"
+        ],
+        "speaker_a": "Calvin",
+        "speaker_b": "Dave"
+      }
+    },
+    {
+      "id": "locomo_conv-48_q080",
+      "category": "multi-hop",
+      "context": "Session 10 (5:35 pm on 22 March, 2023):\nJolene: Definitely! I've been gathering information, watching videos, and I even got a beginners' guide to surfing. Just need to find the right time and place to get a lesson.\n\nSession 29 (1:24 pm on 17 September, 2023):\nJolene: How cool! But I never decided to try it.\nJolene: Just started learning, but haven't gone yet. Want to come with me sometime?",
+      "question": "Has Jolene tried surfing?",
+      "ground_truth_answer": "no",
+      "locomo_metadata": {
+        "sample_id": "conv-48",
+        "qa_index": 80,
+        "locomo_category": 1,
+        "evidence": [
+          "D10:20",
+          "D29:26",
+          "D29:30"
+        ],
+        "speaker_a": "Deborah",
+        "speaker_b": "Jolene"
+      }
+    },
+    {
+      "id": "locomo_conv-47_q009",
+      "category": "multi-hop",
+      "context": "Session 1 (3:47 pm on 17 March, 2022):\nJames: Max and Daisy. Will be actually cool to build an app for dog walking and pet care. The goal is to connect pet owners with reliable dog walkers and provide helpful information on pet care.\n\nSession 5 (9:52 am on 12 April, 2022):\nJames: Hey John! Long time no chat - I adopted a pup from a shelter in Stamford last week and my days have been so much happier with him in the fam. I named it Ned. Any progress on your gaming goals? [image: a photo of a dog and a cat sitting on a dog bed]",
+      "question": "What are the names of James's dogs?",
+      "ground_truth_answer": "Ned, Daisy, Max",
+      "locomo_metadata": {
+        "sample_id": "conv-47",
+        "qa_index": 9,
+        "locomo_category": 1,
+        "evidence": [
+          "D1:14",
+          "D5:1"
+        ],
+        "speaker_a": "James",
+        "speaker_b": "John"
+      }
+    },
+    {
+      "id": "locomo_conv-50_q019",
+      "category": "multi-hop",
+      "context": "Session 3 (4:15 pm on 20 April, 2023):\nCalvin: Hey Dave! Long time no see. I just went to an awesome music thingy in Tokyo - so cool!\n\nSession 12 (1:12 pm on 3 August, 2023):\nCalvin: Aww, that's cool, Dave. Reminiscing is always fun! That pic you shared takes me back to my trip to the Ferrari dealership. I saw a lot of amazing cars, but as for me, my car is the best and  I'm pretty proud of this. Sure, it's just material, but it reminds me of my hard work and dedication. It really inspires me. Take a look at this beauty! [image: a photography of a red car is lifted on a lift in a garage]\n\nSession 24 (10:11 am on 19 October, 2023):\nCalvin: Yeah definitely! Shibuya Crossing is like Tokyo's Times Square, and I was excited to explore Shinjuku. Plus, there's amazing food there, can't wait to try it again! Look at the photo of Shibuya Crossing at night, that's amazing! [image: a photo of a crowd of people with umbrellas in the rain]",
+      "question": "Which places or events has Calvin visited in Tokyo?",
+      "ground_truth_answer": "music festival, car museum, Shibuya crossing, Shinjuku",
+      "locomo_metadata": {
+        "sample_id": "conv-50",
+        "qa_index": 19,
+        "locomo_category": 1,
+        "evidence": [
+          "D3:1",
+          "D12:7",
+          "D24:19"
+        ],
+        "speaker_a": "Calvin",
+        "speaker_b": "Dave"
+      }
+    },
+    {
+      "id": "locomo_conv-48_q001",
+      "category": "multi-hop",
+      "context": "Session 1 (4:06 pm on 23 January, 2023):\nDeborah: It was full of memories, she passed away a few years ago. This is our last photo together. [image: a photo of a woman in a wheelchair hugging a woman in a wheelchair]\n\nSession 2 (9:49 am on 27 January, 2023):\nDeborah: Hey Jolene, sorry to tell you this but my dad passed away two days ago. It's been really tough on us all - his sudden death left us all kinda shell-shocked. I'm trying to channel my grief by spending more time with family and cherishing the memories. These moments remind me to live life fully. [image: a photo of a woman hugging a woman who is sitting on a couch]\n\nSession 6 (4:12 pm on 22 February, 2023):\nDeborah: The roses and dahlias bring me peace. I lost a friend last week, so I've been spending time in the garden to find some comfort.",
+      "question": "Which of Deborah`s family and friends have passed away?",
+      "ground_truth_answer": "mother, father, her friend Karlie",
+      "locomo_metadata": {
+        "sample_id": "conv-48",
+        "qa_index": 1,
+        "locomo_category": 1,
+        "evidence": [
+          "D1:5",
+          "D2:1",
+          "D6:4"
+        ],
+        "speaker_a": "Deborah",
+        "speaker_b": "Jolene"
+      }
+    },
+    {
+      "id": "locomo_conv-50_q033",
+      "category": "multi-hop",
+      "context": "Session 14 (12:35 am on 14 August, 2023):\nDave: Hey Cal, how's it going? Something cool happened since last we talked - I got to go to a car workshop in San Francisco! So cool to dive into the world of car restoration and see all the different techniques. People were really passionate and dedicated - truly inspiring!\n\nSession 17 (9:19 am on 2 September, 2023):\nDave: Hey Calvin! Been a while, what's up? I'm tied up with car stuff lately, yesterday I came back from San Francsico with some great insights and knowledge on car modification that I want to share with you! Changing things around, and giving an old car a new life - so satisfying!",
+      "question": "What was Dave doing in San Francisco?",
+      "ground_truth_answer": "attending a car modification workshop",
+      "locomo_metadata": {
+        "sample_id": "conv-50",
+        "qa_index": 33,
+        "locomo_category": 1,
+        "evidence": [
+          "D17:1",
+          "D14:1"
+        ],
+        "speaker_a": "Calvin",
+        "speaker_b": "Dave"
+      }
+    },
+    {
+      "id": "locomo_conv-43_q021",
+      "category": "multi-hop",
+      "context": "Session 3 (4:21 pm on 16 July, 2023):\nJohn: It's Seattle, I'm stoked for my game there next month! It's one of my favorite cities to explore - super vibrant! [image: a photo of a crowd of people watching a basketball game]\n\nSession 6 (1:08 pm on 11 August, 2023):\nJohn: I was in Chicago, it was awesome! It had so much energy and the locals were really friendly. It's great to experience other cultures and connect with new folks.\n\nSession 9 (6:59 pm on 26 August, 2023):\nJohn: Wow, Tim, that's an awesome book collection! It's cool to escape to different worlds with a hobby. By the way, I love discovering new cities - check out this pic from one of my trips to New York City! [image: a photo of a cityscape with a view of a skyscraper]",
+      "question": "Which US cities does John mention visiting to Tim?",
+      "ground_truth_answer": "Seattle, Chicago, New York",
+      "locomo_metadata": {
+        "sample_id": "conv-43",
+        "qa_index": 21,
+        "locomo_category": 1,
+        "evidence": [
+          "D3:19",
+          "D6:3",
+          "D9:6"
+        ],
+        "speaker_a": "Tim",
+        "speaker_b": "John"
+      }
+    },
+    {
+      "id": "locomo_conv-50_q063",
+      "category": "multi-hop",
+      "context": "Session 16 (2:55 pm on 31 August, 2023):\nDave: Sure, let me know when, I'm here to lend a hand. It's great to fuel your ideas. Remember that photo you sent me once? Love how this guitar shows our different artistic styles. [image: a photo of a guitar with a octopus on it]\nCalvin: Performing on such a big stage was a dream come true! The energy was incredible and I felt on top of the world. It was seriously surreal.\nCalvin: Yeah, Dave! It's like every mark and strum holds a story. Take a look. [image: a photo of a guitar with a purple glow on it]\nDave: That guitar has a gorgeous purple hue. Why did you make it so shiny?",
+      "question": "What style of guitars does Calvin own?",
+      "ground_truth_answer": "custom-made yellow guitar with an octopus on it, shiny purple guitar",
+      "locomo_metadata": {
+        "sample_id": "conv-50",
+        "qa_index": 63,
+        "locomo_category": 1,
+        "evidence": [
+          "D16:13",
+          "D16:4",
+          "D16:18",
+          "D16:19"
+        ],
+        "speaker_a": "Calvin",
+        "speaker_b": "Dave"
+      }
+    },
+    {
+      "id": "locomo_conv-41_q023",
+      "category": "multi-hop",
+      "context": "Session 2 (6:10 pm on 22 December, 2022):\nMaria: I can picture you all laughing and having a blast making your own pizzas - a great way to bond! I made some peach cobbler recently, it was great.\n\nSession 13 (3:18 pm on 4 May, 2023):\nMaria: Thanks, John! It had lots of great things like salads, sandwiches, and homemade desserts. My favorite is the amazing banana split sundae - I enjoy it after a day of volunteering. It's a little moment of joy in life - balance is key!",
+      "question": "What desserts has Maria made?",
+      "ground_truth_answer": "Banana split sundae, Peach cobbler",
+      "locomo_metadata": {
+        "sample_id": "conv-41",
+        "qa_index": 23,
+        "locomo_category": 1,
+        "evidence": [
+          "D2:25",
+          "D13:18"
+        ],
+        "speaker_a": "John",
+        "speaker_b": "Maria"
+      }
+    },
+    {
+      "id": "locomo_conv-48_q013",
+      "category": "multi-hop",
+      "context": "Session 2 (9:49 am on 27 January, 2023):\nDeborah: That's my old home. I go there now and then for my mom, who passed away. Sitting in that spot by the window gives me peace.\n\nSession 4 (9:48 am on 4 February, 2023):\nDeborah: That sounds great, Jolene. Nature's calming for sure. Guess it helps us forget the daily craziness and find inner peace. No wonder you're a fan! I like to come to this spot by the water near my mom's old house. It's where I reflect on her life and find some peace. Being surrounded by nature helps a lot. [image: a photo of a small island with a lone boat in the water]\n\nSession 6 (4:12 pm on 22 February, 2023):\nDeborah: I've been blessed to travel to a few places and Bali last year was one of my favs. It was a gorgeous island that gave me peace, great for yoga. [image: a photo of a swing on a beach with a blue sky]\n\nSession 19 (12:52 am on 19 August, 2023):\nDeborah: I love going to this park near my house - it has a nice forest trail and a beach. It's a peaceful spot where I can do some yoga and reflect. There's also a special bench that holds special meaning to me.",
+      "question": "What places give Deborah peace?",
+      "ground_truth_answer": "sitting in a spot by the window in her Mom's house, sitting by the beach, Bali, forest trail in a nearby park",
+      "locomo_metadata": {
+        "sample_id": "conv-48",
+        "qa_index": 13,
+        "locomo_category": 1,
+        "evidence": [
+          "D2:13",
+          "D4:34",
+          "D6:10",
+          "D19:17"
+        ],
+        "speaker_a": "Deborah",
+        "speaker_b": "Jolene"
+      }
+    },
+    {
+      "id": "locomo_conv-44_q047",
+      "category": "temporal",
+      "context": "Session 24 (6:12 pm on 19 October, 2023):\nAndrew: Hi Audrey! Pets really can make our lives better, huh? Speaking of which, I've got some awesome news -- I recently adopted another pup from a shelter. He's the best. [image: a photo of a dog sitting on a couch with a bowl of food]\n\nSession 28 (9:02 am on 22 November, 2023):\nAndrew: No, we haven't got the chance to take them to the groomer yet. But will do that soon! So guess what, I can't help myself but to adpot another dog the other day. Here's a photo of the doggo! [image: a photo of a woman feeding a dog hay in a barn]",
+      "question": "How many months passed between Andrew adopting Buddy and Scout",
+      "ground_truth_answer": "one month",
+      "locomo_metadata": {
+        "sample_id": "conv-44",
+        "qa_index": 47,
+        "locomo_category": 2,
+        "evidence": [
+          "D24:2",
+          "D28:6"
+        ],
+        "speaker_a": "Audrey",
+        "speaker_b": "Andrew"
+      }
+    },
+    {
+      "id": "locomo_conv-26_q021",
+      "category": "temporal",
+      "context": "Session 6 (8:18 pm on 6 July, 2023):\nCaroline: Wow, that's great! It sure shows how important friendship and compassion are. It's made me appreciate how lucky I am to have my friends and family helping with my transition. They make all the difference. We even had a picnic last week! [image: a photo of a group of women sitting on a blanket in a park]",
+      "question": "When did Caroline have a picnic?",
+      "ground_truth_answer": "The week before 6 July 2023",
+      "locomo_metadata": {
+        "sample_id": "conv-26",
+        "qa_index": 21,
+        "locomo_category": 2,
+        "evidence": [
+          "D6:11"
+        ],
+        "speaker_a": "Caroline",
+        "speaker_b": "Melanie"
+      }
+    },
+    {
+      "id": "locomo_conv-48_q021",
+      "category": "temporal",
+      "context": "Session 2 (9:49 am on 27 January, 2023):\nJolene: We are planning to play \"Walking Dead\" next Saturday.",
+      "question": "When do Jolene and her partner plan to complete the game \"Walking Dead\"?",
+      "ground_truth_answer": "Saturday after 27 January, 2023",
+      "locomo_metadata": {
+        "sample_id": "conv-48",
+        "qa_index": 21,
+        "locomo_category": 2,
+        "evidence": [
+          "D2:30"
+        ],
+        "speaker_a": "Deborah",
+        "speaker_b": "Jolene"
+      }
+    },
+    {
+      "id": "locomo_conv-30_q010",
+      "category": "temporal",
+      "context": "Session 5 (9:32 am on 8 February, 2023):\nGina: That's awesome! I'm sure you feel great knowing your students are doing so well with dance. It's amazing what it can do for people! Oh, and btw - I've been working hard on my online store and just teamed up with a local artist for some cool designs. Check 'em out! [image: a photo of a rack of clothes with a coat and a dress]",
+      "question": "When did Gina team up with a local artist for some cool designs?",
+      "ground_truth_answer": "February, 2023",
+      "locomo_metadata": {
+        "sample_id": "conv-30",
+        "qa_index": 10,
+        "locomo_category": 2,
+        "evidence": [
+          "D5:5"
+        ],
+        "speaker_a": "Jon",
+        "speaker_b": "Gina"
+      }
+    },
+    {
+      "id": "locomo_conv-26_q073",
+      "category": "temporal",
+      "context": "Session 17 (10:31 am on 13 October, 2023):\nMelanie: Thanks for the tip, Caroline. Doing research and readying myself emotionally makes sense. I'll do that. BTW, recently I had a setback. Last month I got hurt and had to take a break from pottery, which I use for self-expression and peace.",
+      "question": "When did Melanie get hurt?",
+      "ground_truth_answer": "September 2023",
+      "locomo_metadata": {
+        "sample_id": "conv-26",
+        "qa_index": 73,
+        "locomo_category": 2,
+        "evidence": [
+          "D17:8"
+        ],
+        "speaker_a": "Caroline",
+        "speaker_b": "Melanie"
+      }
+    },
+    {
+      "id": "locomo_conv-30_q033",
+      "category": "temporal",
+      "context": "Session 16 (2:15 pm on 21 June, 2023):\nJon: That's awesome, Gina! Yesterday I chose to go to networking events to make things happen. It's been tough but I'm staying determined and focused.",
+      "question": "When did Jon visit networking events for his store?",
+      "ground_truth_answer": "20 June, 2023",
+      "locomo_metadata": {
+        "sample_id": "conv-30",
+        "qa_index": 33,
+        "locomo_category": 2,
+        "evidence": [
+          "D16:6"
+        ],
+        "speaker_a": "Jon",
+        "speaker_b": "Gina"
+      }
+    },
+    {
+      "id": "locomo_conv-44_q001",
+      "category": "temporal",
+      "context": "Session 1 (1:10 pm on 27 March, 2023):\nAndrew: Hey Audrey! So, I started a new job as a Financial Analyst last week - it's been quite a change from my previous job. How about you? Anything interesting happening?",
+      "question": "When did Andrew start his new job as a financial analyst?",
+      "ground_truth_answer": "The week before March 27, 2023",
+      "locomo_metadata": {
+        "sample_id": "conv-44",
+        "qa_index": 1,
+        "locomo_category": 2,
+        "evidence": [
+          "D1:2"
+        ],
+        "speaker_a": "Audrey",
+        "speaker_b": "Andrew"
+      }
+    },
+    {
+      "id": "locomo_conv-49_q079",
+      "category": "temporal",
+      "context": "Session 23 (1:32 pm on 6 January, 2024):\nEvan: Thanks Sam! We're off to Canada next month for our honeymoon. So excited to create some awesome memories. Looking forward to exploring the beautiful snowy landscapes there. [image: a photo of a stream running through a snowy forest filled with snow]",
+      "question": "When will Evan and his partner have their honeymoon in Canada?",
+      "ground_truth_answer": "February 2024",
+      "locomo_metadata": {
+        "sample_id": "conv-49",
+        "qa_index": 79,
+        "locomo_category": 2,
+        "evidence": [
+          "D23:23"
+        ],
+        "speaker_a": "Evan",
+        "speaker_b": "Sam"
+      }
+    },
+    {
+      "id": "locomo_conv-26_q010",
+      "category": "temporal",
+      "context": "Session 3 (7:55 pm on 9 June, 2023):\nCaroline: Yeah, I'm really lucky to have them. They've been there through everything, I've known these friends for 4 years, since I moved from my home country. Their love and help have been so important especially after that tough breakup. I'm super thankful. Who supports you, Mel?",
+      "question": "How long has Caroline had her current group of friends for?",
+      "ground_truth_answer": "4 years",
+      "locomo_metadata": {
+        "sample_id": "conv-26",
+        "qa_index": 10,
+        "locomo_category": 2,
+        "evidence": [
+          "D3:13"
+        ],
+        "speaker_a": "Caroline",
+        "speaker_b": "Melanie"
+      }
+    },
+    {
+      "id": "locomo_conv-49_q058",
+      "category": "temporal",
+      "context": "Session 12 (3:09 pm on 8 October, 2023):\nEvan: Hey Sam, tough news. Yeah, our health can really put a damper on things. I started lifting weights one year ago and it's been a journey. It was a struggle at first, but I'm seeing some gains. You interested in trying it out? [image: a photo of a man doing a squat on a machine in a gym]",
+      "question": "When did Evan start lifting weights?",
+      "ground_truth_answer": "October 2022",
+      "locomo_metadata": {
+        "sample_id": "conv-49",
+        "qa_index": 58,
+        "locomo_category": 2,
+        "evidence": [
+          "D12:2"
+        ],
+        "speaker_a": "Evan",
+        "speaker_b": "Sam"
+      }
+    },
+    {
+      "id": "locomo_conv-43_q037",
+      "category": "temporal",
+      "context": "Session 13 (1:50 pm on 13 October, 2023):\nTim: Hey John! It's been ages since we last talked. Guess what? Last week I went to a Harry Potter conference in the UK - it was incredible! There were so many people who shared the same love of HP as me, it was like a magical family. I felt so inspired and like I got a new lease of life. I love how my passion for fantasy stuff brings me closer to people from all over the world, it's pretty cool.",
+      "question": "Which week did Tim visit the UK for the Harry Potter Conference?",
+      "ground_truth_answer": "The week before October 13th, 2023.",
+      "locomo_metadata": {
+        "sample_id": "conv-43",
+        "qa_index": 37,
+        "locomo_category": 2,
+        "evidence": [
+          "D13:1"
+        ],
+        "speaker_a": "Tim",
+        "speaker_b": "John"
+      }
+    },
+    {
+      "id": "locomo_conv-50_q027",
+      "category": "temporal",
+      "context": "Session 16 (2:55 pm on 31 August, 2023):\nCalvin: Cool! Last weekend I started shooting a video for my new album - can't wait for you to check it out! Look how great it was! [image: a photo of a camera and a video camera on a beach]",
+      "question": "Which city was Calvin visiting in August 2023?",
+      "ground_truth_answer": "Miami",
+      "locomo_metadata": {
+        "sample_id": "conv-50",
+        "qa_index": 27,
+        "locomo_category": 2,
+        "evidence": [
+          "D16:6"
+        ],
+        "speaker_a": "Calvin",
+        "speaker_b": "Dave"
+      }
+    },
+    {
+      "id": "locomo_conv-43_q051",
+      "category": "open-ended",
+      "context": "Session 20 (9:52 am on 1 December, 2023):\nJohn: Hi Tim! Congrats on your success! Keep it up, you're doing great! I'm also trying out yoga to get a little extra strength and flexibility. It's challenging but worth it. [image: a photo of a white wall with a black lettering that says 30 positive suites]",
+      "question": "What kind of yoga for building core strength might John benefit from?",
+      "ground_truth_answer": "Hatha Yoga",
+      "locomo_metadata": {
+        "sample_id": "conv-43",
+        "qa_index": 51,
+        "locomo_category": 3,
+        "evidence": [
+          "D20:2"
+        ],
+        "speaker_a": "Tim",
+        "speaker_b": "John"
+      }
+    },
+    {
+      "id": "locomo_conv-42_q014",
+      "category": "open-ended",
+      "context": "Session 7 (7:37 pm on 15 April, 2022):\nNate: Hey Jo, guess what I did? Dyed my hair last week - come see!",
+      "question": "What nickname does Nate use for Joanna?",
+      "ground_truth_answer": "Jo",
+      "locomo_metadata": {
+        "sample_id": "conv-42",
+        "qa_index": 14,
+        "locomo_category": 3,
+        "evidence": [
+          "D7:1"
+        ],
+        "speaker_a": "Joanna",
+        "speaker_b": "Nate"
+      }
+    },
+    {
+      "id": "locomo_conv-47_q016",
+      "category": "open-ended",
+      "context": "Session 8 (2:36 pm on 29 April, 2022):\nJohn: Yes, we played one game, but I forgot its name. Perhaps you know this game. There were multi-colored cards with numbers. You can only place a card with the same color or number on your opponent's card. Sometimes you trade cards, sometimes you need to draw a few extra from the deck or skip a turn.",
+      "question": "What is the game with different colored cards that was John talking about with James?",
+      "ground_truth_answer": "UNO",
+      "locomo_metadata": {
+        "sample_id": "conv-47",
+        "qa_index": 16,
+        "locomo_category": 3,
+        "evidence": [
+          "D8:34"
+        ],
+        "speaker_a": "James",
+        "speaker_b": "John"
+      }
+    },
+    {
+      "id": "locomo_conv-26_q069",
+      "category": "open-ended",
+      "context": "Session 7 (4:33 pm on 12 July, 2023):\nMelanie: Wow, Caroline. We've come so far, but there's more to do. Your drive to help is awesome! What's your plan to pitch in?\n\nSession 13 (3:31 pm on 23 August, 2023):\nMelanie: Wow, Caroline! That's amazing. You really care about being real and helping others. Wishing you the best on your adoption journey!\n\nSession 16 (12:09 am on 13 September, 2023):\nMelanie: The sign was just a precaution, I had a great time. But thank you for your concern, you're so thoughtful!",
+      "question": "What personality traits might Melanie say Caroline has?",
+      "ground_truth_answer": "Thoughtful, authentic, driven",
+      "locomo_metadata": {
+        "sample_id": "conv-26",
+        "qa_index": 69,
+        "locomo_category": 3,
+        "evidence": [
+          "D16:18",
+          "D13:16",
+          "D7:4"
+        ],
+        "speaker_a": "Caroline",
+        "speaker_b": "Melanie"
+      }
+    },
+    {
+      "id": "locomo_conv-42_q073",
+      "category": "open-ended",
+      "context": "Session 28 (5:54 pm on 9 November, 2022):\nJoanna: Thanks, Nate! I took that pic on a hike last summer near Fort Wayne. The sunset and the surrounding beauty were just incredible. It was an awesome reminder of nature's beauty.",
+      "question": "What state did Joanna visit in summer 2021?",
+      "ground_truth_answer": "Indiana",
+      "locomo_metadata": {
+        "sample_id": "conv-42",
+        "qa_index": 73,
+        "locomo_category": 3,
+        "evidence": [
+          "D28:22"
+        ],
+        "speaker_a": "Joanna",
+        "speaker_b": "Nate"
+      }
+    },
+    {
+      "id": "locomo_conv-48_q005",
+      "category": "open-ended",
+      "context": "Session 1 (4:06 pm on 23 January, 2023):\nJolene: Staying connected is super important. Do you have something to remember her by? This pendant reminds me of my mother, she gave it to me in 2010  in Paris. [image: a photo of a heart shaped pendant with a bird on it]",
+      "question": "In what country did Jolene's mother buy her the pendant?",
+      "ground_truth_answer": "In France",
+      "locomo_metadata": {
+        "sample_id": "conv-48",
+        "qa_index": 5,
+        "locomo_category": 3,
+        "evidence": [
+          "D1:8"
+        ],
+        "speaker_a": "Deborah",
+        "speaker_b": "Jolene"
+      }
+    },
+    {
+      "id": "locomo_conv-49_q019",
+      "category": "open-ended",
+      "context": "Session 3 (3:55 pm on 6 June, 2023):\nSam: Yeah, you're right. It takes time, but I'm up for keep trying and making those tiny changes.\nEvan: Sure Sam, I'd be glad to help. Let's get together and I'll show you some basic exercises. We'll reach our goals!\n\nSession 8 (6:17 pm on 19 August, 2023):\nSam: Cool, Evan! What have you been learning in those classes?\nEvan: Thanks Sam! I aim to capture the vibe of nature in my paintings, conveying the peacefulness of being outdoors. [image: a photo of a tree with pink flowers in a field]\n\nSession 9 (10:18 am on 27 August, 2023):\nEvan: Yeah, thanks for the push, Sam. Oh, hey, I came across this pic when I was tidying up. I took a road trip last month - the scenery was stunning and nature really chilled me out. [image: a photography of a car is parked near a lake with mountains in the background]\nSam: I haven't gone on a road trip in ages, but I love being surrounded by nature. It's so tranquil and refreshing. I'd love to go hiking more, but it can be a bit challenging sometimes. However, I am working on becoming healthier, so maybe a road trip and a hike will be possible soon.\n\nSession 12 (3:09 pm on 8 October, 2023):\nSam: Thanks, Evan. I appreciate your support. It really means a lot to me. I'll definitely keep you posted on my progress.\nSam: Wow, Evan, that's really inspiring. Gonna keep believing in it!\n\nSession 14 (1:50 pm on 17 October, 2023):\nSam: Sounds awesome, Evan! Can't wait to go on a hike with you. It's going to be a fun challenge and a great opportunity to appreciate the beauty of nature.\nEvan: Sure thing! Our hike is going to be awesome, I can tell. I'm always here to support you.\n\nSession 22 (11:00 am on 31 December, 2023):\nSam: Hey Evan! I’m really getting into this healthier lifestyle—just took my friends on an epic hiking trip last Friday! [image: a photography of a man standing on a rock looking out over a valley]",
+      "question": "Considering their conversations and personal growth, what advice might Evan and Sam give to someone facing a major life transition or challenge?",
+      "ground_truth_answer": "Evan and Sam would likely advise embracing small, consistent changes​​, finding stress-relieving activities like hiking​​, painting, and road trips​​, and the importance of friendship and support in navigating challenges​​.",
+      "locomo_metadata": {
+        "sample_id": "conv-49",
+        "qa_index": 19,
+        "locomo_category": 3,
+        "evidence": [
+          "D3:10",
+          "D3:15",
+          "D22:1",
+          "D8:17",
+          "D8:22",
+          "D9:8",
+          "D9:11",
+          "D14:7",
+          "D14:12",
+          "D12:7",
+          "D12:11"
+        ],
+        "speaker_a": "Evan",
+        "speaker_b": "Sam"
+      }
+    },
+    {
+      "id": "locomo_conv-43_q015",
+      "category": "open-ended",
+      "context": "Session 4 (4:17 pm on 2 August, 2023):\nJohn: Oh yeah, I remember you telling me about Harry Potter! I've got a funny story. Anthony and I went to this charity thing and ended up in this intense Harry Potter trivia contest. We did alright, but there was this one super-nerd there that took home this as a prize.\n [image: a photo of a book with a picture of a person holding a bookmark]",
+      "question": "Who is Anthony?",
+      "ground_truth_answer": "likely John's friend, colleague or family",
+      "locomo_metadata": {
+        "sample_id": "conv-43",
+        "qa_index": 15,
+        "locomo_category": 3,
+        "evidence": [
+          "D4:8"
+        ],
+        "speaker_a": "Tim",
+        "speaker_b": "John"
+      }
+    },
+    {
+      "id": "locomo_conv-48_q040",
+      "category": "open-ended",
+      "context": "Session 10 (5:35 pm on 22 March, 2023):\nDeborah: Don't forget to take it easy and look after yourself. Wishing you all the best! Recently, Anna and I were sitting by the sea, watching the sunset and talking about each other. And we realized that we inspire each other. What thoughts does the sea in this photo make you think of? [image: a photo of a person walking on the beach with a surfboard]",
+      "question": "Does Deborah live close to the beach or the mountains?",
+      "ground_truth_answer": "beach",
+      "locomo_metadata": {
+        "sample_id": "conv-48",
+        "qa_index": 40,
+        "locomo_category": 3,
+        "evidence": [
+          "D10:17"
+        ],
+        "speaker_a": "Deborah",
+        "speaker_b": "Jolene"
+      }
+    },
+    {
+      "id": "locomo_conv-41_q008",
+      "category": "open-ended",
+      "context": "Session 5 (1:17 pm on 28 January, 2023):\nJohn: It's definitely isn't, Maria. My kids have so much and others don't. We really need to do something about it.",
+      "question": "What might John's financial status be?",
+      "ground_truth_answer": "Middle-class or wealthy",
+      "locomo_metadata": {
+        "sample_id": "conv-41",
+        "qa_index": 8,
+        "locomo_category": 3,
+        "evidence": [
+          "D5:5"
+        ],
+        "speaker_a": "John",
+        "speaker_b": "Maria"
+      }
+    },
+    {
+      "id": "locomo_conv-41_q050",
+      "category": "open-ended",
+      "context": "Session 2 (6:10 pm on 22 December, 2022):\nJohn: Yeah, they are my rock in tough times and always cheer me on. I'm really thankful for their love. Family time means a lot to me. [image: a photography of a family enjoying a ride on a swing]\n\nSession 3 (8:30 pm on 1 January, 2023):\nJohn: We held some events and got to meet some people. We went to a homeless shelter to give out food and supplies. Seeing the smiles on their faces, we knew we made a real difference. We also organized a toy drive for kids in need. It was amazing seeing the community come together to spread some joy.\n\nSession 4 (7:06 pm on 9 January, 2023):\nJohn: I tried to stay calm and asked for assistance, which helped me handle the situation and make it back safely.\n\nSession 26 (1:59 pm on 31 July, 2023):\nJohn: It was chaotic when we arrived, but we pulled together. I got a surge of energy and purpose, and we were able to save a family from a burning building. It was wild, but knowing we made a difference made it worth it.",
+      "question": "What attributes describe John?",
+      "ground_truth_answer": "Selfless, family-oriented, passionate, rational",
+      "locomo_metadata": {
+        "sample_id": "conv-41",
+        "qa_index": 50,
+        "locomo_category": 3,
+        "evidence": [
+          "D26:6",
+          "D2:14",
+          "D3:5",
+          "D4:6"
+        ],
+        "speaker_a": "John",
+        "speaker_b": "Maria"
+      }
+    },
+    {
+      "id": "locomo_conv-26_q022",
+      "category": "open-ended",
+      "context": "Session 6 (8:18 pm on 6 July, 2023):\nCaroline: I've got lots of kids' books- classics, stories from different cultures, educational books, all of that. What's a favorite book you remember from your childhood?",
+      "question": "Would Caroline likely have Dr. Seuss books on her bookshelf?",
+      "ground_truth_answer": "Yes, since she collects classic children's books",
+      "locomo_metadata": {
+        "sample_id": "conv-26",
+        "qa_index": 22,
+        "locomo_category": 3,
+        "evidence": [
+          "D6:9"
+        ],
+        "speaker_a": "Caroline",
+        "speaker_b": "Melanie"
+      }
+    }
+  ]
+}

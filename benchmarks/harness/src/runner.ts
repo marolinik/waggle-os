@@ -33,7 +33,7 @@ import { generateTurnId } from '@waggle/agent';
 import type {
   CellName, ControlName, DatasetSpec, JsonlRecord, ModelSpec, RunConfig, RunKind,
 } from './types.js';
-import { loadDataset, sampleInstances } from './datasets.js';
+import { loadDataset, loadPreflightSampleLock, sampleInstances } from './datasets.js';
 import { createLlmClient } from './llm.js';
 import { JsonlWriter, buildAggregate, scoreAccuracy, percentile } from './metrics.js';
 import { cells, isCellName, isControlName } from './cells.js';
@@ -52,6 +52,7 @@ interface ParsedArgs {
   budget: number;
   output?: string;
   dryRun?: boolean;
+  sampleLock?: string;
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -79,6 +80,7 @@ function parseArgs(argv: string[]): ParsedArgs {
       case '--output': out.output = next; i++; break;
       case '--dry-run': out.dryRun = true; break;
       case '--live': out.dryRun = false; break;
+      case '--sample-lock': out.sampleLock = next; i++; break;
       case '--help':
       case '-h':
         printHelp();
@@ -109,6 +111,10 @@ Flags:
   --output path     JSONL output path                  (default auto)
   --dry-run         Stub LLM calls                     (default if LITELLM_URL unset)
   --live            Force real LLM calls even if LITELLM_URL unset
+  --sample-lock P   Path to a committed sample-lock JSON. Bypasses the dataset
+                    adapter and loads instances directly from the lock. Runtime
+                    asserts category distribution matches 13/13/12/12 for the
+                    Stage 2 preflight gate; fails fast otherwise.
   --help, -h        This text
 `);
 }
@@ -138,8 +144,23 @@ function loadDatasets(): Record<string, DatasetSpec> {
 async function runOne(config: RunConfig): Promise<void> {
   const startedAt = new Date().toISOString();
   const dataRoot = path.join(harnessRoot(), '..', 'data');
-  const all = loadDataset(config.dataset, dataRoot);
-  const sampled = sampleInstances(all, config.seed, config.limit);
+  // Sample-lock path, when provided, takes precedence over the dataset adapter
+  // and enforces the Stage 2 13/13/12/12 distribution inside
+  // loadPreflightSampleLock. Failure to match → throw before any LLM call,
+  // which is the Task-1 acceptance requirement.
+  const all = config.sampleLockPath
+    ? loadPreflightSampleLock(
+        path.isAbsolute(config.sampleLockPath)
+          ? config.sampleLockPath
+          : path.resolve(process.cwd(), config.sampleLockPath),
+      )
+    : loadDataset(config.dataset, dataRoot);
+  // When a sample lock drives the run, honor instance order verbatim — the
+  // lock file IS the deterministic sample. Cell comparisons require identical
+  // order across cells, and `sampleInstances` would re-shuffle the lock.
+  const sampled = config.sampleLockPath
+    ? (Number.isFinite(config.limit) && config.limit < all.length ? all.slice(0, config.limit) : all.slice())
+    : sampleInstances(all, config.seed, config.limit);
 
   const writer = new JsonlWriter(config.outputPath);
   const llm = createLlmClient({
@@ -273,6 +294,7 @@ async function main(): Promise<void> {
       dryRun,
       litellmUrl,
       litellmApiKey,
+      sampleLockPath: args.sampleLock,
     });
   }
 }

@@ -78,6 +78,10 @@ export interface RunConfig {
   litellmUrl: string;
   /** LiteLLM bearer key. Only used when dryRun is false. */
   litellmApiKey: string;
+  /** Optional path to a committed sample-lock JSON. When set, bypasses the
+   *  dataset adapter and loads instances directly from the lock file. Runtime
+   *  asserts the distribution required for the Stage 2 preflight gate. */
+  sampleLockPath?: string;
 }
 
 /** One entry in the per-instance JSONL output. Shape intentionally flat so

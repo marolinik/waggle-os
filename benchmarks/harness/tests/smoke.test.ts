@@ -15,10 +15,22 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import url from 'node:url';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { parseArgs, buildRuns, runOne } from '../src/runner.js';
-import { loadDataset, sampleInstances } from '../src/datasets.js';
+import {
+  loadDataset,
+  sampleInstances,
+  loadPreflightSampleLock,
+  PREFLIGHT_LOCOMO_50_DISTRIBUTION,
+} from '../src/datasets.js';
 import type { JsonlRecord } from '../src/types.js';
+
+const HERE = url.fileURLToPath(import.meta.url);
+const HARNESS_ROOT = path.resolve(path.dirname(HERE), '..');
+const DATA_DIR = path.resolve(HARNESS_ROOT, '..', 'data');
+const STAGE_2_LOCK = path.join(DATA_DIR, 'preflight-locomo-50.json');
+const CALIBRATION_LOCK = path.join(DATA_DIR, 'failure-mode-calibration-10.jsonl');
 
 const SYNTHETIC_DATASET = {
   id: 'synthetic' as const,
@@ -89,6 +101,103 @@ describe('dataset sampling (reproducibility)', () => {
     const a = sampleInstances(all, 42, 10);
     const b = sampleInstances(all, 7, 10);
     expect(a.map(i => i.instance_id)).not.toEqual(b.map(i => i.instance_id));
+  });
+});
+
+describe('preflight-locomo-50 sample lock (Task 1 acceptance)', () => {
+  it('lock file exists at the canonical path and parses', () => {
+    expect(fs.existsSync(STAGE_2_LOCK)).toBe(true);
+  });
+
+  it('loads 50 instances with the required 13/13/12/12 distribution', () => {
+    const instances = loadPreflightSampleLock(STAGE_2_LOCK);
+    expect(instances).toHaveLength(50);
+    const raw = JSON.parse(fs.readFileSync(STAGE_2_LOCK, 'utf-8')) as {
+      instances: { category: string; id: string }[];
+    };
+    const dist: Record<string, number> = {};
+    for (const i of raw.instances) dist[i.category] = (dist[i.category] ?? 0) + 1;
+    expect(dist['single-hop']).toBe(PREFLIGHT_LOCOMO_50_DISTRIBUTION['single-hop']);
+    expect(dist['multi-hop']).toBe(PREFLIGHT_LOCOMO_50_DISTRIBUTION['multi-hop']);
+    expect(dist['temporal']).toBe(PREFLIGHT_LOCOMO_50_DISTRIBUTION['temporal']);
+    expect(dist['open-ended']).toBe(PREFLIGHT_LOCOMO_50_DISTRIBUTION['open-ended']);
+  });
+
+  it('has no duplicate instance ids', () => {
+    const raw = JSON.parse(fs.readFileSync(STAGE_2_LOCK, 'utf-8')) as {
+      instances: { id: string }[];
+    };
+    const ids = new Set(raw.instances.map(i => i.id));
+    expect(ids.size).toBe(raw.instances.length);
+  });
+
+  it('throws the Task-1 error message on a tampered lock', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-tampered-'));
+    const tamperedPath = path.join(tmp, 'tampered.json');
+    const raw = JSON.parse(fs.readFileSync(STAGE_2_LOCK, 'utf-8')) as {
+      _meta: unknown;
+      instances: { category: string }[];
+    };
+    // Drop a single single-hop to force a 12/13/12/12 mismatch.
+    const tampered = {
+      _meta: raw._meta,
+      instances: [
+        ...raw.instances.filter(i => i.category !== 'single-hop'),
+        ...raw.instances.filter(i => i.category === 'single-hop').slice(1),
+      ],
+    };
+    fs.writeFileSync(tamperedPath, JSON.stringify(tampered), 'utf-8');
+    expect(() => loadPreflightSampleLock(tamperedPath)).toThrow(
+      /Pre-flight sample distribution mismatch: expected 13\/13\/12\/12/,
+    );
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+});
+
+describe('failure-mode-calibration-10 (Task 2 acceptance)', () => {
+  it('lock file exists and parses as JSONL', () => {
+    expect(fs.existsSync(CALIBRATION_LOCK)).toBe(true);
+  });
+
+  it('has 10 instances with the 3/3/2/2 distribution and null human_label fields', () => {
+    const raw = fs.readFileSync(CALIBRATION_LOCK, 'utf-8');
+    const lines = raw
+      .split('\n')
+      .map(l => l.trim())
+      .filter(l => l.length > 0 && !l.startsWith('#'));
+    const records = lines.map(l => JSON.parse(l) as {
+      id: string;
+      category: string;
+      human_label: { verdict: null | string; failure_mode: null | string; rationale: null | string };
+    });
+    expect(records).toHaveLength(10);
+    const dist: Record<string, number> = {};
+    for (const r of records) dist[r.category] = (dist[r.category] ?? 0) + 1;
+    expect(dist['single-hop']).toBe(3);
+    expect(dist['multi-hop']).toBe(3);
+    expect(dist['temporal']).toBe(2);
+    expect(dist['open-ended']).toBe(2);
+    for (const r of records) {
+      expect(r.human_label.verdict).toBeNull();
+      expect(r.human_label.failure_mode).toBeNull();
+      expect(r.human_label.rationale).toBeNull();
+    }
+  });
+
+  it('does not overlap with preflight-locomo-50 instance ids', () => {
+    const calRaw = fs.readFileSync(CALIBRATION_LOCK, 'utf-8');
+    const calLines = calRaw
+      .split('\n')
+      .map(l => l.trim())
+      .filter(l => l.length > 0 && !l.startsWith('#'));
+    const calIds = new Set(calLines.map(l => (JSON.parse(l) as { id: string }).id));
+    const stageRaw = JSON.parse(fs.readFileSync(STAGE_2_LOCK, 'utf-8')) as {
+      instances: { id: string }[];
+    };
+    const stageIds = new Set(stageRaw.instances.map(i => i.id));
+    for (const id of calIds) expect(stageIds.has(id)).toBe(false);
+    // And stage-2 ids should not leak into calibration either.
+    for (const id of stageIds) expect(calIds.has(id)).toBe(false);
   });
 });
 
@@ -215,6 +324,47 @@ describe('runOne — acceptance criteria', () => {
       fs.readFileSync(outputPath.replace(/\.jsonl$/, '.summary.json'), 'utf-8'),
     );
     expect(summary.counts.budgetStoppedAt).not.toBeNull();
+  });
+
+  it('sample-lock path loads preflight-locomo-50.json with the correct distribution', async () => {
+    const outputPath = path.join(tmpDir, 'sample-lock.jsonl');
+    await runOne({
+      run: { kind: 'cell', name: 'raw' },
+      dataset: SYNTHETIC_DATASET, // ignored when sampleLockPath is set
+      model: QWEN_MODEL,
+      limit: Number.POSITIVE_INFINITY,
+      seed: 42,
+      budgetUsd: Number.POSITIVE_INFINITY,
+      outputPath,
+      dryRun: true,
+      litellmUrl: 'http://unused',
+      litellmApiKey: 'unused',
+      sampleLockPath: STAGE_2_LOCK,
+    });
+    const records = readJsonl(outputPath);
+    expect(records).toHaveLength(50);
+    // instance_ids must be the stable locomo_<sample_id>_q<NNN> form.
+    for (const r of records) {
+      expect(r.instance_id).toMatch(/^locomo_conv-\d+_q\d{3}$/);
+    }
+    // Ordering invariant: when the lock drives the run, re-running must
+    // produce the identical instance sequence (no shuffle applied).
+    const outputPath2 = path.join(tmpDir, 'sample-lock-2.jsonl');
+    await runOne({
+      run: { kind: 'cell', name: 'raw' },
+      dataset: SYNTHETIC_DATASET,
+      model: QWEN_MODEL,
+      limit: Number.POSITIVE_INFINITY,
+      seed: 42,
+      budgetUsd: Number.POSITIVE_INFINITY,
+      outputPath: outputPath2,
+      dryRun: true,
+      litellmUrl: 'http://unused',
+      litellmApiKey: 'unused',
+      sampleLockPath: STAGE_2_LOCK,
+    });
+    const records2 = readJsonl(outputPath2);
+    expect(records2.map(r => r.instance_id)).toEqual(records.map(r => r.instance_id));
   });
 
   it('all four cells produce records with the correct `cell` tag', async () => {

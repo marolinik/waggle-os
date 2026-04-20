@@ -25,11 +25,20 @@ marketplace.db
 # Benchmark harness — data + run outputs stay local
 benchmarks/data/*
 !benchmarks/data/.gitkeep
+# Committed sample-lock artifacts (stratified picks from public LoCoMo). Small,
+# diff-reviewable, required for reproducibility. Raw LoCoMo dumps stay local.
+!benchmarks/data/preflight-locomo-50.json
+!benchmarks/data/failure-mode-calibration-10.jsonl
 benchmarks/results/*
 !benchmarks/results/.gitkeep
-# Also catch nested mis-CWD writes (e.g. ran from benchmarks/harness/)
-**/benchmarks/results/
-**/benchmarks/data/
+# Also catch nested mis-CWD writes (e.g. ran from benchmarks/harness/).
+# Use a trailing `*` (not `/`) so the `!` exceptions above still apply.
+**/benchmarks/results/*
+**/benchmarks/data/*
+!**/benchmarks/data/preflight-locomo-50.json
+!**/benchmarks/data/failure-mode-calibration-10.jsonl
+!**/benchmarks/data/.gitkeep
+!**/benchmarks/results/.gitkeep
 test-regression-*.log
 # SQLite WAL/SHM companions — always match the *.db they accompany
 marketplace.db-shm

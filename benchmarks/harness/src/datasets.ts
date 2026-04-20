@@ -13,6 +13,78 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { DatasetInstance, DatasetSpec } from './types.js';
 
+/** Preflight sample-lock schema written by scripts/build-preflight-samples.ts. */
+export interface PreflightSampleInstance {
+  id: string;
+  category: 'single-hop' | 'multi-hop' | 'temporal' | 'open-ended';
+  context: string;
+  question: string;
+  ground_truth_answer: string;
+  locomo_metadata?: unknown;
+}
+
+export interface PreflightSampleFile {
+  _meta?: {
+    distribution?: Record<string, number>;
+    seed?: number;
+    [k: string]: unknown;
+  };
+  instances: PreflightSampleInstance[];
+}
+
+/** The 4-cell Stage 2 preflight gate requires exactly this distribution
+ *  per `decisions/2026-04-20-preflight-oq-resolutions-locked.md` §OQ-PF-1. */
+export const PREFLIGHT_LOCOMO_50_DISTRIBUTION = {
+  'single-hop': 13,
+  'multi-hop': 13,
+  'temporal': 12,
+  'open-ended': 12,
+} as const;
+
+function distributionOf(instances: PreflightSampleInstance[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const i of instances) out[i.category] = (out[i.category] ?? 0) + 1;
+  return out;
+}
+
+/** Loads a committed sample-lock JSON and asserts the 13/13/12/12 distribution.
+ *
+ *  This is the enforcement point required by Task 1 of the CC preflight
+ *  sprint brief. Any deviation — whether from tampering, an incomplete
+ *  rebuild, or an accidental schema drift — must fail loudly so that no
+ *  Stage 2 run proceeds against a silently-broken sample. */
+export function loadPreflightSampleLock(lockPath: string): DatasetInstance[] {
+  if (!fs.existsSync(lockPath)) {
+    throw new Error(`Pre-flight sample lock not found at ${lockPath}`);
+  }
+  const raw = fs.readFileSync(lockPath, 'utf-8');
+  const parsed = JSON.parse(raw) as PreflightSampleFile;
+  if (!parsed || !Array.isArray(parsed.instances)) {
+    throw new Error(`Pre-flight sample lock at ${lockPath} is missing the "instances" array`);
+  }
+  const actual = distributionOf(parsed.instances);
+  const expected = PREFLIGHT_LOCOMO_50_DISTRIBUTION;
+  const keys: (keyof typeof expected)[] = ['single-hop', 'multi-hop', 'temporal', 'open-ended'];
+  const mismatch =
+    parsed.instances.length !== 50 ||
+    keys.some(k => (actual[k] ?? 0) !== expected[k]) ||
+    Object.keys(actual).some(k => !(k in expected));
+  if (mismatch) {
+    const actualStr = keys.map(k => `${k}=${actual[k] ?? 0}`).join('/');
+    const expectedStr = keys.map(k => `${k}=${expected[k]}`).join('/');
+    throw new Error(
+      `Pre-flight sample distribution mismatch: expected 13/13/12/12, got ${actualStr} ` +
+      `(expected breakdown: ${expectedStr}; total ${parsed.instances.length}, expected 50)`,
+    );
+  }
+  return parsed.instances.map(inst => ({
+    instance_id: inst.id,
+    question: inst.question,
+    context: inst.context,
+    expected: [inst.ground_truth_answer],
+  }));
+}
+
 /**
  * Built-in 60-instance synthetic dataset — enough for the `--limit 50`
  * verbose-fixed acceptance test plus 10 slack. Questions probe short-context
