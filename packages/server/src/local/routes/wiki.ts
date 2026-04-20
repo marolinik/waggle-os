@@ -5,7 +5,8 @@ import {
   HybridSearch,
   createEmbeddingProvider,
 } from '@waggle/core';
-import { WikiCompiler, CompilationState, resolveSynthesizer } from '@waggle/wiki-compiler';
+import { WikiCompiler, CompilationState, resolveSynthesizer, writeToObsidianVault } from '@waggle/wiki-compiler';
+import * as path from 'node:path';
 
 export const wikiRoutes: FastifyPluginAsync = async (server) => {
   function getPersonalDb() {
@@ -89,5 +90,36 @@ export const wikiRoutes: FastifyPluginAsync = async (server) => {
     const db = getPersonalDb();
     const state = new CompilationState(db);
     return reply.send(state.getWatermark());
+  });
+
+  // POST /api/wiki/export/obsidian — M-12: write all compiled pages to a
+  // directory the user can drop into an Obsidian vault. The adapter shapes
+  // output as {outDir}/{pageType}/{slug}.md + a top-level _index.md.
+  server.post<{ Body: { outDir?: string } }>('/api/wiki/export/obsidian', async (req, reply) => {
+    const outDir = req.body?.outDir?.trim();
+    if (!outDir) {
+      return reply.status(400).send({ error: 'outDir is required' });
+    }
+    if (!path.isAbsolute(outDir)) {
+      return reply.status(400).send({ error: 'outDir must be an absolute path' });
+    }
+
+    const db = getPersonalDb();
+    const state = new CompilationState(db);
+    const pages = state.getAllPages();
+    if (pages.length === 0) {
+      return reply.status(409).send({
+        error: 'No compiled pages to export. Run compile first.',
+      });
+    }
+
+    try {
+      const result = writeToObsidianVault(pages, outDir);
+      return reply.send(result);
+    } catch (err) {
+      return reply.status(500).send({
+        error: err instanceof Error ? err.message : 'Export failed',
+      });
+    }
   });
 };

@@ -1339,6 +1339,28 @@ class LocalAdapter {
     return res.json();
   }
 
+  /**
+   * M-12: export all compiled wiki pages to an Obsidian-shaped directory.
+   * `outDir` must be an absolute path. Writes `_index.md` at the root and
+   * `{type}/{slug}.md` per page. Existing files are overwritten.
+   */
+  async exportWikiToObsidian(outDir: string): Promise<{
+    outDir: string;
+    filesWritten: number;
+    indexPath: string;
+    byType: Record<string, number>;
+  }> {
+    const res = await this.fetch('/api/wiki/export/obsidian', {
+      method: 'POST',
+      body: JSON.stringify({ outDir }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(body.error ?? `Export failed (${res.status})`);
+    }
+    return res.json();
+  }
+
   // --- Compliance ---
   async getComplianceStatus(workspaceId?: string): Promise<any> {
     const url = workspaceId ? `/api/compliance/status?workspaceId=${workspaceId}` : '/api/compliance/status';

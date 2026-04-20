@@ -8,7 +8,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   BookOpen, RefreshCw, Loader2, Search, FileText,
-  Heart, ChevronRight, Zap, Network, Lightbulb,
+  Heart, ChevronRight, Zap, Network, Lightbulb, Download,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { renderSimpleMarkdown } from '@/lib/render-markdown';
@@ -142,6 +142,32 @@ export default function WikiTab() {
     }
   }, []);
 
+  // M-12: Obsidian export. Uses a prompt() for the absolute path since the
+  // web layer can't open a native folder picker without Tauri APIs; power
+  // users pasting a path is fine for the v1 of this button.
+  const handleExportObsidian = useCallback(async () => {
+    const outDir = window.prompt(
+      'Absolute path to your Obsidian vault directory (will be created if missing):',
+      '',
+    );
+    if (!outDir?.trim()) return;
+    try {
+      const result = await adapter.exportWikiToObsidian(outDir.trim());
+      setPageContent(
+        `# Obsidian Export Complete\n\n` +
+        `- **Output dir:** \`${result.outDir}\`\n` +
+        `- **Files written:** ${result.filesWritten}\n` +
+        `- **Index:** \`${result.indexPath}\`\n` +
+        `- **By type:** ${Object.entries(result.byType).map(([k, v]) => `${k}=${v}`).join(', ')}\n\n` +
+        `Open the directory in Obsidian as a vault to browse the pages.`,
+      );
+      setSelectedSlug(null);
+      setHealth(null);
+    } catch (err) {
+      setPageContent(`# Export Failed\n\n${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
+  }, []);
+
   // Filter pages
   const filtered = pages.filter(p => {
     if (filterType && p.pageType !== filterType) return false;
@@ -184,6 +210,15 @@ export default function WikiTab() {
                   className="p-1 rounded text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
                 >
                   {compiling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+                </button>
+              </HintTooltip>
+              <HintTooltip content="Export to Obsidian vault">
+                <button
+                  onClick={handleExportObsidian}
+                  disabled={pages.length === 0}
+                  className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30"
+                >
+                  <Download className="w-3.5 h-3.5" />
                 </button>
               </HintTooltip>
               <HintTooltip content="Refresh">
