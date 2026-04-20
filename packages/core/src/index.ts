@@ -81,6 +81,7 @@ export {
 
 // ── Harvest (Memory Harvest) ──
 export { HarvestSourceStore } from './harvest/source-store.js';
+export { HarvestRunStore, type HarvestRun, type HarvestRunStatus } from './harvest/run-store.js';
 export { ChatGPTAdapter } from './harvest/chatgpt-adapter.js';
 export { ClaudeAdapter } from './harvest/claude-adapter.js';
 export { ClaudeCodeAdapter } from './harvest/claude-code-adapter.js';

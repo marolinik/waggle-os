@@ -1,5 +1,6 @@
 export * from './types.js';
 export { HarvestSourceStore } from './source-store.js';
+export { HarvestRunStore, type HarvestRun, type HarvestRunStatus } from './run-store.js';
 export { ChatGPTAdapter } from './chatgpt-adapter.js';
 export { ClaudeAdapter } from './claude-adapter.js';
 export { ClaudeCodeAdapter } from './claude-code-adapter.js';
