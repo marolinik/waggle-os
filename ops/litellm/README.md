@@ -7,6 +7,65 @@ know why we chose a particular upstream slug or fallback policy.**
 
 ---
 
+## Sprint 10 Task 1.4 — DashScope intl primary + OR failover (2026-04-21)
+
+**Key provisioning.** A classic DashScope Model Studio API key (`sk-…`,
+not `sk-ws-…`) was provisioned on 2026-04-21 and is held in two places:
+
+- `.env` under `DASHSCOPE_API_KEY=sk-…` (LiteLLM container reads at
+  startup via `os.environ/DASHSCOPE_API_KEY`).
+- Waggle vault under name `alibaba` (credentialType `api_key`).
+
+The key is bound to the **international tenant**, not mainland. Smoke
+verification (2026-04-21):
+
+| Endpoint | Result |
+|---|---|
+| `https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions` | HTTP 200, target `qwen3.6-35b-a3b` returns valid completion with `reasoning_content` populated (thinking default on) |
+| `https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions` | HTTP 401 `invalid_api_key` — key is intl-bound |
+
+**Routing decision.** `litellm-config.yaml` now carries three Qwen3.6
+routes:
+
+| Alias | Upstream | Role |
+|---|---|---|
+| `qwen3.6-35b-a3b` | `openai/qwen3.6-35b-a3b` @ `dashscope-intl.aliyuncs.com/compatible-mode/v1` | **Canonical primary** — real 3.6 model |
+| `qwen3.6-35b-a3b-via-dashscope` | identical to canonical | **Explicit DashScope pin** — for operator scripts that want to bypass a canonical alias flip |
+| `qwen3.6-35b-a3b-via-openrouter` | `openrouter/qwen/qwen3.5-35b-a3b` | **Failover** — one-minor regression to 3.5 (OR catalog lacks 3.6-35b-a3b as of 2026-04-21) |
+
+**Failover policy.** Caller-side responsibility, not LiteLLM router:
+
+1. First call: `qwen3.6-35b-a3b` (canonical, DashScope-intl).
+2. On HTTP 429 rate-limit or 5xx within a reasonable retry window
+   (client-judgment), retry on `qwen3.6-35b-a3b-via-openrouter`.
+3. OR path returns Qwen3.5-35B-A3B, so log the model substitution in
+   the caller's trace record so Week-1 / Stage-2 aggregate reports
+   attribute correctly. The `judge-runner.ts` trace already carries
+   `judge_model`, so a failover just writes the failover model name
+   to that field; no schema change needed.
+4. Do NOT use `openrouter/auto` as a third-tier failover — it can
+   silently route to an unrelated model and pollute cost accounting.
+
+LiteLLM's per-route `fallbacks` field is supported (would let us
+declare failover in config rather than caller logic) but deliberately
+not used here: the Week-1 / Stage-2 trace schema relies on precise
+per-call model attribution, and letting LiteLLM transparently swap
+models would make traces harder to audit.
+
+**Regression gate.** `scripts/smoke-qwen-dual-route.mjs` calls both
+routes with the same prompt, verifies both return HTTP 200, logs
+per-route completion, latency, and token counts. Task 1.1 (Qwen
+stability matrix) uses the canonical alias for its live run — which
+means the matrix now exercises the real 3.6 model, not the 3.5 OR
+fallback. Materially improves Stage-2-prep defensibility.
+
+**Follow-up for Marko (when available).** If the key later gets mainland
+provisioning too, a second route `qwen3.6-35b-a3b-via-dashscope-mainland`
+can be added with the same key pattern — but the intl endpoint is
+sufficient for Sprint 10 + Stage 2 benchmarks.
+
+---
+
 ## Sprint 10 Task 1.2 — Sonnet 4.6 dated-snapshot repair (2026-04-21)
 
 **Problem.** The `claude-sonnet-4-6` alias previously routed to

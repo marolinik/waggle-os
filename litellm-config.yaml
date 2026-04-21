@@ -180,23 +180,54 @@ model_list:
       api_key: os.environ/OPENROUTER_API_KEY
 
   # ── Alibaba / Qwen ────────────────────────────────────────────
-  # Routed via OpenRouter (2026-04-21): the existing DashScope key is a
-  # PAI Workspace bearer token (sk-ws-…), not a classic Model Studio API
-  # key. Getting the classic key requires resolving an Alibaba Cloud
-  # billing-account collision (card already bound to prior account).
-  # Skipped per user call 2026-04-21; OR route is functionally identical.
+  # Sprint 10 Task 1.4 (2026-04-21): classic DashScope Model Studio API
+  # key (sk-…) provisioned on the intl tenant. Smoke-verified: target
+  # `qwen3.6-35b-a3b` returns HTTP 200 on
+  # https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions
+  # with reasoning_content populated (thinking mode default on). The
+  # mainland endpoint `dashscope.aliyuncs.com` returns 401 invalid_api_key
+  # — the provisioned key is intl-bound. Failover policy documented in
+  # ops/litellm/README.md §Sprint-10-Task-1.4.
+  # refs sprint-10-brief §1.4
   - model_name: qwen-max
     litellm_params:
       model: openrouter/qwen/qwen-max
       api_key: os.environ/OPENROUTER_API_KEY
 
-  # Qwen3.6-35B-A3B OpenRouter fallback — the exact `qwen3.6-35b-a3b`
-  # slug is NOT live on OpenRouter (verified 2026-04-21: catalog has
-  # qwen/qwen3.5-35b-a3b and qwen/qwen3.6-plus, no 3.6-35b-a3b). Until
-  # DashScope publishes 3.6-35B publicly, we route the 3.6-35B alias
-  # through the closest available model (Qwen3.5-35B-A3B) so downstream
-  # benchmarks have SOMETHING to run against. DashScope-native entry
-  # above (line ~216) stays in place for when the real slug lands.
+  # ── Qwen3.6-35B-A3B canonical + dual-route (primary + fallback) ──
+  #
+  # Canonical alias routes to DashScope-intl direct as primary. The
+  # 3.6-35B slug IS live on the intl tenant (verified 2026-04-21 Sprint
+  # 10 Task 1.4 smoke). Earlier comment asserting the slug was "not live
+  # on any public API" was wrong on the intl tenant — only the mainland
+  # DashScope and OpenRouter catalogs lacked the exact slug.
+  #
+  # Callers should prefer the canonical `qwen3.6-35b-a3b` alias — it
+  # routes to DashScope-intl native, giving us the real 3.6 model
+  # rather than the Qwen3.5-35B-A3B OpenRouter fallback. If DashScope
+  # rate-limits or is unavailable, caller-side retry should fall back
+  # to `qwen3.6-35b-a3b-via-openrouter` (bridge route, one-minor regress
+  # to 3.5 until OR carries 3.6).
+  - model_name: qwen3.6-35b-a3b
+    litellm_params:
+      model: openai/qwen3.6-35b-a3b
+      api_base: https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+      api_key: os.environ/DASHSCOPE_API_KEY
+
+  # Explicit DashScope alias (same target, stable naming for operator
+  # scripts that want to pin to DashScope irrespective of canonical
+  # alias flips).
+  - model_name: qwen3.6-35b-a3b-via-dashscope
+    litellm_params:
+      model: openai/qwen3.6-35b-a3b
+      api_base: https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+      api_key: os.environ/DASHSCOPE_API_KEY
+
+  # OpenRouter bridge — failover when DashScope rate-limits or is
+  # unavailable. Note: OpenRouter's Qwen catalog does NOT have the exact
+  # 3.6-35b-a3b slug — this route lands on qwen3.5-35b-a3b, so it's a
+  # one-minor-version regression. Acceptable for transient failover,
+  # not for primary use.
   - model_name: qwen3.6-35b-a3b-via-openrouter
     litellm_params:
       model: openrouter/qwen/qwen3.5-35b-a3b
@@ -290,7 +321,7 @@ model_list:
       model: openrouter/qwen/qwen3-30b-a3b-instruct-2507
       api_key: os.environ/OPENROUTER_API_KEY
 
-  # ── Qwen3.6-35B-A3B (LOCKED 2026-04-19) ──────────────────────
+  # ── Qwen3.6-35B-A3B LOCKED decision (2026-04-19) ──────────────
   # Canonical engine for Waggle Pro/Teams default + KVARK prod +
   # Track 2 benchmarks (H-42 / H-43 / H-44). Per LOCKED decision:
   # D:\Projects\PM-Waggle-OS\decisions\2026-04-19-target-model-qwen35b-locked.md
@@ -299,20 +330,11 @@ model_list:
   # HF source (verified 2026-04-19):
   #   https://huggingface.co/Qwen/Qwen3.6-35B-A3B
   #
-  # ROUTING (updated 2026-04-21): temporarily routed through OpenRouter's
-  # qwen/qwen3.5-35b-a3b because (a) the 3.6-35B-A3B slug is not yet
-  # live on any public API (OpenRouter + Ollama Cloud catalogs both
-  # return no match), and (b) the user's DashScope credential is a PAI
-  # Workspace bearer token, not a classic Model Studio API key. This
-  # keeps the canonical `qwen3.6-35b-a3b` alias working for downstream
-  # benchmarks with a one-minor-version regression (3.5→3.6). When
-  # Alibaba publishes 3.6-35B-A3B publicly, flip this back to the
-  # native DashScope route (dashscope/qwen3.6-35b-a3b with a proper
-  # sk-… key) — the alias stays stable so callers don't change.
-  - model_name: qwen3.6-35b-a3b
-    litellm_params:
-      model: openrouter/qwen/qwen3.5-35b-a3b
-      api_key: os.environ/OPENROUTER_API_KEY
+  # The canonical `qwen3.6-35b-a3b` routing ENTRY lives above in the
+  # Alibaba/Qwen section (next to its dashscope + openrouter siblings).
+  # DashScope-intl direct is primary as of Sprint 10 Task 1.4
+  # (2026-04-21). This comment block stays here as the LOCKED decision
+  # memo anchor — do not duplicate the route entry.
 
   # ── Added for PromptAssembler v5 eval ──────────────────────────
   # Spec: v5 brief §11.2. Entries verified live via provider docs on
