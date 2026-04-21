@@ -1,0 +1,299 @@
+{
+  "generatedAt": "2026-04-21T08:56:18.311Z",
+  "labelsSource": "D:/Projects/PM-Waggle-OS/calibration/2026-04-20-failure-mode-calibration-labels.md",
+  "judgeModel": "claude-sonnet-4-6",
+  "ensemble": null,
+  "matchRate": {
+    "matches": 8,
+    "total": 10,
+    "verdict": "PASS"
+  },
+  "cost": {
+    "totalUsd": 0.027305999999999997,
+    "judgeCalls": 10,
+    "entries": [
+      {
+        "timestamp": "2026-04-21T08:55:53.214Z",
+        "model": "claude-sonnet-4-6",
+        "promptTokens": 478,
+        "completionTokens": 56,
+        "usd": 0.002274,
+        "latencyMs": 1556,
+        "ok": true,
+        "instanceIndex": 0
+      },
+      {
+        "timestamp": "2026-04-21T08:55:54.841Z",
+        "model": "claude-sonnet-4-6",
+        "promptTokens": 480,
+        "completionTokens": 64,
+        "usd": 0.0024000000000000002,
+        "latencyMs": 1625,
+        "ok": true,
+        "instanceIndex": 1
+      },
+      {
+        "timestamp": "2026-04-21T08:55:57.855Z",
+        "model": "claude-sonnet-4-6",
+        "promptTokens": 470,
+        "completionTokens": 52,
+        "usd": 0.00219,
+        "latencyMs": 3013,
+        "ok": true,
+        "instanceIndex": 2
+      },
+      {
+        "timestamp": "2026-04-21T08:56:00.141Z",
+        "model": "claude-sonnet-4-6",
+        "promptTokens": 487,
+        "completionTokens": 62,
+        "usd": 0.002391,
+        "latencyMs": 2284,
+        "ok": true,
+        "instanceIndex": 3
+      },
+      {
+        "timestamp": "2026-04-21T08:56:03.381Z",
+        "model": "claude-sonnet-4-6",
+        "promptTokens": 474,
+        "completionTokens": 72,
+        "usd": 0.002502,
+        "latencyMs": 3240,
+        "ok": true,
+        "instanceIndex": 4
+      },
+      {
+        "timestamp": "2026-04-21T08:56:05.640Z",
+        "model": "claude-sonnet-4-6",
+        "promptTokens": 479,
+        "completionTokens": 67,
+        "usd": 0.0024419999999999997,
+        "latencyMs": 2259,
+        "ok": true,
+        "instanceIndex": 5
+      },
+      {
+        "timestamp": "2026-04-21T08:56:11.729Z",
+        "model": "claude-sonnet-4-6",
+        "promptTokens": 493,
+        "completionTokens": 271,
+        "usd": 0.005543999999999999,
+        "latencyMs": 6089,
+        "ok": true,
+        "instanceIndex": 6
+      },
+      {
+        "timestamp": "2026-04-21T08:56:14.287Z",
+        "model": "claude-sonnet-4-6",
+        "promptTokens": 502,
+        "completionTokens": 75,
+        "usd": 0.0026309999999999997,
+        "latencyMs": 2557,
+        "ok": true,
+        "instanceIndex": 7
+      },
+      {
+        "timestamp": "2026-04-21T08:56:16.452Z",
+        "model": "claude-sonnet-4-6",
+        "promptTokens": 495,
+        "completionTokens": 74,
+        "usd": 0.002595,
+        "latencyMs": 2163,
+        "ok": true,
+        "instanceIndex": 8
+      },
+      {
+        "timestamp": "2026-04-21T08:56:18.311Z",
+        "model": "claude-sonnet-4-6",
+        "promptTokens": 494,
+        "completionTokens": 57,
+        "usd": 0.0023369999999999997,
+        "latencyMs": 1858,
+        "ok": true,
+        "instanceIndex": 9
+      }
+    ]
+  },
+  "perInstance": [
+    {
+      "index": 1,
+      "instanceId": "locomo_conv-26_q109",
+      "category": "single-hop",
+      "question": "What did Mel and her kids make during the pottery workshop?",
+      "humanVerdict": "correct",
+      "humanFailureMode": null,
+      "humanRationale": "Model contains the required fact (pots) with equivalent phrasing. Extra context (Mel, kids, workshop) is factually aligned with ground truth, no fabrication.",
+      "judgeOutput": {
+        "verdict": "correct",
+        "failure_mode": null,
+        "rationale": "The model correctly states that Mel and her kids made their own pots at the pottery workshop, which matches the ground truth.",
+        "judge_model": "claude-sonnet-4-6"
+      },
+      "match": true,
+      "elapsedMs": 1560,
+      "error": null
+    },
+    {
+      "index": 2,
+      "instanceId": "locomo_conv-41_q123",
+      "category": "single-hop",
+      "question": "What did Maria plan to do later on the evening of 7 July, 2023?",
+      "humanVerdict": "incorrect",
+      "humanFailureMode": "F3",
+      "humanRationale": "Model misinterprets the context: 'friends from the gym' signals where Maria knows the friends from, not that she is going to the gym. The answer derives from present substrate but gets it wrong — classic F3 misreading of existing context, not fabrication.",
+      "judgeOutput": {
+        "verdict": "incorrect",
+        "failure_mode": "F3",
+        "rationale": "The model incorrectly states Maria planned to go to the gym for an evening workout, when in fact she planned to have dinner with friends from the gym.",
+        "judge_model": "claude-sonnet-4-6"
+      },
+      "match": true,
+      "elapsedMs": 1626,
+      "error": null
+    },
+    {
+      "index": 3,
+      "instanceId": "locomo_conv-50_q141",
+      "category": "single-hop",
+      "question": "Which city is featured in the photograph Dave showed Calvin?",
+      "humanVerdict": "incorrect",
+      "humanFailureMode": "F4",
+      "humanRationale": "Model names a city that does not appear in the context (Chicago, Lake Michigan) and fabricates a geographic descriptor (skyline, lake) without any supporting excerpt. This is outright invention of substrate — F4, not F3, because the answer's content has no origin in the ground truth material.",
+      "judgeOutput": {
+        "verdict": "incorrect",
+        "failure_mode": "F3",
+        "rationale": "The model incorrectly identifies the city as Chicago when the ground truth clearly states it is Boston.",
+        "judge_model": "claude-sonnet-4-6"
+      },
+      "match": false,
+      "elapsedMs": 3013,
+      "error": null
+    },
+    {
+      "index": 4,
+      "instanceId": "locomo_conv-42_q030",
+      "category": "multi-hop",
+      "question": "What kind of writings does Joanna do?",
+      "humanVerdict": "incorrect",
+      "humanFailureMode": "F2",
+      "humanRationale": "Model correctly identifies two of four required elements (screenplays, books) with no fabrication or incorrect claims, but omits the other two (online blog posts, journal) which are explicitly evidenced in D18:1 and D18:5. Partial coverage without fabrication — F2.",
+      "judgeOutput": {
+        "verdict": "incorrect",
+        "failure_mode": "F2",
+        "rationale": "The model correctly identifies screenplays and books but omits online blog posts and journal writing, which are also part of the ground-truth answer.",
+        "judge_model": "claude-sonnet-4-6"
+      },
+      "match": true,
+      "elapsedMs": 2285,
+      "error": null
+    },
+    {
+      "index": 5,
+      "instanceId": "locomo_conv-49_q015",
+      "category": "multi-hop",
+      "question": "What kind of unhealthy snacks does Sam enjoy eating?",
+      "humanVerdict": "correct",
+      "humanFailureMode": null,
+      "humanRationale": "Model contains both required facts (soda, candy). Additional commentary about habit acknowledgment mirrors context faithfully, no incorrect additions.",
+      "judgeOutput": {
+        "verdict": "correct",
+        "failure_mode": null,
+        "rationale": "The model correctly identifies both soda and candy as Sam's unhealthy snacks, matching the ground truth, and the additional detail about acknowledging it's not healthy is factually supported by the context.",
+        "judge_model": "claude-sonnet-4-6"
+      },
+      "match": true,
+      "elapsedMs": 3240,
+      "error": null
+    },
+    {
+      "index": 6,
+      "instanceId": "locomo_conv-41_q036",
+      "category": "multi-hop",
+      "question": "What music events has John attended?",
+      "humanVerdict": "incorrect",
+      "humanFailureMode": "F5",
+      "humanRationale": "Model answer is coherent and derives from context (walks, picnics, town events appear in D8:11), but does not address the specific question — which music events did John attend. Response pivots to a related but different topic (John's family-activity preferences). No hallucination, no incorrect facts about John's activities, but off-topic relative to prompt — F5.",
+      "judgeOutput": {
+        "verdict": "incorrect",
+        "failure_mode": "F5",
+        "rationale": "The model does not mention either of the required music events (live music event, violin concert) and instead provides generic information about John's activities that does not answer the question.",
+        "judge_model": "claude-sonnet-4-6"
+      },
+      "match": true,
+      "elapsedMs": 2259,
+      "error": null
+    },
+    {
+      "index": 7,
+      "instanceId": "locomo_conv-42_q038",
+      "category": "temporal",
+      "question": "When did Joanna make a dessert with almond milk?",
+      "humanVerdict": "incorrect",
+      "humanFailureMode": "F3",
+      "humanRationale": "Model derives date from context (session is 14 September, 'last Friday' reference) but computes it incorrectly. 7 September 2022 was a Wednesday — Friday before 14 September was actually 9 September. Answer draws on present substrate but arrives at a demonstrably wrong specific date — F3, not F4, because model did not fabricate the relationship, only miscomputed it.",
+      "judgeOutput": {
+        "verdict": "incorrect",
+        "failure_mode": "F3",
+        "rationale": "The model incorrectly states September 7, 2022; the Friday before September 14, 2022 (a Wednesday) would be September 9, 2022, not September 7.",
+        "judge_model": "claude-sonnet-4-6"
+      },
+      "match": true,
+      "elapsedMs": 6089,
+      "error": null
+    },
+    {
+      "index": 8,
+      "instanceId": "locomo_conv-41_q053",
+      "category": "temporal",
+      "question": "When did John help renovate his hometown community center?",
+      "humanVerdict": "incorrect",
+      "humanFailureMode": "F4",
+      "humanRationale": "Model produces a year (2020) that cannot be derived from the context — 'last year' relative to 5 August 2023 unambiguously yields 2022. Model also fabricates causal context ('early pandemic period', 'volunteer support for infrastructure') that does not appear in any excerpt. Content generation beyond what the substrate allows — F4, not F3, because the fabricated context is the bulk of the answer.",
+      "judgeOutput": {
+        "verdict": "incorrect",
+        "failure_mode": "F4",
+        "rationale": "The model states 2020 and fabricates a pandemic-related context, whereas the ground truth indicates the renovation occurred in 2022 (last year relative to the August 2023 session).",
+        "judge_model": "claude-sonnet-4-6"
+      },
+      "match": true,
+      "elapsedMs": 2559,
+      "error": null
+    },
+    {
+      "index": 9,
+      "instanceId": "locomo_conv-50_q037",
+      "category": "open-ended",
+      "question": "Does Calvin love music tours?",
+      "humanVerdict": "correct",
+      "humanFailureMode": null,
+      "humanRationale": "Model gives the correct yes/no answer aligned with ground truth, and supports it with context-faithful evidence across all three referenced sessions. No fabrication, no misreading.",
+      "judgeOutput": {
+        "verdict": "incorrect",
+        "failure_mode": "F4",
+        "rationale": "The model introduces fabricated details not present in the ground-truth context, specifically 'touring with Frank Ocean' and 'felt alive on stage in Tokyo,' which are not mentioned in the supporting context.",
+        "judge_model": "claude-sonnet-4-6"
+      },
+      "match": false,
+      "elapsedMs": 2164,
+      "error": null
+    },
+    {
+      "index": 10,
+      "instanceId": "locomo_conv-47_q017",
+      "category": "open-ended",
+      "question": "What is the board game where you have to find the imposter that John mentions to James?",
+      "humanVerdict": "incorrect",
+      "humanFailureMode": "F1",
+      "humanRationale": "Model explicitly refuses to answer, stating it lacks sufficient information. No partial answer, no fabrication, no off-topic pivot. Ground truth (Mafia) is not literally stated in the D8:36 excerpt — model plays it safe and abstains rather than inferring from the 'find the impostor' description. Classic F1 abstain behavior.",
+      "judgeOutput": {
+        "verdict": "incorrect",
+        "failure_mode": "F1",
+        "rationale": "The model explicitly states it does not have enough information to determine the answer, rather than identifying the game as Mafia.",
+        "judge_model": "claude-sonnet-4-6"
+      },
+      "match": true,
+      "elapsedMs": 1859,
+      "error": null
+    }
+  ]
+}
