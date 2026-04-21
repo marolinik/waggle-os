@@ -81,6 +81,17 @@ export function createJudgeLlmClient(config: JudgeLlmClientConfig): LlmClient {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
+      // Opus 4.7 and some newer reasoning-model families reject the
+      // `temperature` param with HTTP 400. Omit it for those; they're
+      // effectively deterministic at their provider defaults. Keep T=0
+      // for the rest for reproducibility.
+      const rejectsTemperature = /opus-4-7|gpt-5|o3|o4/i.test(config.model);
+      const reqBody: Record<string, unknown> = {
+        model: config.model,
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 1024,
+      };
+      if (!rejectsTemperature) reqBody.temperature = 0.0;
       const res = await fetchFn(`${url}/v1/chat/completions`, {
         method: 'POST',
         headers: {
@@ -88,12 +99,7 @@ export function createJudgeLlmClient(config: JudgeLlmClientConfig): LlmClient {
           Authorization: `Bearer ${config.litellmApiKey}`,
         },
         signal: controller.signal,
-        body: JSON.stringify({
-          model: config.model,
-          messages: [{ role: 'user', content: prompt }],
-          max_tokens: 1024,
-          temperature: 0.0,
-        }),
+        body: JSON.stringify(reqBody),
       });
       const latencyMs = Date.now() - started;
       if (!res.ok) {
