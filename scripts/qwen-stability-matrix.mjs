@@ -144,8 +144,14 @@ const args = (() => {
 
 // ── Inference layer ─────────────────────────────────────────────────────
 
-/** Call the LiteLLM proxy with thinking toggle via `extra_body`. */
-async function callLitellm({ url, apiKey, model, prompt, maxTokens, thinking }) {
+/** Call the LiteLLM proxy with thinking toggle via `extra_body`.
+ *  Per-call 180s AbortController ceiling so a thinking-mode loop on a
+ *  single cell doesn't stall the whole 40-cell matrix. Stage-0 Q2
+ *  demonstrated Qwen3.6 can perseverate for minutes on specific prompt
+ *  shapes; we want those to surface as `error: timeout` classifications
+ *  fast, not hang the run.
+ */
+async function callLitellm({ url, apiKey, model, prompt, maxTokens, thinking, timeoutMs = 180_000 }) {
   const started = Date.now();
   const body = {
     model,
@@ -159,6 +165,8 @@ async function callLitellm({ url, apiKey, model, prompt, maxTokens, thinking }) 
     // with an env override if we hit that.
     body.extra_body = { enable_thinking: false };
   }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   let res;
   try {
     res = await fetch(`${url.replace(/\/$/, '')}/v1/chat/completions`, {
@@ -168,10 +176,15 @@ async function callLitellm({ url, apiKey, model, prompt, maxTokens, thinking }) 
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify(body),
+      signal: controller.signal,
     });
   } catch (err) {
-    return { error: `fetch_error: ${err instanceof Error ? err.message : String(err)}`, latencyMs: Date.now() - started };
+    clearTimeout(timer);
+    const msg = err instanceof Error ? err.message : String(err);
+    const kind = /abort|timeout/i.test(msg) ? 'timeout' : 'fetch_error';
+    return { error: `${kind}: ${msg.slice(0, 200)}`, latencyMs: Date.now() - started };
   }
+  clearTimeout(timer);
   const latencyMs = Date.now() - started;
   if (!res.ok) {
     const text = await res.text();
@@ -459,7 +472,16 @@ async function main() {
 
   const rows = [];
   let totalCostUsd = 0;
+  // Hard alarm per brief §Task 1.1 Budget: $1.50 cap, $2.00 hard alarm.
+  // At hard alarm, abort the remaining cells and write a partial-run
+  // report so the operator sees what happened rather than a silent stall.
+  const HARD_ALARM_USD = 2.00;
+  const SOFT_CAP_USD = 1.50;
   for (let i = 0; i < executeCount; i++) {
+    if (!args.dryRun && totalCostUsd >= HARD_ALARM_USD) {
+      console.log(`[qwen-matrix:BUDGET_HARD_STOP] totalCostUsd=$${totalCostUsd.toFixed(4)} ≥ $${HARD_ALARM_USD} — aborting remaining cells.`);
+      break;
+    }
     const cell = cells[i];
     process.stdout.write(
       `  [${String(i + 1).padStart(2, ' ')}/${executeCount}] `
@@ -478,7 +500,14 @@ async function main() {
       r.costUsd = 0;
     }
     rows.push(r);
-    console.log(`${r.outcome} (${r.inference.completionTokens ?? 0} tok, ${r.inference.latencyMs ?? 0}ms)`);
+    console.log(`${r.outcome} (${r.inference.completionTokens ?? 0} tok, ${r.inference.latencyMs ?? 0}ms, $${(r.costUsd ?? 0).toFixed(4)}  cum=$${totalCostUsd.toFixed(4)})`);
+    if (!args.dryRun && totalCostUsd >= SOFT_CAP_USD && totalCostUsd < HARD_ALARM_USD) {
+      // Once past the soft cap, emit a one-time notice but keep running — brief allows up to hard alarm.
+      if (!rows.find(x => x._softCapNoted)) {
+        rows[rows.length - 1]._softCapNoted = true;
+        console.log(`  [qwen-matrix:BUDGET_SOFT_CAP] totalCostUsd=$${totalCostUsd.toFixed(4)} ≥ $${SOFT_CAP_USD} soft cap; continuing up to $${HARD_ALARM_USD} hard alarm.`);
+      }
+    }
   }
 
   const iso = new Date().toISOString().replace(/[:.]/g, '-');

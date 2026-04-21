@@ -114,8 +114,8 @@ Anti-pattern #4 reminder: **thresholds do NOT shift post-hoc.** This clause rema
 | 1.4 DashScope dual-route | ✅ CLOSED | 3/3 routes PASS; real qwen3.6-35b-a3b on intl tenant |
 | 2.1 Tri-vendor ensemble setup | ✅ CLOSED | Fleiss' κ=0.7458 on 10-instance baseline, substantial band |
 | 2.2 Full 14-instance Fleiss' κ | ✅ CLOSED | **κ=0.8784** · strong band · **Sprint 11 GO** |
-| 1.1 Qwen stability matrix | scaffold CLOSED, live-run pending | Matrix driver + classifier dry-run verified |
-| 1.5 Harvest Claude artifacts adapter | unblocked Day-3 (fresh zip landed); implementation pending | hive-mind backlog entry `b3348fb` |
+| 1.1 Qwen stability matrix | ✅ CLOSED (PASS) — 36/40 converged, 5 safe configs emerged. Stage 2 primary config LOCKED at `thinking=off, max_tokens=16000` (cheapest 5/5 safe config at ≥16K ceiling per STAGE-2-PREP-BACKLOG exit criterion). Spend $0.085 of $1.50 cap. | `preflight-results/qwen-thinking-stability-2026-04-21T14-05-12-175Z.md` · CSV sibling · exit ping at `PM-Waggle-OS/sessions/2026-04-22-sprint-10-task-1-1-exit.md` |
+| 1.5 Harvest Claude artifacts adapter | **Phase 1 CLOSED** (fresh zip verified — artifacts folder ABSENT). **Phase 2 CLOSED** — PM ratified Option 4 (partial adapter scope). **Phase 3 staged local** on hive-mind master (`c363257`), +7 tests, 312/312 passing, tsc clean. Awaiting PM push ratification. | `preflight-results/claude-ai-export-verification-2026-04-22.md` · hive-mind commit `c363257` · ratification ask at `PM-Waggle-OS/sessions/2026-04-22-sprint-10-task-1-5-phase-3-ratification.md` |
 
 ## 9. Cost accounting
 
@@ -125,8 +125,11 @@ Anti-pattern #4 reminder: **thresholds do NOT shift post-hoc.** This clause rema
 | Day-2 Sonnet calibration | $0.027 | $0.028 |
 | Day-2 Tri-vendor 10-instance baseline | $0.101 | $0.129 |
 | Day-3 Task 2.2 14-instance ensemble | $0.151 | $0.280 |
+| Day-3 Task 1.1 Qwen stability matrix live-run | $0.085 | $0.365 |
+| Day-3 Task 1.5 Phase 1+2 (file inspection, 0 API) | $0.000 | $0.365 |
+| Day-3 Task 1.5 Phase 3 (local commit, not executed) | $0.000 | $0.365 |
 
-**Sprint 10 total: $0.280 of $15 hard-stop ceiling (1.9%)**
+**Sprint 10 total: $0.365 of $15 hard-stop ceiling (2.4%)**
 
 ## 10. Anti-pattern #4 compliance check
 
@@ -135,12 +138,35 @@ Anti-pattern #4 reminder: **thresholds do NOT shift post-hoc.** This clause rema
 - Single PM-vs-ensemble disagreement (instance 10, temporal precision) is logged, not hidden. Ensemble called "correct/null" where PM called F3 — interpretive disagreement on "early April" vs "around April 2", not a judge fabrication.
 - LoCoMo Sprint-11 banner thresholds (≥91.6% / 85-91.5% / <85%) untouched.
 
+## 10b. Task 1.1 stability matrix — Stage 2 primary config LOCKED
+
+The Qwen3.6 thinking-mode stability matrix (40 cells · 2 thinking toggles × 4 max_tokens ceilings × 5 prompt shapes) returned **36/40 converged (90%)**. Five `(thinking, max_tokens)` rows achieved full 5/5 prompt-shape convergence:
+
+| Config | Avg latency (all 5 shapes) | Notes |
+|---|---|---|
+| `on / 64K` | 17.9s | fastest, reasoning-token overhead |
+| `off / 32K` | 22.8s | — |
+| `off / 64K` | 23.0s | — |
+| **`off / 16K`** | **27.6s** | **recommended — cheapest 5/5 at ≥16K per exit criterion** |
+| `on / 16K` | 28.8s | — |
+
+**LOCKED recommendation for Stage 2 LoCoMo full-run: `thinking=off, max_tokens=16000`.** Per `STAGE-2-PREP-BACKLOG.md` §exit-criterion ("any thinking-off ≥16K config that converges 5/5"), this config meets the trigger and costs the least per call.
+
+**Stage-2-unsafe cells to avoid (4 of 40):**
+- All `(*, 8K, temporal-scope)` combinations — temporal-scope shape consistently loops at 8K regardless of thinking toggle.
+- `(on, 32K, temporal-scope)` — 180s timeout (thinking loop on this shape at 32K ceiling).
+- `(on, 8K, direct-fact)` — HTTP 500 one-shot cold-connection hiccup; not a systemic defect (subsequent cells on the identical route succeeded). Caller-side single-retry recommended for Stage 2 first-call-per-batch hardening.
+
 ## 11. Ready-state for Sprint 11
 
 - Judge methodology: **AUTHORIZED** at κ=0.8784 (strong band).
 - Tri-vendor ensemble verified on 14 instances covering 6 F-mode categories across 7 question categories.
 - Tie-breaker policy documented Day-2 (first-in-list today; escalate-to-PM recommended for Sprint 11 Stage-2 full-run to preserve multi-vendor defensibility).
-- Outstanding Sprint-10 items (Task 1.1 live run + Task 1.5 artifacts adapter) are not Sprint-11-blocking — 1.1 blocks Stage 2 Qwen full-run specifically; 1.5 blocks next dogfood cycle on real Marko corpus. Sprint 11 LoCoMo SOTA run uses public dataset, neither item gates it.
+- Task 1.1 stability matrix **CLOSED with PASS verdict** — Stage 2 Qwen primary config **LOCKED at `thinking=off, max_tokens=16000`** (27.6s avg latency, cheapest 5/5-safe config at ≥16K ceiling).
+- Task 1.5 Phase 1+2 **CLOSED** (Option 4 ratified — partial adapter for project-docs + memories + design_chats). Phase 3 **local commit `c363257`** on hive-mind master awaiting PM push ratification. Not Sprint-11-blocking — LoCoMo Sprint-11 run uses public dataset; the hive-mind adapter expansion is corpus-layer only.
+- Stage 0 mechanism #3 (session-generated `/mnt/user-data/outputs/*` artifacts) remains **OPEN** as hive-mind BACKLOG P1. Sprint 11+ vendor-path item; not a Sprint-10 gate.
+
+**Sprint 10 scorecard: 7 of 7 tasks accounted for — all CLOSED except Task 1.5 Phase 3 which awaits a single-line PM push ratification.**
 
 ---
 
