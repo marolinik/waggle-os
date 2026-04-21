@@ -48,6 +48,13 @@ benchmarks/results/*
 !**/benchmarks/data/failure-mode-calibration-10.jsonl
 !**/benchmarks/data/.gitkeep
 !**/benchmarks/results/.gitkeep
+# Sprint 11 A2 (ratification §Q5 Tier 2): `benchmarks/archive/` holds
+# gzipped JSONL from launch-claim-supporting runs (H-42a/b full-run).
+# Retention: 12 months minimum from commit per ratification §Q5. Files here
+# ARE committed — do NOT gitignore the folder. Spring 11 only adds the
+# folder + README; actual archival runs land in a later sprint.
+!benchmarks/archive/
+!benchmarks/archive/**
 test-regression-*.log
 # SQLite WAL/SHM companions — always match the *.db they accompany
 marketplace.db-shm

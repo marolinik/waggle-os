@@ -10,6 +10,45 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { AggregateSummary, JsonlRecord, RunConfig } from './types.js';
 
+/**
+ * Sprint 11 Task A2 — read-path pruning per H-AUDIT-1 ratification §Q4.
+ *
+ * Write-path always persists full records (incl. `reasoning_content`). The
+ * exclusion contract (design doc §2.4) is enforced on the READ side: any
+ * caller that might surface reasoning to a judge, UI, MCP payload, or
+ * summary brief must pass `{ includeReasoning: false }` so the field is
+ * stripped at the boundary.
+ *
+ * Default is `includeReasoning: false` — callers opt in explicitly when
+ * they need the raw trace (e.g. for archival gzip, audit replay).
+ */
+export interface ReadJsonlOptions {
+  /** When false (default), strips `reasoning_content` from each record.
+   *  `reasoning_content_chars` and `reasoning_shape` are lightweight
+   *  observability fields and are retained either way. */
+  includeReasoning?: boolean;
+}
+
+export function readJsonl(filePath: string, options: ReadJsonlOptions = {}): JsonlRecord[] {
+  const includeReasoning = options.includeReasoning ?? false;
+  if (!fs.existsSync(filePath)) return [];
+  const raw = fs.readFileSync(filePath, 'utf-8');
+  const records: JsonlRecord[] = [];
+  for (const line of raw.split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed.length === 0) continue;
+    const record = JSON.parse(trimmed) as JsonlRecord;
+    if (!includeReasoning && record.reasoning_content !== undefined) {
+      // Strip the content; keep the chars + shape observability fields.
+      const { reasoning_content: _stripped, ...rest } = record;
+      records.push(rest as JsonlRecord);
+    } else {
+      records.push(record);
+    }
+  }
+  return records;
+}
+
 /** Scores a model output against expected substrings (any-match = full credit). */
 export function scoreAccuracy(output: string, expected: string[]): number {
   if (expected.length === 0) return 0;
@@ -72,6 +111,29 @@ export function buildAggregate(config: RunConfig, records: JsonlRecord[], starte
     failureModes[key] = (failureModes[key] ?? 0) + 1;
   }
 
+  // Sprint 11 A2: reasoning_content aggregates when any record carries it.
+  // `undefined` when no records had reasoning — lets consumers distinguish
+  // "thinking was off" from "zero chars observed". Chars only, never content
+  // (design doc §2.4 exclusion rule).
+  const reasoningChars = records
+    .filter(r => r.reasoning_content_chars !== undefined && r.reasoning_content_chars > 0)
+    .map(r => r.reasoning_content_chars as number);
+  const shapeDistribution: Record<string, number> = {};
+  for (const r of records) {
+    if (r.reasoning_shape !== undefined) {
+      shapeDistribution[r.reasoning_shape] = (shapeDistribution[r.reasoning_shape] ?? 0) + 1;
+    }
+  }
+  const reasoningAggregate = reasoningChars.length === 0 && Object.keys(shapeDistribution).length === 0
+    ? undefined
+    : {
+        count: reasoningChars.length,
+        sumChars: reasoningChars.reduce((s, n) => s + n, 0),
+        p50Chars: Math.round(percentile(reasoningChars, 50)),
+        p95Chars: Math.round(percentile(reasoningChars, 95)),
+        shapeDistribution,
+      };
+
   return {
     run: {
       kind: config.run.kind,
@@ -96,6 +158,7 @@ export function buildAggregate(config: RunConfig, records: JsonlRecord[], starte
       meanUsdPerQuery: records.length === 0 ? 0 : round(totalUsd / records.length, 6),
     },
     failureModes,
+    ...(reasoningAggregate && { reasoningContent: reasoningAggregate }),
   };
 }
 

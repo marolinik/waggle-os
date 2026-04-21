@@ -192,6 +192,35 @@ export interface JsonlRecord {
    *  their own rationales + failure_modes. `judge_verdict` above still
    *  holds the majority. A single-judge run leaves this `undefined`. */
   judge_ensemble?: JudgeEnsembleEntry[];
+  // ── H-AUDIT-1 reasoning_content extension (Sprint 11 Task A2, 2026-04-22) ──
+  /**
+   * Captured chain-of-thought when thinking=on. Per design doc §2.2 +
+   * ratification §Q4: persisted in the SAME JSONL row under the same
+   * `turnId`, so reconstruction from a single turnId yields the full
+   * turn graph including reasoning. Populated by the runner from
+   * `LlmCallResult.reasoningContent`.
+   *
+   * HARD EXCLUSION rules (design doc §2.4): NEVER passed to judges, NEVER
+   * written to frames/memory/KG/UI payloads, NEVER exported in summary
+   * briefs. Visibility is JSONL-read-only; use `readJsonl(path, {
+   * includeReasoning: false })` to prune on the consumer side.
+   */
+  reasoning_content?: string;
+  /**
+   * Character count of `reasoning_content`. The canonical observability
+   * field for aggregation — `metrics.ts` computes sum / p50 / p95 here,
+   * NOT on the content itself. Ratification §Q4 affirms this as
+   * non-redundant (separate aggregation surface from the content storage).
+   */
+  reasoning_content_chars?: number;
+  /**
+   * Which response-shape yielded the reasoning_content. Ratification §Q3
+   * parser precedence: `message.reasoning_content` (DashScope native),
+   * `message.reasoning` (OpenRouter unified), `body.reasoning_content`
+   * (legacy fallback), or `unknown` when thinking=on was requested but no
+   * field was present. `undefined` when thinking was off.
+   */
+  reasoning_shape?: 'message.reasoning_content' | 'message.reasoning' | 'body.reasoning_content' | 'unknown';
 }
 
 /** Summary shape emitted at the end of a run — written alongside the JSONL. */
@@ -219,4 +248,19 @@ export interface AggregateSummary {
     meanUsdPerQuery: number;
   };
   failureModes: Record<string, number>;
+  /**
+   * Sprint 11 Task A2 (2026-04-22): reasoning_content aggregates when at
+   * least one record in the run carried a populated `reasoning_content`.
+   * Always character counts only — the content itself lives in JSONL only
+   * per design doc §2.4 exclusion rule.
+   * `undefined` when no records in the run had reasoning (thinking=off
+   * runs), so consumers can easily distinguish "no data" from "zero chars".
+   */
+  reasoningContent?: {
+    count: number;        // records with non-empty reasoning_content
+    sumChars: number;
+    p50Chars: number;
+    p95Chars: number;
+    shapeDistribution: Record<string, number>;  // e.g. { 'message.reasoning': 200, 'unknown': 2 }
+  };
 }

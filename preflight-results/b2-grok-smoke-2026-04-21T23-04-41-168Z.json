@@ -1,0 +1,31 @@
+{
+  "verdict": "PASS",
+  "startedAt": "2026-04-21T23:04:37.669Z",
+  "finishedAt": "2026-04-21T23:04:41.168Z",
+  "latencyMs": 3495,
+  "route": "grok-4.20",
+  "litellmUrl": "http://localhost:4000",
+  "usage": {
+    "inputTokens": 380,
+    "outputTokens": 35
+  },
+  "costUsd": 0.001665,
+  "text": "{\n  \"verdict\": \"correct\",\n  \"failure_mode\": null,\n  \"rationale\": \"The model's answer matches the ground-truth answer of Paris exactly.\"\n}",
+  "textChars": 137,
+  "parsed": {
+    "verdict": "correct",
+    "failure_mode": null,
+    "rationale": "The model's answer matches the ground-truth answer of Paris exactly."
+  },
+  "parseError": null,
+  "providerFinishReason": "stop",
+  "providerRaw": {
+    "id": "d64c811b-dc5f-905f-a14e-27bc95d17882",
+    "model": "grok-4.20",
+    "created": 1776812680
+  },
+  "tieBreakContext": {
+    "scenario": "single-vendor smoke (not a 1-1-1 escalation replay)",
+    "note": "This smoke proves the xai/grok-4.20 route is callable with a judge-shaped payload. The full 1-1-1 escalation path is exercised by the mocked unit tests in packages/server/tests/benchmarks/ensemble-tiebreak.test.ts."
+  }
+}

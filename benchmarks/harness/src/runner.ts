@@ -29,7 +29,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import url from 'node:url';
-import { generateTurnId } from '@waggle/agent';
+import { generateTurnId, logTurnEvent } from '@waggle/agent';
 import type {
   CellName, ControlName, DatasetSpec, JsonlRecord, ModelSpec, RunConfig, RunKind,
 } from './types.js';
@@ -213,6 +213,32 @@ async function runOne(config: RunConfig): Promise<void> {
     const accuracy = result.failureMode ? 0 : scoreAccuracy(result.text, instance.expected);
     totalCost += result.costUsd;
 
+    // Sprint 11 A2: emit structured llm.response event tagged with turnId.
+    // `reasoningShape` + char count become the canonical observability
+    // surface; reasoning content itself goes to JSONL only, never to logs,
+    // per design doc §2.3/§2.4 exclusion rules.
+    logTurnEvent(turnId, {
+      stage: 'llm.response',
+      cell: config.run.name,
+      model: config.model.id,
+      textChars: result.text.length,
+      latencyMs: result.latencyMs,
+      costUsd: result.costUsd,
+      failureMode: result.failureMode,
+      reasoningShape: result.reasoningShape ?? 'none',
+      reasoningChars: result.reasoningContent?.length ?? 0,
+    });
+    // Drift alarm per ratification §Q3: thinking=on was requested but no
+    // reasoning field present — observable without failing the run.
+    if (result.reasoningShape === 'unknown') {
+      logTurnEvent(turnId, {
+        stage: 'llm.response.reasoning_content_shape_unknown',
+        cell: config.run.name,
+        model: config.model.id,
+        litellmModel: config.model.litellmModel,
+      });
+    }
+
     // Sprint 9 Task 2: when a judge is configured, grade the answer
     // in-line. The judge runs even when the cell call itself failed
     // (failureMode !== null) because the transcript still has value
@@ -257,6 +283,16 @@ async function runOne(config: RunConfig): Promise<void> {
         judge_model: judgePayload.judge_model,
         judge_timestamp: judgePayload.judge_timestamp,
         judge_ensemble: judgePayload.judge_ensemble,
+      }),
+      // Sprint 11 A2: reasoning_content fields — same-row persistence
+      // keyed by `turnId` per ratification §Q4. Chars stay separate for
+      // aggregation even when content is stripped on the read path.
+      ...(result.reasoningContent !== undefined && {
+        reasoning_content: result.reasoningContent,
+        reasoning_content_chars: result.reasoningContent.length,
+      }),
+      ...(result.reasoningShape !== undefined && {
+        reasoning_shape: result.reasoningShape,
       }),
     };
     writer.write(record);

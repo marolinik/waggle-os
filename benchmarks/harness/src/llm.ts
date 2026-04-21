@@ -21,15 +21,26 @@ export interface LlmCallResult {
   failureMode: string | null;
   /**
    * Sprint 11 Task B1 (2026-04-22): captured chain-of-thought when the
-   * provider emits it under `thinking=on`. Parsed from two canonical shapes:
-   *   - OpenRouter unified:  `body.choices[0].message.reasoning`
-   *   - DashScope native:    `body.choices[0].message.reasoning_content`
+   * provider emits it under `thinking=on`. Parsed per H-AUDIT-1 ratification
+   * §Q3 precedence:
+   *   1. `body.choices[0].message.reasoning_content`   (DashScope native, primary)
+   *   2. `body.choices[0].message.reasoning`           (OpenRouter unified, current bridge)
+   *   3. `body.reasoning_content`                       (legacy top-level fallback)
    * `undefined` when thinking is off or the provider omits the field.
    * Per H-AUDIT-1 §2.4 exclusion rules, NEVER persisted to frames / memory /
    * judge inputs — captured at the transport layer for JSONL + B1 smoke logs
    * only.
    */
   reasoningContent?: string;
+  /**
+   * Sprint 11 Task A2 (2026-04-22): which shape yielded the reasoning. Enum
+   * values per ratification §Q3 — `'unknown'` signals thinking=on was
+   * requested but no reasoning field was present; undefined when thinking
+   * was off (no expectation). Consumed by the runner to emit a
+   * `reasoning_content_shape_unknown` observability event when drift is
+   * detected.
+   */
+  reasoningShape?: 'message.reasoning_content' | 'message.reasoning' | 'body.reasoning_content' | 'unknown';
 }
 
 export interface LlmCallInput {
@@ -156,19 +167,37 @@ class LiteLlmClient implements LlmClient {
           message?: {
             content?: string;
             reasoning?: string;           // OpenRouter unified shape
-            reasoning_content?: string;   // DashScope native shape
+            reasoning_content?: string;   // DashScope native (message-level)
           };
         }>;
+        reasoning_content?: string;        // DashScope legacy top-level
         usage?: { prompt_tokens?: number; completion_tokens?: number };
       };
       const msg = body.choices?.[0]?.message;
       const text = msg?.content ?? '';
-      // Sprint 11 B1: capture reasoning surface if present. Prefer OpenRouter's
-      // unified `reasoning` (the route via `qwen3.6-35b-a3b-via-openrouter`
-      // emits this); fall back to DashScope's `reasoning_content` when the
-      // route is direct-DashScope. `undefined` when thinking off or provider
-      // drops the field.
-      const reasoningContent = msg?.reasoning ?? msg?.reasoning_content;
+      // Sprint 11 A2: parser precedence per H-AUDIT-1 ratification §Q3.
+      // Primary = DashScope native `message.reasoning_content`.
+      // Secondary = OpenRouter unified `message.reasoning`.
+      // Tertiary = legacy top-level `body.reasoning_content`.
+      // Unknown = thinking was requested but no field was present — emit
+      // observability signal so provider schema drift becomes visible.
+      let reasoningContent: string | undefined;
+      let reasoningShape: LlmCallResult['reasoningShape'];
+      if (msg?.reasoning_content !== undefined) {
+        reasoningContent = msg.reasoning_content;
+        reasoningShape = 'message.reasoning_content';
+      } else if (msg?.reasoning !== undefined) {
+        reasoningContent = msg.reasoning;
+        reasoningShape = 'message.reasoning';
+      } else if (body.reasoning_content !== undefined) {
+        reasoningContent = body.reasoning_content;
+        reasoningShape = 'body.reasoning_content';
+      } else if (thinkingEnabled) {
+        // thinking=on was requested but no reasoning surface present.
+        // `reasoningContent` stays undefined; `reasoningShape` = 'unknown'
+        // surfaces the drift for the runner to log.
+        reasoningShape = 'unknown';
+      }
       const inputTokens = body.usage?.prompt_tokens ?? approximateTokenCount(input.systemPrompt + input.userPrompt);
       const outputTokens = body.usage?.completion_tokens ?? approximateTokenCount(text);
       const costUsd =
@@ -182,6 +211,7 @@ class LiteLlmClient implements LlmClient {
         costUsd,
         failureMode: null,
         ...(reasoningContent !== undefined && { reasoningContent }),
+        ...(reasoningShape !== undefined && { reasoningShape }),
       };
     } catch (err) {
       const latencyMs = Date.now() - started;
