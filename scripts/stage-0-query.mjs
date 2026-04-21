@@ -156,11 +156,12 @@ async function callLitellm({ url, apiKey, model, systemPrompt, userPrompt }) {
       ],
       // Thinking-mode Qwen3.6 burns reasoning tokens against this cap; we
       // need enough room for the reasoning pass PLUS the visible answer.
-      // 8000 observed to be the minimum that clears the reasoning pass on
-      // the Stage-0 long-form Serbian questions without truncating the
-      // final answer. Lower caps left message.content empty and only
-      // message.reasoning_content populated.
-      max_tokens: 8000,
+      // 16000 observed during Sprint 9 Task 0.5 rerun — the raised
+      // preview cap (10K/frame) inflates retrieved context, which in
+      // turn produces longer reasoning passes. 8000 consistently ran
+      // out mid-synthesis for the Legat-question shape; 16000 gives
+      // enough headroom for reasoning + a structured final answer.
+      max_tokens: 16000,
       temperature: 0.0,
     }),
   });
