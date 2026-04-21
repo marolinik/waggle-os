@@ -154,7 +154,13 @@ async function callLitellm({ url, apiKey, model, systemPrompt, userPrompt }) {
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      max_tokens: 1200,
+      // Thinking-mode Qwen3.6 burns reasoning tokens against this cap; we
+      // need enough room for the reasoning pass PLUS the visible answer.
+      // 8000 observed to be the minimum that clears the reasoning pass on
+      // the Stage-0 long-form Serbian questions without truncating the
+      // final answer. Lower caps left message.content empty and only
+      // message.reasoning_content populated.
+      max_tokens: 8000,
       temperature: 0.0,
     }),
   });
@@ -164,7 +170,21 @@ async function callLitellm({ url, apiKey, model, systemPrompt, userPrompt }) {
     throw new Error(`LiteLLM ${res.status}: ${body.slice(0, 500)}`);
   }
   const body = await res.json();
-  const text = body.choices?.[0]?.message?.content ?? '';
+  const choice = body.choices?.[0]?.message ?? {};
+  // Some LiteLLM routes (notably qwen3.6-…-via-openrouter in thinking
+  // mode) split the stream into `content` (final answer) and
+  // `reasoning_content` (chain-of-thought). When max_tokens is reached
+  // mid-reasoning, `content` comes back empty even though the provider
+  // charged for the reasoning tokens. Fall back to reasoning_content so
+  // the caller isn't left with an empty model answer in that degenerate
+  // case, prefixed with a marker so downstream analysis can tell the
+  // difference.
+  const primary = typeof choice.content === 'string' ? choice.content : '';
+  const reasoning = typeof choice.reasoning_content === 'string' ? choice.reasoning_content : '';
+  let text = primary;
+  if (!text && reasoning) {
+    text = `[reasoning-only — content was empty; reasoning_content surfaced as fallback]\n\n${reasoning}`;
+  }
   const usage = body.usage ?? {};
   return {
     text,
@@ -217,6 +237,13 @@ async function callOllama({ url, model, systemPrompt, userPrompt }) {
 // small to move the amortized-cost needle).
 const PRICING = {
   'litellm:qwen3.6-35b-a3b': { input: 0.2, output: 0.8 },
+  // qwen3.6-35b-a3b-via-openrouter route cost observed 2026-04-21
+  // during Sprint 9 Task 0 rerun: ~$0.0003 per query at ~190 tokens
+  // output, which back-solves to roughly the OpenRouter upstream
+  // provider rate (AtlasCloud). Keeping same $/M-token coefficients as
+  // the DashScope route — the difference is small enough to stay
+  // inside the budget alarm either way.
+  'litellm:qwen3.6-35b-a3b-via-openrouter': { input: 0.3, output: 1.8 },
   'ollama:gemma4:31b':       { input: 0.0, output: 0.0 },
 };
 
