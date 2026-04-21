@@ -1,0 +1,989 @@
+{
+  "generatedAt": "2026-04-21T13:04:54.701Z",
+  "labelsSource": "D:\\Projects\\waggle-os\\preflight-results\\task-2-2-labels-14inst-2026-04-22.md",
+  "judgeModel": "claude-haiku-4-5",
+  "ensemble": [
+    "claude-opus-4-7",
+    "gpt-5.4",
+    "gemini-3.1-pro"
+  ],
+  "matchRate": {
+    "matches": 13,
+    "total": 14,
+    "verdict": "PASS"
+  },
+  "cost": {
+    "totalUsd": 0.15111,
+    "judgeCalls": 42,
+    "entries": [
+      {
+        "timestamp": "2026-04-21T13:00:07.043Z",
+        "model": "claude-opus-4-7",
+        "promptTokens": 687,
+        "completionTokens": 65,
+        "usd": 0.0030359999999999996,
+        "latencyMs": 2204,
+        "ok": true,
+        "instanceIndex": 0
+      },
+      {
+        "timestamp": "2026-04-21T13:00:09.478Z",
+        "model": "gpt-5.4",
+        "promptTokens": 430,
+        "completionTokens": 50,
+        "usd": 0.00204,
+        "latencyMs": 2433,
+        "ok": true,
+        "instanceIndex": 1
+      },
+      {
+        "timestamp": "2026-04-21T13:00:12.551Z",
+        "model": "gemini-3.1-pro",
+        "promptTokens": 452,
+        "completionTokens": 129,
+        "usd": 0.0032909999999999997,
+        "latencyMs": 3071,
+        "ok": true,
+        "instanceIndex": 2
+      },
+      {
+        "timestamp": "2026-04-21T13:00:14.791Z",
+        "model": "claude-opus-4-7",
+        "promptTokens": 686,
+        "completionTokens": 81,
+        "usd": 0.003273,
+        "latencyMs": 2238,
+        "ok": true,
+        "instanceIndex": 3
+      },
+      {
+        "timestamp": "2026-04-21T13:00:17.090Z",
+        "model": "gpt-5.4",
+        "promptTokens": 436,
+        "completionTokens": 58,
+        "usd": 0.0021780000000000002,
+        "latencyMs": 2299,
+        "ok": true,
+        "instanceIndex": 4
+      },
+      {
+        "timestamp": "2026-04-21T13:00:43.212Z",
+        "model": "gemini-3.1-pro",
+        "promptTokens": 462,
+        "completionTokens": 189,
+        "usd": 0.004221000000000001,
+        "latencyMs": 26120,
+        "ok": true,
+        "instanceIndex": 5
+      },
+      {
+        "timestamp": "2026-04-21T13:00:45.543Z",
+        "model": "claude-opus-4-7",
+        "promptTokens": 686,
+        "completionTokens": 84,
+        "usd": 0.0033179999999999998,
+        "latencyMs": 2330,
+        "ok": true,
+        "instanceIndex": 6
+      },
+      {
+        "timestamp": "2026-04-21T13:00:47.335Z",
+        "model": "gpt-5.4",
+        "promptTokens": 426,
+        "completionTokens": 55,
+        "usd": 0.002103,
+        "latencyMs": 1791,
+        "ok": true,
+        "instanceIndex": 7
+      },
+      {
+        "timestamp": "2026-04-21T13:01:21.011Z",
+        "model": "gemini-3.1-pro",
+        "promptTokens": 450,
+        "completionTokens": 137,
+        "usd": 0.003405,
+        "latencyMs": 3154,
+        "ok": true,
+        "instanceIndex": 8
+      },
+      {
+        "timestamp": "2026-04-21T13:01:23.641Z",
+        "model": "claude-opus-4-7",
+        "promptTokens": 694,
+        "completionTokens": 68,
+        "usd": 0.0031019999999999997,
+        "latencyMs": 2629,
+        "ok": true,
+        "instanceIndex": 9
+      },
+      {
+        "timestamp": "2026-04-21T13:01:25.417Z",
+        "model": "gpt-5.4",
+        "promptTokens": 439,
+        "completionTokens": 56,
+        "usd": 0.002157,
+        "latencyMs": 1776,
+        "ok": true,
+        "instanceIndex": 10
+      },
+      {
+        "timestamp": "2026-04-21T13:01:28.718Z",
+        "model": "gemini-3.1-pro",
+        "promptTokens": 464,
+        "completionTokens": 151,
+        "usd": 0.003657,
+        "latencyMs": 3301,
+        "ok": true,
+        "instanceIndex": 11
+      },
+      {
+        "timestamp": "2026-04-21T13:01:30.629Z",
+        "model": "claude-opus-4-7",
+        "promptTokens": 686,
+        "completionTokens": 64,
+        "usd": 0.003018,
+        "latencyMs": 1910,
+        "ok": true,
+        "instanceIndex": 12
+      },
+      {
+        "timestamp": "2026-04-21T13:01:32.596Z",
+        "model": "gpt-5.4",
+        "promptTokens": 424,
+        "completionTokens": 52,
+        "usd": 0.002052,
+        "latencyMs": 1966,
+        "ok": true,
+        "instanceIndex": 13
+      },
+      {
+        "timestamp": "2026-04-21T13:01:35.276Z",
+        "model": "gemini-3.1-pro",
+        "promptTokens": 450,
+        "completionTokens": 162,
+        "usd": 0.0037800000000000004,
+        "latencyMs": 2680,
+        "ok": true,
+        "instanceIndex": 14
+      },
+      {
+        "timestamp": "2026-04-21T13:01:40.113Z",
+        "model": "claude-opus-4-7",
+        "promptTokens": 679,
+        "completionTokens": 77,
+        "usd": 0.0031920000000000004,
+        "latencyMs": 4837,
+        "ok": true,
+        "instanceIndex": 15
+      },
+      {
+        "timestamp": "2026-04-21T13:01:42.147Z",
+        "model": "gpt-5.4",
+        "promptTokens": 436,
+        "completionTokens": 58,
+        "usd": 0.0021780000000000002,
+        "latencyMs": 2034,
+        "ok": true,
+        "instanceIndex": 16
+      },
+      {
+        "timestamp": "2026-04-21T13:01:48.050Z",
+        "model": "gemini-3.1-pro",
+        "promptTokens": 458,
+        "completionTokens": 433,
+        "usd": 0.007869,
+        "latencyMs": 5903,
+        "ok": true,
+        "instanceIndex": 17
+      },
+      {
+        "timestamp": "2026-04-21T13:01:49.845Z",
+        "model": "claude-opus-4-7",
+        "promptTokens": 690,
+        "completionTokens": 66,
+        "usd": 0.00306,
+        "latencyMs": 1793,
+        "ok": true,
+        "instanceIndex": 18
+      },
+      {
+        "timestamp": "2026-04-21T13:01:52.010Z",
+        "model": "gpt-5.4",
+        "promptTokens": 439,
+        "completionTokens": 66,
+        "usd": 0.002307,
+        "latencyMs": 2165,
+        "ok": true,
+        "instanceIndex": 19
+      },
+      {
+        "timestamp": "2026-04-21T13:01:57.192Z",
+        "model": "gemini-3.1-pro",
+        "promptTokens": 470,
+        "completionTokens": 390,
+        "usd": 0.00726,
+        "latencyMs": 5182,
+        "ok": true,
+        "instanceIndex": 20
+      },
+      {
+        "timestamp": "2026-04-21T13:01:59.560Z",
+        "model": "claude-opus-4-7",
+        "promptTokens": 712,
+        "completionTokens": 75,
+        "usd": 0.003261,
+        "latencyMs": 2368,
+        "ok": true,
+        "instanceIndex": 21
+      },
+      {
+        "timestamp": "2026-04-21T13:02:01.260Z",
+        "model": "gpt-5.4",
+        "promptTokens": 453,
+        "completionTokens": 62,
+        "usd": 0.0022890000000000002,
+        "latencyMs": 1700,
+        "ok": true,
+        "instanceIndex": 22
+      },
+      {
+        "timestamp": "2026-04-21T13:02:05.089Z",
+        "model": "gemini-3.1-pro",
+        "promptTokens": 484,
+        "completionTokens": 248,
+        "usd": 0.005172,
+        "latencyMs": 3828,
+        "ok": true,
+        "instanceIndex": 23
+      },
+      {
+        "timestamp": "2026-04-21T13:02:07.559Z",
+        "model": "claude-opus-4-7",
+        "promptTokens": 691,
+        "completionTokens": 82,
+        "usd": 0.0033030000000000004,
+        "latencyMs": 2470,
+        "ok": true,
+        "instanceIndex": 24
+      },
+      {
+        "timestamp": "2026-04-21T13:02:09.632Z",
+        "model": "gpt-5.4",
+        "promptTokens": 447,
+        "completionTokens": 46,
+        "usd": 0.0020310000000000003,
+        "latencyMs": 2073,
+        "ok": true,
+        "instanceIndex": 25
+      },
+      {
+        "timestamp": "2026-04-21T13:02:13.773Z",
+        "model": "gemini-3.1-pro",
+        "promptTokens": 475,
+        "completionTokens": 197,
+        "usd": 0.00438,
+        "latencyMs": 4141,
+        "ok": true,
+        "instanceIndex": 26
+      },
+      {
+        "timestamp": "2026-04-21T13:02:17.799Z",
+        "model": "claude-opus-4-7",
+        "promptTokens": 721,
+        "completionTokens": 67,
+        "usd": 0.003168,
+        "latencyMs": 4026,
+        "ok": true,
+        "instanceIndex": 27
+      },
+      {
+        "timestamp": "2026-04-21T13:02:19.382Z",
+        "model": "gpt-5.4",
+        "promptTokens": 453,
+        "completionTokens": 62,
+        "usd": 0.0022890000000000002,
+        "latencyMs": 1583,
+        "ok": true,
+        "instanceIndex": 28
+      },
+      {
+        "timestamp": "2026-04-21T13:02:54.010Z",
+        "model": "gemini-3.1-pro",
+        "promptTokens": 486,
+        "completionTokens": 186,
+        "usd": 0.004248,
+        "latencyMs": 4107,
+        "ok": true,
+        "instanceIndex": 29
+      },
+      {
+        "timestamp": "2026-04-21T13:02:56.630Z",
+        "model": "claude-opus-4-7",
+        "promptTokens": 800,
+        "completionTokens": 60,
+        "usd": 0.0033,
+        "latencyMs": 2620,
+        "ok": true,
+        "instanceIndex": 30
+      },
+      {
+        "timestamp": "2026-04-21T13:02:58.685Z",
+        "model": "gpt-5.4",
+        "promptTokens": 502,
+        "completionTokens": 51,
+        "usd": 0.002271,
+        "latencyMs": 2055,
+        "ok": true,
+        "instanceIndex": 31
+      },
+      {
+        "timestamp": "2026-04-21T13:03:34.175Z",
+        "model": "gemini-3.1-pro",
+        "promptTokens": 540,
+        "completionTokens": 141,
+        "usd": 0.003735,
+        "latencyMs": 4985,
+        "ok": true,
+        "instanceIndex": 32
+      },
+      {
+        "timestamp": "2026-04-21T13:03:37.325Z",
+        "model": "claude-opus-4-7",
+        "promptTokens": 921,
+        "completionTokens": 84,
+        "usd": 0.0040230000000000005,
+        "latencyMs": 3150,
+        "ok": true,
+        "instanceIndex": 33
+      },
+      {
+        "timestamp": "2026-04-21T13:03:39.719Z",
+        "model": "gpt-5.4",
+        "promptTokens": 586,
+        "completionTokens": 69,
+        "usd": 0.002793,
+        "latencyMs": 2393,
+        "ok": true,
+        "instanceIndex": 34
+      },
+      {
+        "timestamp": "2026-04-21T13:03:43.147Z",
+        "model": "gemini-3.1-pro",
+        "promptTokens": 636,
+        "completionTokens": 173,
+        "usd": 0.004503,
+        "latencyMs": 3428,
+        "ok": true,
+        "instanceIndex": 35
+      },
+      {
+        "timestamp": "2026-04-21T13:03:47.063Z",
+        "model": "claude-opus-4-7",
+        "promptTokens": 943,
+        "completionTokens": 84,
+        "usd": 0.004089,
+        "latencyMs": 3915,
+        "ok": true,
+        "instanceIndex": 36
+      },
+      {
+        "timestamp": "2026-04-21T13:03:49.923Z",
+        "model": "gpt-5.4",
+        "promptTokens": 598,
+        "completionTokens": 60,
+        "usd": 0.002694,
+        "latencyMs": 2859,
+        "ok": true,
+        "instanceIndex": 37
+      },
+      {
+        "timestamp": "2026-04-21T13:03:55.921Z",
+        "model": "gemini-3.1-pro",
+        "promptTokens": 649,
+        "completionTokens": 145,
+        "usd": 0.004122,
+        "latencyMs": 5998,
+        "ok": true,
+        "instanceIndex": 38
+      },
+      {
+        "timestamp": "2026-04-21T13:04:00.275Z",
+        "model": "claude-opus-4-7",
+        "promptTokens": 1982,
+        "completionTokens": 73,
+        "usd": 0.007041,
+        "latencyMs": 4354,
+        "ok": true,
+        "instanceIndex": 39
+      },
+      {
+        "timestamp": "2026-04-21T13:04:02.449Z",
+        "model": "gpt-5.4",
+        "promptTokens": 1289,
+        "completionTokens": 58,
+        "usd": 0.004737,
+        "latencyMs": 2174,
+        "ok": true,
+        "instanceIndex": 40
+      },
+      {
+        "timestamp": "2026-04-21T13:04:54.701Z",
+        "model": "gemini-3.1-pro",
+        "promptTokens": 1433,
+        "completionTokens": 191,
+        "usd": 0.007164,
+        "latencyMs": 21724,
+        "ok": true,
+        "instanceIndex": 41
+      }
+    ]
+  },
+  "perInstance": [
+    {
+      "index": 1,
+      "instanceId": "locomo_conv-26_q109",
+      "category": "single-hop",
+      "question": "What did Mel and her kids make during the pottery workshop?",
+      "humanVerdict": "correct",
+      "humanFailureMode": null,
+      "humanRationale": "Model contains the required fact (pots) with equivalent phrasing. Extra context (Mel, kids, workshop) is factually aligned with ground truth, no fabrication.",
+      "judgeOutput": {
+        "verdict": "correct",
+        "failure_mode": null,
+        "rationale": "The model correctly identifies that Mel and her kids made pots at the pottery workshop.",
+        "judge_model": "ensemble_majority",
+        "ensemble": [
+          {
+            "model": "claude-opus-4-7",
+            "verdict": "correct",
+            "failure_mode": null,
+            "rationale": "The model correctly identifies that Mel and her kids made pots at the pottery workshop."
+          },
+          {
+            "model": "gpt-5.4",
+            "verdict": "correct",
+            "failure_mode": null,
+            "rationale": "The model answer correctly states that Mel and her kids made pots, which matches the ground truth without adding any incorrect information."
+          },
+          {
+            "model": "gemini-3.1-pro",
+            "verdict": "correct",
+            "failure_mode": null,
+            "rationale": "The model correctly states that they made pots, which matches the ground-truth answer."
+          }
+        ],
+        "fleissKappa": 1
+      },
+      "match": true,
+      "elapsedMs": 7712,
+      "error": null
+    },
+    {
+      "index": 2,
+      "instanceId": "locomo_conv-41_q123",
+      "category": "single-hop",
+      "question": "What did Maria plan to do later on the evening of 7 July, 2023?",
+      "humanVerdict": "incorrect",
+      "humanFailureMode": "F3",
+      "humanRationale": "Model misinterprets the context: 'friends from the gym' signals where Maria knows the friends from, not that she is going to the gym. The answer derives from present substrate but gets it wrong — classic F3 misreading of existing context, not fabrication.",
+      "judgeOutput": {
+        "verdict": "incorrect",
+        "failure_mode": "F3",
+        "rationale": "The model incorrectly states Maria planned to work out at the gym, when she actually planned to have dinner with friends from the gym.",
+        "judge_model": "ensemble_majority",
+        "ensemble": [
+          {
+            "model": "claude-opus-4-7",
+            "verdict": "incorrect",
+            "failure_mode": "F3",
+            "rationale": "The model incorrectly states Maria planned to work out at the gym, when she actually planned to have dinner with friends from the gym."
+          },
+          {
+            "model": "gpt-5.4",
+            "verdict": "incorrect",
+            "failure_mode": "F3",
+            "rationale": "The model gives a context-related but wrong plan, saying Maria would go to the gym for a workout instead of having dinner with friends from the gym."
+          },
+          {
+            "model": "gemini-3.1-pro",
+            "verdict": "incorrect",
+            "failure_mode": "F3",
+            "rationale": "The model incorrectly states Maria planned to work out at the gym, whereas the ground truth states she planned to have dinner with friends from the gym."
+          }
+        ],
+        "fleissKappa": 1
+      },
+      "match": true,
+      "elapsedMs": 30660,
+      "error": null
+    },
+    {
+      "index": 3,
+      "instanceId": "locomo_conv-50_q141",
+      "category": "single-hop",
+      "question": "Which city is featured in the photograph Dave showed Calvin?",
+      "humanVerdict": "incorrect",
+      "humanFailureMode": "F4",
+      "humanRationale": "Model names a city that does not appear in the context (Chicago, Lake Michigan) and fabricates a geographic descriptor (skyline, lake) without any supporting excerpt. This is outright invention of substrate — F4, not F3, because the answer's content has no origin in the ground truth material.",
+      "judgeOutput": {
+        "verdict": "incorrect",
+        "failure_mode": "F4",
+        "rationale": "The model fabricates Chicago and Lake Michigan, which do not appear in the ground-truth context that identifies the city as Boston.",
+        "judge_model": "ensemble_majority",
+        "ensemble": [
+          {
+            "model": "claude-opus-4-7",
+            "verdict": "incorrect",
+            "failure_mode": "F4",
+            "rationale": "The model fabricates Chicago and Lake Michigan, which do not appear in the ground-truth context that identifies the city as Boston."
+          },
+          {
+            "model": "gpt-5.4",
+            "verdict": "incorrect",
+            "failure_mode": "F4",
+            "rationale": "The ground truth says the photograph is of Boston, but the model instead names Chicago and adds unsupported details about the skyline near Lake Michigan."
+          },
+          {
+            "model": "gemini-3.1-pro",
+            "verdict": "incorrect",
+            "failure_mode": "F4",
+            "rationale": "The model incorrectly identifies the city as Chicago and includes fabricated details about Lake Michigan, whereas the ground truth states the city is Boston."
+          }
+        ],
+        "fleissKappa": 1
+      },
+      "match": true,
+      "elapsedMs": 37799,
+      "error": null
+    },
+    {
+      "index": 4,
+      "instanceId": "locomo_conv-42_q030",
+      "category": "multi-hop",
+      "question": "What kind of writings does Joanna do?",
+      "humanVerdict": "incorrect",
+      "humanFailureMode": "F2",
+      "humanRationale": "Model correctly identifies two of four required elements (screenplays, books) with no fabrication or incorrect claims, but omits the other two (online blog posts, journal) which are explicitly evidenced in D18:1 and D18:5. Partial coverage without fabrication — F2.",
+      "judgeOutput": {
+        "verdict": "incorrect",
+        "failure_mode": "F2",
+        "rationale": "The model correctly identifies screenplays and books but omits the journal and online blog posts.",
+        "judge_model": "ensemble_majority",
+        "ensemble": [
+          {
+            "model": "claude-opus-4-7",
+            "verdict": "incorrect",
+            "failure_mode": "F2",
+            "rationale": "The model correctly identifies screenplays and books but omits the journal and online blog posts."
+          },
+          {
+            "model": "gpt-5.4",
+            "verdict": "incorrect",
+            "failure_mode": "F2",
+            "rationale": "The answer includes two correct writing types (screenplays and books) but omits online blog posts and journaling, which are also required."
+          },
+          {
+            "model": "gemini-3.1-pro",
+            "verdict": "incorrect",
+            "failure_mode": "F2",
+            "rationale": "The model correctly identifies screenplays and books but fails to mention online blog posts and journals."
+          }
+        ],
+        "fleissKappa": 1
+      },
+      "match": true,
+      "elapsedMs": 7706,
+      "error": null
+    },
+    {
+      "index": 5,
+      "instanceId": "locomo_conv-49_q015",
+      "category": "multi-hop",
+      "question": "What kind of unhealthy snacks does Sam enjoy eating?",
+      "humanVerdict": "correct",
+      "humanFailureMode": null,
+      "humanRationale": "Model contains both required facts (soda, candy). Additional commentary about habit acknowledgment mirrors context faithfully, no incorrect additions.",
+      "judgeOutput": {
+        "verdict": "correct",
+        "failure_mode": null,
+        "rationale": "The model correctly identifies soda and candy as Sam's unhealthy snacks.",
+        "judge_model": "ensemble_majority",
+        "ensemble": [
+          {
+            "model": "claude-opus-4-7",
+            "verdict": "correct",
+            "failure_mode": null,
+            "rationale": "The model correctly identifies soda and candy as Sam's unhealthy snacks."
+          },
+          {
+            "model": "gpt-5.4",
+            "verdict": "correct",
+            "failure_mode": null,
+            "rationale": "The model correctly identifies the unhealthy snacks as soda and candy, and the added note that it's not a healthy habit matches the context."
+          },
+          {
+            "model": "gemini-3.1-pro",
+            "verdict": "correct",
+            "failure_mode": null,
+            "rationale": "The model correctly identifies soda and candy as the unhealthy snacks Sam enjoys, matching the ground truth."
+          }
+        ],
+        "fleissKappa": 1
+      },
+      "match": true,
+      "elapsedMs": 6557,
+      "error": null
+    },
+    {
+      "index": 6,
+      "instanceId": "locomo_conv-41_q036",
+      "category": "multi-hop",
+      "question": "What music events has John attended?",
+      "humanVerdict": "incorrect",
+      "humanFailureMode": "F5",
+      "humanRationale": "Model answer is coherent and derives from context (walks, picnics, town events appear in D8:11), but does not address the specific question — which music events did John attend. Response pivots to a related but different topic (John's family-activity preferences). No hallucination, no incorrect facts about John's activities, but off-topic relative to prompt — F5.",
+      "judgeOutput": {
+        "verdict": "incorrect",
+        "failure_mode": "F5",
+        "rationale": "The model describes John's general activity preferences instead of naming the specific music events (violin concert, live music event) he attended.",
+        "judge_model": "ensemble_majority",
+        "ensemble": [
+          {
+            "model": "claude-opus-4-7",
+            "verdict": "incorrect",
+            "failure_mode": "F5",
+            "rationale": "The model describes John's general activity preferences instead of naming the specific music events (violin concert, live music event) he attended."
+          },
+          {
+            "model": "gpt-5.4",
+            "verdict": "incorrect",
+            "failure_mode": "F5",
+            "rationale": "The answer does not mention the required music events (live music event and violin concert) and instead talks generally about family-friendly activities and exploring town events."
+          },
+          {
+            "model": "gemini-3.1-pro",
+            "verdict": "incorrect",
+            "failure_mode": "F4",
+            "rationale": "The model fails to mention the music events John attended and instead hallucinates activities like walks and picnics that are not present in the ground-truth context."
+          }
+        ],
+        "fleissKappa": -0.5000000000000001
+      },
+      "match": true,
+      "elapsedMs": 12774,
+      "error": null
+    },
+    {
+      "index": 7,
+      "instanceId": "locomo_conv-42_q038",
+      "category": "temporal",
+      "question": "When did Joanna make a dessert with almond milk?",
+      "humanVerdict": "incorrect",
+      "humanFailureMode": "F3",
+      "humanRationale": "Model derives date from context (session is 14 September, 'last Friday' reference) but computes it incorrectly. 7 September 2022 was a Wednesday — Friday before 14 September was actually 9 September. Answer draws on present substrate but arrives at a demonstrably wrong specific date — F3, not F4, because model did not fabricate the relationship, only miscomputed it.",
+      "judgeOutput": {
+        "verdict": "incorrect",
+        "failure_mode": "F3",
+        "rationale": "The context says Joanna made the dessert 'last Friday' relative to 14 September 2022, which is Friday 9 September 2022, not 7 September 2022.",
+        "judge_model": "ensemble_majority",
+        "ensemble": [
+          {
+            "model": "claude-opus-4-7",
+            "verdict": "correct",
+            "failure_mode": null,
+            "rationale": "7 September 2022 was the Friday before 14 September 2022, matching the ground truth."
+          },
+          {
+            "model": "gpt-5.4",
+            "verdict": "incorrect",
+            "failure_mode": "F3",
+            "rationale": "The context says Joanna made the dessert 'last Friday' relative to 14 September 2022, which is Friday 9 September 2022, not 7 September 2022."
+          },
+          {
+            "model": "gemini-3.1-pro",
+            "verdict": "incorrect",
+            "failure_mode": "F3",
+            "rationale": "The model incorrectly calculated the date of 'last Friday' from September 14, 2022, as September 7 (which is a Wednesday), rather than the correct date of September 9."
+          }
+        ],
+        "fleissKappa": -0.5000000000000001
+      },
+      "match": true,
+      "elapsedMs": 9141,
+      "error": null
+    },
+    {
+      "index": 8,
+      "instanceId": "locomo_conv-41_q053",
+      "category": "temporal",
+      "question": "When did John help renovate his hometown community center?",
+      "humanVerdict": "incorrect",
+      "humanFailureMode": "F4",
+      "humanRationale": "Model produces a year (2020) that cannot be derived from the context — 'last year' relative to 5 August 2023 unambiguously yields 2022. Model also fabricates causal context ('early pandemic period', 'volunteer support for infrastructure') that does not appear in any excerpt. Content generation beyond what the substrate allows — F4, not F3, because the fabricated context is the bulk of the answer.",
+      "judgeOutput": {
+        "verdict": "incorrect",
+        "failure_mode": "F4",
+        "rationale": "The model states 2020 and adds a pandemic-related claim not present in the context; the correct year is 2022.",
+        "judge_model": "ensemble_majority",
+        "ensemble": [
+          {
+            "model": "claude-opus-4-7",
+            "verdict": "incorrect",
+            "failure_mode": "F4",
+            "rationale": "The model states 2020 and adds a pandemic-related claim not present in the context; the correct year is 2022."
+          },
+          {
+            "model": "gpt-5.4",
+            "verdict": "incorrect",
+            "failure_mode": "F4",
+            "rationale": "The ground truth implies John helped renovate the community center in 2022, but the model says 2020 and adds unsupported details about the early pandemic and local infrastructure."
+          },
+          {
+            "model": "gemini-3.1-pro",
+            "verdict": "incorrect",
+            "failure_mode": "F4",
+            "rationale": "The model incorrectly states the year as 2020 instead of 2022 and fabricates details about the early pandemic period that are not present in the ground-truth context."
+          }
+        ],
+        "fleissKappa": 1
+      },
+      "match": true,
+      "elapsedMs": 7897,
+      "error": null
+    },
+    {
+      "index": 9,
+      "instanceId": "locomo_conv-47_q017",
+      "category": "open-ended",
+      "question": "What is the board game where you have to find the imposter that John mentions to James?",
+      "humanVerdict": "incorrect",
+      "humanFailureMode": "F1",
+      "humanRationale": "Model explicitly refuses to answer, stating it lacks sufficient information. No partial answer, no fabrication, no off-topic pivot. Ground truth (Mafia) is not literally stated in the D8:36 excerpt — model plays it safe and abstains rather than inferring from the 'find the impostor' description. Classic F1 abstain behavior.",
+      "judgeOutput": {
+        "verdict": "incorrect",
+        "failure_mode": "F1",
+        "rationale": "The model explicitly refuses to answer, stating it lacks sufficient information, rather than providing the answer 'Mafia'.",
+        "judge_model": "ensemble_majority",
+        "ensemble": [
+          {
+            "model": "claude-opus-4-7",
+            "verdict": "incorrect",
+            "failure_mode": "F1",
+            "rationale": "The model explicitly refuses to answer, stating it lacks sufficient information, rather than providing the answer 'Mafia'."
+          },
+          {
+            "model": "gpt-5.4",
+            "verdict": "incorrect",
+            "failure_mode": "F1",
+            "rationale": "The model explicitly says it does not have enough information instead of identifying the game as Mafia."
+          },
+          {
+            "model": "gemini-3.1-pro",
+            "verdict": "incorrect",
+            "failure_mode": "F1",
+            "rationale": "The model explicitly states it does not have enough information to answer the question."
+          }
+        ],
+        "fleissKappa": 1
+      },
+      "match": true,
+      "elapsedMs": 8684,
+      "error": null
+    },
+    {
+      "index": 10,
+      "instanceId": "locomo_conv-44_pm_2026-04-22_001",
+      "category": "temporal-scope",
+      "question": "When did Audrey adopt Pixie?",
+      "humanVerdict": "incorrect",
+      "humanFailureMode": "F3",
+      "humanRationale": "Answer is vague-but-derived: \"early April\" overlaps with true \"around April 2, 2023\" but loses the specific date precision the ground truth provides. Derivable from substrate but imprecise — F3 misread of specific date, not fabrication.",
+      "judgeOutput": {
+        "verdict": "correct",
+        "failure_mode": null,
+        "rationale": "Early April 2023 is an acceptable equivalent formulation of around April 2, 2023.",
+        "judge_model": "ensemble_majority",
+        "ensemble": [
+          {
+            "model": "claude-opus-4-7",
+            "verdict": "correct",
+            "failure_mode": null,
+            "rationale": "Early April 2023 is an acceptable equivalent formulation of around April 2, 2023."
+          },
+          {
+            "model": "gpt-5.4",
+            "verdict": "correct",
+            "failure_mode": null,
+            "rationale": "The model's answer, 'early April 2023,' is a reasonable equivalent of the ground truth 'around April 2, 2023' and adds no incorrect information."
+          },
+          {
+            "model": "gemini-3.1-pro",
+            "verdict": "correct",
+            "failure_mode": null,
+            "rationale": "The model's answer of 'early April 2023' accurately reflects the ground truth date of 'around April 2, 2023'."
+          }
+        ],
+        "fleissKappa": 1
+      },
+      "match": false,
+      "elapsedMs": 40237,
+      "error": null
+    },
+    {
+      "index": 11,
+      "instanceId": "locomo_conv-44_pm_2026-04-22_002",
+      "category": "temporal-scope",
+      "question": "How many years passed between Audrey adopting Pixie and her other three dogs?",
+      "humanVerdict": "incorrect",
+      "humanFailureMode": "F3",
+      "humanRationale": "Answer gives a specific but incorrect interval (two years vs ground-truth three years). Miscounted arithmetic on derivable anchors — F3 class misread, not F4 fabrication.",
+      "judgeOutput": {
+        "verdict": "incorrect",
+        "failure_mode": "F3",
+        "rationale": "The ground truth states three years passed, but the model answered two years.",
+        "judge_model": "ensemble_majority",
+        "ensemble": [
+          {
+            "model": "claude-opus-4-7",
+            "verdict": "incorrect",
+            "failure_mode": "F3",
+            "rationale": "The ground truth states three years passed, but the model answered two years."
+          },
+          {
+            "model": "gpt-5.4",
+            "verdict": "incorrect",
+            "failure_mode": "F3",
+            "rationale": "The model answered the asked question but gave the wrong number of years; the context indicates three years, not two."
+          },
+          {
+            "model": "gemini-3.1-pro",
+            "verdict": "incorrect",
+            "failure_mode": "F3",
+            "rationale": "The model incorrectly states that two years passed, whereas the ground truth states three years."
+          }
+        ],
+        "fleissKappa": 1
+      },
+      "match": true,
+      "elapsedMs": 40165,
+      "error": null
+    },
+    {
+      "index": 12,
+      "instanceId": "locomo_conv-43_pm_2026-04-22_003",
+      "category": "null-result",
+      "question": "What musical instrument does John play?",
+      "humanVerdict": "incorrect",
+      "humanFailureMode": "F4",
+      "humanRationale": "Model names a specific instrument (guitar) with fabricated supporting detail (weekend jam sessions, high school team). Dialogue contains zero evidence for John playing any instrument. This is classic F4 — invented substrate, plausible-sounding but entirely unsupported.",
+      "judgeOutput": {
+        "verdict": "incorrect",
+        "failure_mode": "F4",
+        "rationale": "The ground truth indicates no evidence of John playing any instrument, but the model fabricates that he plays guitar with details not present in the context.",
+        "judge_model": "ensemble_majority",
+        "ensemble": [
+          {
+            "model": "claude-opus-4-7",
+            "verdict": "incorrect",
+            "failure_mode": "F4",
+            "rationale": "The ground truth indicates no evidence of John playing any instrument, but the model fabricates that he plays guitar with details not present in the context."
+          },
+          {
+            "model": "gpt-5.4",
+            "verdict": "incorrect",
+            "failure_mode": "F4",
+            "rationale": "The ground truth is null because the dialogue provides no evidence about any musical instrument John plays, while the model fabricates that he plays guitar and adds unsupported details about weekend jam sessions and his high school team."
+          },
+          {
+            "model": "gemini-3.1-pro",
+            "verdict": "incorrect",
+            "failure_mode": "F4",
+            "rationale": "The model fabricated the claim that John plays the guitar, which is not supported by the ground-truth context."
+          }
+        ],
+        "fleissKappa": 1
+      },
+      "match": true,
+      "elapsedMs": 8972,
+      "error": null
+    },
+    {
+      "index": 13,
+      "instanceId": "locomo_conv-48_pm_2026-04-22_004",
+      "category": "null-result",
+      "question": "Which university did Deborah attend?",
+      "humanVerdict": "incorrect",
+      "humanFailureMode": "F4",
+      "humanRationale": "Model names a specific university (Stanford) and a specific degree (computer science) for Deborah, neither of which appear in the dialogue. This is F4 — full fabrication from a null-evidence base. Stanford is a plausible-default \"prestigious US university\" choice that LLMs commonly hallucinate in absence of context.",
+      "judgeOutput": {
+        "verdict": "incorrect",
+        "failure_mode": "F4",
+        "rationale": "The ground truth indicates no evidence of Deborah's university in the context, but the model fabricates that she attended Stanford for computer science.",
+        "judge_model": "ensemble_majority",
+        "ensemble": [
+          {
+            "model": "claude-opus-4-7",
+            "verdict": "incorrect",
+            "failure_mode": "F4",
+            "rationale": "The ground truth indicates no evidence of Deborah's university in the context, but the model fabricates that she attended Stanford for computer science."
+          },
+          {
+            "model": "gpt-5.4",
+            "verdict": "incorrect",
+            "failure_mode": "F4",
+            "rationale": "The ground truth is null because the dialogue provides no evidence of which university Deborah attended, but the model fabricated 'Stanford University' and a computer science degree."
+          },
+          {
+            "model": "gemini-3.1-pro",
+            "verdict": "incorrect",
+            "failure_mode": "F4",
+            "rationale": "The model fabricated the claim that Deborah attended Stanford University, which is not supported by the ground-truth context."
+          }
+        ],
+        "fleissKappa": 1
+      },
+      "match": true,
+      "elapsedMs": 12774,
+      "error": null
+    },
+    {
+      "index": 14,
+      "instanceId": "locomo_conv-30_pm_2026-04-22_005",
+      "category": "chain-of-anchor",
+      "question": "What hobbies and activities does Jon pursue across the dialogue history?",
+      "humanVerdict": "incorrect",
+      "humanFailureMode": "F2",
+      "humanRationale": "Model lists 2 of 5 ground-truth activities correctly (contemporary dance + dance studio business) with no fabrication — but omits dance competitions, gym/fitness, and reading. This is textbook F2: partial coverage / omission without hallucination. The two items mentioned are accurately supported; the failure mode is the three missing items.",
+      "judgeOutput": {
+        "verdict": "incorrect",
+        "failure_mode": "F2",
+        "rationale": "The model mentions only dance and the studio but misses competitions, gym/fitness, and reading business books.",
+        "judge_model": "ensemble_majority",
+        "ensemble": [
+          {
+            "model": "claude-opus-4-7",
+            "verdict": "incorrect",
+            "failure_mode": "F2",
+            "rationale": "The model mentions only dance and the studio but misses competitions, gym/fitness, and reading business books."
+          },
+          {
+            "model": "gpt-5.4",
+            "verdict": "incorrect",
+            "failure_mode": "F2",
+            "rationale": "The answer correctly mentions contemporary dance and running a dance studio but omits Jon's dance competitions, gym/fitness, and reading business-improvement books."
+          },
+          {
+            "model": "gemini-3.1-pro",
+            "verdict": "incorrect",
+            "failure_mode": "F2",
+            "rationale": "The model correctly identifies contemporary dance and running a dance studio, but misses competing in dance competitions, going to the gym, and reading business-improvement books."
+          }
+        ],
+        "fleissKappa": 1
+      },
+      "match": true,
+      "elapsedMs": 58780,
+      "error": null
+    }
+  ]
+}

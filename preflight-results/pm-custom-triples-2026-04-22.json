@@ -1,0 +1,118 @@
+{
+  "_meta": {
+    "description": "Sprint 10 Task 2.2 — 5 PM-authored + CC-finalized ground-truth triples for judge calibration",
+    "generated_at": "2026-04-21T12:59:40.227Z",
+    "source_brief": "PM-Waggle-OS/sessions/2026-04-22-cc-brief-task-2-2-ratified.md",
+    "source_drafts": "PM-Waggle-OS/sessions/2026-04-22-task-2-2-pm-triples-drafts.md",
+    "verification": "preflight-results/conv-verification-2026-04-22.md",
+    "conv_swap_policy": "trivial — conv+character reference swap only; question shape preserved per brief §A",
+    "locomo_dataset": "benchmarks/data/locomo10.json (10-conversation slice; conv-1/2/15 not present, swapped per verification note)",
+    "f_mode_distribution": "1 correct + 2 F3 + 1 F4 + 1 F2 (diversifies gap coverage: null-result F1/F4 boundary + temporal F3 + chain-of-anchor F2)"
+  },
+  "triples": [
+    {
+      "id": "pm_2026-04-22_001",
+      "category": "temporal-scope",
+      "conversation_id": "locomo_conv-44",
+      "question": "When did Audrey adopt Pixie?",
+      "ground_truth_answer": "around April 2, 2023",
+      "ground_truth_rationale": "Single anchor turn D2:1 contains explicit date statement. Question is direct, no temporal arithmetic required. Tests judge calibration on single-anchor temporal Q where any deviation from \"around April 2, 2023\" (e.g., \"April 2023\", \"early April\", or fabricated \"April 8, 2022\") should flag. Adapted from Draft #1 (originally conv-1); conv-1 not present in the local 10-conversation LoCoMo slice, swapped to conv-44 canonical single-anchor temporal QA with identical shape.",
+      "dialogue_anchor_turns": [
+        "D2:1"
+      ],
+      "anchor_justification": "D2:1 is the canonical LoCoMo evidence label for this question (category 2 temporal).",
+      "synthesized_model_answer": "Audrey adopted Pixie in early April 2023.",
+      "human_label": {
+        "verdict": "incorrect",
+        "failure_mode": "F3",
+        "rationale": "Answer is vague-but-derived: \"early April\" overlaps with true \"around April 2, 2023\" but loses the specific date precision the ground truth provides. Derivable from substrate but imprecise — F3 misread of specific date, not fabrication."
+      },
+      "context_excerpt": "Session 2 (2:42 pm on 2 April, 2023) Audrey: \"Hey Andrew, I got a surprise for you! We adopted another puppy called Pixie. She's SO cute! Isn't she just the cutest?\""
+    },
+    {
+      "id": "pm_2026-04-22_002",
+      "category": "temporal-scope",
+      "conversation_id": "locomo_conv-44",
+      "question": "How many years passed between Audrey adopting Pixie and her other three dogs?",
+      "ground_truth_answer": "three years",
+      "ground_truth_rationale": "Requires two-anchor arithmetic across evidence turns D2:1 (Pixie adoption) and D1:7 (prior three-dog adoption timing). Tests F3 (model derives wrong interval via miscount: two, four years) vs F4 (fabricates narrative details not derivable from dialogue). Adapted from Draft #2 (originally conv-1 Sweden); conv-1 not present locally, swapped to conv-44 canonical two-anchor temporal QA.",
+      "dialogue_anchor_turns": [
+        "D2:1",
+        "D1:7"
+      ],
+      "anchor_justification": "D2:1 supplies Pixie adoption date; D1:7 supplies the relative timing anchor for prior three-dog adoption. Both required to compute the three-year interval.",
+      "synthesized_model_answer": "Two years passed between Audrey adopting Pixie and her other three dogs.",
+      "human_label": {
+        "verdict": "incorrect",
+        "failure_mode": "F3",
+        "rationale": "Answer gives a specific but incorrect interval (two years vs ground-truth three years). Miscounted arithmetic on derivable anchors — F3 class misread, not F4 fabrication."
+      },
+      "context_excerpt": "Session 2 (2:42 pm on 2 April, 2023) Audrey: \"Hey Andrew, I got a surprise for you! We adopted another puppy called Pixie. She's SO cute! Isn't she just the cutest?\"\nSession 1 (1:10 pm on 27 March, 2023) Audrey: \"I've had them for 3 years! Their names are Pepper, Precious and Panda. I can't live without my little ones!\""
+    },
+    {
+      "id": "pm_2026-04-22_003",
+      "category": "null-result",
+      "conversation_id": "locomo_conv-43",
+      "question": "What musical instrument does John play?",
+      "ground_truth_answer": null,
+      "ground_truth_rationale": "Conv-43 dialogue contains zero references to John himself playing any musical instrument. Tim plays piano (D8:14) and is learning violin (D21:11); John acknowledges Tim's playing (D21:10, D21:12) but never asserts playing any instrument himself. LoCoMo's own dataset marks John-instrument questions as \"undefined\" — the canonical null-evidence signal. Adapted from Draft #3 (originally conv-2 Nate); conv-2 not present locally, swapped to conv-43 John where null-result structure is preserved with stronger dataset backing.",
+      "dialogue_anchor_turns": [],
+      "anchor_justification": "Empty anchor list by construction — the correct behavior is principled abstain. Nearest positive anchors are Tim-as-musician turns (D8:14, D21:11) which the judge may reference as negative control.",
+      "synthesized_model_answer": "John plays the guitar, which he mentions practicing during weekend jam sessions with his high school team.",
+      "human_label": {
+        "verdict": "incorrect",
+        "failure_mode": "F4",
+        "rationale": "Model names a specific instrument (guitar) with fabricated supporting detail (weekend jam sessions, high school team). Dialogue contains zero evidence for John playing any instrument. This is classic F4 — invented substrate, plausible-sounding but entirely unsupported."
+      },
+      "context_excerpt": "(Excerpt — locomo_conv-43 opening; dialogue contains no evidence of the queried attribute across 680 turns.)\nSession 1 (7:48 pm on 21 May, 2023) John: \"Hey Tim, nice to meet you! What's up? Anything new happening?\"\nSession 1 (7:48 pm on 21 May, 2023) Tim: \"Hey John! Great to meet you. Been discussing collaborations for a Harry Potter fan project I am working on - super excited! Anything interesting happening for you?\"\nSession 1 (7:48 pm on 21 May, 2023) John: \"That's great! I just signed with a new team - excited for the season!\"\nSession 1 (7:48 pm on 21 May, 2023) Tim: \"Woohoo! Congrats on the new team. Which team did you sign with?\""
+    },
+    {
+      "id": "pm_2026-04-22_004",
+      "category": "null-result",
+      "conversation_id": "locomo_conv-48",
+      "question": "Which university did Deborah attend?",
+      "ground_truth_answer": null,
+      "ground_truth_rationale": "Conv-48 contains zero university/college references in Deborah's 341 turns. Jolene (the other speaker) mentions engineering college generically (D3:1, D7:9) but names no specific university and the question targets Deborah specifically. LoCoMo has no education-related QA entries involving Deborah, consistent with dataset-level absence of evidence. Adapted from Draft #4 (originally conv-15); conv-15 not present locally, swapped to conv-48 Deborah where null-result holds cleanly.",
+      "dialogue_anchor_turns": [],
+      "anchor_justification": "Empty by construction. Jolene turns D3:1 and D7:9 are negative control — they mention \"engineering class in college\" generically, which a strong judge may note but which does not answer the Deborah-targeted question.",
+      "synthesized_model_answer": "Deborah attended Stanford University for her undergraduate degree in computer science.",
+      "human_label": {
+        "verdict": "incorrect",
+        "failure_mode": "F4",
+        "rationale": "Model names a specific university (Stanford) and a specific degree (computer science) for Deborah, neither of which appear in the dialogue. This is F4 — full fabrication from a null-evidence base. Stanford is a plausible-default \"prestigious US university\" choice that LLMs commonly hallucinate in absence of context."
+      },
+      "context_excerpt": "(Excerpt — locomo_conv-48 opening; dialogue contains no evidence of the queried attribute across 681 turns.)\nSession 1 (4:06 pm on 23 January, 2023) Deborah: \"Hey Jolene, nice to meet you! How's your week going? Anything fun happened?\"\nSession 1 (4:06 pm on 23 January, 2023) Jolene: \"Hi Deb! Good to meet you! Yeah, my week's been busy. I finished an electrical engineering project last week - took a lot of work, but it's done now. Anything fun happening for you?\"\nSession 1 (4:06 pm on 23 January, 2023) Deborah: \"Congrats! Last week I visited a place that holds a lot of memories for me. It was my mother`s old house.\"\nSession 1 (4:06 pm on 23 January, 2023) Jolene: \"Why does it hold such special memories for you?\""
+    },
+    {
+      "id": "pm_2026-04-22_005",
+      "category": "chain-of-anchor",
+      "conversation_id": "locomo_conv-30",
+      "question": "What hobbies and activities does Jon pursue across the dialogue history?",
+      "ground_truth_answer": "Jon pursues five distinct activities: (1) contemporary dance (lifelong passion, favored style contemporary), (2) running his own dance studio as a business, (3) competing in dance competitions (dance crew won first place locally; prepares for further comps), (4) gym / fitness (began hitting the gym to balance venture stress), (5) reading business-improvement books (e.g. \"The Lean Startup\").",
+      "ground_truth_rationale": "Chain-of-anchor multi-hobby enumeration across five distinct activity categories, each with its own dialogue evidence anchors. Tests F2 (partial coverage: model lists 2-3 correctly with no fabrication) vs F4 (model lists 5 but 1-2 are fabricated) vs correct (all 5 enumerated faithfully). Kept on conv-30 per PM preference — local 10-conv set has only conv-30 in the 27-33 adjacency range.",
+      "dialogue_anchor_turns": [
+        "D1:6",
+        "D1:8",
+        "D1:24",
+        "D1:4",
+        "D1:20",
+        "D2:4",
+        "D2:8",
+        "D1:16",
+        "D4:13",
+        "D8:13",
+        "D6:1",
+        "D12:6",
+        "D12:8"
+      ],
+      "anchor_justification": "Five activity categories with explicit dialogue anchors. Contemporary dance: D1:6 + D1:8 + D1:24. Dance studio: D1:4 + D1:20 + D2:4 + D2:8. Dance competitions: D1:16 + D4:13 + D8:13. Gym: D6:1 (\"started hitting the gym last week\"). Reading: D12:6 + D12:8 (discussing \"The Lean Startup\"). Granularity caveat: items 1-3 are dance-related facets (art/business/competition); a strict reader could argue 3 hobbies + gym + reading = 5 distinct items, which still preserves the 5+ cardinality the PM draft specified.",
+      "synthesized_model_answer": "Jon pursues contemporary dance and running his own dance studio. He is passionate about dance since childhood and is working on opening a studio.",
+      "human_label": {
+        "verdict": "incorrect",
+        "failure_mode": "F2",
+        "rationale": "Model lists 2 of 5 ground-truth activities correctly (contemporary dance + dance studio business) with no fabrication — but omits dance competitions, gym/fitness, and reading. This is textbook F2: partial coverage / omission without hallucination. The two items mentioned are accurately supported; the failure mode is the three missing items."
+      },
+      "context_excerpt": "Session 1 (4:04 pm on 20 January, 2023) Jon: \"I've been into dancing since I was a kid and it's been my passion and escape. I wanna start a dance studio so I can teach others the joy that dancing brings me.\"\nSession 1 (4:04 pm on 20 January, 2023) Jon: \"Cool, Gina! I love all dances, but contemporary is my top pick. It's so expressive and powerful! What's your fave?\"\nSession 1 (4:04 pm on 20 January, 2023) Jon: \"Thanks! I rehearsed with a small group of dancers after work. We do all kinds of dances, from contemporary to hip-hop. We've got some cool projects in the works. Finishing up choreography to perform at a nearby festival next month. Can't wait!\"\nSession 1 (4:04 pm on 20 January, 2023) Jon: \"Sorry to hear that! I'm starting a dance studio 'cause I'm passionate about dancing and it'd be great to share it with others.\"\nSession 1 (4:04 pm on 20 January, 2023) Jon: \"Wow, that must've been great! Check my ideal dance studio by the water.\"\nSession 2 (2:32 pm on 29 January, 2023) Jon: \"Hey Gina! Thanks for asking. I'm on the hunt for the ideal spot for my dance studio and it's been quite a journey! I've been looking at different places and picturing how the space would look. I even found a place with great natural light! Oh, I've been to Paris yesterday! It was sooo cool.\"\nSession 2 (2:32 pm on 29 January, 2023) Jon: \"Yeah, good flooring's crucial. I'm after Marley flooring, which is what dance studios usually use. It's great 'cause it's grippy but still lets you move, plus it's tough and easy to keep clean.\"\nSession 1 (4:04 pm on 20 January, 2023) Jon: \"Woah, that pic's from when my dance crew took home first in a local comp last year. It was amazing up on that stage! I'm super keen to spread that intensity with other peeps. Gina, you ever been in any dance comps or shows?\"\nSession 4 (10:43 am on 4 February, 2023) Jon: \"I'm getting ready for a dance comp near me next month. It's a great chance for me to show my skillz and, hopefully, get some props from the dance fam. Super stoked!\"\nSession 8 (1:26 pm on 3 April, 2023) Jon: \"Thanks, Gina! I'm expanding my dance studio's social media presence and offering workshops and classes to local schools and centers. I'm also hosting a dance competition next month to showcase local talent and bring more attention to my studio. All the work's paying off - I'm seeing progress and the dancers are so excited. It's such a great feeling to give a place where people can express themselves through dance!\"\nSession 6 (2:35 pm on 16 March, 2023) Jon: \"Hi Gina! Been hectic for me lately. Started hitting the gym last week to stay on track with the venture. Gotta figure out how to balance it all, but it's going well. How about you?\"\nSession 12 (7:18 pm on 27 May, 2023) Jon: \"I'm currently reading \"The Lean Startup\" and hoping it'll give me tips for my biz.\"\nSession 12 (7:18 pm on 27 May, 2023) Jon: \"Yeah, the book got me thinking about building a focused and efficient business. Adapting and tweaking from customer feedback is important too, so I'm gonna try it out!\""
+    }
+  ]
+}

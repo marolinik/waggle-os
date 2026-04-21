@@ -144,9 +144,15 @@ async function main() {
   }
   const md = fs.readFileSync(mdAbs, 'utf-8');
   const instances = parseLabelsMarkdown(md);
-  if (instances.length !== 10) {
-    console.error(`[judge-calibration] expected 10 instances, parsed ${instances.length}`);
+  // Accept any positive instance count — Sprint 9 used 10, Sprint 10 Task 2.2 uses 14
+  // (original 10 minus #9 drop + 5 new PM-authored triples per 2026-04-22 ratification).
+  // Log a warning for unusual counts; hard-exit only on zero.
+  if (instances.length === 0) {
+    console.error(`[judge-calibration] parsed 0 instances from ${mdAbs} — labels file malformed`);
     process.exit(2);
+  }
+  if (instances.length !== 10 && instances.length !== 14) {
+    console.warn(`[judge-calibration] unusual instance count: ${instances.length} (expected 10 or 14) — proceeding`);
   }
   console.log(`[judge-calibration] parsed ${instances.length} instances from ${path.basename(mdAbs)}`);
   console.log(`[judge-calibration] judge model: ${args.judgeModel}${args.ensemble ? ` (ensemble: ${args.ensemble.join(',')})` : ''}`);
