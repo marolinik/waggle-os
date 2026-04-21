@@ -3,8 +3,9 @@
 **Datum:** 2026-04-21
 **Brief:** `PM-Waggle-OS/briefs/2026-04-20-cc-stage-0-dogfood-tasks.md`
 **Questions:** `PM-Waggle-OS/sessions/2026-04-20-preflight-stage-0-questions.md`
-**Status banner:** **INFRASTRUCTURE PASS — query quality PARTIAL (abstain × 3)**
-**Recommendation for Marko:** review the three verbatim model answers + root-cause section §7 before go/no-go on Stage 1.
+**Status banner (ratified by PM response 2026-04-21):** **FAIL on the original rubric, mechanism = substrate failure surfacing past working retrieval.** Three-class split, not aggregate. Q1 + Q2 are harvest-timestamp-drop ABSTAINs (root cause isolated at `hive-mind/packages/cli/src/commands/harvest-local.ts` frame-create path — fix is three lines + regression test + re-harvest). Q3 is **DEFERRED**, not ABSTAIN — workflow-reality mismatch surfaced in PM response §10.1 (cross-source for this user is cross-LLM, not cross-platform). Stage 0 moves to a two-question battery (Q1 + Q2) from this point forward.
+**Meta-finding that matters more than the PASS/FAIL line:** three principled abstains instead of three hallucinations under a broken-substrate condition is the hive-mind safety property empirically holding. See PM response §6.
+**Go/no-go on Stage 1:** GO per PM response §5. Commit `73374cd` pushes as durable audit trail; Sprint 9 Task 0 executes the harvest fix + trojni re-run gate before Stage 2.
 
 ---
 
@@ -102,11 +103,23 @@ CLI entry point used: `scripts/stage-0-query.mjs` (standalone, calls `hive-mind-
 - [ ] PARTIAL
 - [ ] INCORRECT
 - [ ] HALLUCINATED
-- [ ] ABSTAIN — `[Marko: ___]`
+- [x] **ABSTAIN** — substrate failure, root cause confirmed as harvest timestamp drop (`item.timestamp` → `NOW()`).
 
 **Komentar:**
 ```
-[Marko: ___]
+Retrieval surfuje obe ground-truth sesije u top-20 (frame 370 rank 5,
+frame 380 rank 14). LLM abstain je epistemički ispravan pod uslovima
+slomljenog harvest timestamp layer-a (§7.1 ovog report-a). Substrate
+failure u `hive-mind/packages/cli/src/commands/harvest-local.ts`,
+nije retrieval defekt. Re-run posle Sprint 9 Task 0 fix-a očekuje
+SPECIFIC_AND_CORRECT bez izmene query-ja ili pitanja. Ground truth
+postoji (1. decembar 2025, Legat trilogija, session IDs
+7379b8f7-…/fc1f1db4-…) i u Claude.ai istoriji i u harvested
+frames 370/380 — date-scoping je nemoguć bez `session_at` polja na
+frame layer-u koje sada zovemo Sprint 9 Task 0 da doda. Trojni gate
+na re-run per brief: Tier 1 SPECIFIC_AND_CORRECT / Tier 2 PARTIAL
+samo uz kumulativne uslove (tačan datum + session kontekst + jedan
+anchor bez halucinacije) / Tier 3 FAIL.
 ```
 
 ### Q2 — KVARK hardware, temporal scope Sept–Oct 2025
@@ -128,11 +141,23 @@ CLI entry point used: `scripts/stage-0-query.mjs` (standalone, calls `hive-mind-
 - [ ] PARTIAL
 - [ ] INCORRECT
 - [ ] HALLUCINATED
-- [ ] ABSTAIN — `[Marko: ___]`
+- [x] **ABSTAIN** — isti substrate root cause kao Q1 + sekundarni 2000-char preview cap.
 
 **Komentar:**
 ```
-[Marko: ___]
+Retrieval surfuje frame 381 ("KVARK platform website design", 27. okt
+2025) u top-3 — sadržaj relevantan. Dva nezavisna harvest-layer
+problema spajaju se u isti ABSTAIN ishod:
+(a) harvest timestamp metadata loss iz §7.1 (isti root cause kao Q1),
+(b) 2000-char frame preview cap iz `harvest-local.ts` koji odseca
+telo KVARK platform brief-a pre nego što hardver specifikacije
+(8× H100 u 4U liquid-cooled rackmount) stignu u retrievable window.
+Treća stavka ground truth ostala je `[Marko popunjava treću]`
+placeholder iz v2 questions fajla — ne menja ishod jer ni prve
+dve stavke (Qwen3-235B @ 30. septembar, H100 hardware @ 27. oktobar)
+nisu mogle biti potvrđene zbog harvest gap-a. Re-run pending
+Sprint 9 Task 0 (primary fix §7.1); preview-cap gap je P1 follow-up
+u Sprint 9-10 backlog, ne Stage 0 blocker.
 ```
 
 ### Q3 — Six Hats PRD × Takeout, multi-hop cross-source
@@ -166,11 +191,41 @@ CLI entry point used: `scripts/stage-0-query.mjs` (standalone, calls `hive-mind-
 - [ ] PARTIAL
 - [ ] INCORRECT
 - [ ] HALLUCINATED
-- [ ] ABSTAIN — `[Marko: ___]`
+- [ ] ABSTAIN
+- [x] **DEFERRED** — workflow-reality mismatch, cross-source test moved to Stage 1 pending ChatGPT + Gemini corpus. Explicitly not ABSTAIN per PM response §10.1.
 
 **Komentar:**
 ```
-[Marko: ___]
+Retrieval surfuje frame 295 ("Six Hats AI App Enhancement",
+5. avgust 2025) na rank 0 — single-source identifikacija savršena.
+Cross-source komponenta je strukturno netestabilna u ovom corpus-u:
+Google Takeout isporučio samo HTML MyActivity logs + Gemini Apps
+assets, bez Mail/.mbox, Calendar/.ics, Drive JSON payload-a koje
+hive-mind adapter umeju da konsumiraju. Ad-hoc HTML adapter build
+eksplicitno zabranjen brief-om.
+
+LOCKED 2026-04-21 per PM response §10.1: Q3 u originalnoj formi
+pretpostavlja cross-platform workflow (Claude.ai × Mail × Calendar
+× Drive) koji ne odgovara CEO/founder profilu. Marko-v strateški
+rad živi isključivo u glavi + LLM sesijama; Mail/Calendar/Disk/
+Discord/Viber/Linear su downstream artefakti tuđeg rada koji
+prati njegove odluke, ne paralelni tragovi njegovog mišljenja.
+Pravi cross-source test za ovaj user profil je CROSS-LLM
+(Claude.ai × ChatGPT × Gemini unified graph), NE cross-platform.
+
+Operativno:
+- Q3 se NE re-run-uje u Sprint 9 Task 0 (ni pod novim harvest
+  timestamp fix-om). Audit trail preservation zahteva DEFERRED,
+  ne ABSTAIN — distinkcija razlikuje "failed on rubric" od
+  "reformulated per workflow reality check".
+- Pravi cross-LLM Q3 ekvivalent ulazi u Stage 1 scope kada
+  ChatGPT export + Gemini korpus stignu.
+- Google Takeout Mail/Calendar/Drive re-request (opcija (a)
+  iz PM response §3.3) — OBUSTAVLJENA per §10.1.
+- Outlook/OneDrive adapter sugestija iz prethodnog relay-a —
+  takođe OBUSTAVLJENA; vraća se u backlog sa konkretnim
+  Microsoft-shop enterprise referral customer trigger-om,
+  ne generic-segment-expansion trigger-om.
 ```
 
 ---
