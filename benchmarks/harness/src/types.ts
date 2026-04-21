@@ -82,6 +82,15 @@ export interface RunConfig {
    *  dataset adapter and loads instances directly from the lock file. Runtime
    *  asserts the distribution required for the Stage 2 preflight gate. */
   sampleLockPath?: string;
+  /** Sprint 9 Task 2. When set, runner invokes `failure-mode-judge` after
+   *  each cell call with this config. Single-judge or ensemble depending
+   *  on the shape; undefined means judging is disabled. The runner keeps
+   *  its own budget ledger for judge spend separate from cell spend so
+   *  the brief's "$5 alarm per run" can be respected independently. */
+  judgeConfig?: import('./judge-runner.js').JudgeConfig;
+  /** Optional sink for per-call judge cost entries. Typically the caller
+   *  collects into an array to summarise in the run output. */
+  onJudgeCall?: (entry: import('./judge-client.js').JudgeClientCostEntry) => void;
 }
 
 /** Judge failure-mode taxonomy codes. Must match the enum the judge module

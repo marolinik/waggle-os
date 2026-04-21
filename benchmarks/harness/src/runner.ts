@@ -38,6 +38,8 @@ import { createLlmClient } from './llm.js';
 import { JsonlWriter, buildAggregate, scoreAccuracy, percentile } from './metrics.js';
 import { cells, isCellName, isControlName } from './cells.js';
 import { controls } from './controls.js';
+import { createJudgeLlmClient, type JudgeClientCostEntry } from './judge-client.js';
+import { runJudge, type JudgeConfig } from './judge-runner.js';
 
 // ── Arg parsing ────────────────────────────────────────────────────────────
 
@@ -53,6 +55,14 @@ interface ParsedArgs {
   output?: string;
   dryRun?: boolean;
   sampleLock?: string;
+  /** When set, each cell/control call also triggers a judge call after
+   *  the model answer returns. Value is the single-judge model id
+   *  (e.g. `claude-sonnet-4-6`). Default: undefined → judging skipped. */
+  judge?: string;
+  /** Comma-separated list of judge model ids for ensemble mode. First
+   *  id is the tie-breaker (Sonnet by taxonomy §6 convention). Takes
+   *  precedence over `--judge` when both are set. */
+  judgeEnsemble?: string[];
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -81,6 +91,11 @@ function parseArgs(argv: string[]): ParsedArgs {
       case '--dry-run': out.dryRun = true; break;
       case '--live': out.dryRun = false; break;
       case '--sample-lock': out.sampleLock = next; i++; break;
+      case '--judge': out.judge = next; i++; break;
+      case '--judge-ensemble':
+        out.judgeEnsemble = (next ?? '').split(',').map(s => s.trim()).filter(Boolean);
+        i++;
+        break;
       case '--help':
       case '-h':
         printHelp();
@@ -115,6 +130,14 @@ Flags:
                     adapter and loads instances directly from the lock. Runtime
                     asserts category distribution matches 13/13/12/12 for the
                     Stage 2 preflight gate; fails fast otherwise.
+  --judge MODEL     Enable single-judge mode. After each cell call, invokes
+                    failure-mode-judge with the given model (e.g.
+                    claude-sonnet-4-6) and populates the judge fields on the
+                    JSONL record. Skip the flag to run without judging.
+  --judge-ensemble M1,M2,...
+                    Enable 3+-judge ensemble mode. First model is the tie-
+                    breaker. Takes precedence over --judge. Real API spend —
+                    keep within the brief's $5 alarm per run.
   --help, -h        This text
 `);
 }
@@ -190,6 +213,28 @@ async function runOne(config: RunConfig): Promise<void> {
     const accuracy = result.failureMode ? 0 : scoreAccuracy(result.text, instance.expected);
     totalCost += result.costUsd;
 
+    // Sprint 9 Task 2: when a judge is configured, grade the answer
+    // in-line. The judge runs even when the cell call itself failed
+    // (failureMode !== null) because the transcript still has value
+    // for calibration; the aggregator can filter if needed. A judge
+    // error never aborts the batch — runJudge swallows and annotates.
+    let judgePayload: import('./judge-runner.js').JudgePayload | null = null;
+    if (config.judgeConfig && !result.failureMode) {
+      judgePayload = await runJudge(
+        {
+          question: instance.question,
+          // scoreAccuracy picks the first expected answer; keep parity
+          // so the judge sees the same ground truth. Remaining entries
+          // in `expected` are alternate phrasings, not independent
+          // facts, and are irrelevant to the §4 judge prompt.
+          groundTruth: instance.expected[0] ?? '',
+          contextExcerpt: instance.context,
+          modelAnswer: result.text,
+        },
+        config.judgeConfig,
+      );
+    }
+
     // p50 / p95 are computed over the running window of observed latencies
     // so the JSONL record carries real-time percentiles (not flat per-row).
     // Aggregate metrics.ts recomputes globals for the summary.
@@ -204,6 +249,15 @@ async function runOne(config: RunConfig): Promise<void> {
       p95_latency_ms: percentile(latenciesByInstance, 95),
       usd_per_query: round(result.costUsd, 6),
       failure_mode: result.failureMode,
+      ...(judgePayload && {
+        model_answer: judgePayload.model_answer,
+        judge_verdict: judgePayload.judge_verdict,
+        judge_failure_mode: judgePayload.judge_failure_mode,
+        judge_rationale: judgePayload.judge_rationale,
+        judge_model: judgePayload.judge_model,
+        judge_timestamp: judgePayload.judge_timestamp,
+        judge_ensemble: judgePayload.judge_ensemble,
+      }),
     };
     writer.write(record);
   }
@@ -280,6 +334,41 @@ async function main(): Promise<void> {
   const litellmUrl = process.env.LITELLM_URL ?? 'http://localhost:4000';
   const litellmApiKey = process.env.LITELLM_API_KEY ?? 'sk-waggle-dev';
 
+  // Build judge config (Sprint 9 Task 2). `--judge-ensemble` wins when
+  // both flags are present. In dry-run mode judge is force-skipped —
+  // calling a real LiteLLM judge while the cell path is stubbed would
+  // produce mixed-signal JSONL that's hard to interpret.
+  const judgeCosts: JudgeClientCostEntry[] = [];
+  let judgeConfig: JudgeConfig | undefined;
+  if (!dryRun) {
+    if (args.judgeEnsemble && args.judgeEnsemble.length > 0) {
+      const clients = new Map<string, import('./judge-client.js').LlmClient>();
+      for (const m of args.judgeEnsemble) {
+        clients.set(
+          m,
+          createJudgeLlmClient({
+            litellmUrl,
+            litellmApiKey,
+            model: m,
+            onCall: entry => judgeCosts.push(entry),
+          }),
+        );
+      }
+      judgeConfig = { kind: 'ensemble', models: args.judgeEnsemble, clients };
+    } else if (args.judge) {
+      judgeConfig = {
+        kind: 'single',
+        model: args.judge,
+        client: createJudgeLlmClient({
+          litellmUrl,
+          litellmApiKey,
+          model: args.judge,
+          onCall: entry => judgeCosts.push(entry),
+        }),
+      };
+    }
+  }
+
   const runs = buildRuns(args);
   for (const run of runs) {
     const outputPath = args.output ?? defaultOutputPath(run, args.dataset);
@@ -295,7 +384,20 @@ async function main(): Promise<void> {
       litellmUrl,
       litellmApiKey,
       sampleLockPath: args.sampleLock,
+      judgeConfig,
+      onJudgeCall: entry => judgeCosts.push(entry),
     });
+  }
+
+  // Surface judge spend separately from cell spend so the brief's "$5
+  // alarm per run" guardrail applies cleanly to the judge-layer budget.
+  if (judgeCosts.length > 0) {
+    const judgeTotalUsd = judgeCosts.reduce((sum, e) => sum + e.usd, 0);
+    const judgeOk = judgeCosts.filter(e => e.ok).length;
+    console.log(
+      `[bench:judge-summary] calls=${judgeCosts.length} ok=${judgeOk} ` +
+      `failed=${judgeCosts.length - judgeOk} total_usd=$${judgeTotalUsd.toFixed(6)}`,
+    );
   }
 }
 
