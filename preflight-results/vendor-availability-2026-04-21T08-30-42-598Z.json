@@ -1,0 +1,43 @@
+{
+  "generatedAt": "2026-04-21T08:30:48.294Z",
+  "litellmUrl": "http://localhost:4000",
+  "allAvailable": true,
+  "vendors": [
+    {
+      "id": "anthropic",
+      "model": "claude-opus-4-7",
+      "label": "Anthropic Opus 4.7",
+      "status": "ok",
+      "http": 200,
+      "latencyMs": 2066,
+      "error": null,
+      "completionText": "OK",
+      "promptTokens": 21,
+      "completionTokens": 6
+    },
+    {
+      "id": "openai",
+      "model": "gpt-5.4",
+      "label": "OpenAI GPT-5.4",
+      "status": "ok",
+      "http": 200,
+      "latencyMs": 1649,
+      "error": null,
+      "completionText": "OK",
+      "promptTokens": 13,
+      "completionTokens": 4
+    },
+    {
+      "id": "google",
+      "model": "gemini-3.1-pro",
+      "label": "Google Gemini 3.1 Pro",
+      "status": "ok",
+      "http": 200,
+      "latencyMs": 1977,
+      "error": null,
+      "completionText": "OK",
+      "promptTokens": 8,
+      "completionTokens": 12
+    }
+  ]
+}
