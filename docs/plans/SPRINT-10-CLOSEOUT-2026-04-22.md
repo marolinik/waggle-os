@@ -115,7 +115,7 @@ Anti-pattern #4 reminder: **thresholds do NOT shift post-hoc.** This clause rema
 | 2.1 Tri-vendor ensemble setup | ✅ CLOSED | Fleiss' κ=0.7458 on 10-instance baseline, substantial band |
 | 2.2 Full 14-instance Fleiss' κ | ✅ CLOSED | **κ=0.8784** · strong band · **Sprint 11 GO** |
 | 1.1 Qwen stability matrix | ✅ CLOSED (PASS) — 36/40 converged, 5 safe configs emerged. Stage 2 primary config LOCKED at `thinking=off, max_tokens=16000` (cheapest 5/5 safe config at ≥16K ceiling per STAGE-2-PREP-BACKLOG exit criterion). Spend $0.085 of $1.50 cap. | `preflight-results/qwen-thinking-stability-2026-04-21T14-05-12-175Z.md` · CSV sibling · exit ping at `PM-Waggle-OS/sessions/2026-04-22-sprint-10-task-1-1-exit.md` |
-| 1.5 Harvest Claude artifacts adapter | **Phase 1 CLOSED** (fresh zip verified — artifacts folder ABSENT). **Phase 2 CLOSED** — PM ratified Option 4 (partial adapter scope). **Phase 3 staged local** on hive-mind master (`c363257`), +7 tests, 312/312 passing, tsc clean. Awaiting PM push ratification. | `preflight-results/claude-ai-export-verification-2026-04-22.md` · hive-mind commit `c363257` · ratification ask at `PM-Waggle-OS/sessions/2026-04-22-sprint-10-task-1-5-phase-3-ratification.md` |
+| 1.5 Harvest Claude artifacts adapter | ✅ CLOSED — Phase 1 (zip verified, artifacts folder ABSENT), Phase 2 (PM ratified Option 4: partial adapter), Phase 3 (hive-mind `c363257` pushed to origin/master per PM ratification 2026-04-22). +7 tests, 312/312 passing, tsc clean. Stage 0 mech #3 ticket stays OPEN (session-artifact gap is Sprint 11+ vendor-path work). | `preflight-results/claude-ai-export-verification-2026-04-22.md` · hive-mind origin/master at `c363257` |
 
 ## 9. Cost accounting
 
@@ -163,10 +163,10 @@ The Qwen3.6 thinking-mode stability matrix (40 cells · 2 thinking toggles × 4 
 - Tri-vendor ensemble verified on 14 instances covering 6 F-mode categories across 7 question categories.
 - Tie-breaker policy documented Day-2 (first-in-list today; escalate-to-PM recommended for Sprint 11 Stage-2 full-run to preserve multi-vendor defensibility).
 - Task 1.1 stability matrix **CLOSED with PASS verdict** — Stage 2 Qwen primary config **LOCKED at `thinking=off, max_tokens=16000`** (27.6s avg latency, cheapest 5/5-safe config at ≥16K ceiling).
-- Task 1.5 Phase 1+2 **CLOSED** (Option 4 ratified — partial adapter for project-docs + memories + design_chats). Phase 3 **local commit `c363257`** on hive-mind master awaiting PM push ratification. Not Sprint-11-blocking — LoCoMo Sprint-11 run uses public dataset; the hive-mind adapter expansion is corpus-layer only.
+- Task 1.5 **fully CLOSED** — Phase 1 (artifacts-absent verification) + Phase 2 (Option 4 partial-adapter ratified) + Phase 3 (hive-mind commit `c363257` pushed to origin/master 2026-04-22 per PM ratification). ClaudeAdapter now covers project-docs + memories + design_chats streams; +7 tests (hive-mind suite 305 → 312), tsc clean.
 - Stage 0 mechanism #3 (session-generated `/mnt/user-data/outputs/*` artifacts) remains **OPEN** as hive-mind BACKLOG P1. Sprint 11+ vendor-path item; not a Sprint-10 gate.
 
-**Sprint 10 scorecard: 7 of 7 tasks accounted for — all CLOSED except Task 1.5 Phase 3 which awaits a single-line PM push ratification.**
+**Sprint 10 scorecard: 7 of 7 tasks CLOSED. Sprint 10 fully closed.**
 
 ---
 
