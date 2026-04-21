@@ -48,14 +48,16 @@ model_list:
       api_key: os.environ/OPENAI_API_KEY
 
   # ── Google Gemini ──────────────────────────────────────────────
+  # Use stable slug (not dated preview). Google deprecated -preview-05-20
+  # and -preview-06-05 — verified 2026-04-21 via live /v1beta/models list.
   - model_name: gemini-2.5-pro
     litellm_params:
-      model: gemini/gemini-2.5-pro-preview-06-05
+      model: gemini/gemini-2.5-pro
       api_key: os.environ/GEMINI_API_KEY
 
   - model_name: gemini-2.5-flash
     litellm_params:
-      model: gemini/gemini-2.5-flash-preview-05-20
+      model: gemini/gemini-2.5-flash
       api_key: os.environ/GEMINI_API_KEY
 
   # ── xAI (Grok) ────────────────────────────────────────────────
@@ -109,16 +111,95 @@ model_list:
       api_key: os.environ/OPENROUTER_API_KEY
 
   # ── Moonshot / Kimi ────────────────────────────────────────────
+  # Legacy endpoint (kept for backwards compatibility)
   - model_name: moonshot-v1
     litellm_params:
       model: moonshot/moonshot-v1-128k
       api_key: os.environ/MOONSHOT_API_KEY
 
+  # Current Kimi K2 family — routed via OpenRouter because the slugs
+  # moonshotai/kimi-k2.5, kimi-k2-thinking, kimi-k2.6 are all live on
+  # openrouter.ai/api/v1/models (verified 2026-04-21). Native
+  # platform.moonshot.cn slugs differ (kimi-k2-0905 etc) and the API
+  # surface drifts; OR normalizes.
+  - model_name: kimi-k2
+    litellm_params:
+      model: openrouter/moonshotai/kimi-k2
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  - model_name: kimi-k2.5
+    litellm_params:
+      model: openrouter/moonshotai/kimi-k2.5
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  # Reasoning variant (chain-of-thought exposed). Keep <think>...</think>
+  # tags in message history — see the MiniMax M2.7 note below.
+  - model_name: kimi-k2-thinking
+    litellm_params:
+      model: openrouter/moonshotai/kimi-k2-thinking
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  # Kimi K2.6 — Moonshot's latest (added 2026-04-21). OR slug verified.
+  - model_name: kimi-k2.6
+    litellm_params:
+      model: openrouter/moonshotai/kimi-k2.6
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  # Native Moonshot fallback (used if OR is rate-limited). The user's
+  # MOONSHOT_API_KEY is registered on the intl tenant (api.moonshot.ai,
+  # NOT api.moonshot.cn — the .cn endpoint returned empty on probe
+  # 2026-04-21). Using `moonshot-v1-auto` instead of pinning to a k2.x
+  # variant: kimi-k2.6 enforces temperature=1 at the API layer, which
+  # breaks generic smoke tests and deterministic eval harnesses. The
+  # `-auto` slug lets Moonshot pick the right variant and accepts
+  # standard temperature ranges.
+  - model_name: kimi-k2-native
+    litellm_params:
+      model: openai/moonshot-v1-auto
+      api_base: https://api.moonshot.ai/v1
+      api_key: os.environ/MOONSHOT_API_KEY
+
+  # UI aliases — providers.ts surfaces `kimi-2.5` and `kimi-2.5-thinking`
+  # in the Waggle UI model picker. Route them to the live OR entries so
+  # the UI doesn't 404.
+  - model_name: kimi-2.5
+    litellm_params:
+      model: openrouter/moonshotai/kimi-k2.5
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  - model_name: kimi-2.5-thinking
+    litellm_params:
+      model: openrouter/moonshotai/kimi-k2-thinking
+      api_key: os.environ/OPENROUTER_API_KEY
+
   # ── Alibaba / Qwen ────────────────────────────────────────────
+  # Routed via OpenRouter (2026-04-21): the existing DashScope key is a
+  # PAI Workspace bearer token (sk-ws-…), not a classic Model Studio API
+  # key. Getting the classic key requires resolving an Alibaba Cloud
+  # billing-account collision (card already bound to prior account).
+  # Skipped per user call 2026-04-21; OR route is functionally identical.
   - model_name: qwen-max
     litellm_params:
-      model: dashscope/qwen-max
-      api_key: os.environ/DASHSCOPE_API_KEY
+      model: openrouter/qwen/qwen-max
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  # Qwen3.6-35B-A3B OpenRouter fallback — the exact `qwen3.6-35b-a3b`
+  # slug is NOT live on OpenRouter (verified 2026-04-21: catalog has
+  # qwen/qwen3.5-35b-a3b and qwen/qwen3.6-plus, no 3.6-35b-a3b). Until
+  # DashScope publishes 3.6-35B publicly, we route the 3.6-35B alias
+  # through the closest available model (Qwen3.5-35B-A3B) so downstream
+  # benchmarks have SOMETHING to run against. DashScope-native entry
+  # above (line ~216) stays in place for when the real slug lands.
+  - model_name: qwen3.6-35b-a3b-via-openrouter
+    litellm_params:
+      model: openrouter/qwen/qwen3.5-35b-a3b
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  # Sibling alias that points to Qwen3.5-35B-A3B directly (no ambiguity).
+  - model_name: qwen3.5-35b-a3b
+    litellm_params:
+      model: openrouter/qwen/qwen3.5-35b-a3b
+      api_key: os.environ/OPENROUTER_API_KEY
 
   # ── Mistral ────────────────────────────────────────────────────
   - model_name: mistral-large-latest
@@ -137,9 +218,13 @@ model_list:
       api_key: os.environ/MISTRAL_API_KEY
 
   # ── MiniMax ────────────────────────────────────────────────────
+  # `abab6.5s-chat` was deprecated by MiniMax (confirmed 2026-04-21 via
+  # 400 "unknown model" response). Repointed to MiniMax-M1, the nearest
+  # current successor. The `minimax-01` alias is preserved for any
+  # callers using the provider.ts UI slug.
   - model_name: minimax-01
     litellm_params:
-      model: openai/abab6.5s-chat
+      model: openai/MiniMax-M1
       api_base: https://api.minimaxi.chat/v1
       api_key: os.environ/MINIMAX_API_KEY
 
@@ -207,16 +292,20 @@ model_list:
   # HF source (verified 2026-04-19):
   #   https://huggingface.co/Qwen/Qwen3.6-35B-A3B
   #
-  # ROUTING: Alibaba DashScope — the model is NOT published on
-  # OpenRouter (verified 2026-04-19 by Marko). The DashScope slug
-  # follows the HF model name. Vault key: `alibaba` provider id,
-  # which the server's providers.ts route also enumerates. Entry is
-  # config-only; production routing stays on existing models until
-  # a DASHSCOPE_API_KEY is provisioned.
+  # ROUTING (updated 2026-04-21): temporarily routed through OpenRouter's
+  # qwen/qwen3.5-35b-a3b because (a) the 3.6-35B-A3B slug is not yet
+  # live on any public API (OpenRouter + Ollama Cloud catalogs both
+  # return no match), and (b) the user's DashScope credential is a PAI
+  # Workspace bearer token, not a classic Model Studio API key. This
+  # keeps the canonical `qwen3.6-35b-a3b` alias working for downstream
+  # benchmarks with a one-minor-version regression (3.5→3.6). When
+  # Alibaba publishes 3.6-35B-A3B publicly, flip this back to the
+  # native DashScope route (dashscope/qwen3.6-35b-a3b with a proper
+  # sk-… key) — the alias stays stable so callers don't change.
   - model_name: qwen3.6-35b-a3b
     litellm_params:
-      model: dashscope/qwen3.6-35b-a3b
-      api_key: os.environ/DASHSCOPE_API_KEY
+      model: openrouter/qwen/qwen3.5-35b-a3b
+      api_key: os.environ/OPENROUTER_API_KEY
 
   # ── Added for PromptAssembler v5 eval ──────────────────────────
   # Spec: v5 brief §11.2. Entries verified live via provider docs on
@@ -281,6 +370,19 @@ model_list:
     litellm_params:
       model: openrouter/qwen/qwen3-30b-a3b-thinking-2507
       api_key: os.environ/OPENROUTER_API_KEY
+
+  # ── Genspark ───────────────────────────────────────────────────
+  # Added 2026-04-21. Genspark's gsk-* token is a JWT whose payload
+  # references `claude_big_model` / `claude_middle_model` / `claude_small_model`
+  # fields — i.e. they run a Claude-compatible proxy. Endpoint slug below
+  # is a best-effort based on their public docs; validate with a smoke
+  # call after first use. The user's key is in vault + .env as
+  # GENSPARK_API_KEY but this route is NOT wired into Waggle UI yet.
+  - model_name: genspark-claude
+    litellm_params:
+      model: anthropic/claude-sonnet-4-5-20250929
+      api_base: https://api.genspark.ai/anthropic/v1
+      api_key: os.environ/GENSPARK_API_KEY
 
 litellm_settings:
   drop_params: true

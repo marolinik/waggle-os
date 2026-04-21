@@ -83,6 +83,7 @@ services:
       - MISTRAL_API_KEY=${MISTRAL_API_KEY}
       - MINIMAX_API_KEY=${MINIMAX_API_KEY}
       - ZHIPU_API_KEY=${ZHIPU_API_KEY}
+      - GENSPARK_API_KEY=${GENSPARK_API_KEY}
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-waggle-dev}
     command: --config /app/config.yaml
 
