@@ -1,0 +1,309 @@
+{
+  "generatedAt": "2026-04-21T02:10:31.669Z",
+  "labelsSource": "D:/Projects/PM-Waggle-OS/calibration/2026-04-20-failure-mode-calibration-labels.md",
+  "judgeModel": "claude-opus-4-7",
+  "ensemble": null,
+  "matchRate": {
+    "matches": 10,
+    "total": 10,
+    "verdict": "PASS"
+  },
+  "cost": {
+    "totalUsd": 0.036957000000000004,
+    "judgeCalls": 11,
+    "entries": [
+      {
+        "timestamp": "2026-04-21T02:10:07.328Z",
+        "model": "claude-opus-4-7",
+        "promptTokens": 687,
+        "completionTokens": 71,
+        "usd": 0.003126,
+        "latencyMs": 2008,
+        "ok": true,
+        "instanceIndex": 0
+      },
+      {
+        "timestamp": "2026-04-21T02:10:09.184Z",
+        "model": "claude-opus-4-7",
+        "promptTokens": 686,
+        "completionTokens": 70,
+        "usd": 0.0031079999999999997,
+        "latencyMs": 1853,
+        "ok": true,
+        "instanceIndex": 1
+      },
+      {
+        "timestamp": "2026-04-21T02:10:11.550Z",
+        "model": "claude-opus-4-7",
+        "promptTokens": 686,
+        "completionTokens": 83,
+        "usd": 0.003303,
+        "latencyMs": 2364,
+        "ok": true,
+        "instanceIndex": 2
+      },
+      {
+        "timestamp": "2026-04-21T02:10:14.137Z",
+        "model": "claude-opus-4-7",
+        "promptTokens": 694,
+        "completionTokens": 69,
+        "usd": 0.0031169999999999995,
+        "latencyMs": 2587,
+        "ok": true,
+        "instanceIndex": 3
+      },
+      {
+        "timestamp": "2026-04-21T02:10:15.776Z",
+        "model": "claude-opus-4-7",
+        "promptTokens": 686,
+        "completionTokens": 72,
+        "usd": 0.003138,
+        "latencyMs": 1639,
+        "ok": true,
+        "instanceIndex": 4
+      },
+      {
+        "timestamp": "2026-04-21T02:10:17.812Z",
+        "model": "claude-opus-4-7",
+        "promptTokens": 679,
+        "completionTokens": 82,
+        "usd": 0.003267,
+        "latencyMs": 2034,
+        "ok": true,
+        "instanceIndex": 5
+      },
+      {
+        "timestamp": "2026-04-21T02:10:20.900Z",
+        "model": "claude-opus-4-7",
+        "promptTokens": 690,
+        "completionTokens": 208,
+        "usd": 0.00519,
+        "latencyMs": 3088,
+        "ok": true,
+        "instanceIndex": 6
+      },
+      {
+        "timestamp": "2026-04-21T02:10:25.725Z",
+        "model": "claude-opus-4-7",
+        "promptTokens": 717,
+        "completionTokens": 57,
+        "usd": 0.003006,
+        "latencyMs": 4825,
+        "ok": true,
+        "instanceIndex": 7
+      },
+      {
+        "timestamp": "2026-04-21T02:10:28.243Z",
+        "model": "claude-opus-4-7",
+        "promptTokens": 712,
+        "completionTokens": 74,
+        "usd": 0.0032459999999999998,
+        "latencyMs": 2517,
+        "ok": true,
+        "instanceIndex": 8
+      },
+      {
+        "timestamp": "2026-04-21T02:10:30.127Z",
+        "model": "claude-opus-4-7",
+        "promptTokens": 731,
+        "completionTokens": 86,
+        "usd": 0.003483,
+        "latencyMs": 1882,
+        "ok": true,
+        "instanceIndex": 9
+      },
+      {
+        "timestamp": "2026-04-21T02:10:31.669Z",
+        "model": "claude-opus-4-7",
+        "promptTokens": 691,
+        "completionTokens": 60,
+        "usd": 0.002973,
+        "latencyMs": 1542,
+        "ok": true,
+        "instanceIndex": 10
+      }
+    ]
+  },
+  "perInstance": [
+    {
+      "index": 1,
+      "instanceId": "locomo_conv-26_q109",
+      "category": "single-hop",
+      "question": "What did Mel and her kids make during the pottery workshop?",
+      "humanVerdict": "correct",
+      "humanFailureMode": null,
+      "humanRationale": "Model contains the required fact (pots) with equivalent phrasing. Extra context (Mel, kids, workshop) is factually aligned with ground truth, no fabrication.",
+      "judgeOutput": {
+        "verdict": "correct",
+        "failure_mode": null,
+        "rationale": "The model correctly states that Mel and her kids made pots at the pottery workshop, matching the ground truth.",
+        "judge_model": "claude-opus-4-7"
+      },
+      "match": true,
+      "elapsedMs": 2011,
+      "error": null
+    },
+    {
+      "index": 2,
+      "instanceId": "locomo_conv-41_q123",
+      "category": "single-hop",
+      "question": "What did Maria plan to do later on the evening of 7 July, 2023?",
+      "humanVerdict": "incorrect",
+      "humanFailureMode": "F3",
+      "humanRationale": "Model misinterprets the context: 'friends from the gym' signals where Maria knows the friends from, not that she is going to the gym. The answer derives from present substrate but gets it wrong — classic F3 misreading of existing context, not fabrication.",
+      "judgeOutput": {
+        "verdict": "incorrect",
+        "failure_mode": "F3",
+        "rationale": "Maria planned to have dinner with friends from the gym, not go to the gym for a workout.",
+        "judge_model": "claude-opus-4-7"
+      },
+      "match": true,
+      "elapsedMs": 1855,
+      "error": null
+    },
+    {
+      "index": 3,
+      "instanceId": "locomo_conv-50_q141",
+      "category": "single-hop",
+      "question": "Which city is featured in the photograph Dave showed Calvin?",
+      "humanVerdict": "incorrect",
+      "humanFailureMode": "F4",
+      "humanRationale": "Model names a city that does not appear in the context (Chicago, Lake Michigan) and fabricates a geographic descriptor (skyline, lake) without any supporting excerpt. This is outright invention of substrate — F4, not F3, because the answer's content has no origin in the ground truth material.",
+      "judgeOutput": {
+        "verdict": "incorrect",
+        "failure_mode": "F4",
+        "rationale": "The model states Chicago with Lake Michigan details, which contradicts the ground truth of Boston and fabricates information not in the context.",
+        "judge_model": "claude-opus-4-7"
+      },
+      "match": true,
+      "elapsedMs": 2365,
+      "error": null
+    },
+    {
+      "index": 4,
+      "instanceId": "locomo_conv-42_q030",
+      "category": "multi-hop",
+      "question": "What kind of writings does Joanna do?",
+      "humanVerdict": "incorrect",
+      "humanFailureMode": "F2",
+      "humanRationale": "Model correctly identifies two of four required elements (screenplays, books) with no fabrication or incorrect claims, but omits the other two (online blog posts, journal) which are explicitly evidenced in D18:1 and D18:5. Partial coverage without fabrication — F2.",
+      "judgeOutput": {
+        "verdict": "incorrect",
+        "failure_mode": "F2",
+        "rationale": "The model correctly identifies screenplays and books but omits online blog posts and journal writing.",
+        "judge_model": "claude-opus-4-7"
+      },
+      "match": true,
+      "elapsedMs": 2587,
+      "error": null
+    },
+    {
+      "index": 5,
+      "instanceId": "locomo_conv-49_q015",
+      "category": "multi-hop",
+      "question": "What kind of unhealthy snacks does Sam enjoy eating?",
+      "humanVerdict": "correct",
+      "humanFailureMode": null,
+      "humanRationale": "Model contains both required facts (soda, candy). Additional commentary about habit acknowledgment mirrors context faithfully, no incorrect additions.",
+      "judgeOutput": {
+        "verdict": "correct",
+        "failure_mode": null,
+        "rationale": "The model correctly identifies soda and candy as Sam's unhealthy snacks, matching the ground truth.",
+        "judge_model": "claude-opus-4-7"
+      },
+      "match": true,
+      "elapsedMs": 1640,
+      "error": null
+    },
+    {
+      "index": 6,
+      "instanceId": "locomo_conv-41_q036",
+      "category": "multi-hop",
+      "question": "What music events has John attended?",
+      "humanVerdict": "incorrect",
+      "humanFailureMode": "F5",
+      "humanRationale": "Model answer is coherent and derives from context (walks, picnics, town events appear in D8:11), but does not address the specific question — which music events did John attend. Response pivots to a related but different topic (John's family-activity preferences). No hallucination, no incorrect facts about John's activities, but off-topic relative to prompt — F5.",
+      "judgeOutput": {
+        "verdict": "incorrect",
+        "failure_mode": "F5",
+        "rationale": "The model discusses John's general interests in family activities and town events but does not mention the specific music events (violin concert, live music event) asked about.",
+        "judge_model": "claude-opus-4-7"
+      },
+      "match": true,
+      "elapsedMs": 2035,
+      "error": null
+    },
+    {
+      "index": 7,
+      "instanceId": "locomo_conv-42_q038",
+      "category": "temporal",
+      "question": "When did Joanna make a dessert with almond milk?",
+      "humanVerdict": "incorrect",
+      "humanFailureMode": "F3",
+      "humanRationale": "Model derives date from context (session is 14 September, 'last Friday' reference) but computes it incorrectly. 7 September 2022 was a Wednesday — Friday before 14 September was actually 9 September. Answer draws on present substrate but arrives at a demonstrably wrong specific date — F3, not F4, because model did not fabricate the relationship, only miscomputed it.",
+      "judgeOutput": {
+        "verdict": "incorrect",
+        "failure_mode": "F3",
+        "rationale": "The Friday before 14 September 2022 was 9 September, not 7 September.",
+        "judge_model": "claude-opus-4-7"
+      },
+      "match": true,
+      "elapsedMs": 7913,
+      "error": null
+    },
+    {
+      "index": 8,
+      "instanceId": "locomo_conv-41_q053",
+      "category": "temporal",
+      "question": "When did John help renovate his hometown community center?",
+      "humanVerdict": "incorrect",
+      "humanFailureMode": "F4",
+      "humanRationale": "Model produces a year (2020) that cannot be derived from the context — 'last year' relative to 5 August 2023 unambiguously yields 2022. Model also fabricates causal context ('early pandemic period', 'volunteer support for infrastructure') that does not appear in any excerpt. Content generation beyond what the substrate allows — F4, not F3, because the fabricated context is the bulk of the answer.",
+      "judgeOutput": {
+        "verdict": "incorrect",
+        "failure_mode": "F4",
+        "rationale": "The model states 2020 and adds pandemic-related details not supported by the context; the correct year is 2022.",
+        "judge_model": "claude-opus-4-7"
+      },
+      "match": true,
+      "elapsedMs": 2518,
+      "error": null
+    },
+    {
+      "index": 9,
+      "instanceId": "locomo_conv-50_q037",
+      "category": "open-ended",
+      "question": "Does Calvin love music tours?",
+      "humanVerdict": "correct",
+      "humanFailureMode": null,
+      "humanRationale": "Model gives the correct yes/no answer aligned with ground truth, and supports it with context-faithful evidence across all three referenced sessions. No fabrication, no misreading.",
+      "judgeOutput": {
+        "verdict": "correct",
+        "failure_mode": null,
+        "rationale": "The model affirms Calvin loves music tours and cites the Tokyo tour, audience energy, and excitement for the next tour, matching the ground truth.",
+        "judge_model": "claude-opus-4-7"
+      },
+      "match": true,
+      "elapsedMs": 1883,
+      "error": null
+    },
+    {
+      "index": 10,
+      "instanceId": "locomo_conv-47_q017",
+      "category": "open-ended",
+      "question": "What is the board game where you have to find the imposter that John mentions to James?",
+      "humanVerdict": "incorrect",
+      "humanFailureMode": "F1",
+      "humanRationale": "Model explicitly refuses to answer, stating it lacks sufficient information. No partial answer, no fabrication, no off-topic pivot. Ground truth (Mafia) is not literally stated in the D8:36 excerpt — model plays it safe and abstains rather than inferring from the 'find the impostor' description. Classic F1 abstain behavior.",
+      "judgeOutput": {
+        "verdict": "incorrect",
+        "failure_mode": "F1",
+        "rationale": "The model abstains, stating it does not have enough information to answer.",
+        "judge_model": "claude-opus-4-7"
+      },
+      "match": true,
+      "elapsedMs": 1542,
+      "error": null
+    }
+  ]
+}
