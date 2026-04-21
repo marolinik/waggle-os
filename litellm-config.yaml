@@ -1,8 +1,14 @@
 model_list:
   # ── Anthropic ──────────────────────────────────────────────────
+  # Sprint 10 Task 1.2 (2026-04-21): Sonnet 4.6 dated-snapshot suffix
+  # `-20250514` was never a valid Claude API ID for the 4.6 family (docs
+  # list plain `claude-sonnet-4-6` as current ID + alias as of 2026-04-21
+  # per https://platform.claude.com/docs/en/docs/about-claude/models/overview).
+  # Repointed to the plain alias. Migration note: ops/litellm/README.md.
+  # refs sprint-10-brief §1.1
   - model_name: claude-sonnet-4-6
     litellm_params:
-      model: anthropic/claude-sonnet-4-6-20250514
+      model: anthropic/claude-sonnet-4-6
       api_key: os.environ/ANTHROPIC_API_KEY
 
   - model_name: claude-opus-4-6
@@ -15,15 +21,16 @@ model_list:
       model: anthropic/claude-haiku-4-5-20251001
       api_key: os.environ/ANTHROPIC_API_KEY
 
-  # Legacy aliases (backwards compat)
+  # Legacy aliases (backwards compat). Both now point to the plain
+  # `claude-sonnet-4-6` alias per Sprint 10 Task 1.2 (see note above).
   - model_name: claude-3-5-sonnet-20241022
     litellm_params:
-      model: anthropic/claude-sonnet-4-6-20250514
+      model: anthropic/claude-sonnet-4-6
       api_key: os.environ/ANTHROPIC_API_KEY
 
   - model_name: anthropic/claude-sonnet-4-6
     litellm_params:
-      model: anthropic/claude-sonnet-4-6-20250514
+      model: anthropic/claude-sonnet-4-6
       api_key: os.environ/ANTHROPIC_API_KEY
 
   - model_name: anthropic/claude-opus-4.6
