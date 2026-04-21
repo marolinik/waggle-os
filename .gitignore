@@ -95,3 +95,6 @@ s*.png
 screen*.png
 tmp_bench_results.json
 tmp_bench_results-v5.json
+
+# Bee regen backup folders — rollback artifacts, not committed
+apps/www/public/brand/_backup-*/
