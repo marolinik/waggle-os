@@ -22,6 +22,7 @@
     "dev:www": "cd apps/www && npx vite",
     "build:www": "cd apps/www && npx vite build",
     "lint": "eslint .",
+    "lint:no-invalid-snapshots": "node scripts/check-no-invalid-snapshots.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "node node_modules/playwright/cli.js test --project=api --reporter=list",

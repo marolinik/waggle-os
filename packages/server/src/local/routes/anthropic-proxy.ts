@@ -39,12 +39,18 @@ function mapModel(model: string): string {
   // Normalize dots to dashes in version (e.g., "claude-sonnet-4.6" → "claude-sonnet-4-6")
   clean = clean.replace(/(\d)\.(\d)/g, '$1-$2');
 
+  // B3 cleanup (2026-04-22) per decisions/2026-04-22-model-route-naming-locked.md
+  // §3 HIGH — drop the Sonnet/Opus 4.6 → -20250514 entries. `-20250514` was
+  // never a valid Claude 4.6-family snapshot ID; sending it produced
+  // `404 model_not_found` on Anthropic. Anthropic resolves the floating
+  // alias `claude-sonnet-4-6` / `claude-opus-4-6` server-side to the current
+  // canonical snapshot — pass-through is the correct behavior.
   const mapping: Record<string, string> = {
-    'claude-sonnet-4-6': 'claude-sonnet-4-20250514',
-    'claude-opus-4-6': 'claude-opus-4-20250514',
+    // Haiku 4.5 passes through verbatim to the canonical dated snapshot.
     'claude-haiku-4-5': 'claude-haiku-4-5-20251001',
     'claude-haiku-4-5-20251001': 'claude-haiku-4-5-20251001',
-    // Common misnames — Haiku 4.6 doesn't exist, map to actual latest Haiku
+    // Common misnames — Haiku 4.6 doesn't exist, map to actual latest Haiku.
+    // Kept as defensive typo guards; all target the valid Haiku 4.5 snapshot.
     'claude-haiku-4-6': 'claude-haiku-4-5-20251001',
     'claude-haiku-4.6': 'claude-haiku-4-5-20251001',
     'claude-haiku-4.5': 'claude-haiku-4-5-20251001',

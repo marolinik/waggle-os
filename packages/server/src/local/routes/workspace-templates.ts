@@ -403,7 +403,12 @@ export const workspaceTemplateRoutes: FastifyPluginAsync = async (server) => {
     // Check for API key in server settings
     const settingsPath = path.join(server.localConfig.dataDir, 'settings.json');
     let apiKey = '';
-    let model = 'claude-sonnet-4-20250514';
+    // B3 cleanup (2026-04-22): default to floating alias per
+    // decisions/2026-04-22-model-route-naming-locked.md §3 MEDIUM.
+    // Prior invalid Claude 4.6 dated snapshot caused new workspaces to 404
+    // on first message; floating alias passes through to the current
+    // canonical snapshot resolved server-side.
+    let model = 'claude-sonnet-4-6';
     try {
       const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
       apiKey = settings.apiKey || '';

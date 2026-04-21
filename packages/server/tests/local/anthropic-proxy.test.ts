@@ -146,7 +146,10 @@ describe('Anthropic Proxy Routes', () => {
       const fetchCall = (globalThis.fetch as any).mock.calls[0];
       expect(fetchCall[0]).toBe('https://api.anthropic.com/v1/messages');
       const requestBody = JSON.parse(fetchCall[1].body);
-      expect(requestBody.model).toBe('claude-sonnet-4-20250514');
+      // B3 cleanup (2026-04-22) — proxy now passes floating alias through
+      // unchanged per decisions/2026-04-22-model-route-naming-locked.md §3.
+      // Previous behavior rewrote to invalid -20250514 snapshot.
+      expect(requestBody.model).toBe('claude-sonnet-4-6');
       // system is either a string or an Anthropic cache-control block array —
       // extract the text in either case.
       const systemText = Array.isArray(requestBody.system)
@@ -268,6 +271,52 @@ describe('Anthropic Proxy Routes', () => {
       expect(body.choices[0].message.tool_calls[0].type).toBe('function');
       expect(body.choices[0].message.tool_calls[0].function.name).toBe('web_search');
       expect(JSON.parse(body.choices[0].message.tool_calls[0].function.arguments)).toEqual({ query: 'Waggle AI agent' });
+    });
+  });
+
+  // B3 cleanup regression guard per decisions/2026-04-22-model-route-naming-locked.md §4
+  describe('invalid snapshot regression guard (B3 cleanup 2026-04-22)', () => {
+    it('does NOT inject -20250514 snapshot for any Claude 4.6 family floating alias', async () => {
+      process.env.ANTHROPIC_API_KEY = 'test-key-snapshot-guard';
+      server = createTestServer();
+
+      const captures: Array<{ model: string }> = [];
+      globalThis.fetch = vi.fn(async (_url, init: RequestInit | undefined) => {
+        const body = init?.body ? JSON.parse(String(init.body)) : {};
+        captures.push({ model: body.model });
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            content: [{ type: 'text', text: 'ok' }],
+            model: body.model,
+            stop_reason: 'end_turn',
+            usage: { input_tokens: 1, output_tokens: 1 },
+          }),
+        };
+      }) as any;
+
+      const floatingAliases = ['claude-sonnet-4-6', 'claude-opus-4-6', 'anthropic/claude-sonnet-4.6', 'anthropic/claude-opus-4.6'];
+      for (const alias of floatingAliases) {
+        await server.inject({
+          method: 'POST',
+          url: '/v1/chat/completions',
+          payload: {
+            model: alias,
+            messages: [{ role: 'user', content: 'test' }],
+            stream: false,
+          },
+        });
+      }
+
+      // Every outbound model must NOT be the invalid -20250514 snapshot.
+      for (const cap of captures) {
+        expect(cap.model).not.toMatch(/-20250514$/);
+        // Positive assertion: floating alias passes through as the canonical
+        // dash-form (mapModel normalizes dots to dashes).
+        expect(cap.model).toMatch(/^claude-(sonnet|opus)-4-6$/);
+      }
+      expect(captures).toHaveLength(floatingAliases.length);
     });
   });
 });
