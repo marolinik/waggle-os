@@ -8,6 +8,20 @@
     "pricePerMillionOutput": 0.80,
     "contextWindow": 262144
   },
+  "qwen3.6-35b-a3b-stage2": {
+    "id": "qwen3.6-35b-a3b-stage2",
+    "displayName": "Qwen3.6-35B-A3B (Stage 2 LOCKED config — thinking=on, 64K)",
+    "provider": "alibaba",
+    "litellmModel": "qwen3.6-35b-a3b-via-openrouter",
+    "pricePerMillionInput": 0.20,
+    "pricePerMillionOutput": 0.80,
+    "contextWindow": 262144,
+    "stage2Config": {
+      "thinking": true,
+      "maxTokens": 64000,
+      "reasoningShape": "openrouter-unified"
+    }
+  },
   "qwen3.6-35b-a3b-local": {
     "id": "qwen3.6-35b-a3b-local",
     "displayName": "Qwen3.6-35B-A3B (local vLLM)",

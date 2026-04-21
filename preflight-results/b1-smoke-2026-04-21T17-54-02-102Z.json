@@ -1,0 +1,32 @@
+{
+  "verdict": "PASS",
+  "startedAt": "2026-04-21T17:53:59.059Z",
+  "finishedAt": "2026-04-21T17:54:02.102Z",
+  "latencyMs": 3040,
+  "route": "qwen3.6-35b-a3b-via-openrouter",
+  "litellmUrl": "http://localhost:4000",
+  "requestConfig": {
+    "thinking": true,
+    "max_tokens": 64000,
+    "temperature": 0,
+    "reasoning": {
+      "enabled": true
+    }
+  },
+  "usage": {
+    "inputTokens": 40,
+    "outputTokens": 142
+  },
+  "costUsd": 0.000122,
+  "text": "4",
+  "textChars": 1,
+  "reasoningPresent": true,
+  "reasoningChars": 411,
+  "reasoningPreview": "Thinking Process:\n\n1.  **Analyze the Request:**\n    *   Question: \"What is 2 + 2?\"\n    *   Constraint: \"Answer with just the number.\"\n\n2.  **Calculate:**\n    *   2 + 2 = 4\n\n3.  **Format Output:**\n    *   The user wants *only* the number.\n    *   Output should be \"4\".\n\n4.  **Final Check:**\n    *   Do",
+  "providerFinishReason": "stop",
+  "providerRaw": {
+    "id": "gen-1776794040-86S1fQCIPq9BLLooGDSP",
+    "model": "qwen3.6-35b-a3b-via-openrouter",
+    "created": 1776794040
+  }
+}

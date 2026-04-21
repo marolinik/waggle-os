@@ -57,6 +57,27 @@ export interface ModelSpec {
   pricePerMillionOutput: number;
   /** Context window in tokens (for truncation decisions). */
   contextWindow: number;
+  /**
+   * Sprint 11 Task B1 (2026-04-22): Stage 2 LOCKED config (thinking=on,
+   * max_tokens=64000) per decisions/2026-04-22-stage-2-primary-config-locked.md.
+   *
+   * When present, C2/C3 harness runs apply these overrides to every LLM call
+   * explicitly (not inherited from request defaults). Absent = harness uses
+   * the legacy max_tokens=600 default and no reasoning flag.
+   */
+  stage2Config?: {
+    /** Request `reasoning: { enabled: true }` (OpenRouter unified shape). */
+    thinking: boolean;
+    /** Override `max_tokens` in the request body (Stage 2 LOCK: 64000). */
+    maxTokens: number;
+    /**
+     * Response-side parser hint. OpenRouter unified returns
+     * `message.reasoning`; DashScope native returns `message.reasoning_content`.
+     * Parser accepts either shape regardless; this is an annotation for
+     * routing expectations.
+     */
+    reasoningShape: 'openrouter-unified' | 'dashscope-native';
+  };
 }
 
 export interface RunConfig {
