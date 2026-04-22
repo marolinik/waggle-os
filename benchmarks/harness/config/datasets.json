@@ -7,8 +7,8 @@
   },
   "locomo": {
     "id": "locomo",
-    "displayName": "LoCoMo (snap-research/locomo)",
-    "dataPath": "locomo/locomo.jsonl",
+    "displayName": "LoCoMo (snap-research/locomo, canonical 1531-instance non-adversarial eval set)",
+    "dataPath": "locomo/locomo-1540.jsonl",
     "source": "external"
   },
   "longmemeval": {

@@ -1,17 +1,67 @@
 /**
- * Dataset loader + synthetic fallback.
+ * Dataset loader + version hash + opt-in synthetic fallback.
  *
- * Real LoCoMo + LongMemEval data lives under `benchmarks/data/<dataset>/`
- * (gitignored — downloaded by the upstream harness scripts). If the data is
- * absent, we fall back to the built-in `synthetic` dataset so
- * scaffold / smoke tests don't need external downloads.
+ * Canonical archives live under `benchmarks/data/<dataset>/`:
+ *   locomo/locomo-1540.jsonl  (built by scripts/build-locomo-canonical.ts)
  *
- * Week 1 work will add the real dataset adapters.
+ * Production path: if the canonical archive is absent, the loader throws
+ * `DatasetMissingError`. No silent fallback — absent data used to masquerade
+ * as a 60-instance synthetic run, which is the substrate gap Sprint 12 Task 1
+ * Blocker #1 eliminates.
+ *
+ * Development convenience: `BENCH_SYNTHETIC_DATASET=1` re-enables the
+ * synthetic fallback with a prominent console.warn. Never use that path for
+ * publishable runs — its output is scaffold-only.
+ *
+ * Every external dataset carries a `dataset_version` hash (SHA-256 of the
+ * archive bytes). The hash is the audit anchor A3 LOCK §H-AUDIT-2 requires
+ * for pre-registration-conformant benchmark runs. The runner attaches the
+ * hash to every emitted JSONL record (types.ts §dataset_version).
  */
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DatasetInstance, DatasetSpec } from './types.js';
+
+/** Version string for the built-in synthetic scaffold. Static because the
+ *  instances are hard-coded in this file — any change will bump the source
+ *  revision and therefore the git SHA, so a user looking for drift has a
+ *  single obvious needle. */
+export const SYNTHETIC_DATASET_VERSION = 'synthetic-scaffold-v1';
+
+/** Thrown when a non-synthetic dataset archive is absent from the expected
+ *  path and the `BENCH_SYNTHETIC_DATASET` escape hatch is not set. */
+export class DatasetMissingError extends Error {
+  constructor(
+    public readonly resolvedPath: string,
+    public readonly datasetId: string,
+  ) {
+    super(
+      `Dataset '${datasetId}' canonical archive missing at ${resolvedPath}. ` +
+      `Build it via \`npx tsx benchmarks/harness/scripts/build-locomo-canonical.ts\` ` +
+      `or set BENCH_SYNTHETIC_DATASET=1 for the synthetic dev fallback ` +
+      `(scaffold-only — do NOT use for publishable runs).`,
+    );
+    this.name = 'DatasetMissingError';
+  }
+}
+
+/** SHA-256 hex of the dataset archive bytes, or the static version string
+ *  for synthetic. Throws `DatasetMissingError` when the archive is absent
+ *  and the env escape hatch is not set. */
+export function getDatasetVersion(spec: DatasetSpec, dataRoot: string): string {
+  if (spec.source === 'synthetic') return SYNTHETIC_DATASET_VERSION;
+  const resolved = path.resolve(dataRoot, spec.dataPath);
+  if (!fs.existsSync(resolved)) {
+    if (process.env.BENCH_SYNTHETIC_DATASET === '1') {
+      return SYNTHETIC_DATASET_VERSION;
+    }
+    throw new DatasetMissingError(resolved, spec.id);
+  }
+  const buf = fs.readFileSync(resolved);
+  return crypto.createHash('sha256').update(buf).digest('hex');
+}
 
 /** Preflight sample-lock schema written by scripts/build-preflight-samples.ts. */
 export interface PreflightSampleInstance {
@@ -114,16 +164,21 @@ export function loadDataset(spec: DatasetSpec, dataRoot: string): DatasetInstanc
     return SYNTHETIC_INSTANCES;
   }
 
-  // External (LoCoMo / LongMemEval). If the JSONL isn't there yet, we fall
-  // back to synthetic and print a heads-up so the operator knows the numbers
-  // aren't against the real benchmark.
+  // External (LoCoMo / LongMemEval). Sprint 12 Task 1 Blocker #1: no silent
+  // fallback. Missing archive throws `DatasetMissingError`, unless the
+  // `BENCH_SYNTHETIC_DATASET=1` escape hatch is set (dev convenience only —
+  // never use for publishable runs).
   const resolved = path.resolve(dataRoot, spec.dataPath);
   if (!fs.existsSync(resolved)) {
-    console.warn(
-      `[harness] ${spec.id} data not found at ${resolved} — falling back to synthetic ` +
-      `(Week 1 will add the real loader; for now this is scaffold-only).`,
-    );
-    return SYNTHETIC_INSTANCES;
+    if (process.env.BENCH_SYNTHETIC_DATASET === '1') {
+      console.warn(
+        `[harness] ${spec.id} archive missing at ${resolved} — ` +
+        `BENCH_SYNTHETIC_DATASET=1 set, falling back to synthetic scaffold. ` +
+        `Dev-only path; do NOT use for publishable runs.`,
+      );
+      return SYNTHETIC_INSTANCES;
+    }
+    throw new DatasetMissingError(resolved, spec.id);
   }
 
   const raw = fs.readFileSync(resolved, 'utf-8');

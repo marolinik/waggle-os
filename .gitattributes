@@ -1,0 +1,9 @@
+# Sprint 12 Task 1 Blocker #1 (2026-04-22):
+# Pin benchmark canonical archive + meta to byte-exact treatment. The
+# dataset_version hash is computed over the raw bytes at runtime (see
+# benchmarks/harness/src/datasets.ts getDatasetVersion). If Git converts
+# line endings on checkout the hash drifts per-platform, breaking
+# H-AUDIT-2 replication across Windows/macOS/Linux clones. `-text` marks
+# these files as binary — no auto-conversion regardless of autocrlf.
+benchmarks/data/locomo/locomo-1540.jsonl -text
+benchmarks/data/locomo/locomo-1540.meta.json -text

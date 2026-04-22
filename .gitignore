@@ -38,6 +38,12 @@ benchmarks/data/*
 # diff-reviewable, required for reproducibility. Raw LoCoMo dumps stay local.
 !benchmarks/data/preflight-locomo-50.json
 !benchmarks/data/failure-mode-calibration-10.jsonl
+# Sprint 12 Task 1 Blocker #1 — canonical LoCoMo eval archive (1531 instances,
+# derived from snap-research/locomo10.json via scripts/build-locomo-canonical.ts).
+# Committed for hash determinism across clones + CI + H-AUDIT-2 replication.
+!benchmarks/data/locomo/
+!benchmarks/data/locomo/locomo-1540.jsonl
+!benchmarks/data/locomo/locomo-1540.meta.json
 benchmarks/results/*
 !benchmarks/results/.gitkeep
 # Also catch nested mis-CWD writes (e.g. ran from benchmarks/harness/).
@@ -46,6 +52,9 @@ benchmarks/results/*
 **/benchmarks/data/*
 !**/benchmarks/data/preflight-locomo-50.json
 !**/benchmarks/data/failure-mode-calibration-10.jsonl
+!**/benchmarks/data/locomo/
+!**/benchmarks/data/locomo/locomo-1540.jsonl
+!**/benchmarks/data/locomo/locomo-1540.meta.json
 !**/benchmarks/data/.gitkeep
 !**/benchmarks/results/.gitkeep
 # Sprint 11 A2 (ratification §Q5 Tier 2): `benchmarks/archive/` holds

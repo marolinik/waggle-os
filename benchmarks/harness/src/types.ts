@@ -233,6 +233,19 @@ export interface JsonlRecord {
   tie_break_path?: 'none' | 'majority' | 'quadri-vendor' | 'pm-escalation';
   /** Fourth-vendor slug when tie_break_path ∈ {quadri-vendor, pm-escalation}. */
   tie_break_fourth_vendor?: string;
+  // ── Sprint 12 Task 1 Blocker #1 — dataset version (2026-04-22) ────────────
+  /**
+   * SHA-256 of the canonical dataset archive (or the static
+   * `synthetic-scaffold-v1` string for synthetic runs). Populated by the
+   * runner from `getDatasetVersion(dataset, dataRoot)` and attached per-row
+   * so any downstream replication check can resolve the exact input set
+   * from a single JSONL line.
+   *
+   * Will be re-emitted by the pre-registration event emitter in Sprint 12
+   * Task 1 Blocker #3 (`bench.preregistration.manifest_hash` pino event
+   * payload field `dataset_version_hash` per A3 LOCK §H-AUDIT-2).
+   */
+  dataset_version?: string;
 }
 
 /** Summary shape emitted at the end of a run — written alongside the JSONL. */

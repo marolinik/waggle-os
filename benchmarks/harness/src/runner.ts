@@ -26,6 +26,7 @@
  *   LITELLM_API_KEY   default sk-waggle-dev
  */
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import url from 'node:url';
@@ -33,7 +34,7 @@ import { generateTurnId, logTurnEvent } from '@waggle/agent';
 import type {
   CellName, ControlName, DatasetSpec, JsonlRecord, ModelSpec, RunConfig, RunKind,
 } from './types.js';
-import { loadDataset, loadPreflightSampleLock, sampleInstances } from './datasets.js';
+import { getDatasetVersion, loadDataset, loadPreflightSampleLock, sampleInstances } from './datasets.js';
 import { createLlmClient } from './llm.js';
 import { JsonlWriter, buildAggregate, scoreAccuracy, percentile } from './metrics.js';
 import { cells, isCellName, isControlName } from './cells.js';
@@ -178,6 +179,19 @@ async function runOne(config: RunConfig): Promise<void> {
           : path.resolve(process.cwd(), config.sampleLockPath),
       )
     : loadDataset(config.dataset, dataRoot);
+
+  // Sprint 12 Task 1 Blocker #1: attach dataset_version (SHA-256 of canonical
+  // archive) to every emitted JSONL record. Sample-lock runs get the
+  // lock-file hash; regular runs get the dataset archive hash; synthetic
+  // runs get the static `synthetic-scaffold-v1` string. Computed once per
+  // runOne call to avoid per-instance disk I/O.
+  const datasetVersion = config.sampleLockPath
+    ? computeFileHash(
+        path.isAbsolute(config.sampleLockPath)
+          ? config.sampleLockPath
+          : path.resolve(process.cwd(), config.sampleLockPath),
+      )
+    : getDatasetVersion(config.dataset, dataRoot);
   // When a sample lock drives the run, honor instance order verbatim — the
   // lock file IS the deterministic sample. Cell comparisons require identical
   // order across cells, and `sampleInstances` would re-shuffle the lock.
@@ -275,6 +289,7 @@ async function runOne(config: RunConfig): Promise<void> {
       p95_latency_ms: percentile(latenciesByInstance, 95),
       usd_per_query: round(result.costUsd, 6),
       failure_mode: result.failureMode,
+      dataset_version: datasetVersion,
       ...(judgePayload && {
         model_answer: judgePayload.model_answer,
         judge_verdict: judgePayload.judge_verdict,
@@ -323,6 +338,14 @@ async function runOne(config: RunConfig): Promise<void> {
 function round(n: number, decimals: number): number {
   const f = Math.pow(10, decimals);
   return Math.round(n * f) / f;
+}
+
+/** SHA-256 hex of a file's bytes. Used for sample-lock version stamping
+ *  when the run is driven by a committed lock file rather than the regular
+ *  dataset archive. */
+function computeFileHash(absolutePath: string): string {
+  const buf = fs.readFileSync(absolutePath);
+  return crypto.createHash('sha256').update(buf).digest('hex');
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────

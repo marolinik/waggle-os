@@ -1,0 +1,41 @@
+{
+  "dataset_version": "39e415e2f3a0fa1bd3cb1804a58d0b440b50d3070b2100698437e4ec402a5b24",
+  "instance_count": 1531,
+  "built_at": "2026-04-22T09:23:30.601Z",
+  "source": "https://raw.githubusercontent.com/snap-research/locomo/main/data/locomo10.json",
+  "source_reference": "Maharana et al. 2024, ACL-2024, \"Evaluating Very Long-Term Conversational Memory of LLM Agents\"",
+  "canonicalisation": {
+    "adversarial_excluded": true,
+    "no_evidence_excluded": true,
+    "sort_order": "instance_id ascending",
+    "field_order": [
+      "instance_id",
+      "conversation_id",
+      "question",
+      "gold_answer",
+      "expected",
+      "category",
+      "context",
+      "locomo_metadata"
+    ],
+    "line_terminator": "\\n",
+    "trailing_newline": true,
+    "encoding": "utf-8",
+    "no_bom": true
+  },
+  "distribution": {
+    "single-hop": 841,
+    "multi-hop": 281,
+    "temporal": 320,
+    "open-ended": 89
+  },
+  "skip_stats": {
+    "adversarial": 446,
+    "noEvidence": 4,
+    "unresolved": 5,
+    "unknownCat": 0
+  },
+  "paper_total_claim": 1540,
+  "actual_count": 1531,
+  "count_matches_paper": false
+}
