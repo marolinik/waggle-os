@@ -9,6 +9,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { AggregateSummary, JsonlRecord, RunConfig } from './types.js';
+import {
+  computeFailureDistribution,
+  type FailureRow,
+} from './failure-taxonomy/index.js';
 
 /**
  * Sprint 11 Task A2 — read-path pruning per H-AUDIT-1 ratification §Q4.
@@ -134,6 +138,21 @@ export function buildAggregate(config: RunConfig, records: JsonlRecord[], starte
         shapeDistribution,
       };
 
+  // Sprint 12 Task 2 §2.1 A3 namespace split (LOCKED 2026-04-23): compute
+  // the A3 LOCK § 6 failure distribution from the `a3_failure_code` /
+  // `a3_rationale` columns. Only rows that carry the A3 column are
+  // included (pre-Sprint-12 rows and skipped-judge rows are excluded). The
+  // aggregate section stays `undefined` when no A3 rows exist so
+  // pre-A3 runs continue emitting the legacy shape verbatim.
+  const a3Rows: FailureRow[] = records
+    .filter(r => r.a3_failure_code !== undefined)
+    .map(r => ({
+      failure_code: r.a3_failure_code!,
+      rationale: r.a3_rationale ?? null,
+    }));
+  const failureDistribution =
+    a3Rows.length === 0 ? undefined : computeFailureDistribution(a3Rows);
+
   return {
     run: {
       kind: config.run.kind,
@@ -159,6 +178,7 @@ export function buildAggregate(config: RunConfig, records: JsonlRecord[], starte
     },
     failureModes,
     ...(reasoningAggregate && { reasoningContent: reasoningAggregate }),
+    ...(failureDistribution && { failure_distribution: failureDistribution }),
   };
 }
 

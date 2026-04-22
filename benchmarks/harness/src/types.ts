@@ -25,6 +25,16 @@
  * Opus 4.6, Gemma 2 9B probe, full τ-bench + LongMemEval loaders.
  */
 
+// ── Sprint 12 Task 2 / §2.1 A3 namespace split (LOCKED 2026-04-23) ──────
+// A3 LOCK § 6 failure taxonomy + its aggregate distribution are surfaced
+// here as type-only re-exports so any downstream consumer (harness reader,
+// exit-ping generator, external audit tooling) gets a single import
+// entry point for the canonical A3 taxonomy column types.
+export type { FailureCode } from './failure-taxonomy/codes.js';
+export type { FailureDistribution } from './failure-taxonomy/aggregate.js';
+import type { FailureCode } from './failure-taxonomy/codes.js';
+import type { FailureDistribution } from './failure-taxonomy/aggregate.js';
+
 export type CellName = 'raw' | 'filtered' | 'compressed' | 'full-context';
 export type ControlName = 'verbose-fixed';
 export type RunKind = { kind: 'cell'; name: CellName } | { kind: 'control'; name: ControlName };
@@ -199,7 +209,14 @@ export interface RunConfig {
 }
 
 /** Judge failure-mode taxonomy codes. Must match the enum the judge module
- *  returns — see `packages/server/src/benchmarks/judge/failure-mode-judge.ts`. */
+ *  returns — see `packages/server/src/benchmarks/judge/failure-mode-judge.ts`.
+ *
+ *  Sprint 9 5-value space. Retained as a legacy read-only surface per the
+ *  2026-04-23 `decisions/2026-04-23-jsonl-record-taxonomy-split-locked.md`
+ *  namespace-split LOCK — C2 stage 1 and pre-A3 JSONL archives continue to
+ *  parse against this shape. A3 LOCK § 6 callers use `FailureCode` (8-value)
+ *  from `./failure-taxonomy/codes.js` via the `a3_failure_code` / `a3_rationale`
+ *  columns on `JsonlRecord` below. */
 export type FailureMode = 'F1' | 'F2' | 'F3' | 'F4' | 'F5';
 
 /** Single-judge verdict payload embedded in a JsonlRecord. Shape matches
@@ -348,6 +365,29 @@ export interface JsonlRecord {
    * wires provider-specific extraction where applicable.
    */
   model_revision_hash?: string | null;
+  // ── Sprint 12 Task 2 §2.1 A3 namespace split (LOCKED 2026-04-23) ─────────
+  /**
+   * A3 LOCK § 6 failure taxonomy code (8-value: null | F1..F6 | F_other)
+   * per `decisions/2026-04-23-jsonl-record-taxonomy-split-locked.md`.
+   *
+   * On A3 pipeline writes this column is populated for every judged row
+   * (default `null` for correct verdicts). Pre-Sprint-12 JSONL artefacts
+   * (C2 stage 1, B1/B2/B3 smoke) do NOT carry this field — consumers that
+   * handle both arcs treat `undefined` as "pre-A3 row, use Sprint 9
+   * `judge_failure_mode` instead".
+   *
+   * Authoritative column for all A3 exit criteria (Task 2 brief §6
+   * criterion +12) and downstream grep (`jq '.a3_failure_code'`). Sprint 9
+   * `judge_failure_mode` above is retained as a read-only legacy surface.
+   */
+  a3_failure_code?: FailureCode;
+  /**
+   * A3 rationale. MUST be a non-empty ≥10-token string when
+   * `a3_failure_code === 'F_other'` (enforced by
+   * `failure-taxonomy/validator.ts`). `null` for correct verdicts and
+   * F1..F6 codes where rationale is optional.
+   */
+  a3_rationale?: string | null;
 }
 
 /** Summary shape emitted at the end of a run — written alongside the JSONL. */
@@ -390,4 +430,15 @@ export interface AggregateSummary {
     p95Chars: number;
     shapeDistribution: Record<string, number>;  // e.g. { 'message.reasoning': 200, 'unknown': 2 }
   };
+  /**
+   * Sprint 12 Task 2 §2.1 (LOCKED 2026-04-23): A3 LOCK § 6 failure
+   * distribution computed from the `a3_failure_code` + `a3_rationale`
+   * columns of every judged row. `undefined` when the run contained zero
+   * A3-namespace rows (pre-Sprint-12 run or judge disabled).
+   *
+   * Authoritative source for Task 2 brief §6 exit criterion +12 grep
+   * (`jq '.a3_failure_code' *.jsonl | sort | uniq -c` ↔ `counts`) and for
+   * A3 LOCK § 6 F_other ≥10% review-flag tripwire.
+   */
+  failure_distribution?: FailureDistribution;
 }

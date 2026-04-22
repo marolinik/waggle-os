@@ -395,6 +395,13 @@ async function runOne(config: RunConfig): Promise<void> {
         // B2 fold-in observability fields.
         ...(judgePayload.tie_break_path !== undefined && { tie_break_path: judgePayload.tie_break_path }),
         ...(judgePayload.tie_break_fourth_vendor !== undefined && { tie_break_fourth_vendor: judgePayload.tie_break_fourth_vendor }),
+        // Sprint 12 Task 2 §2.1 A3 namespace split (LOCKED 2026-04-23) —
+        // authoritative A3 LOCK § 6 taxonomy columns. `undefined` a3_failure_code
+        // (e.g. PM_ESCALATION skipped instance) is spread conditionally so
+        // the absence of the key is preserved, matching the aggregator's
+        // "skipped" semantics.
+        ...(judgePayload.a3_failure_code !== undefined && { a3_failure_code: judgePayload.a3_failure_code }),
+        ...(judgePayload.a3_rationale !== undefined && { a3_rationale: judgePayload.a3_rationale }),
       }),
       // Sprint 11 A2: reasoning_content fields — same-row persistence
       // keyed by `turnId` per ratification §Q4. Chars stay separate for

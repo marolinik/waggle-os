@@ -19,7 +19,24 @@
  */
 
 import type { LlmClient } from './judge-types.js';
-import type { FailureMode, JudgeEnsembleEntry, JudgeVerdict } from './types.js';
+import type { FailureCode, FailureMode, JudgeEnsembleEntry, JudgeVerdict } from './types.js';
+
+/**
+ * Map a Sprint 9 5-value `FailureMode` onto the A3 LOCK § 6 8-value
+ * `FailureCode` space per decisions/2026-04-23-jsonl-record-taxonomy-split-locked.md.
+ *
+ * Sprint 9 F1..F5 semantics align 1:1 with A3 § 6 F1..F5 (refusal / partial /
+ * off-topic / hallucination / incorrect). F6 (format-violation) and F_other
+ * (≥10-word rationale escape) are A3-only surfaces — they appear on the
+ * harness output only after the judge rubric splice upgrade (follow-on of
+ * §2.1 in the Task 2 runtime; this mapper passes them through as-is on the
+ * judge-emit path).
+ */
+function mapLegacyToA3(legacy: FailureMode | null | undefined): FailureCode {
+  if (legacy === undefined || legacy === null) return null;
+  // FailureMode ⊂ FailureCode at the string level; cast is semantically safe.
+  return legacy as FailureCode;
+}
 
 // The judge module lives in a sibling workspace; tsc's `rootDir: "src"`
 // refuses a direct typed import (TS6059). We resolve the runtime
@@ -139,6 +156,17 @@ export interface JudgePayload {
   /** Model slug that cast the fourth vote when `tie_break_path === 'quadri-vendor'`
    *  or `'pm-escalation'`. e.g. `'xai/grok-4.20'`. */
   tie_break_fourth_vendor?: string;
+  // ── Sprint 12 Task 2 §2.1 A3 namespace split (LOCKED 2026-04-23) ──────
+  /**
+   * A3 LOCK § 6 failure-code column. Populated alongside the legacy
+   * `judge_failure_mode` per namespace-split decision doc — legacy field
+   * is preserved verbatim for backward compat with pre-A3 consumers, a3
+   * field is the authoritative A3 exit-criterion column.
+   */
+  a3_failure_code?: FailureCode;
+  /** A3 rationale. Non-null when a3_failure_code === 'F_other' (validator-
+   *  enforced). Null for correct verdicts and optional for F1..F6. */
+  a3_rationale?: string | null;
 }
 
 export interface SingleJudgeConfig {
@@ -235,6 +263,11 @@ export async function runJudge(
         judge_rationale: result.rationale,
         judge_model: result.judge_model,
         judge_timestamp: new Date().toISOString(),
+        // A3 namespace split (LOCKED 2026-04-23 §2.1): mirror the legacy
+        // 5-value code into the 8-value column. Judge rubric upgrade will
+        // extend emission to F6 / F_other in a follow-on commit.
+        a3_failure_code: mapLegacyToA3(result.failure_mode),
+        a3_rationale: null,
       };
     }
 
@@ -302,6 +335,11 @@ export async function runJudge(
             judge_error: 'PM_ESCALATION',
             tie_break_path: 'pm-escalation',
             tie_break_fourth_vendor: tbResult.fourthVendorSlug,
+            // A3 namespace split: skipped instance carries no failure_code —
+            // `undefined` so the aggregator excludes it from failure_distribution
+            // counts (mirrors `judge_verdict === undefined` semantics).
+            a3_failure_code: undefined,
+            a3_rationale: null,
           };
         }
 
@@ -320,6 +358,9 @@ export async function runJudge(
           judge_ensemble: ensembleVotes,
           tie_break_path: tbResult.path,
           tie_break_fourth_vendor: tbResult.fourthVendorSlug,
+          // A3 namespace split: mirror resolved code into 8-value column.
+          a3_failure_code: mapLegacyToA3(resolvedFailureMode),
+          a3_rationale: null,
         };
       }
       // Not a 1-1-1 split — fall through to legacy majority below.
@@ -338,6 +379,9 @@ export async function runJudge(
         failure_mode: r.failure_mode,
         rationale: r.rationale,
       })),
+      // A3 namespace split: majority legacy code mirrors into 8-value column.
+      a3_failure_code: mapLegacyToA3(result.majority.failure_mode),
+      a3_rationale: null,
     };
   } catch (err) {
     // Two failure classes both land here:
