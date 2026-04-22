@@ -51,10 +51,38 @@ export interface DatasetSpec {
   source: 'synthetic' | 'external';
 }
 
+/**
+ * Pinning surface enum per B3 LOCK addendum § 4. Tags every model entry
+ * (targets + judges) with the audit guarantee it offers:
+ *
+ *   anthropic_immutable  — Anthropic-direct routes, dated snapshot pinned
+ *                          upstream. H-AUDIT-2 spot-check re-runs will hit
+ *                          the exact same model bytes.
+ *   floating_alias       — provider rotates underlying model silently;
+ *                          replication tolerates semantic equivalence only,
+ *                          not byte-level match. Requires non-null
+ *                          pinning_surface_carve_out_reason.
+ *   revision_hash_pinned — provider exposes a revision hash we capture into
+ *                          the JSONL row; replication binds to that hash.
+ */
+export type PinningSurface = 'anthropic_immutable' | 'floating_alias' | 'revision_hash_pinned';
+
+export type JudgeRole = 'primary' | 'secondary' | 'tertiary';
+
+export type ModelProvider =
+  | 'alibaba'
+  | 'anthropic'
+  | 'ollama'
+  | 'litellm-proxy'
+  | 'local'
+  | 'openai_via_openrouter'
+  | 'google_via_openrouter'
+  | 'xai_via_openrouter';
+
 export interface ModelSpec {
   id: string;
   displayName: string;
-  provider: 'alibaba' | 'anthropic' | 'ollama' | 'litellm-proxy' | 'local';
+  provider: ModelProvider;
   /** Route string the LiteLLM proxy recognizes. */
   litellmModel: string;
   /** USD per 1M input tokens. */
@@ -63,6 +91,20 @@ export interface ModelSpec {
   pricePerMillionOutput: number;
   /** Context window in tokens (for truncation decisions). */
   contextWindow: number;
+  // ── Sprint 12 Task 1 Blocker #4 / B3 addendum § 4 fields ─────────────────
+  /** Pinning surface classification per B3 LOCK addendum § 4. Absence is
+   *  tolerated for pre-Sprint-12 entries but Blocker #4 seeds every entry
+   *  explicitly so the models-config test covers the registry. */
+  pinning_surface?: PinningSurface;
+  /** Human-readable rationale for floating_alias / revision_hash_pinned
+   *  entries. MUST be null for anthropic_immutable. MUST be non-null for
+   *  the other two surfaces (enforced in models-config.test.ts). */
+  pinning_surface_carve_out_reason?: string | null;
+  /** Role classification for judge-ensemble entries. Targets (systems under
+   *  test) leave this undefined. Primary judges are the 3-vendor ensemble
+   *  (Sprint 10 Task 2.2 ratified trio); secondary / tertiary are reserve /
+   *  tie-break roles per A3 LOCK § 4. */
+  judge_role?: JudgeRole;
   /**
    * Sprint 11 Task B1 (2026-04-22): Stage 2 LOCKED config (thinking=on,
    * max_tokens=64000) per decisions/2026-04-22-stage-2-primary-config-locked.md.
