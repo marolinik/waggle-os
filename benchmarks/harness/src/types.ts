@@ -67,7 +67,18 @@ export interface DatasetSpec {
  */
 export type PinningSurface = 'anthropic_immutable' | 'floating_alias' | 'revision_hash_pinned';
 
-export type JudgeRole = 'primary' | 'secondary' | 'tertiary';
+/**
+ * Judge ensemble role classification.
+ *
+ * Sprint 12 Task 1 judge-role remap (2026-04-22, brief
+ * `briefs/2026-04-22-cc-sprint-12-task1-judge-role-remap.md`):
+ * B2 LOCK § 1 treats Opus 4.7 + GPT-5.4 + Gemini 3.1 as a 3-vendor
+ * primary ensemble (all `primary`); Grok 4.20 is the tie-break `reserve`.
+ * `secondary` / `tertiary` are retained in the enum for backward
+ * compatibility — future models may populate them, but no current entry
+ * in models.json uses them after this remap.
+ */
+export type JudgeRole = 'primary' | 'secondary' | 'tertiary' | 'reserve';
 
 export type ModelProvider =
   | 'alibaba'

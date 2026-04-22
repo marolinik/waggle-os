@@ -34,7 +34,7 @@ const VALID_PINNING_SURFACES: readonly PinningSurface[] = [
   'revision_hash_pinned',
 ];
 
-const VALID_JUDGE_ROLES: readonly JudgeRole[] = ['primary', 'secondary', 'tertiary'];
+const VALID_JUDGE_ROLES: readonly JudgeRole[] = ['primary', 'secondary', 'tertiary', 'reserve'];
 
 /** Sprint 11 Task 2.2 ratified judge ensemble — 3-primary + 1-reserve. */
 const REQUIRED_JUDGE_IDS: readonly string[] = ['claude-opus-4-7', 'gpt-5.4', 'gemini-3.1', 'grok-4.20'];
@@ -143,22 +143,22 @@ describe('Sprint 11 Task 2.2 judge ensemble (criterion 6)', () => {
     expect(opus.provider).toBe('anthropic');
   });
 
-  it('Grok 4.20 is tertiary tie-break reserve (B2 LOCK quadri-vendor invariant)', () => {
+  it('Grok 4.20 is the reserve tie-break (B2 LOCK § 1 quadri-vendor invariant)', () => {
     const models = loadModels();
     const grok = models['grok-4.20'];
     expect(grok).toBeDefined();
-    expect(grok.judge_role).toBe('tertiary');
+    expect(grok.judge_role).toBe('reserve');
     expect(grok.pinning_surface).toBe('floating_alias');
     expect(grok.provider).toBe('xai_via_openrouter');
   });
 
-  it('GPT-5.4 + Gemini 3.1 are secondary judges with floating_alias surfaces', () => {
+  it('GPT-5.4 + Gemini 3.1 are primary judges (B2 LOCK § 1 3-vendor primary ensemble)', () => {
     const models = loadModels();
     const gpt = models['gpt-5.4'];
     const gemini = models['gemini-3.1'];
-    expect(gpt.judge_role).toBe('secondary');
+    expect(gpt.judge_role).toBe('primary');
     expect(gpt.pinning_surface).toBe('floating_alias');
-    expect(gemini.judge_role).toBe('secondary');
+    expect(gemini.judge_role).toBe('primary');
     expect(gemini.pinning_surface).toBe('floating_alias');
   });
 

@@ -81,7 +81,7 @@
     "contextWindow": 200000,
     "pinning_surface": "floating_alias",
     "pinning_surface_carve_out_reason": "OpenAI does not expose immutable model snapshots through OpenRouter routing layer; floating alias mandated by B3 addendum § 5",
-    "judge_role": "secondary"
+    "judge_role": "primary"
   },
   "gemini-3.1": {
     "id": "gemini-3.1",
@@ -93,7 +93,7 @@
     "contextWindow": 1000000,
     "pinning_surface": "floating_alias",
     "pinning_surface_carve_out_reason": "Google does not expose immutable model snapshots through OpenRouter routing layer; floating alias mandated by B3 addendum § 5",
-    "judge_role": "secondary"
+    "judge_role": "primary"
   },
   "grok-4.20": {
     "id": "grok-4.20",
@@ -105,6 +105,6 @@
     "contextWindow": 131072,
     "pinning_surface": "floating_alias",
     "pinning_surface_carve_out_reason": "xAI does not expose immutable model snapshots through OpenRouter routing layer; floating alias mandated by B3 addendum § 5",
-    "judge_role": "tertiary"
+    "judge_role": "reserve"
   }
 }

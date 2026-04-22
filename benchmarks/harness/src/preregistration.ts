@@ -54,7 +54,11 @@ export type PinningSurface = 'anthropic_immutable' | 'floating_alias' | 'revisio
 export interface JudgeModelManifestEntry {
   model_id: string;
   provider: string;
-  judge_role: 'primary' | 'secondary' | 'tertiary';
+  /** Kept in sync with `JudgeRole` in types.ts (2026-04-22 B2 LOCK remap
+   *  added `'reserve'` for Grok tie-break). Duplicated inline here to
+   *  avoid a types.ts → preregistration.ts → types.ts type cycle per
+   *  existing `PinningSurface` dual-declaration precedent. */
+  judge_role: 'primary' | 'secondary' | 'tertiary' | 'reserve';
   pinning_surface: PinningSurface;
   pinning_surface_carve_out_reason: string | null;
 }
