@@ -24,6 +24,7 @@ import type {
   FailureMode,
   JudgeVerdict,
   JudgeEnsembleEntry,
+  PinningSurface,
 } from '../src/types.js';
 
 // Fixture: pre-judge record exactly as Sprint-7/8 runners emitted it.
@@ -175,5 +176,90 @@ describe('JsonlRecord judge-field type closedness (Task 1 acceptance)', () => {
     };
     expect(withOptionals.rationale).toBeTruthy();
     expect(withOptionals.latency_ms).toBe(540);
+  });
+});
+
+// ── Sprint 12 Task 1 / B3 addendum § 4 — pinning surface fields ──────────
+
+describe('JsonlRecord B3 addendum pinning fields (Sub-deliverable C)', () => {
+  it('accepts an anthropic_immutable target row with null carve-out + null revision', () => {
+    const row: JsonlRecord = {
+      turnId: '11111111-1111-1111-1111-111111111111',
+      cell: 'raw',
+      instance_id: 'locomo_conv-26_q000',
+      model: 'claude-opus-4-7',
+      seed: 42,
+      accuracy: 1,
+      p50_latency_ms: 900,
+      p95_latency_ms: 1500,
+      usd_per_query: 0.0006,
+      failure_mode: null,
+      model_pinning_surface: 'anthropic_immutable',
+      model_pinning_carve_out_reason: null,
+      model_revision_hash: null,
+    };
+    expect(row.model_pinning_surface).toBe('anthropic_immutable');
+    expect(row.model_pinning_carve_out_reason).toBeNull();
+    expect(row.model_revision_hash).toBeNull();
+  });
+
+  it('accepts a floating_alias target row with non-null carve-out reason', () => {
+    const row: JsonlRecord = {
+      turnId: '22222222-2222-2222-2222-222222222222',
+      cell: 'filtered',
+      instance_id: 'locomo_conv-26_q001',
+      model: 'qwen3.6-35b-a3b-stage2',
+      seed: 42,
+      accuracy: 0,
+      p50_latency_ms: 1100,
+      p95_latency_ms: 1700,
+      usd_per_query: 0.0012,
+      failure_mode: null,
+      model_pinning_surface: 'floating_alias',
+      model_pinning_carve_out_reason:
+        'DashScope does not expose immutable model snapshots; floating alias mandated by B3 addendum § 5',
+      model_revision_hash: null,
+    };
+    expect(row.model_pinning_surface).toBe('floating_alias');
+    expect(typeof row.model_pinning_carve_out_reason).toBe('string');
+    expect((row.model_pinning_carve_out_reason as string).length).toBeGreaterThan(10);
+  });
+
+  it('parses a pre-Sprint-12 row (pinning fields absent) without error — backward compat', () => {
+    const raw = JSON.stringify({
+      turnId: '33333333-3333-3333-3333-333333333333',
+      cell: 'raw',
+      instance_id: 'locomo_conv-26_q002',
+      model: 'qwen3.6-35b-a3b',
+      seed: 42,
+      accuracy: 1,
+      p50_latency_ms: 800,
+      p95_latency_ms: 1200,
+      usd_per_query: 0.0008,
+      failure_mode: null,
+    });
+    const parsed = JSON.parse(raw) as JsonlRecord;
+    expect(parsed.model_pinning_surface).toBeUndefined();
+    expect(parsed.model_pinning_carve_out_reason).toBeUndefined();
+    expect(parsed.model_revision_hash).toBeUndefined();
+    expect(parsed.turnId).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it('PinningSurface union is exactly the B3 addendum § 4 three-value enum', () => {
+    const surfaces: PinningSurface[] = ['anthropic_immutable', 'floating_alias', 'revision_hash_pinned'];
+    expect(surfaces).toHaveLength(3);
+    for (const s of surfaces) {
+      switch (s) {
+        case 'anthropic_immutable':
+        case 'floating_alias':
+        case 'revision_hash_pinned':
+          expect(s).toBeTruthy();
+          break;
+        default: {
+          const _exhaustive: never = s;
+          throw new Error(`unreachable: ${_exhaustive as string}`);
+        }
+      }
+    }
   });
 });

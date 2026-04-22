@@ -43,6 +43,7 @@ import {
   getRunnerVersion,
   readManifestLockedDate,
   sanitizeArgv,
+  type JudgeModelManifestEntry,
   type PreregistrationManifestPayload,
 } from './preregistration.js';
 import { JsonlWriter, buildAggregate, scoreAccuracy, percentile } from './metrics.js';
@@ -405,6 +406,17 @@ async function runOne(config: RunConfig): Promise<void> {
       ...(result.reasoningShape !== undefined && {
         reasoning_shape: result.reasoningShape,
       }),
+      // Sprint 12 Task 1 Blocker #3 / B3 addendum § 4: copy target-model
+      // pinning surface fields from `config/models.json` onto every row so
+      // any single JSONL line carries its own audit-replication anchor.
+      ...(config.model.pinning_surface !== undefined && {
+        model_pinning_surface: config.model.pinning_surface,
+        model_pinning_carve_out_reason: config.model.pinning_surface_carve_out_reason ?? null,
+      }),
+      // B3 addendum § 4 leaves `model_revision_hash` null unless the provider
+      // exposes one. Future providers (e.g. OpenRouter with revision_id)
+      // will populate this via a provider-specific hook in Session 3+.
+      model_revision_hash: null,
     };
     writer.write(record);
   }
@@ -442,6 +454,47 @@ function computeFileHash(absolutePath: string): string {
 }
 
 /**
+ * Resolve the CLI-requested judge-model roster against `config/models.json`
+ * so every pre-registration emit carries B3-addendum pinning fields. Keeps
+ * the registry lookup in main() — runOne only forwards the materialised
+ * list.
+ *
+ * Unknown model ids are passed through with `floating_alias` defaults and
+ * an explicit carve-out reason that names the ID. This keeps the run going
+ * while loudly surfacing the gap to downstream audit consumers.
+ */
+function resolveJudgeModelsForPreregistration(
+  models: Record<string, ModelSpec>,
+  args: ParsedArgs,
+): JudgeModelManifestEntry[] {
+  const ids: string[] = [];
+  if (args.judgeEnsemble && args.judgeEnsemble.length > 0) {
+    ids.push(...args.judgeEnsemble);
+  } else if (args.judge) {
+    ids.push(args.judge);
+  }
+  return ids.map((id, idx) => {
+    const spec = models[id];
+    if (!spec) {
+      return {
+        model_id: id,
+        provider: 'unknown',
+        judge_role: (idx === 0 ? 'primary' : idx === 1 ? 'secondary' : 'tertiary'),
+        pinning_surface: 'floating_alias' as const,
+        pinning_surface_carve_out_reason: `Model id '${id}' not found in benchmarks/harness/config/models.json — pinning surface cannot be resolved; treating as floating_alias for audit safety`,
+      };
+    }
+    return {
+      model_id: spec.id,
+      provider: spec.provider,
+      judge_role: spec.judge_role ?? (idx === 0 ? 'primary' : idx === 1 ? 'secondary' : 'tertiary'),
+      pinning_surface: spec.pinning_surface ?? 'floating_alias',
+      pinning_surface_carve_out_reason: spec.pinning_surface_carve_out_reason ?? null,
+    };
+  });
+}
+
+/**
  * Build the `PreregistrationManifestPayload` from the RunConfig + derived
  * per-run context. Split out from `runOne` so tests can exercise the
  * assembly without spinning up a full run.
@@ -473,20 +526,10 @@ function assemblePreregistrationPayload(
 
   const perCell = config.perCellList ?? [config.run.name];
 
-  // Sub-deliverable A: placeholder judge_models shape. Sub-deliverable C
-  // will look these up against the extended models.json registry.
-  const judgeModelIds = config.judgeConfig?.kind === 'ensemble'
-    ? config.judgeConfig.models
-    : config.judgeConfig?.kind === 'single'
-      ? [config.judgeConfig.model]
-      : [];
-  const judgeModels = judgeModelIds.map((id, idx) => ({
-    model_id: id,
-    provider: 'unknown',
-    judge_role: (idx === 0 ? 'primary' : idx === 1 ? 'secondary' : 'tertiary') as 'primary' | 'secondary' | 'tertiary',
-    pinning_surface: 'floating_alias' as const,
-    pinning_surface_carve_out_reason: 'registry_lookup_pending_sub_deliverable_c',
-  }));
+  // Sub-deliverable C: `judgeModelsResolved` is pre-materialised in main()
+  // from args.judgeEnsemble against config/models.json. When judging is
+  // disabled the list is empty (schema-valid per brief § 3.1).
+  const judgeModels: JudgeModelManifestEntry[] = config.judgeModelsResolved ?? [];
 
   return {
     manifest_hash: manifestHash,
@@ -635,6 +678,10 @@ async function main(): Promise<void> {
   // than a single runOne's slice. Stripping kind='control' entries from the
   // list would hide verbose-fixed-only invocations; report them as-is.
   const perCellList = runs.map(r => r.name);
+  // Sub-deliverable C: materialise judge-model roster with B3 addendum
+  // pinning fields so every pre-registration emit carries audit-anchor
+  // metadata without repeating the models.json lookup per runOne.
+  const judgeModelsResolved = resolveJudgeModelsForPreregistration(models, args);
   for (const run of runs) {
     const outputPath = args.output ?? defaultOutputPath(run, args.dataset);
     await runOne({
@@ -655,6 +702,7 @@ async function main(): Promise<void> {
       emitPreregistrationEvent: args.emitPreregistrationEvent,
       perCellList,
       judgeTiebreak: args.judgeTiebreak,
+      judgeModelsResolved,
     });
   }
 

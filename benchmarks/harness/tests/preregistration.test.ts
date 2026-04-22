@@ -283,3 +283,56 @@ describe('getRunnerVersion', () => {
     expect(/^[0-9a-f]{7,40}$/.test(v) || v === RUNNER_VERSION_FALLBACK).toBe(true);
   });
 });
+
+// ── Sub-deliverable C — per-judge pinning in manifest payload ────────────
+
+describe('judge_models B3 addendum pinning (Sub-deliverable C)', () => {
+  let infoSpy: MockInstance;
+
+  beforeEach(() => {
+    infoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+  });
+  afterEach(() => {
+    infoSpy.mockRestore();
+  });
+
+  it('payload.judge_models carries per-model pinning_surface + carve_out_reason', () => {
+    const payload = makeValidPayload({
+      judge_models: [
+        {
+          model_id: 'claude-opus-4-7',
+          provider: 'anthropic',
+          judge_role: 'primary',
+          pinning_surface: 'anthropic_immutable',
+          pinning_surface_carve_out_reason: null,
+        },
+        {
+          model_id: 'gemini-3.1',
+          provider: 'google_via_openrouter',
+          judge_role: 'secondary',
+          pinning_surface: 'floating_alias',
+          pinning_surface_carve_out_reason:
+            'Google does not expose immutable model snapshots through OpenRouter routing layer; floating alias mandated by B3 addendum § 5',
+        },
+      ],
+    });
+    emitPreregistrationManifest(payload);
+    expect(infoSpy).toHaveBeenCalledTimes(1);
+    const emitted = infoSpy.mock.calls[0][1] as { judge_models: Array<Record<string, unknown>> };
+    expect(emitted.judge_models).toHaveLength(2);
+    expect(emitted.judge_models[0].model_id).toBe('claude-opus-4-7');
+    expect(emitted.judge_models[0].pinning_surface).toBe('anthropic_immutable');
+    expect(emitted.judge_models[0].pinning_surface_carve_out_reason).toBeNull();
+    expect(emitted.judge_models[1].model_id).toBe('gemini-3.1');
+    expect(emitted.judge_models[1].pinning_surface).toBe('floating_alias');
+    expect((emitted.judge_models[1].pinning_surface_carve_out_reason as string)).toMatch(/B3 addendum/);
+  });
+
+  it('payload.judge_models[] is empty when judging is disabled (schema-valid)', () => {
+    const payload = makeValidPayload({ judge_models: [] });
+    emitPreregistrationManifest(payload);
+    const emitted = infoSpy.mock.calls[0][1] as { judge_models: unknown[] };
+    expect(Array.isArray(emitted.judge_models)).toBe(true);
+    expect(emitted.judge_models).toHaveLength(0);
+  });
+});

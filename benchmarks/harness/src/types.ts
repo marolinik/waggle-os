@@ -177,6 +177,14 @@ export interface RunConfig {
   perCellList?: string[];
   /** Judge tie-break strategy surfaced into the pre-registration payload. */
   judgeTiebreak?: string;
+  /**
+   * Resolved judge model roster with per-model pinning fields, already
+   * looked up against `config/models.json`. Main() materializes this list
+   * once from CLI `--judge-ensemble` args so runOne doesn't re-read the
+   * model registry on every cell iteration. Undefined when judging is
+   * disabled — pre-registration payload emits an empty array in that case.
+   */
+  judgeModelsResolved?: import('./preregistration.js').JudgeModelManifestEntry[];
 }
 
 /** Judge failure-mode taxonomy codes. Must match the enum the judge module
@@ -305,12 +313,30 @@ export interface JsonlRecord {
    * runner from `getDatasetVersion(dataset, dataRoot)` and attached per-row
    * so any downstream replication check can resolve the exact input set
    * from a single JSONL line.
-   *
-   * Will be re-emitted by the pre-registration event emitter in Sprint 12
-   * Task 1 Blocker #3 (`bench.preregistration.manifest_hash` pino event
-   * payload field `dataset_version_hash` per A3 LOCK §H-AUDIT-2).
    */
   dataset_version?: string;
+  // ── Sprint 12 Task 1 Blocker #3 / B3 addendum § 4 piggy-back ─────────────
+  /**
+   * Pinning surface classification for the target model that produced this
+   * row. Populated by the runner from `config.model.pinning_surface`. A row
+   * without this field belongs to a pre-Sprint-12 artefact (backward-compat
+   * tolerated via optional).
+   */
+  model_pinning_surface?: PinningSurface;
+  /**
+   * Non-null rationale when `model_pinning_surface === 'floating_alias'` or
+   * `revision_hash_pinned`. Null for `anthropic_immutable`. The exact text
+   * is copied verbatim from `config/models.json` so a grep across JSONL
+   * artefacts recovers the full carve-out set per B3 addendum § 5.
+   */
+  model_pinning_carve_out_reason?: string | null;
+  /**
+   * Provider-exposed revision hash (e.g., OpenRouter `revision_id`, vLLM
+   * `model_hash`) when available. Null when the provider does not surface
+   * one — floating-alias runs set this to null. Future hook: Session 3+
+   * wires provider-specific extraction where applicable.
+   */
+  model_revision_hash?: string | null;
 }
 
 /** Summary shape emitted at the end of a run — written alongside the JSONL. */
