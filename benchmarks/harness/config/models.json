@@ -85,14 +85,14 @@
   },
   "gemini-3.1": {
     "id": "gemini-3.1",
-    "displayName": "Gemini 3.1 Pro (Sprint 11 Task 2.2 primary judge)",
+    "displayName": "Gemini 3.1 Pro Preview (Sprint 11 Task 2.2 primary judge)",
     "provider": "google_via_openrouter",
-    "litellmModel": "openrouter/google/gemini-3.1-pro",
+    "litellmModel": "openrouter/google/gemini-3.1-pro-preview",
     "pricePerMillionInput": 3.5,
     "pricePerMillionOutput": 10.5,
     "contextWindow": 1000000,
     "pinning_surface": "floating_alias",
-    "pinning_surface_carve_out_reason": "Google does not expose immutable model snapshots through OpenRouter routing layer; floating alias mandated by B3 addendum § 5",
+    "pinning_surface_carve_out_reason": "Google does not expose immutable model snapshots through OpenRouter routing layer; `gemini-3.1-pro` canonical release is served as `gemini-3.1-pro-preview` on OpenRouter per 2026-04-23 Sprint 12 Task 2 §2.2 slug verification; floating alias mandated by B3 addendum § 5",
     "judge_role": "primary"
   },
   "grok-4.20": {
