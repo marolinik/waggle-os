@@ -221,6 +221,18 @@ export interface JsonlRecord {
    * field was present. `undefined` when thinking was off.
    */
   reasoning_shape?: 'message.reasoning_content' | 'message.reasoning' | 'body.reasoning_content' | 'unknown';
+  // ── B2 fold-in (Sprint 11 Task B2, 2026-04-22) ────────────────────────────
+  /**
+   * Path the tie-break resolver took. `undefined` on single-judge runs and
+   * on 3-primary ensembles that reached majority without escalation.
+   * `'quadri-vendor'` when 1-1-1 was escalated to `xai/grok-4.20` and
+   * resolved. `'pm-escalation'` when even the fourth vote produced 1-1-1-1
+   * — accompanied by `judge_error: 'PM_ESCALATION'` so the aggregator
+   * treats the row as a skipped judge instance.
+   */
+  tie_break_path?: 'none' | 'majority' | 'quadri-vendor' | 'pm-escalation';
+  /** Fourth-vendor slug when tie_break_path ∈ {quadri-vendor, pm-escalation}. */
+  tie_break_fourth_vendor?: string;
 }
 
 /** Summary shape emitted at the end of a run — written alongside the JSONL. */

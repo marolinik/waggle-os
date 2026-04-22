@@ -283,6 +283,9 @@ async function runOne(config: RunConfig): Promise<void> {
         judge_model: judgePayload.judge_model,
         judge_timestamp: judgePayload.judge_timestamp,
         judge_ensemble: judgePayload.judge_ensemble,
+        // B2 fold-in observability fields.
+        ...(judgePayload.tie_break_path !== undefined && { tie_break_path: judgePayload.tie_break_path }),
+        ...(judgePayload.tie_break_fourth_vendor !== undefined && { tie_break_fourth_vendor: judgePayload.tie_break_fourth_vendor }),
       }),
       // Sprint 11 A2: reasoning_content fields — same-row persistence
       // keyed by `turnId` per ratification §Q4. Chars stay separate for
@@ -390,7 +393,35 @@ async function main(): Promise<void> {
           }),
         );
       }
-      judgeConfig = { kind: 'ensemble', models: args.judgeEnsemble, clients };
+
+      // Sprint 11 B2 fold-in (2026-04-22): when the primary ensemble is
+      // exactly 3 vendors (the Sprint 10 Task 2.2 ratified trio — Opus 4.7
+      // + GPT-5.4 + Gemini 3.1-Pro), auto-wire xai/grok-4.20 as the
+      // fourth-vendor tie-breaker per decisions/2026-04-22-tie-break-policy-locked.md.
+      // Skip wiring when: (a) the ensemble isn't 3-vendor, (b) grok-4.20 is
+      // already in the primary list (would create dual-role ambiguity).
+      const TIE_BREAKER_MODEL = 'grok-4.20';
+      const shouldWireTieBreaker =
+        args.judgeEnsemble.length === 3 && !args.judgeEnsemble.includes(TIE_BREAKER_MODEL);
+      let tieBreakerClient: import('./judge-client.js').LlmClient | undefined;
+      if (shouldWireTieBreaker) {
+        tieBreakerClient = createJudgeLlmClient({
+          litellmUrl,
+          litellmApiKey,
+          model: TIE_BREAKER_MODEL,
+          onCall: entry => judgeCosts.push(entry),
+        });
+      }
+
+      judgeConfig = {
+        kind: 'ensemble',
+        models: args.judgeEnsemble,
+        clients,
+        ...(shouldWireTieBreaker && tieBreakerClient && {
+          tieBreakerModel: TIE_BREAKER_MODEL,
+          tieBreakerClient,
+        }),
+      };
     } else if (args.judge) {
       judgeConfig = {
         kind: 'single',

@@ -123,6 +123,22 @@ export interface JudgePayload {
    *  logs this but does NOT surface it as a cell-level failure_mode —
    *  the cell succeeded, only the post-hoc grading failed. */
   judge_error?: string;
+  /**
+   * Sprint 11 B2 fold-in (2026-04-22): path the ensemble resolver took.
+   *   - `undefined` on single-judge runs or when the tie-break module
+   *      was never consulted (e.g. 3-0 consensus, 2-1 majority — handled
+   *      by legacy `computeMajority` inside `judgeEnsemble`).
+   *   - `'none'` / `'majority'` when resolveTieBreak short-circuited.
+   *   - `'quadri-vendor'` when 1-1-1 was escalated to the fourth vendor
+   *      and resolved.
+   *   - `'pm-escalation'` when the four votes produced 1-1-1-1 → runtime
+   *      surfaces this as `judge_error: 'PM_ESCALATION'` so the aggregator
+   *      treats the instance as skipped (no silent coin-flip verdict).
+   */
+  tie_break_path?: 'none' | 'majority' | 'quadri-vendor' | 'pm-escalation';
+  /** Model slug that cast the fourth vote when `tie_break_path === 'quadri-vendor'`
+   *  or `'pm-escalation'`. e.g. `'xai/grok-4.20'`. */
+  tie_break_fourth_vendor?: string;
 }
 
 export interface SingleJudgeConfig {
@@ -137,9 +153,64 @@ export interface EnsembleJudgeConfig {
    *  per taxonomy §6). */
   models: string[];
   clients: Map<string, LlmClient>;
+  /**
+   * Sprint 11 B2 fold-in (2026-04-22) per decisions/2026-04-22-tie-break-policy-locked.md:
+   * when provided AND a 1-1-1 three-way split emerges from the primary
+   * ensemble (only meaningful when `models.length === 3`), judge-runner
+   * calls `resolveTieBreak` with this client as the fourth vendor.
+   * Absent → keep the legacy `computeMajority` behavior (tie-breaker =
+   * first model in `models` list).
+   */
+  tieBreakerModel?: string;
+  tieBreakerClient?: LlmClient;
 }
 
 export type JudgeConfig = SingleJudgeConfig | EnsembleJudgeConfig;
+
+/** Module shape mirror for resolveTieBreak — same dynamic-import pattern
+ *  as loadJudgeModule to keep tsc happy under `rootDir: "src"`. */
+interface TieBreakModule {
+  resolveTieBreak(
+    votes: Array<{ verdict: JudgeVerdict; failure_mode: FailureMode | null; rationale: string; judge_model: string }>,
+    options: {
+      callFourthVendor?: (payload: { primaryVotes: Array<{ verdict: JudgeVerdict; failure_mode: FailureMode | null; rationale: string; judge_model: string }>; model: string }) => Promise<{ verdict: JudgeVerdict; failure_mode: FailureMode | null; rationale: string; judge_model: string }>;
+      fourthVendorModel?: string;
+      logger?: { info(event: string, fields: Record<string, unknown>): void; warn?(event: string, fields: Record<string, unknown>): void };
+    },
+  ): Promise<{
+    verdict: string;
+    path: 'none' | 'majority' | 'quadri-vendor' | 'pm-escalation';
+    votes: Array<{ verdict: JudgeVerdict; failure_mode: FailureMode | null; rationale: string; judge_model: string }>;
+    fourthVendorVote?: { verdict: JudgeVerdict; failure_mode: FailureMode | null; rationale: string; judge_model: string };
+    fourthVendorSlug?: string;
+  }>;
+  PM_ESCALATION_VERDICT: string;
+  DEFAULT_FOURTH_VENDOR: string;
+}
+
+let cachedTieBreakModule: TieBreakModule | null = null;
+
+async function loadTieBreakModule(): Promise<TieBreakModule> {
+  if (cachedTieBreakModule) return cachedTieBreakModule;
+  const { fileURLToPath, pathToFileURL } = await import('node:url');
+  const nodePath = await import('node:path');
+  const here = fileURLToPath(import.meta.url);
+  const repoRoot = nodePath.resolve(nodePath.dirname(here), '..', '..', '..');
+  const candidates = [
+    nodePath.resolve(repoRoot, 'packages/server/src/benchmarks/judge/ensemble-tiebreak.ts'),
+    nodePath.resolve(repoRoot, 'packages/server/src/benchmarks/judge/ensemble-tiebreak.js'),
+    nodePath.resolve(repoRoot, 'packages/server/dist/benchmarks/judge/ensemble-tiebreak.js'),
+  ];
+  const fs = await import('node:fs');
+  const target = candidates.find(p => fs.existsSync(p));
+  if (!target) {
+    throw new Error(
+      `ensemble-tiebreak module not found — looked in:\n  ${candidates.join('\n  ')}`,
+    );
+  }
+  cachedTieBreakModule = (await import(pathToFileURL(target).href)) as TieBreakModule;
+  return cachedTieBreakModule;
+}
 
 export async function runJudge(
   triple: JudgeTriple,
@@ -175,6 +246,85 @@ export async function runJudge(
       judgeModels: config.models,
       llmClients: config.clients,
     });
+
+    // Sprint 11 B2 fold-in (2026-04-22): 3-primary ensemble + tie-break
+    // client supplied + 1-1-1 three-way split observed → escalate via
+    // resolveTieBreak. Preserves judgeEnsemble's internal contract (it
+    // still returns its computeMajority-derived `majority` field);
+    // judge-runner post-processes to override the majority when the
+    // escalation triggers.
+    const isThreePrimary = config.models.length === 3;
+    const hasTieBreaker = Boolean(config.tieBreakerClient);
+    if (isThreePrimary && hasTieBreaker) {
+      const distinctVoteKeys = new Set(
+        result.ensemble.map(r => `${r.verdict}|${r.failure_mode ?? 'NA'}`),
+      );
+      if (distinctVoteKeys.size === 3) {
+        // 1-1-1 split confirmed. Dispatch to resolveTieBreak.
+        const tb = await loadTieBreakModule();
+        const fourthVendorModel = config.tieBreakerModel ?? tb.DEFAULT_FOURTH_VENDOR;
+        const tbResult = await tb.resolveTieBreak(result.ensemble, {
+          fourthVendorModel,
+          callFourthVendor: async ({ model: tbModel }) => {
+            const grokJudge = await mod.judgeAnswer({
+              question: triple.question,
+              groundTruth: triple.groundTruth,
+              contextExcerpt: triple.contextExcerpt,
+              modelAnswer: triple.modelAnswer,
+              judgeModel: tbModel,
+              llmClient: config.tieBreakerClient!,
+            });
+            return {
+              verdict: grokJudge.verdict,
+              failure_mode: grokJudge.failure_mode,
+              rationale: grokJudge.rationale,
+              judge_model: grokJudge.judge_model,
+            };
+          },
+        });
+
+        const ensembleVotes = tbResult.votes.map(r => ({
+          model: r.judge_model,
+          verdict: r.verdict,
+          failure_mode: r.failure_mode,
+          rationale: r.rationale,
+        }));
+
+        if (tbResult.path === 'pm-escalation') {
+          // 1-1-1-1 four-way — surface as judge_error so aggregator treats
+          // it as skipped (no silent coin-flip verdict). Preserves the
+          // Fleiss' κ=0.8784 methodology lock by NEVER fabricating a
+          // verdict when the ensemble + tie-break cannot reach plurality.
+          return {
+            ...base,
+            judge_timestamp: new Date().toISOString(),
+            judge_ensemble: ensembleVotes,
+            judge_error: 'PM_ESCALATION',
+            tie_break_path: 'pm-escalation',
+            tie_break_fourth_vendor: tbResult.fourthVendorSlug,
+          };
+        }
+
+        // path === 'quadri-vendor' — decode back to structured verdict.
+        const [verdictStr, failureModeRaw] = tbResult.verdict.split('|');
+        const resolvedVerdict = (verdictStr as JudgeVerdict);
+        const resolvedFailureMode: FailureMode | null =
+          failureModeRaw === 'NA' ? null : (failureModeRaw as FailureMode);
+        return {
+          ...base,
+          judge_verdict: resolvedVerdict,
+          judge_failure_mode: resolvedFailureMode,
+          judge_rationale: `tie-break path=${tbResult.path} via ${tbResult.fourthVendorSlug ?? 'unknown'}`,
+          judge_model: 'ensemble_with_tiebreak',
+          judge_timestamp: new Date().toISOString(),
+          judge_ensemble: ensembleVotes,
+          tie_break_path: tbResult.path,
+          tie_break_fourth_vendor: tbResult.fourthVendorSlug,
+        };
+      }
+      // Not a 1-1-1 split — fall through to legacy majority below.
+    }
+
     return {
       ...base,
       judge_verdict: result.majority.verdict,
