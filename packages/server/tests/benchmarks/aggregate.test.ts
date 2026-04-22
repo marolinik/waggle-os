@@ -9,7 +9,7 @@
  *   - per-cell count table matches hand-computed rows
  *   - weighted score matches hand-computed number (see §2 below)
  *   - per-category rollup surfaces the hallucination flag at the right threshold
- *   - cross-cell delta matrix populates full-stack − raw direction
+ *   - cross-cell delta matrix populates full-context − raw direction
  *   - cost summary sums correctly + Week-1 projection flag fires at the threshold
  *   - markdown renderer produces parseable output + contains every row
  */
@@ -66,7 +66,7 @@ function mkRecord(
  *  catches silent drift in the rubric. */
 function fixture12(): JudgedJsonlRecord[] {
   const recs: JudgedJsonlRecord[] = [];
-  const cells = ['raw', 'memory-only', 'full-stack'];
+  const cells = ['raw', 'filtered', 'full-context'];
   // Per cell: 1 correct + 1 F2 partial + 1 F3 incorrect + 1 F4 hallucinated.
   for (const c of cells) {
     recs.push(mkRecord(`${c}-A`, c, 'correct', null, 'single-hop'));
@@ -108,7 +108,7 @@ describe('perCellRollup', () => {
   it('emits 3 rows, one per observed cell, in CELL_NAMES order', () => {
     const rows = perCellRollup(fixture12());
     expect(rows).toHaveLength(3);
-    expect(rows.map(r => r.cell)).toEqual(['raw', 'memory-only', 'full-stack']);
+    expect(rows.map(r => r.cell)).toEqual(['raw', 'filtered', 'full-context']);
   });
 
   it('computes per-cell counts + weighted score correctly (hand-check)', () => {
@@ -197,34 +197,34 @@ describe('perCategoryRollup', () => {
 // ── crossCellDeltaMatrix ───────────────────────────────────────────────
 
 describe('crossCellDeltaMatrix', () => {
-  it('returns delta = full-stack − raw for each verdict, preserving sign', () => {
-    // Build a case where full-stack correct% > raw correct%.
+  it('returns delta = full-context − raw for each verdict, preserving sign', () => {
+    // Build a case where full-context correct% > raw correct%.
     const recs: JudgedJsonlRecord[] = [
       // raw: 1 correct, 3 incorrect-F4 → 25% correct, 75% F4
       mkRecord('r1', 'raw', 'correct', null, 'single-hop'),
       mkRecord('r2', 'raw', 'incorrect', 'F4', 'single-hop'),
       mkRecord('r3', 'raw', 'incorrect', 'F4', 'single-hop'),
       mkRecord('r4', 'raw', 'incorrect', 'F4', 'single-hop'),
-      // full-stack: 3 correct, 1 F4 → 75% correct, 25% F4
-      mkRecord('f1', 'full-stack', 'correct', null, 'single-hop'),
-      mkRecord('f2', 'full-stack', 'correct', null, 'single-hop'),
-      mkRecord('f3', 'full-stack', 'correct', null, 'single-hop'),
-      mkRecord('f4', 'full-stack', 'incorrect', 'F4', 'single-hop'),
+      // full-context: 3 correct, 1 F4 → 75% correct, 25% F4
+      mkRecord('f1', 'full-context', 'correct', null, 'single-hop'),
+      mkRecord('f2', 'full-context', 'correct', null, 'single-hop'),
+      mkRecord('f3', 'full-context', 'correct', null, 'single-hop'),
+      mkRecord('f4', 'full-context', 'incorrect', 'F4', 'single-hop'),
     ];
     const perCell = perCellRollup(recs);
     const delta = crossCellDeltaMatrix(perCell);
     expect(delta).not.toBeNull();
     const correctDelta = delta!.find(d => d.verdict === 'correct')!;
     expect(correctDelta.rawPercent).toBeCloseTo(0.25, 6);
-    expect(correctDelta.fullStackPercent).toBeCloseTo(0.75, 6);
+    expect(correctDelta.fullContextPercent).toBeCloseTo(0.75, 6);
     expect(correctDelta.delta).toBeCloseTo(0.50, 6);
     // F4 goes the other way.
     const f4Delta = delta!.find(d => d.verdict === 'F4_hallucinated')!;
     expect(f4Delta.delta).toBeCloseTo(-0.50, 6);
   });
 
-  it('returns null when either raw or full-stack is absent', () => {
-    const recs: JudgedJsonlRecord[] = [mkRecord('x', 'memory-only', 'correct', null)];
+  it('returns null when either raw or full-context is absent', () => {
+    const recs: JudgedJsonlRecord[] = [mkRecord('x', 'filtered', 'correct', null)];
     const perCell = perCellRollup(recs);
     expect(crossCellDeltaMatrix(perCell)).toBeNull();
   });
@@ -237,12 +237,12 @@ describe('costSummary', () => {
     const recs: JudgedJsonlRecord[] = [
       mkRecord('a', 'raw', 'correct', null, 'single-hop', 0.010),
       mkRecord('b', 'raw', 'correct', null, 'single-hop', 0.020),
-      mkRecord('c', 'full-stack', 'correct', null, 'single-hop', 0.050),
+      mkRecord('c', 'full-context', 'correct', null, 'single-hop', 0.050),
     ];
     const cost = costSummary(recs);
     expect(cost.totalUsd).toBeCloseTo(0.08, 6);
     expect(cost.perCellUsd['raw']).toBeCloseTo(0.03, 6);
-    expect(cost.perCellUsd['full-stack']).toBeCloseTo(0.05, 6);
+    expect(cost.perCellUsd['full-context']).toBeCloseTo(0.05, 6);
   });
 
   it('buildReport overlays an authoritative judgeTotalUsd and recomputes the Week-1 projection', () => {
@@ -277,7 +277,7 @@ describe('renderMarkdown', () => {
     expect(md).toContain('## Per-LoCoMo-category distribution');
     expect(md).toContain('## Cost summary');
     // Cells in table
-    for (const cell of ['raw', 'memory-only', 'full-stack']) {
+    for (const cell of ['raw', 'filtered', 'full-context']) {
       expect(md).toContain(`| ${cell} |`);
     }
     // Verdict columns in the header row

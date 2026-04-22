@@ -43,7 +43,7 @@ const PRE_JUDGE_JSONL = JSON.stringify({
 // Fixture: post-judge record with every new field populated, ensemble shape.
 const POST_JUDGE_JSONL = JSON.stringify({
   turnId: '9f16c4b2-e831-4a23-8a97-cd8b1e4c7210',
-  cell: 'full-stack',
+  cell: 'full-context',
   instance_id: 'locomo_conv-26_q001',
   model: 'qwen3.6-35b-a3b',
   seed: 42,

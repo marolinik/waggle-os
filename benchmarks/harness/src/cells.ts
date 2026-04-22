@@ -4,14 +4,14 @@
  * Each cell is a pure function from (instance, model, llm-client, turnId) to
  * an LLM call result. Cells differ only in HOW they assemble the prompt:
  *
- *   raw:          no memory injection, no prompt evolution.
- *   memory-only:  inject the instance's own context as "retrieved memory"
- *                 (scaffold proxy — Week 1 swaps in real HybridSearch).
- *   evolve-only:  raw prompt wrapped in an evolved scaffold — proxy for
- *                 GEPA prompt evolution until the real evolution config
- *                 ships (currently applies a lightweight v5-style
- *                 compression scaffold inline).
- *   full-stack:   memory + evolve (both treatments).
+ *   raw:           no memory injection, no prompt evolution.
+ *   filtered:      inject the instance's own context as "retrieved memory"
+ *                  (scaffold proxy — Week 1 swaps in real HybridSearch).
+ *   compressed:    raw prompt wrapped in an evolved scaffold — proxy for
+ *                  GEPA prompt evolution until the real evolution config
+ *                  ships (currently applies a lightweight v5-style
+ *                  compression scaffold inline).
+ *   full-context:  memory + evolve (both treatments).
  *
  * Controls live in `controls.ts`.
  */
@@ -60,7 +60,7 @@ export const cells: Record<CellName, CellFn> = {
     });
   },
 
-  'memory-only': async ({ instance, model, llm, turnId: _turnId }: CellInput) => {
+  filtered: async ({ instance, model, llm, turnId: _turnId }: CellInput) => {
     return llm.call({
       model,
       systemPrompt: SYSTEM_BASELINE,
@@ -68,7 +68,7 @@ export const cells: Record<CellName, CellFn> = {
     });
   },
 
-  'evolve-only': async ({ instance, model, llm, turnId: _turnId }: CellInput) => {
+  compressed: async ({ instance, model, llm, turnId: _turnId }: CellInput) => {
     return llm.call({
       model,
       systemPrompt: SYSTEM_EVOLVED,
@@ -76,7 +76,7 @@ export const cells: Record<CellName, CellFn> = {
     });
   },
 
-  'full-stack': async ({ instance, model, llm, turnId: _turnId }: CellInput) => {
+  'full-context': async ({ instance, model, llm, turnId: _turnId }: CellInput) => {
     return llm.call({
       model,
       systemPrompt: SYSTEM_EVOLVED,
@@ -87,7 +87,7 @@ export const cells: Record<CellName, CellFn> = {
 
 /** Type-narrowing helper for the runner's cell-or-control dispatch. */
 export function isCellName(name: string): name is CellName {
-  return name === 'raw' || name === 'memory-only' || name === 'evolve-only' || name === 'full-stack';
+  return name === 'raw' || name === 'filtered' || name === 'compressed' || name === 'full-context';
 }
 
 export function isControlName(name: string): name is ControlName {

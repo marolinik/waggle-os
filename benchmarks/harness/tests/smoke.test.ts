@@ -278,7 +278,7 @@ describe('runOne — acceptance criteria', () => {
   it('every record carries all four cost-capture fields (accuracy, p50, p95, usd_per_query)', async () => {
     const outputPath = path.join(tmpDir, 'cost.jsonl');
     await runOne({
-      run: { kind: 'cell', name: 'memory-only' },
+      run: { kind: 'cell', name: 'filtered' },
       dataset: SYNTHETIC_DATASET,
       model: QWEN_MODEL,
       limit: 5,
@@ -368,7 +368,7 @@ describe('runOne — acceptance criteria', () => {
   });
 
   it('all four cells produce records with the correct `cell` tag', async () => {
-    const cellNames = ['raw', 'memory-only', 'evolve-only', 'full-stack'] as const;
+    const cellNames = ['raw', 'filtered', 'compressed', 'full-context'] as const;
     for (const name of cellNames) {
       const outputPath = path.join(tmpDir, `${name}.jsonl`);
       await runOne({

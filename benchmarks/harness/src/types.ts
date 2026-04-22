@@ -2,10 +2,16 @@
  * Four-cell ablation harness — shared types.
  *
  * The four cells isolate causal contributions to end-to-end quality:
- *   Cell 1 — raw:          LLM only, stateless per turn.
- *   Cell 2 — memory-only:  LLM + memory retrieval, no prompt evolution.
- *   Cell 3 — evolve-only:  LLM + prompt evolution, no memory retrieval.
- *   Cell 4 — full-stack:   LLM + memory + prompt evolution.
+ *   Cell 1 — raw:           LLM only, stateless per turn.
+ *   Cell 2 — filtered:      LLM + memory retrieval, no prompt evolution.
+ *   Cell 3 — compressed:    LLM + prompt evolution, no memory retrieval.
+ *   Cell 4 — full-context:  LLM + memory + prompt evolution.
+ *
+ * Sprint 12 Task 1 Blocker #2 (2026-04-22) renamed cell keys from the
+ * Sprint 10 technical labels to the A3 LOCK publication-ready labels.
+ * Architecture unchanged — only key strings. Migration script
+ * (benchmarks/scripts/migrate-cell-names.ts) rewrites any legacy JSONL
+ * artefacts with the old keys.
  *
  * Same dataset, same seed, same model across all four. Difference at report
  * time between a baseline cell and a treatment cell isolates the causal
@@ -19,7 +25,7 @@
  * Opus 4.6, Gemma 2 9B probe, full τ-bench + LongMemEval loaders.
  */
 
-export type CellName = 'raw' | 'memory-only' | 'evolve-only' | 'full-stack';
+export type CellName = 'raw' | 'filtered' | 'compressed' | 'full-context';
 export type ControlName = 'verbose-fixed';
 export type RunKind = { kind: 'cell'; name: CellName } | { kind: 'control'; name: ControlName };
 
@@ -28,7 +34,7 @@ export interface DatasetInstance {
   instance_id: string;
   /** Question or task statement shown to the model. */
   question: string;
-  /** Dataset-supplied context that raw / evolve-only cells receive verbatim
+  /** Dataset-supplied context that raw / compressed cells receive verbatim
    *  and memory cells may ignore in favor of their retrieval layer. */
   context: string;
   /** Canonical reference answer(s) for automated scoring. */

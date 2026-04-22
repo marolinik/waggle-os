@@ -10,7 +10,7 @@
  *   1. Per-cell verdict distribution + weighted quality score
  *   2. Per-LoCoMo-category distribution (single/multi-hop/temporal/
  *      open-ended) with a hallucination rate flag for PM review
- *   3. Cross-cell delta matrix (full-stack vs raw: correct / F4 /
+ *   3. Cross-cell delta matrix (full-context vs raw: correct / F4 /
  *      F1 lift per taxonomy §5)
  *   4. Judge cost summary when the run included judge calls
  *
@@ -30,8 +30,8 @@ export type Verdict6 =
   | 'F5_offtopic'
   | 'unjudged';
 
-export type CellName = 'raw' | 'memory-only' | 'evolve-only' | 'full-stack';
-const CELL_NAMES: readonly CellName[] = ['raw', 'memory-only', 'evolve-only', 'full-stack'];
+export type CellName = 'raw' | 'filtered' | 'compressed' | 'full-context';
+const CELL_NAMES: readonly CellName[] = ['raw', 'filtered', 'compressed', 'full-context'];
 
 /** Categories match `preflight-locomo-50.json` `_meta.locomo_category_map`
  *  minus the excluded adversarial bucket. Unknown categories fall into
@@ -216,14 +216,14 @@ export function perCategoryRollup(records: readonly JudgedJsonlRecord[]): PerCat
   return rows;
 }
 
-// ── Cross-cell delta matrix (full-stack vs raw) ────────────────────────
+// ── Cross-cell delta matrix (full-context vs raw) ──────────────────────
 
 export interface CrossCellDelta {
   verdict: Verdict6;
   rawPercent: number;
-  fullStackPercent: number;
-  /** fullStack − raw. Positive = full-stack raised this verdict's share;
-   *  negative = full-stack lowered it. The brief's headline expectation:
+  fullContextPercent: number;
+  /** fullContext − raw. Positive = full-context raised this verdict's share;
+   *  negative = full-context lowered it. The brief's headline expectation:
    *  `correct` delta > 0, `F4_hallucinated` delta < 0, `F1_abstain`
    *  may go either way (more abstains is sometimes an OK signal). */
   delta: number;
@@ -231,14 +231,14 @@ export interface CrossCellDelta {
 
 export function crossCellDeltaMatrix(perCell: readonly PerCellRow[]): CrossCellDelta[] | null {
   const raw = perCell.find(r => r.cell === 'raw');
-  const full = perCell.find(r => r.cell === 'full-stack');
+  const full = perCell.find(r => r.cell === 'full-context');
   if (!raw || !full) return null;
   const out: CrossCellDelta[] = [];
   for (const v of VERDICT6_VALUES) {
     out.push({
       verdict: v,
       rawPercent: raw.percents[v],
-      fullStackPercent: full.percents[v],
+      fullContextPercent: full.percents[v],
       delta: full.percents[v] - raw.percents[v],
     });
   }
@@ -399,13 +399,13 @@ export function renderMarkdown(report: AggregateReport): string {
     lines.push('');
   }
   if (report.crossCellDelta) {
-    lines.push('## Full-stack vs raw delta');
+    lines.push('## Full-context vs raw delta');
     lines.push('');
-    lines.push('| Verdict | raw % | full-stack % | Δ (full − raw) |');
+    lines.push('| Verdict | raw % | full-context % | Δ (full − raw) |');
     lines.push('|---|---:|---:|---:|');
     for (const r of report.crossCellDelta) {
       const sign = r.delta > 0 ? '+' : '';
-      lines.push(`| ${r.verdict} | ${pct(r.rawPercent)} | ${pct(r.fullStackPercent)} | ${sign}${pct(r.delta)} |`);
+      lines.push(`| ${r.verdict} | ${pct(r.rawPercent)} | ${pct(r.fullContextPercent)} | ${sign}${pct(r.delta)} |`);
     }
     lines.push('');
   }

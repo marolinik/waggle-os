@@ -8,7 +8,7 @@
  * the memory reader. Per the LOCKED spec, its purpose is to eliminate the
  * "prompt bogatstvo" confounder — a verbose prompt that *simulates* memory
  * access without ever *actually* hitting the memory stack. Any call to those
- * layers collapses the control into naive-RAG or full-stack and voids the
+ * layers collapses the control into naive-RAG or full-context and voids the
  * Week-2 results.
  *
  * This test enforces that invariant by construction:
@@ -21,7 +21,7 @@
  *
  * Failure modes guarded:
  *   - Someone wires HybridSearch or CombinedRetrieval into the harness cell
- *     (e.g. accidentally merging memory-only logic into verbose-fixed).
+ *     (e.g. accidentally merging filtered logic into verbose-fixed).
  *   - Someone calls WikiCompiler.compile* (or the `compile` method) from the
  *     cell to "enrich" the prompt.
  *   - Someone swaps the static system prompt for a dynamic assembler that

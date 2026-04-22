@@ -12,9 +12,9 @@ contribution of the ablated component.
 | Cell | Memory | Prompt evolution | Purpose |
 |------|--------|------------------|---------|
 | `raw` | no | no | Baseline — LLM only, stateless per turn. |
-| `memory-only` | yes | no | Isolates the memory-layer contribution. |
-| `evolve-only` | no | yes | Isolates the GEPA prompt-evolution contribution. |
-| `full-stack` | yes | yes | Joint contribution (memory × evolution). |
+| `filtered` | yes | no | Isolates the memory-layer contribution. (Sprint 12 rename: was `memory-only`.) |
+| `compressed` | no | yes | Isolates the GEPA prompt-evolution contribution. (Sprint 12 rename: was `evolve-only`.) |
+| `full-context` | yes | yes | Joint contribution (memory × evolution). (Sprint 12 rename: was `full-stack`.) |
 
 ## Controls (not cells — diagnostic)
 
@@ -52,10 +52,10 @@ npm run bench -- --control verbose-fixed --dataset locomo --limit 50 --model qwe
 
 | Flag | Default | Notes |
 |------|---------|-------|
-| `--cell <name>` | — | One of `raw \| memory-only \| evolve-only \| full-stack`. |
+| `--cell <name>` | — | One of `raw \| filtered \| compressed \| full-context`. |
 | `--all-cells` | — | Run all four sequentially with the same dataset + seed. |
 | `--control <name>` | — | Currently only `verbose-fixed`. |
-| `--dataset <id>` | `synthetic` | `synthetic \| locomo \| longmemeval`. Falls back to `synthetic` if the external data isn't downloaded yet. |
+| `--dataset <id>` | `synthetic` | `synthetic \| locomo \| longmemeval`. External datasets throw `DatasetMissingError` if the canonical archive is absent; set `BENCH_SYNTHETIC_DATASET=1` to re-enable the dev-only synthetic fallback. |
 | `--limit N` | `10` | Cap instances. `--full` = no cap. |
 | `--model <id>` | `qwen3.6-35b-a3b` | Id from `config/models.json`. |
 | `--seed N` | `42` | Reproducibility — same seed → same instance order + dry-run output. |

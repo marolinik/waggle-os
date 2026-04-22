@@ -5,9 +5,9 @@
  * Usage (via `npm run bench -- ...` from repo root, or direct `tsx`):
  *
  *   --cell raw                  Single cell
- *   --cell memory-only
- *   --cell evolve-only
- *   --cell full-stack
+ *   --cell filtered
+ *   --cell compressed
+ *   --cell full-context
  *   --all-cells                 Run all four sequentially (same dataset/seed)
  *   --control verbose-fixed     Diagnostic control (not a cell)
  *
@@ -110,7 +110,7 @@ function printHelp(): void {
   console.log(`Four-cell ablation harness.
 
 Usage:
-  waggle-bench --cell <raw|memory-only|evolve-only|full-stack> --dataset <id> --limit N --model <id>
+  waggle-bench --cell <raw|filtered|compressed|full-context> --dataset <id> --limit N --model <id>
   waggle-bench --all-cells --dataset <id> --limit N --model <id> [--budget USD]
   waggle-bench --control verbose-fixed --dataset <id> --limit N --model <id>
 
@@ -353,7 +353,7 @@ function computeFileHash(absolutePath: string): string {
 function buildRuns(args: ParsedArgs): RunKind[] {
   const runs: RunKind[] = [];
   if (args.allCells) {
-    (['raw', 'memory-only', 'evolve-only', 'full-stack'] as CellName[]).forEach(n => {
+    (['raw', 'filtered', 'compressed', 'full-context'] as CellName[]).forEach(n => {
       runs.push({ kind: 'cell', name: n });
     });
   } else if (args.control) {
@@ -363,7 +363,7 @@ function buildRuns(args: ParsedArgs): RunKind[] {
     runs.push({ kind: 'control', name: args.control });
   } else if (args.cell) {
     if (!isCellName(args.cell)) {
-      throw new Error(`Unknown cell: ${args.cell}. Valid: raw | memory-only | evolve-only | full-stack`);
+      throw new Error(`Unknown cell: ${args.cell}. Valid: raw | filtered | compressed | full-context`);
     }
     runs.push({ kind: 'cell', name: args.cell });
   } else {
