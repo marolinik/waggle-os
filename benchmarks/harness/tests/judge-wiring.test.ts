@@ -295,6 +295,7 @@ describe('runOne integration — judge fields land on every record when judgeCon
       dryRun: true,
       litellmUrl: 'http://unused',
       litellmApiKey: 'unused',
+      emitPreregistrationEvent: false,
       judgeConfig: { kind: 'single', model: 'claude-sonnet-4-6', client: scripted },
     });
 
@@ -326,6 +327,7 @@ describe('runOne integration — judge fields land on every record when judgeCon
       dryRun: true,
       litellmUrl: 'http://unused',
       litellmApiKey: 'unused',
+      emitPreregistrationEvent: false,
     });
     const records = readJsonl(outputPath);
     expect(records).toHaveLength(2);
@@ -352,6 +354,7 @@ describe('runOne integration — judge fields land on every record when judgeCon
       dryRun: true,
       litellmUrl: 'http://unused',
       litellmApiKey: 'unused',
+      emitPreregistrationEvent: false,
       judgeConfig: { kind: 'single', model: 'gpt-5', client: scripted },
     });
     const records = readJsonl(outputPath);

@@ -223,6 +223,7 @@ describe('runOne — acceptance criteria', () => {
       dryRun: true,
       litellmUrl: 'http://unused',
       litellmApiKey: 'unused',
+      emitPreregistrationEvent: false,
     });
     const records = readJsonl(outputPath);
     expect(records).toHaveLength(1);
@@ -260,6 +261,7 @@ describe('runOne — acceptance criteria', () => {
       dryRun: true,
       litellmUrl: 'http://unused',
       litellmApiKey: 'unused',
+      emitPreregistrationEvent: false,
     });
     const records = readJsonl(outputPath);
     expect(records).toHaveLength(50);
@@ -288,6 +290,7 @@ describe('runOne — acceptance criteria', () => {
       dryRun: true,
       litellmUrl: 'http://unused',
       litellmApiKey: 'unused',
+      emitPreregistrationEvent: false,
     });
     const records = readJsonl(outputPath);
     expect(records.length).toBeGreaterThan(0);
@@ -317,6 +320,7 @@ describe('runOne — acceptance criteria', () => {
       dryRun: true,
       litellmUrl: 'http://unused',
       litellmApiKey: 'unused',
+      emitPreregistrationEvent: false,
     });
     const records = readJsonl(outputPath);
     expect(records.length).toBeLessThan(20);
@@ -382,6 +386,7 @@ describe('runOne — acceptance criteria', () => {
         dryRun: true,
         litellmUrl: 'http://unused',
         litellmApiKey: 'unused',
+        emitPreregistrationEvent: false,
       });
       const records = readJsonl(outputPath);
       expect(records).toHaveLength(2);

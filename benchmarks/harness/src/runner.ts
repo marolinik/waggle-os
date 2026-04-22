@@ -36,6 +36,15 @@ import type {
 } from './types.js';
 import { getDatasetVersion, loadDataset, loadPreflightSampleLock, sampleInstances } from './datasets.js';
 import { createLlmClient } from './llm.js';
+import {
+  CANONICAL_MANIFEST_PATH,
+  computeBenchSpecManifestHash,
+  emitPreregistrationManifest,
+  getRunnerVersion,
+  readManifestLockedDate,
+  sanitizeArgv,
+  type PreregistrationManifestPayload,
+} from './preregistration.js';
 import { JsonlWriter, buildAggregate, scoreAccuracy, percentile } from './metrics.js';
 import { cells, isCellName, isControlName } from './cells.js';
 import { controls } from './controls.js';
@@ -64,6 +73,28 @@ interface ParsedArgs {
    *  id is the tie-breaker (Sonnet by taxonomy §6 convention). Takes
    *  precedence over `--judge` when both are set. */
   judgeEnsemble?: string[];
+  // ── Sprint 12 Task 1 Blocker #3 — pre-registration flags ─────────────────
+  /** SHA-256 hex of the bench-spec manifest YAML. When omitted, the
+   *  emitter resolves the manifest path (env → sibling PM-Waggle-OS → throw)
+   *  and computes the hash at run start. When provided, skips the lookup
+   *  entirely — useful for tests and replication runs where the source
+   *  YAML is not available at the runtime cwd. */
+  manifestHash?: string;
+  /** Suppresses `bench.preregistration.manifest_hash` pino-style event
+   *  when `false`. Default: true. Tests pass `--no-emit-preregistration-event`
+   *  to keep the log surface quiet. */
+  emitPreregistrationEvent: boolean;
+  /** Multi-value cell selection (repeatable `--per-cell raw --per-cell filtered`).
+   *  Overrides `--cell` and `--all-cells` when at least one value is set.
+   *  Also materializes into the `per_cell` field of the pre-registration
+   *  manifest payload regardless of how cells were chosen (falls back to
+   *  derivation from --all-cells or --cell when unset). */
+  perCell?: string[];
+  /** Judge tie-break strategy name surfaced into the pre-registration
+   *  payload. Canonical A3 LOCK § B2 values: `quadri-vendor` (fourth
+   *  vendor fires on 1-1-1) and `pm-escalation` (2-2 escalates to PM).
+   *  `majority` is accepted as an explicit-default alias. */
+  judgeTiebreak?: string;
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -74,7 +105,9 @@ function parseArgs(argv: string[]): ParsedArgs {
     model: 'qwen3.6-35b-a3b',
     seed: 42,
     budget: Number.POSITIVE_INFINITY,
+    emitPreregistrationEvent: true,
   };
+  const VALID_TIEBREAK = new Set(['quadri-vendor', 'pm-escalation', 'majority']);
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
     const next = argv[i + 1];
@@ -95,6 +128,39 @@ function parseArgs(argv: string[]): ParsedArgs {
       case '--judge': out.judge = next; i++; break;
       case '--judge-ensemble':
         out.judgeEnsemble = (next ?? '').split(',').map(s => s.trim()).filter(Boolean);
+        i++;
+        break;
+      // ── Sprint 12 Task 1 Blocker #3 flags ───────────────────────────
+      case '--manifest-hash':
+        if (typeof next !== 'string' || !/^[0-9a-f]{64}$/i.test(next)) {
+          throw new Error(
+            `Invalid --manifest-hash value: expected 64-char lowercase SHA-256 hex, got ${next ?? '(missing)'}`,
+          );
+        }
+        out.manifestHash = next.toLowerCase();
+        i++;
+        break;
+      case '--emit-preregistration-event':
+        out.emitPreregistrationEvent = true;
+        break;
+      case '--no-emit-preregistration-event':
+        out.emitPreregistrationEvent = false;
+        break;
+      case '--per-cell':
+        if (typeof next !== 'string' || next.length === 0) {
+          throw new Error(`Invalid --per-cell value: expected cell name, got ${next ?? '(missing)'}`);
+        }
+        out.perCell = out.perCell ?? [];
+        out.perCell.push(next);
+        i++;
+        break;
+      case '--judge-tiebreak':
+        if (typeof next !== 'string' || !VALID_TIEBREAK.has(next)) {
+          throw new Error(
+            `Invalid --judge-tiebreak value: expected one of ${[...VALID_TIEBREAK].join(' | ')}, got ${next ?? '(missing)'}`,
+          );
+        }
+        out.judgeTiebreak = next;
         i++;
         break;
       case '--help':
@@ -139,6 +205,24 @@ Flags:
                     Enable 3+-judge ensemble mode. First model is the tie-
                     breaker. Takes precedence over --judge. Real API spend —
                     keep within the brief's $5 alarm per run.
+
+  Pre-registration flags (Sprint 12 Task 1 Blocker #3):
+  --manifest-hash <sha>  Override bench-spec manifest SHA-256 (64-char hex).
+                    When omitted, resolves BENCH_SPEC_MANIFEST_PATH env or
+                    falls back to sibling ../PM-Waggle-OS/decisions/ path.
+  --emit-preregistration-event
+                    Explicitly enable the bench.preregistration.manifest_hash
+                    event (default: enabled).
+  --no-emit-preregistration-event
+                    Suppress the event (useful for smoke tests).
+  --per-cell NAME   Multi-value cell selection. Repeat for multiple cells
+                    (--per-cell raw --per-cell filtered). Overrides --cell
+                    and --all-cells when at least one value is supplied.
+  --judge-tiebreak STRATEGY
+                    Tie-break strategy surfaced into the pre-registration
+                    payload. One of: quadri-vendor | pm-escalation | majority.
+                    Default: quadri-vendor (per A3 LOCK § B2).
+
   --help, -h        This text
 `);
 }
@@ -192,6 +276,15 @@ async function runOne(config: RunConfig): Promise<void> {
           : path.resolve(process.cwd(), config.sampleLockPath),
       )
     : getDatasetVersion(config.dataset, dataRoot);
+
+  // Sprint 12 Task 1 Blocker #3: emit `bench.preregistration.manifest_hash`
+  // once per runOne before the first instance iteration. Suppressed when
+  // the caller sets `emitPreregistrationEvent: false` (test default).
+  if (config.emitPreregistrationEvent !== false) {
+    emitPreregistrationManifest(
+      assemblePreregistrationPayload(config, datasetVersion, all.length),
+    );
+  }
   // When a sample lock drives the run, honor instance order verbatim — the
   // lock file IS the deterministic sample. Cell comparisons require identical
   // order across cells, and `sampleInstances` would re-shuffle the lock.
@@ -348,10 +441,87 @@ function computeFileHash(absolutePath: string): string {
   return crypto.createHash('sha256').update(buf).digest('hex');
 }
 
+/**
+ * Build the `PreregistrationManifestPayload` from the RunConfig + derived
+ * per-run context. Split out from `runOne` so tests can exercise the
+ * assembly without spinning up a full run.
+ *
+ * Judge models surfacing: in Sub-deliverable A the list is derived from
+ * `config.judgeConfig.models` (ensemble) or `config.judgeConfig.model`
+ * (single-judge), with placeholder pinning fields. Sub-deliverable C
+ * tightens per-judge `pinning_surface` + `carve_out_reason` by looking
+ * each model up in `config/models.json`. Until C lands, judges emit as
+ * `floating_alias` + null carve-out (schema-valid placeholder).
+ */
+function assemblePreregistrationPayload(
+  config: RunConfig,
+  datasetVersion: string,
+  datasetInstanceCount: number,
+): PreregistrationManifestPayload {
+  const manifestHash = config.manifestHash ?? computeBenchSpecManifestHash();
+  // `readManifestLockedDate` throws if the YAML can't be located and no
+  // override is provided. If the caller supplied `manifestHash` explicitly
+  // (test path), we still try to resolve the YAML for `locked_at`; if
+  // resolution fails under that branch, fall back to 'unknown' so tests
+  // that don't carry the YAML keep working.
+  let manifestLockedAt: string;
+  try {
+    manifestLockedAt = readManifestLockedDate();
+  } catch {
+    manifestLockedAt = 'unknown';
+  }
+
+  const perCell = config.perCellList ?? [config.run.name];
+
+  // Sub-deliverable A: placeholder judge_models shape. Sub-deliverable C
+  // will look these up against the extended models.json registry.
+  const judgeModelIds = config.judgeConfig?.kind === 'ensemble'
+    ? config.judgeConfig.models
+    : config.judgeConfig?.kind === 'single'
+      ? [config.judgeConfig.model]
+      : [];
+  const judgeModels = judgeModelIds.map((id, idx) => ({
+    model_id: id,
+    provider: 'unknown',
+    judge_role: (idx === 0 ? 'primary' : idx === 1 ? 'secondary' : 'tertiary') as 'primary' | 'secondary' | 'tertiary',
+    pinning_surface: 'floating_alias' as const,
+    pinning_surface_carve_out_reason: 'registry_lookup_pending_sub_deliverable_c',
+  }));
+
+  return {
+    manifest_hash: manifestHash,
+    manifest_path: CANONICAL_MANIFEST_PATH,
+    manifest_locked_at: manifestLockedAt,
+    dataset_version: datasetVersion,
+    dataset_path: config.dataset.dataPath,
+    dataset_instance_count: datasetInstanceCount,
+    per_cell: perCell,
+    judge_tiebreak: config.judgeTiebreak ?? 'quadri-vendor',
+    judge_models: judgeModels,
+    emitted_at: new Date().toISOString(),
+    runner_version: getRunnerVersion(),
+    runner_invocation: {
+      argv: sanitizeArgv(process.argv),
+      cwd: process.cwd(),
+    },
+  };
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────
 
 function buildRuns(args: ParsedArgs): RunKind[] {
   const runs: RunKind[] = [];
+  // Sprint 12 Task 1 Blocker #3: `--per-cell` (multi-value) overrides the
+  // single-cell / all-cells dispatch when at least one value is supplied.
+  if (args.perCell && args.perCell.length > 0) {
+    for (const name of args.perCell) {
+      if (!isCellName(name)) {
+        throw new Error(`Unknown cell: ${name}. Valid: raw | filtered | compressed | full-context`);
+      }
+      runs.push({ kind: 'cell', name });
+    }
+    return runs;
+  }
   if (args.allCells) {
     (['raw', 'filtered', 'compressed', 'full-context'] as CellName[]).forEach(n => {
       runs.push({ kind: 'cell', name: n });
@@ -367,7 +537,7 @@ function buildRuns(args: ParsedArgs): RunKind[] {
     }
     runs.push({ kind: 'cell', name: args.cell });
   } else {
-    throw new Error('Must specify one of --cell <name>, --all-cells, or --control <name>. Try --help.');
+    throw new Error('Must specify one of --cell <name>, --all-cells, --per-cell <name>, or --control <name>. Try --help.');
   }
   return runs;
 }
@@ -460,6 +630,11 @@ async function main(): Promise<void> {
   }
 
   const runs = buildRuns(args);
+  // Sprint 12 Task 1 Blocker #3: invocation-level cell list fed into every
+  // runOne so the pre-registration payload reports the full scope rather
+  // than a single runOne's slice. Stripping kind='control' entries from the
+  // list would hide verbose-fixed-only invocations; report them as-is.
+  const perCellList = runs.map(r => r.name);
   for (const run of runs) {
     const outputPath = args.output ?? defaultOutputPath(run, args.dataset);
     await runOne({
@@ -476,6 +651,10 @@ async function main(): Promise<void> {
       sampleLockPath: args.sampleLock,
       judgeConfig,
       onJudgeCall: entry => judgeCosts.push(entry),
+      manifestHash: args.manifestHash,
+      emitPreregistrationEvent: args.emitPreregistrationEvent,
+      perCellList,
+      judgeTiebreak: args.judgeTiebreak,
     });
   }
 

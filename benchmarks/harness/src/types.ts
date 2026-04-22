@@ -118,6 +118,23 @@ export interface RunConfig {
   /** Optional sink for per-call judge cost entries. Typically the caller
    *  collects into an array to summarise in the run output. */
   onJudgeCall?: (entry: import('./judge-client.js').JudgeClientCostEntry) => void;
+  // ── Sprint 12 Task 1 Blocker #3 — pre-registration inputs ────────────────
+  /** Pre-computed SHA-256 of the bench-spec manifest YAML. When undefined,
+   *  the runner resolves the YAML path (env → sibling PM-Waggle-OS → throw)
+   *  and computes the hash at run start. */
+  manifestHash?: string;
+  /** Suppress the `bench.preregistration.manifest_hash` pino-style event
+   *  when `false`. Defaults to emitting (true). Tests pass `false` to keep
+   *  log noise down. */
+  emitPreregistrationEvent?: boolean;
+  /** Invocation-level cell list — the full scope of cells this benchmark
+   *  invocation spans. Each `runOne` call receives the same list so its
+   *  emitted pre-registration event reports the full scope (not the
+   *  single-cell subset it runs). Derived from CLI `--per-cell` or
+   *  `--all-cells` / `--cell` expansion. */
+  perCellList?: string[];
+  /** Judge tie-break strategy surfaced into the pre-registration payload. */
+  judgeTiebreak?: string;
 }
 
 /** Judge failure-mode taxonomy codes. Must match the enum the judge module
