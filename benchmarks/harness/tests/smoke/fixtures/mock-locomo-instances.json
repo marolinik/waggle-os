@@ -1,0 +1,75 @@
+{
+  "_meta": {
+    "description": "Sprint 12 Task 1 Session 3 smoke test — 10-instance synthetic LoCoMo-shaped fixture. Content is synthetic, structure mirrors the real locomo-1540.jsonl row shape at the fields the smoke pipeline exercises (instance_id, conversation_id, question, reference_answer). Prefix 'mock-conv-*' + 'mock-q-*' makes the synthetic-ness explicit so the fixture cannot be confused for a real LoCoMo slice.",
+    "conversation_distribution": {
+      "mock-conv-A": 3,
+      "mock-conv-B": 3,
+      "mock-conv-C": 2,
+      "mock-conv-D": 2
+    },
+    "total_instances": 10,
+    "brief": "PM-Waggle-OS/briefs/2026-04-22-cc-sprint-12-task1-session3-brief.md §2.1 C"
+  },
+  "instances": [
+    {
+      "instance_id": "mock-q-01",
+      "conversation_id": "mock-conv-A",
+      "question": "What day did Alice meet Bob?",
+      "reference_answer": "Tuesday"
+    },
+    {
+      "instance_id": "mock-q-02",
+      "conversation_id": "mock-conv-A",
+      "question": "Where did they go on the weekend?",
+      "reference_answer": "the lake"
+    },
+    {
+      "instance_id": "mock-q-03",
+      "conversation_id": "mock-conv-A",
+      "question": "What did Carol bring to the picnic?",
+      "reference_answer": "potato salad"
+    },
+    {
+      "instance_id": "mock-q-04",
+      "conversation_id": "mock-conv-B",
+      "question": "How many guests came to the party?",
+      "reference_answer": "twelve"
+    },
+    {
+      "instance_id": "mock-q-05",
+      "conversation_id": "mock-conv-B",
+      "question": "What year did Dave move to Berlin?",
+      "reference_answer": "2021"
+    },
+    {
+      "instance_id": "mock-q-06",
+      "conversation_id": "mock-conv-B",
+      "question": "Who hosted the book club?",
+      "reference_answer": "Emma"
+    },
+    {
+      "instance_id": "mock-q-07",
+      "conversation_id": "mock-conv-C",
+      "question": "What kind of car does Frank drive?",
+      "reference_answer": "a blue Subaru"
+    },
+    {
+      "instance_id": "mock-q-08",
+      "conversation_id": "mock-conv-C",
+      "question": "When did Grace finish her PhD?",
+      "reference_answer": "May 2022"
+    },
+    {
+      "instance_id": "mock-q-09",
+      "conversation_id": "mock-conv-D",
+      "question": "What instrument does Henry play?",
+      "reference_answer": "cello"
+    },
+    {
+      "instance_id": "mock-q-10",
+      "conversation_id": "mock-conv-D",
+      "question": "Where does Ivy's sister live?",
+      "reference_answer": "Lisbon"
+    }
+  ]
+}

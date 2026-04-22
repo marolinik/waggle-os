@@ -1,0 +1,119 @@
+{
+  "_meta": {
+    "description": "Sprint 12 Task 1 Session 3 smoke test — mock judge responses for the 3-primary ensemble (Opus 4.7, GPT-5.4, Gemini 3.1) across 10 mock instances. One entry per (instance_id, judge_model) pair. Tie-break fourth-vendor (Grok 4.20) reserve vote is captured as a top-level `grok_reserve_vote` field on the single instance that triggers the 1-1 code split among incorrect judges (mock-q-08) — avoids pulling in the runtime resolveTieBreak module since smoke test is pipeline proof, not tie-break unit test.",
+    "kappa_target_band": "[0.60, 0.70]",
+    "kappa_predicted": 0.682,
+    "correctness_target": "7 of 10 final verdicts correct",
+    "brief": "PM-Waggle-OS/briefs/2026-04-22-cc-sprint-12-task1-session3-brief.md §2.1 C"
+  },
+  "judges": ["claude-opus-4-7", "gpt-5.4", "gemini-3.1"],
+  "tie_break_reserve": "grok-4.20",
+  "responses": [
+    {
+      "instance_id": "mock-q-01",
+      "judge_votes": [
+        { "judge": "claude-opus-4-7", "verdict": "correct", "failure_code": null, "rationale": null },
+        { "judge": "gpt-5.4",         "verdict": "correct", "failure_code": null, "rationale": null },
+        { "judge": "gemini-3.1",      "verdict": "correct", "failure_code": null, "rationale": null }
+      ]
+    },
+    {
+      "instance_id": "mock-q-02",
+      "judge_votes": [
+        { "judge": "claude-opus-4-7", "verdict": "correct", "failure_code": null, "rationale": null },
+        { "judge": "gpt-5.4",         "verdict": "correct", "failure_code": null, "rationale": null },
+        { "judge": "gemini-3.1",      "verdict": "correct", "failure_code": null, "rationale": null }
+      ]
+    },
+    {
+      "instance_id": "mock-q-03",
+      "judge_votes": [
+        { "judge": "claude-opus-4-7", "verdict": "correct", "failure_code": null, "rationale": null },
+        { "judge": "gpt-5.4",         "verdict": "correct", "failure_code": null, "rationale": null },
+        { "judge": "gemini-3.1",      "verdict": "correct", "failure_code": null, "rationale": null }
+      ]
+    },
+    {
+      "instance_id": "mock-q-04",
+      "judge_votes": [
+        { "judge": "claude-opus-4-7", "verdict": "correct", "failure_code": null, "rationale": null },
+        { "judge": "gpt-5.4",         "verdict": "correct", "failure_code": null, "rationale": null },
+        { "judge": "gemini-3.1",      "verdict": "correct", "failure_code": null, "rationale": null }
+      ]
+    },
+    {
+      "instance_id": "mock-q-05",
+      "judge_votes": [
+        { "judge": "claude-opus-4-7", "verdict": "correct", "failure_code": null, "rationale": null },
+        { "judge": "gpt-5.4",         "verdict": "correct", "failure_code": null, "rationale": null },
+        { "judge": "gemini-3.1",      "verdict": "correct", "failure_code": null, "rationale": null }
+      ]
+    },
+    {
+      "instance_id": "mock-q-06",
+      "judge_votes": [
+        { "judge": "claude-opus-4-7", "verdict": "correct", "failure_code": null, "rationale": null },
+        { "judge": "gpt-5.4",         "verdict": "correct", "failure_code": null, "rationale": null },
+        { "judge": "gemini-3.1",      "verdict": "correct", "failure_code": null, "rationale": null }
+      ]
+    },
+    {
+      "instance_id": "mock-q-07",
+      "note": "(2,1) majority correct — 1 dissenting judge picks F3 off-topic. Final verdict = correct, no tie-break needed.",
+      "judge_votes": [
+        { "judge": "claude-opus-4-7", "verdict": "correct",   "failure_code": null, "rationale": null },
+        { "judge": "gpt-5.4",         "verdict": "correct",   "failure_code": null, "rationale": null },
+        { "judge": "gemini-3.1",      "verdict": "incorrect", "failure_code": "F3", "rationale": null }
+      ]
+    },
+    {
+      "instance_id": "mock-q-08",
+      "note": "(1,2) majority incorrect — 1 correct + 2 incorrect judges split codes (F1 vs F_other). Tie-break reserve (Grok 4.20) votes F1 → final verdict = incorrect, failure_code = F1.",
+      "judge_votes": [
+        { "judge": "claude-opus-4-7", "verdict": "correct",   "failure_code": null, "rationale": null },
+        { "judge": "gpt-5.4",         "verdict": "incorrect", "failure_code": "F1", "rationale": null },
+        {
+          "judge": "gemini-3.1",
+          "verdict": "incorrect",
+          "failure_code": "F_other",
+          "rationale": "model answered with a completely different year and also attributed the move to the wrong city entirely"
+        }
+      ],
+      "grok_reserve_vote": { "verdict": "incorrect", "failure_code": "F1", "rationale": null },
+      "final_failure_code": "F1"
+    },
+    {
+      "instance_id": "mock-q-09",
+      "note": "(0,3) unanimous F_other — all three judges agree the failure does not fit F1..F6 and each provides a ≥10-word rationale. Takes the sole F_other slot in the fixture so aggregate f_other_rate = 1/10 = 10% (not > 10%, review_flag stays off per A3 LOCK §6 strict-gt semantic).",
+      "judge_votes": [
+        {
+          "judge": "claude-opus-4-7",
+          "verdict": "incorrect",
+          "failure_code": "F_other",
+          "rationale": "model returned a long musical digression about unrelated string instruments rather than naming the one played"
+        },
+        {
+          "judge": "gpt-5.4",
+          "verdict": "incorrect",
+          "failure_code": "F_other",
+          "rationale": "the answer drifts into a tangential essay about orchestra sections and never actually states the instrument"
+        },
+        {
+          "judge": "gemini-3.1",
+          "verdict": "incorrect",
+          "failure_code": "F_other",
+          "rationale": "response compares cello and viola tonal range but fails to commit to a single instrument name"
+        }
+      ]
+    },
+    {
+      "instance_id": "mock-q-10",
+      "note": "(0,3) unanimous F6 format-violation — all three judges agree the content is correct but formatted wrong (e.g. JSON envelope violated).",
+      "judge_votes": [
+        { "judge": "claude-opus-4-7", "verdict": "incorrect", "failure_code": "F6", "rationale": null },
+        { "judge": "gpt-5.4",         "verdict": "incorrect", "failure_code": "F6", "rationale": null },
+        { "judge": "gemini-3.1",      "verdict": "incorrect", "failure_code": "F6", "rationale": null }
+      ]
+    }
+  ]
+}
