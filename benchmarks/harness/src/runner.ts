@@ -643,15 +643,24 @@ async function main(): Promise<void> {
       // fourth-vendor tie-breaker per decisions/2026-04-22-tie-break-policy-locked.md.
       // Skip wiring when: (a) the ensemble isn't 3-vendor, (b) grok-4.20 is
       // already in the primary list (would create dual-role ambiguity).
-      const TIE_BREAKER_MODEL = 'grok-4.20';
+      //
+      // Sprint 12 Task 2 §2.3 (2026-04-23): split the models.json key (used
+      // to construct the LiteLLM client with the correct route resolution)
+      // from the OpenRouter canonical audit slug (used as the
+      // `tie_break_fourth_vendor` JSONL column + pino `fourth_vendor_slug`).
+      // Without the split, the JSONL audit log would report the harness-
+      // local key `'grok-4.20'` and diverge from the §2.2-verified
+      // OpenRouter slug `x-ai/grok-4.20`.
+      const TIE_BREAKER_MODEL_KEY = 'grok-4.20';           // models.json key (LiteLLM route)
+      const TIE_BREAKER_AUDIT_SLUG = 'x-ai/grok-4.20';     // OpenRouter canonical (§2.2 verified 2026-04-23)
       const shouldWireTieBreaker =
-        args.judgeEnsemble.length === 3 && !args.judgeEnsemble.includes(TIE_BREAKER_MODEL);
+        args.judgeEnsemble.length === 3 && !args.judgeEnsemble.includes(TIE_BREAKER_MODEL_KEY);
       let tieBreakerClient: import('./judge-client.js').LlmClient | undefined;
       if (shouldWireTieBreaker) {
         tieBreakerClient = createJudgeLlmClient({
           litellmUrl,
           litellmApiKey,
-          model: TIE_BREAKER_MODEL,
+          model: TIE_BREAKER_MODEL_KEY,
           onCall: entry => judgeCosts.push(entry),
         });
       }
@@ -661,7 +670,7 @@ async function main(): Promise<void> {
         models: args.judgeEnsemble,
         clients,
         ...(shouldWireTieBreaker && tieBreakerClient && {
-          tieBreakerModel: TIE_BREAKER_MODEL,
+          tieBreakerModel: TIE_BREAKER_AUDIT_SLUG,
           tieBreakerClient,
         }),
       };
