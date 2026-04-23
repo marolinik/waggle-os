@@ -73,26 +73,38 @@
   },
   "gpt-5.4": {
     "id": "gpt-5.4",
-    "displayName": "GPT-5.4 (Sprint 11 Task 2.2 primary judge)",
+    "displayName": "GPT-5.4 (Sprint 11 Task 2.2 primary judge, direct via LiteLLM→OpenAI)",
     "provider": "openai_via_openrouter",
-    "litellmModel": "openrouter/openai/gpt-5.4",
+    "litellmModel": "gpt-5.4",
     "pricePerMillionInput": 10.0,
     "pricePerMillionOutput": 30.0,
     "contextWindow": 200000,
     "pinning_surface": "floating_alias",
-    "pinning_surface_carve_out_reason": "OpenAI does not expose immutable model snapshots through OpenRouter routing layer; floating alias mandated by B3 addendum § 5",
+    "pinning_surface_carve_out_reason": "Sprint 12 Task 2 C3 Stage 2 mini (2026-04-23): routing pivoted from OpenRouter bridge to direct OpenAI Chat Completions via LiteLLM local alias `gpt-5.4` → `openai/gpt-5.4` (eliminates ~5-15% OpenRouter middleware markup + preserves token-level telemetry for EU AI Act Art. 14 replay). OpenAI does not expose immutable model snapshots for the gpt-5.x family; floating alias mandated by B3 addendum § 5.",
     "judge_role": "primary"
   },
   "gemini-3.1": {
     "id": "gemini-3.1",
-    "displayName": "Gemini 3.1 Pro Preview (Sprint 11 Task 2.2 primary judge)",
+    "displayName": "Gemini 3.1 Pro Preview (legacy OpenRouter bridge route)",
     "provider": "google_via_openrouter",
     "litellmModel": "openrouter/google/gemini-3.1-pro-preview",
     "pricePerMillionInput": 3.5,
     "pricePerMillionOutput": 10.5,
     "contextWindow": 1000000,
     "pinning_surface": "floating_alias",
-    "pinning_surface_carve_out_reason": "Google does not expose immutable model snapshots through OpenRouter routing layer; `gemini-3.1-pro` canonical release is served as `gemini-3.1-pro-preview` on OpenRouter per 2026-04-23 Sprint 12 Task 2 §2.2 slug verification; floating alias mandated by B3 addendum § 5",
+    "pinning_surface_carve_out_reason": "Legacy OpenRouter-bridge route; Sprint 12 Task 2 C3 Stage 2 mini (2026-04-23) pivoted judge routing to direct via LiteLLM local alias `gemini-3.1-pro` — see sibling entry below. This entry kept for backward compat with pre-Sprint-12 artefacts; floating alias mandated by B3 addendum § 5",
+    "judge_role": "primary"
+  },
+  "gemini-3.1-pro": {
+    "id": "gemini-3.1-pro",
+    "displayName": "Gemini 3.1 Pro Preview (Sprint 12 Task 2 primary judge, direct via LiteLLM→Google AI Studio)",
+    "provider": "google_via_openrouter",
+    "litellmModel": "gemini-3.1-pro",
+    "pricePerMillionInput": 3.5,
+    "pricePerMillionOutput": 10.5,
+    "contextWindow": 1000000,
+    "pinning_surface": "floating_alias",
+    "pinning_surface_carve_out_reason": "Sprint 12 Task 2 C3 Stage 2 mini (2026-04-23): direct-provider routing via LiteLLM local alias `gemini-3.1-pro` → `gemini/gemini-3.1-pro-preview` (Google AI Studio). Google ships the 3.1 Pro generation as `-preview` suffix only — no stable alias exists as of 2026-04-23 01:47 UTC (GET openrouter.ai/v1/models). Direct routing eliminates OpenRouter middleware markup + preserves native reasoning_tokens telemetry. Verify at replay time that `-preview` still resolves to the same underlying checkpoint; Google guarantees preview stability within a release window but not across release cycles. Floating alias mandated by B3 addendum § 5 (no immutable upstream snapshot surface).",
     "judge_role": "primary"
   },
   "grok-4.20": {
