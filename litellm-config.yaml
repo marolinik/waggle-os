@@ -223,6 +223,16 @@ model_list:
       api_base: https://dashscope-intl.aliyuncs.com/compatible-mode/v1
       api_key: os.environ/DASHSCOPE_API_KEY
 
+  # Sprint 12 Task 2 C3 Stage 2 Mini Retry v3 (2026-04-23): -direct suffix
+  # alias expected by the v3 brief §0.2 alias roster. Same route as the
+  # `qwen3.6-35b-a3b-via-dashscope` sibling above (pure naming change for
+  # operator scripts that want the "-direct" suffix semantic clarity).
+  - model_name: qwen3.6-35b-a3b-via-dashscope-direct
+    litellm_params:
+      model: openai/qwen3.6-35b-a3b
+      api_base: https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+      api_key: os.environ/DASHSCOPE_API_KEY
+
   # OpenRouter bridge — failover when DashScope rate-limits or is
   # unavailable. Note: OpenRouter's Qwen catalog does NOT have the exact
   # 3.6-35b-a3b slug — this route lands on qwen3.5-35b-a3b, so it's a
@@ -349,6 +359,15 @@ model_list:
   # Current SOTA on GPQA Diamond (94.3%), LMArena #1 (1501 Elo).
   # Neutral to all candidate families.
   - model_name: gemini-3.1-pro
+    litellm_params:
+      model: gemini/gemini-3.1-pro-preview
+      api_key: os.environ/GEMINI_API_KEY
+
+  # Sprint 12 Task 2 C3 Stage 2 Mini Retry v3 (2026-04-23): -preview suffix
+  # alias expected by the v3 brief §0.2 alias roster (judge_tie_breaker).
+  # Same upstream as `gemini-3.1-pro` above — alias name encodes the
+  # "-preview" provenance explicitly for manifest audit clarity.
+  - model_name: gemini-3.1-pro-preview
     litellm_params:
       model: gemini/gemini-3.1-pro-preview
       api_key: os.environ/GEMINI_API_KEY
