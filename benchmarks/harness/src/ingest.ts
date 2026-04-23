@@ -149,14 +149,32 @@ function parseSessionNumber(key: string): number {
  * When it does fire, the returned `count` reflects the deduplicated total so
  * the caller's vector-index batch stays in sync with the frame table.
  */
+/**
+ * Default batch size for vector indexing. ollama-embedder has a hardcoded 30s
+ * per-request timeout and nomic-embed-text handles ~200 short turns/request
+ * comfortably; larger batches can hit the timeout on slower machines or
+ * larger embedding models. 200 is a conservative default that works on a
+ * dev workstation; callers can override via the `batchSize` option for
+ * faster embedders or tighter memory budgets.
+ */
+const DEFAULT_INDEX_BATCH_SIZE = 200;
+
+export interface IngestOptions {
+  /** Vector-index batch size. Default 200. Callers with fast/parallel
+   *  embedders can raise this; callers hitting timeouts should lower it. */
+  batchSize?: number;
+}
+
 export async function ingestLoCoMoCorpus(
   db: MindDB,
   search: HybridSearch,
   frames: FrameStore,
   sessions: SessionStore,
   turns: LocomoTurn[],
+  options: IngestOptions = {},
 ): Promise<IngestStats> {
   void db;  // reserved for future per-db hooks; kept for signature symmetry
+  const batchSize = Math.max(1, options.batchSize ?? DEFAULT_INDEX_BATCH_SIZE);
   const ingestStart = Date.now();
   const toIndex: Array<{ id: number; content: string }> = [];
   const seen = new Set<number>();
@@ -175,8 +193,16 @@ export async function ingestLoCoMoCorpus(
   }
   const ingestMs = Date.now() - ingestStart;
 
+  // Chunk the vector-index batch so a slow embedder (ollama, API with
+  // rate limits) can't blow the per-request timeout on a large corpus.
+  // sqlite-vec's vec0 insert is already transactional per `indexFramesBatch`
+  // call, so chunking preserves atomicity per batch (just with multiple
+  // transactions end-to-end — the same data lands either way).
   const indexStart = Date.now();
-  await search.indexFramesBatch(toIndex);
+  for (let i = 0; i < toIndex.length; i += batchSize) {
+    const slice = toIndex.slice(i, i + batchSize);
+    await search.indexFramesBatch(slice);
+  }
   const indexMs = Date.now() - indexStart;
 
   return { count: toIndex.length, ingestMs, indexMs };
