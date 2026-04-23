@@ -95,12 +95,27 @@ export async function preCellHealthCheck(opts: HealthCheckOptions): Promise<Heal
   }
 
   // 2. Model ping probes (subject + each judge).
+  //
+  // Opus 4.7 + some newer reasoning-model families reject the `temperature`
+  // param with HTTP 400 (`temperature is deprecated for this model`). Mirror
+  // the regex-based detection judge-client.ts:88 already ships so the ping
+  // payload survives across provider generations. Also bumps max_tokens to
+  // match the judge-client default (1024) — 5 was too tight for providers
+  // that burn tokens on reasoning before content, producing empty-body
+  // responses that aren't technically 5xx but also aren't useful.
   const probeModels: string[] = [opts.subjectModel, ...(opts.judgeModels ?? [])];
   for (const model of probeModels) {
     await probeOnce(`POST /v1/chat/completions model=${model}`, async () => {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), timeoutMs);
       try {
+        const rejectsTemperature = /opus-4-7|gpt-5|o3|o4/i.test(model);
+        const reqBody: Record<string, unknown> = {
+          model,
+          messages: [{ role: 'user', content: PING_MESSAGE }],
+          max_tokens: 1024,
+        };
+        if (!rejectsTemperature) reqBody.temperature = 0.0;
         return await fetchFn(`${baseUrl}/v1/chat/completions`, {
           method: 'POST',
           headers: {
@@ -108,12 +123,7 @@ export async function preCellHealthCheck(opts: HealthCheckOptions): Promise<Heal
             Authorization: `Bearer ${opts.litellmApiKey}`,
           },
           signal: ctrl.signal,
-          body: JSON.stringify({
-            model,
-            messages: [{ role: 'user', content: PING_MESSAGE }],
-            max_tokens: 5,
-            temperature: 0.0,
-          }),
+          body: JSON.stringify(reqBody),
         });
       } finally {
         clearTimeout(t);
