@@ -65,6 +65,7 @@ const INSTANCE: DatasetInstance = {
   question: 'When did Caroline paint a sunrise?',
   context: 'full conversation context would be here in reality',
   expected: ['2022'],
+  conversation_id: 'conv-01',
 };
 
 /** Build an LlmClient that captures every call argument for assertion. */
@@ -88,6 +89,40 @@ function createCapturingLlm(response: Partial<LlmCallResult> = {}): {
   };
   return { client, calls };
 }
+
+describe('no-context cell — Stage 2-Retry §1.1 true zero-memory baseline', () => {
+  it('sends question-only user prompt, no instance.context, no memory injection', async () => {
+    const { client, calls } = createCapturingLlm();
+    const result = await cells['no-context']({
+      instance: INSTANCE, model: MODEL, llm: client, turnId: 't',
+    });
+    expect(result.text).toBe('test-answer');
+    expect(calls).toHaveLength(1);
+    expect(calls[0].userPrompt).toBe(`Question: ${INSTANCE.question}`);
+    expect(calls[0].userPrompt).not.toContain(INSTANCE.context);
+    expect(calls[0].userPrompt).not.toContain('# Recalled Memories');
+    expect(calls[0].userPrompt).not.toContain('Context:');
+  });
+
+  it('uses SYSTEM_BASELINE (not EVOLVED) for format consistency with raw/retrieval', async () => {
+    const { client, calls } = createCapturingLlm();
+    await cells['no-context']({
+      instance: INSTANCE, model: MODEL, llm: client, turnId: 't',
+    });
+    expect(calls[0].systemPrompt).toContain('shortest possible answer');
+    expect(calls[0].systemPrompt).not.toContain('Extract the answer from the supplied context');
+  });
+
+  it('does NOT require substrate or litellm (no dependencies beyond LlmClient)', async () => {
+    const { client } = createCapturingLlm();
+    // No substrate, no litellm — pure LLM call. Must not throw.
+    const result = await cells['no-context']({
+      instance: INSTANCE, model: MODEL, llm: client, turnId: 't',
+    });
+    expect(result.failureMode).toBeNull();
+    expect(result.text).toBeTruthy();
+  });
+});
 
 describe('retrieval cell — real HybridSearch, Task 2.5 Stage 1', () => {
   it('calls substrate search with the instance question and top-K', async () => {
@@ -143,15 +178,52 @@ describe('retrieval cell — real HybridSearch, Task 2.5 Stage 1', () => {
     }
   });
 
-  it('defaults retrievalTopK to 10 when unspecified', async () => {
+  it('defaults retrievalTopK to 20 when unspecified (Stage 2-Retry §1.2)', async () => {
     const substrate = createSubstrate({ embedder: createFakeEmbedder() });
     try {
       const spy = vi.spyOn(substrate.search, 'search');
       const { client } = createCapturingLlm();
+      const instanceNoConv: DatasetInstance = { ...INSTANCE };
+      delete instanceNoConv.conversation_id;
       await cells.retrieval({
-        instance: INSTANCE, model: MODEL, llm: client, turnId: 't', substrate,
+        instance: instanceNoConv, model: MODEL, llm: client, turnId: 't', substrate,
       });
-      expect(spy).toHaveBeenCalledWith(INSTANCE.question, { limit: 10 });
+      expect(spy).toHaveBeenCalledWith(instanceNoConv.question, { limit: 20 });
+      spy.mockRestore();
+    } finally {
+      substrate.close();
+    }
+  });
+
+  it('passes gopId filter when conversation_id is set on the instance (Stage 2-Retry §1.2)', async () => {
+    const substrate = createSubstrate({ embedder: createFakeEmbedder() });
+    try {
+      const spy = vi.spyOn(substrate.search, 'search').mockResolvedValue([]);
+      const { client } = createCapturingLlm();
+      const instanceWithConv: DatasetInstance = { ...INSTANCE, conversation_id: 'conv-26' };
+      await cells.retrieval({
+        instance: instanceWithConv, model: MODEL, llm: client, turnId: 't', substrate,
+      });
+      expect(spy).toHaveBeenCalledWith(instanceWithConv.question, { limit: 20, gopId: 'conv-26' });
+      spy.mockRestore();
+    } finally {
+      substrate.close();
+    }
+  });
+
+  it('omits gopId when conversation_id is absent (backward compat)', async () => {
+    const substrate = createSubstrate({ embedder: createFakeEmbedder() });
+    try {
+      const spy = vi.spyOn(substrate.search, 'search').mockResolvedValue([]);
+      const { client } = createCapturingLlm();
+      const instanceNoConv: DatasetInstance = { ...INSTANCE };
+      delete instanceNoConv.conversation_id;
+      await cells.retrieval({
+        instance: instanceNoConv, model: MODEL, llm: client, turnId: 't', substrate,
+        retrievalTopK: 7,
+      });
+      // When no conversation_id, no gopId in call; only limit.
+      expect(spy).toHaveBeenCalledWith(instanceNoConv.question, { limit: 7 });
       spy.mockRestore();
     } finally {
       substrate.close();
@@ -434,16 +506,71 @@ describe('makeSearchMemoryTool', () => {
     }
   });
 
-  it('clamps limit to 1..20', async () => {
+  it('clamps limit to 1..50 (Stage 2-Retry §1.2 upper bound relaxed 20→50)', async () => {
     const substrate = createSubstrate({ embedder: createFakeEmbedder() });
     try {
       const spy = vi.spyOn(substrate.search, 'search').mockResolvedValue([]);
-      const tool = makeSearchMemoryTool(substrate, 10);
+      const tool = makeSearchMemoryTool(substrate, 20);
       await tool.execute({ query: 'x', limit: 999 });
-      expect(spy).toHaveBeenLastCalledWith('x', { limit: 20 });
+      expect(spy).toHaveBeenLastCalledWith('x', { limit: 50 });
       await tool.execute({ query: 'x', limit: -5 });
       expect(spy).toHaveBeenLastCalledWith('x', { limit: 1 });
       spy.mockRestore();
+    } finally {
+      substrate.close();
+    }
+  });
+
+  it('default limit is 20 (Stage 2-Retry §1.2 bump 10→20)', async () => {
+    const substrate = createSubstrate({ embedder: createFakeEmbedder() });
+    try {
+      const spy = vi.spyOn(substrate.search, 'search').mockResolvedValue([]);
+      const tool = makeSearchMemoryTool(substrate); // no explicit default
+      await tool.execute({ query: 'x' });
+      expect(spy).toHaveBeenLastCalledWith('x', { limit: 20 });
+      spy.mockRestore();
+    } finally {
+      substrate.close();
+    }
+  });
+
+  it('when boundToGopId is set, scopes every call to that gopId (Stage 2-Retry §1.2)', async () => {
+    const substrate = createSubstrate({ embedder: createFakeEmbedder() });
+    try {
+      const spy = vi.spyOn(substrate.search, 'search').mockResolvedValue([]);
+      const tool = makeSearchMemoryTool(substrate, 20, 'conv-42');
+      await tool.execute({ query: 'anything' });
+      expect(spy).toHaveBeenLastCalledWith('anything', { limit: 20, gopId: 'conv-42' });
+      // Agent-side args.gopId must NOT override the bound scope (not part of
+      // the tool schema either way — silent drop).
+      await tool.execute({ query: 'still-scoped', gopId: 'conv-other' } as Record<string, unknown>);
+      expect(spy).toHaveBeenLastCalledWith('still-scoped', { limit: 20, gopId: 'conv-42' });
+      spy.mockRestore();
+    } finally {
+      substrate.close();
+    }
+  });
+
+  it('when boundToGopId is NOT set, call has no gopId field (backward compat)', async () => {
+    const substrate = createSubstrate({ embedder: createFakeEmbedder() });
+    try {
+      const spy = vi.spyOn(substrate.search, 'search').mockResolvedValue([]);
+      const tool = makeSearchMemoryTool(substrate, 20);
+      await tool.execute({ query: 'x' });
+      expect(spy).toHaveBeenLastCalledWith('x', { limit: 20 });
+      spy.mockRestore();
+    } finally {
+      substrate.close();
+    }
+  });
+
+  it('description mentions auto-scope when bound to gopId', () => {
+    const substrate = createSubstrate({ embedder: createFakeEmbedder() });
+    try {
+      const bound = makeSearchMemoryTool(substrate, 20, 'conv-xyz');
+      const unbound = makeSearchMemoryTool(substrate, 20);
+      expect(bound.description).toContain('auto-restricted to the current conversation');
+      expect(unbound.description).not.toContain('auto-restricted');
     } finally {
       substrate.close();
     }

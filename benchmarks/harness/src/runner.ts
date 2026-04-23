@@ -692,10 +692,16 @@ function buildRuns(args: ParsedArgs): RunKind[] {
   const runs: RunKind[] = [];
   // Sprint 12 Task 1 Blocker #3: `--per-cell` (multi-value) overrides the
   // single-cell / all-cells dispatch when at least one value is supplied.
+  // Sprint 12 Task 2.5 Stage 2-Retry §1.5: valid-name list extended to
+  // include retrieval + agentic (Stage 1) + no-context (Stage 2-Retry).
+  // `--all-cells` is preserved at the Sprint 9 quartet for backward
+  // compatibility per PM ratification; `scripts/run-mini-locomo.ts
+  // --v3-cells` expands to the Stage 2-Retry 5-cell list via --per-cell.
+  const VALID_CELLS = 'raw | filtered | compressed | full-context | retrieval | agentic | no-context';
   if (args.perCell && args.perCell.length > 0) {
     for (const name of args.perCell) {
       if (!isCellName(name)) {
-        throw new Error(`Unknown cell: ${name}. Valid: raw | filtered | compressed | full-context`);
+        throw new Error(`Unknown cell: ${name}. Valid: ${VALID_CELLS}`);
       }
       runs.push({ kind: 'cell', name });
     }
@@ -712,7 +718,7 @@ function buildRuns(args: ParsedArgs): RunKind[] {
     runs.push({ kind: 'control', name: args.control });
   } else if (args.cell) {
     if (!isCellName(args.cell)) {
-      throw new Error(`Unknown cell: ${args.cell}. Valid: raw | filtered | compressed | full-context`);
+      throw new Error(`Unknown cell: ${args.cell}. Valid: ${VALID_CELLS}`);
     }
     runs.push({ kind: 'cell', name: args.cell });
   } else {

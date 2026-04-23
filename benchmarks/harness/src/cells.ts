@@ -41,56 +41,79 @@ const SYSTEM_EVOLVED =
   'If the context does not contain the answer, reply with "unknown".';
 
 /**
- * SYSTEM_AGENTIC — RATIFIED VERBATIM by PM 2026-04-23 (GATE-S1 Gate 1).
- * Sprint 12 Task 2.5 Stage 1 source of record.
+ * SYSTEM_AGENTIC — SOFTENED by PM 2026-04-24 (Stage 2-Retry Gate A ratification).
+ * Sprint 12 Task 2.5 Stage 2-Retry source of record. Supersedes the Stage 1
+ * Gate 1 text ratified in commit `c80a4a3`.
  *
- * PM ratification decisions (see PM-Waggle-OS/sessions/2026-04-23-task25-stage1-complete.md §3
- * and the 2026-04-23 GATE-S1 PM adjudication response):
- *   - Hard cap semantics: keep "SHOULD finish in 2" as drafted. Turn 3 is
- *     diagnostic signal (F-agentic-3rdturn vs F-agentic-answered-in-2),
- *     not benchmark noise. Revisit only if N=400 shows systematic 3rd-turn
- *     abuse.
- *   - "unknown" fallback: keep binary. Hallucination is a worse failure mode
- *     than admission; strict grounding is the benchmark philosophy. Judge-
- *     ensemble failure taxonomy (F-grounding vs F-hallucination) handles the
- *     LoCoMo category-3 multi-phrase-answer concern.
- *   - Tool-result interpretation: no relevance-filter instruction added. §4
- *     ("ambiguous or incomplete") is sufficient. More verbiage increases
- *     prompt-length variance without clear benefit.
+ * Changes vs Stage 1 text (Stage 2 N=20 FAIL drove these):
+ *   - §1 protocol verb: MUST → SHOULD. Stage 2 showed the MUST-call-first-
+ *     turn rule was too rigid — 2/20 instances answered correctly from
+ *     general knowledge, hitting the 95% floor by one instance. Softening
+ *     lets the agent skip the tool on clearly-non-conversational factoids.
+ *   - §1 explicit exception: general-knowledge lookups where the answer
+ *     does not require conversation-specific context may skip the tool call.
+ *   - §3 phrasing: "directly contain" → "contain" (tolerate inference from
+ *     retrieved memories rather than requiring exact-span match).
+ *   - §5 cap description: dropped the "SHOULD finish in 2" prescriptive
+ *     language in favour of "use your turns wisely" — diagnostic data from
+ *     Stage 2 showed 14/20 finished in 2 organically, and the prescriptive
+ *     phrasing was not carrying behavioural weight.
+ *   - §6 fallback threshold: "do not contain the answer" → "after reasonable
+ *     search you believe the memory does not contain a supported answer"
+ *     (nominalized, gives the agent latitude before abstaining).
+ *   - §7 NEW: explicit tool-exhaustion fallback clause — if turn 3 arrives
+ *     without a clear answer, commit to a best-supported answer. Backs the
+ *     runtime-side forced-answer fallback (§1.4 in the brief).
+ *   - Closing paragraph: "content returned by search_memory … and general
+ *     knowledge" instead of "ONLY … search_memory tool" — matches §1
+ *     softening.
  *
- * TEXT FROZEN. Any future change requires new PM adjudication + a new Gate.
+ * Previous Stage 1 text archive: commit c80a4a3.
  *
- * Brief requirement coverage (Stage 1 §agentic-cell-shape):
- *   (a) explicit instruction to invoke search_memory before answering → §1
- *   (b) ground the answer in retrieved content, not prior knowledge → §6 + closing
- *   (c) a stop condition that triggers before the 3-turn cap → §4–§5 budget
+ * PM gate reference: `PM-Waggle-OS/briefs/2026-04-24-cc-task25-stage2-retry-kickoff.md` §1.3.
  */
 export const SYSTEM_AGENTIC = [
   'You are a memory-grounded answering agent. Your job: answer a short',
-  'factoid question using ONLY the content returned by the search_memory',
-  'tool.',
+  'factoid question using content returned by the search_memory tool and',
+  'your reasoning over it.',
   '',
-  'Protocol (you MUST follow):',
+  'Protocol (you SHOULD follow):',
   '1. First turn: call search_memory with a focused query derived from the',
-  '   question. Do NOT answer from prior knowledge.',
+  '   question, UNLESS the question is a simple factual lookup you can',
+  '   answer with high confidence from general knowledge and the answer',
+  '   does not require conversation-specific context. When uncertain,',
+  '   prefer the search_memory call.',
   '2. After the tool returns, read the retrieved memories carefully.',
-  '3. If the retrieved memories directly contain the answer, respond with',
-  '   the shortest possible answer span — no sentences, no hedging, no',
-  '   preamble.',
+  '3. If the retrieved memories contain the answer, respond with the',
+  '   shortest possible answer span — no sentences, no hedging, no preamble.',
   '4. If the retrieved memories are ambiguous or incomplete, you MAY call',
   '   search_memory ONE more time with a refined query (different wording,',
   '   different entity, different time window). Then answer.',
-  '5. You have a hard cap of 3 total turns. You SHOULD finish in 2: one',
-  '   tool call, then a direct answer. Use the third turn only if genuinely',
-  '   needed; never repeat an identical query.',
-  '6. If the retrieved memories do not contain the answer, reply with',
-  '   exactly: unknown',
+  '5. You have a hard cap of 3 total turns. Use your turns wisely.',
+  '6. If after reasonable search you believe the memory does not contain a',
+  '   supported answer, reply with exactly: unknown',
+  '7. If turn 3 arrives without a clear answer, commit to your best',
+  '   supported answer span using the context you have gathered across',
+  '   search calls. Do NOT leave the response empty.',
   '',
   'Output format: plain answer span only. No JSON, no markdown, no',
-  'explanation. Your knowledge is frozen — memory is the source of truth.',
-  'Never invent facts. Never extrapolate. Ground every claim in a retrieved',
-  'turn.',
+  'explanation. Never invent facts. Ground every factual claim in retrieved',
+  'context or clearly-established general knowledge.',
 ].join('\n');
+
+/**
+ * SYSTEM_AGENTIC_FORCED_FALLBACK — Sprint 12 Task 2.5 Stage 2-Retry §1.4.
+ *
+ * The runtime fallback prompt fires when agent-loop exhausts `maxTurns`
+ * with empty `resp.content` but non-empty `toolsUsed`. The agentic cell
+ * wrapper calls the subject LLM directly (no tools, no agent-loop) with
+ * this system prompt and the accumulated search_memory tool results in
+ * the user message. Prevents the Stage 2 "2/20 empty-answer" tail.
+ */
+export const SYSTEM_AGENTIC_FORCED_FALLBACK =
+  'You must commit to your best supported answer span or reply `unknown`. ' +
+  'Do not call tools. Use only the retrieved memory context below. ' +
+  'Respond with ONLY the answer span — no sentences, no hedging, no preamble.';
 
 export interface CellInput {
   instance: DatasetInstance;
@@ -153,14 +176,35 @@ function formatRecalledMemories(results: readonly SearchResult[]): string {
 /** Build a `search_memory`-only `ToolDefinition` bound to the substrate's
  *  HybridSearch instance. The tool returns a plain-text memory block the
  *  LLM can parse inline — matches the shape the real Waggle orchestrator
- *  emits for `search_memory` calls. */
-export function makeSearchMemoryTool(substrate: Substrate, defaultLimit: number = 10): ToolDefinition {
+ *  emits for `search_memory` calls.
+ *
+ *  Sprint 12 Task 2.5 Stage 2-Retry §1.2: when `boundToGopId` is provided,
+ *  every tool invocation scopes its underlying `HybridSearch.search` call
+ *  to that `gopId` (conversation). This matches the LoCoMo QA-pair locality
+ *  — relevant evidence for a question lives inside its own conversation.
+ *  The agent CANNOT override the binding at call time (the tool does not
+ *  expose a `gopId` param); this is intentional — per-conversation scope
+ *  is a benchmark invariant, not an agent decision.
+ *
+ *  Default `defaultLimit` bumped from Stage 1's 10 → 20 per Stage 2-Retry
+ *  brief §1.2 tail ("Top-K moves from 10 to 20"). The upper clamp also
+ *  moves from 20 to 50 so agents can request wider recall when genuinely
+ *  needed without hitting a surprise cap.
+ */
+export function makeSearchMemoryTool(
+  substrate: Substrate,
+  defaultLimit: number = 20,
+  boundToGopId?: string,
+): ToolDefinition {
   return {
     name: 'search_memory',
     description:
       'Search the conversation memory corpus for turns relevant to a query. ' +
       'Call this BEFORE answering so you can ground your answer in retrieved content. ' +
-      'Results are ranked turn frames with speaker, text, and relevance score.',
+      'Results are ranked turn frames with speaker, text, and relevance score.' +
+      (boundToGopId
+        ? ' (Scope is auto-restricted to the current conversation.)'
+        : ''),
     offlineCapable: true,
     parameters: {
       type: 'object',
@@ -171,7 +215,7 @@ export function makeSearchMemoryTool(substrate: Substrate, defaultLimit: number 
         },
         limit: {
           type: 'number',
-          description: `Max results to return. Default ${defaultLimit}. Cap 20.`,
+          description: `Max results to return. Default ${defaultLimit}. Cap 50.`,
         },
       },
       required: ['query'],
@@ -180,8 +224,10 @@ export function makeSearchMemoryTool(substrate: Substrate, defaultLimit: number 
       const query = typeof args.query === 'string' ? args.query.trim() : '';
       if (!query) return 'ERROR: query is required and must be a non-empty string.';
       const limitRaw = typeof args.limit === 'number' ? args.limit : defaultLimit;
-      const limit = Math.max(1, Math.min(20, Math.floor(limitRaw)));
-      const results = await substrate.search.search(query, { limit });
+      const limit = Math.max(1, Math.min(50, Math.floor(limitRaw)));
+      const searchOpts: { limit: number; gopId?: string } = { limit };
+      if (boundToGopId) searchOpts.gopId = boundToGopId;
+      const results = await substrate.search.search(query, searchOpts);
       if (results.length === 0) return '(no memories found)';
       return results.map((r, idx) => {
         const score = r.finalScore.toFixed(3);
@@ -247,19 +293,24 @@ export const cells: Record<CellName, CellFn> = {
   },
 
   /**
-   * retrieval — Sprint 12 Task 2.5 Stage 1 (2026-04-23).
+   * retrieval — Sprint 12 Task 2.5 Stage 1, updated by Stage 2-Retry.
    *
-   * Real `@waggle/core::HybridSearch` RRF-fused FTS5 + vec0 recall over the
-   * pre-ingested LoCoMo corpus. Top-K turn frames formatted into the "#
-   * Recalled Memories" block and handed to the model under SYSTEM_BASELINE.
+   * Real `@waggle/core::HybridSearch` RRF-fused FTS5 + vec0 recall. Stage
+   * 1 ran whole-corpus top-K=10. Stage 2-Retry §1.2 scopes search to the
+   * instance's conversation via `gopId` filter (plumbed through
+   * `HybridSearch.SearchOptions.gopId`) and bumps the top-K default to 20.
+   * Matches LoCoMo QA-pair locality.
    *
-   * This is the substrate-real replacement for the Sprint 9 `filtered` cell,
-   * which used the instance's own ground-truth context as a scaffold proxy.
+   * When `instance.conversation_id` is unset (synthetic datasets, pre-
+   * Stage-2-Retry fixtures), falls back to whole-corpus search — preserves
+   * backward compatibility with existing unit tests.
    */
   retrieval: async ({ instance, model, llm, turnId: _turnId, substrate, retrievalTopK }: CellInput) => {
     assertSubstrate('retrieval', substrate);
-    const limit = retrievalTopK ?? 10;
-    const results = await substrate.search.search(instance.question, { limit });
+    const limit = retrievalTopK ?? 20;
+    const searchOpts: { limit: number; gopId?: string } = { limit };
+    if (instance.conversation_id) searchOpts.gopId = instance.conversation_id;
+    const results = await substrate.search.search(instance.question, searchOpts);
     const memoryBlock = formatRecalledMemories(results);
     const userPrompt = `${memoryBlock}\n\nQuestion: ${instance.question}`;
     return llm.call({
@@ -287,14 +338,26 @@ export const cells: Record<CellName, CellFn> = {
    * CellInput. (The cell's `llm: LlmClient` is kept in the signature for
    * interface symmetry but is not used by this cell.)
    */
-  agentic: async ({ instance, model, turnId, substrate, litellm, agenticMaxTurns, agenticTimeoutMs, runAgentLoopFn }: CellInput) => {
+  agentic: async ({ instance, model, llm, turnId, substrate, litellm, agenticMaxTurns, agenticTimeoutMs, runAgentLoopFn }: CellInput) => {
     assertSubstrate('agentic', substrate);
     assertLitellm('agentic', litellm);
     const maxTurns = agenticMaxTurns ?? 3;
     const timeoutMs = agenticTimeoutMs ?? 180_000;
     const runFn = runAgentLoopFn ?? runAgentLoop;
 
-    const searchMemoryTool = makeSearchMemoryTool(substrate, 10);
+    // Stage 2-Retry §1.2: bind search_memory to this instance's conversation
+    // via gopId, so agent's search calls are automatically scoped. Cannot be
+    // overridden by the agent — conversation scope is a benchmark invariant.
+    const searchMemoryTool = makeSearchMemoryTool(substrate, 20, instance.conversation_id);
+
+    // Stage 2-Retry §1.4: capture tool-result text as it streams through so
+    // the exhaustion-fallback pass has the accumulated context available.
+    // Each entry is the string returned by makeSearchMemoryTool.execute.
+    const capturedToolResults: string[] = [];
+    const captureToolResult = (name: string, _input: Record<string, unknown>, result: string): void => {
+      if (name === 'search_memory') capturedToolResults.push(result);
+    };
+
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     const started = Date.now();
@@ -309,18 +372,43 @@ export const cells: Record<CellName, CellFn> = {
       maxTurns,
       signal: controller.signal,
       turnId,
+      onToolResult: captureToolResult,
     };
 
     try {
       const resp = await runFn(cfg);
+      let finalContent = resp.content;
+      let fallbackInput = 0;
+      let fallbackOutput = 0;
+
+      // Stage 2-Retry §1.4 tool-exhaustion fallback: agent exhausted maxTurns
+      // without producing content but DID use tools → synthesize one forced-
+      // answer call with accumulated search context + SYSTEM_AGENTIC_FORCED_
+      // FALLBACK. SYSTEM_AGENTIC §7 addresses this prompt-side; this is the
+      // runtime guarantee. Fires only on empty-content-with-tool-use; normal
+      // empty-abstain ("unknown") paths don't trigger.
+      if (!finalContent.trim() && capturedToolResults.length > 0) {
+        const ctxBlock = capturedToolResults
+          .map((r, i) => `## search_memory call ${i + 1}\n${r}`)
+          .join('\n\n');
+        const forcedResp = await llm.call({
+          model,
+          systemPrompt: SYSTEM_AGENTIC_FORCED_FALLBACK,
+          userPrompt: `Question: ${instance.question}\n\n# Retrieved memory context\n${ctxBlock}`,
+        });
+        finalContent = forcedResp.text;
+        fallbackInput = forcedResp.inputTokens;
+        fallbackOutput = forcedResp.outputTokens;
+      }
+
       const latencyMs = Date.now() - started;
-      const inputTokens = resp.usage.inputTokens;
-      const outputTokens = resp.usage.outputTokens;
+      const inputTokens = resp.usage.inputTokens + fallbackInput;
+      const outputTokens = resp.usage.outputTokens + fallbackOutput;
       const costUsd =
         (inputTokens / 1_000_000) * model.pricePerMillionInput +
         (outputTokens / 1_000_000) * model.pricePerMillionOutput;
       return {
-        text: resp.content,
+        text: finalContent,
         inputTokens,
         outputTokens,
         latencyMs,
@@ -343,6 +431,29 @@ export const cells: Record<CellName, CellFn> = {
       clearTimeout(timer);
     }
   },
+
+  /**
+   * no-context — Sprint 12 Task 2.5 Stage 2-Retry §1.1 (2026-04-24).
+   *
+   * True zero-memory baseline: question-only user prompt, no
+   * `instance.context`, no retrieval, no memory injection. SYSTEM_BASELINE
+   * keeps the model's output format consistent with other cells. This is
+   * the honest comparator for the retrieval memory-lift success criterion
+   * (brief §4 criterion 2): `retrieval >= no-context + 5pp`.
+   *
+   * Rationale (per Stage 2 N=20 FAIL exit §6.1): Sprint 9 `raw` embeds
+   * LoCoMo's oracle-selected `instance.context` in its prompt, so `raw` is
+   * NOT a zero-memory baseline on LoCoMo — it's an oracle-fed diagnostic
+   * (now exposed as v3 `oracle-context` alias). `no-context` is the
+   * zero-memory ground truth.
+   */
+  'no-context': async ({ instance, model, llm, turnId: _turnId }: CellInput) => {
+    return llm.call({
+      model,
+      systemPrompt: SYSTEM_BASELINE,
+      userPrompt: `Question: ${instance.question}`,
+    });
+  },
 };
 
 /** Type-narrowing helper for the runner's cell-or-control dispatch. */
@@ -353,7 +464,8 @@ export function isCellName(name: string): name is CellName {
     name === 'compressed' ||
     name === 'full-context' ||
     name === 'retrieval' ||
-    name === 'agentic'
+    name === 'agentic' ||
+    name === 'no-context'
   );
 }
 

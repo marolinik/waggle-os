@@ -44,18 +44,32 @@ import type { Substrate } from './substrate.js';
  * Cell names. Sprint 9 / Sprint 12 Task 1 Blocker #2 shipped the first four
  * (`raw`, `filtered`, `compressed`, `full-context`). Sprint 12 Task 2.5
  * Stage 1 (2026-04-23) added `retrieval` and `agentic` — backed by real
- * `@waggle/core::HybridSearch` and `@waggle/agent::agent-loop` respectively
- * (vs the Sprint 9 `filtered` / `compressed` scaffold proxies which remain
- * for back-compat with pre-Task-2.5 JSONL artefacts).
+ * `@waggle/core::HybridSearch` and `@waggle/agent::agent-loop` respectively.
  *
- * v3 brief cell vocabulary `[raw, context, retrieval, agentic]` maps via
- * `scripts/run-mini-locomo.ts::V3_TO_V1_CELLS`:
- *   raw        → raw
- *   context    → full-context
- *   retrieval  → retrieval       (NEW; real HybridSearch — Task 2.5 Stage 1)
- *   agentic    → agentic         (NEW; real agent-loop  — Task 2.5 Stage 1)
+ * Sprint 12 Task 2.5 Stage 2-Retry (2026-04-24) added `no-context` — a
+ * true zero-memory baseline (question-only prompt, no `instance.context`,
+ * no retrieval). The Stage 2 N=20 FAIL exit revealed that Sprint 9 `raw`
+ * is NOT a zero-context baseline on LoCoMo (its prompt embeds the
+ * oracle-selected `instance.context`); `no-context` is the honest
+ * comparator for the retrieval memory-lift criterion.
+ *
+ * The v3 PM-facing vocabulary for Stage 2-Retry is
+ * `[no-context, oracle-context, full-context, retrieval, agentic]`; mapping
+ * to harness internal ids via `scripts/run-mini-locomo.ts::V3_TO_V1_CELLS`:
+ *   no-context     → no-context      (NEW; true zero-memory baseline)
+ *   oracle-context → raw             (alias — oracle-fed diagnostic; harness `raw` kept for back-compat)
+ *   full-context   → full-context    (unchanged)
+ *   retrieval      → retrieval       (now conv-scope top-K=20)
+ *   agentic        → agentic         (now conv-scope + softened SYSTEM_AGENTIC + fallback)
  */
-export type CellName = 'raw' | 'filtered' | 'compressed' | 'full-context' | 'retrieval' | 'agentic';
+export type CellName =
+  | 'raw'
+  | 'filtered'
+  | 'compressed'
+  | 'full-context'
+  | 'retrieval'
+  | 'agentic'
+  | 'no-context';
 export type ControlName = 'verbose-fixed';
 export type RunKind = { kind: 'cell'; name: CellName } | { kind: 'control'; name: ControlName };
 
@@ -69,6 +83,14 @@ export interface DatasetInstance {
   context: string;
   /** Canonical reference answer(s) for automated scoring. */
   expected: string[];
+  /** Sprint 12 Task 2.5 Stage 2-Retry (2026-04-24): identifier of the
+   *  conversation this QA pair was authored within. For LoCoMo this is the
+   *  `conversation_id` / `sample_id` carried by the canonical archive (e.g.
+   *  `conv-26`). Retrieval + agentic cells use this as a `gopId` filter so
+   *  HybridSearch scopes to the instance's conversation only, matching the
+   *  QA-pair locality LoCoMo was authored for. Undefined for synthetic runs
+   *  and pre-Stage-2-Retry JSONL artefacts. */
+  conversation_id?: string;
 }
 
 export interface DatasetSpec {

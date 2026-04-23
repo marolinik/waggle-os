@@ -51,9 +51,12 @@ interface Args {
   validateOnly: boolean;
   manifestHash?: string;
   seed: number;
+  /** Stage 2-Retry §1.5: when true, `cells` is set to V3_CELLS_EXPANSION
+   *  (5 PM-facing v3 cell names) unless the user passed --cells explicitly. */
+  v3Cells: boolean;
 }
 
-function parseArgs(argv: string[]): Args {
+export function parseArgs(argv: string[]): Args {
   const out: Args = {
     N: 100,
     cells: ['raw', 'context', 'retrieval', 'agentic'],
@@ -61,7 +64,9 @@ function parseArgs(argv: string[]): Args {
     dryRun: false,
     validateOnly: false,
     seed: 42,
+    v3Cells: false,
   };
+  let explicitCells = false;
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
     const next = argv[i + 1];
@@ -74,7 +79,8 @@ function parseArgs(argv: string[]): Args {
         i++;
         break;
       case '--N': out.N = Number(next); i++; break;
-      case '--cells': out.cells = (next ?? '').split(',').map(s => s.trim()).filter(Boolean); i++; break;
+      case '--cells': out.cells = (next ?? '').split(',').map(s => s.trim()).filter(Boolean); explicitCells = true; i++; break;
+      case '--v3-cells': out.v3Cells = true; break;
       case '--parallel-concurrency': out.parallelConcurrency = Number(next); i++; break;
       case '--output': out.output = next; i++; break;
       case '--dry-run': out.dryRun = true; break;
@@ -86,6 +92,12 @@ function parseArgs(argv: string[]): Args {
         printHelp();
         process.exit(0);
     }
+  }
+  // Stage 2-Retry §1.5: --v3-cells sets the 5-cell roster unless the user
+  // ALSO passed --cells explicitly (in which case --cells wins; v3Cells
+  // stays true for downstream observability but cells is the user's choice).
+  if (out.v3Cells && !explicitCells) {
+    out.cells = [...V3_CELLS_EXPANSION];
   }
   return out;
 }
@@ -101,6 +113,9 @@ Flags:
   --judge-ensemble <csv>         Comma-separated judge aliases
   --N <int>                      Instances per cell (default 100)
   --cells <csv>                  v3 cell names (default raw,context,retrieval,agentic)
+  --v3-cells                     Stage 2-Retry (2026-04-24): expands --cells to the 5-cell roster
+                                 [no-context, oracle-context, full-context, retrieval, agentic].
+                                 Loses to an explicit --cells argument if both are passed.
   --parallel-concurrency <int>   Concurrent cell invocations (default 2)
   --output <path>                Override output base path (default auto)
   --manifest-hash <sha>          64-char lowercase SHA-256 of manifest YAML
@@ -207,16 +222,49 @@ async function validateAliases(requiredAliases: string[]): Promise<{
 // / `compressed`) — those remain in the dispatch table for back-compat with
 // pre-Task-2.5 JSONL artefacts only.
 //
-// `context` still maps to `full-context` because Sprint 9's `full-context` cell
-// (context + evolved system prompt) IS semantically the v3 "context" cell per
-// the GATE-2 adjudication in sessions/2026-04-23-cells-semantic-diff.md.
+// Sprint 12 Task 2.5 Stage 2-Retry (2026-04-24): adds two aliases per PM
+// Gate A ratification. `no-context` is a brand-new harness cell (true
+// zero-memory baseline). `oracle-context` is a PM-facing alias for the
+// Sprint 9 harness `raw` cell (which is oracle-fed on LoCoMo, not actually
+// zero-memory — renaming the harness id would break 40+ existing test
+// assertions, so we alias instead). `full-context` is admitted as a
+// first-class v3 name alongside the legacy `context` alias.
 
 const V3_TO_V1_CELLS: Record<string, string> = {
-  raw: 'raw',
-  context: 'full-context',
+  'no-context': 'no-context',         // NEW — true zero-memory baseline
+  'oracle-context': 'raw',            // NEW — PM-facing alias for harness `raw`
+  'full-context': 'full-context',     // NEW — direct v3 name (legacy `context` below)
+  raw: 'raw',                         // kept for backward compat (Sprint 9 callers)
+  context: 'full-context',            // kept for backward compat (v3 pre-retry)
   retrieval: 'retrieval',
   agentic: 'agentic',
 };
+
+/** Stage 2-Retry §1.5 JSONL emit contract: PM-facing cell-name values are
+ *  written into the JSONL `cell` field, not harness internal ids. This is
+ *  the inverse map of V3_TO_V1_CELLS, preferring the Stage 2-Retry PM-facing
+ *  name when multiple v3 names alias to the same harness id (e.g. harness
+ *  `full-context` aliases to both v3 `full-context` and v3 `context`;
+ *  Stage 2-Retry emits `full-context`). */
+const V1_TO_V3_EMIT_NAME: Record<string, string> = {
+  'no-context': 'no-context',
+  'raw': 'oracle-context',
+  'full-context': 'full-context',
+  'retrieval': 'retrieval',
+  'agentic': 'agentic',
+  // Sprint 9 scaffold cells have no v3 equivalent — emit unchanged if used.
+  'filtered': 'filtered',
+  'compressed': 'compressed',
+};
+
+/** Stage 2-Retry §1.5 `--v3-cells` expands to the 5 PM-facing v3 names. */
+const V3_CELLS_EXPANSION: readonly string[] = [
+  'no-context',
+  'oracle-context',
+  'full-context',
+  'retrieval',
+  'agentic',
+];
 
 function mapCell(v3Name: string): string {
   const v1 = V3_TO_V1_CELLS[v3Name];
@@ -226,6 +274,42 @@ function mapCell(v3Name: string): string {
     );
   }
   return v1;
+}
+
+/** Rewrite the `cell` field of every JSONL row in `outputPath` to the
+ *  PM-facing v3 name. Returns the number of rows rewritten. Atomic: writes
+ *  the full new content in a single `writeFileSync` after building the
+ *  replacement string. Gracefully tolerates already-v3 values (idempotent
+ *  — running the rewrite twice produces the same output as running it
+ *  once).
+ *
+ *  Stage 2-Retry §1.5 emit contract. No schema change; only the value
+ *  space of the `cell` field expands. JSONL readers that parse by field
+ *  name continue to work.
+ */
+export function rewriteJsonlCellField(outputPath: string, v3Cell: string): number {
+  if (!fs.existsSync(outputPath)) return 0;
+  const raw = fs.readFileSync(outputPath, 'utf-8');
+  const lines = raw.split('\n');
+  const rewritten: string[] = [];
+  let count = 0;
+  for (const line of lines) {
+    if (!line.trim()) {
+      rewritten.push(line);
+      continue;
+    }
+    try {
+      const rec = JSON.parse(line) as Record<string, unknown>;
+      rec.cell = v3Cell;
+      rewritten.push(JSON.stringify(rec));
+      count++;
+    } catch {
+      // Malformed line — preserve as-is.
+      rewritten.push(line);
+    }
+  }
+  fs.writeFileSync(outputPath, rewritten.join('\n'), 'utf-8');
+  return count;
 }
 
 // ── Runner invocation ────────────────────────────────────────────────────
@@ -297,6 +381,28 @@ async function runOneCell(v3Cell: string, args: Args): Promise<CellRunResult> {
       process.stderr.write(`[${v3Cell}→${v1Cell}:err] ${text}`);
     });
     child.on('exit', (code) => {
+      // Stage 2-Retry §1.5 JSONL emit contract: rewrite the `cell` field to
+      // the PM-facing v3 name before resolving. Only fires on clean exit
+      // with a parsed output path; failed runs leave the JSONL untouched.
+      let rowsRewritten = 0;
+      if ((code ?? 1) === 0 && outputPath) {
+        const v3EmitName = V1_TO_V3_EMIT_NAME[v1Cell] ?? v3Cell;
+        try {
+          rowsRewritten = rewriteJsonlCellField(outputPath, v3EmitName);
+          if (rowsRewritten > 0) {
+            console.log(
+              `[wrapper:jsonl-rewrite] ${v3Cell}→${v1Cell}: ${rowsRewritten} rows ` +
+              `cell-field rewritten to '${v3EmitName}' in ${outputPath}`,
+            );
+          }
+        } catch (err) {
+          console.error(
+            `[wrapper:jsonl-rewrite:warn] rewrite failed for ${outputPath}: ` +
+            `${err instanceof Error ? err.message : String(err)}. ` +
+            `JSONL left in harness-internal cell-name state.`,
+          );
+        }
+      }
       resolve({
         v3Cell,
         v1Cell,
@@ -483,7 +589,18 @@ async function main(): Promise<void> {
   if (failCount > 0) process.exit(1);
 }
 
-main().catch(err => {
-  console.error('[wrapper:error]', err instanceof Error ? err.message : String(err));
-  process.exit(1);
-});
+// Only run main() when invoked as an executable (not when imported by tests).
+// Mirror the runner.ts guard so `import('../../../scripts/run-mini-locomo.ts')`
+// is side-effect-free.
+const isMainModule =
+  typeof process !== 'undefined' &&
+  Array.isArray(process.argv) &&
+  process.argv[1] !== undefined &&
+  url.fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+
+if (isMainModule) {
+  main().catch(err => {
+    console.error('[wrapper:error]', err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  });
+}
