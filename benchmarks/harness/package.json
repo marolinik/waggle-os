@@ -17,7 +17,8 @@
     "bench": "tsx src/runner.ts"
   },
   "dependencies": {
-    "@waggle/agent": "0.1.0"
+    "@waggle/agent": "0.1.0",
+    "@waggle/core": "*"
   },
   "devDependencies": {
     "tsx": "^4.0.0",

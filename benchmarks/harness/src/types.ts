@@ -34,8 +34,28 @@ export type { FailureCode } from './failure-taxonomy/codes.js';
 export type { FailureDistribution } from './failure-taxonomy/aggregate.js';
 import type { FailureCode } from './failure-taxonomy/codes.js';
 import type { FailureDistribution } from './failure-taxonomy/aggregate.js';
+// Sprint 12 Task 2.5 Stage 1 (2026-04-23): Substrate is imported type-only so
+// types.ts has zero runtime dependency on substrate.ts / @waggle/core. The
+// field threads through RunConfig → runOne → CellInput for the retrieval +
+// agentic cells.
+import type { Substrate } from './substrate.js';
 
-export type CellName = 'raw' | 'filtered' | 'compressed' | 'full-context';
+/**
+ * Cell names. Sprint 9 / Sprint 12 Task 1 Blocker #2 shipped the first four
+ * (`raw`, `filtered`, `compressed`, `full-context`). Sprint 12 Task 2.5
+ * Stage 1 (2026-04-23) added `retrieval` and `agentic` — backed by real
+ * `@waggle/core::HybridSearch` and `@waggle/agent::agent-loop` respectively
+ * (vs the Sprint 9 `filtered` / `compressed` scaffold proxies which remain
+ * for back-compat with pre-Task-2.5 JSONL artefacts).
+ *
+ * v3 brief cell vocabulary `[raw, context, retrieval, agentic]` maps via
+ * `scripts/run-mini-locomo.ts::V3_TO_V1_CELLS`:
+ *   raw        → raw
+ *   context    → full-context
+ *   retrieval  → retrieval       (NEW; real HybridSearch — Task 2.5 Stage 1)
+ *   agentic    → agentic         (NEW; real agent-loop  — Task 2.5 Stage 1)
+ */
+export type CellName = 'raw' | 'filtered' | 'compressed' | 'full-context' | 'retrieval' | 'agentic';
 export type ControlName = 'verbose-fixed';
 export type RunKind = { kind: 'cell'; name: CellName } | { kind: 'control'; name: ControlName };
 
@@ -206,6 +226,27 @@ export interface RunConfig {
    * disabled — pre-registration payload emits an empty array in that case.
    */
   judgeModelsResolved?: import('./preregistration.js').JudgeModelManifestEntry[];
+  // ── Sprint 12 Task 2.5 Stage 1 (2026-04-23) — substrate deps for retrieval + agentic cells ─
+  /**
+   * Ephemeral MindDB + HybridSearch pair built by main() via
+   * `createSubstrate({embedder})` and pre-populated via
+   * `ingestLoCoMoCorpus(...)` BEFORE any cell fires. Required only when the
+   * run roster includes `retrieval` or `agentic`; the other four cells ignore
+   * it. Lifecycle is owned by main() — `close()` is called in its `finally`.
+   */
+  substrate?: Substrate;
+  /**
+   * LiteLLM URL + API key surfaced to CellInput so the `agentic` cell's
+   * inner `runAgentLoop` can talk to the proxy directly (agent-loop does
+   * not route through the cell's `LlmClient`). Other cells ignore.
+   */
+  litellm?: { url: string; apiKey: string };
+  /** Retrieval cell top-K override. Default 10 (GATE-S0 lock). */
+  retrievalTopK?: number;
+  /** Agentic cell turn cap override. Default 3 (GATE-S0 lock). */
+  agenticMaxTurns?: number;
+  /** Agentic cell AbortController timeout override. Default 180_000 ms. */
+  agenticTimeoutMs?: number;
 }
 
 /** Judge failure-mode taxonomy codes. Must match the enum the judge module

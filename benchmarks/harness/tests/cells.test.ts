@@ -14,11 +14,22 @@ import { describe, expect, it } from 'vitest';
 import { cells, isCellName } from '../src/cells.js';
 import type { CellName } from '../src/types.js';
 
-const CANONICAL_NAMES: readonly CellName[] = ['raw', 'filtered', 'compressed', 'full-context'];
+// Sprint 12 Task 1 Blocker #2 shipped the first four names. Sprint 12 Task
+// 2.5 Stage 1 (2026-04-23) added `retrieval` + `agentic` — backed by real
+// HybridSearch + agent-loop respectively. Both old and new names must be
+// acceptable; legacy pre-Sprint-12 names must still be rejected.
+const CANONICAL_NAMES: readonly CellName[] = [
+  'raw',
+  'filtered',
+  'compressed',
+  'full-context',
+  'retrieval',
+  'agentic',
+];
 const LEGACY_NAMES = ['memory-only', 'evolve-only', 'full-stack'] as const;
 
-describe('CellName enum (Sprint 12 Task 1 Blocker #2 rename)', () => {
-  it('exposes exactly the four A3 LOCK cell names as object keys', () => {
+describe('CellName enum (Sprint 12 Task 1 Blocker #2 rename + Task 2.5 Stage 1 extension)', () => {
+  it('exposes exactly the six canonical cell names as object keys', () => {
     const keys = Object.keys(cells).sort();
     expect(keys).toEqual([...CANONICAL_NAMES].sort());
   });

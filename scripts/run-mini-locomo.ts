@@ -199,13 +199,23 @@ async function validateAliases(requiredAliases: string[]): Promise<{
   return { ok: missing.length === 0, live, missing };
 }
 
-// ── v3 → v1 cell-name mapping (Scenario C alias table) ───────────────────
+// ── v3 → v1 cell-name mapping ────────────────────────────────────────────
+//
+// Sprint 12 Task 2.5 Stage 1 (2026-04-23): `retrieval` and `agentic` are now
+// FIRST-CLASS cells in the harness (real HybridSearch + real agent-loop).
+// The wrapper no longer aliases them to the Sprint 9 scaffold cells (`filtered`
+// / `compressed`) — those remain in the dispatch table for back-compat with
+// pre-Task-2.5 JSONL artefacts only.
+//
+// `context` still maps to `full-context` because Sprint 9's `full-context` cell
+// (context + evolved system prompt) IS semantically the v3 "context" cell per
+// the GATE-2 adjudication in sessions/2026-04-23-cells-semantic-diff.md.
 
 const V3_TO_V1_CELLS: Record<string, string> = {
   raw: 'raw',
   context: 'full-context',
-  retrieval: 'filtered',
-  agentic: 'compressed',
+  retrieval: 'retrieval',
+  agentic: 'agentic',
 };
 
 function mapCell(v3Name: string): string {
