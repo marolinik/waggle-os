@@ -57,6 +57,19 @@ import { runJudge, type JudgeConfig } from './judge-runner.js';
 // threaded through RunConfig → CellInput to each iteration.
 import { createSubstrate, type Substrate } from './substrate.js';
 import { extractTurnsFromLocomoRaw, ingestLoCoMoCorpus } from './ingest.js';
+// Sprint 12 Task 2.5 Stage 1.5 §7.2 — consecutive fetch-transport failure
+// halt. Prevents the v2 full-context saturation cascade from burning the
+// full instance budget on dead calls.
+import { StreakTracker } from './streak-tracker.js';
+// Sprint 12 Task 2.5 Stage 1.5 §7.3 — pre-cell health check. Probes every
+// upstream route the run depends on before spending instance-budget on them.
+import { preCellHealthCheck } from './health-check.js';
+// Sprint 12 Task 2.5 Stage 1.5 §7.4 — single-runner PID+heartbeat lock.
+// Encodes `concurrent_runners: FORBIDDEN` at the process level. Uses a
+// single global sentinel under benchmarks/results/ so two harness processes
+// can never both run even against different datasets/models (they still
+// share the LiteLLM proxy + provider bridges — the v2 saturation root cause).
+import { acquireRunnerLock, type LockHandle } from './runner-lock.js';
 
 // ── Arg parsing ────────────────────────────────────────────────────────────
 
@@ -372,6 +385,12 @@ async function runOne(config: RunConfig): Promise<void> {
   let totalCost = 0;
   let budgetStoppedAt: number | null = null;
   const latenciesByInstance: number[] = [];
+  // §7.2 Stage 1.5 streak halt — track consecutive fetch-transport failures.
+  // Tracker is cell-local: each cell gets a fresh counter so a streak in the
+  // previous cell doesn't poison the next.
+  const streakTracker = new StreakTracker();
+  let streakHaltAt: number | null = null;
+  let streakHaltSummary: string | null = null;
 
   for (let i = 0; i < sampled.length; i++) {
     if (totalCost >= config.budgetUsd) {
@@ -513,6 +532,16 @@ async function runOne(config: RunConfig): Promise<void> {
       model_revision_hash: null,
     };
     writer.write(record);
+
+    // §7.2 Stage 1.5 streak halt — check AFTER writing the current record so
+    // the failure-forensic row persists. Break out of the loop; the error is
+    // thrown AFTER writer.close() below so JSONL + summary files flush
+    // cleanly. Caller (main) surfaces the error to the operator.
+    if (streakTracker.record(result.failureMode)) {
+      streakHaltAt = i + 1;
+      streakHaltSummary = streakTracker.summary();
+      break;
+    }
   }
 
   await writer.close();
@@ -532,6 +561,19 @@ async function runOne(config: RunConfig): Promise<void> {
     `cost=$${summary.metrics.totalUsd} ` +
     `jsonl=${config.outputPath}`,
   );
+
+  // §7.2 Stage 1.5 — throw AFTER writer + summary flushed so partial data
+  // persists for forensic review (same pattern as budget-stop, except budget
+  // is a soft stop that doesn't throw). The surfaced error lets main()
+  // decide whether to continue other cells or bail the whole invocation.
+  if (streakHaltAt !== null) {
+    throw new Error(
+      `[bench:halt] cell '${config.run.name}' aborted at instance ${streakHaltAt}/${sampled.length} ` +
+      `due to consecutive fetch-transport failures (${streakHaltSummary}). ` +
+      `Likely upstream saturation — check LiteLLM proxy + provider health before re-running. ` +
+      `Partial JSONL persisted at ${config.outputPath}.`,
+    );
+  }
 }
 
 function round(n: number, decimals: number): number {
@@ -795,7 +837,42 @@ async function main(): Promise<void> {
     r => r.kind === 'cell' && (r.name === 'retrieval' || r.name === 'agentic'),
   );
   let substrate: Substrate | null = null;
+  let runnerLock: LockHandle | null = null;
   try {
+    // §7.4 Stage 1.5 — acquire the global single-runner lock FIRST. Fail
+    // fast before any substrate ingest or health-probe cost is spent.
+    // Sentinel lives under benchmarks/results/ so any two runner invocations
+    // contend regardless of their --output paths.
+    const lockSentinel = path.join(harnessRoot(), '..', 'results', '.benchmark-runner');
+    runnerLock = acquireRunnerLock(lockSentinel);
+    console.log(`[bench:lock] acquired ${runnerLock.lockPath} (pid=${process.pid})`);
+
+    // §7.3 Stage 1.5 — pre-cell health check. Probes /health/liveliness + a
+    // short ping call per (subject + judge ensemble). Skipped in dry-run
+    // mode (no upstream to probe). Any 5xx or network error aborts before
+    // any instance budget is spent.
+    if (!dryRun) {
+      const judgePingModels = args.judgeEnsemble
+        ? [...args.judgeEnsemble]
+        : (args.judge ? [args.judge] : []);
+      const hc = await preCellHealthCheck({
+        litellmUrl,
+        litellmApiKey,
+        subjectModel: model.litellmModel,
+        judgeModels: judgePingModels,
+      });
+      if (!hc.ok) {
+        const summary = hc.failures.map(f => `${f.endpoint} → ${f.error}`).join('; ');
+        throw new Error(
+          `[bench:health-check] FAILED in ${hc.durationMs}ms against ${litellmUrl}: ${summary}. ` +
+          `Aborting before any instance budget is spent. Check LiteLLM proxy + provider keys.`,
+        );
+      }
+      console.log(
+        `[bench:health-check] OK — probed subject + ${judgePingModels.length} judge(s) in ${hc.durationMs}ms`,
+      );
+    }
+
     if (substrateNeeded) {
       if (dryRun) {
         // Retrieval + agentic aren't meaningful in dry-run mode (the agent
@@ -871,6 +948,9 @@ async function main(): Promise<void> {
   } finally {
     if (substrate) {
       substrate.close();
+    }
+    if (runnerLock) {
+      runnerLock.release();
     }
   }
 }
