@@ -41,17 +41,29 @@ const SYSTEM_EVOLVED =
   'If the context does not contain the answer, reply with "unknown".';
 
 /**
- * SYSTEM_AGENTIC — DRAFT, Sprint 12 Task 2.5 Stage 1 (2026-04-23).
+ * SYSTEM_AGENTIC — RATIFIED VERBATIM by PM 2026-04-23 (GATE-S1 Gate 1).
+ * Sprint 12 Task 2.5 Stage 1 source of record.
  *
- * PM review pending. Do NOT ship to N=20 validation or N=400 retry until PM
- * ratifies this prompt verbatim.
+ * PM ratification decisions (see PM-Waggle-OS/sessions/2026-04-23-task25-stage1-complete.md §3
+ * and the 2026-04-23 GATE-S1 PM adjudication response):
+ *   - Hard cap semantics: keep "SHOULD finish in 2" as drafted. Turn 3 is
+ *     diagnostic signal (F-agentic-3rdturn vs F-agentic-answered-in-2),
+ *     not benchmark noise. Revisit only if N=400 shows systematic 3rd-turn
+ *     abuse.
+ *   - "unknown" fallback: keep binary. Hallucination is a worse failure mode
+ *     than admission; strict grounding is the benchmark philosophy. Judge-
+ *     ensemble failure taxonomy (F-grounding vs F-hallucination) handles the
+ *     LoCoMo category-3 multi-phrase-answer concern.
+ *   - Tool-result interpretation: no relevance-filter instruction added. §4
+ *     ("ambiguous or incomplete") is sufficient. More verbiage increases
+ *     prompt-length variance without clear benefit.
  *
- * Brief requirements (Stage 1 §agentic-cell-shape):
- *   (a) explicit instruction to invoke search_memory before answering
- *   (b) ground the answer in retrieved content, not prior knowledge
- *   (c) a stop condition that triggers before the 3-turn cap
+ * TEXT FROZEN. Any future change requires new PM adjudication + a new Gate.
  *
- * All three are covered: (a) §1, (b) §6 + closing line, (c) §4–§5 budget.
+ * Brief requirement coverage (Stage 1 §agentic-cell-shape):
+ *   (a) explicit instruction to invoke search_memory before answering → §1
+ *   (b) ground the answer in retrieved content, not prior knowledge → §6 + closing
+ *   (c) a stop condition that triggers before the 3-turn cap → §4–§5 budget
  */
 export const SYSTEM_AGENTIC = [
   'You are a memory-grounded answering agent. Your job: answer a short',
