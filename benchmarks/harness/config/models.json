@@ -26,6 +26,22 @@
     "pinning_surface": "floating_alias",
     "pinning_surface_carve_out_reason": "OpenRouter bridge to DashScope does not expose immutable model snapshots; floating alias mandated by B3 addendum § 5"
   },
+  "qwen3.6-35b-a3b-via-openrouter": {
+    "id": "qwen3.6-35b-a3b-via-openrouter",
+    "displayName": "Qwen3.6-35B-A3B (C3 Stage 2 mini subject — alias name matches LiteLLM route, stage2 LOCKED config applied)",
+    "provider": "alibaba",
+    "litellmModel": "qwen3.6-35b-a3b-via-openrouter",
+    "pricePerMillionInput": 0.20,
+    "pricePerMillionOutput": 0.80,
+    "contextWindow": 262144,
+    "stage2Config": {
+      "thinking": true,
+      "maxTokens": 64000,
+      "reasoningShape": "openrouter-unified"
+    },
+    "pinning_surface": "floating_alias",
+    "pinning_surface_carve_out_reason": "Sprint 12 Task 2 C3 Stage 2 mini (2026-04-23): sibling alias of `qwen3.6-35b-a3b-stage2` that exposes the LiteLLM route name as the models.json key — lets the manifest `target_model: qwen3.6-35b-a3b-via-openrouter` match both the pre-registration audit trail AND the CLI --model arg verbatim. Same routing: LiteLLM -> OpenRouter -> Alibaba bridge (slug `openrouter/qwen/qwen3.5-35b-a3b`). OpenRouter bridge to DashScope does not expose immutable model snapshots; floating alias mandated by B3 addendum § 5."
+  },
   "qwen3.6-35b-a3b-local": {
     "id": "qwen3.6-35b-a3b-local",
     "displayName": "Qwen3.6-35B-A3B (local vLLM)",
