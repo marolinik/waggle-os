@@ -210,6 +210,33 @@ Pricing $0.20 / $0.80 per M in/out. `floating_alias` pinning. B3 addendum § 5.
 
 **κ monitoring (κ re-cal phase, §5.4):** three pairwise Cohen's κ + conservative trio min. Thresholds from Bench-Spec LOCK v1 (pass ≥ 0.65; borderline 0.60-0.65; halt ≤ 0.60) retained. v6 κ re-cal success criterion ≥ 0.70 substantial agreement (tighter than operational halt threshold).
 
+#### 5.2.1 Failover behavior on MiniMax unavailability (clarification — added 2026-04-24 post-Phase-2 pre-flight, under v6 authority; canonical anchor `60d061e` preserved)
+
+The pre-registered backup activation ("Kimi K2.6 per-instance failover")
+is RETRACTED based on §1.3g-h-C Kimi reliability findings (parse rate
+67-71% on challenging samples, p50 32s latency, p95 exceeds 60s timeout
+threshold). Kimi retirement from v6 ensemble is a clarification, not
+substantive methodology change: ensemble membership (Opus+GPT+MiniMax trio),
+primary hypothesis test, and κ baseline remain unchanged.
+
+Quorum policy on MiniMax failure (API error, parse fail, timeout >60s
+after standard 3-retry judge-runner policy):
+- If Opus and GPT agree → majority verdict = their consensus (2-of-2 quorum)
+- If Opus and GPT disagree → evaluator_loss marker, instance excluded
+  from primary hypothesis analysis
+- Expected MiniMax failure rate <1% per Phase 1 empirical evidence
+  (100/100 parse, 0 routing errors)
+- Expected evaluator_loss rate projected <1% of N=400
+
+This clarification **supersedes** the pre-retraction "Backup activation policy" paragraph above (Kimi per-instance failover + both-fail `judge_ensemble_fail`). The retained text is kept in place as audit-visible "pre-amendment intent" for tamper-evident trail; operational Phase 2 runs per §5.2.1 quorum policy.
+
+#### 5.2.2 Kimi alias retention in litellm-config.
+
+Kimi alias (`kimi-k26-direct`) retained in `litellm-config.yaml` as orphan
+declaration (not invoked by runner). Removal would require additional
+config amendment commit; retention preserves audit trail of v6 Phase 1
+intent and is zero-cost operationally.
+
 ### 5.3 Health-check predicate
 
 _Inherited from manifest v5 §5.3 (health-check.ts frozen), amended for new aliases._

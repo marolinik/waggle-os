@@ -338,7 +338,34 @@ judge_ensemble:
     model_id: grok-4.20
     v5_role: tiebreak_reserve_on_1_1_1
     v6_status: retired
-    v6_replacement_policy: "three-way 1/1/1 split on primary trio -> PM escalation (no reserve judge in v6; backup-failover policy replaces reserve mechanism)"
+    v6_replacement_policy: "three-way 1/1/1 split on primary trio -> PM escalation (no reserve judge in v6; backup-failover policy replaces reserve mechanism — further superseded by §5.2.1 2-of-2 quorum clarification 2026-04-24)"
+  section_5_2_1_clarification_2026_04_24:
+    scope: "v6 §5.2 amendment under v6 authority (canonical anchor 60d061e preserved); NOT v7 re-pre-registration; NOT §10 deviation"
+    pm_adjudication_anchor: pm_adjudicate_v6_phase2_blockers_option_b_accept
+    change_summary: "retract Kimi backup; adopt 2-of-2 quorum on MiniMax failure; evaluator_loss on Opus/GPT split"
+    rationale:
+      - "MiniMax Phase 1 empirical reliability: 100/100 parse + 0 routing errors (expected <1% N=400 failure rate)"
+      - "Kimi cold probe (Phase 2 pre-flight fa7464b): 2/3 parse (67%); §1.3g-h-C consistent 67-71% on challenging samples + p95 >60s timeout"
+      - "Kimi-as-backup = insurance that fails when needed"
+    backup_judge_retraction:
+      retracted_policy: per_instance_failover_on_primary_judge_3_failure
+      retracted_model: kimi-k26-direct
+      retracted_model_status_in_litellm_config: retained_as_orphan_not_invoked_by_runner
+    new_quorum_policy_on_minimax_failure:
+      opus_gpt_agree: majority_verdict_equals_their_consensus_2_of_2_quorum
+      opus_gpt_disagree: evaluator_loss_reason_minimax_failed_opus_gpt_split_exclude_from_h1
+      expected_failure_rate_n400: lt_0_01
+      expected_evaluator_loss_rate_n400: lt_0_01
+    expected_phase2_execution_semantics:
+      primary_judges_parallel: [opus, gpt, minimax]
+      minimax_failure_triggers: [api_error, parse_fail, timeout_gt_60s_after_3_retry]
+      minimax_failure_fallback: 2_of_2_opus_gpt_quorum
+      kimi_involvement: none_retired
+      evaluator_loss_only_when: opus_gpt_disagree_and_minimax_failed
+    audit_chain:
+      parent_commit: fa7464b
+      canonical_v6_anchor: 60d061e
+      phase_2_kick_gate: PM_RATIFY_V6_5_2_CLARIFICATION
   consistency_constraint:
     same_physical_judge_models_subset_as_v5_plus_minimax: true
     single_call_per_judge_per_instance: true
