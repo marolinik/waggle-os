@@ -375,10 +375,18 @@ model_list:
   # alias expected by the v3 brief §0.2 alias roster (judge_tie_breaker).
   # Same upstream as `gemini-3.1-pro` above — alias name encodes the
   # "-preview" provenance explicitly for manifest audit clarity.
+  #
+  # Manifest v5 Fold-in 3.5b (2026-04-24): defensive-mirror rpm: 20 applied
+  # here as well because this alias shares the same Google upstream bucket
+  # (`gemini/gemini-3.1-pro-preview` at 25 RPM per-model cap) with the
+  # primary `gemini-3.1-pro` alias (edited in Step 2). Isolation sweep
+  # found non-zero (dormant) references to this alias in repo-wide grep,
+  # so defensive posture per PM brief Fold-in 3.5b decision tree.
   - model_name: gemini-3.1-pro-preview
     litellm_params:
       model: gemini/gemini-3.1-pro-preview
       api_key: os.environ/GEMINI_API_KEY
+      rpm: 20
 
   # GPT-5.4 — OpenAI's flagship (released Mar 5, 2026)
   # Strong judgment on structured outputs. Neutral to all candidates.
