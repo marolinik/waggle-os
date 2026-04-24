@@ -358,10 +358,18 @@ model_list:
   # Gemini 3.1 Pro — Google's frontier (released Feb 19, 2026)
   # Current SOTA on GPQA Diamond (94.3%), LMArena #1 (1501 Elo).
   # Neutral to all candidate families.
+  #
+  # Manifest v5 §5.2 addendum (2026-04-24, Stage 3 rekick): rpm: 20 applied
+  # after §1.3 Gate P+ probe FAIL (24/50 HTTP 429) revealed Google per-model
+  # preview cap of 25 RPM on generate_requests_per_model for this upstream.
+  # 20 < 25 Google cap with 5 RPM margin for burst variance. This is the
+  # single permitted §11 code-freeze exception in v5 per PM P4 path. See
+  # benchmarks/preregistration/manifest-v5-preregistration.md §5.2 and §11.
   - model_name: gemini-3.1-pro
     litellm_params:
       model: gemini/gemini-3.1-pro-preview
       api_key: os.environ/GEMINI_API_KEY
+      rpm: 20
 
   # Sprint 12 Task 2 C3 Stage 2 Mini Retry v3 (2026-04-23): -preview suffix
   # alias expected by the v3 brief §0.2 alias roster (judge_tie_breaker).
