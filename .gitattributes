@@ -7,3 +7,11 @@
 # these files as binary — no auto-conversion regardless of autocrlf.
 benchmarks/data/locomo/locomo-1540.jsonl -text
 benchmarks/data/locomo/locomo-1540.meta.json -text
+
+# Sprint 12 Task 2.5 Stage 3 (2026-04-24):
+# Same byte-exact treatment for pre-registration manifests. The YAML +
+# md SHA-256 recorded in the anchor commit message is computed against
+# these files' on-disk bytes; we need checkout bytes to match across
+# platforms so any auditor can re-verify the hash after `git clone`.
+benchmarks/results/manifest-*-preregistration.md -text
+benchmarks/results/manifest-*-preregistration.yaml -text
