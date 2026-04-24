@@ -423,6 +423,40 @@ model_list:
       api_base: https://api.minimaxi.chat/v1
       api_key: os.environ/MINIMAX_API_KEY
 
+  # ── Manifest v6 judge ensemble swap (2026-04-24) ──────────────────
+  # Added under v6 Phase 1 Commit 2 authority on PM ratification of
+  # §1.3g-§1.3h-C sequence closure. v6 supersedes v5 §11 freeze on
+  # litellm-config.yaml (single permitted amendment; Gemini rpm:20
+  # entry retained above as orphan audit artefact).
+  # Anchor: benchmarks/preregistration/manifest-v6-preregistration.md
+  # v6 selection rationale documented in §0.5 delta log (MD) + judge_ensemble
+  # block (YAML). All v5 aliases retained; v6 additions are orthogonal.
+
+  # v6 primary_judge_3 — MiniMax M2.7 via OpenRouter.
+  # §1.3h verified: direct routes (api.minimaxi.com + api.minimax.chat v2)
+  # fail 401 on MINIMAX_GROUP_ID + Bearer auth; OR fallback 7/7 parse.
+  # OR catalog slug verified live 2026-04-24: minimax/minimax-m2.7
+  # @ 196K ctx, $0.30 prompt / $1.20 completion per 1M tokens.
+  - model_name: minimax-m27-via-openrouter
+    litellm_params:
+      model: openrouter/minimax/minimax-m2.7
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  # v6 backup_judge — Kimi K2.6 via Moonshot direct.
+  # §1.3g verified: direct route (api.moonshot.ai/v1, intl tenant) stable.
+  # Moonshot catalog verified live 2026-04-24: kimi-k2.6.
+  # Per-instance failover on primary_judge_3 (MiniMax) failure per v6 §5.2
+  # (API error / parse failure / 60s timeout). If both fail same instance
+  # -> judge_ensemble_fail (evaluator_loss in denominator, §9).
+  # Routed as OpenAI-compatible via api_base override (same pattern as
+  # kimi-k2-native above); LiteLLM's moonshot/ provider prefix not used
+  # because the openai/ prefix + api_base is proven stable per v5 config.
+  - model_name: kimi-k26-direct
+    litellm_params:
+      model: openai/kimi-k2.6
+      api_base: https://api.moonshot.ai/v1
+      api_key: os.environ/MOONSHOT_API_KEY
+
   # ── Small-model additions for v5 eval (candidate, not judge) ──
 
   # Qwen3-30B-A3B Thinking variant — dedicated reasoning mode.
