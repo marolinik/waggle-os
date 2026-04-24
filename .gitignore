@@ -46,12 +46,15 @@ benchmarks/data/*
 !benchmarks/data/locomo/locomo-1540.meta.json
 benchmarks/results/*
 !benchmarks/results/.gitkeep
-# Sprint 12 Task 2.5 Stage 3 — per-stage pre-registration manifests (md + yaml
-# twin). These are the ex-ante anchors committed BEFORE a run starts; they are
-# tamper-evident audit artefacts, not run output, so they MUST be tracked.
-# Wildcard lets future stages (v5, v6…) adopt the same anchor convention.
-!benchmarks/results/manifest-*-preregistration.md
-!benchmarks/results/manifest-*-preregistration.yaml
+# Sprint 12 Task 2.5 Stage 3 — per-stage manifest-adjacent audit artefacts:
+# pre-registration anchors, clarification memos, RCA memos, probe logs.
+# These are tamper-evident, NOT run output, so they MUST be tracked.
+# Broadened 2026-04-24 for Stage 3 re-kick (Option A): clarification +
+# RCA memos + Gate P+ probe log all need the same treatment.
+!benchmarks/results/manifest-*.md
+!benchmarks/results/manifest-*.yaml
+!benchmarks/results/stage*-gate-*.md
+!benchmarks/results/stage*-gate-*.jsonl
 # Also catch nested mis-CWD writes (e.g. ran from benchmarks/harness/).
 # Use a trailing `*` (not `/`) so the `!` exceptions above still apply.
 **/benchmarks/results/*
@@ -63,8 +66,10 @@ benchmarks/results/*
 !**/benchmarks/data/locomo/locomo-1540.meta.json
 !**/benchmarks/data/.gitkeep
 !**/benchmarks/results/.gitkeep
-!**/benchmarks/results/manifest-*-preregistration.md
-!**/benchmarks/results/manifest-*-preregistration.yaml
+!**/benchmarks/results/manifest-*.md
+!**/benchmarks/results/manifest-*.yaml
+!**/benchmarks/results/stage*-gate-*.md
+!**/benchmarks/results/stage*-gate-*.jsonl
 # Sprint 11 A2 (ratification §Q5 Tier 2): `benchmarks/archive/` holds
 # gzipped JSONL from launch-claim-supporting runs (H-42a/b full-run).
 # Retention: 12 months minimum from commit per ratification §Q5. Files here

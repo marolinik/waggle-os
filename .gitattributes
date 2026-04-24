@@ -13,5 +13,7 @@ benchmarks/data/locomo/locomo-1540.meta.json -text
 # md SHA-256 recorded in the anchor commit message is computed against
 # these files' on-disk bytes; we need checkout bytes to match across
 # platforms so any auditor can re-verify the hash after `git clone`.
-benchmarks/results/manifest-*-preregistration.md -text
-benchmarks/results/manifest-*-preregistration.yaml -text
+benchmarks/results/manifest-*.md -text
+benchmarks/results/manifest-*.yaml -text
+benchmarks/results/stage*-gate-*.md -text
+benchmarks/results/stage*-gate-*.jsonl -text
