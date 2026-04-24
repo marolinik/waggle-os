@@ -17,3 +17,9 @@ benchmarks/results/manifest-*.md -text
 benchmarks/results/manifest-*.yaml -text
 benchmarks/results/stage*-gate-*.md -text
 benchmarks/results/stage*-gate-*.jsonl -text
+
+# Sprint 12 Task 2.5 Stage 3 (v5 emission 2026-04-24):
+# Pre-registration manifests relocated to benchmarks/preregistration/ per
+# PM brief §Step 1. Same byte-exact treatment as v4.
+benchmarks/preregistration/manifest-*.md -text
+benchmarks/preregistration/manifest-*.yaml -text
