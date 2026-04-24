@@ -55,6 +55,13 @@ benchmarks/results/*
 !benchmarks/results/manifest-*.yaml
 !benchmarks/results/stage*-gate-*.md
 !benchmarks/results/stage*-gate-*.jsonl
+# §1.3f Vertex Batch eligibility probe (2026-04-24): standalone probe
+# artefacts outside §11 frozen paths. Logs + JSONL + script + memo all
+# tracked; override the *.log line-3 wildcard for this specific folder.
+!benchmarks/probes/**/*.log
+!benchmarks/probes/**/*.jsonl
+!benchmarks/probes/**/*.py
+!benchmarks/probes/**/*.md
 # Also catch nested mis-CWD writes (e.g. ran from benchmarks/harness/).
 # Use a trailing `*` (not `/`) so the `!` exceptions above still apply.
 **/benchmarks/results/*

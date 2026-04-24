@@ -23,3 +23,10 @@ benchmarks/results/stage*-gate-*.jsonl -text
 # PM brief §Step 1. Same byte-exact treatment as v4.
 benchmarks/preregistration/manifest-*.md -text
 benchmarks/preregistration/manifest-*.yaml -text
+
+# Sprint 12 Task 2.5 Stage 3 §1.3f (2026-04-24):
+# Vertex Batch eligibility probe artefacts — byte-exact audit.
+benchmarks/probes/**/*.log -text
+benchmarks/probes/**/*.jsonl -text
+benchmarks/probes/**/*.py -text
+benchmarks/probes/**/*.md -text
