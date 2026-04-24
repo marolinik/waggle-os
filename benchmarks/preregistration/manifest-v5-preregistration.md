@@ -55,6 +55,15 @@ Root cause: Google PRODUCT POLICY — preview models have per-model sub-caps (he
 
 v4 predecessor pre-registration: anchor commit `dedd698`. v5 supersedes v4 for Stage 3 N=400 governance. v4's artefacts (probe FAIL at `66dcd5a`, scope audit at `69a14708`) inform v5 but do NOT re-pre-register.
 
+### LiteLLM alias naming reconciliation
+
+LiteLLM alias naming reconciliation: Step 2 `rpm: 20` edit applied to
+`gemini-3.1-pro` alias (`litellm-config.yaml:361-364`), which routes to
+upstream `gemini/gemini-3.1-pro-preview`. Brief §5.2 phrased this as
+"`gemini-3.1-pro-preview` alias"; terminology refers to upstream model
+name, not LiteLLM alias key. Both aliases share the same Google upstream
+bucket; see Fold-in 3.5b for sibling alias treatment.
+
 ---
 
 ## 1. Primary hypothesis (directional, confirmatory)
