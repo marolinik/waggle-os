@@ -39,3 +39,9 @@ benchmarks/probes/**/*.md -text
 benchmarks/results/stage3-n400-v6-*.md -text
 benchmarks/results/agentic-locomo-2026-04-25T*.jsonl -text
 benchmarks/results/agentic-locomo-2026-04-25T*.summary.json -text
+
+# v6 self-judge re-evaluation (2026-04-25): apples-to-apples vs Mem0.
+# Same byte-exact treatment for the 2000-record results JSONL + comparison
+# md + memo. SHA-256 of these files captured in commit message body.
+benchmarks/results/v6-self-judge-rebench/*.jsonl -text
+benchmarks/results/v6-self-judge-rebench/*.md -text

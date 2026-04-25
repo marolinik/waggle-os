@@ -61,6 +61,11 @@ benchmarks/results/*
 !benchmarks/results/stage3-n400-v6-*.md
 !benchmarks/results/agentic-locomo-2026-04-25T*.jsonl
 !benchmarks/results/agentic-locomo-2026-04-25T*.summary.json
+# v6 self-judge re-evaluation (2026-04-25): apples-to-apples vs Mem0
+# methodology. 2000 records, side-by-side comparison, ≤300-word memo.
+!benchmarks/results/v6-self-judge-rebench/
+!benchmarks/results/v6-self-judge-rebench/*.jsonl
+!benchmarks/results/v6-self-judge-rebench/*.md
 # §1.3f Vertex Batch eligibility probe (2026-04-24): standalone probe
 # artefacts outside §11 frozen paths. Logs + JSONL + script + memo all
 # tracked; override the *.log line-3 wildcard for this specific folder.
@@ -86,6 +91,9 @@ benchmarks/results/*
 !**/benchmarks/results/stage3-n400-v6-*.md
 !**/benchmarks/results/agentic-locomo-2026-04-25T*.jsonl
 !**/benchmarks/results/agentic-locomo-2026-04-25T*.summary.json
+!**/benchmarks/results/v6-self-judge-rebench/
+!**/benchmarks/results/v6-self-judge-rebench/*.jsonl
+!**/benchmarks/results/v6-self-judge-rebench/*.md
 # Sprint 11 A2 (ratification §Q5 Tier 2): `benchmarks/archive/` holds
 # gzipped JSONL from launch-claim-supporting runs (H-42a/b full-run).
 # Retention: 12 months minimum from commit per ratification §Q5. Files here
