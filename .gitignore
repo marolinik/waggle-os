@@ -55,6 +55,12 @@ benchmarks/results/*
 !benchmarks/results/manifest-*.yaml
 !benchmarks/results/stage*-gate-*.md
 !benchmarks/results/stage*-gate-*.jsonl
+# Stage 3 v6 N=400 final deliverables (2026-04-25): cell-by-cell summary,
+# Fisher H1 analysis, ≤300-word memo, and the agentic-cell evidence JSONL.
+# Tracked under PM-RATIFY-V6-N400-COMPLETE; tamper-evident audit chain.
+!benchmarks/results/stage3-n400-v6-*.md
+!benchmarks/results/agentic-locomo-2026-04-25T*.jsonl
+!benchmarks/results/agentic-locomo-2026-04-25T*.summary.json
 # §1.3f Vertex Batch eligibility probe (2026-04-24): standalone probe
 # artefacts outside §11 frozen paths. Logs + JSONL + script + memo all
 # tracked; override the *.log line-3 wildcard for this specific folder.
@@ -77,6 +83,9 @@ benchmarks/results/*
 !**/benchmarks/results/manifest-*.yaml
 !**/benchmarks/results/stage*-gate-*.md
 !**/benchmarks/results/stage*-gate-*.jsonl
+!**/benchmarks/results/stage3-n400-v6-*.md
+!**/benchmarks/results/agentic-locomo-2026-04-25T*.jsonl
+!**/benchmarks/results/agentic-locomo-2026-04-25T*.summary.json
 # Sprint 11 A2 (ratification §Q5 Tier 2): `benchmarks/archive/` holds
 # gzipped JSONL from launch-claim-supporting runs (H-42a/b full-run).
 # Retention: 12 months minimum from commit per ratification §Q5. Files here
