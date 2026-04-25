@@ -54,6 +54,10 @@ interface Args {
   /** Stage 2-Retry §1.5: when true, `cells` is set to V3_CELLS_EXPANSION
    *  (5 PM-facing v3 cell names) unless the user passed --cells explicitly. */
   v3Cells: boolean;
+  /** v6 Phase 2 partial-rekick (2026-04-25): retrieval and agentic cells
+   *  require the raw snap-research/locomo10.json archive for substrate
+   *  ingestion. Passed through to underlying runner.ts as --locomo-raw-path. */
+  locomoRawPath?: string;
 }
 
 export function parseArgs(argv: string[]): Args {
@@ -87,6 +91,7 @@ export function parseArgs(argv: string[]): Args {
       case '--validate-only': out.validateOnly = true; break;
       case '--manifest-hash': out.manifestHash = next; i++; break;
       case '--seed': out.seed = Number(next); i++; break;
+      case '--locomo-raw-path': out.locomoRawPath = next; i++; break;
       case '--help':
       case '-h':
         printHelp();
@@ -120,6 +125,9 @@ Flags:
   --output <path>                Override output base path (default auto)
   --manifest-hash <sha>          64-char lowercase SHA-256 of manifest YAML
   --seed <int>                   PRNG seed (default 42)
+  --locomo-raw-path <path>       Raw snap-research/locomo10.json archive path.
+                                 Required by retrieval + agentic cells for substrate
+                                 ingestion. v6 Phase 2 partial-rekick (2026-04-25).
   --dry-run                      Stub LLM calls. Runs N=1 per cell, 4 calls total.
   --validate-only                Only validate manifest + aliases, do not invoke runner.
   -h, --help                     This text
@@ -348,6 +356,11 @@ async function runOneCell(v3Cell: string, args: Args): Promise<CellRunResult> {
   }
   if (args.manifestHash) {
     runnerArgs.push('--manifest-hash', args.manifestHash);
+  }
+  if (args.locomoRawPath) {
+    // v6 Phase 2 partial-rekick (2026-04-25): retrieval + agentic cells
+    // require the raw snap-research/locomo10.json archive for substrate.
+    runnerArgs.push('--locomo-raw-path', args.locomoRawPath);
   }
   if (!args.dryRun) {
     // Emit the preregistration event only on real runs — the runner
