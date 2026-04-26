@@ -39,6 +39,15 @@ function isIsoTimestamp(value: string): boolean {
   return Number.isFinite(Date.parse(value));
 }
 
+/** Sprint 9 Task 0.5 (hive-mind 0bbdf7a): preview cap raised 2000 → 10_000.
+ *  Waggle-os had previously set this to 4000 as a partial mitigation, but
+ *  the canonical, production-tested value from the Stage 0 re-harvest is
+ *  10K — captures the session setup + editor-persona context + first
+ *  substantive assistant response on median Marko-side Claude.ai sessions
+ *  (~15K chars opening). Storage impact: ~12 MB on a 646-frame ingest,
+ *  well within SQLite single-file comfort zone. */
+const HARVEST_PREVIEW_CAP_CHARS = 10_000;
+
 /** M-08: where cached input payloads live so we can resume interrupted runs. */
 function getHarvestCacheDir(dataDir: string): string {
   return path.join(dataDir, 'harvest-cache');
@@ -346,7 +355,7 @@ export async function harvestRoutes(fastify: FastifyInstance) {
       emitHarvestProgress({ phase: 'saving', current: 0, total: items.length, source });
       for (const item of items) {
         const label = `[Harvest:${item.source}] ${item.title}`;
-        const content = item.content.slice(0, 4000);
+        const content = item.content.slice(0, HARVEST_PREVIEW_CAP_CHARS);
         // Preserve original source timestamp on the resulting frame so
         // downstream date-scoped retrieval has a valid temporal anchor.
         // Every adapter surfaces `item.timestamp` on UniversalImportItem;
