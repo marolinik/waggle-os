@@ -80,6 +80,26 @@ export interface AgentLoopConfig {
   turnId?: string;
 }
 
+// Phase 2 Commit 2.1: re-export structured-action retrieval loop alongside
+// the existing tool-use loop. Implementation lives in retrieval-agent-loop.ts
+// to keep this file under the 800-line guideline; agent-loop.ts is the
+// canonical "unified entry point" for both loop patterns per sprint plan §2.
+export {
+  runSoloAgent,
+  runRetrievalAgentLoop,
+  type SoloAgentRunConfig,
+  type MultiStepAgentRunConfig,
+  type AgentRunResult,
+  type LlmCallFn,
+  type LlmCallInput,
+  type LlmCallResult,
+  type RetrievalSearchFn,
+  type RetrievalSearchInput,
+  type RetrievalSearchResult,
+  type NormalizationPresetName,
+  type BaseAgentRunConfig,
+} from './retrieval-agent-loop.js';
+
 export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentResponse> {
   const {
     litellmUrl,
