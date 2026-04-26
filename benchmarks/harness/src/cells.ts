@@ -28,17 +28,42 @@ import type { Substrate } from './substrate.js';
 import type { SearchResult } from '@waggle/core';
 import {
   runAgentLoop,
+  selectShape,
   type AgentLoopConfig,
   type ToolDefinition,
 } from '@waggle/agent';
 
-const SYSTEM_BASELINE =
-  'You are answering a short factoid question. Give the shortest possible answer; no preamble.';
+/**
+ * Phase 2.3 (Option A) refactor — the two ChatGPT-audit-flagged
+ * Claude-shaped artefacts have been deleted from this file:
+ *   - the strict-extraction baseline + evolved system-prompt constants
+ *     (replaced by cell-local personas routed through Phase 1.2 prompt-shapes
+ *     via `systemPromptForCell` below)
+ *   - the synthetic-memory scaffold-proxy user-prompt builder (replaced by
+ *     `buildUserPromptRetrieved` with neutral framing)
+ *
+ * Cell semantics are preserved via cell-specific personas + cell-specific
+ * user-prompt builders. SYSTEM_AGENTIC and SYSTEM_AGENTIC_FORCED_FALLBACK
+ * (declared further below) remain on their pre-existing methodology lineage
+ * and are explicitly excluded from this refactor's scope.
+ *
+ * For the original audit-flagged literal strings, see the pre-refactor revision
+ * of this file at git tag/commit prior to commit 5699677.
+ */
+const FACTOID_BASELINE_PERSONA = 'short-answer factoid QA agent';
+const FACTOID_STRICT_PERSONA =
+  'short-answer factoid QA agent that extracts the exact answer span ' +
+  'from supplied context, or replies "unknown" when the context does ' +
+  'not support an answer';
 
-const SYSTEM_EVOLVED =
-  'You are answering a short factoid question. Extract the answer from the supplied context. ' +
-  'Respond with ONLY the answer span — no sentences, no punctuation, no hedging. ' +
-  'If the context does not contain the answer, reply with "unknown".';
+/**
+ * Build a model-aware system prompt via Phase 1.2 prompt-shapes. Falls back
+ * to generic-simple when the model alias is not registered.
+ */
+function systemPromptForCell(model: ModelSpec, persona: string): string {
+  const shape = selectShape(model.litellmModel);
+  return shape.systemPrompt({ persona, question: '', isMultiStep: false });
+}
 
 /**
  * SYSTEM_AGENTIC — SOFTENED by PM 2026-04-24 (Stage 2-Retry Gate A ratification).
@@ -146,13 +171,17 @@ function buildUserPromptRaw(instance: DatasetInstance): string {
   return `Context: ${instance.context}\n\nQuestion: ${instance.question}`;
 }
 
-function buildUserPromptMemory(instance: DatasetInstance): string {
-  // Scaffold proxy: treat the instance's own context block as if it had been
-  // retrieved by HybridSearch + formatted by combined-retrieval.ts. Header
-  // mimics the "Recalled Memories" block the real orchestrator emits.
+/**
+ * Phase 2.3: replaces the deleted scaffold-proxy user-prompt builder. Same
+ * semantic — context framed AS retrieved memory — with neutral phrasing.
+ * The retrieval cell still uses `formatRecalledMemories` (which produces
+ * real frame-metadata-tagged output from HybridSearch results, not the
+ * deleted scaffold proxy).
+ */
+function buildUserPromptRetrieved(instance: DatasetInstance): string {
   return (
-    '# Recalled Memories\n' +
-    `- [memory:synth] ${instance.context}\n\n` +
+    'Retrieved context (from session memory):\n' +
+    `${instance.context}\n\n` +
     `Question: ${instance.question}`
   );
 }
@@ -263,7 +292,7 @@ export const cells: Record<CellName, CellFn> = {
   raw: async ({ instance, model, llm, turnId: _turnId }: CellInput) => {
     return llm.call({
       model,
-      systemPrompt: SYSTEM_BASELINE,
+      systemPrompt: systemPromptForCell(model, FACTOID_BASELINE_PERSONA),
       userPrompt: buildUserPromptRaw(instance),
     });
   },
@@ -271,15 +300,15 @@ export const cells: Record<CellName, CellFn> = {
   filtered: async ({ instance, model, llm, turnId: _turnId }: CellInput) => {
     return llm.call({
       model,
-      systemPrompt: SYSTEM_BASELINE,
-      userPrompt: buildUserPromptMemory(instance),
+      systemPrompt: systemPromptForCell(model, FACTOID_BASELINE_PERSONA),
+      userPrompt: buildUserPromptRetrieved(instance),
     });
   },
 
   compressed: async ({ instance, model, llm, turnId: _turnId }: CellInput) => {
     return llm.call({
       model,
-      systemPrompt: SYSTEM_EVOLVED,
+      systemPrompt: systemPromptForCell(model, FACTOID_STRICT_PERSONA),
       userPrompt: buildUserPromptRaw(instance),
     });
   },
@@ -287,8 +316,8 @@ export const cells: Record<CellName, CellFn> = {
   'full-context': async ({ instance, model, llm, turnId: _turnId }: CellInput) => {
     return llm.call({
       model,
-      systemPrompt: SYSTEM_EVOLVED,
-      userPrompt: buildUserPromptMemory(instance),
+      systemPrompt: systemPromptForCell(model, FACTOID_STRICT_PERSONA),
+      userPrompt: buildUserPromptRetrieved(instance),
     });
   },
 
@@ -315,7 +344,7 @@ export const cells: Record<CellName, CellFn> = {
     const userPrompt = `${memoryBlock}\n\nQuestion: ${instance.question}`;
     return llm.call({
       model,
-      systemPrompt: SYSTEM_BASELINE,
+      systemPrompt: systemPromptForCell(model, FACTOID_BASELINE_PERSONA),
       userPrompt,
     });
   },
@@ -436,8 +465,9 @@ export const cells: Record<CellName, CellFn> = {
    * no-context — Sprint 12 Task 2.5 Stage 2-Retry §1.1 (2026-04-24).
    *
    * True zero-memory baseline: question-only user prompt, no
-   * `instance.context`, no retrieval, no memory injection. SYSTEM_BASELINE
-   * keeps the model's output format consistent with other cells. This is
+   * `instance.context`, no retrieval, no memory injection. The factoid-
+   * baseline persona (via `systemPromptForCell`) keeps the model's output
+   * format consistent with raw / filtered / retrieval cells. This is
    * the honest comparator for the retrieval memory-lift success criterion
    * (brief §4 criterion 2): `retrieval >= no-context + 5pp`.
    *
@@ -450,7 +480,7 @@ export const cells: Record<CellName, CellFn> = {
   'no-context': async ({ instance, model, llm, turnId: _turnId }: CellInput) => {
     return llm.call({
       model,
-      systemPrompt: SYSTEM_BASELINE,
+      systemPrompt: systemPromptForCell(model, FACTOID_BASELINE_PERSONA),
       userPrompt: `Question: ${instance.question}`,
     });
   },

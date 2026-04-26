@@ -109,8 +109,13 @@ describe('no-context cell — Stage 2-Retry §1.1 true zero-memory baseline', ()
     await cells['no-context']({
       instance: INSTANCE, model: MODEL, llm: client, turnId: 't',
     });
-    expect(calls[0].systemPrompt).toContain('shortest possible answer');
-    expect(calls[0].systemPrompt).not.toContain('Extract the answer from the supplied context');
+    // Phase 2.3 Option A refactor: SYSTEM_BASELINE deleted; baseline-style
+    // system prompt now comes from Phase 1.2 prompt-shapes via the cell's
+    // FACTOID_BASELINE_PERSONA. Assertions updated to fragment-based on the
+    // new persona phrasing + negative assertion preserves the original
+    // intent (no-context cell does NOT use evolved/strict-extraction framing).
+    expect(calls[0].systemPrompt).toContain('short-answer factoid');
+    expect(calls[0].systemPrompt).not.toContain('extracts the exact answer span');
   });
 
   it('does NOT require substrate or litellm (no dependencies beyond LlmClient)', async () => {
@@ -171,8 +176,13 @@ describe('retrieval cell — real HybridSearch, Task 2.5 Stage 1', () => {
       await cells.retrieval({
         instance: INSTANCE, model: MODEL, llm: client, turnId: 't', substrate,
       });
-      expect(calls[0].systemPrompt).toContain('shortest possible answer');
-      expect(calls[0].systemPrompt).not.toContain('Extract the answer from the supplied context');
+      // Phase 2.3 Option A refactor: SYSTEM_BASELINE deleted; baseline-style
+      // system prompt now comes from Phase 1.2 prompt-shapes via the cell's
+      // FACTOID_BASELINE_PERSONA. Same intent as before — retrieval cell uses
+      // baseline (not strict-extraction) framing — expressed via fragment
+      // assertion on the new persona phrasing.
+      expect(calls[0].systemPrompt).toContain('short-answer factoid');
+      expect(calls[0].systemPrompt).not.toContain('extracts the exact answer span');
     } finally {
       substrate.close();
     }

@@ -42,6 +42,55 @@ export {
   type NormalizationPresetName,
   type BaseAgentRunConfig,
 } from './agent-loop.js';
+
+// Phase 1.2 — model-aware prompt shapes (oversight in original Phase 1.2:
+// re-export to public API was missing; surfaced + fixed during Phase 2.3
+// when benchmarks/harness/src/cells.ts started consuming selectShape).
+export {
+  selectShape,
+  listShapes,
+  getShapeMetadata,
+  REGISTRY,
+  claudeShape,
+  qwenThinkingShape,
+  qwenNonThinkingShape,
+  gptShape,
+  genericSimpleShape,
+  MULTI_STEP_ACTION_CONTRACT,
+  type PromptShape,
+  type PromptShapeMetadata,
+  type SystemPromptInput,
+  type SoloUserPromptInput,
+  type MultiStepKickoffInput,
+  type RetrievalInjectionInput,
+  type SelectShapeOptions,
+} from './prompt-shapes/index.js';
+
+// Phase 1.1 — output normalization (also missing from Phase 1.1 public API).
+export {
+  normalize,
+  normalizeWithPreset,
+  PRESETS,
+  type NormalizationConfig,
+  type NormalizationAction,
+  type NormalizationResult,
+} from './output-normalize.js';
+
+// Phase 1.3 — run-meta (also missing from Phase 1.3 public API).
+export {
+  RunMetaCapture,
+  RunMetaReader,
+  verifyDeterministicReplay,
+  RUN_META_SCHEMA_VERSION,
+  type RunMeta,
+  type PredictionRecord,
+  type JudgeCallTrace,
+  type AuditSha,
+  type ModelVersion,
+  type ProviderRoute,
+  type ReplayResult,
+  type ReplayMismatch,
+} from './run-meta.js';
 export { createTeamTools, type TeamToolDeps } from './team-tools.js';
 export { ensureIdentity, type IdentityConfig } from './auto-identity.js';
 export { buildSelfAwareness, type AgentCapabilities } from './self-awareness.js';
