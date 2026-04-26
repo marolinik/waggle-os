@@ -1,0 +1,30 @@
+{
+  "_meta": {
+    "purpose": "Map LiteLLM model aliases to prompt-shape names. Used by packages/agent/src/prompt-shapes/selector.ts.",
+    "format": "Exact aliases match first; wildcard patterns (suffix-*) match by prefix; falls back to default.",
+    "binding_rule": "INHERITED_CONFIGS_REQUIRE_TASK_TYPE_AUDIT (decisions/2026-04-26-pilot-verdict-FAIL.md §6 — amendment v2 §5). Adding/changing a mapping requires empirical evidence in the corresponding shape's evidence_link.",
+    "evidence_link_for_qwen_default": "Qwen aliases default to qwen-thinking because Stage 3 v6 + pilot 2026-04-26 (synthesis tasks) used thinking-on. For thinking-off use cases (judge calls, short structured outputs), callers should explicitly override to qwen-non-thinking.",
+    "phase": "1.2 of agent-fix sprint (decisions/2026-04-26-agent-fix-sprint-plan.md)"
+  },
+
+  "default": "generic-simple",
+
+  "exact_aliases": {
+    "claude-opus-4-7": "claude",
+    "claude-sonnet-4-6": "claude",
+    "claude-haiku-4-5": "claude",
+    "qwen3.6-35b-a3b-via-dashscope-direct": "qwen-thinking",
+    "qwen3.6-35b-a3b-via-openrouter": "qwen-thinking",
+    "qwen3.6-35b-a3b": "qwen-thinking",
+    "gpt-5.4": "gpt"
+  },
+
+  "prefix_patterns": [
+    { "prefix": "claude-", "shape": "claude" },
+    { "prefix": "qwen3.6-", "shape": "qwen-thinking" },
+    { "prefix": "qwen-", "shape": "qwen-thinking" },
+    { "prefix": "gpt-", "shape": "gpt" },
+    { "prefix": "minimax-", "shape": "generic-simple" },
+    { "prefix": "kimi-", "shape": "generic-simple" }
+  ]
+}
