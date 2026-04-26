@@ -1,0 +1,107 @@
+[2026-04-26T00:43:55.442Z] [pilot] amendment_doc_sha256 = 3946d3e00fbb1996fb7e63096ecef51abf1e209e5ff166fd0d8758e9a3a14aad
+[2026-04-26T00:43:55.442Z] [pilot] cc1_brief_sha256 = 9805adae478333178d36d71b88795afc37f8fb543c2ebccaecb7b01faf06afee
+[2026-04-26T00:43:55.442Z] [pilot] judge_rubric_sha256 = 2e24826eb75e92ef1e64055bb2c632eec64ded8fedf7d5b6897ccaec9ffff2eb
+[2026-04-26T00:43:55.442Z] [pilot] head_sha = b7e19c557fdbc42f2d0a3c3213176aa4d790f7a2
+[2026-04-26T00:43:55.442Z] [pilot] manifest_anchor = pilot-2026-04-26-v1
+[2026-04-26T00:43:55.443Z] [pilot] cost_cap = $7, halt = $6
+[2026-04-26T00:43:55.445Z] [task task-1] loaded 7 frames
+[2026-04-26T00:43:55.448Z] [cell task-1/A] solo call → claude-opus-4-7
+[2026-04-26T00:46:15.284Z] [judge minimax-m27-via-openrouter] FAILED after 3: attempt 3: malformed JSON: 
+[2026-04-26T00:46:15.287Z] [cell task-1/A] wrote pilot-task-1-A.jsonl trio_mean=4.50 strict=true critical=false cell_cost=$0.4123
+[2026-04-26T00:46:15.287Z] [cumulative] $0.4123 / $7
+[2026-04-26T00:46:15.301Z] [cell task-1/B] ingested 7 frames into D:\Projects\waggle-os\tmp\pilot-2026-04-26\per-task-task-1-cell-B.sqlite
+[2026-04-26T00:48:10.267Z] [cell task-1/B] wrote pilot-task-1-B.jsonl trio_mean=4.94 strict=true critical=false cell_cost=$0.5670
+[2026-04-26T00:48:10.267Z] [cumulative] $0.9793 / $7
+[2026-04-26T00:48:10.270Z] [cell task-1/C] solo call → qwen3.6-35b-a3b-via-openrouter
+[2026-04-26T00:49:43.703Z] [cell task-1/C] wrote pilot-task-1-C.jsonl trio_mean=4.17 strict=true critical=false cell_cost=$0.1564
+[2026-04-26T00:49:43.703Z] [cumulative] $1.1357 / $7
+[2026-04-26T00:49:43.722Z] [cell task-1/D] ingested 7 frames into D:\Projects\waggle-os\tmp\pilot-2026-04-26\per-task-task-1-cell-D.sqlite
+[2026-04-26T00:50:44.695Z] [cell task-1/D] wrote pilot-task-1-D.jsonl trio_mean=3.94 strict=true critical=false cell_cost=$0.1538
+[2026-04-26T00:50:44.695Z] [cumulative] $1.2895 / $7
+[2026-04-26T00:50:44.696Z] [summary] verdict=FAIL h2=1/3 h3=0/3 h4=0/3 critical=0 cost=$1.2895
+[2026-04-26T01:32:00.711Z] [pilot] amendment_v2_doc_sha256 = 1ab5082ff773538a26b3c3294f7fbee4e30063a8d994bdb3753bdc9dd6d6cd99
+[2026-04-26T01:32:00.712Z] [pilot] amendment_v1_doc_sha256 = 3946d3e00fbb1996fb7e63096ecef51abf1e209e5ff166fd0d8758e9a3a14aad
+[2026-04-26T01:32:00.712Z] [pilot] cc1_brief_sha256 = 9805adae478333178d36d71b88795afc37f8fb543c2ebccaecb7b01faf06afee
+[2026-04-26T01:32:00.712Z] [pilot] judge_rubric_sha256 = 2e24826eb75e92ef1e64055bb2c632eec64ded8fedf7d5b6897ccaec9ffff2eb
+[2026-04-26T01:32:00.712Z] [pilot] head_sha = b7e19c557fdbc42f2d0a3c3213176aa4d790f7a2
+[2026-04-26T01:32:00.714Z] [pilot] manifest_anchor = pilot-2026-04-26-v1
+[2026-04-26T01:32:00.714Z] [pilot] cost_cap = $20, halt = $17, per_cell_halt = $1
+[2026-04-26T01:32:00.714Z] [pilot] qwen_alias = qwen3.6-35b-a3b-via-dashscope-direct
+[2026-04-26T01:32:00.715Z] [pilot] qwen_max_tokens = 16000
+[2026-04-26T01:32:00.715Z] [pilot] qwen_thinking = on
+[2026-04-26T01:32:00.716Z] [retry-minimax] Cell A — calling minimax-m27-via-openrouter against existing candidate (5996c)
+[2026-04-26T01:33:08.391Z] [judge minimax-m27-via-openrouter] FAILED after 3: attempt 3: malformed JSON: 
+[2026-04-26T01:33:08.391Z] [retry-minimax] FAIL again — Cell A retains 2-judge fallback. cost=$0.0186
+[2026-04-26T01:33:08.392Z] [restart] moved original to pilot-task-1-C.invalidated-2026-04-26T01-33-08-392Z.jsonl
+[2026-04-26T01:33:08.394Z] [cell task-1/C] solo call → qwen3.6-35b-a3b-via-dashscope-direct {"maxTokens":16000,"thinking":true}
+[2026-04-26T01:35:05.440Z] [judge minimax-m27-via-openrouter] FAILED after 3: attempt 3: malformed JSON: 
+[2026-04-26T01:35:05.441Z] [cell task-1/C] wrote pilot-task-1-C.jsonl trio_mean=4.58 strict=true critical=false cell_cost=$0.1737
+[2026-04-26T01:35:05.443Z] [restart] moved original to pilot-task-1-D.invalidated-2026-04-26T01-35-05-441Z.jsonl
+[2026-04-26T01:35:05.459Z] [cell task-1/D] ingested 7 frames into D:\Projects\waggle-os\tmp\pilot-2026-04-26\per-task-task-1-cell-D.sqlite
+[2026-04-26T01:36:37.018Z] [cell task-1/D] wrote pilot-task-1-D.jsonl trio_mean=4.39 strict=true critical=false cell_cost=$0.1626
+[2026-04-26T01:36:37.018Z] [partial-run] complete; partial_cost=$0.3363
+[2026-04-26T01:36:37.019Z] [summary] verdict=FAIL h2=1/3 h3=0/3 h4=0/3 critical=0 cost=$1.3156
+[2026-04-26T01:48:03.018Z] [pilot] amendment_v2_doc_sha256 = 1ab5082ff773538a26b3c3294f7fbee4e30063a8d994bdb3753bdc9dd6d6cd99
+[2026-04-26T01:48:03.019Z] [pilot] amendment_v1_doc_sha256 = 3946d3e00fbb1996fb7e63096ecef51abf1e209e5ff166fd0d8758e9a3a14aad
+[2026-04-26T01:48:03.019Z] [pilot] cc1_brief_sha256 = 9805adae478333178d36d71b88795afc37f8fb543c2ebccaecb7b01faf06afee
+[2026-04-26T01:48:03.019Z] [pilot] judge_rubric_sha256 = 2e24826eb75e92ef1e64055bb2c632eec64ded8fedf7d5b6897ccaec9ffff2eb
+[2026-04-26T01:48:03.019Z] [pilot] head_sha = b7e19c557fdbc42f2d0a3c3213176aa4d790f7a2
+[2026-04-26T01:48:03.021Z] [pilot] manifest_anchor = pilot-2026-04-26-v1
+[2026-04-26T01:48:03.021Z] [pilot] cost_cap = $20, halt = $17, per_cell_halt = $1
+[2026-04-26T01:48:03.021Z] [pilot] qwen_alias = qwen3.6-35b-a3b-via-dashscope-direct
+[2026-04-26T01:48:03.021Z] [pilot] qwen_max_tokens = 16000
+[2026-04-26T01:48:03.022Z] [pilot] qwen_thinking = on
+[2026-04-26T01:48:03.023Z] [retry-minimax] Cell A — calling minimax-m27-via-openrouter against existing candidate (5996c)
+[2026-04-26T01:48:25.389Z] [retry-minimax] SUCCESS — Cell A judge_minimax=4.83 new trio_mean=4.611 cost=$0.0067
+[2026-04-26T01:48:25.389Z] [partial-run] complete; partial_cost=$0.0000
+[2026-04-26T01:48:25.391Z] [summary] verdict=FAIL h2=1/3 h3=0/3 h4=0/3 critical=0 cost=$1.3224
+[2026-04-26T01:48:26.549Z] [pilot] amendment_v2_doc_sha256 = 1ab5082ff773538a26b3c3294f7fbee4e30063a8d994bdb3753bdc9dd6d6cd99
+[2026-04-26T01:48:26.549Z] [pilot] amendment_v1_doc_sha256 = 3946d3e00fbb1996fb7e63096ecef51abf1e209e5ff166fd0d8758e9a3a14aad
+[2026-04-26T01:48:26.549Z] [pilot] cc1_brief_sha256 = 9805adae478333178d36d71b88795afc37f8fb543c2ebccaecb7b01faf06afee
+[2026-04-26T01:48:26.549Z] [pilot] judge_rubric_sha256 = 2e24826eb75e92ef1e64055bb2c632eec64ded8fedf7d5b6897ccaec9ffff2eb
+[2026-04-26T01:48:26.549Z] [pilot] head_sha = b7e19c557fdbc42f2d0a3c3213176aa4d790f7a2
+[2026-04-26T01:48:26.549Z] [pilot] manifest_anchor = pilot-2026-04-26-v1
+[2026-04-26T01:48:26.549Z] [pilot] cost_cap = $20, halt = $17, per_cell_halt = $1
+[2026-04-26T01:48:26.549Z] [pilot] qwen_alias = qwen3.6-35b-a3b-via-dashscope-direct
+[2026-04-26T01:48:26.549Z] [pilot] qwen_max_tokens = 16000
+[2026-04-26T01:48:26.550Z] [pilot] qwen_thinking = on
+[2026-04-26T01:48:26.550Z] [task task-2] loaded 4 frames
+[2026-04-26T01:48:26.552Z] [cell task-2/A] solo call → claude-opus-4-7 {"maxTokens":4096}
+[2026-04-26T01:50:03.270Z] [cell task-2/A] wrote pilot-task-2-A.jsonl trio_mean=4.94 strict=true critical=false cell_cost=$0.5203
+[2026-04-26T01:50:03.270Z] [cumulative] $0.5203 / $20
+[2026-04-26T01:50:03.292Z] [cell task-2/B] ingested 4 frames into D:\Projects\waggle-os\tmp\pilot-2026-04-26\per-task-task-2-cell-B.sqlite
+[2026-04-26T01:51:12.749Z] [cell task-2/B] HALT per-call $0.4435
+[2026-04-26T01:52:59.411Z] [cell task-2/B] wrote pilot-task-2-B.jsonl trio_mean=5.00 strict=true critical=false cell_cost=$1.1209
+[2026-04-26T01:52:59.412Z] [cumulative] $1.6412 / $20
+[2026-04-26T01:52:59.412Z] [cell task-2/C] solo call → qwen3.6-35b-a3b-via-dashscope-direct {"maxTokens":16000,"thinking":true}
+[2026-04-26T01:54:10.637Z] [cell task-2/C] wrote pilot-task-2-C.jsonl trio_mean=4.67 strict=true critical=false cell_cost=$0.2091
+[2026-04-26T01:54:10.637Z] [cumulative] $1.8503 / $20
+[2026-04-26T01:54:10.647Z] [cell task-2/D] ingested 4 frames into D:\Projects\waggle-os\tmp\pilot-2026-04-26\per-task-task-2-cell-D.sqlite
+[2026-04-26T01:56:06.518Z] [cell task-2/D] wrote pilot-task-2-D.jsonl trio_mean=3.94 strict=true critical=false cell_cost=$0.1916
+[2026-04-26T01:56:06.518Z] [cumulative] $2.0419 / $20
+[2026-04-26T01:56:06.519Z] [summary] verdict=FAIL h2=0/3 h3=0/3 h4=0/3 critical=0 cost=$2.0419
+[2026-04-26T01:56:07.663Z] [pilot] amendment_v2_doc_sha256 = 1ab5082ff773538a26b3c3294f7fbee4e30063a8d994bdb3753bdc9dd6d6cd99
+[2026-04-26T01:56:07.663Z] [pilot] amendment_v1_doc_sha256 = 3946d3e00fbb1996fb7e63096ecef51abf1e209e5ff166fd0d8758e9a3a14aad
+[2026-04-26T01:56:07.663Z] [pilot] cc1_brief_sha256 = 9805adae478333178d36d71b88795afc37f8fb543c2ebccaecb7b01faf06afee
+[2026-04-26T01:56:07.664Z] [pilot] judge_rubric_sha256 = 2e24826eb75e92ef1e64055bb2c632eec64ded8fedf7d5b6897ccaec9ffff2eb
+[2026-04-26T01:56:07.664Z] [pilot] head_sha = b7e19c557fdbc42f2d0a3c3213176aa4d790f7a2
+[2026-04-26T01:56:07.664Z] [pilot] manifest_anchor = pilot-2026-04-26-v1
+[2026-04-26T01:56:07.664Z] [pilot] cost_cap = $20, halt = $17, per_cell_halt = $1
+[2026-04-26T01:56:07.664Z] [pilot] qwen_alias = qwen3.6-35b-a3b-via-dashscope-direct
+[2026-04-26T01:56:07.664Z] [pilot] qwen_max_tokens = 16000
+[2026-04-26T01:56:07.664Z] [pilot] qwen_thinking = on
+[2026-04-26T01:56:07.665Z] [task task-3] loaded 3 frames
+[2026-04-26T01:56:07.667Z] [cell task-3/A] solo call → claude-opus-4-7 {"maxTokens":4096}
+[2026-04-26T01:57:50.367Z] [cell task-3/A] wrote pilot-task-3-A.jsonl trio_mean=4.94 strict=true critical=false cell_cost=$0.5087
+[2026-04-26T01:57:50.367Z] [cumulative] $0.5087 / $20
+[2026-04-26T01:57:50.386Z] [cell task-3/B] ingested 3 frames into D:\Projects\waggle-os\tmp\pilot-2026-04-26\per-task-task-3-cell-B.sqlite
+[2026-04-26T01:59:10.191Z] [cell task-3/B] HALT per-call $0.4694
+[2026-04-26T02:01:06.258Z] [cell task-3/B] wrote pilot-task-3-B.jsonl trio_mean=4.89 strict=true critical=false cell_cost=$1.3437
+[2026-04-26T02:01:06.258Z] [cumulative] $1.8524 / $20
+[2026-04-26T02:01:06.258Z] [cell task-3/C] solo call → qwen3.6-35b-a3b-via-dashscope-direct {"maxTokens":16000,"thinking":true}
+[2026-04-26T02:02:17.661Z] [cell task-3/C] wrote pilot-task-3-C.jsonl trio_mean=4.89 strict=true critical=false cell_cost=$0.1886
+[2026-04-26T02:02:17.662Z] [cumulative] $2.0411 / $20
+[2026-04-26T02:02:17.675Z] [cell task-3/D] ingested 3 frames into D:\Projects\waggle-os\tmp\pilot-2026-04-26\per-task-task-3-cell-D.sqlite
+[2026-04-26T02:03:47.741Z] [cell task-3/D] wrote pilot-task-3-D.jsonl trio_mean=4.56 strict=true critical=false cell_cost=$0.1753
+[2026-04-26T02:03:47.741Z] [cumulative] $2.2163 / $20
+[2026-04-26T02:03:47.741Z] [summary] verdict=FAIL h2=0/3 h3=0/3 h4=0/3 critical=0 cost=$2.2163

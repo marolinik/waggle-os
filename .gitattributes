@@ -45,3 +45,12 @@ benchmarks/results/agentic-locomo-2026-04-25T*.summary.json -text
 # md + memo. SHA-256 of these files captured in commit message body.
 benchmarks/results/v6-self-judge-rebench/*.jsonl -text
 benchmarks/results/v6-self-judge-rebench/*.md -text
+
+# Agentic knowledge work pilot 2026-04-26 (FAIL verdict). All artefacts
+# byte-exact pinned for audit. SHA-256s captured in commit body.
+benchmarks/results/pilot-2026-04-26/*.jsonl -text
+benchmarks/results/pilot-2026-04-26/*.json -text
+benchmarks/results/pilot-2026-04-26/*.log -text
+benchmarks/results/pilot-2026-04-26/prompts-archive/*.md -text
+benchmarks/results/pilot-2026-04-26/invalidated/*.jsonl -text
+decisions/*.md -text
