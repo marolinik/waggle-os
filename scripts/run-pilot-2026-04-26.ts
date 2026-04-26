@@ -42,6 +42,22 @@ import {
   type Embedder,
 } from '@waggle/core';
 
+// Phase 2.2 — pilot wrapper now consumes the unified agent loop from
+// @waggle/agent (Phase 2.1 commit a599a07). Local re-implementations of
+// runCellSolo / runCellMultiStep / parseAgentAction are removed; this
+// wrapper provides only the LlmCallFn + RetrievalSearchFn adapters, plus
+// the pilot-specific orchestration (task loading, cell loop, judge ensemble,
+// cost accounting, JSONL output, audit chain).
+import {
+  runSoloAgent,
+  runRetrievalAgentLoop,
+  type LlmCallFn,
+  type LlmCallInput,
+  type LlmCallResult as AgentLlmCallResult,
+  type RetrievalSearchFn,
+  type AgentRunResult,
+} from '@waggle/agent';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -98,20 +114,14 @@ function buildCells(qwenAlias: string) {
 }
 const CELLS = buildCells(DEFAULT_QWEN_ALIAS);
 
-// Module-level mutable Qwen opts — set from CLI args in main(); read by cell runners.
+// Module-level mutable Qwen opts — set from CLI args in main(); applied by
+// the LlmCallFn adapter when the model alias matches Qwen. Subject calls go
+// through the agent loop; judge calls go through llmCall directly with their
+// own opts (max_tokens=3000, thinking=false per amendment v2).
 const RUNTIME_QWEN_OPTS = {
   maxTokens: DEFAULT_QWEN_MAX_TOKENS,
   thinking: DEFAULT_QWEN_THINKING_ON,
 };
-
-// Helper: pick LLM opts based on model class. Qwen subjects get amendment-v2 §2 config;
-// other models retain prior defaults (Opus max_tokens=4096, no thinking flag override).
-function llmOptsFor(model: string): { maxTokens: number; thinking?: boolean } {
-  if (model.includes('qwen')) {
-    return { maxTokens: RUNTIME_QWEN_OPTS.maxTokens, thinking: RUNTIME_QWEN_OPTS.thinking };
-  }
-  return { maxTokens: 4096 };
-}
 
 const JUDGES = ['claude-opus-4-7', 'gpt-5.4', 'minimax-m27-via-openrouter'] as const;
 
@@ -351,43 +361,36 @@ function loadTaskMaterials(taskId: string): TaskMaterials {
 // LiteLLM HTTP client with cost tracking
 // ─────────────────────────────────────────────────────────────────────────
 
-interface LlmCallResult {
-  content: string;
-  inTokens: number;
-  outTokens: number;
-  costUsd: number;
-  latencyMs: number;
-  raw: unknown;
-  error?: string;
-}
-
-async function llmCall(
-  model: string,
-  messages: { role: string; content: string }[],
-  opts: { maxTokens?: number; temperature?: number; thinking?: boolean } = {}
-): Promise<LlmCallResult> {
-  const { maxTokens = 4096, temperature = 0.3, thinking = true } = opts;
+// LlmCallFn adapter — Phase 2.2 refactor. Conforms to @waggle/agent's
+// LlmCallFn signature so the agent loop can call it directly. Handles
+// per-model accommodations (Opus temp=1.0, GPT/MiniMax omit temperature,
+// Qwen extra_body.enable_thinking explicit per amendment v2 §2).
+//
+// For Qwen subject calls, applies RUNTIME_QWEN_OPTS (set from CLI flags)
+// when the caller doesn't override. Judge callers pass thinking=false and
+// maxTokens=3000 explicitly.
+const llmCall: LlmCallFn = async (input: LlmCallInput): Promise<AgentLlmCallResult> => {
   const masterKey = process.env.LITELLM_MASTER_KEY;
   if (!masterKey) throw new Error('LITELLM_MASTER_KEY env not set');
 
-  const payload: Record<string, unknown> = {
-    model,
-    messages,
-    max_tokens: maxTokens,
-  };
+  const { model, messages } = input;
+  const isQwen = model.includes('qwen');
+  const maxTokens = input.maxTokens ?? (isQwen ? RUNTIME_QWEN_OPTS.maxTokens : 4096);
+  const thinking = input.thinking ?? (isQwen ? RUNTIME_QWEN_OPTS.thinking : true);
+  const temperature = input.temperature ?? 0.3;
+
+  const payload: Record<string, unknown> = { model, messages, max_tokens: maxTokens };
 
   if (model.startsWith('claude-opus')) {
     payload.temperature = 1.0;
-  } else if (model === 'gpt-5.4') {
-    // omit temperature — reasoning model defaults
-  } else if (model === 'minimax-m27-via-openrouter') {
+  } else if (model === 'gpt-5.4' || model === 'minimax-m27-via-openrouter') {
     // omit temperature — reasoning model defaults
   } else {
     payload.temperature = temperature;
   }
 
   // Amendment v2 §2: ALWAYS pass enable_thinking explicitly for Qwen — do not rely on default.
-  if (model.includes('qwen')) {
+  if (isQwen) {
     payload.extra_body = { enable_thinking: thinking };
   }
 
@@ -412,7 +415,7 @@ async function llmCall(
       const outTok = usage.completion_tokens ?? 0;
       const pricing = MODEL_PRICING[model] ?? { in: 1, out: 4 };
       const costUsd = (inTok * pricing.in + outTok * pricing.out) / 1_000_000;
-      return { content, inTokens: inTok, outTokens: outTok, costUsd, latencyMs: Date.now() - started, raw: d };
+      return { content, inTokens: inTok, outTokens: outTok, costUsd, latencyMs: Date.now() - started };
     } catch (e) {
       lastErr = `${(e as Error).name}: ${(e as Error).message}`.slice(0, 200);
       if (attempt < 1) await new Promise(r => setTimeout(r, 1500));
@@ -421,10 +424,10 @@ async function llmCall(
   }
   return {
     content: '', inTokens: 0, outTokens: 0, costUsd: 0,
-    latencyMs: Date.now() - started, raw: null,
+    latencyMs: Date.now() - started,
     error: lastErr ?? 'unknown error',
   };
-}
+};
 
 // ─────────────────────────────────────────────────────────────────────────
 // Cell A/C: solo single-shot
@@ -432,39 +435,36 @@ async function llmCall(
 
 async function runCellSolo(cell: 'A' | 'C', task: TaskMaterials): Promise<CellResult> {
   const config = CELLS[cell];
-  const userPrompt = [
-    task.persona,
-    '',
-    `MATERIALS:\n\n${task.materialsConcat}`,
-    '',
-    `QUESTION:\n\n${task.question}`,
-    '',
-    'Answer the question above based on the materials. Be specific and substantive.',
-  ].join('\n');
+  logLine(`[cell ${task.taskId}/${cell}] solo call → ${config.model} (via @waggle/agent runSoloAgent)`);
 
-  await fsp.writeFile(
-    path.join(PROMPTS_ARCHIVE_DIR, `${task.taskId}-cell-${cell}-prompt.md`),
-    userPrompt,
-    'utf-8'
-  );
-
-  logLine(`[cell ${task.taskId}/${cell}] solo call → ${config.model} ${JSON.stringify(llmOptsFor(config.model))}`);
-  const r = await llmCall(config.model, [{ role: 'user', content: userPrompt }], llmOptsFor(config.model));
+  // Delegate to the unified agent loop from packages/agent (Phase 2.1 a599a07).
+  // Prompt assembly + per-model framing is handled by the prompt-shape selected
+  // for config.model. Pilot wrapper provides only the LlmCallFn adapter.
+  const result: AgentRunResult = await runSoloAgent({
+    modelAlias: config.model,
+    persona: task.persona,
+    question: task.question,
+    materials: task.materialsConcat,
+    llmCall,
+    contextTag: `${task.taskId}/${cell}`,
+    // No normalization-side schema change — keep raw response in JSONL for
+    // backwards compat with original pilot artifacts.
+  });
 
   return {
     taskId: task.taskId,
     cellId: cell,
     model: config.model,
     configuration: 'solo',
-    candidateResponse: r.content,
-    candidateLatencyMs: r.latencyMs,
-    candidateTokensIn: r.inTokens,
-    candidateTokensOut: r.outTokens,
-    candidateCostUsd: r.costUsd,
-    loopExhausted: false,
-    stepsTaken: 1,
-    retrievalCalls: 0,
-    errors: r.error ? [r.error] : [],
+    candidateResponse: result.rawResponse,
+    candidateLatencyMs: result.totalLatencyMs,
+    candidateTokensIn: result.totalTokensIn,
+    candidateTokensOut: result.totalTokensOut,
+    candidateCostUsd: result.totalCostUsd,
+    loopExhausted: result.loopExhausted,
+    stepsTaken: result.stepsTaken,
+    retrievalCalls: result.retrievalCalls,
+    errors: [...result.errors],
   };
 }
 
@@ -472,30 +472,17 @@ async function runCellSolo(cell: 'A' | 'C', task: TaskMaterials): Promise<CellRe
 // Cell B/D: multi-step retrieval-augmented loop
 // ─────────────────────────────────────────────────────────────────────────
 
-function parseAgentAction(text: string):
-  | { kind: 'retrieve'; query: string }
-  | { kind: 'finalize'; response: string }
-  | { kind: 'malformed' } {
-  const jsonMatch = text.match(/\{[\s\S]*?\}/);
-  if (!jsonMatch) return { kind: 'malformed' };
-  try {
-    const obj = JSON.parse(jsonMatch[0]);
-    if (obj.action === 'retrieve' && typeof obj.query === 'string') return { kind: 'retrieve', query: obj.query };
-    if (obj.action === 'finalize' && typeof obj.response === 'string') return { kind: 'finalize', response: obj.response };
-    return { kind: 'malformed' };
-  } catch {
-    return { kind: 'malformed' };
-  }
-}
-
 async function runCellMultiStep(cell: 'B' | 'D', task: TaskMaterials, embedder: Embedder): Promise<CellResult> {
   const config = CELLS[cell];
+
+  // Per-cell SessionStore + HybridSearch setup — this scaffolding stays in
+  // the pilot wrapper because per-task corpus isolation is pilot-specific.
   const dbPath = path.join(SCRATCH_DIR, `per-task-${task.taskId}-cell-${cell}.sqlite`);
   if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
   const db = new MindDB(dbPath);
   const frames = new FrameStore(db);
   const sessions = new SessionStore(db);
-  const search = new HybridSearch(db, embedder);
+  const hybrid = new HybridSearch(db, embedder);
 
   const gopId = `${PILOT_ID}-${task.taskId}-${cell}`;
   sessions.ensure(gopId, undefined, `Pilot session for ${task.taskId} cell ${cell}`);
@@ -506,119 +493,48 @@ async function runCellMultiStep(cell: 'B' | 'D', task: TaskMaterials, embedder: 
   }
   logLine(`[cell ${task.taskId}/${cell}] ingested ${task.materialFrames.length} frames into ${dbPath}`);
 
-  const SYSTEM_PROMPT = [
-    task.persona,
-    '',
-    'You have access to a private corpus of materials about this scenario via a retrieval tool.',
-    'You CANNOT see the materials directly. You must request retrievals to get information.',
-    '',
-    `On EACH turn, output exactly ONE JSON object on its own line, no prose, no code fences:`,
-    `  - To retrieve information, output: {"action": "retrieve", "query": "<your search query>"}`,
-    `  - To finalize your answer, output: {"action": "finalize", "response": "<your full final answer>"}`,
-    '',
-    `You have a maximum of ${MAX_STEPS} turns. Plan accordingly.`,
-    'Each retrieval returns up to 8 most relevant document chunks.',
-    'Be focused: a good retrieval query is 5-15 words and targets specific information.',
-    '',
-    `QUESTION:\n${task.question}`,
-  ].join('\n');
+  // RetrievalSearchFn adapter — wraps HybridSearch.search for the agent loop.
+  // The agent loop calls this via config.search; the adapter formats the hits
+  // into a single string for prompt injection.
+  const searchAdapter: RetrievalSearchFn = async ({ query, limit }) => {
+    const hits = await hybrid.search(query, { limit, gopId });
+    const formatted = hits.length > 0
+      ? hits.map((sr, i) => `[result ${i + 1}, score ${sr.finalScore.toFixed(3)}]\n${sr.frame.content}`).join('\n\n---\n\n')
+      : '';
+    return { formattedResults: formatted, resultCount: hits.length };
+  };
 
-  const messages: { role: string; content: string }[] = [
-    { role: 'system', content: SYSTEM_PROMPT },
-    { role: 'user', content: 'Begin. Output your first action JSON now.' },
-  ];
+  // Delegate to the unified agent loop from packages/agent (Phase 2.1 a599a07).
+  // Per-call halt + per-cell halt + MAX_STEPS + force-finalize all enforced inside.
+  const result: AgentRunResult = await runRetrievalAgentLoop({
+    modelAlias: config.model,
+    persona: task.persona,
+    question: task.question,
+    llmCall,
+    search: searchAdapter,
+    maxSteps: MAX_STEPS,
+    maxRetrievalsPerStep: MAX_RETRIEVALS_PER_STEP,
+    perCallHaltUsd: PER_CALL_SANITY_USD,
+    perCellHaltUsd: PER_CELL_HARD_HALT_USD,
+    contextTag: `${task.taskId}/${cell}`,
+  });
 
-  let totalIn = 0, totalOut = 0, totalCost = 0, totalLatency = 0;
-  let retrievalCalls = 0;
-  let finalResponse = '';
-  let loopExhausted = false;
-  let stepsTaken = 0;
-  const errors: string[] = [];
-
-  let promptArchive = `# ${task.taskId} cell ${cell} — multi-step trace\n\n`;
-  promptArchive += `## SYSTEM\n\n\`\`\`\n${SYSTEM_PROMPT}\n\`\`\`\n\n`;
-
-  for (let step = 1; step <= MAX_STEPS; step++) {
-    stepsTaken = step;
-    promptArchive += `## STEP ${step} — model call\n\n`;
-    const r = await llmCall(config.model, messages, llmOptsFor(config.model));
-    totalIn += r.inTokens; totalOut += r.outTokens; totalCost += r.costUsd; totalLatency += r.latencyMs;
-    if (r.error) {
-      errors.push(`step ${step}: ${r.error}`);
-      promptArchive += `_ERROR_: ${r.error}\n\n`;
-      break;
-    }
-    if (r.costUsd > PER_CALL_SANITY_USD) {
-      errors.push(`step ${step}: per-call $${r.costUsd.toFixed(4)} > $${PER_CALL_SANITY_USD}`);
-      logLine(`[cell ${task.taskId}/${cell}] HALT per-call $${r.costUsd.toFixed(4)}`);
-      break;
-    }
-    if (totalCost > PER_CELL_HARD_HALT_USD) {
-      errors.push(`step ${step}: cell cumulative $${totalCost.toFixed(4)} > $${PER_CELL_HARD_HALT_USD}`);
-      logLine(`[cell ${task.taskId}/${cell}] HALT cell-spend $${totalCost.toFixed(4)}`);
-      break;
-    }
-
-    const action = parseAgentAction(r.content);
-    promptArchive += `_response_:\n\`\`\`\n${r.content}\n\`\`\`\n\n_parsed_: ${action.kind}\n\n`;
-    messages.push({ role: 'assistant', content: r.content });
-
-    if (action.kind === 'retrieve') {
-      retrievalCalls += 1;
-      const results = await search.search(action.query, { limit: MAX_RETRIEVALS_PER_STEP, gopId });
-      const ctx = results.length > 0
-        ? results.map((sr, i) => `[result ${i + 1}, score ${sr.finalScore.toFixed(3)}]\n${sr.frame.content}`).join('\n\n---\n\n')
-        : '(no results — try a different query)';
-      messages.push({ role: 'user', content: `Retrieval results for "${action.query}":\n\n${ctx}\n\nNext action JSON?` });
-      promptArchive += `## STEP ${step} — retrieval (${results.length} results)\n\n_query_: ${action.query}\n\n_top result preview_:\n\`\`\`\n${(results[0]?.frame.content ?? '(none)').slice(0, 500)}\n\`\`\`\n\n`;
-    } else if (action.kind === 'finalize') {
-      finalResponse = action.response;
-      promptArchive += `## STEP ${step} — finalize\n\n${finalResponse.slice(0, 500)}${finalResponse.length > 500 ? '...' : ''}\n\n`;
-      break;
-    } else {
-      messages.push({
-        role: 'user',
-        content: 'Your previous output was not a valid JSON action. Output exactly one JSON object: {"action":"retrieve","query":"..."} or {"action":"finalize","response":"..."}.',
-      });
-      promptArchive += `## STEP ${step} — malformed action; recovery attempt\n\n`;
-    }
-  }
-
-  if (!finalResponse) {
-    loopExhausted = true;
-    const forceMsg = [
-      ...messages,
-      { role: 'user', content: 'Step budget exhausted. Output your final answer to the original question NOW as plain prose, no JSON wrapper. Be substantive.' },
-    ];
-    const r = await llmCall(config.model, forceMsg, llmOptsFor(config.model));
-    totalIn += r.inTokens; totalOut += r.outTokens; totalCost += r.costUsd; totalLatency += r.latencyMs;
-    finalResponse = r.content || '(loop exhausted with no response)';
-    if (r.error) errors.push(`force-finalize: ${r.error}`);
-    promptArchive += `## FORCE-FINALIZE\n\n${finalResponse.slice(0, 500)}${finalResponse.length > 500 ? '...' : ''}\n\n`;
-  }
-
-  await fsp.writeFile(
-    path.join(PROMPTS_ARCHIVE_DIR, `${task.taskId}-cell-${cell}-trace.md`),
-    promptArchive,
-    'utf-8'
-  );
   // MindDB does not expose a public close() — let GC reclaim. The sqlite file
   // remains on disk in tmp/ for post-run inspection (gitignored).
-
   return {
     taskId: task.taskId,
     cellId: cell,
     model: config.model,
     configuration: 'memory-harness',
-    candidateResponse: finalResponse,
-    candidateLatencyMs: totalLatency,
-    candidateTokensIn: totalIn,
-    candidateTokensOut: totalOut,
-    candidateCostUsd: totalCost,
-    loopExhausted,
-    stepsTaken,
-    retrievalCalls,
-    errors,
+    candidateResponse: result.rawResponse,
+    candidateLatencyMs: result.totalLatencyMs,
+    candidateTokensIn: result.totalTokensIn,
+    candidateTokensOut: result.totalTokensOut,
+    candidateCostUsd: result.totalCostUsd,
+    loopExhausted: result.loopExhausted,
+    stepsTaken: result.stepsTaken,
+    retrievalCalls: result.retrievalCalls,
+    errors: [...result.errors],
   };
 }
 
@@ -707,7 +623,7 @@ async function runJudge(judgeModel: string, prompt: string): Promise<JudgeRecord
   // Amendment v2 PM-decision (post second-smoke): max_tokens 1024 → 3000 to address
   // MiniMax solo-cell failure pattern (dense memo responses likely overflowed 1024 mid-JSON).
   for (let attempt = 0; attempt < MAX_JUDGE_RETRIES; attempt++) {
-    const r = await llmCall(judgeModel, [{ role: 'user', content: prompt }], { maxTokens: 3000, thinking: false });
+    const r = await llmCall({ model: judgeModel, messages: [{ role: 'user', content: prompt }], maxTokens: 3000, thinking: false });
     totalCost += r.costUsd; totalLatency += r.latencyMs;
     if (r.error) { lastError = `attempt ${attempt + 1}: ${r.error}`; continue; }
     const parsed = parseJudgeJson(r.content);
