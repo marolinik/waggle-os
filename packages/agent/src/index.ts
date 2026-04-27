@@ -91,6 +91,18 @@ export {
   type ReplayResult,
   type ReplayMismatch,
 } from './run-meta.js';
+
+// Phase 3.1 — long-task checkpointing (per-step state serialization).
+export {
+  CheckpointStore,
+  CHECKPOINT_SCHEMA_VERSION,
+  makeInitialState,
+  nextStateFrom,
+  type CheckpointStepState,
+  type CheckpointStoreOptions,
+  type Decision as CheckpointDecision,
+  type IntegrityReport as CheckpointIntegrityReport,
+} from './long-task/checkpoint.js';
 export { createTeamTools, type TeamToolDeps } from './team-tools.js';
 export { ensureIdentity, type IdentityConfig } from './auto-identity.js';
 export { buildSelfAwareness, type AgentCapabilities } from './self-awareness.js';
