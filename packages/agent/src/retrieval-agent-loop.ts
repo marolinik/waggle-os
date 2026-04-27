@@ -51,6 +51,11 @@ import {
   type Decision,
 } from './long-task/checkpoint.js';
 import { type ContextManager } from './long-task/context-manager.js';
+// Phase 4.6 — messages-array compression (separate from accumulated_context).
+import {
+  maybeCompressMessages,
+  type MessagesContextManagerConfig,
+} from './long-task/messages-compressor.js';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Injected dependencies
@@ -148,6 +153,16 @@ export interface BaseAgentRunConfig {
    * provided, false otherwise.
    */
   resumeFromCheckpoint?: boolean;
+
+  /**
+   * Phase 4.6 — optional messages-array compression. When provided, the loop
+   * checks token-count of the messages array at the top of each iteration and
+   * compresses (summarize older middle, retain head + tail) if over threshold.
+   * Closes the Phase 3 acceptance gate finding (ContextManager-as-implemented
+   * compresses ONLY accumulated_context audit log, not the cost-dominant
+   * messages array).
+   */
+  messagesContextManager?: MessagesContextManagerConfig;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -159,7 +174,8 @@ export type AgentRunProgressEventType =
   | 'step_started'
   | 'step_completed'
   | 'retrieval_invoked'
-  | 'context_compressed'
+  | 'context_compressed'      // Phase 3.3 — accumulated_context (audit log)
+  | 'messages_compressed'     // Phase 4.6 — messages array (LLM working state)
   | 'finalized'
   | 'loop_exhausted';
 
@@ -169,7 +185,7 @@ export interface AgentRunProgressEvent {
   step_index: number;
   /** 1-indexed turn number aligned with the existing loop convention. */
   turn?: number;
-  /** Per-call cost (set on step_completed). */
+  /** Per-call cost (set on step_completed; also set on messages_compressed when LLM summarizer fires). */
   cost_usd?: number;
   /** Per-call usage. */
   tokens_in?: number;
@@ -177,9 +193,12 @@ export interface AgentRunProgressEvent {
   /** Set on retrieval_invoked. */
   retrieval_query?: string;
   retrieval_results_count?: number;
-  /** Set on context_compressed. */
+  /** Set on context_compressed AND messages_compressed (token counts of the compressed dimension). */
   context_before_tokens?: number;
   context_after_tokens?: number;
+  /** Set on messages_compressed only — message-count delta. */
+  messages_before_count?: number;
+  messages_after_count?: number;
   /** Free-form for diagnostic events (e.g. "already finalized" on resume). */
   message?: string;
 }
@@ -550,8 +569,28 @@ export async function runRetrievalAgentLoop(config: MultiStepAgentRunConfig): Pr
     }
   }
 
+  let messagesRunningSummary: string | null = null;
+
   for (let step = startStep; step <= maxSteps; step++) {
     stepsTaken = step;
+
+    // Phase 4.6: messages-array compression (top of iteration, before LLM call).
+    if (config.messagesContextManager) {
+      const compressed = await maybeCompressMessages(messages, config.messagesContextManager, messagesRunningSummary);
+      if (compressed.compressed) {
+        const beforeCount = messages.length;
+        messages = compressed.messages;
+        messagesRunningSummary = compressed.summary;
+        emit({
+          type: 'messages_compressed',
+          step_index: step - 1,
+          turn: step,
+          messages_before_count: beforeCount,
+          messages_after_count: messages.length,
+        });
+      }
+    }
+
     emit({ type: 'step_started', step_index: step - 1, turn: step });
     const llmRes = await config.llmCall({
       model: config.modelAlias,

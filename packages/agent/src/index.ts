@@ -165,6 +165,15 @@ export {
   type WrittenReportPaths,
   type PilotJsonlRecord,
 } from './long-task/report.js';
+
+// Phase 4.6 — messages-array compression integration (closes Phase 3 gate finding).
+export {
+  maybeCompressMessages,
+  shouldCompressMessages,
+  type MessagesContextManagerConfig,
+  type MessagesCompressionEvent,
+  type CompressMessagesResult,
+} from './long-task/messages-compressor.js';
 export { createTeamTools, type TeamToolDeps } from './team-tools.js';
 export { ensureIdentity, type IdentityConfig } from './auto-identity.js';
 export { buildSelfAwareness, type AgentCapabilities } from './self-awareness.js';
