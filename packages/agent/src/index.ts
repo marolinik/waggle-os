@@ -118,6 +118,19 @@ export {
   type ErrorClass as RecoveryErrorClass,
   type ErrorClassifier as RecoveryErrorClassifier,
 } from './long-task/recovery.js';
+
+// Phase 3.3 — long-task context management (compression / eviction / decision rollup).
+export {
+  ContextManager,
+  type ContextManagerOptions,
+  type CompressionStrategy as ContextCompressionStrategy,
+  type CompressionEvent as ContextCompressionEvent,
+  type ContextCompressionEvent as ContextCompressionEventDetail,
+  type DecisionsCompressionEvent,
+  type CacheEvictionEvent,
+  type ArchivedContextRange,
+  type CompressOptions as ContextCompressOptions,
+} from './long-task/context-manager.js';
 export { createTeamTools, type TeamToolDeps } from './team-tools.js';
 export { ensureIdentity, type IdentityConfig } from './auto-identity.js';
 export { buildSelfAwareness, type AgentCapabilities } from './self-awareness.js';
