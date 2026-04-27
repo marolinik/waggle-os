@@ -137,6 +137,19 @@ export {
   type ArchivedContextRange,
   type CompressOptions as ContextCompressOptions,
 } from './long-task/context-manager.js';
+
+// Phase 4.1 — failure classifier (10-category taxonomy + LLM judge fallback).
+export {
+  classifyFailure,
+  classifyFailureBatch,
+  failureDistribution,
+  FAILURE_CATEGORIES,
+  type FailureCategory,
+  type FailureClassification,
+  type ClassifierInput,
+  type ClassifierOptions,
+  type ConfidenceLevel as FailureConfidenceLevel,
+} from './long-task/failure-classify.js';
 export { createTeamTools, type TeamToolDeps } from './team-tools.js';
 export { ensureIdentity, type IdentityConfig } from './auto-identity.js';
 export { buildSelfAwareness, type AgentCapabilities } from './self-awareness.js';
