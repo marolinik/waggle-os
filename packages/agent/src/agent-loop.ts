@@ -98,6 +98,12 @@ export {
   type RetrievalSearchResult,
   type NormalizationPresetName,
   type BaseAgentRunConfig,
+  // Phase 3.4 — long-task integration (whole-loop recovery + progress events).
+  runRetrievalAgentLoopWithRecovery,
+  type LoopRecoveryOptions,
+  type AgentRunProgressEvent,
+  type AgentRunProgressEventType,
+  type AgentRunProgressCallback,
 } from './retrieval-agent-loop.js';
 
 export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentResponse> {

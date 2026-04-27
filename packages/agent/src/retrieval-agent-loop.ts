@@ -43,6 +43,14 @@ import {
   type PromptShape,
 } from './prompt-shapes/index.js';
 import { type RunMetaCapture } from './run-meta.js';
+// Phase 3.4 — long-task integration (all optional; backwards compatible).
+import {
+  CHECKPOINT_SCHEMA_VERSION,
+  type CheckpointStepState,
+  type CheckpointStore,
+  type Decision,
+} from './long-task/checkpoint.js';
+import { type ContextManager } from './long-task/context-manager.js';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Injected dependencies
@@ -110,7 +118,73 @@ export interface BaseAgentRunConfig {
   perCallHaltUsd?: number;
   /** Free-form context tag included in run-meta predictions. */
   contextTag?: string;
+
+  // ───── Phase 3.4 long-task integration (all optional, opt-in). ─────────
+  /**
+   * Stable run identifier for checkpoint-based resume. Auto-generated if
+   * checkpointStore is set and runId is omitted, but explicit runId is
+   * required to resume across processes.
+   */
+  runId?: string;
+  /**
+   * Optional checkpoint store. If provided, the loop saves a
+   * CheckpointStepState per turn, enabling cross-process resume.
+   */
+  checkpointStore?: CheckpointStore;
+  /**
+   * Optional context manager. If provided, accumulated_context audit log
+   * auto-compresses at threshold. ContextManager does NOT touch the
+   * messages array (LLM working state — separate concern).
+   */
+  contextManager?: ContextManager;
+  /**
+   * Optional progress callback. Receives a stream of agent-loop events for
+   * Tauri UI / benchmark harness telemetry.
+   */
+  onProgress?: AgentRunProgressCallback;
+  /**
+   * If true and a prior checkpoint exists for runId, resume from the latest
+   * checkpoint instead of starting fresh. Default: true if checkpointStore
+   * provided, false otherwise.
+   */
+  resumeFromCheckpoint?: boolean;
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 3.4 — Progress event types
+// ─────────────────────────────────────────────────────────────────────────
+
+export type AgentRunProgressEventType =
+  | 'recovery_resumed'
+  | 'step_started'
+  | 'step_completed'
+  | 'retrieval_invoked'
+  | 'context_compressed'
+  | 'finalized'
+  | 'loop_exhausted';
+
+export interface AgentRunProgressEvent {
+  type: AgentRunProgressEventType;
+  /** 0-indexed step index aligned with CheckpointStepState. */
+  step_index: number;
+  /** 1-indexed turn number aligned with the existing loop convention. */
+  turn?: number;
+  /** Per-call cost (set on step_completed). */
+  cost_usd?: number;
+  /** Per-call usage. */
+  tokens_in?: number;
+  tokens_out?: number;
+  /** Set on retrieval_invoked. */
+  retrieval_query?: string;
+  retrieval_results_count?: number;
+  /** Set on context_compressed. */
+  context_before_tokens?: number;
+  context_after_tokens?: number;
+  /** Free-form for diagnostic events (e.g. "already finalized" on resume). */
+  message?: string;
+}
+
+export type AgentRunProgressCallback = (event: AgentRunProgressEvent) => void;
 
 export interface SoloAgentRunConfig extends BaseAgentRunConfig {
   /** Full materials block embedded in the user prompt. */
@@ -217,6 +291,61 @@ interface ParsedAction {
   kind: 'retrieve' | 'finalize' | 'malformed';
   query?: string;
   response?: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 3.4 — Long-task helpers (private)
+// ─────────────────────────────────────────────────────────────────────────
+
+interface LoopStepInputShape extends Record<string, unknown> {
+  turn: number;
+  messages_snapshot: ReadonlyArray<{ role: string; content: string }>;
+}
+
+interface LoopStepOutputShape extends Record<string, unknown> {
+  llm_raw_content: string;
+  action_kind: 'retrieve' | 'finalize' | 'malformed' | 'force_finalize';
+  action_query?: string;
+  action_response?: string;
+  retrieval_count?: number;
+  tokens_in: number;
+  tokens_out: number;
+  cost_usd: number;
+  latency_ms: number;
+  total_tokens_in: number;
+  total_tokens_out: number;
+  total_cost_usd: number;
+  total_latency_ms: number;
+  total_retrieval_calls: number;
+}
+
+function buildAccumulatedAudit(prior: string, turn: number, action: ParsedAction): string {
+  const sep = prior.length > 0 ? '\n' : '';
+  if (action.kind === 'retrieve') {
+    return prior + sep + `Turn ${turn}: retrieve query="${(action.query ?? '').slice(0, 80)}"`;
+  }
+  if (action.kind === 'finalize') {
+    return prior + sep + `Turn ${turn}: finalize (${(action.response ?? '').slice(0, 60)}…)`;
+  }
+  return prior + sep + `Turn ${turn}: malformed`;
+}
+
+async function applyContextCompression(
+  state: CheckpointStepState,
+  contextManager: ContextManager,
+  emit: AgentRunProgressCallback,
+): Promise<CheckpointStepState> {
+  if (!contextManager.needsCompression(state)) return state;
+  const beforeTokens = contextManager.estimateTokens(state.accumulated_context);
+  const compressed = await contextManager.compress(state);
+  const afterTokens = contextManager.estimateTokens(compressed.accumulated_context);
+  emit({
+    type: 'context_compressed',
+    step_index: state.step_index,
+    context_before_tokens: beforeTokens,
+    context_after_tokens: afterTokens,
+  });
+  return contextManager.evictRetrievalCache(compressed);
 }
 
 function parseAgentAction(text: string): ParsedAction {
@@ -344,6 +473,13 @@ export async function runRetrievalAgentLoop(config: MultiStepAgentRunConfig): Pr
   const maxSteps = config.maxSteps ?? DEFAULT_MAX_STEPS;
   const maxRetrievalsPerStep = config.maxRetrievalsPerStep ?? DEFAULT_MAX_RETRIEVALS_PER_STEP;
 
+  // Phase 3.4 long-task hooks (all optional).
+  const checkpointStore = config.checkpointStore;
+  const contextManager = config.contextManager;
+  const emit: AgentRunProgressCallback = config.onProgress ?? (() => {});
+  const runId = config.runId ?? crypto.randomUUID();
+  const resumeEnabled = config.resumeFromCheckpoint ?? Boolean(checkpointStore);
+
   const systemPrompt = shape.systemPrompt({
     persona: config.persona,
     question: config.question,
@@ -353,7 +489,7 @@ export async function runRetrievalAgentLoop(config: MultiStepAgentRunConfig): Pr
   });
   const kickoffUser = shape.multiStepKickoffUserPrompt({});
 
-  const messages: Array<{ role: string; content: string }> = [
+  let messages: Array<{ role: string; content: string }> = [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: kickoffUser },
   ];
@@ -367,9 +503,56 @@ export async function runRetrievalAgentLoop(config: MultiStepAgentRunConfig): Pr
   let loopExhausted = false;
   let finalRaw = '';
   const errors: string[] = [];
+  let accumulatedAudit = '';
+  let retrievalCacheState: Record<string, unknown> = {};
+  let decisionHistoryState: Decision[] = [];
+  let startStep = 1;
 
-  for (let step = 1; step <= maxSteps; step++) {
+  // ─── Phase 3.4: optional resume from checkpoint ─────────────────────────
+  if (checkpointStore && resumeEnabled) {
+    const latest = await checkpointStore.loadLatest();
+    if (latest && latest.run_id === runId) {
+      const out = latest.step_output as LoopStepOutputShape;
+      if (out.action_kind === 'finalize' || out.action_kind === 'force_finalize') {
+        // Already finalized in a prior process — return cached result.
+        emit({ type: 'recovery_resumed', step_index: latest.step_index, message: 'already finalized' });
+        const cachedFinal = (out.action_response ?? out.llm_raw_content ?? '') as string;
+        const normResult = normalizeFinal(cachedFinal, config.normalizationPreset);
+        return {
+          rawResponse: cachedFinal,
+          normalizedResponse: normResult.normalized,
+          normalizationActions: normResult.actions,
+          promptShapeName: shape.name,
+          totalTokensIn: out.total_tokens_in,
+          totalTokensOut: out.total_tokens_out,
+          totalCostUsd: out.total_cost_usd,
+          totalLatencyMs: out.total_latency_ms,
+          loopExhausted: out.action_kind === 'force_finalize',
+          stepsTaken: latest.step_index + 1,
+          retrievalCalls: out.total_retrieval_calls,
+          errors: [],
+        };
+      }
+      // Mid-loop resume: restore messages array + running totals.
+      const inp = latest.step_input as LoopStepInputShape;
+      messages = [...inp.messages_snapshot];
+      totalIn = out.total_tokens_in;
+      totalOut = out.total_tokens_out;
+      totalCost = out.total_cost_usd;
+      totalLatency = out.total_latency_ms;
+      retrievalCalls = out.total_retrieval_calls;
+      stepsTaken = latest.step_index + 1;
+      accumulatedAudit = latest.accumulated_context;
+      retrievalCacheState = { ...latest.retrieval_cache };
+      decisionHistoryState = [...latest.decision_history];
+      startStep = (inp.turn ?? 0) + 1;
+      emit({ type: 'recovery_resumed', step_index: latest.step_index, turn: startStep, message: 'mid-loop resume' });
+    }
+  }
+
+  for (let step = startStep; step <= maxSteps; step++) {
     stepsTaken = step;
+    emit({ type: 'step_started', step_index: step - 1, turn: step });
     const llmRes = await config.llmCall({
       model: config.modelAlias,
       messages,
@@ -411,29 +594,121 @@ export async function runRetrievalAgentLoop(config: MultiStepAgentRunConfig): Pr
 
     messages.push({ role: 'assistant', content: llmRes.content });
     const action = parseAgentAction(llmRes.content);
+    let retrievalCountThisTurn = 0;
 
     if (action.kind === 'retrieve' && action.query) {
       retrievalCalls += 1;
+      retrievalCountThisTurn = 1;
       const found = await config.search({ query: action.query, limit: maxRetrievalsPerStep });
+      retrievalCacheState[action.query] = {
+        formattedResults: found.formattedResults,
+        resultCount: found.resultCount,
+      };
+      emit({
+        type: 'retrieval_invoked',
+        step_index: step - 1,
+        turn: step,
+        retrieval_query: action.query,
+        retrieval_results_count: found.resultCount,
+      });
       const userMsg = shape.retrievalInjectionUserPrompt({
         query: action.query,
         results: found.formattedResults || '(no results — try a different query)',
         resultCount: found.resultCount,
       });
       messages.push({ role: 'user', content: userMsg });
-      continue;
-    }
-
-    if (action.kind === 'finalize' && action.response !== undefined) {
+    } else if (action.kind === 'finalize' && action.response !== undefined) {
       finalRaw = action.response;
-      break;
+      emit({ type: 'finalized', step_index: step - 1, turn: step });
+    } else {
+      // Malformed — one corrective re-prompt. If model also malforms next step, loop continues.
+      messages.push({
+        role: 'user',
+        content: `Your previous output was not a valid JSON action. ${MULTI_STEP_ACTION_CONTRACT}`,
+      });
     }
 
-    // Malformed — one corrective re-prompt. If model also malforms next step, loop continues.
-    messages.push({
-      role: 'user',
-      content: `Your previous output was not a valid JSON action. ${MULTI_STEP_ACTION_CONTRACT}`,
+    // Phase 3.4: per-turn checkpoint save + optional context compression.
+    decisionHistoryState = [
+      ...decisionHistoryState,
+      { step_index: step - 1, decision: action.kind, rationale: action.query ?? action.response?.slice(0, 60) },
+    ];
+    accumulatedAudit = buildAccumulatedAudit(accumulatedAudit, step, action);
+    if (checkpointStore) {
+      const stepInput: LoopStepInputShape = { turn: step, messages_snapshot: [...messages] };
+      const stepOutput: LoopStepOutputShape = {
+        llm_raw_content: llmRes.content,
+        action_kind: action.kind === 'retrieve'
+          ? 'retrieve'
+          : action.kind === 'finalize'
+          ? 'finalize'
+          : 'malformed',
+        action_query: action.query,
+        action_response: action.response,
+        retrieval_count: retrievalCountThisTurn,
+        tokens_in: llmRes.inTokens,
+        tokens_out: llmRes.outTokens,
+        cost_usd: llmRes.costUsd,
+        latency_ms: llmRes.latencyMs,
+        total_tokens_in: totalIn,
+        total_tokens_out: totalOut,
+        total_cost_usd: totalCost,
+        total_latency_ms: totalLatency,
+        total_retrieval_calls: retrievalCalls,
+      };
+      let toSave: CheckpointStepState = {
+        schema_version: CHECKPOINT_SCHEMA_VERSION,
+        task_id: checkpointStore.taskId,
+        run_id: runId,
+        step_index: step - 1,
+        timestamp_iso: new Date().toISOString(),
+        step_action: action.kind,
+        step_input: stepInput,
+        step_output: stepOutput,
+        accumulated_context: accumulatedAudit,
+        retrieval_cache: { ...retrievalCacheState },
+        decision_history: [...decisionHistoryState],
+        cost_usd: llmRes.costUsd,
+        latency_ms: llmRes.latencyMs,
+      };
+      if (contextManager) {
+        toSave = await applyContextCompression(toSave, contextManager, emit);
+        accumulatedAudit = toSave.accumulated_context;
+        retrievalCacheState = { ...toSave.retrieval_cache };
+      }
+      await checkpointStore.save(toSave);
+    } else if (contextManager) {
+      // No store but contextManager — still apply to in-memory audit for telemetry.
+      const synthState: CheckpointStepState = {
+        schema_version: CHECKPOINT_SCHEMA_VERSION,
+        task_id: 'in-memory',
+        run_id: runId,
+        step_index: step - 1,
+        timestamp_iso: new Date().toISOString(),
+        step_action: action.kind,
+        step_input: {},
+        step_output: {},
+        accumulated_context: accumulatedAudit,
+        retrieval_cache: { ...retrievalCacheState },
+        decision_history: [...decisionHistoryState],
+      };
+      const compressed = await applyContextCompression(synthState, contextManager, emit);
+      accumulatedAudit = compressed.accumulated_context;
+      retrievalCacheState = { ...compressed.retrieval_cache };
+    }
+
+    emit({
+      type: 'step_completed',
+      step_index: step - 1,
+      turn: step,
+      cost_usd: llmRes.costUsd,
+      tokens_in: llmRes.inTokens,
+      tokens_out: llmRes.outTokens,
     });
+
+    if (finalRaw) break;
+    if (action.kind === 'retrieve') continue;
+    // For malformed: corrective prompt was already pushed; continue to next turn.
   }
 
   if (!finalRaw) {
@@ -473,6 +748,43 @@ export async function runRetrievalAgentLoop(config: MultiStepAgentRunConfig): Pr
       latency_ms: llmRes.latencyMs,
       context_tag: `${config.contextTag ?? ''}:force-finalize`,
     });
+
+    emit({ type: 'loop_exhausted', step_index: stepsTaken, turn: stepsTaken + 1 });
+
+    // Phase 3.4: persist final force-finalize checkpoint so resume sees it as completed.
+    if (checkpointStore) {
+      const stepInput: LoopStepInputShape = { turn: stepsTaken + 1, messages_snapshot: [...forceMsgs] };
+      const stepOutput: LoopStepOutputShape = {
+        llm_raw_content: llmRes.content,
+        action_kind: 'force_finalize',
+        action_response: finalRaw,
+        tokens_in: llmRes.inTokens,
+        tokens_out: llmRes.outTokens,
+        cost_usd: llmRes.costUsd,
+        latency_ms: llmRes.latencyMs,
+        total_tokens_in: totalIn,
+        total_tokens_out: totalOut,
+        total_cost_usd: totalCost,
+        total_latency_ms: totalLatency,
+        total_retrieval_calls: retrievalCalls,
+      };
+      const finalState: CheckpointStepState = {
+        schema_version: CHECKPOINT_SCHEMA_VERSION,
+        task_id: checkpointStore.taskId,
+        run_id: runId,
+        step_index: stepsTaken,
+        timestamp_iso: new Date().toISOString(),
+        step_action: 'force_finalize',
+        step_input: stepInput,
+        step_output: stepOutput,
+        accumulated_context: accumulatedAudit + '\nForce-finalize.',
+        retrieval_cache: { ...retrievalCacheState },
+        decision_history: [...decisionHistoryState],
+        cost_usd: llmRes.costUsd,
+        latency_ms: llmRes.latencyMs,
+      };
+      await checkpointStore.save(finalState);
+    }
   }
 
   // Final response gets normalized.
@@ -492,4 +804,103 @@ export async function runRetrievalAgentLoop(config: MultiStepAgentRunConfig): Pr
     retrievalCalls,
     errors,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 3.4 — Whole-loop recovery wrapper
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface LoopRecoveryOptions {
+  /** Default 2 retries. */
+  maxRetries?: number;
+  /** Default 1000ms initial backoff. */
+  baseBackoffMs?: number;
+  /** Default 30000ms cap on backoff. */
+  maxBackoffMs?: number;
+  /** Default 0.25 (±25% jitter). 0 = deterministic. */
+  jitterFactor?: number;
+  /** Optional injectable RNG for jitter. Default Math.random. */
+  rng?: () => number;
+  /** Optional injectable sleep for tests. Default native setTimeout. */
+  sleep?: (ms: number) => Promise<void>;
+  /** Optional callback called when a retry is about to happen. */
+  onRetry?: (info: { attempt: number; backoff_ms: number; error: string }) => void;
+}
+
+const DEFAULT_LOOP_RECOVERY_MAX_RETRIES = 2;
+const DEFAULT_LOOP_RECOVERY_BASE_MS = 1000;
+const DEFAULT_LOOP_RECOVERY_MAX_MS = 30000;
+const DEFAULT_LOOP_RECOVERY_JITTER = 0.25;
+
+function defaultLoopSleep(ms: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    // eslint-disable-next-line no-restricted-globals
+    setTimeout(resolve, ms);
+  });
+}
+
+function computeLoopBackoff(attempt: number, opts: Required<Pick<LoopRecoveryOptions, 'baseBackoffMs' | 'maxBackoffMs' | 'jitterFactor' | 'rng'>>): number {
+  const exponential = Math.min(opts.baseBackoffMs * 2 ** (attempt - 1), opts.maxBackoffMs);
+  if (opts.jitterFactor === 0) return exponential;
+  const jitter = (opts.rng() * 2 - 1) * opts.jitterFactor * exponential;
+  return Math.max(0, exponential + jitter);
+}
+
+function loopErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'string') return err;
+  return String(err);
+}
+
+/**
+ * Whole-loop recovery wrapper. Retries runRetrievalAgentLoop on throw with
+ * exponential-backoff + optional jitter. Each retry leverages the loop's
+ * internal checkpoint resume (config.checkpointStore + config.runId) to
+ * continue from the last successful turn.
+ *
+ * Backwards compatibility: if config.checkpointStore is not set, retries
+ * restart the loop from scratch (fresh prompt, no resume). With a checkpoint
+ * store, retries resume mid-loop and final outputs match the no-crash run
+ * given identical llmCall + retrievalSearch outcomes.
+ *
+ * Replay determinism: backoff DURATIONS depend on rng (non-deterministic
+ * by default; injectable for replay). Recovery DECISIONS (retry vs throw)
+ * depend only on whether the loop call resolved or threw.
+ */
+export async function runRetrievalAgentLoopWithRecovery(
+  config: MultiStepAgentRunConfig,
+  recoveryOpts: LoopRecoveryOptions = {},
+): Promise<AgentRunResult> {
+  const maxRetries = recoveryOpts.maxRetries ?? DEFAULT_LOOP_RECOVERY_MAX_RETRIES;
+  if (!Number.isInteger(maxRetries) || maxRetries < 0) {
+    throw new Error(`runRetrievalAgentLoopWithRecovery: maxRetries must be a non-negative integer (got ${String(maxRetries)})`);
+  }
+  const baseBackoffMs = recoveryOpts.baseBackoffMs ?? DEFAULT_LOOP_RECOVERY_BASE_MS;
+  const maxBackoffMs = recoveryOpts.maxBackoffMs ?? DEFAULT_LOOP_RECOVERY_MAX_MS;
+  if (baseBackoffMs < 0 || maxBackoffMs < baseBackoffMs) {
+    throw new Error(`runRetrievalAgentLoopWithRecovery: invalid backoff bounds (base=${baseBackoffMs}, max=${maxBackoffMs})`);
+  }
+  const jitterFactor = recoveryOpts.jitterFactor ?? DEFAULT_LOOP_RECOVERY_JITTER;
+  if (jitterFactor < 0 || jitterFactor > 1) {
+    throw new Error(`runRetrievalAgentLoopWithRecovery: jitterFactor must be in [0, 1] (got ${jitterFactor})`);
+  }
+
+  const sleep = recoveryOpts.sleep ?? defaultLoopSleep;
+  const rng = recoveryOpts.rng ?? Math.random;
+  const onRetry = recoveryOpts.onRetry ?? (() => {});
+
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxRetries + 1; attempt += 1) {
+    if (attempt > 1) {
+      const backoff = computeLoopBackoff(attempt - 1, { baseBackoffMs, maxBackoffMs, jitterFactor, rng });
+      onRetry({ attempt, backoff_ms: backoff, error: loopErrorMessage(lastError) });
+      await sleep(backoff);
+    }
+    try {
+      return await runRetrievalAgentLoop(config);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(loopErrorMessage(lastError));
 }

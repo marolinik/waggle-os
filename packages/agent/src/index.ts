@@ -41,6 +41,12 @@ export {
   type RetrievalSearchResult,
   type NormalizationPresetName,
   type BaseAgentRunConfig,
+  // Phase 3.4 — long-task integration (whole-loop recovery + progress events):
+  runRetrievalAgentLoopWithRecovery,
+  type LoopRecoveryOptions,
+  type AgentRunProgressEvent,
+  type AgentRunProgressEventType,
+  type AgentRunProgressCallback,
 } from './agent-loop.js';
 
 // Phase 1.2 — model-aware prompt shapes (oversight in original Phase 1.2:
