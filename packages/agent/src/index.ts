@@ -150,6 +150,21 @@ export {
   type ClassifierOptions,
   type ConfidenceLevel as FailureConfidenceLevel,
 } from './long-task/failure-classify.js';
+
+// Phase 4.2 — reporting (summary.json/md, predictions.jsonl, failures.jsonl, cross-model matrix).
+export {
+  generateReport,
+  writeReportToDisk,
+  fromPilotRecord,
+  type AgentPredictionRecord,
+  type ReportOptions,
+  type CellMetrics,
+  type ModelComparisonMatrix,
+  type RunSummary,
+  type ReportArtifacts,
+  type WrittenReportPaths,
+  type PilotJsonlRecord,
+} from './long-task/report.js';
 export { createTeamTools, type TeamToolDeps } from './team-tools.js';
 export { ensureIdentity, type IdentityConfig } from './auto-identity.js';
 export { buildSelfAwareness, type AgentCapabilities } from './self-awareness.js';
