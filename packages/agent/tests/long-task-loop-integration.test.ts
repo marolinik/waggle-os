@@ -32,6 +32,9 @@ import {
 } from '../src/retrieval-agent-loop.js';
 import { CheckpointStore } from '../src/long-task/checkpoint.js';
 import { ContextManager } from '../src/long-task/context-manager.js';
+import type {
+  MessagesCompressionEvent,
+} from '../src/long-task/messages-compressor.js';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Fixtures
@@ -724,3 +727,124 @@ describe('Phase 3.4 — replay determinism', () => {
     expect(noStore.totalCostUsd).toBe(withStore.totalCostUsd);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 4.7 — compression-engaged end-to-end assertion
+//
+// This block is the assertion test that would have caught the Phase 3
+// acceptance gate compression gap before runtime. Three sub-tests:
+//   (1) Main scenario: messagesContextManager fires ≥1 compress event
+//       across a 30-step retrieval loop with growing messages array.
+//   (2) Safety: under a pathologically tight budget, compressions are
+//       bounded (no infinite loop).
+//   (3) Regression-pin: WITHOUT messagesContextManager, no compression
+//       fires — locks in the Phase 3 gap so a future regression
+//       (e.g., accidental field removal) surfaces immediately.
+// ─────────────────────────────────────────────────────────────────────────
+
+describe('Phase 4.7 — compression-engaged end-to-end assertion', () => {
+  it('messagesContextManager fires ≥1 compress event over a 30-step retrieval loop', async () => {
+    const compressionEvents: MessagesCompressionEvent[] = [];
+
+    // Deterministic summarizer mock (no real LLM).
+    const summarizerLlm: LlmCallFn = async () => ({
+      content: '[deterministic summary of earlier messages]',
+      inTokens: 100, outTokens: 30, costUsd: 0.001, latencyMs: 50,
+    });
+
+    // 28 retrieves + 1 finalize = 29 scripted replies.
+    const replies = [];
+    for (let i = 0; i < 28; i += 1) {
+      replies.push({ content: `{"action":"retrieve","query":"theme_${i}"}` });
+    }
+    replies.push({ content: '{"action":"finalize","response":"' + 'x'.repeat(100) + '"}' });
+    const loopLlm = makeScriptedLlm(replies);
+
+    // Each retrieval returns ~2000 chars ≈ 500 tokens of synthetic content.
+    const heavySearch: RetrievalSearchFn = async () => ({
+      formattedResults: 'Result text. ' + 'word '.repeat(400),
+      resultCount: 1,
+    });
+
+    const result = await runRetrievalAgentLoop(baseConfig({
+      llmCall: loopLlm.fn,
+      search: heavySearch,
+      maxSteps: 30,
+      messagesContextManager: {
+        budgetTokens: 4000,
+        threshold: 0.7,
+        retainRecentTurns: 5,
+        llmCall: summarizerLlm,
+        summarizationModel: 'budget-model',
+        onCompressionEvent: (e) => compressionEvents.push(e),
+      },
+    }));
+
+    // ASSERTION 1: compression fired at least once
+    expect(compressionEvents.length).toBeGreaterThanOrEqual(1);
+
+    // ASSERTION 2: each compressed state has fewer tokens than before
+    for (const e of compressionEvents) {
+      expect(e.after_tokens).toBeLessThan(e.before_tokens);
+    }
+
+    // ASSERTION 3: final answer is reachable + non-trivial
+    expect(result.rawResponse).toBeTruthy();
+    expect(result.rawResponse.length).toBeGreaterThan(50);
+
+    // ASSERTION 4: no infinite compression loop (compress count ≤ steps)
+    expect(compressionEvents.length).toBeLessThanOrEqual(result.stepsTaken);
+  });
+
+  it('safety: compressions are bounded by step count under tight budget', async () => {
+    const compressionEvents: MessagesCompressionEvent[] = [];
+    const summarizerLlm: LlmCallFn = async () => ({
+      content: 'tiny',
+      inTokens: 100, outTokens: 10, costUsd: 0.001, latencyMs: 10,
+    });
+
+    const replies = [];
+    for (let i = 0; i < 9; i += 1) replies.push({ content: `{"action":"retrieve","query":"q${i}"}` });
+    replies.push({ content: '{"action":"finalize","response":"done"}' });
+
+    const result = await runRetrievalAgentLoop(baseConfig({
+      llmCall: makeScriptedLlm(replies).fn,
+      search: async () => ({ formattedResults: 'x'.repeat(2000), resultCount: 1 }),
+      maxSteps: 10,
+      messagesContextManager: {
+        budgetTokens: 50,           // pathologically tight
+        threshold: 0.4,
+        retainRecentTurns: 1,
+        llmCall: summarizerLlm,
+        summarizationModel: 'b',
+        onCompressionEvent: (e) => compressionEvents.push(e),
+      },
+    }));
+
+    // No infinite loop — compressions strictly bounded by stepsTaken.
+    expect(compressionEvents.length).toBeLessThanOrEqual(result.stepsTaken);
+    expect(result.rawResponse).toBeTruthy();
+  });
+
+  it('regression-pin: WITHOUT messagesContextManager, no messages_compressed events fire', async () => {
+    // This test pins the Phase 3 gate gap. If anyone removes the
+    // messagesContextManager field by accident, this test still passes —
+    // but the main test (above) would fail, surfacing the regression.
+    const events: AgentRunProgressEvent[] = [];
+
+    const replies = [];
+    for (let i = 0; i < 10; i += 1) replies.push({ content: `{"action":"retrieve","query":"q${i}"}` });
+    replies.push({ content: '{"action":"finalize","response":"done"}' });
+
+    await runRetrievalAgentLoop(baseConfig({
+      llmCall: makeScriptedLlm(replies).fn,
+      search: async () => ({ formattedResults: 'x'.repeat(2000), resultCount: 1 }),
+      maxSteps: 10,
+      onProgress: (e) => events.push(e),
+      // NO messagesContextManager — verify Phase 3 gap reproduces here.
+    }));
+
+    expect(events.some(e => e.type === 'messages_compressed')).toBe(false);
+  });
+});
+
