@@ -103,6 +103,21 @@ export {
   type Decision as CheckpointDecision,
   type IntegrityReport as CheckpointIntegrityReport,
 } from './long-task/checkpoint.js';
+
+// Phase 3.2 — long-task recovery (retry + fallback + crash-resume).
+export {
+  RecoveryRunner,
+  type RecoveryRunnerOptions,
+  type RecoveryRunResult,
+  type RecoveryRunOptions,
+  type RecoveryEvent,
+  type RecoveryEventType,
+  type StepFn as RecoveryStepFn,
+  type StepFnInput as RecoveryStepFnInput,
+  type StepFnResult as RecoveryStepFnResult,
+  type ErrorClass as RecoveryErrorClass,
+  type ErrorClassifier as RecoveryErrorClassifier,
+} from './long-task/recovery.js';
 export { createTeamTools, type TeamToolDeps } from './team-tools.js';
 export { ensureIdentity, type IdentityConfig } from './auto-identity.js';
 export { buildSelfAwareness, type AgentCapabilities } from './self-awareness.js';
