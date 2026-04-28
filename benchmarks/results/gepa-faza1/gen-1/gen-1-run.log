@@ -280,3 +280,120 @@
 [2026-04-28T20:02:09.599Z] [delta-floor]   threshold_2_qwen_retrieval_absolute=PASS (max_delta=0.922)
 [2026-04-28T20:02:09.599Z] [delta-floor]   threshold_3_compound_tier_1_plus_tier_2=PASS (tier1=1.18pp tier2_agg=0.188)
 [2026-04-28T20:02:09.599Z] [done] 53 evals; total cost $6.5533; halt_reason=Amendment 7 §checkpoint_b_tightened.qwen_retrieval_engagement_regression: shape=qwen-non-thinking mean=1.200 < NULL baseline 1.250 (n=5)
+[2026-04-28T20:35:13.967Z] [loaded] corpus=50; sample=8 via seed=42
+[2026-04-28T20:35:14.012Z] [loaded] 5 shapes × 3 candidates each
+[2026-04-28T20:35:14.014Z] [validator] claude::gen1-v1 valid=true violations=0
+[2026-04-28T20:35:14.015Z] [validator] claude::gen1-v2 valid=true violations=0
+[2026-04-28T20:35:14.015Z] [validator] qwen-thinking::gen1-v1 valid=true violations=0
+[2026-04-28T20:35:14.016Z] [validator] qwen-thinking::gen1-v2 valid=true violations=0
+[2026-04-28T20:35:14.017Z] [validator] qwen-non-thinking::gen1-v1 valid=true violations=0
+[2026-04-28T20:35:14.018Z] [validator] qwen-non-thinking::gen1-v2 valid=true violations=0
+[2026-04-28T20:35:14.019Z] [validator] gpt::gen1-v1 valid=true violations=0
+[2026-04-28T20:35:14.019Z] [validator] gpt::gen1-v2 valid=true violations=0
+[2026-04-28T20:35:14.019Z] [validator] generic-simple::gen1-v1 valid=true violations=0
+[2026-04-28T20:35:14.020Z] [validator] generic-simple::gen1-v2 valid=true violations=0
+[2026-04-28T20:35:14.020Z] [dry-run] would run 5×3×8 = 120 evals (or halt at 30 = Checkpoint B)
+[2026-04-28T20:35:14.020Z] [dry-run] candidate=claude::baseline variant=baseline shape.name=claude
+[2026-04-28T20:35:14.020Z] [dry-run] candidate=claude::gen1-v1 variant=gen1-v1 shape.name=claude-gen1-v1
+[2026-04-28T20:35:14.020Z] [dry-run] candidate=claude::gen1-v2 variant=gen1-v2 shape.name=claude-gen1-v2
+[2026-04-28T20:35:14.020Z] [dry-run] candidate=qwen-thinking::baseline variant=baseline shape.name=qwen-thinking
+[2026-04-28T20:35:14.020Z] [dry-run] candidate=qwen-thinking::gen1-v1 variant=gen1-v1 shape.name=qwen-thinking-gen1-v1
+[2026-04-28T20:35:14.020Z] [dry-run] candidate=qwen-thinking::gen1-v2 variant=gen1-v2 shape.name=qwen-thinking-gen1-v2
+[2026-04-28T20:35:14.020Z] [dry-run] candidate=qwen-non-thinking::baseline variant=baseline shape.name=qwen-non-thinking
+[2026-04-28T20:35:14.021Z] [dry-run] candidate=qwen-non-thinking::gen1-v1 variant=gen1-v1 shape.name=qwen-non-thinking-gen1-v1
+[2026-04-28T20:35:14.021Z] [dry-run] candidate=qwen-non-thinking::gen1-v2 variant=gen1-v2 shape.name=qwen-non-thinking-gen1-v2
+[2026-04-28T20:35:14.021Z] [dry-run] candidate=gpt::baseline variant=baseline shape.name=gpt
+[2026-04-28T20:35:14.021Z] [dry-run] candidate=gpt::gen1-v1 variant=gen1-v1 shape.name=gpt-gen1-v1
+[2026-04-28T20:35:14.021Z] [dry-run] candidate=gpt::gen1-v2 variant=gen1-v2 shape.name=gpt-gen1-v2
+[2026-04-28T20:35:14.021Z] [dry-run] candidate=generic-simple::baseline variant=baseline shape.name=generic-simple
+[2026-04-28T20:35:14.021Z] [dry-run] candidate=generic-simple::gen1-v1 variant=gen1-v1 shape.name=generic-simple-gen1-v1
+[2026-04-28T20:35:14.021Z] [dry-run] candidate=generic-simple::gen1-v2 variant=gen1-v2 shape.name=generic-simple-gen1-v2
+[2026-04-28T20:36:16.285Z] [loaded] corpus=50; sample=8 via seed=42
+[2026-04-28T20:36:16.315Z] [loaded] 5 shapes × 3 candidates each
+[2026-04-28T20:36:16.316Z] [validator] claude::gen1-v1 valid=true violations=0
+[2026-04-28T20:36:16.317Z] [validator] claude::gen1-v2 valid=true violations=0
+[2026-04-28T20:36:16.317Z] [validator] qwen-thinking::gen1-v1 valid=true violations=0
+[2026-04-28T20:36:16.317Z] [validator] qwen-thinking::gen1-v2 valid=true violations=0
+[2026-04-28T20:36:16.318Z] [validator] qwen-non-thinking::gen1-v1 valid=true violations=0
+[2026-04-28T20:36:16.320Z] [validator] qwen-non-thinking::gen1-v2 valid=true violations=0
+[2026-04-28T20:36:16.320Z] [validator] gpt::gen1-v1 valid=true violations=0
+[2026-04-28T20:36:16.321Z] [validator] gpt::gen1-v2 valid=true violations=0
+[2026-04-28T20:36:16.321Z] [validator] generic-simple::gen1-v1 valid=true violations=0
+[2026-04-28T20:36:16.321Z] [validator] generic-simple::gen1-v2 valid=true violations=0
+[2026-04-28T20:36:16.323Z] [resume] loaded 53 existing evals; cumulative $6.5533
+[2026-04-28T20:36:16.324Z] [mode=full] target eval count: 120
+[2026-04-28T20:36:16.324Z] [skip] claude::baseline__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T20:36:16.324Z] [skip] claude::baseline__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.324Z] [skip] claude::baseline__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.324Z] [skip] claude::baseline__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.324Z] [skip] claude::baseline__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T20:36:16.324Z] [skip] claude::baseline__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T20:36:16.324Z] [skip] claude::baseline__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.324Z] [skip] claude::baseline__h3-F3-p3_coo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.324Z] [skip] claude::gen1-v1__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T20:36:16.325Z] [skip] claude::gen1-v1__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.325Z] [skip] claude::gen1-v1__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.325Z] [skip] claude::gen1-v1__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.325Z] [skip] claude::gen1-v1__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T20:36:16.325Z] [skip] claude::gen1-v1__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T20:36:16.325Z] [skip] claude::gen1-v1__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.325Z] [skip] claude::gen1-v1__h3-F3-p3_coo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.325Z] [skip] claude::gen1-v2__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T20:36:16.325Z] [skip] claude::gen1-v2__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.325Z] [skip] claude::gen1-v2__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.325Z] [skip] claude::gen1-v2__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.325Z] [skip] claude::gen1-v2__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T20:36:16.326Z] [skip] claude::gen1-v2__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T20:36:16.326Z] [skip] claude::gen1-v2__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.326Z] [skip] claude::gen1-v2__h3-F3-p3_coo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.326Z] [skip] qwen-thinking::baseline__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T20:36:16.326Z] [skip] qwen-thinking::baseline__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.326Z] [skip] qwen-thinking::baseline__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.326Z] [skip] qwen-thinking::baseline__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.326Z] [skip] qwen-thinking::baseline__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T20:36:16.326Z] [skip] qwen-thinking::baseline__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T20:36:16.326Z] [skip] qwen-thinking::baseline__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.326Z] [skip] qwen-thinking::baseline__h3-F3-p3_coo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.326Z] [skip] qwen-thinking::gen1-v1__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T20:36:16.326Z] [skip] qwen-thinking::gen1-v1__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.326Z] [skip] qwen-thinking::gen1-v1__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.326Z] [skip] qwen-thinking::gen1-v1__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.326Z] [skip] qwen-thinking::gen1-v1__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T20:36:16.327Z] [skip] qwen-thinking::gen1-v1__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T20:36:16.327Z] [skip] qwen-thinking::gen1-v1__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.327Z] [skip] qwen-thinking::gen1-v1__h3-F3-p3_coo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.327Z] [skip] qwen-thinking::gen1-v2__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T20:36:16.327Z] [skip] qwen-thinking::gen1-v2__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.327Z] [skip] qwen-thinking::gen1-v2__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.327Z] [skip] qwen-thinking::gen1-v2__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.327Z] [skip] qwen-thinking::gen1-v2__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T20:36:16.327Z] [skip] qwen-thinking::gen1-v2__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T20:36:16.327Z] [skip] qwen-thinking::gen1-v2__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.327Z] [skip] qwen-thinking::gen1-v2__h3-F3-p3_coo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.327Z] [skip] qwen-non-thinking::baseline__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T20:36:16.327Z] [skip] qwen-non-thinking::baseline__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.327Z] [skip] qwen-non-thinking::baseline__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.327Z] [skip] qwen-non-thinking::baseline__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T20:36:16.327Z] [skip] qwen-non-thinking::baseline__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T20:36:16.328Z] [qwen-non-thinking::baseline__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T20:36:27.500Z] [qwen-non-thinking::baseline__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] subject_done; retrievals=1 steps=2 cost=$0.0014
+[2026-04-28T20:36:47.212Z] [qwen-non-thinking::baseline__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] judged; trio_mean=4.333 pass_ii=true retrievals=1 eval_cost=$0.1081
+[2026-04-28T20:36:47.213Z] [cumulative] $6.6614 / $26 halt; 54 evals total
+[2026-04-28T20:36:47.213Z] [qwen-non-thinking::baseline__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T20:37:01.678Z] [qwen-non-thinking::baseline__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0024
+[2026-04-28T20:37:46.564Z] [qwen-non-thinking::baseline__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.222 pass_ii=true retrievals=1 eval_cost=$0.1574
+[2026-04-28T20:37:46.565Z] [cumulative] $6.8188 / $26 halt; 55 evals total
+[2026-04-28T20:37:46.565Z] [qwen-non-thinking::baseline__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T20:37:53.022Z] [qwen-non-thinking::baseline__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0010
+[2026-04-28T20:38:18.283Z] [qwen-non-thinking::baseline__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.333 pass_ii=true retrievals=1 eval_cost=$0.0940
+[2026-04-28T20:38:18.283Z] [cumulative] $6.9128 / $26 halt; 56 evals total
+[2026-04-28T20:38:18.283Z] [qwen-non-thinking::gen1-v1__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T20:38:30.605Z] [qwen-non-thinking::gen1-v1__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] subject_done; retrievals=2 steps=3 cost=$0.0029
+[2026-04-28T20:38:42.772Z] [qwen-non-thinking::gen1-v1__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] judged; trio_mean=4.611 pass_ii=true retrievals=2 eval_cost=$0.1218
+[2026-04-28T20:38:42.772Z] [HALT-A7] Amendment 7 §checkpoint_b_tightened.qwen_retrieval_engagement_regression (post Amendment 10 §10.1 calibration_fix): shape=qwen-non-thinking mean=1.125 < NULL baseline 1.250 (n=8; ≥1 mutation candidate evaluated for shape)
+[2026-04-28T20:38:42.773Z] [summary] wrote D:\Projects\waggle-os-faza1-wt\benchmarks\results\gepa-faza1\gen-1\gen-1-summary.json
+[2026-04-28T20:38:42.773Z] [delta-floor] verdict=PROCEED
+[2026-04-28T20:38:42.774Z] [delta-floor]   threshold_1_aggregate_tier_1=FAIL (value=1.97pp)
+[2026-04-28T20:38:42.774Z] [delta-floor]   threshold_2_qwen_retrieval_absolute=PASS (max_delta=0.922)
+[2026-04-28T20:38:42.774Z] [delta-floor]   threshold_3_compound_tier_1_plus_tier_2=PASS (tier1=1.97pp tier2_agg=0.200)
+[2026-04-28T20:38:42.774Z] [done] 57 evals; total cost $7.0346; halt_reason=Amendment 7 §checkpoint_b_tightened.qwen_retrieval_engagement_regression (post Amendment 10 §10.1 calibration_fix): shape=qwen-non-thinking mean=1.125 < NULL baseline 1.250 (n=8; ≥1 mutation candidate evaluated for shape)

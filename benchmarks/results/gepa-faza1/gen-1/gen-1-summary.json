@@ -1,11 +1,11 @@
 {
   "manifestAnchor": "manifest-v7-gepa-faza1",
   "manifestShaAmendment7": "bc0bcf9bd8b0c8344b25e5f8ab15b0475039ba28a1f782ebffe4cc1c4ff7d1de",
-  "generated_at": "2026-04-28T20:02:09.598Z",
+  "generated_at": "2026-04-28T20:38:42.773Z",
   "mode": "full",
-  "totalEvals": 53,
-  "totalCostUsd": 6.553308499999999,
-  "haltReason": "Amendment 7 §checkpoint_b_tightened.qwen_retrieval_engagement_regression: shape=qwen-non-thinking mean=1.200 < NULL baseline 1.250 (n=5)",
+  "totalEvals": 57,
+  "totalCostUsd": 7.034589099999999,
+  "haltReason": "Amendment 7 §checkpoint_b_tightened.qwen_retrieval_engagement_regression (post Amendment 10 §10.1 calibration_fix): shape=qwen-non-thinking mean=1.125 < NULL baseline 1.250 (n=8; ≥1 mutation candidate evaluated for shape)",
   "perCandidateTierBreakdown": [
     {
       "candidateId": "claude::baseline",
@@ -119,16 +119,34 @@
       "candidateId": "qwen-non-thinking::baseline",
       "shape": "qwen-non-thinking",
       "variant": "baseline",
-      "evalCount": 5,
+      "evalCount": 8,
       "trioStrictPassRateII": 1,
-      "meanRetrievalCallsPerTask": 1.2,
-      "meanEvalCostUsd": 0.12940780000000002,
+      "meanRetrievalCallsPerTask": 1.125,
+      "meanEvalCostUsd": 0.1258152375,
       "costOvershoot": false,
       "tieredFitness": {
         "tier1DeltaPP": 0,
         "tier2RetrievalBonus": 0,
         "tier3CellSemanticInvarianceBonus": 0.1,
         "aggregateSaturatedRegime": 0.1,
+        "saturatedRegimeApplied": true,
+        "cellSemanticAnchorInvarianceCount": 7
+      }
+    },
+    {
+      "candidateId": "qwen-non-thinking::gen1-v1",
+      "shape": "qwen-non-thinking",
+      "variant": "gen1-v1",
+      "evalCount": 1,
+      "trioStrictPassRateII": 1,
+      "meanRetrievalCallsPerTask": 2,
+      "meanEvalCostUsd": 0.1217977,
+      "costOvershoot": false,
+      "tieredFitness": {
+        "tier1DeltaPP": 0,
+        "tier2RetrievalBonus": 0.25,
+        "tier3CellSemanticInvarianceBonus": 0.1,
+        "aggregateSaturatedRegime": 0.35,
         "saturatedRegimeApplied": true,
         "cellSemanticAnchorInvarianceCount": 7
       }
@@ -142,8 +160,8 @@
     },
     "qwen-non-thinking": {
       "nullBaselineMean": 1.25,
-      "gen1PartialMean": 1.2,
-      "deltaAbsolute": -0.050000000000000044
+      "gen1PartialMean": 1.2222222222222223,
+      "deltaAbsolute": -0.02777777777777768
     }
   },
   "cellSemanticAnchorInvarianceCountPerCandidate": {
@@ -153,16 +171,17 @@
     "qwen-thinking::baseline": 7,
     "qwen-thinking::gen1-v1": 7,
     "qwen-thinking::gen1-v2": 7,
-    "qwen-non-thinking::baseline": 7
+    "qwen-non-thinking::baseline": 7,
+    "qwen-non-thinking::gen1-v1": 7
   },
   "preRegisteredDeltaFloorVerdict": {
     "threshold1AggregateTier1": "FAIL",
-    "threshold1ValuePP": 1.1792452830188704,
+    "threshold1ValuePP": 1.9736842105263164,
     "threshold2QwenRetrievalAbsolute": "PASS",
     "threshold2MaxDeltaAbsolute": 0.9216666666666664,
     "threshold3CompoundTier1PlusTier2": "PASS",
-    "threshold3Tier1ValuePP": 1.1792452830188704,
-    "threshold3Tier2Aggregate": 0.1875,
+    "threshold3Tier1ValuePP": 1.9736842105263164,
+    "threshold3Tier2Aggregate": 0.2,
     "overallVerdict": "PROCEED"
   },
   "midRunHaltsBindingThresholds": {
@@ -176,7 +195,7 @@
     },
     "qwenRetrievalRegression": {
       "triggered": true,
-      "details": "qwen-non-thinking mean=1.200 < NULL 1.25"
+      "details": "qwen-non-thinking mean=1.222 < NULL 1.25"
     }
   }
 }
