@@ -893,10 +893,15 @@ judge_metric_design:
       gpt_pct: 65.0
       minimax_pct: 90.0
 
-# ── F-saturated-baseline rule (Amendment 5 — BINDING) ─────────────────────
+# ── F-saturated-baseline rule (Amendment 5 — BINDING; REVOKED BY AMENDMENT 7) ─
 
 F_saturated_baseline_rule:
   added_by: amendment_5
+  status: REVOKED_BY_AMENDMENT_7  # see amendment_7_integration.saturated_baseline_revocation
+  status_history:
+    - { amendment: 5, status: ACTIVE,   note: "applied to qwen-thinking (8/8 = 100% NULL artifactual)" }
+    - { amendment: 6, status: PAUSED,   note: "pending real per-shape NULL data after promptShapeOverride bug fix" }
+    - { amendment: 7, status: REVOKED,  note: "real per-shape NULL data shows no shape with Wilson CI low ≥ 0.88; global revoke; original §F.1 ≥+5pp delta applies to all 5 shapes" }
   trigger_condition: "Shape's NULL-baseline trio_strict_pass_rate (op ii) = 1.0 (100%, all evals pass)"
   applies_immediately_to:
     - qwen-thinking  # 8/8 = 100% at NULL per Checkpoint A
@@ -972,6 +977,156 @@ amendment_6_integration:
     - "Pre-Gen-1 cost projection $14.86 (cost is shape-independent: subject + judge dominate)"
     - "Headroom under $115 cap remains healthy (~$90 post re-run)"
 
+# ── Amendment 7 master integration section (binding) ──────────────────────
+
+amendment_7_integration:
+  ratification_date: 2026-04-28
+  authority: PM (Marko Markovic)
+  predecessor: Amendment 6 (NULL-baseline shape-override bug fix)
+  trigger: "Checkpoint A v2 halt-and-PM. LOCKED §C verdict ANOMALOUS due to claude shape +37.5pp delta vs artifactual band. Per Amendment 6 root-cause analysis, the artifactual per-shape labels had ZERO informational content (5×8 replicates of qwen-thinking shape; not shape-vs-shape data). Pre-registered bands therefore structurally biased toward triggering anomaly. PM ratifies Option C (Hybrid override per Checkpoint A v2 §F.2): GO Gen 1 with tightened Checkpoint B + retrieval engagement weighting addendum."
+  scope:
+    - "§saturated_baseline_revocation: §F-saturated rule REVOKED globally (no shape's Wilson CI low ≥0.88); §F.1 fitness function applies to all 5 shapes"
+    - "§lock_override_acknowledgment: Checkpoint A v2 ANOMALOUS classified as structurally-induced; LOCK pre-registration discipline preserved; PM ratifies override per Option C"
+    - "§fitness_function_tiered: Tier 1 NULL-delta (TIE-BREAKER + acceptance gate), Tier 2 retrieval-engagement (PRIMARY in saturated regime, +0.05 per pp above NULL baseline, cap 0.25), Tier 3 cell-semantic-anchor invariance (SECONDARY, +0.10 if all 7 anchors invariant)"
+    - "§gen_1_pre_registered_delta_floor: 3 OR-gated Δ-floor thresholds at Checkpoint B (ANY pass → continue; ALL fail → HALT + Investigate)"
+    - "§checkpoint_b_tightened: mid-run halt thresholds + report extensions + PM ratify gate"
+    - "§sha_chain: Amendment 7 SHA appended to manifest v7 chain (becomes 7-SHA chain)"
+
+  saturated_baseline_revocation:
+    status: REVOKED_BY_AMENDMENT_7
+    predecessor_state_amendment_5: "F_saturated_baseline_rule applied to qwen-thinking (8/8 = 100% NULL artifactual)"
+    predecessor_state_amendment_6: "F_saturated_baseline_rule PAUSED — pending real per-shape NULL data"
+    revocation_basis: "Real per-shape NULL data (Checkpoint A v2 §B.2 + §D): no shape has Wilson 95% CI lower bound ≥ 0.88. Highest CI low: qwen-non-thinking at 0.676 (8/8 = 100% sample but N=8 binomial CI prevents saturated-rule invocation)."
+    decision: GLOBAL_REVOKE
+    consequence: "Apply original §F.1 (≥+5pp delta on trio_strict_pass) to all 5 shapes (no per-shape exception)"
+    re_instate_threshold: "Any shape with CI low ≥ 0.88 on a future expanded NULL run (e.g., N=16+); not achievable within Faza 1 N=8 cap; defer to Faza 2 if relevant"
+
+  lock_override_acknowledgment:
+    locked_verdict_from_checkpoint_a_v2: ANOMALOUS
+    classification: structurally_induced
+    structural_root_cause: "Pre-registered §C bands anchored on artifactual per-shape labels (Amendment 6 root cause: bug-affected NULL-baseline ran 5×8 replicates of qwen-thinking shape, not shape-vs-shape). Bands structurally biased toward triggering anomaly even under correct experiment."
+    pre_registration_discipline_status: PRESERVED_AS_DOCUMENTED
+    pre_registration_discipline_value: "LOCK enforced honest classification — system did NOT silently rationalize verdict away. PM was forced to make explicit override decision rather than retroactively redefining bands. This is the EXACT handoff pre-registration is supposed to produce."
+    pm_ratification: Option_C_Hybrid
+    pm_authority_to_override: "Pre-registration LOCK is discipline tool, not absolute halt. PM has override authority when (a) rationale documented (this section), (b) basis empirically grounded (Amendment 6 root cause), (c) hypothesis tree exercised (Checkpoint A v2 §F.1 H1/H2/H3). All three conditions met."
+    three_pillars_pass_evidence:
+      mutation_invariance: "7 cell-semantic anchors byte-identical to Amendment 6 pins (substrate intact)"
+      cost_sensitivity: "+0.2% per-eval, +0.3% Pre-Gen-1 projection ($14.91 vs $78 halt — 5.2× margin)"
+      raw_agreement: "65% min PASS Amendment 5 §judge_metric_design 65% threshold (exact boundary, inclusive)"
+    kappa_recovery_signal: "κ recovery -0.111 → +0.724 (Opus↔MiniMax pair) — judge agreement was destroyed by the bug, now restored to substantial. Health signal supporting H1 (~70% credence) dominance in Checkpoint A v2 §F.1 hypothesis tree."
+    audit_chain_preserved: "Original LOCKED §C verdict ANOMALOUS remains documented at Checkpoint A v2 report. This Amendment 7 supersedes literal verdict via PM ratification but does NOT erase original audit trail. Pre-registration discipline is honored even when overridden."
+
+  fitness_function_tiered:
+    applies_to: all_5_shapes
+    saturated_regime_definition: "NULL pass rate ≥ 75% for ≥4 of 5 shapes (current state per Checkpoint A v2 §B.2: 5/5 ≥75%)"
+    structural_problem: "Tier 1 (NULL delta) becomes noise-bound on N=8 binomial in saturated regime — statistical noise floor ±15pp at 95% CI swamps the +5pp acceptance threshold. Per-shape NULL improvement is therefore NOT a reliable Tier 1 fitness signal in saturated regime."
+    resolution: "Use Tier 2 + Tier 3 as PRIMARY differentiators in saturated regime; Tier 1 retained as TIE-BREAKER + ACCEPTANCE GATE (≥+5pp from launch decision §F.1 unchanged)."
+    tier_1:
+      label: NULL_pass_rate_delta
+      role_in_saturated_regime: TIE_BREAKER
+      role_as_acceptance_gate: "≥+5pp delta on trio_strict_pass op (ii); UNCHANGED from Amendment 5 launch decision §F.1"
+      computation: "candidate.trioStrictPassRateII − shape_specific_null_baseline_pass_rate, expressed in pp (×100)"
+      noise_floor_pp_at_n_8_95ci: 15
+      noise_floor_basis: "Wilson 95% CI for binomial(N=8, p=0.875) is roughly [0.529, 0.978] = ±22pp; for binomial(N=8, p=0.75) is [0.41, 0.93] = ±26pp. ±15pp practitioner estimate is conservative for headroom analysis."
+    tier_2:
+      label: retrieval_engagement_bonus_continuous
+      role_in_saturated_regime: PRIMARY_DIFFERENTIATOR
+      applies_to_shapes: [qwen-thinking, qwen-non-thinking]
+      excluded_shapes: [claude, gpt, generic-simple]
+      formula: "bonus = clamp(0.05 × (candidate_mean_retrieval − per_shape_null_baseline_mean_retrieval) × 100, 0, 0.25)"
+      formula_interpretation: "0.05 absolute bonus per percentage point ('pp' = 0.01 absolute increase in mean_retrieval_calls_per_task) above per-shape NULL baseline. Cap 0.25 reached at +5pp absolute (e.g., baseline 1.12 → candidate 1.17). Floor 0 (no negative bonus from this formula — see relation_to_amendment_2 below for negative-bonus path)."
+      relation_to_amendment_2_band_bonus: "Amendment 2 §3 band-based bonus (-0.05 / 0.00 / +0.05) remains BINDING for §F.5 false-positive guard + Qwen 1.7 acceptance threshold. Amendment 7 Tier 2 is SUPPLEMENTARY tiered-fitness ranking signal (continuous, granular) — both apply in parallel: Amendment 2 bands gate acceptance + provide negative-band penalty; Amendment 7 Tier 2 ranks candidates within accepted population."
+      pre_registered_at_amendment_7: true
+    tier_3:
+      label: cell_semantic_anchor_invariance
+      role_in_saturated_regime: SECONDARY_DIFFERENTIATOR
+      applies_to_shapes: all_5
+      formula: "bonus = 0.10 if mutation_validator(candidate).valid === true (all 7 anchors invariant per BOUNDARY_SHAS + BASELINE_SHAPE_SHAS pins); bonus = 0 otherwise"
+      seven_anchors:
+        - "packages/agent/src/prompt-shapes/types.ts (whole file SHA pin 1a9fa329e4b6...)"
+        - "MULTI_STEP_ACTION_CONTRACT body bytes (252 bytes SHA pin 70a1701dfa12...)"
+        - "Baseline claude.ts (cbaf0c37b067...)"
+        - "Baseline qwen-thinking.ts (848a4e4917ba...)"
+        - "Baseline qwen-non-thinking.ts (35be379be9a8...)"
+        - "Baseline gpt.ts (5dc6d750d52a...)"
+        - "Baseline generic-simple.ts (81189817f560...)"
+      operationalization_for_gen_1: "All 10 mutation candidates passed mutation_validator at $1.43 oracle run (per audit chain); pre-flight Tier 3 = 0.10 for all 10 candidates. Per-eval Tier 3 = candidate-file invariance (read-only at runtime; agent does not modify shape source files)."
+    aggregate_fitness_in_saturated_regime: "tier_2 + tier_3 (Tier 1 reserved as tie-breaker + acceptance gate; cost penalty per Amendment 2 supplementary diagnostic only — NOT in tiered ranking aggregate)"
+    aggregate_fitness_in_non_saturated_regime: "Amendment 2 form unchanged: trio_strict_pass_rate + retrieval_engagement_bonus_amendment_2_band − cost_penalty (applicability: Faza 1 has no non-saturated shape per Checkpoint A v2 §B.2; retained for Faza 2 expansion if any future shape's NULL pass rate < 75%)"
+    cross_reference_to_existing_acceptance_ts: "evaluateCandidate() in benchmarks/gepa/src/faza-1/acceptance.ts UNCHANGED — operates on §F.1 acceptance gate (Tier 1 ≥+5pp + Qwen 1.7 floor + §F.5 false-positive guard)"
+    fitness_ts_extension: "computeTieredFitness() added to benchmarks/gepa/src/faza-1/fitness.ts; existing computeFitness() retained for Amendment 2 backward-compat reports"
+
+  gen_1_pre_registered_delta_floor:
+    purpose: "Pre-register Gen 1 floor for 'evolution worked at all' to determine whether to continue past Checkpoint B. Looser than §F.1 acceptance threshold (≥+5pp); evolution-worked signal for early HALT."
+    pre_registered_at: amendment_7
+    locked_pre_run: true
+    pm_ratification: Option_C_Hybrid
+    interpretation: "Three OR-gated thresholds. ANY ONE passes at Checkpoint B (30 evals) → proceed (subject to §checkpoint_b_tightened.pm_ratify_gate). ALL THREE fail → HALT + Investigate report."
+    threshold_1_aggregate_tier_1:
+      condition: "aggregate_fitness_delta_pp ≥ 3pp absolute on Tier 1 (NULL pass rate delta)"
+      operationalization: "Mean trio_strict_pass_rate_II across all 30 Checkpoint B evals (across all candidates × shapes evaluated). Compare to mean NULL-baseline 87.5% (Checkpoint A v2 aggregate). Delta in pp must be ≥+3pp."
+      threshold_pp: 3
+      basis: "Loosened from §F.1 ≥+5pp by 2pp for early-HALT signal. ±15pp noise floor on N=30 narrows to ~±8.6pp (sqrt scaling); +3pp ≈ 1/3 noise floor — meaningful early signal that evolution moved the needle."
+    threshold_2_qwen_retrieval_absolute:
+      condition: "Qwen-targeted retrieval engagement ≥+0.10 absolute above per-shape NULL baseline mean retrieval calls per task"
+      operationalization: "For Qwen-targeted candidates evaluated by Checkpoint B (qwen-thinking::* + qwen-non-thinking::*), compute mean retrieval_calls per task. Subtract per-shape NULL baseline (qwen-thinking 1.12, qwen-non-thinking 1.25 per Checkpoint A v2 §B.2). If max delta across Qwen shapes ≥ +0.10 → pass."
+      threshold_absolute: 0.10
+      basis: "Phase 4.5 mechanistic signal direction. +0.10 absolute = closing ~10% of Qwen→Opus gap (1.12 → 1.22 vs 2.33 target). Fits Qwen-targeted shape mutations' explicit anti-premature-finalization scaffolding."
+    threshold_3_compound_tier_1_plus_tier_2:
+      condition: "(aggregate Tier 1 delta ≥ 0pp) AND (aggregate Tier 2 bonus ≥ 0.05)"
+      operationalization: "Tier 1 ≥0pp = no regression on trio_strict. Tier 2 ≥0.05 = aggregate retrieval bonus across Qwen-targeted candidates ≥ 0.05 (per §fitness_function_tiered.tier_2 formula). Both must hold simultaneously."
+      basis: "Compound signal: even if neither threshold 1 nor 2 alone trips, mild improvement on BOTH dimensions suggests evolution moved the needle without regressing anything. Lower-bar but informative."
+    halt_on_all_three_fail:
+      verdict: HALT_AND_INVESTIGATE
+      action: "Stop run at Checkpoint B (30 evals). Author Investigate report at benchmarks/results/gepa-faza1/gen-1/investigate-report.md detailing per-candidate Tier 1/2/3 breakdowns + Δ-floor verdict + hypothesis on why evolution showed no signal. PM ratify investigation path: re-run mutation oracle with stronger anti-premature-finalization scaffolding / scope reduction / Faza 1 abandon."
+      investigate_budget_separate: true
+    proceed_on_any_one_pass:
+      verdict: PROCEED_TO_CHECKPOINT_B_REPORT
+      action: "Author Checkpoint B halt-and-PM report (per §checkpoint_b_tightened.report_extensions). Halt at 30 evals as scheduled per launch decision §E. PM ratifies Checkpoint B (per §checkpoint_b_tightened.pm_ratify_gate) → continue Gen 1 to full 120 evals."
+
+  checkpoint_b_tightened:
+    overrides_standard_checkpoint_b: "Standard B per launch decision §E (post-partial verdict + cost re-projection). Tightened version adds mid-run halt thresholds + report extensions + PM ratify gate."
+    mid_run_halt_thresholds:
+      per_candidate_cost_overshoot:
+        condition: "Per-candidate mean per-eval cost overshoots projection by >25%"
+        projection_basis_per_eval_usd: 0.1243  # Checkpoint A v2 §E
+        overshoot_threshold_per_eval_usd: 0.156  # 0.1243 × 1.25
+        overshoot_candidate_count_to_halt: 3   # >3 candidates with overshoot triggers halt
+        action: "HALT + investigate cost regression. Likely cause: judge ensemble drift, prompt token bloat, retrieval noise."
+      per_shape_variance_widens:
+        condition: "Per-shape variance (max-min trio_strict_pass_rate_II range across that shape's candidates evaluated so far) widens to >40pp"
+        threshold_pp: 40
+        action: "HALT + investigate unstable evolution. Likely cause: oracle producing high-variance mutations that wreck some candidates while improving others."
+      qwen_retrieval_engagement_regression:
+        condition: "Mean retrieval engagement on Qwen-targeted candidates drops below per-shape NULL baseline (qwen-thinking 1.12, qwen-non-thinking 1.25) at any aggregation point with ≥3 evals on that shape"
+        action: "HALT + investigate semantic regression (evolution made retrieval WORSE — opposite Phase 4.5 signal direction; mutation oracle may have introduced anti-engagement scaffolding)."
+    report_extensions:
+      beyond_standard: "Standard Checkpoint B fitness/cost/sample_efficiency fields per launch decision §E remain. Amendment 7 adds:"
+      per_candidate_tier_breakdown: "tier_1 (delta_pp signed), tier_2 (continuous bonus 0..0.25 for Qwen-targeted; N/A for non-Qwen), tier_3 (binary 0 or 0.10), aggregate = tier_2 + tier_3 (saturated regime), tie_breaker_tier_1 (delta_pp signed), saturated_regime_applied (boolean)"
+      retrieval_engagement_deltas_per_qwen_shape: "qwen-thinking + qwen-non-thinking concrete numbers (null_baseline_mean, gen1_partial_mean, delta_absolute, delta_pp)"
+      cell_semantic_anchor_invariance_count_per_candidate: "0..7 scale (where 7 = all anchors invariant per mutation_validator); pre-flight all 10 candidates = 7"
+      pre_registered_delta_floor_pass_fail: "threshold_1_aggregate_tier_1 (PASS|FAIL), threshold_2_qwen_retrieval_absolute (PASS|FAIL), threshold_3_compound_tier_1_plus_tier_2 (PASS|FAIL), overall_delta_floor_verdict (PROCEED|HALT_INVESTIGATE)"
+    pm_ratify_gate:
+      gate_position: "Before post-Checkpoint-B continuation (Gen 1 30 → 120 evals)"
+      pm_action: "Read Checkpoint B halt-and-PM report; ratify continuation OR halt-and-investigate OR scope-reduce-and-continue"
+      no_silent_advance: true
+      brief_authoring_responsibility: PM_side_once_checkpoint_b_lands
+
+  cross_references:
+    pm_brief_session_authored_at: "Session start 2026-04-28 (PM RATIFY brief §1-§8)"
+    checkpoint_a_v2_report: benchmarks/results/gepa-faza1/null-baseline/checkpoint-a-report.md
+    amendment_5_F_saturated_rule: "F_saturated_baseline_rule.status: REVOKED_BY_AMENDMENT_7 (added inline)"
+    amendment_6_root_cause: amendment_6_integration.bug_summary
+    fitness_function_implementation_target: benchmarks/gepa/src/faza-1/fitness.ts (computeTieredFitness function added)
+    delta_floor_implementation_target: benchmarks/gepa/scripts/faza-1/run-gen-1.ts (DELTA_FLOOR_THRESHOLDS constants + verdict computation)
+    halt_thresholds_implementation_target: benchmarks/gepa/scripts/faza-1/run-gen-1.ts (mid-run halt threshold constants + check logic)
+
+  cumulative_actual_spend_at_amendment_7_ratification: 25.18  # corpus 13.35 + sunk null 4.95 + re-null 4.97 + mutations 1.43 + probes 0.40 + misc 0.08
+  pre_gen_1_partial_cost_projection_unchanged: 14.91  # Checkpoint A v2 §E
+  cumulative_post_gen_1_partial_projection_usd: 40.09  # 25.18 + 14.91
+  hard_cap_usd_unchanged: 115.00
+  headroom_post_gen_1_partial_usd: 74.91
+
 # ── Manifest path + lock metadata ──────────────────────────────────────────
 
 manifest_path: benchmarks/preregistration/manifest-v7-gepa-faza1.yaml
@@ -981,10 +1136,12 @@ manifest_amendment_3_supplemented_at: 2026-04-28T00:45:00Z
 manifest_amendment_4_supplemented_at: 2026-04-28T01:00:00Z
 manifest_amendment_5_supplemented_at: 2026-04-28T11:00:00Z
 manifest_amendment_6_supplemented_at: 2026-04-28T15:30:00Z  # NULL-baseline shape-override bug fix
+manifest_amendment_7_supplemented_at: 2026-04-28T17:30:00Z  # PM ratify Option C — saturated revoke + tiered fitness + Δ-floor + tightened Checkpoint B
 manifest_sha256_initial_lock: 1d592a6113c918b7a07fc9aba748c8bdd12a6ce1c6943943c0492678299fa700
 manifest_sha256_post_amendment_2: 583712dde139ffc87fb1ab21643f68d52c56469ded9e8090a624980b05969beb
 manifest_sha256_post_amendment_3: e43d13793535077c92a0e2c24f948ebb9d6e04000293690fdf38c4ba957aa972
 manifest_sha256_post_amendment_4: 1f7a6d6fa01403f6c8d6855893adbfa5e82898a81b7583cfa55628e5eba60196
 manifest_sha256_post_amendment_5: 062dfc4935aaa89f0b25595c5dc3ce4af06c95c4c261075a1f0226d8af3f3dee
-manifest_sha256_post_amendment_6: NOT_YET_COMPUTED  # CC-2 computes post Edit
+manifest_sha256_post_amendment_6: 0b55d8e353299594254e1a4a76f26f53014d726315dc6a0e5d6dc1a3a44a368a
+manifest_sha256_post_amendment_7: NOT_YET_COMPUTED  # CC-2 computes post Edit
 audit_chain_terminus: this_file

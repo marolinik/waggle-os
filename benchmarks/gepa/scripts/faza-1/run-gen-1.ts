@@ -41,6 +41,21 @@ import { REGISTRY } from '../../../../packages/agent/src/prompt-shapes/selector.
 import { type PromptShape } from '../../../../packages/agent/src/prompt-shapes/types.js';
 
 import { type CorpusInstance } from '../../src/faza-1/corpus.js';
+import {
+  NULL_BASELINE_PER_SHAPE,
+  NULL_BASELINE_AGGREGATE,
+  type DeltaFloorVerdict,
+  type TieredFitnessComponents,
+} from '../../src/faza-1/types.js';
+import {
+  computeTieredFitness,
+  computeDeltaFloorVerdict,
+  computeTier2RetrievalBonus,
+} from '../../src/faza-1/fitness.js';
+import {
+  validateCandidate,
+  type ValidatorVerdict,
+} from '../../src/faza-1/mutation-validator.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -93,6 +108,24 @@ const MODEL_PRICING: Record<string, { in: number; out: number }> = {
 
 const MANIFEST_ANCHOR = 'manifest-v7-gepa-faza1';
 const MANIFEST_SHA_AMENDMENT_5 = '062dfc4935aaa89f0b25595c5dc3ce4af06c95c4c261075a1f0226d8af3f3dee';
+const MANIFEST_SHA_AMENDMENT_6 = '0b55d8e353299594254e1a4a76f26f53014d726315dc6a0e5d6dc1a3a44a368a';
+const MANIFEST_SHA_AMENDMENT_7 = 'bc0bcf9bd8b0c8344b25e5f8ab15b0475039ba28a1f782ebffe4cc1c4ff7d1de';
+
+// ── Amendment 7 — mid-run halt thresholds (binding) ───────────────────────
+// Per manifest v7 Amendment 7 §checkpoint_b_tightened.mid_run_halt_thresholds.
+
+/** Per-eval cost projection from Checkpoint A v2 §E (USD). */
+const PER_EVAL_COST_PROJECTION_USD = 0.1243;
+/** Mid-run halt: per-candidate cost overshoot threshold (>25% over projection = >$0.156/eval). */
+const PER_CANDIDATE_COST_OVERSHOOT_THRESHOLD_USD = PER_EVAL_COST_PROJECTION_USD * 1.25;  // 0.155375
+/** Mid-run halt: count of candidates with overshoot that triggers halt (>3). */
+const MID_RUN_HALT_OVERSHOOT_CANDIDATE_COUNT = 3;
+/** Mid-run halt: per-shape variance widens (max-min trio_strict_pass_rate_II range across candidates) >40pp. */
+const PER_SHAPE_VARIANCE_HALT_PP = 40;
+/** Minimum evals before per-shape variance check runs (avoid noise on N<3). */
+const PER_SHAPE_VARIANCE_MIN_EVALS = 3;
+/** Minimum Qwen evals before retrieval regression check runs. */
+const QWEN_RETRIEVAL_REGRESSION_MIN_EVALS = 3;
 
 function log(msg: string): void {
   const line = `[${new Date().toISOString()}] ${msg}\n`;
@@ -399,6 +432,307 @@ async function runOneEval(cand: Candidate, instance: CorpusInstance, embedder: E
 
 // ── Main ──────────────────────────────────────────────────────────────────
 
+// ── Amendment 7 — per-candidate accumulator ───────────────────────────────
+
+interface CandidateAcc {
+  candidateId: string;
+  shape: ShapeName;
+  variant: 'baseline' | 'gen1-v1' | 'gen1-v2';
+  evalCount: number;
+  passIICount: number;          // count of trioStrictPassII = true
+  totalCostUsd: number;
+  totalRetrievalCalls: number;
+  trioMeans: number[];          // per-eval trioMean for variance + audit
+  retrievalCalls: number[];     // per-eval retrieval calls for audit
+  mutationValidatorPassed: boolean;  // computed from validateCandidate at startup
+}
+
+function makeCandidateAcc(cand: Candidate, validatorPassed: boolean): CandidateAcc {
+  return {
+    candidateId: cand.candidateId,
+    shape: cand.shape,
+    variant: cand.variant,
+    evalCount: 0,
+    passIICount: 0,
+    totalCostUsd: 0,
+    totalRetrievalCalls: 0,
+    trioMeans: [],
+    retrievalCalls: [],
+    mutationValidatorPassed: validatorPassed,
+  };
+}
+
+function ingestEvalIntoAcc(acc: CandidateAcc, r: EvalRecord): void {
+  acc.evalCount++;
+  if (r.trioStrictPassII) acc.passIICount++;
+  acc.totalCostUsd += r.evalCostUsd;
+  acc.totalRetrievalCalls += r.retrievalCalls;
+  acc.trioMeans.push(r.trioMean);
+  acc.retrievalCalls.push(r.retrievalCalls);
+}
+
+function accMeanCostPerEval(acc: CandidateAcc): number {
+  return acc.evalCount > 0 ? acc.totalCostUsd / acc.evalCount : 0;
+}
+function accPassRateII(acc: CandidateAcc): number {
+  return acc.evalCount > 0 ? acc.passIICount / acc.evalCount : 0;
+}
+function accMeanRetrievalCallsPerTask(acc: CandidateAcc): number {
+  return acc.evalCount > 0 ? acc.totalRetrievalCalls / acc.evalCount : 0;
+}
+
+// ── Amendment 7 — mid-run halt check (binding) ────────────────────────────
+
+interface MidRunHaltCheckResult {
+  shouldHalt: boolean;
+  reason: string | null;
+}
+
+function checkMidRunHalts(accs: Map<string, CandidateAcc>): MidRunHaltCheckResult {
+  // Threshold A — per-candidate cost overshoot >25% on >3 candidates
+  let overshootCount = 0;
+  const overshootCandidates: string[] = [];
+  for (const acc of accs.values()) {
+    if (acc.evalCount === 0) continue;
+    if (accMeanCostPerEval(acc) > PER_CANDIDATE_COST_OVERSHOOT_THRESHOLD_USD) {
+      overshootCount++;
+      overshootCandidates.push(`${acc.candidateId}=$${accMeanCostPerEval(acc).toFixed(4)}/eval`);
+    }
+  }
+  if (overshootCount > MID_RUN_HALT_OVERSHOOT_CANDIDATE_COUNT) {
+    return {
+      shouldHalt: true,
+      reason: `Amendment 7 §checkpoint_b_tightened.per_candidate_cost_overshoot: ${overshootCount} candidates >$${PER_CANDIDATE_COST_OVERSHOOT_THRESHOLD_USD.toFixed(4)}/eval (threshold >${MID_RUN_HALT_OVERSHOOT_CANDIDATE_COUNT}); offenders=[${overshootCandidates.join(', ')}]`,
+    };
+  }
+
+  // Threshold B — per-shape variance widens >40pp range (max-min trio_strict_pass_rate_II) on any shape
+  for (const shape of SHAPES) {
+    const shapeAccs = [...accs.values()].filter(a => a.shape === shape && a.evalCount >= PER_SHAPE_VARIANCE_MIN_EVALS);
+    if (shapeAccs.length < 2) continue;
+    const passRates = shapeAccs.map(accPassRateII);
+    const max = Math.max(...passRates);
+    const min = Math.min(...passRates);
+    const rangePP = (max - min) * 100;
+    if (rangePP > PER_SHAPE_VARIANCE_HALT_PP) {
+      return {
+        shouldHalt: true,
+        reason: `Amendment 7 §checkpoint_b_tightened.per_shape_variance_widens: shape=${shape} range=${rangePP.toFixed(1)}pp > ${PER_SHAPE_VARIANCE_HALT_PP}pp; rates=${passRates.map(r => r.toFixed(2)).join(',')}`,
+      };
+    }
+  }
+
+  // Threshold C — Qwen-targeted retrieval engagement drops below per-shape NULL baseline
+  for (const shape of ['qwen-thinking', 'qwen-non-thinking'] as const) {
+    const baseline = NULL_BASELINE_PER_SHAPE[shape].meanRetrievalCallsPerTask;
+    const shapeAccs = [...accs.values()].filter(a => a.shape === shape && a.evalCount >= QWEN_RETRIEVAL_REGRESSION_MIN_EVALS);
+    if (shapeAccs.length === 0) continue;
+    const totalRetr = shapeAccs.reduce((s, a) => s + a.totalRetrievalCalls, 0);
+    const totalEvals = shapeAccs.reduce((s, a) => s + a.evalCount, 0);
+    if (totalEvals === 0) continue;
+    const aggMean = totalRetr / totalEvals;
+    if (aggMean < baseline) {
+      return {
+        shouldHalt: true,
+        reason: `Amendment 7 §checkpoint_b_tightened.qwen_retrieval_engagement_regression: shape=${shape} mean=${aggMean.toFixed(3)} < NULL baseline ${baseline.toFixed(3)} (n=${totalEvals})`,
+      };
+    }
+  }
+
+  return { shouldHalt: false, reason: null };
+}
+
+// ── Amendment 7 — Checkpoint B summary writer (binding extensions) ────────
+
+interface PerCandidateTierBreakdown {
+  candidateId: string;
+  shape: ShapeName;
+  variant: string;
+  evalCount: number;
+  trioStrictPassRateII: number;
+  meanRetrievalCallsPerTask: number;
+  meanEvalCostUsd: number;
+  costOvershoot: boolean;
+  tieredFitness: TieredFitnessComponents;
+}
+
+interface CheckpointBSummary {
+  manifestAnchor: string;
+  manifestShaAmendment7: string;
+  generated_at: string;
+  mode: string;
+  totalEvals: number;
+  totalCostUsd: number;
+  haltReason: string | null;
+  perCandidateTierBreakdown: PerCandidateTierBreakdown[];
+  retrievalEngagementDeltasPerQwenShape: {
+    'qwen-thinking': { nullBaselineMean: number; gen1PartialMean: number | null; deltaAbsolute: number | null };
+    'qwen-non-thinking': { nullBaselineMean: number; gen1PartialMean: number | null; deltaAbsolute: number | null };
+  };
+  cellSemanticAnchorInvarianceCountPerCandidate: Record<string, number>;
+  preRegisteredDeltaFloorVerdict: DeltaFloorVerdict;
+  midRunHaltsBindingThresholds: {
+    perCandidateCostOvershoot: { threshold: number; candidatesOvershoot: number };
+    perShapeVariance: { thresholdPP: number; maxRangeObservedPP: number };
+    qwenRetrievalRegression: { triggered: boolean; details: string };
+  };
+}
+
+function buildCheckpointBSummary(
+  args: ReturnType<typeof parseArgs>,
+  accs: Map<string, CandidateAcc>,
+  totalEvals: number,
+  totalCostUsd: number,
+  haltReason: string | null,
+): CheckpointBSummary {
+  const perCandidate: PerCandidateTierBreakdown[] = [];
+  for (const acc of accs.values()) {
+    if (acc.evalCount === 0) continue;
+    const passRate = accPassRateII(acc);
+    const meanRetr = accMeanRetrievalCallsPerTask(acc);
+    const meanCost = accMeanCostPerEval(acc);
+    const candidateMetrics = {
+      candidateId: acc.candidateId,
+      shape: acc.shape,
+      evaluations: [],
+      trioStrictPassRateII: passRate,
+      trioStrictPassRateI: 0,            // not tracked here; reported in JSONL
+      meanRetrievalCallsPerTask: meanRetr,
+      meanCostUsd: meanCost,
+    };
+    const tieredFitness = computeTieredFitness({
+      candidate: candidateMetrics,
+      nullBaselinePassRateII: NULL_BASELINE_PER_SHAPE[acc.shape].trioStrictPassRateII,
+      nullBaselineMeanRetrievalCallsPerTask: NULL_BASELINE_PER_SHAPE[acc.shape].meanRetrievalCallsPerTask,
+      mutationValidatorPassed: acc.mutationValidatorPassed,
+      saturatedRegime: true,  // 5/5 shapes ≥75% per Checkpoint A v2 §B.2
+    });
+    perCandidate.push({
+      candidateId: acc.candidateId,
+      shape: acc.shape,
+      variant: acc.variant,
+      evalCount: acc.evalCount,
+      trioStrictPassRateII: passRate,
+      meanRetrievalCallsPerTask: meanRetr,
+      meanEvalCostUsd: meanCost,
+      costOvershoot: meanCost > PER_CANDIDATE_COST_OVERSHOOT_THRESHOLD_USD,
+      tieredFitness,
+    });
+  }
+
+  // Aggregate Tier 1: mean trio_strict_pass_rate_II across all evals
+  const totalEvalsAcc = perCandidate.reduce((s, c) => s + c.evalCount, 0);
+  const aggregateTrioStrictPassRateII =
+    totalEvalsAcc > 0
+      ? perCandidate.reduce((s, c) => s + c.trioStrictPassRateII * c.evalCount, 0) / totalEvalsAcc
+      : 0;
+
+  // Per-shape Qwen retrieval means (across that shape's candidates)
+  function qwenShapeAggregate(shape: 'qwen-thinking' | 'qwen-non-thinking'):
+    { gen1PartialMean: number | null; deltaAbsolute: number | null } {
+    const shapeAccs = [...accs.values()].filter(a => a.shape === shape && a.evalCount > 0);
+    if (shapeAccs.length === 0) return { gen1PartialMean: null, deltaAbsolute: null };
+    const totalRetr = shapeAccs.reduce((s, a) => s + a.totalRetrievalCalls, 0);
+    const totalEvalsLocal = shapeAccs.reduce((s, a) => s + a.evalCount, 0);
+    const mean = totalEvalsLocal > 0 ? totalRetr / totalEvalsLocal : null;
+    const baseline = NULL_BASELINE_PER_SHAPE[shape].meanRetrievalCallsPerTask;
+    return { gen1PartialMean: mean, deltaAbsolute: mean === null ? null : mean - baseline };
+  }
+  const qwenThinkingAgg = qwenShapeAggregate('qwen-thinking');
+  const qwenNonThinkingAgg = qwenShapeAggregate('qwen-non-thinking');
+
+  const qwenShapeRetrievalMeans: Partial<Record<ShapeName, number>> = {};
+  if (qwenThinkingAgg.gen1PartialMean !== null) qwenShapeRetrievalMeans['qwen-thinking'] = qwenThinkingAgg.gen1PartialMean;
+  if (qwenNonThinkingAgg.gen1PartialMean !== null) qwenShapeRetrievalMeans['qwen-non-thinking'] = qwenNonThinkingAgg.gen1PartialMean;
+
+  // Aggregate Tier 2 bonus across Qwen-targeted candidates (mean across qwen candidates with data)
+  const qwenCandidates = perCandidate.filter(c => c.shape === 'qwen-thinking' || c.shape === 'qwen-non-thinking');
+  const qwenAggregateTier2Bonus =
+    qwenCandidates.length > 0
+      ? qwenCandidates.reduce((s, c) => s + c.tieredFitness.tier2RetrievalBonus, 0) / qwenCandidates.length
+      : 0;
+
+  const deltaFloorVerdict = computeDeltaFloorVerdict({
+    aggregateTrioStrictPassRateII,
+    aggregateNullBaselinePassRateII: NULL_BASELINE_AGGREGATE.trioStrictPassRateII,
+    qwenShapeRetrievalMeans,
+    qwenShapeNullBaselineRetrievalMeans: {
+      'qwen-thinking': NULL_BASELINE_PER_SHAPE['qwen-thinking'].meanRetrievalCallsPerTask,
+      'qwen-non-thinking': NULL_BASELINE_PER_SHAPE['qwen-non-thinking'].meanRetrievalCallsPerTask,
+    },
+    qwenAggregateTier2Bonus,
+  });
+
+  // Per-shape variance maxRange snapshot
+  let maxRangeObservedPP = 0;
+  for (const shape of SHAPES) {
+    const shapeAccs = perCandidate.filter(c => c.shape === shape);
+    if (shapeAccs.length < 2) continue;
+    const rates = shapeAccs.map(c => c.trioStrictPassRateII);
+    const range = (Math.max(...rates) - Math.min(...rates)) * 100;
+    if (range > maxRangeObservedPP) maxRangeObservedPP = range;
+  }
+  const overshootCount = perCandidate.filter(c => c.costOvershoot).length;
+
+  // Qwen retrieval regression check (binary informational; halt logic in checkMidRunHalts)
+  let qwenRegressionDetails = 'no_regression';
+  let qwenRegressionTriggered = false;
+  for (const shape of ['qwen-thinking', 'qwen-non-thinking'] as const) {
+    const agg = shape === 'qwen-thinking' ? qwenThinkingAgg : qwenNonThinkingAgg;
+    if (agg.gen1PartialMean !== null && agg.gen1PartialMean < NULL_BASELINE_PER_SHAPE[shape].meanRetrievalCallsPerTask) {
+      qwenRegressionTriggered = true;
+      qwenRegressionDetails = `${shape} mean=${agg.gen1PartialMean.toFixed(3)} < NULL ${NULL_BASELINE_PER_SHAPE[shape].meanRetrievalCallsPerTask}`;
+      break;
+    }
+  }
+
+  const cellSemanticAnchorInvarianceCountPerCandidate: Record<string, number> = {};
+  for (const c of perCandidate) {
+    cellSemanticAnchorInvarianceCountPerCandidate[c.candidateId] = c.tieredFitness.cellSemanticAnchorInvarianceCount;
+  }
+
+  return {
+    manifestAnchor: MANIFEST_ANCHOR,
+    manifestShaAmendment7: MANIFEST_SHA_AMENDMENT_7,
+    generated_at: new Date().toISOString(),
+    mode: args.mode,
+    totalEvals,
+    totalCostUsd,
+    haltReason,
+    perCandidateTierBreakdown: perCandidate,
+    retrievalEngagementDeltasPerQwenShape: {
+      'qwen-thinking': {
+        nullBaselineMean: NULL_BASELINE_PER_SHAPE['qwen-thinking'].meanRetrievalCallsPerTask,
+        gen1PartialMean: qwenThinkingAgg.gen1PartialMean,
+        deltaAbsolute: qwenThinkingAgg.deltaAbsolute,
+      },
+      'qwen-non-thinking': {
+        nullBaselineMean: NULL_BASELINE_PER_SHAPE['qwen-non-thinking'].meanRetrievalCallsPerTask,
+        gen1PartialMean: qwenNonThinkingAgg.gen1PartialMean,
+        deltaAbsolute: qwenNonThinkingAgg.deltaAbsolute,
+      },
+    },
+    cellSemanticAnchorInvarianceCountPerCandidate,
+    preRegisteredDeltaFloorVerdict: deltaFloorVerdict,
+    midRunHaltsBindingThresholds: {
+      perCandidateCostOvershoot: {
+        threshold: PER_CANDIDATE_COST_OVERSHOOT_THRESHOLD_USD,
+        candidatesOvershoot: overshootCount,
+      },
+      perShapeVariance: {
+        thresholdPP: PER_SHAPE_VARIANCE_HALT_PP,
+        maxRangeObservedPP,
+      },
+      qwenRetrievalRegression: {
+        triggered: qwenRegressionTriggered,
+        details: qwenRegressionDetails,
+      },
+    },
+  };
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   fs.mkdirSync(OUT_DIR, { recursive: true });
@@ -411,6 +745,34 @@ async function main(): Promise<void> {
 
   const candidates = await loadCandidates();
   log(`[loaded] ${SHAPES.length} shapes × ${N_CANDIDATES_PER_SHAPE} candidates each`);
+
+  // Amendment 7 — pre-validate all candidates against cell-semantic anchors (Tier 3 input)
+  const candidateValidatorVerdicts = new Map<string, ValidatorVerdict | null>();
+  const TYPES_FILE_PATH = path.join(PROMPT_SHAPES_DIR, 'types.ts');
+  for (const shape of SHAPES) {
+    for (const cand of candidates.get(shape)!) {
+      if (cand.variant === 'baseline') {
+        // Baselines pass by definition (they ARE the pinned shape file)
+        candidateValidatorVerdicts.set(cand.candidateId, null); // null = baseline (Tier 3 = 0.10 by anchor invariance)
+        continue;
+      }
+      const filename = `${shape}-${cand.variant}.ts`;
+      const candPath = path.join(GEPA_EVOLVED_DIR, filename);
+      try {
+        const verdict = validateCandidate({
+          candidateShapeFilePath: candPath,
+          baselineShapeName: `${shape}.ts`,
+          typesFilePath: TYPES_FILE_PATH,
+          expectShapeDiff: true,
+        });
+        candidateValidatorVerdicts.set(cand.candidateId, verdict);
+        log(`[validator] ${cand.candidateId} valid=${verdict.valid} violations=${verdict.violations.length}`);
+      } catch (e) {
+        log(`[validator] ${cand.candidateId} ERROR ${(e as Error).message}`);
+        candidateValidatorVerdicts.set(cand.candidateId, null);
+      }
+    }
+  }
 
   if (args.mode === 'dry-run') {
     log(`[dry-run] would run 5×3×8 = 120 evals (or halt at 30 = Checkpoint B)`);
@@ -425,12 +787,27 @@ async function main(): Promise<void> {
   // Resume support
   const existing = new Set<string>();
   let cumulativeCost = 0;
+
+  // Amendment 7 — per-candidate accumulator (rebuilt from JSONL on resume)
+  const accs = new Map<string, CandidateAcc>();
+  for (const shape of SHAPES) {
+    for (const cand of candidates.get(shape)!) {
+      const verdict = candidateValidatorVerdicts.get(cand.candidateId);
+      // Baselines: validatorPassed = true (anchor invariant by definition).
+      // Mutations: validatorPassed = verdict.valid (or false if validator threw).
+      const validatorPassed = cand.variant === 'baseline' ? true : verdict?.valid ?? false;
+      accs.set(cand.candidateId, makeCandidateAcc(cand, validatorPassed));
+    }
+  }
+
   if (fs.existsSync(OUT_JSONL)) {
     for (const line of fs.readFileSync(OUT_JSONL, 'utf-8').trim().split(/\n+/).filter(Boolean)) {
       try {
         const r = JSON.parse(line) as EvalRecord;
         existing.add(`${r.candidateId}__${r.instanceId}`);
         cumulativeCost += r.evalCostUsd;
+        const acc = accs.get(r.candidateId);
+        if (acc) ingestEvalIntoAcc(acc, r);
       } catch { /* skip */ }
     }
     log(`[resume] loaded ${existing.size} existing evals; cumulative $${cumulativeCost.toFixed(4)}`);
@@ -443,6 +820,8 @@ async function main(): Promise<void> {
   log(`[mode=${args.mode}] target eval count: ${haltAt}`);
 
   let nDone = existing.size;
+  let amendment7HaltReason: string | null = null;
+
   outer: for (const shape of SHAPES) {
     for (const cand of candidates.get(shape)!) {
       for (const inst of sample) {
@@ -455,13 +834,31 @@ async function main(): Promise<void> {
         out.write(JSON.stringify(r) + '\n');
         cumulativeCost += r.evalCostUsd;
         nDone++;
+        // Amendment 7 — update accumulator + check mid-run halts
+        const acc = accs.get(cand.candidateId);
+        if (acc) ingestEvalIntoAcc(acc, r);
+        const haltCheck = checkMidRunHalts(accs);
+        if (haltCheck.shouldHalt) {
+          amendment7HaltReason = haltCheck.reason;
+          log(`[HALT-A7] ${haltCheck.reason}`);
+          break outer;
+        }
         log(`[cumulative] $${cumulativeCost.toFixed(4)} / $${COST_HALT_USD} halt; ${nDone} evals total`);
       }
     }
   }
   out.end();
 
-  log(`[done] ${nDone} evals; total cost $${cumulativeCost.toFixed(4)}`);
+  // Amendment 7 — write Checkpoint B summary (binding extension per §checkpoint_b_tightened.report_extensions)
+  const summary = buildCheckpointBSummary(args, accs, nDone, cumulativeCost, amendment7HaltReason);
+  fs.writeFileSync(SUMMARY_JSON, JSON.stringify(summary, null, 2));
+  log(`[summary] wrote ${SUMMARY_JSON}`);
+  log(`[delta-floor] verdict=${summary.preRegisteredDeltaFloorVerdict.overallVerdict}`);
+  log(`[delta-floor]   threshold_1_aggregate_tier_1=${summary.preRegisteredDeltaFloorVerdict.threshold1AggregateTier1} (value=${summary.preRegisteredDeltaFloorVerdict.threshold1ValuePP.toFixed(2)}pp)`);
+  log(`[delta-floor]   threshold_2_qwen_retrieval_absolute=${summary.preRegisteredDeltaFloorVerdict.threshold2QwenRetrievalAbsolute} (max_delta=${summary.preRegisteredDeltaFloorVerdict.threshold2MaxDeltaAbsolute.toFixed(3)})`);
+  log(`[delta-floor]   threshold_3_compound_tier_1_plus_tier_2=${summary.preRegisteredDeltaFloorVerdict.threshold3CompoundTier1PlusTier2} (tier1=${summary.preRegisteredDeltaFloorVerdict.threshold3Tier1ValuePP.toFixed(2)}pp tier2_agg=${summary.preRegisteredDeltaFloorVerdict.threshold3Tier2Aggregate.toFixed(3)})`);
+
+  log(`[done] ${nDone} evals; total cost $${cumulativeCost.toFixed(4)}; halt_reason=${amendment7HaltReason ?? 'none (Checkpoint B reached or completed)'}`);
 }
 
 main().catch(e => { console.error('FATAL:', e); process.exit(2); });

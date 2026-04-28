@@ -16,12 +16,22 @@ import {
   computeCostPenalty,
   computeFitness,
   RETRIEVAL_ENGAGEMENT_BANDS,
+  computeTier2RetrievalBonus,
+  computeTieredFitness,
+  computeDeltaFloorVerdict,
+  TIER_2_BONUS_CAP,
+  TIER_2_BONUS_PER_PP,
+  TIER_3_BONUS_FULL_INVARIANCE,
+  TIER_3_ANCHOR_COUNT_FULL,
+  DELTA_FLOOR_THRESHOLDS,
 } from '../../src/faza-1/fitness.js';
 import {
   type CandidateMetrics,
   type ShapeName,
   QWEN_TARGETED_SHAPES,
   NON_QWEN_SHAPES,
+  NULL_BASELINE_PER_SHAPE,
+  NULL_BASELINE_AGGREGATE,
 } from '../../src/faza-1/types.js';
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -299,5 +309,287 @@ describe('computeFitness — invariants', () => {
     const result = computeFitness({ candidate, baselineMedianCostUsd: 0.50 });
     const expected = result.trioStrictPassRateII + result.retrievalEngagementBonus - result.costPenalty;
     expect(result.fitness).toBeCloseTo(expected, 10);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Amendment 7 — Tier 2 retrieval bonus (continuous)
+// ───────────────────────────────────────────────────────────────────────────
+
+describe('Amendment 7 — computeTier2RetrievalBonus (continuous formula)', () => {
+  it('returns 0 for non-Qwen shape regardless of retrieval delta', () => {
+    expect(computeTier2RetrievalBonus('claude', 2.0, 1.0)).toBe(0);
+    expect(computeTier2RetrievalBonus('gpt', 5.0, 1.0)).toBe(0);
+    expect(computeTier2RetrievalBonus('generic-simple', 3.0, 1.0)).toBe(0);
+  });
+
+  it('returns 0 for Qwen-targeted shape when delta ≤ 0 (no negative bonus)', () => {
+    expect(computeTier2RetrievalBonus('qwen-thinking', 1.0, 1.5)).toBe(0);
+    expect(computeTier2RetrievalBonus('qwen-thinking', 1.12, 1.12)).toBe(0); // exact zero delta
+    expect(computeTier2RetrievalBonus('qwen-non-thinking', 1.20, 1.25)).toBe(0); // small negative
+  });
+
+  it('formula: 0.05 bonus per pp above baseline (1pp = 0.01 absolute)', () => {
+    // baseline 1.12, candidate 1.13 = +0.01 = +1pp → 0.05 bonus
+    expect(computeTier2RetrievalBonus('qwen-thinking', 1.13, 1.12)).toBeCloseTo(0.05, 10);
+    // baseline 1.12, candidate 1.14 = +0.02 = +2pp → 0.10 bonus
+    expect(computeTier2RetrievalBonus('qwen-thinking', 1.14, 1.12)).toBeCloseTo(0.10, 10);
+    // baseline 1.12, candidate 1.15 = +0.03 = +3pp → 0.15 bonus
+    expect(computeTier2RetrievalBonus('qwen-thinking', 1.15, 1.12)).toBeCloseTo(0.15, 10);
+    // baseline 1.12, candidate 1.16 = +0.04 = +4pp → 0.20 bonus
+    expect(computeTier2RetrievalBonus('qwen-thinking', 1.16, 1.12)).toBeCloseTo(0.20, 10);
+    // baseline 1.12, candidate 1.17 = +0.05 = +5pp → 0.25 (cap)
+    expect(computeTier2RetrievalBonus('qwen-thinking', 1.17, 1.12)).toBeCloseTo(0.25, 10);
+  });
+
+  it('cap holds at +5pp absolute and beyond (cap = 0.25)', () => {
+    expect(computeTier2RetrievalBonus('qwen-thinking', 1.20, 1.12)).toBe(TIER_2_BONUS_CAP);
+    expect(computeTier2RetrievalBonus('qwen-thinking', 2.00, 1.12)).toBe(TIER_2_BONUS_CAP);
+    expect(computeTier2RetrievalBonus('qwen-thinking', 5.00, 1.12)).toBe(TIER_2_BONUS_CAP);
+    expect(computeTier2RetrievalBonus('qwen-non-thinking', 1.30, 1.25)).toBe(TIER_2_BONUS_CAP);
+  });
+
+  it('Tier 2 weight constants match Amendment 7 §fitness_function_tiered.tier_2', () => {
+    expect(TIER_2_BONUS_PER_PP).toBe(0.05);
+    expect(TIER_2_BONUS_CAP).toBe(0.25);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Amendment 7 — computeTieredFitness (Tier 1/2/3 + saturated regime aggregate)
+// ───────────────────────────────────────────────────────────────────────────
+
+describe('Amendment 7 — computeTieredFitness', () => {
+  it('Tier 1 = NULL pass rate delta in pp (signed)', () => {
+    const candidate = makeCandidate({
+      shape: 'qwen-thinking',
+      trioStrictPassRateII: 0.95,
+      meanRetrievalCallsPerTask: 1.12,
+    });
+    const result = computeTieredFitness({
+      candidate,
+      nullBaselinePassRateII: 0.875,
+      nullBaselineMeanRetrievalCallsPerTask: 1.12,
+      mutationValidatorPassed: true,
+      saturatedRegime: true,
+    });
+    expect(result.tier1DeltaPP).toBeCloseTo(7.5, 10); // 0.95 - 0.875 = 0.075 = 7.5pp
+  });
+
+  it('Tier 1 negative when candidate regresses below NULL baseline', () => {
+    const candidate = makeCandidate({
+      shape: 'claude',
+      trioStrictPassRateII: 0.75,
+      meanRetrievalCallsPerTask: 1.12,
+    });
+    const result = computeTieredFitness({
+      candidate,
+      nullBaselinePassRateII: 0.875,
+      nullBaselineMeanRetrievalCallsPerTask: 1.12,
+      mutationValidatorPassed: true,
+      saturatedRegime: true,
+    });
+    expect(result.tier1DeltaPP).toBeCloseTo(-12.5, 10); // 0.75 - 0.875 = -0.125 = -12.5pp
+  });
+
+  it('Tier 2 only applies to Qwen-targeted shapes', () => {
+    for (const shape of ['claude', 'gpt', 'generic-simple'] as const) {
+      const result = computeTieredFitness({
+        candidate: makeCandidate({ shape, meanRetrievalCallsPerTask: 5.0 }),
+        nullBaselinePassRateII: 0.875,
+        nullBaselineMeanRetrievalCallsPerTask: 1.12,
+        mutationValidatorPassed: true,
+        saturatedRegime: true,
+      });
+      expect(result.tier2RetrievalBonus).toBe(0);
+    }
+  });
+
+  it('Tier 3 = 0.10 if mutation validator passed; 0 otherwise', () => {
+    const base = {
+      candidate: makeCandidate({ shape: 'claude' }),
+      nullBaselinePassRateII: 0.875,
+      nullBaselineMeanRetrievalCallsPerTask: 1.12,
+      saturatedRegime: true,
+    };
+    expect(computeTieredFitness({ ...base, mutationValidatorPassed: true }).tier3CellSemanticInvarianceBonus).toBe(
+      TIER_3_BONUS_FULL_INVARIANCE,
+    );
+    expect(computeTieredFitness({ ...base, mutationValidatorPassed: false }).tier3CellSemanticInvarianceBonus).toBe(0);
+  });
+
+  it('cellSemanticAnchorInvarianceCount: 7 if validator passed; 0 otherwise', () => {
+    const base = {
+      candidate: makeCandidate({ shape: 'claude' }),
+      nullBaselinePassRateII: 0.875,
+      nullBaselineMeanRetrievalCallsPerTask: 1.12,
+      saturatedRegime: true,
+    };
+    expect(computeTieredFitness({ ...base, mutationValidatorPassed: true }).cellSemanticAnchorInvarianceCount).toBe(
+      TIER_3_ANCHOR_COUNT_FULL,
+    );
+    expect(computeTieredFitness({ ...base, mutationValidatorPassed: false }).cellSemanticAnchorInvarianceCount).toBe(0);
+  });
+
+  it('aggregateSaturatedRegime = tier_2 + tier_3 (Tier 1 NOT included)', () => {
+    const candidate = makeCandidate({
+      shape: 'qwen-thinking',
+      trioStrictPassRateII: 0.95, // would give tier1 = 7.5pp
+      meanRetrievalCallsPerTask: 1.15, // 1.12 baseline → +3pp → tier2 = 0.15
+    });
+    const result = computeTieredFitness({
+      candidate,
+      nullBaselinePassRateII: 0.875,
+      nullBaselineMeanRetrievalCallsPerTask: 1.12,
+      mutationValidatorPassed: true, // tier3 = 0.10
+      saturatedRegime: true,
+    });
+    expect(result.aggregateSaturatedRegime).toBeCloseTo(0.15 + 0.10, 10); // 0.25
+    expect(result.aggregateSaturatedRegime).not.toBeCloseTo(7.5 + 0.15 + 0.10, 1); // tier1 not in aggregate
+  });
+
+  it('saturatedRegimeApplied flag mirrors input', () => {
+    const base = {
+      candidate: makeCandidate({ shape: 'claude' }),
+      nullBaselinePassRateII: 0.875,
+      nullBaselineMeanRetrievalCallsPerTask: 1.12,
+      mutationValidatorPassed: true,
+    };
+    expect(computeTieredFitness({ ...base, saturatedRegime: true }).saturatedRegimeApplied).toBe(true);
+    expect(computeTieredFitness({ ...base, saturatedRegime: false }).saturatedRegimeApplied).toBe(false);
+  });
+
+  it('NULL_BASELINE_PER_SHAPE constants match Checkpoint A v2 §B.2 pinned values', () => {
+    expect(NULL_BASELINE_PER_SHAPE.claude.trioStrictPassRateII).toBe(0.875);
+    expect(NULL_BASELINE_PER_SHAPE['qwen-thinking'].trioStrictPassRateII).toBe(0.875);
+    expect(NULL_BASELINE_PER_SHAPE['qwen-non-thinking'].trioStrictPassRateII).toBe(1.0);
+    expect(NULL_BASELINE_PER_SHAPE.gpt.trioStrictPassRateII).toBe(0.75);
+    expect(NULL_BASELINE_PER_SHAPE['generic-simple'].trioStrictPassRateII).toBe(0.875);
+    expect(NULL_BASELINE_AGGREGATE.trioStrictPassRateII).toBe(0.875);
+    expect(NULL_BASELINE_AGGREGATE.meanRetrievalCallsPerTask).toBe(1.12);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Amendment 7 — computeDeltaFloorVerdict (3 OR-gated thresholds)
+// ───────────────────────────────────────────────────────────────────────────
+
+describe('Amendment 7 — computeDeltaFloorVerdict (§gen_1_pre_registered_delta_floor)', () => {
+  it('PROCEED if threshold 1 (aggregate Tier 1 ≥+3pp) passes alone', () => {
+    const verdict = computeDeltaFloorVerdict({
+      aggregateTrioStrictPassRateII: 0.910, // +3.5pp vs 0.875 NULL
+      aggregateNullBaselinePassRateII: 0.875,
+      qwenShapeRetrievalMeans: { 'qwen-thinking': 1.12 }, // no Qwen retrieval signal
+      qwenShapeNullBaselineRetrievalMeans: { 'qwen-thinking': 1.12 },
+      qwenAggregateTier2Bonus: 0,
+    });
+    expect(verdict.threshold1AggregateTier1).toBe('PASS');
+    expect(verdict.threshold1ValuePP).toBeCloseTo(3.5, 10);
+    expect(verdict.threshold2QwenRetrievalAbsolute).toBe('FAIL');
+    expect(verdict.threshold3CompoundTier1PlusTier2).toBe('FAIL');
+    expect(verdict.overallVerdict).toBe('PROCEED');
+  });
+
+  it('PROCEED if threshold 2 (Qwen retrieval ≥+0.10) passes alone', () => {
+    const verdict = computeDeltaFloorVerdict({
+      aggregateTrioStrictPassRateII: 0.875, // exactly NULL → 0pp (fails threshold 1 ≥+3pp)
+      aggregateNullBaselinePassRateII: 0.875,
+      qwenShapeRetrievalMeans: { 'qwen-thinking': 1.30 }, // 1.30 - 1.12 = +0.18 ≥ 0.10
+      qwenShapeNullBaselineRetrievalMeans: { 'qwen-thinking': 1.12 },
+      qwenAggregateTier2Bonus: 0, // not enough for threshold 3
+    });
+    expect(verdict.threshold1AggregateTier1).toBe('FAIL');
+    expect(verdict.threshold2QwenRetrievalAbsolute).toBe('PASS');
+    expect(verdict.threshold2MaxDeltaAbsolute).toBeCloseTo(0.18, 10);
+    expect(verdict.overallVerdict).toBe('PROCEED');
+  });
+
+  it('PROCEED if threshold 3 (Tier 1 ≥0pp AND Tier 2 ≥0.05) passes alone', () => {
+    const verdict = computeDeltaFloorVerdict({
+      aggregateTrioStrictPassRateII: 0.880, // +0.5pp ≥ 0pp; fails threshold 1 ≥+3pp
+      aggregateNullBaselinePassRateII: 0.875,
+      qwenShapeRetrievalMeans: { 'qwen-thinking': 1.13 }, // +0.01 < 0.10 — fails threshold 2
+      qwenShapeNullBaselineRetrievalMeans: { 'qwen-thinking': 1.12 },
+      qwenAggregateTier2Bonus: 0.05, // ≥ 0.05
+    });
+    expect(verdict.threshold1AggregateTier1).toBe('FAIL');
+    expect(verdict.threshold2QwenRetrievalAbsolute).toBe('FAIL');
+    expect(verdict.threshold3CompoundTier1PlusTier2).toBe('PASS');
+    expect(verdict.overallVerdict).toBe('PROCEED');
+  });
+
+  it('HALT_INVESTIGATE if all three thresholds fail', () => {
+    const verdict = computeDeltaFloorVerdict({
+      aggregateTrioStrictPassRateII: 0.870, // -0.5pp — fails threshold 1 + threshold 3 (Tier 1 < 0pp)
+      aggregateNullBaselinePassRateII: 0.875,
+      qwenShapeRetrievalMeans: { 'qwen-thinking': 1.13 }, // +0.01 < 0.10
+      qwenShapeNullBaselineRetrievalMeans: { 'qwen-thinking': 1.12 },
+      qwenAggregateTier2Bonus: 0.04, // < 0.05
+    });
+    expect(verdict.threshold1AggregateTier1).toBe('FAIL');
+    expect(verdict.threshold2QwenRetrievalAbsolute).toBe('FAIL');
+    expect(verdict.threshold3CompoundTier1PlusTier2).toBe('FAIL');
+    expect(verdict.overallVerdict).toBe('HALT_INVESTIGATE');
+  });
+
+  it('threshold 1 exact-boundary: 3.0pp passes (≥+3pp inclusive with EPSILON)', () => {
+    const verdict = computeDeltaFloorVerdict({
+      aggregateTrioStrictPassRateII: 0.905, // +3.0pp exactly
+      aggregateNullBaselinePassRateII: 0.875,
+      qwenShapeRetrievalMeans: {},
+      qwenShapeNullBaselineRetrievalMeans: {},
+      qwenAggregateTier2Bonus: 0,
+    });
+    expect(verdict.threshold1AggregateTier1).toBe('PASS');
+    expect(verdict.threshold1ValuePP).toBeCloseTo(3.0, 10);
+  });
+
+  it('threshold 2 exact-boundary: +0.10 absolute passes (≥+0.10 inclusive with EPSILON)', () => {
+    const verdict = computeDeltaFloorVerdict({
+      aggregateTrioStrictPassRateII: 0.875,
+      aggregateNullBaselinePassRateII: 0.875,
+      qwenShapeRetrievalMeans: { 'qwen-thinking': 1.22 }, // 1.22 - 1.12 = +0.10 exact
+      qwenShapeNullBaselineRetrievalMeans: { 'qwen-thinking': 1.12 },
+      qwenAggregateTier2Bonus: 0,
+    });
+    expect(verdict.threshold2QwenRetrievalAbsolute).toBe('PASS');
+    expect(verdict.threshold2MaxDeltaAbsolute).toBeCloseTo(0.10, 10);
+  });
+
+  it('threshold 2 takes max delta across multiple Qwen shapes', () => {
+    const verdict = computeDeltaFloorVerdict({
+      aggregateTrioStrictPassRateII: 0.875,
+      aggregateNullBaselinePassRateII: 0.875,
+      qwenShapeRetrievalMeans: {
+        'qwen-thinking': 1.13,        // +0.01
+        'qwen-non-thinking': 1.40,    // +0.15
+      },
+      qwenShapeNullBaselineRetrievalMeans: {
+        'qwen-thinking': 1.12,
+        'qwen-non-thinking': 1.25,
+      },
+      qwenAggregateTier2Bonus: 0,
+    });
+    expect(verdict.threshold2MaxDeltaAbsolute).toBeCloseTo(0.15, 10);
+    expect(verdict.threshold2QwenRetrievalAbsolute).toBe('PASS');
+  });
+
+  it('handles empty Qwen data: threshold 2 max delta = 0 (FAIL since 0 < 0.10)', () => {
+    const verdict = computeDeltaFloorVerdict({
+      aggregateTrioStrictPassRateII: 0.875,
+      aggregateNullBaselinePassRateII: 0.875,
+      qwenShapeRetrievalMeans: {},
+      qwenShapeNullBaselineRetrievalMeans: {},
+      qwenAggregateTier2Bonus: 0,
+    });
+    expect(verdict.threshold2MaxDeltaAbsolute).toBe(0);
+    expect(verdict.threshold2QwenRetrievalAbsolute).toBe('FAIL');
+  });
+
+  it('Δ-floor threshold constants match Amendment 7 §gen_1_pre_registered_delta_floor', () => {
+    expect(DELTA_FLOOR_THRESHOLDS.threshold1AggregateTier1PP).toBe(3);
+    expect(DELTA_FLOOR_THRESHOLDS.threshold2QwenRetrievalAbsolute).toBe(0.10);
+    expect(DELTA_FLOOR_THRESHOLDS.threshold3Tier1MinPP).toBe(0);
+    expect(DELTA_FLOOR_THRESHOLDS.threshold3Tier2MinBonus).toBe(0.05);
   });
 });

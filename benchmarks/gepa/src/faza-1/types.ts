@@ -175,3 +175,147 @@ export interface AcceptanceInputs {
   /** NULL-baseline trio_strict_pass_rate (op. (ii)) for the same shape. */
   baselineTrioStrictPassRateII: number;
 }
+
+// ── Amendment 7 — tiered fitness + Δ-floor types ───────────────────────────
+
+/**
+ * Per-shape NULL-baseline anchors pinned from Checkpoint A v2 §B.2 (manifest
+ * v7 Amendment 6 binding SHA 0b55d8e353...).
+ *
+ * These anchor:
+ *   - Tier 1 baseline (NULL pass rate per shape)
+ *   - Tier 2 baseline (NULL retrieval engagement per shape)
+ *   - §F.1 acceptance gate ≥+5pp delta basis
+ *   - Δ-floor threshold 2 per-shape comparison
+ *
+ * Source: real per-shape data from re-run NULL-baseline post Amendment 6
+ * promptShapeOverride bug fix (run bhe0zwi91, 40/40 evals, 2026-04-28).
+ */
+export const NULL_BASELINE_PER_SHAPE: Readonly<
+  Record<ShapeName, { trioStrictPassRateII: number; meanRetrievalCallsPerTask: number }>
+> = {
+  claude:              { trioStrictPassRateII: 0.875, meanRetrievalCallsPerTask: 1.12 },
+  'qwen-thinking':     { trioStrictPassRateII: 0.875, meanRetrievalCallsPerTask: 1.12 },
+  'qwen-non-thinking': { trioStrictPassRateII: 1.000, meanRetrievalCallsPerTask: 1.25 },
+  gpt:                 { trioStrictPassRateII: 0.750, meanRetrievalCallsPerTask: 1.00 },
+  'generic-simple':    { trioStrictPassRateII: 0.875, meanRetrievalCallsPerTask: 1.12 },
+} as const;
+
+/** NULL-baseline aggregate across all 5 shapes (Checkpoint A v2 §B.2). */
+export const NULL_BASELINE_AGGREGATE = {
+  trioStrictPassRateII: 0.875,         // 35/40
+  meanRetrievalCallsPerTask: 1.12,
+} as const;
+
+/**
+ * Tiered fitness components per Amendment 7 §fitness_function_tiered.
+ *
+ * Saturated regime (NULL pass rate ≥75% for ≥4/5 shapes — current Faza 1 state)
+ * makes Tier 1 (NULL delta) noise-bound on N=8 binomial. Tier 2 + Tier 3 act as
+ * primary differentiators; Tier 1 retained as TIE-BREAKER + acceptance gate.
+ */
+export interface TieredFitnessComponents {
+  /**
+   * Tier 1 — NULL pass rate delta (signed, percentage points).
+   * Acceptance gate threshold: ≥+5pp (launch decision §F.1, UNCHANGED).
+   * Role in saturated regime: TIE_BREAKER (noise-bound at N=8).
+   */
+  tier1DeltaPP: number;
+
+  /**
+   * Tier 2 — continuous retrieval engagement bonus (Qwen-targeted only).
+   * Formula: clamp(0.05 × delta_pp, 0, 0.25) where delta_pp = (candidate − baseline) × 100.
+   * Always 0 for non-Qwen shapes.
+   * Role in saturated regime: PRIMARY differentiator for Qwen-targeted shapes.
+   */
+  tier2RetrievalBonus: number;
+
+  /**
+   * Tier 3 — binary cell-semantic anchor invariance bonus.
+   * 0.10 if all 7 anchors invariant (mutation-validator passed); 0 otherwise.
+   * Role in saturated regime: SECONDARY differentiator (substrate-preservation proxy).
+   */
+  tier3CellSemanticInvarianceBonus: number;
+
+  /**
+   * Aggregate fitness in saturated regime: tier_2 + tier_3.
+   * Tier 1 reserved as tie-breaker (NOT in this aggregate).
+   * Cost penalty per Amendment 2 NOT in tiered ranking aggregate (supplementary diagnostic).
+   */
+  aggregateSaturatedRegime: number;
+
+  /** Whether saturated regime applies (per Amendment 7 §fitness_function_tiered.saturated_regime_definition). */
+  saturatedRegimeApplied: boolean;
+
+  /** Cell-semantic anchor invariance count (0..7) for audit reporting. */
+  cellSemanticAnchorInvarianceCount: number;
+}
+
+/** Inputs for tiered fitness. */
+export interface TieredFitnessInputs {
+  /** Aggregated metrics for this candidate. */
+  candidate: CandidateMetrics;
+
+  /** Per-shape NULL-baseline pass rate (op. ii). Typically NULL_BASELINE_PER_SHAPE[shape].trioStrictPassRateII. */
+  nullBaselinePassRateII: number;
+
+  /** Per-shape NULL-baseline mean retrieval calls per task. Typically NULL_BASELINE_PER_SHAPE[shape].meanRetrievalCallsPerTask. */
+  nullBaselineMeanRetrievalCallsPerTask: number;
+
+  /** Whether the candidate's mutation-validator verdict was VALID (all 7 anchors invariant). */
+  mutationValidatorPassed: boolean;
+
+  /**
+   * Whether the saturated regime applies (≥4/5 shapes have NULL pass rate ≥75%).
+   * Caller computes from Checkpoint A v2 data; default true for Faza 1.
+   */
+  saturatedRegime: boolean;
+}
+
+/**
+ * Δ-floor verdict per Amendment 7 §gen_1_pre_registered_delta_floor.
+ * Pre-registered Gen 1 floor for "evolution worked at all" — looser than
+ * §F.1 acceptance gate. Three OR-gated thresholds.
+ */
+export interface DeltaFloorVerdict {
+  /** Threshold 1: aggregate Tier 1 delta ≥+3pp. */
+  threshold1AggregateTier1: 'PASS' | 'FAIL';
+  /** Aggregate Tier 1 delta value (pp, signed) — for audit. */
+  threshold1ValuePP: number;
+
+  /** Threshold 2: max Qwen-shape retrieval engagement delta ≥+0.10 absolute. */
+  threshold2QwenRetrievalAbsolute: 'PASS' | 'FAIL';
+  /** Max delta across Qwen shapes (absolute) — for audit. */
+  threshold2MaxDeltaAbsolute: number;
+
+  /** Threshold 3: (Tier 1 ≥0pp) AND (Tier 2 ≥0.05). */
+  threshold3CompoundTier1PlusTier2: 'PASS' | 'FAIL';
+  /** Aggregate Tier 1 delta (pp, signed) — for audit. */
+  threshold3Tier1ValuePP: number;
+  /** Aggregate Tier 2 bonus across Qwen-targeted candidates — for audit. */
+  threshold3Tier2Aggregate: number;
+
+  /** Overall verdict: PROCEED if ANY threshold passes; HALT_INVESTIGATE if ALL fail. */
+  overallVerdict: 'PROCEED' | 'HALT_INVESTIGATE';
+}
+
+/** Inputs for Δ-floor verdict computation. */
+export interface DeltaFloorInputs {
+  /** Aggregate trio_strict_pass_rate_II across all evaluated candidates × all evals (in saturated regime, mean across 30 Checkpoint B evals). */
+  aggregateTrioStrictPassRateII: number;
+
+  /** Aggregate NULL-baseline pass rate (e.g., 0.875 = NULL_BASELINE_AGGREGATE.trioStrictPassRateII). */
+  aggregateNullBaselinePassRateII: number;
+
+  /**
+   * Per-shape mean retrieval calls per task for Qwen-targeted candidates.
+   * Map: shape → meanRetrievalCallsPerTask. Empty entries treated as no-data (skipped).
+   */
+  qwenShapeRetrievalMeans: Partial<Record<ShapeName, number>>;
+
+  /** Per-shape NULL baseline retrieval means (typically NULL_BASELINE_PER_SHAPE[shape].meanRetrievalCallsPerTask). */
+  qwenShapeNullBaselineRetrievalMeans: Partial<Record<ShapeName, number>>;
+
+  /** Aggregate Tier 2 retrieval engagement bonus across Qwen-targeted candidates (mean). */
+  qwenAggregateTier2Bonus: number;
+}
