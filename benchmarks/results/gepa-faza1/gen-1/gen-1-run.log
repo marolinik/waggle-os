@@ -138,3 +138,145 @@
 [2026-04-28T17:40:19.083Z] [delta-floor]   threshold_2_qwen_retrieval_absolute=PASS (max_delta=0.547)
 [2026-04-28T17:40:19.083Z] [delta-floor]   threshold_3_compound_tier_1_plus_tier_2=FAIL (tier1=-0.83pp tier2_agg=0.250)
 [2026-04-28T17:40:19.083Z] [done] 30 evals; total cost $3.6883; halt_reason=none (Checkpoint B reached or completed)
+[2026-04-28T19:30:23.819Z] [loaded] corpus=50; sample=8 via seed=42
+[2026-04-28T19:30:23.850Z] [loaded] 5 shapes × 3 candidates each
+[2026-04-28T19:30:23.852Z] [validator] claude::gen1-v1 valid=true violations=0
+[2026-04-28T19:30:23.852Z] [validator] claude::gen1-v2 valid=true violations=0
+[2026-04-28T19:30:23.853Z] [validator] qwen-thinking::gen1-v1 valid=true violations=0
+[2026-04-28T19:30:23.853Z] [validator] qwen-thinking::gen1-v2 valid=true violations=0
+[2026-04-28T19:30:23.854Z] [validator] qwen-non-thinking::gen1-v1 valid=true violations=0
+[2026-04-28T19:30:23.855Z] [validator] qwen-non-thinking::gen1-v2 valid=true violations=0
+[2026-04-28T19:30:23.855Z] [validator] gpt::gen1-v1 valid=true violations=0
+[2026-04-28T19:30:23.855Z] [validator] gpt::gen1-v2 valid=true violations=0
+[2026-04-28T19:30:23.856Z] [validator] generic-simple::gen1-v1 valid=true violations=0
+[2026-04-28T19:30:23.856Z] [validator] generic-simple::gen1-v2 valid=true violations=0
+[2026-04-28T19:30:23.858Z] [resume] loaded 30 existing evals; cumulative $3.6883
+[2026-04-28T19:30:23.858Z] [mode=full] target eval count: 120
+[2026-04-28T19:30:23.858Z] [skip] claude::baseline__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T19:30:23.858Z] [skip] claude::baseline__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T19:30:23.858Z] [skip] claude::baseline__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T19:30:23.858Z] [skip] claude::baseline__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T19:30:23.858Z] [skip] claude::baseline__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T19:30:23.859Z] [skip] claude::baseline__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T19:30:23.859Z] [skip] claude::baseline__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T19:30:23.859Z] [skip] claude::baseline__h3-F3-p3_coo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T19:30:23.859Z] [skip] claude::gen1-v1__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T19:30:23.859Z] [skip] claude::gen1-v1__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T19:30:23.859Z] [skip] claude::gen1-v1__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T19:30:23.859Z] [skip] claude::gen1-v1__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T19:30:23.859Z] [skip] claude::gen1-v1__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T19:30:23.859Z] [skip] claude::gen1-v1__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T19:30:23.859Z] [skip] claude::gen1-v1__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T19:30:23.859Z] [skip] claude::gen1-v1__h3-F3-p3_coo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T19:30:23.859Z] [skip] claude::gen1-v2__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T19:30:23.859Z] [skip] claude::gen1-v2__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T19:30:23.859Z] [skip] claude::gen1-v2__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T19:30:23.860Z] [skip] claude::gen1-v2__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T19:30:23.860Z] [skip] claude::gen1-v2__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T19:30:23.860Z] [skip] claude::gen1-v2__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T19:30:23.860Z] [skip] claude::gen1-v2__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T19:30:23.860Z] [skip] claude::gen1-v2__h3-F3-p3_coo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T19:30:23.860Z] [skip] qwen-thinking::baseline__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T19:30:23.860Z] [skip] qwen-thinking::baseline__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T19:30:23.860Z] [skip] qwen-thinking::baseline__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T19:30:23.860Z] [skip] qwen-thinking::baseline__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T19:30:23.861Z] [skip] qwen-thinking::baseline__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T19:30:23.861Z] [skip] qwen-thinking::baseline__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001 already in JSONL
+[2026-04-28T19:30:23.861Z] [qwen-thinking::baseline__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T19:31:33.148Z] [qwen-thinking::baseline__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] subject_done; retrievals=2 steps=3 cost=$0.0073
+[2026-04-28T19:32:28.540Z] [qwen-thinking::baseline__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.278 pass_ii=true retrievals=2 eval_cost=$0.1440
+[2026-04-28T19:32:28.541Z] [cumulative] $3.8323 / $26 halt; 31 evals total
+[2026-04-28T19:32:28.541Z] [qwen-thinking::baseline__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T19:33:26.139Z] [qwen-thinking::baseline__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0042
+[2026-04-28T19:33:49.578Z] [qwen-thinking::baseline__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.722 pass_ii=true retrievals=1 eval_cost=$0.1009
+[2026-04-28T19:33:49.579Z] [cumulative] $3.9332 / $26 halt; 32 evals total
+[2026-04-28T19:33:49.579Z] [qwen-thinking::gen1-v1__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T19:34:29.392Z] [qwen-thinking::gen1-v1__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] subject_done; retrievals=3 steps=4 cost=$0.0064
+[2026-04-28T19:34:51.791Z] [qwen-thinking::gen1-v1__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] judged; trio_mean=4.611 pass_ii=true retrievals=3 eval_cost=$0.1235
+[2026-04-28T19:34:51.791Z] [cumulative] $4.0566 / $26 halt; 33 evals total
+[2026-04-28T19:34:51.791Z] [qwen-thinking::gen1-v1__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T19:35:45.373Z] [qwen-thinking::gen1-v1__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] subject_done; retrievals=3 steps=4 cost=$0.0084
+[2026-04-28T19:36:07.004Z] [qwen-thinking::gen1-v1__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.389 pass_ii=true retrievals=3 eval_cost=$0.1221
+[2026-04-28T19:36:07.005Z] [cumulative] $4.1787 / $26 halt; 34 evals total
+[2026-04-28T19:36:07.005Z] [qwen-thinking::gen1-v1__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] start
+[2026-04-28T19:37:38.866Z] [qwen-thinking::gen1-v1__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] subject_done; retrievals=2 steps=3 cost=$0.0143
+[2026-04-28T19:37:51.013Z] [qwen-thinking::gen1-v1__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] judged; trio_mean=4.444 pass_ii=true retrievals=2 eval_cost=$0.1393
+[2026-04-28T19:37:51.014Z] [cumulative] $4.3180 / $26 halt; 35 evals total
+[2026-04-28T19:37:51.014Z] [qwen-thinking::gen1-v1__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T19:38:51.983Z] [qwen-thinking::gen1-v1__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] subject_done; retrievals=4 steps=5 cost=$0.0100
+[2026-04-28T19:40:03.295Z] [qwen-thinking::gen1-v1__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.389 pass_ii=true retrievals=4 eval_cost=$0.1253
+[2026-04-28T19:40:03.296Z] [cumulative] $4.4433 / $26 halt; 36 evals total
+[2026-04-28T19:40:03.296Z] [qwen-thinking::gen1-v1__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T19:41:37.788Z] [qwen-thinking::gen1-v1__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] subject_done; retrievals=2 steps=3 cost=$0.0080
+[2026-04-28T19:41:51.360Z] [qwen-thinking::gen1-v1__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] judged; trio_mean=4.389 pass_ii=true retrievals=2 eval_cost=$0.1235
+[2026-04-28T19:41:51.360Z] [cumulative] $4.5668 / $26 halt; 37 evals total
+[2026-04-28T19:41:51.360Z] [qwen-thinking::gen1-v1__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T19:43:34.494Z] [qwen-thinking::gen1-v1__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] subject_done; retrievals=2 steps=5 cost=$0.0145
+[2026-04-28T19:44:01.798Z] [qwen-thinking::gen1-v1__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] judged; trio_mean=4.556 pass_ii=true retrievals=2 eval_cost=$0.1160
+[2026-04-28T19:44:01.798Z] [cumulative] $4.6829 / $26 halt; 38 evals total
+[2026-04-28T19:44:01.798Z] [qwen-thinking::gen1-v1__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T19:44:44.862Z] [qwen-thinking::gen1-v1__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0057
+[2026-04-28T19:46:09.835Z] [qwen-thinking::gen1-v1__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.611 pass_ii=true retrievals=1 eval_cost=$0.1496
+[2026-04-28T19:46:09.835Z] [cumulative] $4.8325 / $26 halt; 39 evals total
+[2026-04-28T19:46:09.835Z] [qwen-thinking::gen1-v1__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T19:46:39.313Z] [qwen-thinking::gen1-v1__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] subject_done; retrievals=2 steps=3 cost=$0.0049
+[2026-04-28T19:47:40.896Z] [qwen-thinking::gen1-v1__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.667 pass_ii=true retrievals=2 eval_cost=$0.1000
+[2026-04-28T19:47:40.897Z] [cumulative] $4.9324 / $26 halt; 40 evals total
+[2026-04-28T19:47:40.897Z] [qwen-thinking::gen1-v2__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T19:48:08.655Z] [qwen-thinking::gen1-v2__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] subject_done; retrievals=2 steps=3 cost=$0.0050
+[2026-04-28T19:48:37.256Z] [qwen-thinking::gen1-v2__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] judged; trio_mean=4.444 pass_ii=true retrievals=2 eval_cost=$0.1152
+[2026-04-28T19:48:37.256Z] [cumulative] $5.0477 / $26 halt; 41 evals total
+[2026-04-28T19:48:37.257Z] [qwen-thinking::gen1-v2__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T19:49:17.646Z] [qwen-thinking::gen1-v2__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] subject_done; retrievals=2 steps=3 cost=$0.0069
+[2026-04-28T19:49:47.405Z] [qwen-thinking::gen1-v2__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.389 pass_ii=true retrievals=2 eval_cost=$0.1323
+[2026-04-28T19:49:47.406Z] [cumulative] $5.1800 / $26 halt; 42 evals total
+[2026-04-28T19:49:47.406Z] [qwen-thinking::gen1-v2__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] start
+[2026-04-28T19:50:20.256Z] [qwen-thinking::gen1-v2__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] subject_done; retrievals=2 steps=3 cost=$0.0059
+[2026-04-28T19:50:36.347Z] [qwen-thinking::gen1-v2__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] judged; trio_mean=4.444 pass_ii=true retrievals=2 eval_cost=$0.1252
+[2026-04-28T19:50:36.347Z] [cumulative] $5.3052 / $26 halt; 43 evals total
+[2026-04-28T19:50:36.347Z] [qwen-thinking::gen1-v2__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T19:53:18.851Z] [qwen-thinking::gen1-v2__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] subject_done; retrievals=2 steps=3 cost=$0.0065
+[2026-04-28T19:53:58.175Z] [qwen-thinking::gen1-v2__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] judged; trio_mean=3.583 pass_ii=false retrievals=2 eval_cost=$0.1123
+[2026-04-28T19:53:58.175Z] [cumulative] $5.4175 / $26 halt; 44 evals total
+[2026-04-28T19:53:58.176Z] [qwen-thinking::gen1-v2__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T19:54:43.515Z] [qwen-thinking::gen1-v2__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] subject_done; retrievals=3 steps=4 cost=$0.0093
+[2026-04-28T19:55:06.304Z] [qwen-thinking::gen1-v2__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] judged; trio_mean=3.500 pass_ii=false retrievals=3 eval_cost=$0.1283
+[2026-04-28T19:55:06.305Z] [cumulative] $5.5458 / $26 halt; 45 evals total
+[2026-04-28T19:55:06.305Z] [qwen-thinking::gen1-v2__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T19:55:43.477Z] [qwen-thinking::gen1-v2__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] subject_done; retrievals=2 steps=3 cost=$0.0069
+[2026-04-28T19:56:17.117Z] [qwen-thinking::gen1-v2__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] judged; trio_mean=4.167 pass_ii=true retrievals=2 eval_cost=$0.1132
+[2026-04-28T19:56:17.117Z] [cumulative] $5.6590 / $26 halt; 46 evals total
+[2026-04-28T19:56:17.118Z] [qwen-thinking::gen1-v2__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T19:57:01.519Z] [qwen-thinking::gen1-v2__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] subject_done; retrievals=2 steps=3 cost=$0.0075
+[2026-04-28T19:58:01.253Z] [qwen-thinking::gen1-v2__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.556 pass_ii=true retrievals=2 eval_cost=$0.1526
+[2026-04-28T19:58:01.253Z] [cumulative] $5.8116 / $26 halt; 47 evals total
+[2026-04-28T19:58:01.253Z] [qwen-thinking::gen1-v2__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T19:58:34.588Z] [qwen-thinking::gen1-v2__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] subject_done; retrievals=2 steps=3 cost=$0.0060
+[2026-04-28T19:59:08.915Z] [qwen-thinking::gen1-v2__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.667 pass_ii=true retrievals=2 eval_cost=$0.0946
+[2026-04-28T19:59:08.916Z] [cumulative] $5.9063 / $26 halt; 48 evals total
+[2026-04-28T19:59:08.916Z] [qwen-non-thinking::baseline__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T19:59:19.143Z] [qwen-non-thinking::baseline__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] subject_done; retrievals=1 steps=2 cost=$0.0018
+[2026-04-28T19:59:52.461Z] [qwen-non-thinking::baseline__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] judged; trio_mean=4.611 pass_ii=true retrievals=1 eval_cost=$0.1212
+[2026-04-28T19:59:52.461Z] [cumulative] $6.0275 / $26 halt; 49 evals total
+[2026-04-28T19:59:52.461Z] [qwen-non-thinking::baseline__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T20:00:03.496Z] [qwen-non-thinking::baseline__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0019
+[2026-04-28T20:00:16.851Z] [qwen-non-thinking::baseline__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.111 pass_ii=true retrievals=1 eval_cost=$0.1304
+[2026-04-28T20:00:16.852Z] [cumulative] $6.1578 / $26 halt; 50 evals total
+[2026-04-28T20:00:16.852Z] [qwen-non-thinking::baseline__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] start
+[2026-04-28T20:00:36.409Z] [qwen-non-thinking::baseline__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] subject_done; retrievals=2 steps=4 cost=$0.0050
+[2026-04-28T20:01:01.369Z] [qwen-non-thinking::baseline__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] judged; trio_mean=4.278 pass_ii=true retrievals=2 eval_cost=$0.1385
+[2026-04-28T20:01:01.369Z] [cumulative] $6.2963 / $26 halt; 51 evals total
+[2026-04-28T20:01:01.370Z] [qwen-non-thinking::baseline__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T20:01:13.943Z] [qwen-non-thinking::baseline__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0020
+[2026-04-28T20:01:49.303Z] [qwen-non-thinking::baseline__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.167 pass_ii=true retrievals=1 eval_cost=$0.1286
+[2026-04-28T20:01:49.304Z] [cumulative] $6.4249 / $26 halt; 52 evals total
+[2026-04-28T20:01:49.304Z] [qwen-non-thinking::baseline__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T20:01:58.964Z] [qwen-non-thinking::baseline__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] subject_done; retrievals=1 steps=2 cost=$0.0018
+[2026-04-28T20:02:09.596Z] [qwen-non-thinking::baseline__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] judged; trio_mean=4.000 pass_ii=true retrievals=1 eval_cost=$0.1284
+[2026-04-28T20:02:09.597Z] [HALT-A7] Amendment 7 §checkpoint_b_tightened.qwen_retrieval_engagement_regression: shape=qwen-non-thinking mean=1.200 < NULL baseline 1.250 (n=5)
+[2026-04-28T20:02:09.599Z] [summary] wrote D:\Projects\waggle-os-faza1-wt\benchmarks\results\gepa-faza1\gen-1\gen-1-summary.json
+[2026-04-28T20:02:09.599Z] [delta-floor] verdict=PROCEED
+[2026-04-28T20:02:09.599Z] [delta-floor]   threshold_1_aggregate_tier_1=FAIL (value=1.18pp)
+[2026-04-28T20:02:09.599Z] [delta-floor]   threshold_2_qwen_retrieval_absolute=PASS (max_delta=0.922)
+[2026-04-28T20:02:09.599Z] [delta-floor]   threshold_3_compound_tier_1_plus_tier_2=PASS (tier1=1.18pp tier2_agg=0.188)
+[2026-04-28T20:02:09.599Z] [done] 53 evals; total cost $6.5533; halt_reason=Amendment 7 §checkpoint_b_tightened.qwen_retrieval_engagement_regression: shape=qwen-non-thinking mean=1.200 < NULL baseline 1.250 (n=5)
