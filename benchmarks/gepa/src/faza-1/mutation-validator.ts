@@ -171,11 +171,16 @@ export function validateCandidate(inputs: ValidatorInputs): ValidatorVerdict {
   }
 
   // Check that imports block is still present (GEPA mutations cannot add/remove imports).
-  if (!candidateContent.includes("from './types.js'")) {
+  // Accept either './types.js' (same-dir candidate) or '../types.js' (gepa-evolved/ subdir
+  // candidate per manifest v7 §gepa.shape_scope.target_path) — the invariant is that
+  // candidates must import from types.js, not the specific relative path.
+  const importsTypes = candidateContent.includes("from './types.js'") ||
+                       candidateContent.includes("from '../types.js'");
+  if (!importsTypes) {
     violations.push({
       category: 'shape_file_imports_modified',
       severity: 'invalid',
-      detail: `Required import "from './types.js'" missing from candidate shape file`,
+      detail: `Required import from "types.js" (either "./" or "../" relative) missing from candidate shape file`,
     });
   }
 

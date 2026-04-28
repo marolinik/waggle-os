@@ -203,6 +203,28 @@ describe('validateCandidate — shape file metadata + imports validation', () =>
       fs.unlinkSync(tmpShape);
     }
   });
+
+  it('PASSES if candidate uses ../types.js (gepa-evolved/ subdir convention)', () => {
+    const tmpShape = path.join(os.tmpdir(), `qwen-thinking-subdir-${Date.now()}.ts`);
+    const original = fs.readFileSync(path.join(PROMPT_SHAPES_DIR, 'qwen-thinking.ts'), 'utf-8');
+    // Simulate gepa-evolved/ subdir candidate: ./types.js → ../types.js, body mutation
+    const subdirImport = original
+      .replace(/from '\.\/types\.js'/, "from '../types.js'")
+      .replace('Answer the question precisely', 'Answer the question precisely (mutation)');
+    fs.writeFileSync(tmpShape, subdirImport);
+    try {
+      const verdict = validateCandidate({
+        candidateShapeFilePath: tmpShape,
+        baselineShapeName: 'qwen-thinking.ts',
+        typesFilePath: TYPES_FILE,
+        expectShapeDiff: true,
+      });
+      expect(verdict.valid).toBe(true);
+      expect(verdict.violations.some(v => v.category === 'shape_file_imports_modified')).toBe(false);
+    } finally {
+      fs.unlinkSync(tmpShape);
+    }
+  });
 });
 
 describe('validateCandidate — accepts valid Gen 1 mutation', () => {
