@@ -1,0 +1,114 @@
+{
+  "manifestAnchor": "manifest-v7-gepa-faza1",
+  "manifestShaAmendment11": "fa716ff90a4345eb87962789f3a2ab3d54994edc93964f850ad64cf6fbf6d227",
+  "generated_at": "2026-04-28T23:52:03.930Z",
+  "candidateIds": [
+    "claude::gen1-v1",
+    "qwen-thinking::gen1-v1",
+    "gpt::gen1-v2"
+  ],
+  "heldOutInstanceIds": [
+    "h3-F2-p3_coo-stage_b_post_profitable_consolidation-001",
+    "h3-F1-p2_cfo-stage_a_series_b_growth_burning-001",
+    "h3-F4-p2_cfo-stage_b_post_profitable_consolidation-001",
+    "h3-F5-p1_founder_ceo-stage_a_series_b_growth_burning-001",
+    "h3-F3-p2_cfo-stage_a_series_b_growth_burning-001"
+  ],
+  "totalEvals": 15,
+  "totalCostUsd": 1.9321717999999997,
+  "perCandidate": [
+    {
+      "candidateId": "claude::gen1-v1",
+      "shape": "claude",
+      "variant": "gen1-v1",
+      "inSample": {
+        "evalCount": 8,
+        "passIIRate": 1,
+        "meanRetrieval": 1.625
+      },
+      "heldOut": {
+        "evalCount": 5,
+        "passIIRate": 1,
+        "meanRetrieval": 1.4,
+        "tieredFitness": {
+          "tier1DeltaPP": 12.5,
+          "tier2RetrievalBonus": 0,
+          "tier3CellSemanticInvarianceBonus": 0.1,
+          "aggregateSaturatedRegime": 0.1,
+          "saturatedRegimeApplied": true,
+          "cellSemanticAnchorInvarianceCount": 7
+        }
+      },
+      "passIIGapPP": 0,
+      "retrievalGapAbsolute": 0.2250000000000001,
+      "f5_condition_2_verdict": "PASS",
+      "f5_condition_2_detail": "held-out 100.0% within ±15pp of in-sample 100.0% (gap=0.0pp)",
+      "phase_5_deployment_authorized": true
+    },
+    {
+      "candidateId": "qwen-thinking::gen1-v1",
+      "shape": "qwen-thinking",
+      "variant": "gen1-v1",
+      "inSample": {
+        "evalCount": 8,
+        "passIIRate": 1,
+        "meanRetrieval": 2.375
+      },
+      "heldOut": {
+        "evalCount": 5,
+        "passIIRate": 1,
+        "meanRetrieval": 2,
+        "tieredFitness": {
+          "tier1DeltaPP": 12.5,
+          "tier2RetrievalBonus": 0.25,
+          "tier3CellSemanticInvarianceBonus": 0.1,
+          "aggregateSaturatedRegime": 0.35,
+          "saturatedRegimeApplied": true,
+          "cellSemanticAnchorInvarianceCount": 7
+        }
+      },
+      "passIIGapPP": 0,
+      "retrievalGapAbsolute": 0.375,
+      "f5_condition_2_verdict": "PASS",
+      "f5_condition_2_detail": "held-out 100.0% within ±15pp of in-sample 100.0% (gap=0.0pp)",
+      "phase_5_deployment_authorized": true
+    },
+    {
+      "candidateId": "gpt::gen1-v2",
+      "shape": "gpt",
+      "variant": "gen1-v2",
+      "inSample": {
+        "evalCount": 8,
+        "passIIRate": 1,
+        "meanRetrieval": 2
+      },
+      "heldOut": {
+        "evalCount": 5,
+        "passIIRate": 0.8,
+        "meanRetrieval": 1.8,
+        "tieredFitness": {
+          "tier1DeltaPP": 5.000000000000004,
+          "tier2RetrievalBonus": 0,
+          "tier3CellSemanticInvarianceBonus": 0.1,
+          "aggregateSaturatedRegime": 0.1,
+          "saturatedRegimeApplied": true,
+          "cellSemanticAnchorInvarianceCount": 7
+        }
+      },
+      "passIIGapPP": 19.999999999999996,
+      "retrievalGapAbsolute": 0.19999999999999996,
+      "f5_condition_2_verdict": "FAIL",
+      "f5_condition_2_detail": "held-out 80.0% diverges from in-sample 100.0% by 20.0pp > 15pp threshold",
+      "phase_5_deployment_authorized": false
+    }
+  ],
+  "f2_verdict_confirmation": "MIXED",
+  "f2_verdict_detail": "2/3 held-out candidates PASS §F.5 condition_2",
+  "f5_overfitting_bound_pp": 15,
+  "faza_2_deployment_authorization": "PARTIAL",
+  "next_steps": [
+    "Compute κ_trio on combined Gen 1 (120) + Checkpoint C (15) sample for §F.3 verdict",
+    "Author Faza 1 final summary memo per PARTIAL authorization status",
+    "PM ratify final Faza 1 closure decision (decisions/2026-04-XX-gepa-faza1-results.md)"
+  ]
+}
