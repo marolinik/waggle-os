@@ -1,0 +1,87 @@
+{
+  "manifestAnchor": "manifest-v7-gepa-faza1",
+  "manifestShaAmendment7": "bc0bcf9bd8b0c8344b25e5f8ab15b0475039ba28a1f782ebffe4cc1c4ff7d1de",
+  "generated_at": "2026-04-28T16:09:12.428Z",
+  "mode": "checkpoint-b",
+  "totalEvals": 11,
+  "totalCostUsd": 1.35721,
+  "haltReason": "Amendment 7 §checkpoint_b_tightened.qwen_retrieval_engagement_regression: shape=qwen-thinking mean=1.000 < NULL baseline 1.120 (n=3)",
+  "perCandidateTierBreakdown": [
+    {
+      "candidateId": "claude::baseline",
+      "shape": "claude",
+      "variant": "baseline",
+      "evalCount": 8,
+      "trioStrictPassRateII": 1,
+      "meanRetrievalCallsPerTask": 1.375,
+      "meanEvalCostUsd": 0.1228491625,
+      "costOvershoot": false,
+      "tieredFitness": {
+        "tier1DeltaPP": 12.5,
+        "tier2RetrievalBonus": 0,
+        "tier3CellSemanticInvarianceBonus": 0.1,
+        "aggregateSaturatedRegime": 0.1,
+        "saturatedRegimeApplied": true,
+        "cellSemanticAnchorInvarianceCount": 7
+      }
+    },
+    {
+      "candidateId": "qwen-thinking::baseline",
+      "shape": "qwen-thinking",
+      "variant": "baseline",
+      "evalCount": 3,
+      "trioStrictPassRateII": 0.6666666666666666,
+      "meanRetrievalCallsPerTask": 1,
+      "meanEvalCostUsd": 0.12480556666666665,
+      "costOvershoot": false,
+      "tieredFitness": {
+        "tier1DeltaPP": -20.833333333333336,
+        "tier2RetrievalBonus": 0,
+        "tier3CellSemanticInvarianceBonus": 0.1,
+        "aggregateSaturatedRegime": 0.1,
+        "saturatedRegimeApplied": true,
+        "cellSemanticAnchorInvarianceCount": 7
+      }
+    }
+  ],
+  "retrievalEngagementDeltasPerQwenShape": {
+    "qwen-thinking": {
+      "nullBaselineMean": 1.12,
+      "gen1PartialMean": 1,
+      "deltaAbsolute": -0.1200000000000001
+    },
+    "qwen-non-thinking": {
+      "nullBaselineMean": 1.25,
+      "gen1PartialMean": null,
+      "deltaAbsolute": null
+    }
+  },
+  "cellSemanticAnchorInvarianceCountPerCandidate": {
+    "claude::baseline": 7,
+    "qwen-thinking::baseline": 7
+  },
+  "preRegisteredDeltaFloorVerdict": {
+    "threshold1AggregateTier1": "PASS",
+    "threshold1ValuePP": 3.409090909090906,
+    "threshold2QwenRetrievalAbsolute": "FAIL",
+    "threshold2MaxDeltaAbsolute": -0.1200000000000001,
+    "threshold3CompoundTier1PlusTier2": "FAIL",
+    "threshold3Tier1ValuePP": 3.409090909090906,
+    "threshold3Tier2Aggregate": 0,
+    "overallVerdict": "PROCEED"
+  },
+  "midRunHaltsBindingThresholds": {
+    "perCandidateCostOvershoot": {
+      "threshold": 0.15537499999999999,
+      "candidatesOvershoot": 0
+    },
+    "perShapeVariance": {
+      "thresholdPP": 40,
+      "maxRangeObservedPP": 0
+    },
+    "qwenRetrievalRegression": {
+      "triggered": true,
+      "details": "qwen-thinking mean=1.000 < NULL 1.12"
+    }
+  }
+}
