@@ -8,3 +8,196 @@
 [2026-04-28T13:41:14.844Z] [claude__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] start
 [2026-04-28T13:41:14.858Z] [claude__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] ingested 6 frames
 [2026-04-28T13:41:45.836Z] [claude__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0036 loop_exhausted=false
+[2026-04-28T13:42:27.278Z] [claude__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.444 pass_ii=true pass_i=true eval_cost=$0.1237
+[2026-04-28T13:42:27.279Z] [cumulative] $0.2400 / $26 halt; 2 evals total
+[2026-04-28T13:42:27.279Z] [claude__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] start
+[2026-04-28T13:42:27.292Z] [claude__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] ingested 7 frames
+[2026-04-28T13:43:38.419Z] [claude__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] subject_done; retrievals=2 steps=4 cost=$0.0087 loop_exhausted=false
+[2026-04-28T13:44:16.881Z] [claude__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] judged; trio_mean=4.444 pass_ii=true pass_i=true eval_cost=$0.1295
+[2026-04-28T13:44:16.881Z] [cumulative] $0.3695 / $26 halt; 3 evals total
+[2026-04-28T13:44:16.882Z] [claude__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T13:44:16.895Z] [claude__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] ingested 6 frames
+[2026-04-28T13:44:42.940Z] [claude__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0037 loop_exhausted=false
+[2026-04-28T13:44:51.158Z] [claude__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.056 pass_ii=true pass_i=true eval_cost=$0.1161
+[2026-04-28T13:44:51.159Z] [cumulative] $0.4856 / $26 halt; 4 evals total
+[2026-04-28T13:44:51.159Z] [claude__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T13:44:51.171Z] [claude__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] ingested 7 frames
+[2026-04-28T13:45:27.748Z] [claude__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] subject_done; retrievals=1 steps=2 cost=$0.0054 loop_exhausted=false
+[2026-04-28T13:46:10.971Z] [claude__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] judged; trio_mean=3.833 pass_ii=false pass_i=true eval_cost=$0.1285
+[2026-04-28T13:46:10.971Z] [cumulative] $0.6141 / $26 halt; 5 evals total
+[2026-04-28T13:46:10.972Z] [claude__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T13:46:10.989Z] [claude__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] ingested 6 frames
+[2026-04-28T13:46:44.252Z] [claude__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] subject_done; retrievals=1 steps=2 cost=$0.0045 loop_exhausted=false
+[2026-04-28T13:47:21.590Z] [claude__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] judged; trio_mean=4.056 pass_ii=true pass_i=true eval_cost=$0.1093
+[2026-04-28T13:47:21.590Z] [cumulative] $0.7234 / $26 halt; 6 evals total
+[2026-04-28T13:47:21.591Z] [claude__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T13:47:21.600Z] [claude__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] ingested 7 frames
+[2026-04-28T13:47:58.336Z] [claude__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0045 loop_exhausted=false
+[2026-04-28T13:48:26.944Z] [claude__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.389 pass_ii=true pass_i=true eval_cost=$0.1543
+[2026-04-28T13:48:26.945Z] [cumulative] $0.8777 / $26 halt; 7 evals total
+[2026-04-28T13:48:26.945Z] [claude__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T13:48:26.966Z] [claude__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] ingested 6 frames
+[2026-04-28T13:48:56.551Z] [claude__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0043 loop_exhausted=false
+[2026-04-28T13:49:28.287Z] [claude__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.667 pass_ii=true pass_i=true eval_cost=$0.1027
+[2026-04-28T13:49:28.288Z] [cumulative] $0.9803 / $26 halt; 8 evals total
+[2026-04-28T13:49:28.288Z] [qwen-thinking__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T13:49:28.300Z] [qwen-thinking__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] ingested 6 frames
+[2026-04-28T13:49:54.259Z] [qwen-thinking__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] subject_done; retrievals=1 steps=2 cost=$0.0036 loop_exhausted=false
+[2026-04-28T13:50:29.960Z] [qwen-thinking__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] judged; trio_mean=4.444 pass_ii=true pass_i=true eval_cost=$0.1312
+[2026-04-28T13:50:29.960Z] [cumulative] $1.1115 / $26 halt; 9 evals total
+[2026-04-28T13:50:29.960Z] [qwen-thinking__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T13:50:29.972Z] [qwen-thinking__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] ingested 6 frames
+[2026-04-28T13:51:03.928Z] [qwen-thinking__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0044 loop_exhausted=false
+[2026-04-28T13:51:29.157Z] [qwen-thinking__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.167 pass_ii=true pass_i=true eval_cost=$0.1303
+[2026-04-28T13:51:29.158Z] [cumulative] $1.2418 / $26 halt; 10 evals total
+[2026-04-28T13:51:29.158Z] [qwen-thinking__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] start
+[2026-04-28T13:51:29.173Z] [qwen-thinking__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] ingested 7 frames
+[2026-04-28T13:51:52.274Z] [qwen-thinking__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0034 loop_exhausted=false
+[2026-04-28T13:52:50.961Z] [qwen-thinking__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] judged; trio_mean=4.278 pass_ii=true pass_i=true eval_cost=$0.1379
+[2026-04-28T13:52:50.962Z] [cumulative] $1.3797 / $26 halt; 11 evals total
+[2026-04-28T13:52:50.962Z] [qwen-thinking__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T13:52:50.976Z] [qwen-thinking__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] ingested 6 frames
+[2026-04-28T13:53:26.723Z] [qwen-thinking__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0044 loop_exhausted=false
+[2026-04-28T13:54:04.636Z] [qwen-thinking__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] judged; trio_mean=3.500 pass_ii=false pass_i=false eval_cost=$0.1316
+[2026-04-28T13:54:04.637Z] [cumulative] $1.5113 / $26 halt; 12 evals total
+[2026-04-28T13:54:04.637Z] [qwen-thinking__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T13:54:04.652Z] [qwen-thinking__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] ingested 7 frames
+[2026-04-28T13:54:45.410Z] [qwen-thinking__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] subject_done; retrievals=1 steps=2 cost=$0.0052 loop_exhausted=false
+[2026-04-28T13:55:40.743Z] [qwen-thinking__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] judged; trio_mean=4.278 pass_ii=true pass_i=true eval_cost=$0.1320
+[2026-04-28T13:55:40.743Z] [cumulative] $1.6433 / $26 halt; 13 evals total
+[2026-04-28T13:55:40.744Z] [qwen-thinking__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T13:55:40.764Z] [qwen-thinking__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] ingested 6 frames
+[2026-04-28T13:56:25.749Z] [qwen-thinking__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] subject_done; retrievals=1 steps=2 cost=$0.0057 loop_exhausted=false
+[2026-04-28T13:57:13.118Z] [qwen-thinking__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] judged; trio_mean=4.278 pass_ii=true pass_i=true eval_cost=$0.1151
+[2026-04-28T13:57:13.119Z] [cumulative] $1.7584 / $26 halt; 14 evals total
+[2026-04-28T13:57:13.119Z] [qwen-thinking__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T13:57:13.129Z] [qwen-thinking__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] ingested 7 frames
+[2026-04-28T13:58:08.033Z] [qwen-thinking__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] subject_done; retrievals=2 steps=3 cost=$0.0077 loop_exhausted=false
+[2026-04-28T13:58:40.971Z] [qwen-thinking__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.333 pass_ii=true pass_i=true eval_cost=$0.1449
+[2026-04-28T13:58:40.972Z] [cumulative] $1.9032 / $26 halt; 15 evals total
+[2026-04-28T13:58:40.972Z] [qwen-thinking__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T13:58:40.982Z] [qwen-thinking__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] ingested 6 frames
+[2026-04-28T14:01:13.737Z] [qwen-thinking__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0039 loop_exhausted=false
+[2026-04-28T14:01:33.407Z] [qwen-thinking__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.333 pass_ii=true pass_i=true eval_cost=$0.0977
+[2026-04-28T14:01:33.408Z] [cumulative] $2.0009 / $26 halt; 16 evals total
+[2026-04-28T14:01:33.408Z] [qwen-non-thinking__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T14:01:33.423Z] [qwen-non-thinking__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] ingested 6 frames
+[2026-04-28T14:01:43.881Z] [qwen-non-thinking__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] subject_done; retrievals=1 steps=2 cost=$0.0016 loop_exhausted=false
+[2026-04-28T14:02:01.529Z] [qwen-non-thinking__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] judged; trio_mean=4.111 pass_ii=true pass_i=true eval_cost=$0.1201
+[2026-04-28T14:02:01.529Z] [cumulative] $2.1210 / $26 halt; 17 evals total
+[2026-04-28T14:02:01.529Z] [qwen-non-thinking__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T14:02:01.539Z] [qwen-non-thinking__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] ingested 6 frames
+[2026-04-28T14:02:17.873Z] [qwen-non-thinking__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0021 loop_exhausted=false
+[2026-04-28T14:02:53.983Z] [qwen-non-thinking__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.167 pass_ii=true pass_i=true eval_cost=$0.1379
+[2026-04-28T14:02:53.983Z] [cumulative] $2.2589 / $26 halt; 18 evals total
+[2026-04-28T14:02:53.983Z] [qwen-non-thinking__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] start
+[2026-04-28T14:02:53.998Z] [qwen-non-thinking__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] ingested 7 frames
+[2026-04-28T14:03:19.233Z] [qwen-non-thinking__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] subject_done; retrievals=3 steps=5 cost=$0.0067 loop_exhausted=false
+[2026-04-28T14:04:26.461Z] [qwen-non-thinking__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] judged; trio_mean=4.444 pass_ii=true pass_i=true eval_cost=$0.1395
+[2026-04-28T14:04:26.461Z] [cumulative] $2.3984 / $26 halt; 19 evals total
+[2026-04-28T14:04:26.461Z] [qwen-non-thinking__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T14:04:26.476Z] [qwen-non-thinking__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] ingested 6 frames
+[2026-04-28T14:04:39.717Z] [qwen-non-thinking__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0018 loop_exhausted=false
+[2026-04-28T14:05:23.523Z] [qwen-non-thinking__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.111 pass_ii=true pass_i=true eval_cost=$0.1202
+[2026-04-28T14:05:23.524Z] [cumulative] $2.5186 / $26 halt; 20 evals total
+[2026-04-28T14:05:23.524Z] [qwen-non-thinking__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T14:05:23.544Z] [qwen-non-thinking__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] ingested 7 frames
+[2026-04-28T14:05:37.482Z] [qwen-non-thinking__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] subject_done; retrievals=1 steps=2 cost=$0.0020 loop_exhausted=false
+[2026-04-28T14:06:18.471Z] [qwen-non-thinking__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] judged; trio_mean=4.278 pass_ii=true pass_i=true eval_cost=$0.1371
+[2026-04-28T14:06:18.472Z] [cumulative] $2.6557 / $26 halt; 21 evals total
+[2026-04-28T14:06:18.472Z] [qwen-non-thinking__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T14:06:18.484Z] [qwen-non-thinking__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] ingested 6 frames
+[2026-04-28T14:06:28.189Z] [qwen-non-thinking__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] subject_done; retrievals=1 steps=2 cost=$0.0016 loop_exhausted=false
+[2026-04-28T14:06:53.119Z] [qwen-non-thinking__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] judged; trio_mean=4.556 pass_ii=true pass_i=true eval_cost=$0.1124
+[2026-04-28T14:06:53.120Z] [cumulative] $2.7681 / $26 halt; 22 evals total
+[2026-04-28T14:06:53.120Z] [qwen-non-thinking__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T14:06:53.131Z] [qwen-non-thinking__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] ingested 7 frames
+[2026-04-28T14:07:08.688Z] [qwen-non-thinking__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0022 loop_exhausted=false
+[2026-04-28T14:07:35.613Z] [qwen-non-thinking__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.278 pass_ii=true pass_i=true eval_cost=$0.1495
+[2026-04-28T14:07:35.614Z] [cumulative] $2.9176 / $26 halt; 23 evals total
+[2026-04-28T14:07:35.614Z] [qwen-non-thinking__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T14:07:35.630Z] [qwen-non-thinking__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] ingested 6 frames
+[2026-04-28T14:07:43.232Z] [qwen-non-thinking__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0010 loop_exhausted=false
+[2026-04-28T14:08:24.128Z] [qwen-non-thinking__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.167 pass_ii=true pass_i=true eval_cost=$0.0956
+[2026-04-28T14:08:24.129Z] [cumulative] $3.0131 / $26 halt; 24 evals total
+[2026-04-28T14:08:24.129Z] [gpt__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T14:08:24.142Z] [gpt__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] ingested 6 frames
+[2026-04-28T14:09:13.115Z] [gpt__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] subject_done; retrievals=1 steps=2 cost=$0.0059 loop_exhausted=false
+[2026-04-28T14:09:36.394Z] [gpt__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] judged; trio_mean=4.444 pass_ii=true pass_i=true eval_cost=$0.1146
+[2026-04-28T14:09:36.394Z] [cumulative] $3.1278 / $26 halt; 25 evals total
+[2026-04-28T14:09:36.394Z] [gpt__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T14:09:36.415Z] [gpt__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] ingested 6 frames
+[2026-04-28T14:10:21.119Z] [gpt__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0051 loop_exhausted=false
+[2026-04-28T14:10:52.926Z] [gpt__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.222 pass_ii=true pass_i=true eval_cost=$0.1244
+[2026-04-28T14:10:52.926Z] [cumulative] $3.2522 / $26 halt; 26 evals total
+[2026-04-28T14:10:52.926Z] [gpt__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] start
+[2026-04-28T14:10:52.935Z] [gpt__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] ingested 7 frames
+[2026-04-28T14:11:32.853Z] [gpt__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0045 loop_exhausted=false
+[2026-04-28T14:12:05.185Z] [gpt__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] judged; trio_mean=4.167 pass_ii=true pass_i=true eval_cost=$0.1254
+[2026-04-28T14:12:05.186Z] [cumulative] $3.3776 / $26 halt; 27 evals total
+[2026-04-28T14:12:05.186Z] [gpt__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T14:12:05.197Z] [gpt__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] ingested 6 frames
+[2026-04-28T14:12:51.571Z] [gpt__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0050 loop_exhausted=false
+[2026-04-28T14:13:40.694Z] [gpt__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] judged; trio_mean=3.944 pass_ii=false pass_i=true eval_cost=$0.1265
+[2026-04-28T14:13:40.694Z] [cumulative] $3.5041 / $26 halt; 28 evals total
+[2026-04-28T14:13:40.694Z] [gpt__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T14:13:40.704Z] [gpt__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] ingested 7 frames
+[2026-04-28T14:14:22.067Z] [gpt__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] subject_done; retrievals=1 steps=2 cost=$0.0055 loop_exhausted=false
+[2026-04-28T14:15:49.410Z] [gpt__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] judged; trio_mean=3.278 pass_ii=false pass_i=false eval_cost=$0.1179
+[2026-04-28T14:15:49.411Z] [cumulative] $3.6220 / $26 halt; 29 evals total
+[2026-04-28T14:15:49.411Z] [gpt__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T14:15:49.423Z] [gpt__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] ingested 6 frames
+[2026-04-28T14:16:31.109Z] [gpt__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] subject_done; retrievals=1 steps=2 cost=$0.0047 loop_exhausted=false
+[2026-04-28T14:17:06.696Z] [gpt__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] judged; trio_mean=4.500 pass_ii=true pass_i=true eval_cost=$0.1090
+[2026-04-28T14:17:06.696Z] [cumulative] $3.7309 / $26 halt; 30 evals total
+[2026-04-28T14:17:06.696Z] [gpt__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T14:17:06.713Z] [gpt__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] ingested 7 frames
+[2026-04-28T14:17:48.839Z] [gpt__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0048 loop_exhausted=false
+[2026-04-28T14:18:56.087Z] [gpt__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.278 pass_ii=true pass_i=true eval_cost=$0.1484
+[2026-04-28T14:18:56.088Z] [cumulative] $3.8794 / $26 halt; 31 evals total
+[2026-04-28T14:18:56.088Z] [gpt__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T14:18:56.103Z] [gpt__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] ingested 6 frames
+[2026-04-28T14:19:31.620Z] [gpt__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0047 loop_exhausted=false
+[2026-04-28T14:19:58.586Z] [gpt__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.333 pass_ii=true pass_i=true eval_cost=$0.1126
+[2026-04-28T14:19:58.586Z] [cumulative] $3.9920 / $26 halt; 32 evals total
+[2026-04-28T14:19:58.587Z] [generic-simple__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T14:19:58.601Z] [generic-simple__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] ingested 6 frames
+[2026-04-28T14:20:45.004Z] [generic-simple__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] subject_done; retrievals=1 steps=3 cost=$0.0082 loop_exhausted=false
+[2026-04-28T14:21:53.357Z] [generic-simple__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] judged; trio_mean=4.111 pass_ii=true pass_i=true eval_cost=$0.1277
+[2026-04-28T14:21:53.358Z] [cumulative] $4.1196 / $26 halt; 33 evals total
+[2026-04-28T14:21:53.358Z] [generic-simple__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T14:21:53.381Z] [generic-simple__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] ingested 6 frames
+[2026-04-28T14:22:34.573Z] [generic-simple__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0055 loop_exhausted=false
+[2026-04-28T14:24:14.564Z] [generic-simple__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.389 pass_ii=true pass_i=true eval_cost=$0.1180
+[2026-04-28T14:24:14.565Z] [cumulative] $4.2376 / $26 halt; 34 evals total
+[2026-04-28T14:24:14.565Z] [generic-simple__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] start
+[2026-04-28T14:24:14.578Z] [generic-simple__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] ingested 7 frames
+[2026-04-28T14:24:49.069Z] [generic-simple__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0044 loop_exhausted=false
+[2026-04-28T14:25:15.311Z] [generic-simple__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] judged; trio_mean=4.333 pass_ii=true pass_i=true eval_cost=$0.1284
+[2026-04-28T14:25:15.311Z] [cumulative] $4.3661 / $26 halt; 35 evals total
+[2026-04-28T14:25:15.312Z] [generic-simple__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T14:25:15.322Z] [generic-simple__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] ingested 6 frames
+[2026-04-28T14:26:05.834Z] [generic-simple__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] subject_done; retrievals=2 steps=3 cost=$0.0059 loop_exhausted=false
+[2026-04-28T14:27:02.275Z] [generic-simple__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.000 pass_ii=true pass_i=true eval_cost=$0.1195
+[2026-04-28T14:27:02.276Z] [cumulative] $4.4856 / $26 halt; 36 evals total
+[2026-04-28T14:27:02.276Z] [generic-simple__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T14:27:02.293Z] [generic-simple__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] ingested 7 frames
+[2026-04-28T14:27:40.027Z] [generic-simple__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] subject_done; retrievals=1 steps=2 cost=$0.0047 loop_exhausted=false
+[2026-04-28T14:29:13.595Z] [generic-simple__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] judged; trio_mean=3.500 pass_ii=false pass_i=true eval_cost=$0.1305
+[2026-04-28T14:29:13.595Z] [cumulative] $4.6161 / $26 halt; 37 evals total
+[2026-04-28T14:29:13.595Z] [generic-simple__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T14:29:13.605Z] [generic-simple__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] ingested 6 frames
+[2026-04-28T14:29:44.673Z] [generic-simple__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] subject_done; retrievals=1 steps=2 cost=$0.0033 loop_exhausted=false
+[2026-04-28T14:30:31.790Z] [generic-simple__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] judged; trio_mean=4.611 pass_ii=true pass_i=true eval_cost=$0.1148
+[2026-04-28T14:30:31.790Z] [cumulative] $4.7309 / $26 halt; 38 evals total
+[2026-04-28T14:30:31.790Z] [generic-simple__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T14:30:31.801Z] [generic-simple__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] ingested 7 frames
+[2026-04-28T14:31:07.522Z] [generic-simple__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0042 loop_exhausted=false
+[2026-04-28T14:32:13.785Z] [generic-simple__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.389 pass_ii=true pass_i=true eval_cost=$0.1381
+[2026-04-28T14:32:13.785Z] [cumulative] $4.8691 / $26 halt; 39 evals total
+[2026-04-28T14:32:13.785Z] [generic-simple__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T14:32:13.799Z] [generic-simple__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] ingested 6 frames
+[2026-04-28T14:32:48.092Z] [generic-simple__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0039 loop_exhausted=false
+[2026-04-28T14:34:52.080Z] [generic-simple__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.333 pass_ii=true pass_i=true eval_cost=$0.1025
+[2026-04-28T14:34:52.080Z] [cumulative] $4.9716 / $26 halt; 40 evals total
+[2026-04-28T14:34:52.081Z] [done] 40 evals; total cost $4.9716; summary written

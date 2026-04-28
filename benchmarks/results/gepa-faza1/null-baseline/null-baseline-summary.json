@@ -1,0 +1,86 @@
+{
+  "manifestAnchor": "manifest-v7-gepa-faza1",
+  "manifestShaAmendment4": "1f7a6d6fa01403f6c8d6855893adbfa5e82898a81b7583cfa55628e5eba60196",
+  "samplingSeed": 42,
+  "nPerShape": 8,
+  "sampledInstanceIds": [
+    "h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001",
+    "h3-F4-p2_cfo-stage_a_series_b_growth_burning-001",
+    "h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001",
+    "h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001",
+    "h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001",
+    "h3-F4-p3_coo-stage_b_post_profitable_consolidation-001",
+    "h3-F5-p2_cfo-stage_a_series_b_growth_burning-001",
+    "h3-F3-p3_coo-stage_a_series_b_growth_burning-001"
+  ],
+  "totalEvals": 40,
+  "totalCostUsd": 4.971599,
+  "perShape": [
+    {
+      "shape": "claude",
+      "nEvals": 8,
+      "trioStrictPassRateII": 0.875,
+      "trioStrictPassRateI": 1,
+      "meanRetrievalCallsPerTask": 1.125,
+      "meanCandidateCostUsd": 0.004904175,
+      "meanJudgeCostUsd": 0.11763850000000001,
+      "meanEvalCostUsd": 0.122542675,
+      "totalEvalCostUsd": 0.9803414,
+      "loopExhaustedRate": 0,
+      "meanStepsTaken": 2.25
+    },
+    {
+      "shape": "qwen-thinking",
+      "nEvals": 8,
+      "trioStrictPassRateII": 0.875,
+      "trioStrictPassRateI": 0.875,
+      "meanRetrievalCallsPerTask": 1.125,
+      "meanCandidateCostUsd": 0.0047897,
+      "meanJudgeCostUsd": 0.12278126249999999,
+      "meanEvalCostUsd": 0.1275709625,
+      "totalEvalCostUsd": 1.0205677,
+      "loopExhaustedRate": 0,
+      "meanStepsTaken": 2.125
+    },
+    {
+      "shape": "qwen-non-thinking",
+      "nEvals": 8,
+      "trioStrictPassRateII": 1,
+      "trioStrictPassRateI": 1,
+      "meanRetrievalCallsPerTask": 1.25,
+      "meanCandidateCostUsd": 0.0023637000000000003,
+      "meanJudgeCostUsd": 0.124166075,
+      "meanEvalCostUsd": 0.12652977499999998,
+      "totalEvalCostUsd": 1.0122381999999999,
+      "loopExhaustedRate": 0,
+      "meanStepsTaken": 2.375
+    },
+    {
+      "shape": "gpt",
+      "nEvals": 8,
+      "trioStrictPassRateII": 0.75,
+      "trioStrictPassRateI": 0.875,
+      "meanRetrievalCallsPerTask": 1,
+      "meanCandidateCostUsd": 0.005003275,
+      "meanJudgeCostUsd": 0.11734810000000001,
+      "meanEvalCostUsd": 0.12235137500000001,
+      "totalEvalCostUsd": 0.9788110000000001,
+      "loopExhaustedRate": 0,
+      "meanStepsTaken": 2
+    },
+    {
+      "shape": "generic-simple",
+      "nEvals": 8,
+      "trioStrictPassRateII": 0.875,
+      "trioStrictPassRateI": 1,
+      "meanRetrievalCallsPerTask": 1.125,
+      "meanCandidateCostUsd": 0.005001650000000001,
+      "meanJudgeCostUsd": 0.1174533875,
+      "meanEvalCostUsd": 0.1224550375,
+      "totalEvalCostUsd": 0.9796403,
+      "loopExhaustedRate": 0,
+      "meanStepsTaken": 2.25
+    }
+  ],
+  "completedAtIso": "2026-04-28T14:34:52.081Z"
+}

@@ -1,0 +1,102 @@
+{
+  "shape_aggregates": {
+    "claude": {
+      "n": 8,
+      "pii": 7,
+      "pi": 8,
+      "rate": 0.875,
+      "mt": 4.298611111111112,
+      "mr": 1.125,
+      "mc": 0.122542675,
+      "le": 0.0,
+      "ms": 2.25,
+      "ci_low": 0.5291051942301386,
+      "ci_hi": 0.9775830911367038
+    },
+    "qwen-thinking": {
+      "n": 8,
+      "pii": 7,
+      "pi": 7,
+      "rate": 0.875,
+      "mt": 4.201388888888888,
+      "mr": 1.125,
+      "mc": 0.1275709625,
+      "le": 0.0,
+      "ms": 2.125,
+      "ci_low": 0.5291051942301386,
+      "ci_hi": 0.9775830911367038
+    },
+    "qwen-non-thinking": {
+      "n": 8,
+      "pii": 8,
+      "pi": 8,
+      "rate": 1.0,
+      "mt": 4.263888888888889,
+      "mr": 1.25,
+      "mc": 0.126529775,
+      "le": 0.0,
+      "ms": 2.375,
+      "ci_low": 0.6755843804891231,
+      "ci_hi": 1
+    },
+    "gpt": {
+      "n": 8,
+      "pii": 6,
+      "pi": 7,
+      "rate": 0.75,
+      "mt": 4.145833333333333,
+      "mr": 1.0,
+      "mc": 0.12235137500000001,
+      "le": 0.0,
+      "ms": 2.0,
+      "ci_low": 0.40926987910258916,
+      "ci_hi": 0.9285223111419724
+    },
+    "generic-simple": {
+      "n": 8,
+      "pii": 7,
+      "pi": 8,
+      "rate": 0.875,
+      "mt": 4.208333333333333,
+      "mr": 1.125,
+      "mc": 0.1224550375,
+      "le": 0.0,
+      "ms": 2.25,
+      "ci_low": 0.5291051942301386,
+      "ci_hi": 0.9775830911367038
+    }
+  },
+  "deltas_pp": {
+    "claude": 37.5,
+    "qwen-thinking": -12.5,
+    "qwen-non-thinking": 25.0,
+    "gpt": -12.5,
+    "generic-simple": 0.0
+  },
+  "classification": "ANOMALOUS",
+  "raw_agreement": {
+    "opus_gpt": 0.7,
+    "opus_minimax": 0.95,
+    "gpt_minimax": 0.65
+  },
+  "min_raw_agreement": 0.65,
+  "kappa": {
+    "opus_gpt": 0.323943661971831,
+    "opus_minimax": 0.7241379310344824,
+    "gpt_minimax": 0.19770773638968492
+  },
+  "min_kappa": 0.19770773638968492,
+  "per_judge_pass_rate": {
+    "opus": 0.875,
+    "gpt": 0.575,
+    "minimax": 0.925
+  },
+  "cost": {
+    "total": 4.9715986,
+    "per_eval": 0.124289965,
+    "sensitivity_pct": 0.23384274193548638,
+    "gen1_projected": 14.9147958
+  },
+  "F_saturated_n_qualifying": 0,
+  "F_saturated_decision": "GLOBAL: revoke F-saturated, apply F.1 to all 5"
+}
