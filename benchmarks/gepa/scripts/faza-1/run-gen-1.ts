@@ -117,6 +117,7 @@ const MANIFEST_SHA_AMENDMENT_6 = '0b55d8e353299594254e1a4a76f26f53014d726315dc6a
 const MANIFEST_SHA_AMENDMENT_7 = 'bc0bcf9bd8b0c8344b25e5f8ab15b0475039ba28a1f782ebffe4cc1c4ff7d1de';
 const MANIFEST_SHA_AMENDMENT_8 = '85858f12f1270da28277dd4d98e454d1dae8ef970537cb8c561f484599c4e2e9';
 const MANIFEST_SHA_AMENDMENT_9 = '5e3ad831c61beb19ccb4ff42b455b4c3964d830808944d4915189c5e9b1709b8';
+const MANIFEST_SHA_AMENDMENT_10 = '7fb2fb930670b5a28e417a76c64ca1a556f05afb9cf0761aba9f83f0c5de1c9b';
 
 // ── Amendment 7 — mid-run halt thresholds (binding) ───────────────────────
 // Per manifest v7 Amendment 7 §checkpoint_b_tightened.mid_run_halt_thresholds.
@@ -552,8 +553,24 @@ function checkMidRunHalts(accs: Map<string, CandidateAcc>): MidRunHaltCheckResul
   // verdicts.
   for (const shape of ['qwen-thinking', 'qwen-non-thinking'] as const) {
     const allShapeAccs = [...accs.values()].filter(a => a.shape === shape);
-    const hasMutationEvalsForShape = allShapeAccs.some(a => a.variant !== 'baseline' && a.evalCount > 0);
-    if (!hasMutationEvalsForShape) continue;  // Amendment 10 §10.1 mutation_execution_gate
+
+    // Amendment 11 §11.1 second_order_calibration_patch (binding):
+    // mutation_execution_gate threshold tightened from ≥1 eval to ≥MIN_EVALS evals.
+    // Halt only fires when at least one mutation candidate (variant !== 'baseline')
+    // has STATISTICALLY MEANINGFUL sample size (≥QWEN_RETRIEVAL_REGRESSION_MIN_EVALS=5
+    // evals). This guarantees the mutation IS in the per-shape aggregate (not
+    // excluded by the individual-candidate MIN_EVALS filter), eliminating the
+    // second-order false-positive class where halt fired on baseline-only
+    // aggregate while gate was mechanically met by a single mutation eval.
+    //
+    // Per Amendment 11 §11.2 terminal_calibration_clause (BINDING): if halt
+    // fires AGAIN with this calibration ACTIVE, that IS Phase 4.5 direction_2
+    // verdict. No further calibration patches; escalate to Option C (Amendment 12
+    // interface refactor).
+    const hasStatisticallyMeaningfulMutationForShape = allShapeAccs.some(
+      a => a.variant !== 'baseline' && a.evalCount >= QWEN_RETRIEVAL_REGRESSION_MIN_EVALS,
+    );
+    if (!hasStatisticallyMeaningfulMutationForShape) continue;
 
     const baseline = NULL_BASELINE_PER_SHAPE[shape].meanRetrievalCallsPerTask;
     const shapeAccs = allShapeAccs.filter(a => a.evalCount >= QWEN_RETRIEVAL_REGRESSION_MIN_EVALS);
@@ -565,7 +582,7 @@ function checkMidRunHalts(accs: Map<string, CandidateAcc>): MidRunHaltCheckResul
     if (aggMean < baseline) {
       return {
         shouldHalt: true,
-        reason: `Amendment 7 §checkpoint_b_tightened.qwen_retrieval_engagement_regression (post Amendment 10 §10.1 calibration_fix): shape=${shape} mean=${aggMean.toFixed(3)} < NULL baseline ${baseline.toFixed(3)} (n=${totalEvals}; ≥1 mutation candidate evaluated for shape)`,
+        reason: `Amendment 7 §checkpoint_b_tightened.qwen_retrieval_engagement_regression (post Amendment 11 §11.1 second_order_calibration_patch): shape=${shape} mean=${aggMean.toFixed(3)} < NULL baseline ${baseline.toFixed(3)} (n=${totalEvals}; ≥1 mutation candidate with ≥${QWEN_RETRIEVAL_REGRESSION_MIN_EVALS} evals evaluated for shape; per Amendment 11 §11.2 terminal_calibration_clause, this IS Phase 4.5 direction_2 verdict)`,
       };
     }
   }

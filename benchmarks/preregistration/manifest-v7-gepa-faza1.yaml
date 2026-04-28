@@ -1468,6 +1468,116 @@ amendment_10_integration:
   hard_cap_usd_unchanged: 115.00
   headroom_post_full_gen_1_projection_usd: 73.60
 
+# ── Amendment 11 master integration section (binding) ─────────────────────
+
+amendment_11_integration:
+  ratification_date: 2026-04-29
+  authority: PM (Marko Markovic)
+  predecessor: Amendment 10 (Option A continue + halt threshold calibration_fix MIN_EVALS 3→5 + mutation_execution_gate)
+  trigger: "Post-Amendment-10 resume halt at 57/120 evals (bj1vq1gxq) fired Amendment 7 §checkpoint_b_tightened.qwen_retrieval_engagement_regression on qwen-non-thinking aggregate baseline-only despite Amendment 10 calibration_fix in place. Root cause: second-order interaction bug between mutation_execution_gate (≥1 eval threshold) + MIN_EVALS=5 individual-candidate filter — mutation gen1-v1 had 1 eval (gate satisfied) but excluded from aggregate (1<5), so aggregate computed baseline-only. PM ratifies Option D-α: second-order calibration patch + resume + terminal_calibration_clause."
+  scope:
+    - "§11.1 second_order_calibration_patch: mutation_execution_gate threshold tightened ≥1 → ≥MIN_EVALS (=5) — halt only fires when at least one mutation candidate has statistically meaningful sample size"
+    - "§11.2 terminal_calibration_clause (BINDING): this is the LAST calibration patch in Faza 1; if halt fires AGAIN with §11.1 active + mutation ≥MIN_EVALS, escalate to Option C (Amendment 12 interface refactor); no further calibration patches accepted; PM cannot override post-hoc"
+    - "§11.3 bug_acknowledgment_record: transparent disclosure that Amendment 10 §10.1 created second-order interaction bug; halt fired on calibration bug NOT on Phase 4.5 negative direction; arxiv §5.4 cites this entry"
+    - "§11.4 §F.2_verdict_gate_continued: §F.2 (≥3/5 positive) still pending; full Gen 1 close required for verdict"
+    - "§11.5 sha_chain: append Amendment 11 SHA to manifest v7 chain (becomes 11-SHA chain)"
+
+  second_order_calibration_patch:
+    pre_registered_at: amendment_11
+    locked_pre_resume: true
+    rationale_substantive: |
+      Amendment 10 §10.1 mutation_execution_gate was authored to prevent baseline-only halts.
+      Empirical reality post-resume showed it doesn't fully prevent them: when the mutation
+      candidate has 1 eval (mutation_execution_gate=true) but 1 < MIN_EVALS=5
+      (filtered out of aggregate by individual-candidate eval count threshold),
+      the aggregate is computed from BASELINE evals only and halt fires on
+      baseline-only data. The two thresholds need to align — gate must require
+      mutation has ≥MIN_EVALS evals, not just ≥1 eval.
+    code_change:
+      file: benchmarks/gepa/scripts/faza-1/run-gen-1.ts
+      function: checkMidRunHalts
+      change_before: |
+        const hasMutationEvalsForShape = allShapeAccs.some(a => a.variant !== 'baseline' && a.evalCount > 0);
+      change_after: |
+        const hasStatisticallyMeaningfulMutationForShape = allShapeAccs.some(a => a.variant !== 'baseline' && a.evalCount >= QWEN_RETRIEVAL_REGRESSION_MIN_EVALS);
+      effect: "Halt only fires when at least one mutation candidate (variant !== 'baseline') has ≥MIN_EVALS=5 evals — guaranteeing the mutation IS in the aggregate and the halt is NOT firing on baseline-only data."
+    interaction_with_amendment_10_changes:
+      change_1_min_evals_5_unchanged: "QWEN_RETRIEVAL_REGRESSION_MIN_EVALS = 5 unchanged from Amendment 10 §10.1"
+      change_2_mutation_gate_threshold_raised: "≥1 eval → ≥MIN_EVALS evals; logically tightens what 'mutation executing' means from 'has started' to 'has statistically meaningful sample'"
+    when_halt_can_now_fire:
+      precondition_1: "≥1 mutation candidate has ≥5 evals on the shape (mutation IS in aggregate)"
+      precondition_2: "aggregate retrieval (across all candidates with ≥5 evals on shape) < per-shape NULL baseline"
+      consequence: "Halt represents direction_2 verdict per Amendment 9 — mutations regressing retrieval BELOW baseline at meaningful sample size; this is the genuine Phase 4.5 negative-direction signal"
+
+  terminal_calibration_clause:
+    pre_registered_at: amendment_11
+    locked_pre_resume: true
+    binding: true
+    non_overridable_post_hoc: true
+    pm_authority_acknowledgment: "PM cannot override §11.2 once ratified, even by future PM directive within this Faza 1. This clause exists specifically to prevent infinite calibration cycles."
+    rule: "If Amendment 7 §checkpoint_b_tightened.qwen_retrieval_engagement_regression fires AGAIN with §11.1 calibration ACTIVE — i.e., aggregate computed across ≥1 mutation candidate with ≥MIN_EVALS=5 evals — that IS the Phase 4.5 negative-direction verdict per Amendment 9 §qwen_evolution_verdict_capture.negative_signal_definitions.direction_2."
+    consequence_on_trigger: "HALT + capture Phase 4.5 direction_2 verdict; do NOT auto-recover; do NOT author further calibration patches. Faza 1 closes at that data with documented partial verdict. Escalate to Option C: author Amendment 12 §interface_refactor authorizing redesign of mutation injection mechanism (e.g., promptShapeObject parameter) for Faza 2 expansion."
+    rationale: "Pre-registration discipline binds when trigger fires on the mechanism. Two prior halts (b1t474yqd + bj1vq1gxq) fired on calibration bugs in trigger detection. Amendment 11 fixes the bug class. If halt fires AGAIN despite §11.1 fix, that is PRESUMPTIVELY mechanism — not a third calibration cycle. Cap the cycles at 2 patches (Amendment 10 + Amendment 11) to preserve methodological integrity."
+    cycle_count: "Amendment 8 (registerShape API fix) + Amendment 10 (calibration_fix MIN_EVALS + mutation_execution_gate) + Amendment 11 (second-order calibration patch) = 3 fix amendments. §11.2 caps at no further calibration cycles in Faza 1."
+
+  bug_acknowledgment_record:
+    purpose: "Transparent disclosure of calibration evolution for arxiv §5.4 methodology section. Not hidden — methodologically important to document iterative calibration as legitimate empirical refinement, not as deviation from pre-registration."
+    bug_class: "Second-order interaction between two threshold parameters intended to work together: mutation_execution_gate (Amendment 10 §10.1 change_2) + MIN_EVALS individual-candidate filter (Amendment 7 + Amendment 10 §10.1 change_1)."
+    bug_summary: "When mutation candidate has 1 eval (gate=true at ≥1 eval) but 1 < MIN_EVALS=5 (excluded from aggregate by individual filter), aggregate is computed from baseline-only data while gate is mechanically met. Halt fires on baseline-aggregate while structurally appearing to fire on mutation-direction signal."
+    bug_was_NOT: "Phase 4.5 negative direction signal. Amendment 11 §11.3 explicitly disclaims the qwen-non-thinking halt (bj1vq1gxq) as evidence of mechanism failure."
+    mechanistic_reality_documented:
+      qwen_non_thinking_baseline_n_8_mean: 1.125
+      qwen_non_thinking_gen_1_v1_n_1_mean: 2.0
+      delta_mutation_vs_same_shape_baseline_absolute: +0.875  # POSITIVE direction
+      hypothetical_aggregate_with_mutation_n_9: 1.222  # (1.125*8 + 2.0*1)/9
+      delta_hypothetical_aggregate_vs_NULL_baseline: -0.028  # within ±0.10 noise band documented at Checkpoint B
+      conclusion: "Single mutation eval shows POSITIVE direction lift; hypothetical aggregate including it would NOT have triggered halt. Halt fired on calibration interaction, not mechanism."
+    arxiv_5_4_disclosure_text: |
+      "Faza 1 Gen 1 mid-run halt thresholds underwent two empirical refinements during
+      execution. Amendment 10 §10.1 raised the per-candidate minimum eval threshold
+      from N=3 to N=5 and added a mutation_execution_gate to prevent baseline-only
+      halts. Post-Amendment-10 a second-order interaction emerged where the
+      mutation_execution_gate fired on the existence of any mutation eval (≥1)
+      while the MIN_EVALS=5 filter excluded under-powered mutation evals from the
+      aggregate, allowing baseline-aggregate halts to still fire. Amendment 11
+      §11.1 tightened the gate to require mutation candidates have ≥MIN_EVALS
+      evals (5), eliminating the second-order false-positive class. Amendment 11
+      §11.2 capped further calibration cycles, binding any subsequent halt as
+      genuine mechanism signal. We disclose this evolution as transparent
+      empirical refinement rather than retroactive design change."
+
+  F2_verdict_gate_continued:
+    purpose: "§F.2 (≥3/5 shapes positive delta) verdict still pending; current 2/5 confirmed. Full Gen 1 close required."
+    current_status:
+      claude: PASS  # gen1-v1 +12.5pp (full N=8)
+      qwen-thinking: PASS  # gen1-v1 +12.5pp + retrieval 2.375 (full N=8)
+      qwen-non-thinking: AMBIGUOUS_PENDING_RESUME  # gen1-v1 N=1 +0.875 retrieval lift; need ≥7 more evals for verdict
+      gpt: NOT_EVALUATED  # 24 evals planned
+      generic-simple: NOT_EVALUATED  # 24 evals planned
+    pass_path: "≥3/5 shapes show best-mutation +5pp trio_strict delta. Faza 1 §F.2 PASS → Faza 2 expansion + Phase 5 GEPA-evolved variant deployment authorized per launch decision §F.5 condition_2"
+    fail_path: "≤2/5 shapes positive. Faza 1 §F.2 FAIL — scoped publishable finding (claude + qwen-thinking confirmed; qwen-non-thinking + gpt + generic-simple as evaluated); arxiv §5.4 framing reflects scope of validated method"
+    interpretation_invariant: "PASS and FAIL outcomes both scientifically valid. §F.2 unverdicted is the unacceptable state."
+    expected_state_at_resume: "57/120 evals; 63 remaining; cost projection $7.78 (63 × $0.124); cumulative post-full-Gen-1 $41.35; headroom $73.65"
+
+  sha_chain:
+    amendment_10_sha_pinned: "7fb2fb930670b5a28e417a76c64ca1a556f05afb9cf0761aba9f83f0c5de1c9b (post-Amendment-10 manifest SHA — fills prior NOT_YET_COMPUTED placeholder)"
+    amendment_11_placeholder: "manifest_sha256_post_amendment_11: NOT_YET_COMPUTED  # CC-2 computes post Edit"
+    becomes_chain: "11-SHA chain (initial_lock + post-A2 + post-A3 + post-A4 + post-A5 + post-A6 + post-A7 + post-A8 + post-A9 + post-A10 + Amendment 11 placeholder)"
+
+  cross_references:
+    pm_brief_session_authored_at: "Session 2026-04-28 PM brief — post-Amendment-10 halt + Option D-α ratification + Amendment 11 §11.1-§11.5 directives"
+    post_amendment_10_halt_report: benchmarks/results/gepa-faza1/gen-1/post-amendment-10-halt-report.md
+    amendment_10_calibration_fix: amendment_10_integration.calibration_fix
+    amendment_9_phase_4_5_verdict: amendment_9_integration.qwen_evolution_verdict_capture
+    amendment_9_anti_misattribution: amendment_9_integration.qwen_baseline_anomaly_disposition
+    code_change_target: benchmarks/gepa/scripts/faza-1/run-gen-1.ts (checkMidRunHalts function — mutation_execution_gate threshold)
+
+  cumulative_actual_spend_at_amendment_11_ratification: 33.57  # corpus 13.35 + sunk-null 4.95 + re-null 4.97 + mutations 1.43 + probes 0.40 + sunk-gen-1 1.36 + cumulative-gen-1 7.03 + misc 0.08
+  pre_resume_remaining_cost_projection: 7.78  # 63 evals × $0.124/eval
+  cumulative_post_full_gen_1_projection_usd: 41.35
+  hard_cap_usd_unchanged: 115.00
+  headroom_post_full_gen_1_projection_usd: 73.65
+
 # ── Manifest path + lock metadata ──────────────────────────────────────────
 
 manifest_path: benchmarks/preregistration/manifest-v7-gepa-faza1.yaml
@@ -1481,6 +1591,7 @@ manifest_amendment_7_supplemented_at: 2026-04-28T17:30:00Z  # PM ratify Option C
 manifest_amendment_8_supplemented_at: 2026-04-28T18:45:00Z  # PM ratify Probe-first + Option B Fix-and-Restart — registerShape canonical mutation API + sunk archive
 manifest_amendment_9_supplemented_at: 2026-04-28T19:45:00Z  # PM ratify Option A full-Gen-1 + §qwen_baseline_anomaly_disposition anti-misattribution lock + §qwen_evolution_verdict_capture pre-registration
 manifest_amendment_10_supplemented_at: 2026-04-28T20:30:00Z  # PM ratify Option A continue + §10.1 calibration_fix (MIN_EVALS 3→5 + mutation_execution_gate) + §10.2 §F.2_verdict_gate + §10.3 Phase 4.5 reproducibility on qwen-non-thinking
+manifest_amendment_11_supplemented_at: 2026-04-29T00:30:00Z  # PM ratify Option D-α + §11.1 second_order_calibration_patch (mutation_execution_gate ≥1 → ≥MIN_EVALS) + §11.2 terminal_calibration_clause (BINDING) + §11.3 bug_acknowledgment_record + §11.4 §F.2_verdict_gate_continued
 manifest_sha256_initial_lock: 1d592a6113c918b7a07fc9aba748c8bdd12a6ce1c6943943c0492678299fa700
 manifest_sha256_post_amendment_2: 583712dde139ffc87fb1ab21643f68d52c56469ded9e8090a624980b05969beb
 manifest_sha256_post_amendment_3: e43d13793535077c92a0e2c24f948ebb9d6e04000293690fdf38c4ba957aa972
@@ -1490,5 +1601,6 @@ manifest_sha256_post_amendment_6: 0b55d8e353299594254e1a4a76f26f53014d726315dc6a
 manifest_sha256_post_amendment_7: bc0bcf9bd8b0c8344b25e5f8ab15b0475039ba28a1f782ebffe4cc1c4ff7d1de
 manifest_sha256_post_amendment_8: 85858f12f1270da28277dd4d98e454d1dae8ef970537cb8c561f484599c4e2e9
 manifest_sha256_post_amendment_9: 5e3ad831c61beb19ccb4ff42b455b4c3964d830808944d4915189c5e9b1709b8
-manifest_sha256_post_amendment_10: NOT_YET_COMPUTED  # CC-2 computes post Edit
+manifest_sha256_post_amendment_10: 7fb2fb930670b5a28e417a76c64ca1a556f05afb9cf0761aba9f83f0c5de1c9b
+manifest_sha256_post_amendment_11: NOT_YET_COMPUTED  # CC-2 computes post Edit
 audit_chain_terminus: this_file
