@@ -1372,6 +1372,102 @@ amendment_9_integration:
   hard_cap_usd_unchanged: 115.00
   headroom_post_full_gen_1_projection_usd: 73.70
 
+# ── Amendment 10 master integration section (binding) ─────────────────────
+
+amendment_10_integration:
+  ratification_date: 2026-04-28
+  authority: PM (Marko Markovic)
+  predecessor: Amendment 9 (Option A ratify + Qwen baseline anomaly anti-misattribution lock + Phase 4.5 verdict capture)
+  trigger: "Full Gen 1 halt at 53/120 evals (b1t474yqd) fired Amendment 7 §checkpoint_b_tightened.qwen_retrieval_engagement_regression on qwen-non-thinking::baseline n=5 (mean 1.200 vs NULL 1.250 = -0.05 absolute, within ±0.10 stochastic noise band documented at Checkpoint B). Second consecutive halt firing on baseline-only data within noise; calibration concern empirically confirmed. PM ratifies Option A — tighten halt threshold + resume to full Gen 1 to test §F.2 (≥3/5 shapes positive delta) + Phase 4.5 reproducibility on qwen-non-thinking."
+  scope:
+    - "§10.1 calibration_fix: QWEN_RETRIEVAL_REGRESSION_MIN_EVALS 3 → 5 + ONLY fire halt when at least one mutation candidate has been evaluated for that shape (baseline-only data does NOT trigger halt)"
+    - "§10.2 §F.2_verdict_gate: continue testing all 5 shapes for §F.2 verdict (≥3/5 shapes positive delta); document method scope per outcome"
+    - "§10.3 Phase 4.5 reproducibility on qwen-non-thinking: pre-register reproducibility verdict capture rules (PASS strengthens claim; FAIL produces scoped publishable finding)"
+    - "§10.4 sha_chain: append Amendment 10 SHA to manifest v7 chain (becomes 10-SHA chain)"
+
+  calibration_fix:
+    pre_registered_at: amendment_10
+    locked_pre_resume: true
+    rationale_empirical_basis:
+      run_1: "b5avslp51 (sunk pre-Amendment-8): mid-run halt fired on qwen-thinking::baseline mean retrieval 1.000 at n=3 vs NULL 1.12 (-0.120 absolute). Mutations were ALSO failing via REGISTRY-injection bug at this run — but halt fired on baseline data BEFORE the mutation failure was even detectable as a separate finding."
+      run_2: "b1t474yqd (full Gen 1 post-fix): mid-run halt fired on qwen-non-thinking::baseline mean retrieval 1.200 at n=5 vs NULL 1.250 (-0.050 absolute). Mutations for qwen-non-thinking did NOT execute — halt fired during baseline phase with 5/8 evals on the same instance subset that NULL covered."
+      noise_floor_characterization: "Both runs fired halts at baseline-running deltas of ≤0.12 absolute. Checkpoint B documented qwen-thinking::baseline +0.547 absolute lift on n=6 partial, also baseline noise. Empirical noise band: ±0.55 absolute on N=3-6 baseline samples; settles toward true rate as N grows."
+    code_changes:
+      file: benchmarks/gepa/scripts/faza-1/run-gen-1.ts
+      change_1_constant_raise:
+        before: "const QWEN_RETRIEVAL_REGRESSION_MIN_EVALS = 3;  // Amendment 7"
+        after:  "const QWEN_RETRIEVAL_REGRESSION_MIN_EVALS = 5;  // Amendment 10 §10.1 (raised from 3)"
+        effect: "Each candidate must have 5+ evals to enter the per-shape aggregate retrieval check; reduces N=3 binomial-tail noise sensitivity"
+      change_2_mutation_execution_gate:
+        before: |
+          for (const shape of ['qwen-thinking', 'qwen-non-thinking'] as const) {
+            const baseline = NULL_BASELINE_PER_SHAPE[shape].meanRetrievalCallsPerTask;
+            const shapeAccs = [...accs.values()].filter(a => a.shape === shape && a.evalCount >= QWEN_RETRIEVAL_REGRESSION_MIN_EVALS);
+            if (shapeAccs.length === 0) continue;
+            // ... aggregate check
+          }
+        after: |
+          for (const shape of ['qwen-thinking', 'qwen-non-thinking'] as const) {
+            // Amendment 10 §10.1 mutation_execution_gate: halt only fires when at least
+            // one mutation candidate has been evaluated for this shape. Baseline-only
+            // data does NOT trigger halt (matches Amendment 9 §qwen_evolution_verdict_capture
+            // .mid_run_halt_binding intent that halt represents mutation-direction signal).
+            const allShapeAccs = [...accs.values()].filter(a => a.shape === shape);
+            const hasMutationEvalsForShape = allShapeAccs.some(a => a.variant !== 'baseline' && a.evalCount > 0);
+            if (!hasMutationEvalsForShape) continue;
+
+            const baseline = NULL_BASELINE_PER_SHAPE[shape].meanRetrievalCallsPerTask;
+            const shapeAccs = allShapeAccs.filter(a => a.evalCount >= QWEN_RETRIEVAL_REGRESSION_MIN_EVALS);
+            if (shapeAccs.length === 0) continue;
+            // ... aggregate check (unchanged)
+          }
+        effect: "Halt only triggers when mutations are executing for that shape; preserves Amendment 9 §qwen_evolution_verdict_capture intent."
+    binding_per_run_protocol: "If halt fires AGAIN with the calibration fix in place — i.e., MIN_EVALS=5 + mutation_execution_gate=true — that IS the Phase 4.5 negative-direction verdict per Amendment 9 §qwen_evolution_verdict_capture. Halt + capture as direction_2 finding; do NOT auto-recover. Escalate to Option C (Amendment 11 interface refactor)."
+    why_locked_pre_resume: "Calibration parameters tuned to data are vulnerable to overfitting the analyst's preferred verdict. Pre-registering the tightening BEFORE the resume run runs (with empirical justification from 2 prior halts) preserves pre-registration discipline."
+
+  F2_verdict_gate:
+    purpose: "Continue Gen 1 to all 5 shapes evaluated; produce §F.2 verdict for Faza 1 acceptance gate (≥3/5 shapes positive delta)"
+    pre_registered_at: amendment_10
+    locked_pre_resume: true
+    pass_path:
+      condition: "≥3 of 5 shapes show best-mutation-candidate beating NULL by ≥+5pp on trio_strict_pass_II (Amendment 5 §F.1 + Amendment 7 §F-saturated revoked)"
+      consequence: "Faza 1 §F.2 PASS — methodologically sound for Phase 5 GEPA-evolved variant deployment authorization; Faza 2 expansion authorized per launch decision §F.5 condition_2"
+    fail_path:
+      condition: "≤2 of 5 shapes positive"
+      consequence: "Faza 1 §F.2 FAIL — but valid negative result; document scope of validated method (claude + qwen-thinking) for arxiv §5.4 framing; Faza 2 brief authoring re-scoped"
+    interpretation_invariant: "PASS and FAIL outcomes both scientifically valid. Faza 1 fails methodologically only if §F.2 is left unverdicted (test isn't run)."
+    state_at_resume: "claude (3/3 candidates) + qwen-thinking (3/3 candidates) at full N=8 coverage. Remaining: qwen-non-thinking::baseline (3 evals) + gen1-v1 (8) + gen1-v2 (8); gpt (3 candidates × 8 = 24); generic-simple (3 candidates × 8 = 24). Total 67 evals."
+
+  phase_4_5_reproducibility_qwen_non_thinking:
+    purpose: "Pre-register what counts as Phase 4.5 reproducibility verdict on qwen-non-thinking shape — second Qwen variant tests robustness across reasoning depth"
+    pre_registered_at: amendment_10
+    locked_pre_resume: true
+    candidates_to_evaluate: [qwen-non-thinking::baseline (3 remaining), qwen-non-thinking::gen1-v1, qwen-non-thinking::gen1-v2]
+    positive_signal_definition: "qwen-non-thinking::gen1-v1 OR gen1-v2 satisfies ALL 4 Amendment 9 §qwen_evolution_verdict_capture.positive_signal_definition gates: (1) ≥+5pp trio_strict vs NULL, (2) mean retrieval ≥1.7, (3) mutation > same-shape baseline retrieval, (4) ≥1.5 false-positive guard"
+    positive_outcome_interpretation: "'Qwen evolution method robust across reasoning depth' — claim strengthened. Both qwen-thinking + qwen-non-thinking show retrieval engagement closure. Generalizability to non-thinking variants of Qwen models established."
+    null_outcome_interpretation: "Qwen-non-thinking mutations do not significantly close the retrieval gap (delta ≤+0.10 absolute vs same-shape baseline). Inconclusive — neither validates nor refutes mechanism on this variant."
+    negative_outcome_interpretation: "qwen-non-thinking mutations REGRESS retrieval below same-shape baseline → 'Evolution works on thinking-mode Qwen, not non-thinking' — scoped finding, still publishable as Phase 4.5 partial mechanistic validation; arxiv §5.4 reflects scope. Halt-and-PM via direction_2 verdict per Amendment 9 (NOT direction_1 baseline-only as previously)."
+    binding_anti_misattribution: "Per Amendment 9 §qwen_baseline_anomaly_disposition, qwen-non-thinking::baseline retrieval delta of -0.05pp at full Gen 1 halt is NOT cited as evidence that qwen-non-thinking evolution will fail. The mutation candidates have not executed yet. The baseline finding is variance, not mechanism."
+
+  sha_chain:
+    amendment_9_sha_pinned: "5e3ad831c61beb19ccb4ff42b455b4c3964d830808944d4915189c5e9b1709b8 (post-Amendment-9 manifest SHA — fills prior NOT_YET_COMPUTED placeholder)"
+    amendment_10_placeholder: "manifest_sha256_post_amendment_10: NOT_YET_COMPUTED  # CC-2 computes post Edit"
+    becomes_chain: "10-SHA chain (initial_lock + post-A2 + post-A3 + post-A4 + post-A5 + post-A6 + post-A7 + post-A8 + post-A9 + Amendment 10 placeholder)"
+
+  cross_references:
+    pm_brief_session_authored_at: "Session 2026-04-28 PM brief — full Gen 1 halt Option A ratification + Amendment 10 §10.1-§10.4 directives"
+    full_gen_1_halt_report: benchmarks/results/gepa-faza1/gen-1/full-gen-1-halt-report.md
+    amendment_7_halt_threshold_amended: amendment_7_integration.checkpoint_b_tightened.mid_run_halt_thresholds.qwen_retrieval_engagement_regression
+    amendment_9_phase_4_5_verdict_pre_registration: amendment_9_integration.qwen_evolution_verdict_capture
+    amendment_9_anti_misattribution: amendment_9_integration.qwen_baseline_anomaly_disposition
+    code_change_target: benchmarks/gepa/scripts/faza-1/run-gen-1.ts (lines tracking QWEN_RETRIEVAL_REGRESSION_MIN_EVALS + checkMidRunHalts function)
+
+  cumulative_actual_spend_at_amendment_10_ratification: 33.09  # corpus 13.35 + sunk-null 4.95 + re-null 4.97 + mutations 1.43 + probes 0.40 + sunk-gen-1 1.36 + cumulative-gen-1 6.55 + misc 0.08
+  pre_resume_remaining_cost_projection: 8.31  # 67 evals × $0.124/eval
+  cumulative_post_full_gen_1_projection_usd: 41.40
+  hard_cap_usd_unchanged: 115.00
+  headroom_post_full_gen_1_projection_usd: 73.60
+
 # ── Manifest path + lock metadata ──────────────────────────────────────────
 
 manifest_path: benchmarks/preregistration/manifest-v7-gepa-faza1.yaml
@@ -1384,6 +1480,7 @@ manifest_amendment_6_supplemented_at: 2026-04-28T15:30:00Z  # NULL-baseline shap
 manifest_amendment_7_supplemented_at: 2026-04-28T17:30:00Z  # PM ratify Option C — saturated revoke + tiered fitness + Δ-floor + tightened Checkpoint B
 manifest_amendment_8_supplemented_at: 2026-04-28T18:45:00Z  # PM ratify Probe-first + Option B Fix-and-Restart — registerShape canonical mutation API + sunk archive
 manifest_amendment_9_supplemented_at: 2026-04-28T19:45:00Z  # PM ratify Option A full-Gen-1 + §qwen_baseline_anomaly_disposition anti-misattribution lock + §qwen_evolution_verdict_capture pre-registration
+manifest_amendment_10_supplemented_at: 2026-04-28T20:30:00Z  # PM ratify Option A continue + §10.1 calibration_fix (MIN_EVALS 3→5 + mutation_execution_gate) + §10.2 §F.2_verdict_gate + §10.3 Phase 4.5 reproducibility on qwen-non-thinking
 manifest_sha256_initial_lock: 1d592a6113c918b7a07fc9aba748c8bdd12a6ce1c6943943c0492678299fa700
 manifest_sha256_post_amendment_2: 583712dde139ffc87fb1ab21643f68d52c56469ded9e8090a624980b05969beb
 manifest_sha256_post_amendment_3: e43d13793535077c92a0e2c24f948ebb9d6e04000293690fdf38c4ba957aa972
@@ -1392,5 +1489,6 @@ manifest_sha256_post_amendment_5: 062dfc4935aaa89f0b25595c5dc3ce4af06c95c4c26107
 manifest_sha256_post_amendment_6: 0b55d8e353299594254e1a4a76f26f53014d726315dc6a0e5d6dc1a3a44a368a
 manifest_sha256_post_amendment_7: bc0bcf9bd8b0c8344b25e5f8ab15b0475039ba28a1f782ebffe4cc1c4ff7d1de
 manifest_sha256_post_amendment_8: 85858f12f1270da28277dd4d98e454d1dae8ef970537cb8c561f484599c4e2e9
-manifest_sha256_post_amendment_9: NOT_YET_COMPUTED  # CC-2 computes post Edit
+manifest_sha256_post_amendment_9: 5e3ad831c61beb19ccb4ff42b455b4c3964d830808944d4915189c5e9b1709b8
+manifest_sha256_post_amendment_10: NOT_YET_COMPUTED  # CC-2 computes post Edit
 audit_chain_terminus: this_file

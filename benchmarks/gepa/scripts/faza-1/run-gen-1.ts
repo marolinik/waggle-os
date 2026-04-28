@@ -115,6 +115,8 @@ const MANIFEST_ANCHOR = 'manifest-v7-gepa-faza1';
 const MANIFEST_SHA_AMENDMENT_5 = '062dfc4935aaa89f0b25595c5dc3ce4af06c95c4c261075a1f0226d8af3f3dee';
 const MANIFEST_SHA_AMENDMENT_6 = '0b55d8e353299594254e1a4a76f26f53014d726315dc6a0e5d6dc1a3a44a368a';
 const MANIFEST_SHA_AMENDMENT_7 = 'bc0bcf9bd8b0c8344b25e5f8ab15b0475039ba28a1f782ebffe4cc1c4ff7d1de';
+const MANIFEST_SHA_AMENDMENT_8 = '85858f12f1270da28277dd4d98e454d1dae8ef970537cb8c561f484599c4e2e9';
+const MANIFEST_SHA_AMENDMENT_9 = '5e3ad831c61beb19ccb4ff42b455b4c3964d830808944d4915189c5e9b1709b8';
 
 // ── Amendment 7 — mid-run halt thresholds (binding) ───────────────────────
 // Per manifest v7 Amendment 7 §checkpoint_b_tightened.mid_run_halt_thresholds.
@@ -129,8 +131,16 @@ const MID_RUN_HALT_OVERSHOOT_CANDIDATE_COUNT = 3;
 const PER_SHAPE_VARIANCE_HALT_PP = 40;
 /** Minimum evals before per-shape variance check runs (avoid noise on N<3). */
 const PER_SHAPE_VARIANCE_MIN_EVALS = 3;
-/** Minimum Qwen evals before retrieval regression check runs. */
-const QWEN_RETRIEVAL_REGRESSION_MIN_EVALS = 3;
+/**
+ * Minimum Qwen evals before retrieval regression check runs.
+ *
+ * Amendment 10 §10.1 calibration_fix: raised from 3 → 5 based on empirical
+ * evidence from 2 prior halt firings (b5avslp51 sunk + b1t474yqd full Gen 1)
+ * where halt fired on baseline-only data within ±0.10 absolute noise band.
+ * Each candidate must have 5+ evals to enter the per-shape aggregate check;
+ * reduces N=3 binomial-tail noise sensitivity.
+ */
+const QWEN_RETRIEVAL_REGRESSION_MIN_EVALS = 5;  // Amendment 10 §10.1 (was 3 per Amendment 7)
 
 function log(msg: string): void {
   const line = `[${new Date().toISOString()}] ${msg}\n`;
@@ -531,9 +541,22 @@ function checkMidRunHalts(accs: Map<string, CandidateAcc>): MidRunHaltCheckResul
   }
 
   // Threshold C — Qwen-targeted retrieval engagement drops below per-shape NULL baseline
+  //
+  // Amendment 10 §10.1 mutation_execution_gate (binding): halt only fires when at
+  // least one mutation candidate has been evaluated for this shape. Baseline-only
+  // data does NOT trigger halt. This matches Amendment 9 §qwen_evolution_verdict_capture
+  // .mid_run_halt_binding intent that the halt represents direction_2 verdict
+  // (mutations regress retrieval), not baseline-running stochastic variance.
+  // Empirical basis: 2 prior halt firings (b5avslp51 + b1t474yqd) on baseline-only
+  // data within ±0.10 absolute noise band were both per-Amendment-9 NOT direction_2
+  // verdicts.
   for (const shape of ['qwen-thinking', 'qwen-non-thinking'] as const) {
+    const allShapeAccs = [...accs.values()].filter(a => a.shape === shape);
+    const hasMutationEvalsForShape = allShapeAccs.some(a => a.variant !== 'baseline' && a.evalCount > 0);
+    if (!hasMutationEvalsForShape) continue;  // Amendment 10 §10.1 mutation_execution_gate
+
     const baseline = NULL_BASELINE_PER_SHAPE[shape].meanRetrievalCallsPerTask;
-    const shapeAccs = [...accs.values()].filter(a => a.shape === shape && a.evalCount >= QWEN_RETRIEVAL_REGRESSION_MIN_EVALS);
+    const shapeAccs = allShapeAccs.filter(a => a.evalCount >= QWEN_RETRIEVAL_REGRESSION_MIN_EVALS);
     if (shapeAccs.length === 0) continue;
     const totalRetr = shapeAccs.reduce((s, a) => s + a.totalRetrievalCalls, 0);
     const totalEvals = shapeAccs.reduce((s, a) => s + a.evalCount, 0);
@@ -542,7 +565,7 @@ function checkMidRunHalts(accs: Map<string, CandidateAcc>): MidRunHaltCheckResul
     if (aggMean < baseline) {
       return {
         shouldHalt: true,
-        reason: `Amendment 7 §checkpoint_b_tightened.qwen_retrieval_engagement_regression: shape=${shape} mean=${aggMean.toFixed(3)} < NULL baseline ${baseline.toFixed(3)} (n=${totalEvals})`,
+        reason: `Amendment 7 §checkpoint_b_tightened.qwen_retrieval_engagement_regression (post Amendment 10 §10.1 calibration_fix): shape=${shape} mean=${aggMean.toFixed(3)} < NULL baseline ${baseline.toFixed(3)} (n=${totalEvals}; ≥1 mutation candidate evaluated for shape)`,
       };
     }
   }
