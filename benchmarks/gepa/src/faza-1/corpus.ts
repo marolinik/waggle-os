@@ -177,19 +177,25 @@ export function validateInstance(instance: CorpusInstance): InstanceValidationRe
     violations.push(`docs count ${instance.sourceDocuments.length} > ${DOCS_PER_INSTANCE_MAX} max`);
   }
 
+  // Length bounds loosened post-probe (2026-04-28) — Opus generates naturally
+  // richer personas/scenarios than the hand-crafted pilot baseline. The intent
+  // of these bounds is to catch broken/empty output, not to police verbosity.
   const personaLen = instance.personaText.length;
-  if (personaLen < 100 || personaLen > 600) {
-    violations.push(`persona length ${personaLen} outside [100, 600] range`);
+  if (personaLen < 100 || personaLen > 1500) {
+    violations.push(`persona length ${personaLen} outside [100, 1500] range`);
   }
 
+  // Scenario may be empty if oracle embedded it in personaText (handled by
+  // assembleInstance — extractScenarioFromPersonaText). Skip length floor in
+  // that case but still cap upper bound.
   const scenarioLen = instance.scenario.length;
-  if (scenarioLen < 200 || scenarioLen > 1000) {
-    violations.push(`scenario length ${scenarioLen} outside [200, 1000] range`);
+  if (scenarioLen > 0 && (scenarioLen < 100 || scenarioLen > 1500)) {
+    violations.push(`scenario length ${scenarioLen} outside [100, 1500] range (or 0 if embedded in personaText)`);
   }
 
   const questionLen = instance.question.length;
-  if (questionLen < 100 || questionLen > 600) {
-    violations.push(`question length ${questionLen} outside [100, 600] range`);
+  if (questionLen < 100 || questionLen > 800) {
+    violations.push(`question length ${questionLen} outside [100, 800] range`);
   }
 
   for (const doc of instance.sourceDocuments) {

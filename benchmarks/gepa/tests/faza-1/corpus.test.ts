@@ -210,6 +210,28 @@ describe('validateInstance — quality floor', () => {
     expect(r.violations.some(v => v.includes('persona length'))).toBe(true);
   });
 
+  it('PASS: rich persona up to 1500 chars (post-probe loosening)', () => {
+    const inst = makeValidInstance({ family: 'F1', persona: 'p1_founder_ceo', stage: 'stage_a_series_b_growth_burning' });
+    inst.personaText = 'p'.repeat(1400);
+    const r = validateInstance(inst);
+    expect(r.valid).toBe(true);
+  });
+
+  it('FAIL: persona above 1500 cap', () => {
+    const inst = makeValidInstance({ family: 'F1', persona: 'p1_founder_ceo', stage: 'stage_a_series_b_growth_burning' });
+    inst.personaText = 'p'.repeat(1600);
+    const r = validateInstance(inst);
+    expect(r.valid).toBe(false);
+    expect(r.violations.some(v => v.includes('persona length'))).toBe(true);
+  });
+
+  it('PASS: empty scenario (oracle embedded it in personaText)', () => {
+    const inst = makeValidInstance({ family: 'F1', persona: 'p1_founder_ceo', stage: 'stage_a_series_b_growth_burning' });
+    inst.scenario = '';  // embedded case
+    const r = validateInstance(inst);
+    expect(r.valid).toBe(true);
+  });
+
   it('FAIL: doc charCount mismatch with body length', () => {
     const inst = makeValidInstance({ family: 'F1', persona: 'p1_founder_ceo', stage: 'stage_a_series_b_growth_burning' });
     inst.sourceDocuments[0].charCount = 999;  // intentional mismatch

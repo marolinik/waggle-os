@@ -65,8 +65,10 @@ const MANIFEST_ANCHOR = 'manifest-v7-gepa-faza1';
 const PRICE_INPUT_PER_M = 15.0;
 const PRICE_OUTPUT_PER_M = 75.0;
 
-// Cost halt per manifest v7 §corpus_design.generation_cost_breakdown ($7 = 40% buffer over $5 expected)
-const COST_HALT_USD = 7.0;
+// Cost halt per manifest v7 Amendment 3: $15 = 40% buffer over $13.58 actual expected
+// (was $7 pre-Amendment-3; raised after probe revealed inherited $0.10/instance estimate
+// was 170% off vs actual Opus 4.7 generation cost of $0.27/instance).
+const COST_HALT_USD = 15.0;
 
 // ── Logging ────────────────────────────────────────────────────────────────
 
@@ -256,7 +258,7 @@ async function generateOneCell(cell: StratificationCell, ordinal: number): Promi
     log(`[${instanceId}] parse error: ${parsed.error}; raw content first 200c: ${llm.content.slice(0, 200)}`);
     return { error: parsed.error };
   }
-  const instance = assembleInstance(cell, ordinal, parsed, llm);
+  const instance = assembleInstance(cell, instanceId, parsed, llm);
   const validation = validateInstance(instance);
   if (!validation.valid) {
     log(`[${instanceId}] validation failed: ${validation.violations.join('; ')}`);

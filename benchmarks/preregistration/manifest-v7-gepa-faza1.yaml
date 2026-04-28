@@ -452,19 +452,35 @@ faza_1_acceptance:
 # ── Cost & halt governance (brief §5 + §6.7 + Amendment 1 §4) ──────────────
 
 cost_governance:
-  hard_cap_usd: 100.00
-  internal_halt_usd: 80.00
-  expected_total_usd: 100.50  # Amendment 1 §4 — TIGHT
+  hard_cap_usd: 115.00  # raised from $100 by Amendment 3 (inherited estimate correction, NOT scope creep)
+  hard_cap_usd_pre_amendment_3: 100.00  # historical for audit chain
+  internal_halt_usd: 90.00  # raised from $80 by Amendment 3 (proportional to cap raise)
+  internal_halt_usd_pre_amendment_3: 80.00
+  expected_total_usd: 109.08  # corpus $13.58 + NULL $20 + Gen 1 $60 + held-out $12.50 + mutation $3
+  expected_total_usd_pre_amendment_3: 100.50  # Amendment 1 §4 historical
   super_linear_buffer:
     base_token_projection_multiplier: 1.5  # per brief §6.7 worst-case 1.5× baseline
     mid_run_halt_threshold_pct: 30  # halt if actual exceeds projection by >30%
     audit_frequency: every_20_evaluations
+  pre_phase_boundary_reprojection:  # NEW per Amendment 3 binding rule
+    rule: "Re-project downstream phase cost from actual cost-per-eval telemetry of just-completed phase before kicking next phase. Halt if downstream projection exceeds manifest target by >30%."
+    applies_to:
+      - "Pre-Gen-1: after NULL-baseline (Checkpoint A), before Gen 1 kick"
+    halt_trigger_threshold_pct: 30
+    halt_options:
+      - "raise downstream cap proportionally (Amendment 3 precedent)"
+      - "reduce downstream scope (e.g. 3 candidates × 6 instances OR 2 candidates × 8 instances)"
+      - "pause Faza 1 + report; PM decides path"
   breakdown:
     corpus_generation:
       n_instances: 50
-      cost_per_instance_usd: 0.10
-      subtotal_usd: 5.00
+      cost_per_instance_usd: 0.27  # corrected from $0.10 by Amendment 3 probe data
+      cost_per_instance_usd_pre_amendment_3: 0.10  # inherited generic LLM estimate (incorrect)
+      subtotal_usd: 13.58  # 50 × $0.2716 actual Opus 4.7 cost
+      subtotal_usd_pre_amendment_3: 5.00
       payment: claude-opus-4-7_generation_oracle
+      cost_halt_usd: 15.00  # raised from $7 by Amendment 3 (40% buffer over $13.58 expected)
+      cost_halt_usd_pre_amendment_3: 7.00
     null_baseline:
       n_shapes: 5
       n_instances: 8
@@ -493,9 +509,10 @@ cost_governance:
       subtotal_usd: 3.00
       payment: claude-opus-4-7_mutation_oracle
   halt_triggers:
-    - "cumulative spend > $80 (internal halt)"
-    - "cumulative spend > $100 (hard cap)"
+    - "cumulative spend > $90 (internal halt — raised from $80 by Amendment 3)"
+    - "cumulative spend > $115 (hard cap — raised from $100 by Amendment 3)"
     - "mid-run actual > projection by 30% (super-linear sub-rule)"
+    - "PRE-GEN-1 (Checkpoint A → Gen 1): downstream Gen 1 projection from actual NULL-baseline telemetry > $78 (30% over $60 manifest target) — halt + PM ratify per pre_phase_boundary_reprojection rule"
     - "κ drift detected mid-run (sample audit every 20 calls)"
     - "cell semantic violation detected"
     - "mutation oracle 2 consecutive invalid mutations"
@@ -676,11 +693,52 @@ amendment_2_integration:
     phase_4_5_decision: decisions/2026-04-28-phase-4-5-tools-audit-results.md
     pilot_anchor: benchmarks/results/pilot-2026-04-26/pilot-task-{1,2,3}-{B,D}.jsonl
 
+# ── Amendment 3 master integration section (binding context) ──────────────
+
+amendment_3_integration:
+  amendment_doc: D:/Projects/PM-Waggle-OS/briefs/2026-04-28-cc4-faza1-amendment-3.md  # PM oral ratification embedded in CC-2 session — PM may formalize as separate doc later
+  ratification_date: 2026-04-28
+  trigger: "Probe revealed actual Opus 4.7 cost ($0.2716/instance) is 170% over inherited generic LLM estimate ($0.10/instance) used in Amendment 1 cost projection"
+  source_anchor_pilot: probe_h3-F1-p1_founder_ceo-stage_a_series_b_growth_burning-001 (cost $0.2716, latency 64205ms, 3461 output tokens)
+  authority: PM (Marko Markovic)
+  empirical_signal_summary:
+    finding: "Manifest v7 §corpus_design.expected_generation_cost_usd = $5 (inherited from $0.10/instance × 50) was incorrect inheritance — actual Opus 4.7 generation cost = $0.27/instance for high-quality synthesis instances matching pilot 2026-04-26 quality dimension parity."
+    interpretation: "Cost correction is for inherited estimate being off-by-2.7×, NOT scope expansion. Quality dimension parity with pilot baseline (~5300c materials → ~6700c materials) preserved for apples-to-apples Phase 5 GEPA-evolved variant comparison. Apples-to-apples is methodologically load-bearing."
+    precedent_scope: "This precedent does NOT apply to scope expansion. Cap is correction for inherited error, not creep. Future cost surprises from scope expansion (e.g. requesting more shapes, more generations) require separate ratification."
+  changes_from_v7_amendment_2:
+    cost_governance:
+      hard_cap_usd: 100 → 115
+      internal_halt_usd: 80 → 90
+      expected_total_usd: 100.50 → 109.08
+      breakdown.corpus_generation.cost_per_instance_usd: 0.10 → 0.27
+      breakdown.corpus_generation.subtotal_usd: 5.00 → 13.58
+      breakdown.corpus_generation.cost_halt_usd: 7.00 → 15.00
+      added_field: pre_phase_boundary_reprojection (new binding rule)
+      added_halt_trigger: PRE-GEN-1 cost re-projection halt at Checkpoint A → Gen 1 boundary
+  rejected_options:
+    option_b_tighten_prompt:
+      description: "Reduce per-instance materials by ~34% to fit $7 halt"
+      rejection_reason: "drifts difficulty profile from pilot baseline; risks 50/50 cost-vs-quality outcome"
+    option_d_reduce_n_to_40:
+      description: "Reduce corpus to 40 instances (bare §6.3 minimum)"
+      rejection_reason: "loses 13-instance buffer; pipeline has known failure modes (assembleInstance bug already surfaced); insufficient margin for retries"
+  new_binding_rule_pre_gen_1_cost_reprojection:
+    rule: "After NULL-baseline run completes (Checkpoint A), BEFORE Gen 1 kick, CC-GEPA must (1) compute actual cost-per-evaluation from NULL-baseline telemetry, (2) project Gen 1 cost = 5 shapes × 3 candidates × 8 instances × actual per-eval cost, (3) if projected Gen 1 > $78 (30% over $60 manifest projection), halt-and-PM with options."
+    halt_options:
+      a: "raise Gen 1 cap proportionally (Amendment 3-style correction)"
+      b: "reduce Gen 1 scope (3 candidates × 6 instances OR 2 candidates × 8 instances)"
+      c: "pause Faza 1 + PM decides path"
+    rationale: "Codifies CC-GEPA insight from probe-cost-surprise as binding. Phase-boundary re-projection catches projection errors that continuous monitoring misses — re-baselines against fresh telemetry rather than original (potentially wrong) projection."
+    applies_to_phases: [Pre-Gen-1, future_phase_boundaries_if_PM_extends]
+  cumulative_actual_spend_at_amendment_3_ratification: 0.40  # ~$0.27 successful probe + ~$0.13 failed probe (not tracked due to validation failure path)
+
 # ── Manifest path + lock metadata ──────────────────────────────────────────
 
 manifest_path: benchmarks/preregistration/manifest-v7-gepa-faza1.yaml
 manifest_locked_at: 2026-04-28T00:00:00Z
-manifest_amendment_2_supplemented_at: 2026-04-28T00:30:00Z  # supplemented post original LOCK
+manifest_amendment_2_supplemented_at: 2026-04-28T00:30:00Z
+manifest_amendment_3_supplemented_at: 2026-04-28T00:45:00Z  # cost cap raise + Pre-Gen-1 re-projection rule
 manifest_sha256_initial_lock: 1d592a6113c918b7a07fc9aba748c8bdd12a6ce1c6943943c0492678299fa700
-manifest_sha256_post_amendment_2: NOT_YET_COMPUTED  # CC-2 computes after this Edit completes, pins in launch decision §B alongside initial-lock SHA with delta timestamp
+manifest_sha256_post_amendment_2: 583712dde139ffc87fb1ab21643f68d52c56469ded9e8090a624980b05969beb
+manifest_sha256_post_amendment_3: NOT_YET_COMPUTED  # CC-2 computes after this Edit completes, pins in launch decision §B
 audit_chain_terminus: this_file

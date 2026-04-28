@@ -77,6 +77,20 @@ benchmarks/results/*
 !benchmarks/results/pilot-2026-04-26/prompts-archive/*.md
 !benchmarks/results/pilot-2026-04-26/invalidated/
 !benchmarks/results/pilot-2026-04-26/invalidated/*.jsonl
+# GEPA Faza 1 corpus + run logs + spot-audit reports + NULL/Gen1/held-out
+# artefacts (per launch decision §G + manifest v7 §gepa). All instances +
+# generation logs + checkpoint reports tracked for audit chain.
+# Exception applies to BOTH the line-47 base pattern AND the line-98
+# `**/benchmarks/results/*` nested-mis-CWD catch (mirrors pilot-2026-04-26).
+!benchmarks/results/gepa-faza1/
+!benchmarks/results/gepa-faza1/**/*.jsonl
+!benchmarks/results/gepa-faza1/**/*.json
+!benchmarks/results/gepa-faza1/**/*.md
+!benchmarks/results/gepa-faza1/**/*.log
+!benchmarks/results/gepa-faza1/**/*.yaml
+!**/benchmarks/results/gepa-faza1
+!**/benchmarks/results/gepa-faza1/
+!**/benchmarks/results/gepa-faza1/**
 # §1.3f Vertex Batch eligibility probe (2026-04-24): standalone probe
 # artefacts outside §11 frozen paths. Logs + JSONL + script + memo all
 # tracked; override the *.log line-3 wildcard for this specific folder.
