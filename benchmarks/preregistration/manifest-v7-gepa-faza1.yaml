@@ -810,15 +810,122 @@ amendment_4_integration:
     texture_audit_artefact: benchmarks/results/gepa-faza1/corpus/texture-audit-side-by-side.md
     amendment_3_section: amendment_3_integration
 
+# ── Amendment 5 master integration section (binding context) ──────────────
+
+amendment_5_integration:
+  ratification_date: 2026-04-28
+  authority: PM (Marko Markovic)
+  predecessor: Amendment 4 corpus retry + texture-audit binding rule
+  trigger: "Checkpoint A halt-and-PM (post NULL-baseline) surfaced 2 methodological items + Pre-Gen-1 cost gate PASS"
+  scope:
+    - "judge_metric_design (raw agreement primary for synthesis Likert + κ audit + Cohen-1960 paradox annotation + drift band 65% raw)"
+    - "F-saturated-baseline-rule (saturated NULL → no-regression + mechanistic-improvement reformulation for §F.1)"
+  rationale:
+    judge_metric:
+      - "Canonical κ=0.7878 was measured on LoCoMo factoid binary correctness with balanced base rate (~50% pass per cell); this is structurally different from synthesis Likert binarized at trio_mean ≥ 4.0 with 88% base rate"
+      - "Cohen's κ exhibits known high-base-rate paradox (Cohen 1960; Feinstein & Cicchetti 1990): when both raters near-uniformly agree, expected agreement is high, so observed - expected can be small or negative even when raw agreement is healthy"
+      - "Faza 1 NULL-baseline raw agreement is 70-80% across all judge pairs — judges genuinely agree; literal κ = -0.111 conservative trio at threshold 4.0 is artifact, not drift"
+      - "Sensitivity check: at threshold 4.25 where pass rates spread (65%/10%/72.5%), κ_om recovers to +0.480 — confirming high-real-agreement"
+    saturated_baseline:
+      - "qwen-thinking shape achieves 8/8 (100%) trio_strict_pass at NULL-baseline — saturation"
+      - "§F condition 1 ≥+5pp delta is structurally inapplicable (cannot improve beyond 100%)"
+      - "Reformulation needed: no-regression + mechanistic-improvement (Amendment 2 retrieval-engagement signal) for saturated shapes"
+      - "Other 4 shapes (claude 50%, qwen-non-thinking 75%, gpt 88%, generic-simple 88%) are non-saturated; original §F.1 ≥+5pp criterion applies unchanged"
+  changes_from_v7_amendment_4:
+    new_top_level_section_judge_metric_design: "Adds raw agreement matrix as PRIMARY for synthesis Likert + κ retained as AUDIT REFERENCE with Cohen paradox note + drift band 65% raw"
+    new_top_level_section_F_saturated_baseline_rule: "Reformulates §F.1 acceptance for shapes with saturated NULL-baseline (trio_strict_pass = 100%) to no-regression + mechanistic-improvement"
+    faza_1_acceptance_condition_1_addendum: "Per-shape rule selection: saturated-baseline rule for qwen-thinking; original ≥+5pp rule for non-saturated shapes"
+  post_hoc_phase_4_3_clarification:
+    note: "PM will append clarification note to decisions/2026-04-28-phase-4-3-rescore-delta-report.md documenting that H3 verdict was partially confounded by shape×subject mismatch in pilot 2026-04-26. Faza 1 NULL empirically shows qwen-thinking on Qwen subject ≥ claude shape on Qwen subject. Does NOT change Phase 5 brief outcome direction (Tier 2 GEPA work still required for retrieval engagement gap closure), but sharpens mechanistic interpretation. CC-2 need not action."
+  cumulative_actual_spend_at_amendment_5_ratification: 18.70  # corpus 13.35 + null 4.95 + probe 0.4
+
+# ── Judge metric design (Amendment 5 §judge_metric_design — BINDING) ───────
+
+judge_metric_design:
+  added_by: amendment_5
+  primary_metric_for_synthesis_likert:
+    name: pairwise_raw_agreement_rate
+    method: "binary derived from per-judge mean ≥ trio_strict_threshold (default 4.0 per Ask B); count fraction where each pair agrees on pass/fail; report all 3 pairs + min"
+    drift_band_raw_agreement_min_pct: 65  # min raw agreement across pairs must be ≥ 65%
+    rationale: "Robust to high-base-rate skew; directly interpretable as 'how often do judges agree pass-vs-fail'; matches PM intent of §F.3 ('validate ensemble didn't drift mid-run')"
+  audit_reference_metric:
+    name: cohens_kappa_pairwise
+    method: "standard Cohen 1960 κ on same binary"
+    cohen_paradox_note: "high-base-rate paradox per Feinstein & Cicchetti 1990 — when both raters near-uniformly say PASS (e.g. 90%), expected chance agreement is ~85%, so observed - expected → small or negative κ even with high raw agreement"
+    canonical_value_with_caveat:
+      value: 0.7878
+      measured_on: "LoCoMo factoid binary correctness with balanced base rate (~50% pass per cell)"
+      not_directly_comparable_to: "synthesis Likert binarized at trio_mean ≥ 4.0 (Faza 1 ~88% base rate)"
+      use_for: audit_reference_only
+  drift_decision_rule_synthesis_likert:
+    primary: "raw agreement min(pair) ≥ 65% → PASS"
+    secondary: "report literal κ values for audit chain; flag if ≥ 2 pairs simultaneously go below 50% raw agreement (genuine ensemble drift signal)"
+    pm_verdict: "primary PER CHECKPOINT with full context; no automatic verdict from κ alone"
+  parallel_report_format:
+    columns:
+      - pair: opus_gpt
+        raw_agreement_pct: "<computed>"
+        cohens_kappa: "<computed>"
+      - pair: opus_minimax
+        raw_agreement_pct: "<computed>"
+        cohens_kappa: "<computed>"
+      - pair: gpt_minimax
+        raw_agreement_pct: "<computed>"
+        cohens_kappa: "<computed>"
+    aggregates:
+      - min_raw_agreement_pct: "<min across pairs>"
+      - min_cohens_kappa: "<conservative trio>"
+  faza_1_null_baseline_results_at_amendment_5:
+    raw_agreement:
+      opus_gpt_pct: 75.0
+      opus_minimax_pct: 80.0
+      gpt_minimax_pct: 70.0
+      min_pct: 70.0
+      verdict: PASS  # 70% ≥ 65% threshold
+    kappa:
+      opus_gpt: 0.342
+      opus_minimax: -0.111
+      gpt_minimax: 0.211
+      min: -0.111
+      audit_note: "Cohen high-base-rate paradox; literal verdict DRIFT_LOW would be misleading; raw agreement primary verdict PASS"
+    pass_rates_at_threshold_4_0:
+      opus_pct: 90.0
+      gpt_pct: 65.0
+      minimax_pct: 90.0
+
+# ── F-saturated-baseline rule (Amendment 5 — BINDING) ─────────────────────
+
+F_saturated_baseline_rule:
+  added_by: amendment_5
+  trigger_condition: "Shape's NULL-baseline trio_strict_pass_rate (op ii) = 1.0 (100%, all evals pass)"
+  applies_immediately_to:
+    - qwen-thinking  # 8/8 = 100% at NULL per Checkpoint A
+  reformulated_acceptance_for_saturated_shape:
+    rationale: "§F condition 1 ≥+5pp delta is structurally inapplicable when baseline already 100%; reformulate as no-regression + mechanistic-improvement"
+    condition_1a_no_regression: "Best GEPA candidate maintains trio_strict_pass = 100% (i.e., 8/8 pass on Gen 1 evaluation set)"
+    condition_1b_qwen_targeted_engagement: "For Qwen-targeted shapes (qwen-thinking, qwen-non-thinking): mean retrieval_calls per task ≥ 1.5 (escape Amendment 2 penalty zone)"
+    condition_1b_non_qwen: "For non-Qwen shapes: mean retrieval_calls per task ≥ NULL-baseline retrieval mean (no regression)"
+  shape_classification_at_checkpoint_a:
+    saturated:
+      qwen-thinking: { null_pass_rate: 1.0, rule: F_saturated_baseline }
+    non_saturated:
+      claude: { null_pass_rate: 0.50, rule: original_F_1_5pp_delta }
+      qwen-non-thinking: { null_pass_rate: 0.75, rule: original_F_1_5pp_delta }
+      gpt: { null_pass_rate: 0.875, rule: original_F_1_5pp_delta }
+      generic-simple: { null_pass_rate: 0.875, rule: original_F_1_5pp_delta }
+  classification_re_evaluation: "If a non-saturated shape reaches 100% on Gen 1, the saturated rule retroactively applies; document at Checkpoint C"
+
 # ── Manifest path + lock metadata ──────────────────────────────────────────
 
 manifest_path: benchmarks/preregistration/manifest-v7-gepa-faza1.yaml
 manifest_locked_at: 2026-04-28T00:00:00Z
 manifest_amendment_2_supplemented_at: 2026-04-28T00:30:00Z
 manifest_amendment_3_supplemented_at: 2026-04-28T00:45:00Z
-manifest_amendment_4_supplemented_at: 2026-04-28T01:00:00Z  # corpus retry + texture-audit binding rule
+manifest_amendment_4_supplemented_at: 2026-04-28T01:00:00Z
+manifest_amendment_5_supplemented_at: 2026-04-28T11:00:00Z  # judge metric parallel-report + saturated-baseline rule
 manifest_sha256_initial_lock: 1d592a6113c918b7a07fc9aba748c8bdd12a6ce1c6943943c0492678299fa700
 manifest_sha256_post_amendment_2: 583712dde139ffc87fb1ab21643f68d52c56469ded9e8090a624980b05969beb
 manifest_sha256_post_amendment_3: e43d13793535077c92a0e2c24f948ebb9d6e04000293690fdf38c4ba957aa972
-manifest_sha256_post_amendment_4: NOT_YET_COMPUTED  # CC-2 computes after this Edit, pins in launch decision §B
+manifest_sha256_post_amendment_4: 1f7a6d6fa01403f6c8d6855893adbfa5e82898a81b7583cfa55628e5eba60196
+manifest_sha256_post_amendment_5: NOT_YET_COMPUTED  # CC-2 computes after this Edit
 audit_chain_terminus: this_file
