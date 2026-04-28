@@ -1271,6 +1271,107 @@ amendment_8_integration:
   hard_cap_usd_unchanged: 115.00
   headroom_post_fresh_gen_1_partial_usd: 83.50
 
+# ── Amendment 9 master integration section (binding) ──────────────────────
+
+amendment_9_integration:
+  ratification_date: 2026-04-28
+  authority: PM (Marko Markovic)
+  predecessor: Amendment 8 (Probe-first + Option B fix — registerShape canonical mutation API + sunk archive)
+  trigger: "Checkpoint B halt-and-PM (fresh Gen 1 partial 30/30 evals, buc5febjp). PM ratifies Option A (continue full Gen 1) + explicit interpretation lock on §C qwen-thinking::baseline retrieval anomaly: +0.547 absolute delta is BASELINE-RUNNING variance, NOT Qwen evolution mechanism activation. Pre-registers anti-misattribution discipline + Phase 4.5 verdict capture rules BEFORE remaining 90 evals run (preserves pre-registration discipline)."
+  scope:
+    - "§qwen_baseline_anomaly_disposition: anti-misattribution lock — qwen-thinking::baseline n=6/8 retrieval +0.547 vs NULL is variance NOT evolution; cannot be cited as Phase 4.5 mechanism validation"
+    - "§qwen_evolution_verdict_capture: pre-registered rules for what counts as positive vs negative Phase 4.5 mechanistic Qwen-evolution signal at full Gen 1 close"
+    - "§option_a_ratification: PM rationale for choosing Option A over B/C — pre-registration discipline + multi-shape replication + control shape disentanglement + Phase 4.5 strategic spine + cost discipline"
+    - "§sha_chain: Amendment 9 SHA appended to manifest v7 chain (becomes 9-SHA chain)"
+
+  qwen_baseline_anomaly_disposition:
+    locked_pre_run: true  # ratified BEFORE Qwen mutation evals execute
+    pm_authority: PM_explicit_ratification_via_PM_brief_2026_04_28_post_checkpoint_b
+    anti_misattribution_clause: |
+      qwen-thinking::baseline n=6/8 retrieval delta of +0.547pp vs NULL is caused
+      by stochastic agent-planning variance on baseline (no evolution applied).
+      It triggered Δ-floor threshold 2 procedurally. It does NOT constitute
+      evidence that Qwen retrieval engagement responds to evolved prompts.
+      Phase 4.5 mechanistic Qwen-evolution test occurs only when
+      qwen-thinking::gen1-v1 and qwen-thinking::gen1-v2 mutation candidates
+      run, which is in the remaining 90 evals.
+    binding_for_writeups:
+      - arxiv_preprint
+      - internal_memos
+      - landing_copy
+      - paper_section_5_4
+      - all_future_decisions_referencing_faza_1_qwen_findings
+    forbidden_attribution_examples:
+      - "Faza 1 Gen 1 validates Phase 4.5 Qwen retrieval engagement hypothesis (citing baseline variance)"
+      - "Qwen retrieval gap closed by GEPA evolution (citing +0.547 absolute Δ-floor pass)"
+      - "Tier 2 retrieval bonus reached cap (0.25) on Qwen-thinking shape (citing baseline run)"
+    sanctioned_attribution_examples:
+      - "Faza 1 Gen 1 Checkpoint B observed +0.547 retrieval delta on qwen-thinking::baseline run on a 6/8 instance subset; this reflects agent-planning variance and does NOT indicate evolution mechanism activation."
+      - "Phase 4.5 Qwen mechanism test is pending — requires evaluation of qwen-thinking::gen1-v1, gen1-v2, qwen-non-thinking::baseline, gen1-v1, gen1-v2 (90 evals scheduled in remaining Gen 1)."
+    why_locked_pre_run_not_post: "Post-data interpretation locks are weaker — the temptation is to retroactively explain whatever results land. Pre-registering the anti-misattribution clause BEFORE the remaining 90 evals run forces the team to commit to the interpretation framework before knowing the outcome. This is the same discipline that made Checkpoint A v2 §C lock meaningful."
+
+  qwen_evolution_verdict_capture:
+    locked_pre_run: true  # pre-registered before mutation evals execute
+    pm_authority: PM_explicit_ratification_via_PM_brief_2026_04_28_post_checkpoint_b
+    purpose: "Define what counts as positive vs negative Phase 4.5 mechanistic Qwen-evolution signal at full Gen 1 close. Both directions are valid science findings — Faza 1 doesn't fail if mechanism doesn't activate; it fails only if the test isn't run."
+    qwen_targeted_shapes: [qwen-thinking, qwen-non-thinking]
+    candidates_to_evaluate:
+      - qwen-thinking::baseline (2 evals remaining; total 8/8 needed)
+      - qwen-thinking::gen1-v1 (8 evals)
+      - qwen-thinking::gen1-v2 (8 evals)
+      - qwen-non-thinking::baseline (8 evals)
+      - qwen-non-thinking::gen1-v1 (8 evals)
+      - qwen-non-thinking::gen1-v2 (8 evals)
+    positive_signal_definition:
+      condition_1_acceptance_gate: "Best mutation candidate per Qwen-targeted shape beats Qwen-shape NULL-baseline by ≥+5pp on trio_strict_pass_II (Amendment 5 §F.1 unchanged)"
+      condition_2_qwen_retrieval_engagement_floor: "Best mutation candidate has mean retrieval_calls per task ≥ 1.7 (Amendment 5 §F.1 Qwen sub-criterion + Amendment 2 §F.5 false-positive guard at 1.5)"
+      both_must_hold: true
+      false_positive_guard: "If condition_1 passes but mean retrieval_calls < 1.5 → REJECTED per Amendment 2 §F.5 (false-positive evolution via mutation-noise rather than mechanistic fix)"
+      mutation_must_outperform_baseline: "Mutation candidate's retrieval engagement must exceed the SAME shape's baseline retrieval running on the SAME 8 instances. Comparing mutation to NULL-baseline is necessary but not sufficient — the comparison must isolate evolution effect from baseline-run variance."
+    negative_signal_definitions:
+      direction_1_no_change: "Qwen mutation candidates' retrieval engagement statistically indistinguishable from same-shape baseline (mean delta < 0.10 absolute, well within agent-planning variance band observed at Checkpoint B)"
+      direction_2_regression: "Qwen mutation candidates' retrieval engagement DROPS BELOW same-shape baseline. If mid-run halt qwen_retrieval_engagement_regression triggers WITH mutations actually executing, this is the direction_2 verdict — mechanism active in opposite direction (mutations made retrieval worse). Halt + capture as Phase 4.5 negative finding."
+    null_signal_definition: "Mutation candidates' retrieval engagement varies in direction but neither candidate exceeds same-shape baseline by ≥+0.10 absolute. Inconclusive."
+    mid_run_halt_binding: "Per PM brief 2026-04-28 step 5: if qwen_retrieval_engagement_regression mid-run halt fires WITH qwen-thinking::gen1-v1/v2 mutation candidates executing (NOT just baseline), the halt itself is the Phase 4.5 mechanistic verdict signal (negative direction). Author Phase 4.5 verdict capture report at the halt; do NOT auto-recover."
+    interpretation_consistency_with_amendment_2:
+      band_bonus_remains_binding: "Amendment 2 §3 retrieval engagement band bonus (-0.05 / 0.00 / +0.05) still applies for §F.5 false-positive guard. Amendment 7 Tier 2 (continuous +0.05/pp cap 0.25) is supplementary tiered-fitness ranking signal. Both apply in parallel."
+      qwen_threshold_1_7_unchanged: "Amendment 5 §F.1 Qwen sub-criterion threshold (≥1.7 mean retrieval_calls) unchanged by Amendment 9. This is the binary acceptance gate; Tier 2 continuous formula is for ranking within accepted population."
+    audit_chain_pin:
+      - benchmarks/results/gepa-faza1/null-baseline/checkpoint-a-report.md (NULL per-shape baselines for Qwen comparison)
+      - benchmarks/results/gepa-faza1/gen-1/checkpoint-b-report.md (interpretation context for §C anomaly disposition)
+      - benchmarks/results/gepa-faza1/gen-1/gen-1-eval.jsonl (post-resume will contain 30 + 90 = 120 records for full Gen 1)
+
+  option_a_ratification:
+    pm_path_chosen: A
+    cost_incremental: 11.07  # 90 evals × $0.123/eval
+    cumulative_post_full_gen_1: 41.30  # 30.23 + 11.07
+    headroom_under_115_cap: 73.70
+    pm_rationale_summary:
+      - "Pre-registered design is 5 shapes × 3 candidates. Stopping at 1/5 shapes (Option B) breaks the pre-registration discipline Amendment 7 was authored to enforce."
+      - "claude::gen1-v1 +12.5pp on N=8 with CI [0.676, 1.000] — wide. Parallel-shape evidence reduces effective variance; multi-shape replication separates publishable result from war story."
+      - "gpt + generic-simple are CONTROL SHAPES. Without them, claude::gen1-v1 +12.5pp could be interpreted as 'Waggle-evolution improves any non-Qwen prompt regardless of shape semantics.' Controls disentangle shape-specific from generic improvement."
+      - "Phase 4.5 Qwen mechanistic test is the strategic spine of Tier 2 fitness function (Amendment 7). UNTESTED = unprovable strategic claim."
+      - "Cost: $73.70 headroom remains after full Gen 1. Budget is not a binding constraint."
+    paths_rejected:
+      option_b: "Stop at Checkpoint B; treat claude::gen1-v1 as sole finding. REJECTED: violates pre-registration; insufficient for Faza 2 gating; doesn't test Phase 4.5 strategic spine."
+      option_c: "Scope-reduce to Qwen shapes only. REJECTED: skips control shapes that disentangle shape-specific from generic improvement; partial coverage degrades Faza 1 → Faza 2 generalization claim."
+    methodological_principle: "Spending $11 to complete a pre-registered design is cheap relative to the cost of incomplete data + retroactive scope reductions. Pre-registration is most valuable when honored even when its data turns out cheaper than expected."
+
+  cross_references:
+    pm_brief_session_authored_at: "Session 2026-04-28 PM brief — post-Checkpoint-B Option A ratification + §C interpretation lock"
+    checkpoint_b_report: benchmarks/results/gepa-faza1/gen-1/checkpoint-b-report.md
+    null_baseline_report: benchmarks/results/gepa-faza1/null-baseline/checkpoint-a-report.md
+    amendment_5_F_1_qwen_subcriterion: amendment_5_integration (§F.1 ≥1.7 retrieval gate)
+    amendment_2_F_5_false_positive_guard: amendment_2_integration (band bonus + 1.5 floor)
+    amendment_7_F_saturated_revoked: F_saturated_baseline_rule.status = REVOKED_BY_AMENDMENT_7
+    amendment_7_tier_2_continuous: amendment_7_integration.fitness_function_tiered.tier_2
+
+  cumulative_actual_spend_at_amendment_9_ratification: 30.23  # corpus 13.35 + sunk null 4.95 + re-null 4.97 + mutations 1.43 + probes 0.40 + sunk-gen-1 1.36 + fresh-gen-1-partial 3.69 + misc 0.08
+  pre_full_gen_1_remaining_cost_projection: 11.07  # 90 evals × $0.123/eval
+  cumulative_post_full_gen_1_projection_usd: 41.30
+  hard_cap_usd_unchanged: 115.00
+  headroom_post_full_gen_1_projection_usd: 73.70
+
 # ── Manifest path + lock metadata ──────────────────────────────────────────
 
 manifest_path: benchmarks/preregistration/manifest-v7-gepa-faza1.yaml
@@ -1282,6 +1383,7 @@ manifest_amendment_5_supplemented_at: 2026-04-28T11:00:00Z
 manifest_amendment_6_supplemented_at: 2026-04-28T15:30:00Z  # NULL-baseline shape-override bug fix
 manifest_amendment_7_supplemented_at: 2026-04-28T17:30:00Z  # PM ratify Option C — saturated revoke + tiered fitness + Δ-floor + tightened Checkpoint B
 manifest_amendment_8_supplemented_at: 2026-04-28T18:45:00Z  # PM ratify Probe-first + Option B Fix-and-Restart — registerShape canonical mutation API + sunk archive
+manifest_amendment_9_supplemented_at: 2026-04-28T19:45:00Z  # PM ratify Option A full-Gen-1 + §qwen_baseline_anomaly_disposition anti-misattribution lock + §qwen_evolution_verdict_capture pre-registration
 manifest_sha256_initial_lock: 1d592a6113c918b7a07fc9aba748c8bdd12a6ce1c6943943c0492678299fa700
 manifest_sha256_post_amendment_2: 583712dde139ffc87fb1ab21643f68d52c56469ded9e8090a624980b05969beb
 manifest_sha256_post_amendment_3: e43d13793535077c92a0e2c24f948ebb9d6e04000293690fdf38c4ba957aa972
@@ -1289,5 +1391,6 @@ manifest_sha256_post_amendment_4: 1f7a6d6fa01403f6c8d6855893adbfa5e82898a81b7583
 manifest_sha256_post_amendment_5: 062dfc4935aaa89f0b25595c5dc3ce4af06c95c4c261075a1f0226d8af3f3dee
 manifest_sha256_post_amendment_6: 0b55d8e353299594254e1a4a76f26f53014d726315dc6a0e5d6dc1a3a44a368a
 manifest_sha256_post_amendment_7: bc0bcf9bd8b0c8344b25e5f8ab15b0475039ba28a1f782ebffe4cc1c4ff7d1de
-manifest_sha256_post_amendment_8: NOT_YET_COMPUTED  # CC-2 computes post Edit
+manifest_sha256_post_amendment_8: 85858f12f1270da28277dd4d98e454d1dae8ef970537cb8c561f484599c4e2e9
+manifest_sha256_post_amendment_9: NOT_YET_COMPUTED  # CC-2 computes post Edit
 audit_chain_terminus: this_file
