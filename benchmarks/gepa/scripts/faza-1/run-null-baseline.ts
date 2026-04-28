@@ -453,7 +453,12 @@ async function runOneEval(shape: PromptShape, instance: CorpusInstance, embedder
     return { formattedResults: formatted, resultCount: hits.length };
   };
 
-  // Run multi-step retrieval agent loop
+  // Run multi-step retrieval agent loop.
+  // CRITICAL: pass promptShapeOverride to actually apply the per-shape prompt.
+  // Without this, runRetrievalAgentLoop calls selectShape(modelAlias) which always
+  // resolves to 'qwen-thinking' for Qwen subject (per config), making the runner's
+  // shape parameter unused. This bug was discovered post-Checkpoint-A and corrected
+  // per PM Option A ratification + manifest v7 Amendment 6.
   let agentResult: AgentRunResult;
   try {
     agentResult = await runRetrievalAgentLoop({
@@ -467,7 +472,8 @@ async function runOneEval(shape: PromptShape, instance: CorpusInstance, embedder
       perCallHaltUsd: PER_CALL_HALT_USD,
       perCellHaltUsd: PER_CELL_HALT_USD,
       contextTag: evalId,
-    });
+      promptShapeOverride: shape.name,  // bug fix per Amendment 6
+    } as any);
   } catch (e) {
     const msg = `agent loop failed: ${(e as Error).message}`;
     log(`[${evalId}] ${msg}`);

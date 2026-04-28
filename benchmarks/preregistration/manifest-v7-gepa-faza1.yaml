@@ -915,6 +915,63 @@ F_saturated_baseline_rule:
       generic-simple: { null_pass_rate: 0.875, rule: original_F_1_5pp_delta }
   classification_re_evaluation: "If a non-saturated shape reaches 100% on Gen 1, the saturated rule retroactively applies; document at Checkpoint C"
 
+# ── Amendment 6 master integration section (binding) ──────────────────────
+
+amendment_6_integration:
+  ratification_date: 2026-04-28
+  authority: PM (Marko Markovic)
+  predecessor: Amendment 5 (judge metric + F-saturated-baseline rule)
+  trigger: "Post-Checkpoint-A bug discovery: run-null-baseline.ts didn't forward shape parameter to runRetrievalAgentLoop, causing all 40 evals to use the model-alias-default shape (qwen-thinking for Qwen subject). The 'per-shape pass rates' in the original Checkpoint A report were 5×8 replicates of the same shape, NOT shape-vs-shape comparison."
+  bug_summary:
+    file: benchmarks/gepa/scripts/faza-1/run-null-baseline.ts
+    issue: "runOneEval(shape, ...) received PromptShape but did NOT pass promptShapeOverride to runRetrievalAgentLoop call"
+    consequence: "selectShape(modelAlias) resolved 'qwen3.6-35b-a3b-via-dashscope-direct' to 'qwen-thinking' for all 40 evals; the runner's shape parameter was effectively unused"
+    detection_method: code review post-Checkpoint-A while authoring Gen 1 runner
+    detection_evidence: "runRetrievalAgentLoop config interface line 119 has promptShapeOverride?: string; the runner code did not pass it"
+  fix:
+    edit_summary: "Added `promptShapeOverride: shape.name` to the runRetrievalAgentLoop call in run-null-baseline.ts:runOneEval"
+    regression_test: benchmarks/gepa/tests/faza-1/null-baseline-shape-override.test.ts (4 tests, all passing)
+  reversals_from_amendment_5:
+    F_saturated_baseline_rule:
+      status: PAUSED
+      condition_for_reinstatement: "qwen-thinking real (post-fix) NULL pass rate ≥ 0.88 (saturated threshold per N=8 binomial CI)"
+      condition_for_revocation: "qwen-thinking real NULL < 0.88 → rule revoked entirely; original §F.1 (≥+5pp delta) applies to all shapes"
+      rationale: "Original saturation classification (qwen-thinking 8/8 = 100%) was based on artifactual data; real per-shape NULL data needed before invoking saturated-rule machinery"
+    phase_4_3_clarification_note:
+      status: REVOKED
+      original_proposal: "PM appends 'shape×subject mismatch' clarification note to decisions/2026-04-28-phase-4-3-rescore-delta-report.md"
+      revocation_reason: "Original 'qwen-thinking outperforms claude' finding was artifactual (single-shape variance). Phase 4.3 verdict (72.2% T2 reasoning failure) remains binding as authored. No follow-up note appended."
+    judge_metric_design_amendment_5:
+      status: STAYS
+      rationale: "Judge ensemble metrics (raw agreement + κ + Cohen paradox annotation) are computed on actual response content regardless of which shape produced it. Methodology valid even with artifactual shape labels."
+  re_run_plan:
+    sequence:
+      - "1. Fix run-null-baseline.ts (DONE; commit pending)"
+      - "2. Add regression test (DONE)"
+      - "3. Preserve old NULL artifacts as -artifactual-bug-superseded (DONE)"
+      - "4. Re-run NULL-baseline (5 shapes × 8 instances = 40 evals)"
+      - "5. Re-compute κ + raw agreement on real per-shape data"
+      - "6. Author NEW Checkpoint A report"
+      - "7. Re-evaluate §F-saturated rule per real NULL pass rates"
+      - "8. Re-project Pre-Gen-1 cost"
+      - "9. HALT-AND-PM at NEW Checkpoint A"
+      - "10. Then proceed to Gen 1 kick"
+    sunk_cost_acknowledged_usd: 4.95  # original artifactual NULL-baseline cost
+    new_cost_projected_usd: 5.0       # re-run NULL-baseline
+    cumulative_post_re_run_usd: 25.13  # corpus 13.35 + probe 0.40 + sunk null 4.95 + re-null 5.0 + mutations 1.43
+  preserved_artifacts:
+    - benchmarks/results/gepa-faza1/null-baseline/null-baseline-eval-artifactual-bug-superseded.jsonl
+    - benchmarks/results/gepa-faza1/null-baseline/null-baseline-summary-artifactual-bug-superseded.json
+    - benchmarks/results/gepa-faza1/null-baseline/null-baseline-run-artifactual-bug-superseded.log
+    - benchmarks/results/gepa-faza1/null-baseline/checkpoint-a-aggregates-artifactual-bug-superseded.json
+    - benchmarks/results/gepa-faza1/null-baseline/checkpoint-a-report-artifactual-bug-superseded.md
+  unaffected:
+    - "Mutation oracle 10 candidates (cell-semantic preservation valid; cost $1.43)"
+    - "Corpus 50/50 (no dependency on shape selection)"
+    - "Manifest v7 Amendments 1-5 (conceptually correct; fix is implementation-side only)"
+    - "Pre-Gen-1 cost projection $14.86 (cost is shape-independent: subject + judge dominate)"
+    - "Headroom under $115 cap remains healthy (~$90 post re-run)"
+
 # ── Manifest path + lock metadata ──────────────────────────────────────────
 
 manifest_path: benchmarks/preregistration/manifest-v7-gepa-faza1.yaml
@@ -922,10 +979,12 @@ manifest_locked_at: 2026-04-28T00:00:00Z
 manifest_amendment_2_supplemented_at: 2026-04-28T00:30:00Z
 manifest_amendment_3_supplemented_at: 2026-04-28T00:45:00Z
 manifest_amendment_4_supplemented_at: 2026-04-28T01:00:00Z
-manifest_amendment_5_supplemented_at: 2026-04-28T11:00:00Z  # judge metric parallel-report + saturated-baseline rule
+manifest_amendment_5_supplemented_at: 2026-04-28T11:00:00Z
+manifest_amendment_6_supplemented_at: 2026-04-28T15:30:00Z  # NULL-baseline shape-override bug fix
 manifest_sha256_initial_lock: 1d592a6113c918b7a07fc9aba748c8bdd12a6ce1c6943943c0492678299fa700
 manifest_sha256_post_amendment_2: 583712dde139ffc87fb1ab21643f68d52c56469ded9e8090a624980b05969beb
 manifest_sha256_post_amendment_3: e43d13793535077c92a0e2c24f948ebb9d6e04000293690fdf38c4ba957aa972
 manifest_sha256_post_amendment_4: 1f7a6d6fa01403f6c8d6855893adbfa5e82898a81b7583cfa55628e5eba60196
-manifest_sha256_post_amendment_5: NOT_YET_COMPUTED  # CC-2 computes after this Edit
+manifest_sha256_post_amendment_5: 062dfc4935aaa89f0b25595c5dc3ce4af06c95c4c261075a1f0226d8af3f3dee
+manifest_sha256_post_amendment_6: NOT_YET_COMPUTED  # CC-2 computes post Edit
 audit_chain_terminus: this_file
