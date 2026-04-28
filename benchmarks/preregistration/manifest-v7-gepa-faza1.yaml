@@ -1,0 +1,686 @@
+# Manifest v7 — GEPA Tier 2 Prompt-Shapes Evolution Faza 1 (Pilot Proof-of-Concept)
+# Extends manifest v6 (anchor SHA-256 5d5c1023421cd1a79f4913bb4c0a59415e21f50797255bff7dfec8e16b68e3ed)
+# Authority: PM (Marko Markovic) — RATIFIED via Amendment 1 (briefs/2026-04-28-cc4-faza1-amendment-1.md)
+# Locked upon paste-into-CC-2 + worktree creation 2026-04-28
+# Substrate freeze: c9bda3d (Phase 4.7 HEAD on feature/c3-v3-wrapper)
+
+manifest_version: v7.0.0-gepa-faza1
+manifest_type: gepa_tier2_prompt_shapes_faza1_proof_of_concept
+locked_date: 2026-04-28
+authority: PM (Marko Markovic) — Amendment 1 ratification 2026-04-28 on closure of pre-flight halt-and-PM
+sprint: 12
+task: 2.5_gepa_tier2_extension
+stage: 4_post_phase_4_3_verdict
+phase: faza_1_pilot
+branch: feature/c3-v3-wrapper
+substrate_freeze_head: c9bda3d6dd4c0a4f715e09f3757a96d01ff01cd7
+substrate_freeze_head_short: c9bda3d
+supersedes: NONE  # v7 EXTENDS v6, does not supersede
+inherits_from:
+  - manifest_v6_2026_04_24_anchor_5d5c1023
+  - pilot_2026_04_26_judge_config_runner_8a6251e2
+  - kappa_v6_phase_1_recal_60d061e_38a830e_01f7ead
+
+# ── v7 Delta Log ────────────────────────────────────────────────────────────
+
+v7_delta_log:
+  trigger:
+    event: pm_brief_2026_04_28_authored_followed_by_pre_flight_halt_and_amendment_1_ratification
+    chain:
+      - id: phase_4_3_verdict
+        anchor_commit: c9bda3d
+        finding: H3/H4 fail = 72.2% T2 (reasoning/planning gap), 5.6% T1; Phase 1.1 normalize delta = 0% all 12 cells; worst-case T1 ceiling 27.8% < 30% threshold → Tier 2 GEPA work required pre Phase 5
+      - id: brief_2026_04_28_authored
+        path: D:/Projects/PM-Waggle-OS/briefs/2026-04-28-cc4-gepa-tier2-evolution-faza1-brief.md
+        scope: GEPA Faza 1 pilot proof-of-concept ($100 cap, H3 cell, 5 shapes, 2 generations)
+      - id: cc4_pre_flight_halt
+        path: D:/Projects/PM-Waggle-OS/briefs/2026-04-28-cc4-faza1-preflight-report.md
+        ratification_asks:
+          - "A: H3 cell semantics (3-instance pilot vs 400-instance LoCoMo vs net-new corpus)"
+          - "B: trio_strict_pass operationalization for Likert"
+          - "C: canonical κ=0.7878 source citation"
+          - "D: path correction packages/core/ → packages/agent/"
+          - "E: feedback_config_inheritance_audit.md reconstruction"
+      - id: amendment_1_ratified
+        path: D:/Projects/PM-Waggle-OS/briefs/2026-04-28-cc4-faza1-amendment-1.md
+        resolution_summary: "A=Option C corpus expansion 50 instances; B=op (ii) trio_mean ≥ 4.0; C=cite v6-kappa-recal commits 60d061e/38a830e/01f7ead; D=ratified; E=alternative inline §A in launch decision"
+
+  changes_from_v6:
+    new_section: gepa
+      delta: "v6 has no GEPA section; v7 adds full GEPA Faza 1 specification (population, generations, oracle, mutation surface, validator)"
+    new_section: corpus_design
+      delta: "v6 inherits LoCoMo dataset for 5-cell stage 3; v7 adds 50-instance NorthLane CFO synthesis corpus for GEPA Faza 1 H3 evaluation"
+    new_section: substrate_anchor
+      delta: "v6 freezes HEAD at 373516c with worktree-less main repo operation; v7 pins HEAD at c9bda3d with isolated worktree D:/Projects/waggle-os-faza1-wt for race-condition guard vs CC-1 parallel Phase 4.4/4.5 work"
+    new_section: canonical_kappa_anchor
+      delta: "v6 §5.4 specifies kappa policy floor (≥0.70 pass); v7 pins specific value 0.7878 with file SHA256 for ±0.05 drift threshold per brief §4 condition 3"
+    new_section: metric_operationalization
+      delta: "v6 LoCoMo binary correctness (accuracy=1); v7 adds Likert trio_strict_pass operationalization for synthesis tasks per Amendment 1 Ask B"
+    new_section: judges
+      delta: "v6 §5.2 max_tokens 1024/1024/4096 = LoCoMo factoid baseline; v7 inherits pilot 2026-04-26 runner SHA 8a6251e2 line 626 max_tokens=3000 for synthesis Likert (all 3 judges)"
+    new_section: gepa_acceptance_criteria
+      delta: "v6 has Gate D acceptance for Stage 3 N=400; v7 adds Faza 1 PASS/FAIL conditions per brief §4 (updated condition 1 prose per Amendment 1 §6)"
+    new_section: cost_super_linear_governance
+      delta: "v6 budget envelope $50-60; v7 §cost adds 1.5× baseline token projection + +30% mid-run halt per brief §6.7"
+    locked_substrate_inherited_from_v6:
+      sections:
+        - "v6 §1 primary hypothesis (memory_lift_retrieval_vs_no_context) — Faza 1 does NOT re-test"
+        - "v6 §2 secondary endpoints S1-S5 — Faza 1 does NOT re-test"
+        - "v6 §3 sample design (concurrency=1, 5 cells sequential, N=400, seed=42) — Faza 1 substrate locked but not re-run"
+        - "v6 §4 LoCoMo dataset — Faza 1 substrate locked but not source corpus"
+        - "v6 §6 substrate (HybridSearch, gopId scope, nomic-embed-text) — Faza 1 inherits exactly"
+        - "v6 §7 SYSTEM_AGENTIC verbatim bytes (SHA-256 6facae6d...) — Faza 1 cell semantic LOCK"
+
+# ── Substrate anchor (Discovery 4.5 from Amendment 1) ──────────────────────
+
+substrate_anchor:
+  branch: feature/c3-v3-wrapper
+  commit_sha: c9bda3d6dd4c0a4f715e09f3757a96d01ff01cd7
+  commit_sha_short: c9bda3d
+  phase_label: "Phase 4.7 (compression-engaged-end-to-end assertion test post-fold-in)"
+  commit_message_first_line: "[agent-fix Phase 4.7] test(agent/long-task): compression-engaged-end-to-end assertion"
+  pin_method: git_worktree_isolated
+  worktree_path: D:/Projects/waggle-os-faza1-wt
+  worktree_state: detached_HEAD_at_c9bda3d
+  ancestry_verified_at: 2026-04-28
+  ancestry_verification_command: "git merge-base --is-ancestor c9bda3d HEAD"
+  ancestry_verification_result: PASS
+  rationale: race_condition_guard_vs_CC1_Phase_4_4_4_5_parallel_work
+  integration_back_to_branch: "Final Faza 1 commits land back on feature/c3-v3-wrapper at HEAD via cherry-pick or merge at Checkpoint C; CC-2 designs integration sequence and reports in Checkpoint C halt"
+  notes:
+    - "git fetch origin feature/c3-v3-wrapper FAILED at lock time (couldn't find remote ref) — repo has no origin remote configured for this branch; substrate freshness verified locally only via git rev-parse + ancestry check"
+    - "main repo D:/Projects/waggle-os is currently AT c9bda3d (HEAD on branch matches anchor); worktree creation is forward-looking guard rather than current-state hedge"
+
+# ── Canonical κ anchor (Ask C from Amendment 1) ────────────────────────────
+
+canonical_kappa_anchor:
+  value: 0.7877758913412564  # exact from _summary-v6-kappa.json k_conservative_trio
+  value_rounded_4dp: 0.7878
+  source_file: benchmarks/calibration/v6-kappa-recal/_summary-v6-kappa.json
+  source_file_sha256: 657d4490bab28d35cf8a9c3ccea8a6b79e92835d700155184e51f3900836684c
+  source_file_size_bytes: 1822
+  source_file_modified: "2026-04-24T17:34:00Z"
+  supplementary_files:
+    - path: benchmarks/calibration/v6-kappa-recal/v6-kappa-memo.md
+      sha256: 24b18112f7648ea3aa235281af19970ff4712925124301a0e60a8fd05bf5bb33
+    - path: benchmarks/calibration/v6-kappa-recal/kappa-v6-analysis.md
+      sha256: 457357db1ad7f5941c045c3ef6724b653d2050ba8a4b61bf3f02a751adae5d47
+  ratified_commits:
+    - sha: 60d061e
+      message: "[v6] manifest pre-registration: judge ensemble swap to MiniMax M2.7 primary + Kimi K2.6 backup per §1.3g-§1.3h-C validation"
+    - sha: 38a830e
+      message: "[v6] litellm-config amendment: add minimax-m27 + kimi-k26 aliases per judge swap ratification; anchor=60d061e"
+    - sha: 01f7ead
+      message: "[v6] kappa re-calibration on new trio: conservative trio kappa=0.7878 (PASS); anchor=60d061e"
+  ratified_date: 2026-04-24
+  drift_threshold: 0.05  # per brief §4 condition 3
+  drift_band:
+    pass: [0.7378, 0.8378]    # 0.7878 ± 0.05
+    fail_low: 0.7378           # < this triggers Faza 1 condition §4.3 FAIL
+    fail_high: 0.8378          # > this also fails (judge ensemble drifted upward → may indicate confound)
+  pairwise_components:
+    k_opus_gpt: 0.847958297132928
+    k_opus_minimax: 0.8548922056384745
+    k_gpt_minimax: 0.7877758913412564  # MIN — canonical conservative trio
+    confusion_matrices_available: true  # see _summary-v6-kappa.json lines 58-75
+  per_cell_breakdown_at_ratification:
+    no-context: 1.0000
+    oracle-context: 0.7059
+    full-context: 0.7000
+    retrieval: 0.8936
+    agentic: 0.6875  # BORDERLINE at cell-level per v6-kappa-memo.md (GPT-MiniMax pair)
+  notes:
+    - "Amendment 1 Ask C cited path 'benchmarks/calibration/2026-04-24-trio-strict-recal.json' which does NOT exist at HEAD"
+    - "Path correction applied: actual canonical files live in benchmarks/calibration/v6-kappa-recal/ subdirectory (matches manifest v6 §5.4 + audit chain)"
+    - "Per Ask C halt-and-PM trigger language ('if file is absent at HEAD: halt-and-PM, signal of repo state divergence'): file IS present, just at slightly different path within same calibration dir tree — interpreted as path typo similar to packages/core/ → packages/agent/ Ask D precedent, NOT state divergence"
+
+# ── Metric operationalization (Ask B from Amendment 1) ─────────────────────
+
+metric_operationalization:
+  trio_strict_pass:
+    method_primary: aggregate_trio_mean_threshold
+    method_primary_id: "(ii)"
+    threshold_primary: 4.0
+    citation: "Amendment 1 Ask B ratification (trio_mean ≥ 4.0 per pilot artifact pattern interpretation)"
+    method_supplementary: per_judge_mean_threshold_with_quorum
+    method_supplementary_id: "(i)"
+    threshold_supplementary_per_judge: 3.5
+    threshold_supplementary_quorum: "≥ 2 of 3 judges with mean ≥ 3.5"
+    citation_supplementary: "pilot 2026-04-26 runner SHA 8a6251e2 line 657 actually-deployed code"
+    discrepancy_note:
+      detected: true
+      summary: "Amendment 1 Ask B specifies that operationalization (ii) reuses 'pilot 2026-04-26 already-deployed pattern'. Pre-flight discovery during runner archeology found the deployed code uses (i), not (ii). Both happen to agree on the pilot's 12 sample data points but can diverge for candidates near boundary."
+      resolution: "Faza 1 computes BOTH methods for every evaluation, reports both in raw judge logs + summary. Acceptance per brief §4 condition 1 (Amendment 1 §6 update) uses (ii) trio_mean ≥ 4.0 as PRIMARY. (i) reported as supplementary diagnostic for cross-checking against pilot baseline."
+      pm_visibility: "Reported at Pre-A halt + Checkpoint A + Checkpoint C; PM may override to (i) primary if cross-method delta exceeds ±2pp on NULL-baseline."
+  trio_critical_fail:
+    method: per_judge_mean_threshold_with_quorum
+    threshold_per_judge: 2.0
+    threshold_quorum: "≥ 2 of 3 judges with mean < 2.0 AND > 0 (excludes failed parses)"
+    citation: "pilot 2026-04-26 runner SHA 8a6251e2 line 658"
+    inheritance: unchanged_from_pilot
+  trio_mean:
+    method: arithmetic_mean_of_valid_judge_means
+    valid_judge_means_filter: "judge.mean > 0 (excludes failed parse / 2-of-2 quorum fallback per v6 §5.2.1)"
+    fallback: "If all 3 judges fail: trio_mean = 0, flagged as evaluator_loss per v6 §9"
+  retrieval_engagement_bonus:
+    added_by: amendment_2
+    rationale: "Phase 4.5 empirical signal — Qwen retrieves 1.33×/task vs Opus 2.33×/task on byte-identical MULTI_STEP_ACTION_CONTRACT surface; H4 score gap mechanistically traces to under-engagement, not tool format"
+    applies_to_shapes: [qwen-thinking, qwen-non-thinking]
+    excluded_shapes: [claude, gpt, generic-simple]  # exclusion rationale: these don't exhibit the engagement gap
+    metric: mean_retrieval_calls_per_task
+    bands:
+      bonus_plus_5pp: ">= 2.0"   # Opus parity proxy
+      bonus_zero: "[1.5, 2.0)"
+      bonus_minus_5pp: "< 1.5"   # Qwen baseline behavior penalty
+    encoded_as_decimals:
+      "+0.05": ">= 2.0"
+      "0.00": "[1.5, 2.0)"
+      "-0.05": "< 1.5"
+    threshold_choice_rationale:
+      width_5pp: "matches brief §4 condition 1 +5pp threshold for signal magnitude consistency"
+      threshold_2_0: "Opus mean 2.33 is parity target; 2.0 = slight relaxation acknowledging Faza 1 shapes are mid-evolution; achievement signals engagement gap closed to within 14% of Opus"
+      threshold_1_5: "midpoint between Qwen baseline 1.33 and Opus parity 2.33; below this = Qwen baseline behavior unimproved"
+    telemetry_source: agent_harness_existing_retrieval_calls_counter  # no new API calls per Amendment 2 §7
+    pilot_anchor_data:
+      qwen_baseline: "1.33 mean (Cells D across task-{1,2,3})"
+      opus_baseline: "2.33 mean (Cells B across task-{1,2,3})"
+      gap_pp: 43  # Qwen under-engagement vs Opus
+      source: pilot-2026-04-26 + Phase 4.5 audit decisions/2026-04-28-phase-4-5-tools-audit-results.md
+  per_shape_fitness_formula:
+    qwen_targeted:
+      shapes: [qwen-thinking, qwen-non-thinking]
+      formula: "trio_strict_pass_rate + retrieval_engagement_bonus - cost_penalty"
+    non_qwen:
+      shapes: [claude, gpt, generic-simple]
+      formula: "trio_strict_pass_rate - cost_penalty"
+    cost_penalty:
+      method: linear_per_dollar_above_baseline_median
+      coefficient_pp_per_dollar_10c: 0.5  # -0.5pp per $0.10 above per-shape baseline median
+      baseline_reference: per_shape_null_baseline_median_cost_usd
+
+# ── Judges block (Discovery 3.1 from Amendment 1) ──────────────────────────
+
+judges:
+  primary:
+    - slot: primary_judge_1
+      model_id: claude-opus-4-7
+      provider: anthropic
+      max_tokens: 3000
+      thinking: false
+      temperature_explicit: 1.0  # per pilot runner line 385
+      price_per_million_input_usd: 15.0
+      price_per_million_output_usd: 75.0
+      inherited_from: pilot_2026_04_26_runner_sha256_8a6251e2_line_626
+    - slot: primary_judge_2
+      model_id: gpt-5.4
+      provider: openai_via_openrouter
+      max_tokens: 3000
+      thinking: false
+      temperature: omitted  # reasoning model per pilot runner line 387
+      price_per_million_input_usd: 2.5  # per pilot runner line 131 (deviates from v6 §5.2 10.0)
+      price_per_million_output_usd: 10.0  # per pilot runner line 131 (deviates from v6 §5.2 30.0)
+      inherited_from: pilot_2026_04_26_runner_sha256_8a6251e2_line_626
+      pricing_note: "Pilot runner uses GPT pricing 2.5/10.0 per million; v6 §5.2 had 10.0/30.0 — v7 inherits from pilot which is more recent"
+    - slot: primary_judge_3
+      model_id: minimax-m27-via-openrouter
+      provider: openrouter_bridge
+      upstream_identifier: openrouter/minimax/minimax-m2.7
+      max_tokens: 3000
+      thinking: false
+      temperature: omitted  # reasoning model per pilot runner line 387
+      price_per_million_input_usd: 0.7  # per pilot runner line 132 (deviates from v6 §5.2 0.30)
+      price_per_million_output_usd: 2.8  # per pilot runner line 132 (deviates from v6 §5.2 1.20)
+      inherited_from: pilot_2026_04_26_runner_sha256_8a6251e2_line_626
+      pricing_note: "Pilot runner uses MiniMax pricing 0.7/2.8; v6 §5.2 had 0.30/1.20 — v7 inherits from pilot which is more recent"
+  retries:
+    max_per_judge: 3
+    pattern: "exponential backoff per pilot runner; on 3 fail, judge marked __JUDGE_FAILED__ + 0 mean + excluded from trio_mean per metric_operationalization.trio_mean.valid_judge_means_filter"
+  fallback_quorum:
+    activation: when_minimax_fails
+    rule: "2-of-2 Opus+GPT quorum per v6 §5.2.1; trio_mean computed from 2 valid judges"
+    expected_failure_rate_per_eval: lt_0_05  # observed in pilot ~0.2% per JSONL inspection
+
+# ── Subject model (inherited from pilot runner — H3 = Qwen synthesis) ──────
+
+subject:
+  model_alias: qwen3.6-35b-a3b-via-dashscope-direct
+  fallback_alias: qwen3.6-35b-a3b-via-openrouter
+  max_tokens: 16000
+  thinking: true  # enable_thinking=true via extra_body per pilot runner line 394
+  temperature: 0.3  # default per pilot runner line 380
+  inherited_from: pilot_2026_04_26_runner_sha256_8a6251e2_amendment_v2
+  notes:
+    - "H3 hypothesis space = Qwen solo synthesis; Faza 1 evolves prompt-shapes for Qwen + 4 other shapes (proof-of-concept whether GEPA generalizes)"
+    - "Cells C/D in pilot use this exact subject; Faza 1 NULL-baseline also uses this subject"
+
+# ── Corpus design (Ask A Option C from Amendment 1) ────────────────────────
+
+corpus_design:
+  total_instances: 50
+  generation_oracle:
+    model: claude-opus-4-7
+    max_tokens: 8000
+    thinking: true
+    temperature: 0.7  # higher for instance variation
+    rationale: "Opus 4.7 chosen for consistency with mutation oracle (brief §3.3); single-oracle design minimizes confounders across pre-work + GEPA pipeline"
+  domain: NorthLane_CFO_synthesis
+  domain_anchor: pilot_2026_04_26_brief_dir_D__Projects_PM_Waggle_OS_briefs_2026_04_26_agentic_knowledge_work_pilot
+  stratification_axes:
+    primary_axis: task_family
+    primary_axis_count: 5
+    secondary_axis: persona_company_stage
+    secondary_axis_count: 10  # 5 personas × 2 company stages
+    cells_per_family: 10
+  task_families:
+    - id: F1_strategic_synthesis
+      description: "Multi-document risk identification + prioritized action planning (mirror pilot task-1)"
+      mirror_pilot_task: task-1
+      docs_per_instance: 7
+      example_prompt_template: "Identify the 3 most critical risks for $COMPANY in $PERIOD and propose action plan for each."
+    - id: F2_cross_thread_coordination
+      description: "Multi-stakeholder alignment across email/Slack/document threads (mirror pilot task-2)"
+      mirror_pilot_task: task-2
+      docs_per_instance: 6
+      example_prompt_template: "Reconcile conflicting positions from $STAKEHOLDERS and propose unified approach."
+    - id: F3_decision_support
+      description: "Go/no-go recommendations with explicit tradeoff analysis (mirror pilot task-3)"
+      mirror_pilot_task: task-3
+      docs_per_instance: 6
+      example_prompt_template: "Recommend $DECISION based on materials; justify, address counter-arguments."
+    - id: F4_investor_communications
+      description: "Board update memos + investor Q&A prep (NEW family, NorthLane domain extension)"
+      mirror_pilot_task: NONE
+      docs_per_instance: 6
+      example_prompt_template: "Draft Q$N investor update covering $METRICS + addressing $CONCERNS."
+    - id: F5_scenario_planning
+      description: "Multi-scenario forecast + decision-tree comparison (NEW family, NorthLane domain extension)"
+      mirror_pilot_task: NONE
+      docs_per_instance: 7
+      example_prompt_template: "Compare $N scenarios for $DECISION_AREA; recommend hedging strategy."
+  persona_axis:
+    - p1_founder_ceo
+    - p2_cfo  # mirrors pilot persona
+    - p3_coo
+    - p4_vp_finance
+    - p5_independent_director
+  company_stage_axis:
+    - stage_a_series_b_growth_burning  # mirrors NorthLane state
+    - stage_b_post_profitable_consolidation
+  stratified_sampling:
+    method: deterministic_fully_crossed
+    seed: 42
+    yield: "5 task_families × 5 personas × 2 company_stages = 50 cells; each cell = 1 instance"
+  rubric_per_instance:
+    dimensions: [completeness, accuracy, synthesis, judgment, actionability, structure]
+    scale: likert_1_5
+    inherited_from: pilot_judge_rubric_sha256_2e24826eb75e92ef1e64055bb2c632eec64ded8fedf7d5b6897ccaec9ffff2eb
+  per_instance_quality_floor:
+    docs_per_instance_min: 6
+    docs_per_instance_max: 8
+    avg_doc_length_chars: 800-1500
+    persona_chars: 100-300
+    scenario_chars: 200-500
+    question_chars: 100-300
+  spot_audit:
+    sample_size: 5
+    sampling: random_seeded_42
+    audit_dimensions:
+      - "instance has ≥6 source docs (count check)"
+      - "persona + scenario coherent + plausible (manual read)"
+      - "question answerable from materials (no fabrication required)"
+      - "rubric dims applicable (no edge case e.g. binary yes/no)"
+      - "domain anchor preserved (NorthLane CFO context recognizable)"
+    halt_on: "any 1 of 5 fails any dimension → corpus regeneration required"
+    pre_a_checkpoint_binding: true
+  expected_generation_cost_usd: 5.00
+  generation_cost_breakdown: "50 instances × ~16k tokens output × $0.075/1k = ~$60... actual estimate ~$5 with prompt caching + Opus 4.7 efficient generation; halt at $7 generation cost (40% buffer)"
+  generation_artifact_path: benchmarks/results/gepa-faza1/corpus/h3-northlane-cfo-50-instances.jsonl
+  spot_audit_report_path: benchmarks/results/gepa-faza1/corpus/h3-spot-audit-pre-a-report.md
+
+# ── GEPA Faza 1 specification ──────────────────────────────────────────────
+
+gepa:
+  faza: 1
+  type: pilot_proof_of_concept
+  cell_scope:
+    label: H3
+    semantic: Qwen_solo_synthesis
+    source_corpus: corpus_design.task_families  # 50 NorthLane CFO instances
+  shape_scope:
+    target_count: 5
+    targets:
+      - claude
+      - qwen-thinking  # primary substrate (H3 = Qwen)
+      - qwen-non-thinking
+      - gpt
+      - generic-simple
+    target_path: packages/agent/src/prompt-shapes/  # CORRECTION per Ask D from packages/core/
+    cell_scope_per_shape: H3
+  population:
+    candidates_per_shape: 3
+    seed_candidate_per_shape: current_baseline_shape  # @ c9bda3d
+    mutation_count_per_shape: 2
+    total_candidates: 15  # 5 shapes × 3 candidates
+  generations:
+    count: 2
+    gen_0: initial_population_with_baseline_seeds
+    gen_1: one_round_of_mutations
+    convergence_search: false  # explicitly NOT a convergence run
+  evaluation:
+    n_per_candidate: 8
+    instance_selection: deterministic_stratified_seed_42_from_corpus_design
+    evaluation_type: trio_judged_per_metric_operationalization
+  mutation_oracle:
+    model: claude-opus-4-7
+    max_tokens: 8000
+    thinking: true
+    temperature: 0.5
+    prompt_template_path_qwen: benchmarks/results/gepa-faza1/oracle/mutation-prompt-template-qwen.md
+    prompt_template_path_non_qwen: benchmarks/results/gepa-faza1/oracle/mutation-prompt-template-non-qwen.md
+    fork_method: shape_class_routing  # see mutation_oracle_design section below — added by Amendment 2
+    constraints:
+      - "preserve cell semantics: do NOT modify MULTI_STEP_ACTION_CONTRACT in types.ts"
+      - "preserve cell semantics: do NOT modify cell.system_prompt or cell.scoring_rubric"
+      - "modify only reasoning scaffold, planning step structure, or chain-of-thought triggers"
+      - "do NOT modify task framing (persona/question/materials section labels)"
+    failure_handling: "2 consecutive invalid mutations from oracle (per brief §5 halt trigger) → halt-and-PM"
+  mutation_validator:
+    type: cell_semantic_preservation_audit
+    inputs: [baseline_shape_file, candidate_shape_file]
+    diff_target: shape_file_only
+    invalid_diff_targets:
+      - types.ts (entire file LOCKED)
+      - selector.ts (entire file LOCKED)
+      - index.ts (entire file LOCKED)
+      - shape_file.metadata (only evidence_link can update; description/modelClass/defaultThinking/defaultMaxTokens LOCKED)
+      - shape_file.imports (LOCKED)
+      - MULTI_STEP_ACTION_CONTRACT (LOCKED — single hashable boundary)
+    valid_diff_targets:
+      - shape_file.systemPrompt method body (string-building only)
+      - shape_file.soloUserPrompt method body
+      - shape_file.multiStepKickoffUserPrompt method body
+      - shape_file.retrievalInjectionUserPrompt method body
+      - shape_file.metadata.evidence_link (MUST update to point to GEPA Gen 1 results)
+    boundary_anchor:
+      file: packages/agent/src/prompt-shapes/types.ts
+      constant_name: MULTI_STEP_ACTION_CONTRACT
+      sha256_at_substrate_anchor: NOT_YET_COMPUTED  # CC-2 computes pre-launch decision
+      enforcement: "any candidate that produces non-zero diff against this string at the byte level → automatic INVALID, candidate dropped, oracle re-prompted (consumes 1 of 2 tolerance per brief §5)"
+    output: validity_verdict_per_candidate_with_diff_artifact
+
+# ── Faza 1 acceptance criteria (per brief §4 + Amendment 1 §6 update) ──────
+
+faza_1_acceptance:
+  conditions_all_must_hold:
+    - id: condition_1_updated_twice
+      brief_section: "§4 condition 1 UPDATED per Amendment 1 §6 + Amendment 2 §5 (third update — Qwen-shape sub-criterion added)"
+      statement: "Best GEPA candidate per shape beats NULL-baseline by ≥+5pp on trio_strict_pass rate (where trio_strict_pass = trio_mean ≥ 4.0 per Ask B ratification). For Qwen-targeted shapes (qwen-thinking, qwen-non-thinking), additionally: best candidate must have mean retrieval_calls per task ≥ 1.7 (engagement gap closed by ≥50% relative to Qwen baseline 1.33 → Opus parity 2.33)."
+      operationalization_primary: metric_operationalization.trio_strict_pass.method_primary
+      delta_threshold_pp: 5
+      qwen_retrieval_engagement_floor_per_task: 1.7  # 50% gap closure threshold
+      n_per_evaluation: 8
+      ci_pp_at_95: 17  # binomial CI for N=8 — fitness signal not statistical claim
+      signal_disclaimer: "+5pp threshold is FITNESS SIGNAL indicator, not publishable statistical claim per brief §6.5 σ-aware acceptance"
+    - id: condition_2
+      brief_section: "§4 condition 2 unchanged"
+      statement: "At least 3/5 shapes show positive delta"
+      rationale: "avoids cherry-picking single shape that lucked out"
+    - id: condition_3
+      brief_section: "§4 condition 3 unchanged"
+      statement: "Trio judge κ remains within ±0.05 of canonical 0.7878"
+      drift_band: canonical_kappa_anchor.drift_band
+    - id: condition_4
+      brief_section: "§4 condition 4 unchanged"
+      statement: "Zero cell semantic violations detected per gepa.mutation_validator audit"
+  conditions_pass_fail_NEW_per_amendment_2:
+    - id: condition_5_NEW_false_positive_guard
+      brief_section: "§4.5 NEW per Amendment 2 §5 — false-positive evolution guard"
+      statement: "If best Qwen-shape candidate achieves +5pp trio_strict delta WITHOUT closing retrieval engagement gap (mean retrieval_calls per task < 1.5), this signals false-positive evolution (improvement via mutation-noise rather than mechanistic fix). Result: candidate REJECTED, shape marked FAIL even if other criteria pass."
+      applies_to_shapes: [qwen-thinking, qwen-non-thinking]
+      rejection_threshold_retrieval_calls_per_task: 1.5
+      rejection_with_trio_delta_at_or_above: 5  # pp
+      pm_action_on_trigger: "PM ratifies whether to re-run mutation generation with stronger anti-premature-finalization scaffolding or escalate"
+  fail_conditions_any_triggers_fail:
+    - "condition_1 fails (best candidate delta < +5pp on majority shapes; OR Qwen shape passes trio delta but fails retrieval engagement floor 1.7)"
+    - "condition_5 triggers (Qwen false-positive guard — +5pp trio delta with retrieval_calls < 1.5 → REJECTED)"
+    - "best candidate beats NULL-baseline only by overfitting evaluation set (detected via held-out 5 instances per shape)"
+    - "condition_3 fails (κ drift > 0.05 from 0.7878 → judge ensemble unreliable)"
+    - "condition_4 fails (cell semantic violation found in best candidate)"
+  on_fail: "fallback PHF; GEPA work parked; paper claim #2 multiplier teza reframes per decisions/2026-04-26-decision-matrix-self-judge-reframe.md"
+  on_pass: "Faza 2 expansion brief authoring authorized; CC-1 Phase 5 NULL-baseline run gated on Faza 1 PASS"
+
+# ── Cost & halt governance (brief §5 + §6.7 + Amendment 1 §4) ──────────────
+
+cost_governance:
+  hard_cap_usd: 100.00
+  internal_halt_usd: 80.00
+  expected_total_usd: 100.50  # Amendment 1 §4 — TIGHT
+  super_linear_buffer:
+    base_token_projection_multiplier: 1.5  # per brief §6.7 worst-case 1.5× baseline
+    mid_run_halt_threshold_pct: 30  # halt if actual exceeds projection by >30%
+    audit_frequency: every_20_evaluations
+  breakdown:
+    corpus_generation:
+      n_instances: 50
+      cost_per_instance_usd: 0.10
+      subtotal_usd: 5.00
+      payment: claude-opus-4-7_generation_oracle
+    null_baseline:
+      n_shapes: 5
+      n_instances: 8
+      cost_per_run_usd: 0.50
+      subtotal_usd: 20.00
+      payment: subject_qwen + judge_trio
+    gepa_gen_1:
+      n_shapes: 5
+      n_candidates: 3
+      n_instances: 8
+      cost_per_run_usd: 0.50
+      subtotal_usd: 60.00
+      payment: subject_qwen + judge_trio
+    held_out_validation:
+      n_shapes: 5
+      n_top_candidates: 1
+      n_instances: 5
+      cost_per_run_usd: 0.50
+      subtotal_usd: 12.50
+      payment: subject_qwen + judge_trio
+    mutation_oracle:
+      n_shapes: 5
+      n_mutations_per_gen: 2
+      n_generations: 2
+      cost_per_mutation_usd: 0.15
+      subtotal_usd: 3.00
+      payment: claude-opus-4-7_mutation_oracle
+  halt_triggers:
+    - "cumulative spend > $80 (internal halt)"
+    - "cumulative spend > $100 (hard cap)"
+    - "mid-run actual > projection by 30% (super-linear sub-rule)"
+    - "κ drift detected mid-run (sample audit every 20 calls)"
+    - "cell semantic violation detected"
+    - "mutation oracle 2 consecutive invalid mutations"
+    - "any LLM API blocker (rate-limit cascade, auth failure)"
+
+# ── Halt-and-PM checkpoints (brief §7 + Amendment 1 §5) ────────────────────
+
+checkpoints:
+  pre_a_NEW_per_amendment_1:
+    cumulative_spend_usd: 5
+    trigger: post_corpus_generation_plus_spot_audit_5_random
+    pm_action: ratify_corpus_quality_plus_null_baseline_kick_authorization
+    binding: true
+    artifact: benchmarks/results/gepa-faza1/corpus/h3-spot-audit-pre-a-report.md
+  checkpoint_a:
+    cumulative_spend_usd: 25
+    trigger: post_null_baseline_5_shapes_x_8_instances
+    pm_action: ratify_null_trio_strict_in_18_24_pct_range_plus_kappa_stability_plus_gen_1_kick
+    binding: true
+    artifact: benchmarks/results/gepa-faza1/null-baseline/checkpoint-a-report.md
+  checkpoint_b:
+    cumulative_spend_usd_range: [50, 65]
+    trigger: mid_gen_1_after_30_evaluations
+    pm_action: ratify_intermediate_kappa_plus_cell_semantic_violations_review_plus_complete_gen_1
+    binding: true
+    artifact: benchmarks/results/gepa-faza1/gen-1/checkpoint-b-report.md
+  checkpoint_c:
+    cumulative_spend_usd: 100
+    trigger: post_held_out_validation_5_shapes_top_1_x_5_instances
+    pm_action: faza_1_acceptance_verdict_per_faza_1_acceptance + faza_2_expansion_authorize_OR_phf_fallback
+    binding: true
+    artifact: decisions/2026-04-XX-gepa-faza1-results.md  # XX = checkpoint C date
+
+# ── §A inherited pre-flight rules anchor (Ask E alternative) ───────────────
+
+inherited_pre_flight_rules:
+  source: brief_section_6_verbatim
+  embedded_in: decisions/2026-04-28-gepa-faza1-launch.md_section_A
+  rule_count: 8
+  binding_for_entire_faza_1: true
+  citation_pattern: "All Faza 1 audit references that would cite 'feedback_config_inheritance_audit.md' instead cite 'Faza 1 launch decision §A inherited pre-flight rules from PM brief §6'"
+  pm_alternative_rationale: "External feedback file lives at /sessions/inspiring-festive-lamport/mnt/.auto-memory/ (PM session memory, persists cross-sessions); CC-2 cannot reach the path; reconstructing in waggle-os would create duplicate-but-stale copy that may drift from PM authoritative version; inline §A is self-contained binding contract for entire Faza 1 work"
+
+# ── Out-of-scope (locked) ──────────────────────────────────────────────────
+
+out_of_scope_for_faza_1:
+  - "H2 + H4 cells (Faza 2 expansion)"
+  - "More than 2 GEPA generations"
+  - "Population > 3 candidates per shape"
+  - "N > 8 per evaluation in Gen 1"
+  - "System prompt / cell semantics evolution (locked by brief §2 scope, enforced by gepa.mutation_validator)"
+  - "mind/ substrate modifications (locked by substrate_anchor)"
+  - "Apples-to-apples re-eval against pilot 2026-04-26 with original 12 instances (separate Korak 12 work; Faza 1 corpus is net-new per Ask A)"
+  - "Paper §5.4 framing update (post Phase 5 GEPA-evolved variant complete)"
+
+newly_in_scope_per_amendment_1:
+  - "50-instance H3 corpus generation (Ask A Option C)"
+  - "Pre-A halt-and-PM checkpoint (corpus quality gate)"
+  - "Substrate anchor pin via git worktree D:/Projects/waggle-os-faza1-wt (Discovery 4.5)"
+  - "κ anchor SHA256 verification (Ask C)"
+  - "Inline §A inherited rules in launch decision (Ask E alternative)"
+  - "Pilot judge config archeology + max_tokens=3000 inheritance (Discovery 3.1)"
+  - "Dual operationalization reporting for trio_strict_pass per pilot-vs-Amendment-1 discrepancy (metric_operationalization.discrepancy_note)"
+
+# ── Cross-references ───────────────────────────────────────────────────────
+
+cross_references:
+  predecessor_brief: D:/Projects/PM-Waggle-OS/briefs/2026-04-28-cc4-gepa-tier2-evolution-faza1-brief.md
+  pre_flight_report: D:/Projects/PM-Waggle-OS/briefs/2026-04-28-cc4-faza1-preflight-report.md
+  amendment_1: D:/Projects/PM-Waggle-OS/briefs/2026-04-28-cc4-faza1-amendment-1.md
+  phase_4_3_verdict: D:/Projects/PM-Waggle-OS/decisions/2026-04-28-phase-4-3-rescore-delta-report.md
+  pilot_artifact: benchmarks/results/pilot-2026-04-26/pilot-task-{1,2,3}-{A,B,C,D}.jsonl
+  pilot_runner_sha256: 8a6251e2fc4e3c44ba2f23bfe7a452c316cd58f2d30a5ae45928238d72e01104
+  pilot_runner_path: scripts/run-pilot-2026-04-26.ts
+  manifest_v6_anchor: benchmarks/preregistration/manifest-v6-preregistration.yaml (SHA-256 5d5c1023421cd1a79f4913bb4c0a59415e21f50797255bff7dfec8e16b68e3ed)
+  stage_3_v6_5_cell_summary: benchmarks/results/stage3-n400-v6-final-5cell-summary.md
+  kappa_anchor_file: benchmarks/calibration/v6-kappa-recal/_summary-v6-kappa.json (SHA-256 657d4490bab28d35cf8a9c3ccea8a6b79e92835d700155184e51f3900836684c)
+  prompt_shapes_dir: packages/agent/src/prompt-shapes/  # corrected per Ask D
+  multi_step_action_contract: packages/agent/src/prompt-shapes/types.ts (constant MULTI_STEP_ACTION_CONTRACT, lines 99-101)
+  launch_decision: D:/Projects/PM-Waggle-OS/decisions/2026-04-28-gepa-faza1-launch.md (LOCK upon authoring)
+  results_decision: D:/Projects/PM-Waggle-OS/decisions/2026-04-XX-gepa-faza1-results.md (post Checkpoint C)
+
+# ── Mutation oracle design (Amendment 2 §4 — forked Qwen vs non-Qwen) ──────
+
+mutation_oracle_design:
+  added_by: amendment_2
+  rationale: "Phase 4.5 finding requires Qwen-specific scaffolding to address mechanistic under-engagement; uniform mutation guidance would not target the empirical gap; forked oracle prompts ensure Qwen mutations explore the engagement-bonus reward landscape while non-Qwen mutations explore the broader scaffold space"
+  fork_routing:
+    method: shape_class_string_match
+    qwen_targeted_shapes: [qwen-thinking, qwen-non-thinking]
+    non_qwen_shapes: [claude, gpt, generic-simple]
+  qwen_prompt_template:
+    path: benchmarks/results/gepa-faza1/oracle/mutation-prompt-template-qwen.md
+    additional_guidance:
+      - "Emphasize multi-turn retrieval over single-shot retrieval"
+      - "Discourage premature finalization. Example phrasing: 'Continue retrieving until you have evidence from at least 2 distinct queries before finalizing'"
+      - "Encourage iterative refinement of retrieval queries based on prior turn results"
+      - "Anti-premature-finalization scaffolding. Example: 'Before finalizing, ask: what gap in evidence remains? Issue another retrieval if any gap exists.'"
+      - "Preserve cell semantic boundary (per Amendment 1 §6.4 mutation validator) — DO NOT modify MULTI_STEP_ACTION_CONTRACT bytes"
+    standard_constraints_inherited: gepa.mutation_oracle.constraints
+  non_qwen_prompt_template:
+    path: benchmarks/results/gepa-faza1/oracle/mutation-prompt-template-non-qwen.md
+    additional_guidance: "standard mutation guidance per original brief §3.3 — no Qwen-specific scaffolding (these shapes do not exhibit the engagement gap per Phase 4.5 audit)"
+    standard_constraints_inherited: gepa.mutation_oracle.constraints
+  fork_validation:
+    test: "shape-routing test in scaffold tests must verify oracle template selection per shape class"
+    coverage: "Qwen branch: 2 shapes × at least 1 test each; non-Qwen branch: 3 shapes × at least 1 test each"
+
+# ── Amendment 2 master integration section (binding context) ───────────────
+
+amendment_2_integration:
+  amendment_doc: D:/Projects/PM-Waggle-OS/briefs/2026-04-28-cc4-faza1-amendment-2.md
+  ratification_date: 2026-04-28
+  trigger_doc: decisions/2026-04-28-phase-4-5-tools-audit-results.md
+  trigger_source_session: CC-1 Phase 4.5 tools audit
+  source_anchor_pilot: benchmarks/results/pilot-2026-04-26
+  authority: PM (Marko Markovic)
+  empirical_signal_summary:
+    finding: "Qwen retrieval engagement 1.33×/task vs Opus 2.33×/task — same MULTI_STEP_ACTION_CONTRACT bytes (your 70a1701d hash), so behavior gap is prompting-strategy / confidence-calibration, NOT tool format"
+    source_table: amendment_2_doc_section_2_pilot_table
+    cells_observed: [task-1/B, task-1/D, task-2/B, task-2/D, task-3/B, task-3/D]
+    means:
+      qwen_retrieval_calls_per_task: 1.33
+      opus_retrieval_calls_per_task: 2.33
+      delta_pp: 43  # Qwen under-engagement vs Opus
+      qwen_trio_mean_avg: 4.30  # Cells D mean
+      opus_trio_mean_avg: 4.94  # Cells B mean
+      delta_score_avg: -0.65  # Qwen below Opus on every task
+    loop_exhausted_pattern: "Opus 67% (2/3 retrieval runs); Qwen 0% — Opus wants more retrievals than 5-turn budget"
+    interpretation: "Qwen finalizes prematurely with insufficient evidence base; mutation surface (prompt-shape body) is the lever to address this on Qwen-targeted shapes"
+  changes_from_v7_initial_lock:
+    metric_operationalization:
+      added_subsection: retrieval_engagement_bonus
+      added_subsection: per_shape_fitness_formula
+      reason: "Per-shape fitness function fork enables Qwen-specific reward shaping for engagement; non-Qwen shapes use original (trio_strict only) fitness to avoid distorting their measurement"
+    gepa_mutation_oracle:
+      changed_field: prompt_template_path → forked into prompt_template_path_qwen + prompt_template_path_non_qwen
+      added_field: fork_method
+      reason: "Qwen mutations need explicit anti-premature-finalization scaffolding; non-Qwen don't"
+    new_top_level_section: mutation_oracle_design
+      reason: "Forked design needs first-class manifest section for auditability"
+    faza_1_acceptance:
+      changed_condition: condition_1_updated → condition_1_updated_twice (added Qwen retrieval floor 1.7 sub-criterion)
+      added_condition: condition_5_NEW_false_positive_guard (REJECT Qwen candidate that achieves +5pp trio without retrieval engagement closure)
+      added_fail_condition: condition_5_trigger
+      reason: "Acceptance must reflect mechanistic intent — score gain without retrieval engagement = false-positive evolution"
+  changes_NOT_required:
+    - cost_governance: "no change — retrieval_calls is existing telemetry, no new API calls"
+    - canonical_kappa_anchor: "no change — Phase 4.5 finding orthogonal to κ"
+    - substrate_anchor: "no change — same c9bda3d worktree"
+    - corpus_design: "no change — corpus pre-dates retrieval engagement consideration; Pre-A spot-audit unchanged"
+    - subject_model: "no change — same Qwen alias + max_tokens + thinking"
+    - judges block: "no change — same max_tokens=3000 + retries"
+    - checkpoints: "no change — same 4 mandatory + Pre-A"
+  scaffold_test_coverage_NEW_requirements:
+    fitness_function_module:
+      coverage_target_pct: 80
+      mandatory_boundary_tests:
+        - "qwen-thinking shape, mean retrieval_calls = 1.49 → expect bonus = -0.05"
+        - "qwen-thinking shape, mean retrieval_calls = 1.50 → expect bonus = 0.00"
+        - "qwen-thinking shape, mean retrieval_calls = 1.99 → expect bonus = 0.00"
+        - "qwen-thinking shape, mean retrieval_calls = 2.00 → expect bonus = +0.05"
+        - "qwen-thinking shape, mean retrieval_calls = 2.50 → expect bonus = +0.05"
+      mandatory_routing_tests:
+        - "claude shape: bonus computation NOT applied (excluded from retrieval engagement weighting)"
+        - "gpt shape: bonus computation NOT applied"
+        - "generic-simple shape: bonus computation NOT applied"
+        - "qwen-thinking shape: bonus computation IS applied"
+        - "qwen-non-thinking shape: bonus computation IS applied"
+      mandatory_acceptance_tests:
+        - "§4.5 FAIL: Qwen candidate with trio_strict_pass_delta = +6pp AND mean retrieval_calls = 1.4 → REJECTED (false-positive guard fires)"
+        - "§4.5 PASS path: Qwen candidate with trio_strict_pass_delta = +6pp AND mean retrieval_calls = 1.7 → ACCEPTED (engagement floor met)"
+  phase_5_forward_record_NOT_FAZA_1:
+    note: "Per Amendment 2 §6 — Phase 5 GEPA-evolved variant has separate acceptance criteria (engagement parity ≥ Opus + score parity narrowed by ≥0.30 H4 trio_mean delta). CC-2 must NOT optimize for Phase 5 criteria during Faza 1 selection. Faza 1 selection is per faza_1_acceptance only."
+  cross_references:
+    amendment_2_doc: D:/Projects/PM-Waggle-OS/briefs/2026-04-28-cc4-faza1-amendment-2.md
+    amendment_1_doc: D:/Projects/PM-Waggle-OS/briefs/2026-04-28-cc4-faza1-amendment-1.md
+    phase_4_5_decision: decisions/2026-04-28-phase-4-5-tools-audit-results.md
+    pilot_anchor: benchmarks/results/pilot-2026-04-26/pilot-task-{1,2,3}-{B,D}.jsonl
+
+# ── Manifest path + lock metadata ──────────────────────────────────────────
+
+manifest_path: benchmarks/preregistration/manifest-v7-gepa-faza1.yaml
+manifest_locked_at: 2026-04-28T00:00:00Z
+manifest_amendment_2_supplemented_at: 2026-04-28T00:30:00Z  # supplemented post original LOCK
+manifest_sha256_initial_lock: 1d592a6113c918b7a07fc9aba748c8bdd12a6ce1c6943943c0492678299fa700
+manifest_sha256_post_amendment_2: NOT_YET_COMPUTED  # CC-2 computes after this Edit completes, pins in launch decision §B alongside initial-lock SHA with delta timestamp
+audit_chain_terminus: this_file
