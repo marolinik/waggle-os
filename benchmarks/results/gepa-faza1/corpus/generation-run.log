@@ -176,3 +176,27 @@
 [2026-04-28T01:42:05.379Z] [cumulative] $12.5417 / $15 halt; 47/50 instances
 [2026-04-28T01:42:05.380Z] [done] generated 47 instances; total cost $12.5417
 [2026-04-28T01:42:05.383Z] [pre-a] spot-audit report written to D:\Projects\waggle-os-faza1-wt\benchmarks\results\gepa-faza1\corpus\h3-spot-audit-pre-a-report.md
+[2026-04-28T08:41:15.960Z] [generator] mode=retry-failed; total cells=50
+[2026-04-28T08:41:15.961Z] [retry-failed] generating 3 instance(s)
+[2026-04-28T08:41:15.962Z] [h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3106c) [JSON-mode retry per Amendment 4]
+[2026-04-28T08:41:18.261Z] [h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] LLM error: litellm.BadRequestError: AnthropicException - {"type":"error","error":{"type":"invalid_request_error","message":"`temperature` is deprecated for this model."},"request_id":"req_011CaVsT1m4q8H6juEzB8fj
+[2026-04-28T08:41:18.262Z] [error] cell h3-F4-p2_cfo-stage_a_series_b_growth_burning-001 skipped due to: LLM error: litellm.BadRequestError: AnthropicException - {"type":"error","error":{"type":"invalid_request_error","message":"`temperature` is deprecated for this model."},"request_id":"req_011CaVsT1m4q8H6juEzB8fj
+[2026-04-28T08:41:18.262Z] [h3-F4-p2_cfo-stage_b_post_profitable_consolidation-001] generating via claude-opus-4-7 (prompt 3102c) [JSON-mode retry per Amendment 4]
+[2026-04-28T08:41:20.377Z] [h3-F4-p2_cfo-stage_b_post_profitable_consolidation-001] LLM error: litellm.BadRequestError: AnthropicException - {"type":"error","error":{"type":"invalid_request_error","message":"`temperature` is deprecated for this model."},"request_id":"req_011CaVsTAwDZ6FzbdLWXLXy
+[2026-04-28T08:41:20.377Z] [error] cell h3-F4-p2_cfo-stage_b_post_profitable_consolidation-001 skipped due to: LLM error: litellm.BadRequestError: AnthropicException - {"type":"error","error":{"type":"invalid_request_error","message":"`temperature` is deprecated for this model."},"request_id":"req_011CaVsTAwDZ6FzbdLWXLXy
+[2026-04-28T08:41:20.377Z] [h3-F5-p1_founder_ceo-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3131c) [JSON-mode retry per Amendment 4]
+[2026-04-28T08:41:22.508Z] [h3-F5-p1_founder_ceo-stage_a_series_b_growth_burning-001] LLM error: litellm.BadRequestError: AnthropicException - {"type":"error","error":{"type":"invalid_request_error","message":"`temperature` is deprecated for this model."},"request_id":"req_011CaVsTL2uSf8SK3LAB5zT
+[2026-04-28T08:41:22.509Z] [error] cell h3-F5-p1_founder_ceo-stage_a_series_b_growth_burning-001 skipped due to: LLM error: litellm.BadRequestError: AnthropicException - {"type":"error","error":{"type":"invalid_request_error","message":"`temperature` is deprecated for this model."},"request_id":"req_011CaVsTL2uSf8SK3LAB5zT
+[2026-04-28T08:41:22.509Z] [done] generated 0 instances; total cost $0.0000
+[2026-04-28T08:41:44.272Z] [generator] mode=retry-failed; total cells=50
+[2026-04-28T08:41:44.273Z] [retry-failed] generating 3 instance(s)
+[2026-04-28T08:41:44.274Z] [h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3106c) [JSON-mode retry per Amendment 4]
+[2026-04-28T08:42:48.872Z] [h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] OK; cost=$0.2658; 6 docs; latency=64598ms
+[2026-04-28T08:42:48.873Z] [cumulative] $0.2658 / $15 halt; 1/50 instances
+[2026-04-28T08:42:48.873Z] [h3-F4-p2_cfo-stage_b_post_profitable_consolidation-001] generating via claude-opus-4-7 (prompt 3102c) [JSON-mode retry per Amendment 4]
+[2026-04-28T08:43:50.504Z] [h3-F4-p2_cfo-stage_b_post_profitable_consolidation-001] OK; cost=$0.2499; 6 docs; latency=61630ms
+[2026-04-28T08:43:50.504Z] [cumulative] $0.5156 / $15 halt; 2/50 instances
+[2026-04-28T08:43:50.505Z] [h3-F5-p1_founder_ceo-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3131c) [JSON-mode retry per Amendment 4]
+[2026-04-28T08:44:58.124Z] [h3-F5-p1_founder_ceo-stage_a_series_b_growth_burning-001] OK; cost=$0.2884; 7 docs; latency=67618ms
+[2026-04-28T08:44:58.124Z] [cumulative] $0.8040 / $15 halt; 3/50 instances
+[2026-04-28T08:44:58.124Z] [done] generated 3 instances; total cost $0.8040

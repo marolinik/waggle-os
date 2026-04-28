@@ -732,13 +732,93 @@ amendment_3_integration:
     applies_to_phases: [Pre-Gen-1, future_phase_boundaries_if_PM_extends]
   cumulative_actual_spend_at_amendment_3_ratification: 0.40  # ~$0.27 successful probe + ~$0.13 failed probe (not tracked due to validation failure path)
 
+# ── Amendment 4 master integration section (binding context) ──────────────
+
+amendment_4_integration:
+  ratification_date: 2026-04-28
+  authority: PM (Marko Markovic)
+  predecessor: Amendment 3 cost cap raise
+  trigger: "PM Option B ratification on Pre-A halt — retry 3 failed cells via JSON-mode response_format with binding texture-audit caveat"
+  scope:
+    - "Document corpus retry methodology (JSON-mode response_format on Opus 4.7)"
+    - "Embed texture-audit binding rule (Pre-A caveat from PM Amendment 4)"
+    - "Document final 50/50 corpus state + texture audit verdict (NO DRIFT)"
+  rationale:
+    - "Phase 5 inheritance: Phase 5 GEPA-evolved variant uses Faza 1 corpus as baseline; cleaner 50/50 corpus = cleaner Phase 5 measurement + fewer methodological caveats in paper §5.4"
+    - "JSON-mode mitigation pattern documentation: reusable insurance for Faza 2 expansion + Phase 5 GEPA-evolved variant if same failure class recurs"
+    - "Reviewer dynamics: '50/50 with JSON-mode mitigation' is cleaner narrative than '47/50 because σ noise floor'"
+  retry_methodology:
+    cells_retried:
+      - h3-F4-p2_cfo-stage_a_series_b_growth_burning-001
+      - h3-F4-p2_cfo-stage_b_post_profitable_consolidation-001
+      - h3-F5-p1_founder_ceo-stage_a_series_b_growth_burning-001
+    failure_class: "Opus 4.7 emitted unescaped quotation marks inside long doc-body strings, breaking JSON envelope at positions 7042 / 7821 / 8823 in original generation"
+    mitigation:
+      response_format: '{"type":"json_object"}'
+      max_tokens: 6000  # reduced from 8000 to constrain output volume
+      temperature: omitted  # Anthropic Opus 4.7 deprecates temperature when response_format set; matches GPT-5.4/MiniMax pilot precedent
+    retry_cost_usd: 0.8040  # 3 cells × ~$0.27/cell
+    retry_outcome: 3_of_3_succeeded
+    retry_latency_each_seconds: ~64
+    notes:
+      - "First retry attempt failed with `temperature is deprecated for this model` Anthropic API error when temperature=0.3 was sent alongside response_format. Mitigation: omit temperature when JSON-mode requested. Discovery + fix landed mid-retry."
+      - "Latent resume bug in generator script (mode==='all' guard on JSONL load) caused JSONL truncation when --retry-failed wrote with 'w' flag. Recovery: git checkout restored 47 originals, then appended 3 retry instances. Fix landed in script: resume logic now triggers for any non-dry-run mode."
+  texture_audit_binding_rule:
+    trigger: "After JSON-mode generation of retry instances completes (any future use of JSON-mode retry on this corpus class)"
+    scope_required:
+      - "spot-audit retry instances against same quality criteria as original spot-audit"
+      - "side-by-side narrative texture comparison: 5 random originals (different seed than spot-audit) vs all retry instances"
+      - "score texture match qualitatively + quantitatively (paragraph length, sentence length, bullet density, table density, pronoun register, persona-stage consistency)"
+    drift_decision_rule:
+      drift_detected_signal: "visibly shorter/longer paragraphs, different framing, different register vs originals"
+      action_on_drift: "PIVOT TO OPTION A (accept partial corpus); document drift as caveat in Pre-A addendum + manifest amendment"
+      action_on_match: "accept retried-corpus version, kick downstream phase"
+    insurance_rationale: "JSON-mode response_format changes generation control flow (constrained decoding); subtle narrative texture shift possible that non-side-by-side spot-audit doesn't catch. Insurance value > 5-10 min audit cost."
+  final_corpus_state:
+    instances_target: 50
+    instances_generated: 50
+    spot_audit_seed_42_verdict: PASS
+    texture_audit_seed_99_verdict: NO_DRIFT_DETECTED
+    cc2_verdict: ACCEPT_50_OF_50
+    corpus_sha256_file_bytes: 9fa2bef83eb604f361419bf0ead70cf1560484a44ea01c5ebdc170a2c25c4ea3
+    corpus_sha256_canonical_fields: 9336ae2467e0728f20dd64a8972e3095b795f248676d679039bd1dd79a11bfef
+    corpus_sha256_pre_retry_47_instances: cc9b9ae210cbd20f48f98675a45551366eebb9aa15fca93fd2eda6b366a2b912  # historical
+    final_corpus_cost_usd: 13.3457  # original 12.5417 + retry 0.8040
+    cumulative_faza_1_spend_at_amendment_4_ratification: 13.74  # corpus + probe attempts ~$0.40
+  texture_audit_quantitative_deltas:
+    notes: "Retry mean vs original-sample mean (5 originals at seed=99). Most deltas within natural variance; outlier-driven items annotated."
+    n_docs_pct: -1.1
+    total_chars_pct: +7.8  # retry slightly enriched
+    first_two_chars_pct: +7.0
+    n_paragraphs_pct: +14.3
+    avg_para_chars_pct: -7.0
+    avg_sent_chars_pct: +13.5
+    bullets_pct: -15.2  # marginal
+    headers_pct: 0
+    tables_pct: +100  # OUTLIER-DRIVEN: 1 retry instance has tabular CFO P&L (genre-appropriate); originals also include tabular P&L (h3-F4-p3_coo-stage_b)
+    pronouns_first_pct_naive: -36.4
+    pronouns_first_pct_non_tabular: -15.8  # corrected for tabular outlier
+    pronouns_second_pct: 0
+  changes_from_v7_amendment_3:
+    cost_governance.breakdown.corpus_generation:
+      subtotal_usd: 13.58 → 13.35  # actual post-retry
+      retry_subtotal_usd_added: 0.80
+    new_top_level_section: amendment_4_integration
+    new_pre_phase_boundary_invocation: "Texture-audit binding rule (above) now applies for any future JSON-mode retry within Faza 1; PM may extend scope to other phase transitions"
+  cross_references:
+    pre_a_addendum: benchmarks/results/gepa-faza1/corpus/h3-spot-audit-pre-a-addendum.md
+    texture_audit_artefact: benchmarks/results/gepa-faza1/corpus/texture-audit-side-by-side.md
+    amendment_3_section: amendment_3_integration
+
 # ── Manifest path + lock metadata ──────────────────────────────────────────
 
 manifest_path: benchmarks/preregistration/manifest-v7-gepa-faza1.yaml
 manifest_locked_at: 2026-04-28T00:00:00Z
 manifest_amendment_2_supplemented_at: 2026-04-28T00:30:00Z
-manifest_amendment_3_supplemented_at: 2026-04-28T00:45:00Z  # cost cap raise + Pre-Gen-1 re-projection rule
+manifest_amendment_3_supplemented_at: 2026-04-28T00:45:00Z
+manifest_amendment_4_supplemented_at: 2026-04-28T01:00:00Z  # corpus retry + texture-audit binding rule
 manifest_sha256_initial_lock: 1d592a6113c918b7a07fc9aba748c8bdd12a6ce1c6943943c0492678299fa700
 manifest_sha256_post_amendment_2: 583712dde139ffc87fb1ab21643f68d52c56469ded9e8090a624980b05969beb
-manifest_sha256_post_amendment_3: NOT_YET_COMPUTED  # CC-2 computes after this Edit completes, pins in launch decision §B
+manifest_sha256_post_amendment_3: e43d13793535077c92a0e2c24f948ebb9d6e04000293690fdf38c4ba957aa972
+manifest_sha256_post_amendment_4: NOT_YET_COMPUTED  # CC-2 computes after this Edit, pins in launch decision §B
 audit_chain_terminus: this_file

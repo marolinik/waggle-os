@@ -81,10 +81,22 @@ function log(msg: string): void {
 // ── CLI ────────────────────────────────────────────────────────────────────
 
 interface Args {
-  mode: 'dry-run' | 'probe' | 'all';
+  mode: 'dry-run' | 'probe' | 'all' | 'retry-failed';
   startIdx?: number;
   endIdx?: number;
 }
+
+/**
+ * The 3 cells that failed in the 2026-04-28 first-pass generation due to
+ * Opus emitting unescaped quotation marks in long doc bodies. Per
+ * Amendment 4 retry methodology, these cells are re-run with JSON-mode
+ * response_format + lowered temperature + reduced max_tokens.
+ */
+const RETRY_FAILED_CELLS: ReadonlyArray<{ family: string; persona: string; stage: string }> = [
+  { family: 'F4', persona: 'p2_cfo', stage: 'stage_a_series_b_growth_burning' },
+  { family: 'F4', persona: 'p2_cfo', stage: 'stage_b_post_profitable_consolidation' },
+  { family: 'F5', persona: 'p1_founder_ceo', stage: 'stage_a_series_b_growth_burning' },
+];
 
 function parseArgs(argv: string[]): Args {
   let mode: Args['mode'] = 'dry-run';
@@ -94,11 +106,12 @@ function parseArgs(argv: string[]): Args {
     const flag = argv[i];
     const next = argv[i + 1];
     switch (flag) {
-      case '--dry-run': mode = 'dry-run'; break;
-      case '--probe':   mode = 'probe'; break;
-      case '--all':     mode = 'all'; break;
-      case '--start':   startIdx = Number(next); i++; break;
-      case '--end':     endIdx = Number(next); i++; break;
+      case '--dry-run':       mode = 'dry-run'; break;
+      case '--probe':         mode = 'probe'; break;
+      case '--all':           mode = 'all'; break;
+      case '--retry-failed':  mode = 'retry-failed'; break;
+      case '--start':         startIdx = Number(next); i++; break;
+      case '--end':           endIdx = Number(next); i++; break;
     }
   }
   return { mode, startIdx, endIdx };
@@ -115,18 +128,41 @@ interface LlmResult {
   error?: string;
 }
 
-async function callOpusOracle(prompt: string): Promise<LlmResult> {
+/**
+ * Per-call Opus oracle options. The default (temperature 1.0, max_tokens 8000,
+ * no response_format) matches the original generation. JSON-mode retry uses
+ * temperature 0.3 + max_tokens 6000 + response_format json_object per
+ * Amendment 4 retry methodology.
+ */
+interface OpusOracleOptions {
+  maxTokens?: number;
+  temperature?: number;
+  responseFormatJsonObject?: boolean;
+}
+
+async function callOpusOracle(
+  prompt: string,
+  options: OpusOracleOptions = {},
+): Promise<LlmResult> {
   const masterKey = process.env.LITELLM_MASTER_KEY;
   if (!masterKey) {
     throw new Error('LITELLM_MASTER_KEY env not set; cannot call Opus oracle');
   }
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     model: ORACLE_MODEL,
     messages: [{ role: 'user', content: prompt }],
-    max_tokens: ORACLE_MAX_TOKENS,
-    temperature: 1.0,  // Opus runs at temp=1.0 per pilot runner line 385
+    max_tokens: options.maxTokens ?? ORACLE_MAX_TOKENS,
   };
+  // Anthropic Opus 4.7 + response_format=json_object rejects `temperature`
+  // as deprecated for that mode. Omit temperature when JSON-mode is requested
+  // (matches the pilot runner's "reasoning model omit temperature" precedent
+  // for GPT-5.4 + MiniMax). Standard mode keeps temperature.
+  if (options.responseFormatJsonObject) {
+    payload.response_format = { type: 'json_object' };
+  } else {
+    payload.temperature = options.temperature ?? 1.0;
+  }
 
   const started = Date.now();
   let lastErr: string | undefined;
@@ -244,11 +280,16 @@ function extractScenarioFromPersonaText(personaText: string): string {
 
 // ── Generate one cell ──────────────────────────────────────────────────────
 
-async function generateOneCell(cell: StratificationCell, ordinal: number): Promise<CorpusInstance | { error: string }> {
+async function generateOneCell(
+  cell: StratificationCell,
+  ordinal: number,
+  options: OpusOracleOptions & { retryNote?: string } = {},
+): Promise<CorpusInstance | { error: string }> {
   const instanceId = buildInstanceId(cell, ordinal);
   const prompt = buildCorpusInstancePrompt({ cell, instanceId });
-  log(`[${instanceId}] generating via ${ORACLE_MODEL} (prompt ${prompt.length}c)`);
-  const llm = await callOpusOracle(prompt);
+  const noteSuffix = options.retryNote ? ` [${options.retryNote}]` : '';
+  log(`[${instanceId}] generating via ${ORACLE_MODEL} (prompt ${prompt.length}c)${noteSuffix}`);
+  const llm = await callOpusOracle(prompt, options);
   if (llm.error) {
     log(`[${instanceId}] LLM error: ${llm.error}`);
     return { error: `LLM error: ${llm.error}` };
@@ -351,16 +392,30 @@ async function main(): Promise<void> {
     return;
   }
 
-  const targetCells = args.mode === 'probe'
-    ? cells.slice(args.startIdx ?? 0, (args.startIdx ?? 0) + 1)
-    : cells.slice(args.startIdx ?? 0, args.endIdx ?? cells.length);
+  let targetCells: StratificationCell[];
+  if (args.mode === 'probe') {
+    targetCells = cells.slice(args.startIdx ?? 0, (args.startIdx ?? 0) + 1);
+  } else if (args.mode === 'retry-failed') {
+    // Filter stratification to only the cells listed in RETRY_FAILED_CELLS.
+    const lookup = new Set(RETRY_FAILED_CELLS.map(c => `${c.family}|${c.persona}|${c.stage}`));
+    targetCells = cells.filter(c => lookup.has(`${c.family}|${c.persona}|${c.stage}`));
+    if (targetCells.length !== RETRY_FAILED_CELLS.length) {
+      log(`[retry-failed] FATAL: expected ${RETRY_FAILED_CELLS.length} cells, found ${targetCells.length}`);
+      process.exit(2);
+    }
+  } else {
+    targetCells = cells.slice(args.startIdx ?? 0, args.endIdx ?? cells.length);
+  }
 
   log(`[${args.mode}] generating ${targetCells.length} instance(s)`);
 
   const instances: CorpusInstance[] = [];
   let cumulativeCost = 0;
-  // Resume support: if JSONL already exists, pick up at the next cell.
-  if (fs.existsSync(OUT_JSONL) && args.mode === 'all') {
+  // Resume support: always load existing JSONL on startup so we never truncate
+  // an existing corpus. Originally guarded on mode==='all' which broke retry-failed
+  // mode (corpus was truncated to 3 retry instances; recovery via git checkout
+  // restored 47 originals; this fix prevents recurrence).
+  if (fs.existsSync(OUT_JSONL) && args.mode !== 'dry-run') {
     const lines = fs.readFileSync(OUT_JSONL, 'utf-8').trim().split(/\n+/).filter(Boolean);
     for (const line of lines) {
       try {
@@ -376,18 +431,36 @@ async function main(): Promise<void> {
   const out = fs.createWriteStream(OUT_JSONL, { flags: instances.length > 0 ? 'a' : 'w' });
   const existingIds = new Set(instances.map(i => i.instanceId));
 
+  // Per Amendment 4: retry-failed mode uses JSON-mode response_format +
+  // lower temperature + reduced max_tokens to mitigate the "Opus emits
+  // unescaped quotes in long doc bodies" failure class observed on first run.
+  const isRetryMode = args.mode === 'retry-failed';
+  const cellOptions: OpusOracleOptions & { retryNote?: string } = isRetryMode
+    ? {
+        responseFormatJsonObject: true,
+        temperature: 0.3,
+        maxTokens: 6000,
+        retryNote: 'JSON-mode retry per Amendment 4',
+      }
+    : {};
+
   for (let i = 0; i < targetCells.length; i++) {
     const cell = targetCells[i];
     const id = buildInstanceId(cell, 1);
-    if (existingIds.has(id)) {
+    if (existingIds.has(id) && !isRetryMode) {
       log(`[skip] ${id} already in JSONL`);
+      continue;
+    }
+    if (existingIds.has(id) && isRetryMode) {
+      // In retry mode, this should not happen (retry targets only failed cells)
+      log(`[retry-failed] WARNING: ${id} already in JSONL — skipping`);
       continue;
     }
     if (cumulativeCost >= COST_HALT_USD) {
       log(`[HALT] cumulative $${cumulativeCost.toFixed(4)} >= $${COST_HALT_USD} cost halt — stopping generation`);
       break;
     }
-    const result = await generateOneCell(cell, 1);
+    const result = await generateOneCell(cell, 1, cellOptions);
     if ('error' in result) {
       log(`[error] cell ${id} skipped due to: ${result.error}`);
       continue;
@@ -401,7 +474,9 @@ async function main(): Promise<void> {
 
   log(`[done] generated ${instances.length} instances; total cost $${cumulativeCost.toFixed(4)}`);
 
-  // Spot-audit + Pre-A report (only meaningful if we have a full or near-full corpus)
+  // Spot-audit + Pre-A report (only meaningful if we have a full or near-full corpus).
+  // Skipped in retry-failed mode — the corrected Pre-A addendum is authored manually
+  // by the orchestrating session per Amendment 4 §texture_audit_methodology.
   if (args.mode === 'all' && instances.length > 0) {
     writeSpotAuditReport(instances, cumulativeCost);
   }
