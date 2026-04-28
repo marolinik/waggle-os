@@ -1127,6 +1127,150 @@ amendment_7_integration:
   hard_cap_usd_unchanged: 115.00
   headroom_post_gen_1_partial_usd: 74.91
 
+# ── Amendment 8 master integration section (binding) ──────────────────────
+
+amendment_8_integration:
+  ratification_date: 2026-04-28
+  authority: PM (Marko Markovic)
+  predecessor: Amendment 7 (Option C — saturated revoke + tiered fitness + Δ-floor + tightened Checkpoint B)
+  trigger: "Gen 1 partial run b5avslp51 halted at 11/30 evals via Amendment 7 §checkpoint_b_tightened.qwen_retrieval_engagement_regression. Investigate report (benchmarks/results/gepa-faza1/gen-1/investigate-report.md) surfaced CRITICAL secondary finding: REGISTRY-injection bug. All 16 attempted mutation-candidate evals (claude::gen1-v1/v2 × 8 each) failed with `prompt-shapes selector: override 'claude-gen1-v1' not in REGISTRY`. PM ratifies Probe-first prerequisite + Option B (Fix-and-Restart Fresh)."
+  scope:
+    - "§canonical_mutation_api: registerShape() is the only sanctioned path for runtime REGISTRY mutation; direct (REGISTRY as any)[name] = shape forbidden post-Amendment-8"
+    - "§registry_invariant_test: cross-module-boundary regression test (benchmarks/gepa/tests/faza-1/registry-injection.test.ts, 7 tests) documents H1 failure mode + verifies fix"
+    - "§lint_rule_or_grep_check: grep-based codebase scan for direct REGISTRY mutation outside selector.ts; expected matches = 1 (selector.ts:75 inside registerShape itself); deliberate failure-mode demonstration in benchmarks/gepa/scripts/faza-1/probe-registry-injection.ts is exempted (audit artifact)"
+    - "§sunk_disposition: 11 baseline evals from b5avslp51 archived with -void-registry-bug-superseded suffix; NOT carried into fresh Gen 1 run"
+    - "§sha_chain: Amendment 8 SHA appended to manifest v7 chain (becomes 8-SHA chain)"
+
+  probe_verdict:
+    diagnostic_artifact: benchmarks/gepa/scripts/faza-1/probe-registry-injection.ts
+    run_at: 2026-04-28T17:30:00Z (approximate; pre-fix probe run)
+    verdict: H1_CONFIRMED
+    smoking_gun:
+      object_identity_a_eq_b: false  # script deep-relative-path REGISTRY ≠ @waggle/agent REGISTRY
+      object_identity_a_eq_c: false  # script deep-relative-path REGISTRY ≠ @waggle/agent REGISTRY (2nd import)
+      object_identity_b_eq_c: true   # both @waggle/agent imports → same instance
+      mutation_via_a_visible_to_a: true
+      mutation_via_a_visible_to_b: false  # ← bug confirmed
+      mutation_via_a_visible_to_c: false
+      selectShape_via_b: "throws: prompt-shapes selector: override 'claude-gen1-v1-probe' not in REGISTRY"
+    structural_root_cause: "tsx + Node ESM with workspace path resolution: importing REGISTRY via deep relative path '../../../../packages/agent/src/prompt-shapes/selector.js' vs via '@waggle/agent' produces TWO distinct module instances. The worktree has @waggle/agent symlinked to MAIN REPO's packages/agent (via npm-workspaces hoisting), which means worktree's deep-relative-path resolves to worktree's source tree but @waggle/agent resolves to main-repo's source tree — genuinely different files at different absolute paths."
+    pm_directive_satisfied: "If H1 confirmed: implement registerShape API; PM ratify Option B (Fix-and-Restart Fresh) authorized."
+    if_not_h1_action_avoided: "PM brief stipulated halt-and-PM if probe verdict NOT H1. Verdict IS H1, so probe-first prerequisite passes; proceeding with Option B fix without escalation to Option C interface refactor."
+
+  canonical_mutation_api:
+    api_signature: "registerShape(name: string, shape: PromptShape): void"
+    location: packages/agent/src/prompt-shapes/selector.ts (lines 38-76)
+    main_repo_mirror: D:/Projects/waggle-os/packages/agent/src/prompt-shapes/selector.ts (identical content; required because worktree's @waggle/agent symlinks to main repo via npm workspaces)
+    re_export_paths:
+      - packages/agent/src/prompt-shapes/index.ts (re-exports registerShape)
+      - packages/agent/src/index.ts (re-exports registerShape via prompt-shapes/index.js)
+      - "@waggle/agent" (public package import — canonical caller-facing path)
+    rationale: "Callers must import registerShape from '@waggle/agent' (NOT a deep relative path) so that the mutation hits the SAME REGISTRY instance the agent-loop's selectShape() reads from. Importing registerShape from a deep relative path would still suffer the H1 module-identity issue."
+    forbidden_patterns:
+      - "(REGISTRY as any)[name] = shape"
+      - "REGISTRY[name] = shape (outside selector.ts internal implementation)"
+      - "Object.assign(REGISTRY, { [name]: shape })"
+      - "Reflect.set(REGISTRY, name, shape)"
+    sanctioned_pattern: |
+      import { registerShape, type PromptShape } from '@waggle/agent';
+      registerShape(candidateName, candidateShape);
+    validation_in_registerShape:
+      - "name is non-empty string (else throws)"
+      - "shape has required PromptShape fields (else throws)"
+      - "last-write-wins re-registration semantics (registerShape can be called multiple times for same name)"
+
+  registry_invariant_test:
+    test_file: benchmarks/gepa/tests/faza-1/registry-injection.test.ts
+    test_count: 7
+    test_purposes:
+      - "Documents H1 failure mode (deep-path REGISTRY ≠ package REGISTRY) — assertion 1 + 2"
+      - "Verifies fix: registerShape via @waggle/agent makes shape visible from selectShape() — assertion 3"
+      - "Validates registerShape input rejection (empty name, malformed shape) — assertion 4 + 5"
+      - "Validates last-write-wins re-registration semantics — assertion 6"
+      - "Validates listShapes() inspector reflects registerShape mutations — assertion 7"
+    binding: "Test must remain green for all future Faza 1 runs + Faza 2 expansion + Phase 5 GEPA-evolved variant work. If test-1 (object-identity assertion) ever inverts (i.e., deep-path === package), the underlying ESM resolver behavior has changed — flag immediately + audit downstream impacts."
+
+  lint_rule_or_grep_check:
+    method: codebase_grep
+    grep_pattern_for_writes: "REGISTRY\\[.+\\]\\s*=\\s*[^=]"
+    grep_pattern_for_writes_via_cast: "\\(REGISTRY as any\\)\\[.+\\]\\s*=\\s*"
+    expected_matches:
+      - file: packages/agent/src/prompt-shapes/selector.ts
+        line: 75
+        text: "REGISTRY[name] = shape;"
+        verdict: SANCTIONED (inside registerShape function body)
+      - file: benchmarks/gepa/scripts/faza-1/probe-registry-injection.ts
+        line: ~91
+        text: "(RegistryFromScriptDeepPath as any)[PROBE_SHAPE_NAME] = probeShape;"
+        verdict: SANCTIONED (deliberate failure-mode demonstration; audit artifact for the bug-fix narrative)
+    forbidden_locations: "Anywhere else in codebase. CC-2 enforcement at code review time + automated grep at CI time (proposed). Deviations require Amendment 9+ ratification."
+    cleanup_rationale: "Forbidden direct mutation pattern includes the failure-mode demonstration in tests/regression test (benchmarks/gepa/tests/faza-1/registry-injection.test.ts) — but those usages are GUARDED by `Record<string, PromptShape>` cast (not `as any`) and are EXPLICITLY documented as failure-mode witnesses. Acceptable as test-only usage."
+
+  sunk_disposition:
+    sunk_run_id: b5avslp51
+    sunk_evals_count: 11
+    sunk_cost_usd: 1.3572
+    sunk_breakdown:
+      - candidate: claude::baseline
+        evals_completed: 8
+        outcome: 8/8 trio_strict_pass_II  # 100% baseline drift vs NULL 87.5% = +12.5pp variance
+      - candidate: qwen-thinking::baseline
+        evals_completed: 3
+        outcome: 2/3 trio_strict_pass_II  # 66.7% on small sample = -20.83pp from NULL 87.5% (variance)
+    rationale: "Mutation-candidate evals never executed (16/16 failed instantly with REGISTRY-injection error). Only baseline evals completed. These are NOT evolution data — they're partial baseline replicates on a different sample subset than NULL-baseline. Including them in fresh Gen 1 would mix pre-fix + post-fix evals and contaminate the analysis."
+    archive_action:
+      method: rename_with_suffix
+      suffix: "-void-registry-bug-superseded"
+      files_archived:
+        - benchmarks/results/gepa-faza1/gen-1/gen-1-eval.jsonl → gen-1-eval-void-registry-bug-superseded.jsonl
+        - benchmarks/results/gepa-faza1/gen-1/gen-1-summary.json → gen-1-summary-void-registry-bug-superseded.json
+        - benchmarks/results/gepa-faza1/gen-1/gen-1-run.log → gen-1-run-void-registry-bug-superseded.log
+      preserved_unchanged:
+        - benchmarks/results/gepa-faza1/gen-1/investigate-report.md (root-cause narrative, audit chain)
+    fresh_gen_1_starting_state: "Empty gen-1-eval.jsonl + empty gen-1-run.log + no gen-1-summary.json. Runner writes fresh files at original paths."
+    cumulative_spend_post_archive_pre_restart: 26.54  # unchanged ($25.18 pre-Gen-1 + $1.36 sunk)
+
+  fresh_gen_1_kick_authorization:
+    authorization_basis: "PM brief 2026-04-28 RATIFY GO message §4 — 'Discard sunk run. Run fresh Gen 1 on full 30 evals (8 baseline + 16 mutation + 6 retrieval probes). $4.96 expected. Halt-and-PM at Checkpoint B with extended report per Amendment 7.'"
+    pre_kick_gates:
+      - id: probe_verdict_h1
+        status: PASS  # documented in §probe_verdict above
+      - id: registerShape_implemented
+        status: PASS  # selector.ts (worktree) + selector.ts (main repo mirror)
+      - id: registerShape_re_exported
+        status: PASS  # prompt-shapes/index.ts + index.ts in BOTH worktree + main repo
+      - id: regression_test_green
+        status: PASS  # 7/7 tests in registry-injection.test.ts
+      - id: full_faza_1_test_suite_green
+        status: PASS  # 206/206 tests across 10 test files (was 199; +7 from regression test)
+      - id: runner_dry_run_green
+        status: PASS  # all 5 baselines + 10 mutations load + register + dry-run candidate enumeration completes
+      - id: sunk_evals_archived
+        status: PENDING_THIS_COMMIT  # archive action defined in §sunk_disposition; will land in same commit as Amendment 8
+    cost_projection_fresh_gen_1: 4.96  # full 30 evals × $0.124/eval = $3.72 + judge variance buffer + retry overhead
+    cumulative_post_fresh_gen_1_partial_projection_usd: 31.50  # 26.54 sunk + 4.96 fresh
+    headroom_under_115_cap_usd: 83.50
+
+  mid_run_halt_thresholds_unchanged:
+    note: "Amendment 7 §checkpoint_b_tightened mid-run halt thresholds remain ACTIVE for fresh Gen 1 run. Per PM brief step 5: 'If qwen_retrieval_engagement triggers AGAIN on fresh run (post-fix, with mutations actually executing), THAT is a real signal — escalate to Option C investigate even mid-run.'"
+    interpretation: "Pre-fix halt was variance-driven (mutations didn't execute). Post-fix halt would mean evolution genuinely makes retrieval WORSE — opposite Phase 4.5 signal direction → mechanistic regression deserving immediate investigation, not auto-recovery."
+
+  cross_references:
+    pm_brief_session_authored_at: "Session start 2026-04-28 (PM RATIFY brief §1-§8 + later Probe-first + Option B ratify)"
+    investigate_report: benchmarks/results/gepa-faza1/gen-1/investigate-report.md
+    diagnostic_probe: benchmarks/gepa/scripts/faza-1/probe-registry-injection.ts
+    regression_test: benchmarks/gepa/tests/faza-1/registry-injection.test.ts
+    canonical_mutation_api_source_worktree: packages/agent/src/prompt-shapes/selector.ts (lines 38-76)
+    canonical_mutation_api_source_main_repo: D:/Projects/waggle-os/packages/agent/src/prompt-shapes/selector.ts (mirrored content; required for runtime resolution)
+    runner_post_fix: benchmarks/gepa/scripts/faza-1/run-gen-1.ts (registerShape import + call site updated)
+    sunk_run_command: "npx tsx benchmarks/gepa/scripts/faza-1/run-gen-1.ts --checkpoint-b (background job b5avslp51, 2026-04-28 15:59 UTC)"
+
+  cumulative_actual_spend_at_amendment_8_ratification: 26.54  # Amendment 7 ratification 25.18 + Gen 1 partial sunk 1.36
+  pre_fresh_gen_1_cost_projection: 4.96  # full 30-eval Checkpoint-B halt budget
+  cumulative_post_fresh_gen_1_partial_projection_usd: 31.50  # 26.54 + 4.96
+  hard_cap_usd_unchanged: 115.00
+  headroom_post_fresh_gen_1_partial_usd: 83.50
+
 # ── Manifest path + lock metadata ──────────────────────────────────────────
 
 manifest_path: benchmarks/preregistration/manifest-v7-gepa-faza1.yaml
@@ -1137,11 +1281,13 @@ manifest_amendment_4_supplemented_at: 2026-04-28T01:00:00Z
 manifest_amendment_5_supplemented_at: 2026-04-28T11:00:00Z
 manifest_amendment_6_supplemented_at: 2026-04-28T15:30:00Z  # NULL-baseline shape-override bug fix
 manifest_amendment_7_supplemented_at: 2026-04-28T17:30:00Z  # PM ratify Option C — saturated revoke + tiered fitness + Δ-floor + tightened Checkpoint B
+manifest_amendment_8_supplemented_at: 2026-04-28T18:45:00Z  # PM ratify Probe-first + Option B Fix-and-Restart — registerShape canonical mutation API + sunk archive
 manifest_sha256_initial_lock: 1d592a6113c918b7a07fc9aba748c8bdd12a6ce1c6943943c0492678299fa700
 manifest_sha256_post_amendment_2: 583712dde139ffc87fb1ab21643f68d52c56469ded9e8090a624980b05969beb
 manifest_sha256_post_amendment_3: e43d13793535077c92a0e2c24f948ebb9d6e04000293690fdf38c4ba957aa972
 manifest_sha256_post_amendment_4: 1f7a6d6fa01403f6c8d6855893adbfa5e82898a81b7583cfa55628e5eba60196
 manifest_sha256_post_amendment_5: 062dfc4935aaa89f0b25595c5dc3ce4af06c95c4c261075a1f0226d8af3f3dee
 manifest_sha256_post_amendment_6: 0b55d8e353299594254e1a4a76f26f53014d726315dc6a0e5d6dc1a3a44a368a
-manifest_sha256_post_amendment_7: NOT_YET_COMPUTED  # CC-2 computes post Edit
+manifest_sha256_post_amendment_7: bc0bcf9bd8b0c8344b25e5f8ab15b0475039ba28a1f782ebffe4cc1c4ff7d1de
+manifest_sha256_post_amendment_8: NOT_YET_COMPUTED  # CC-2 computes post Edit
 audit_chain_terminus: this_file

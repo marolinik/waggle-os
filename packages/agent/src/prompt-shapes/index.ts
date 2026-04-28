@@ -42,6 +42,7 @@ export {
   listShapes,
   getShapeMetadata,
   REGISTRY,
+  registerShape,
   _resetConfigCache,
   type SelectShapeOptions,
 } from './selector.js';

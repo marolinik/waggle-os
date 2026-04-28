@@ -140,3 +140,31 @@
 [2026-04-28T16:09:12.429Z] [delta-floor]   threshold_2_qwen_retrieval_absolute=FAIL (max_delta=-0.120)
 [2026-04-28T16:09:12.429Z] [delta-floor]   threshold_3_compound_tier_1_plus_tier_2=FAIL (tier1=3.41pp tier2_agg=0.000)
 [2026-04-28T16:09:12.429Z] [done] 11 evals; total cost $1.3572; halt_reason=Amendment 7 §checkpoint_b_tightened.qwen_retrieval_engagement_regression: shape=qwen-thinking mean=1.000 < NULL baseline 1.120 (n=3)
+[2026-04-28T16:44:50.490Z] [loaded] corpus=50; sample=8 via seed=42
+[2026-04-28T16:44:50.528Z] [loaded] 5 shapes × 3 candidates each
+[2026-04-28T16:44:50.530Z] [validator] claude::gen1-v1 valid=true violations=0
+[2026-04-28T16:44:50.530Z] [validator] claude::gen1-v2 valid=true violations=0
+[2026-04-28T16:44:50.531Z] [validator] qwen-thinking::gen1-v1 valid=true violations=0
+[2026-04-28T16:44:50.531Z] [validator] qwen-thinking::gen1-v2 valid=true violations=0
+[2026-04-28T16:44:50.531Z] [validator] qwen-non-thinking::gen1-v1 valid=true violations=0
+[2026-04-28T16:44:50.532Z] [validator] qwen-non-thinking::gen1-v2 valid=true violations=0
+[2026-04-28T16:44:50.532Z] [validator] gpt::gen1-v1 valid=true violations=0
+[2026-04-28T16:44:50.532Z] [validator] gpt::gen1-v2 valid=true violations=0
+[2026-04-28T16:44:50.533Z] [validator] generic-simple::gen1-v1 valid=true violations=0
+[2026-04-28T16:44:50.533Z] [validator] generic-simple::gen1-v2 valid=true violations=0
+[2026-04-28T16:44:50.533Z] [dry-run] would run 5×3×8 = 120 evals (or halt at 30 = Checkpoint B)
+[2026-04-28T16:44:50.533Z] [dry-run] candidate=claude::baseline variant=baseline shape.name=claude
+[2026-04-28T16:44:50.533Z] [dry-run] candidate=claude::gen1-v1 variant=gen1-v1 shape.name=claude-gen1-v1
+[2026-04-28T16:44:50.533Z] [dry-run] candidate=claude::gen1-v2 variant=gen1-v2 shape.name=claude-gen1-v2
+[2026-04-28T16:44:50.533Z] [dry-run] candidate=qwen-thinking::baseline variant=baseline shape.name=qwen-thinking
+[2026-04-28T16:44:50.533Z] [dry-run] candidate=qwen-thinking::gen1-v1 variant=gen1-v1 shape.name=qwen-thinking-gen1-v1
+[2026-04-28T16:44:50.533Z] [dry-run] candidate=qwen-thinking::gen1-v2 variant=gen1-v2 shape.name=qwen-thinking-gen1-v2
+[2026-04-28T16:44:50.533Z] [dry-run] candidate=qwen-non-thinking::baseline variant=baseline shape.name=qwen-non-thinking
+[2026-04-28T16:44:50.534Z] [dry-run] candidate=qwen-non-thinking::gen1-v1 variant=gen1-v1 shape.name=qwen-non-thinking-gen1-v1
+[2026-04-28T16:44:50.534Z] [dry-run] candidate=qwen-non-thinking::gen1-v2 variant=gen1-v2 shape.name=qwen-non-thinking-gen1-v2
+[2026-04-28T16:44:50.534Z] [dry-run] candidate=gpt::baseline variant=baseline shape.name=gpt
+[2026-04-28T16:44:50.534Z] [dry-run] candidate=gpt::gen1-v1 variant=gen1-v1 shape.name=gpt-gen1-v1
+[2026-04-28T16:44:50.534Z] [dry-run] candidate=gpt::gen1-v2 variant=gen1-v2 shape.name=gpt-gen1-v2
+[2026-04-28T16:44:50.534Z] [dry-run] candidate=generic-simple::baseline variant=baseline shape.name=generic-simple
+[2026-04-28T16:44:50.534Z] [dry-run] candidate=generic-simple::gen1-v1 variant=gen1-v1 shape.name=generic-simple-gen1-v1
+[2026-04-28T16:44:50.534Z] [dry-run] candidate=generic-simple::gen1-v2 variant=gen1-v2 shape.name=generic-simple-gen1-v2

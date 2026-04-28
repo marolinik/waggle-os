@@ -35,10 +35,15 @@ import {
   type LlmCallResult as AgentLlmCallResult,
   type RetrievalSearchFn,
   type AgentRunResult,
+  // Amendment 8 §canonical_mutation_api: REGISTRY + registerShape MUST be imported from
+  // '@waggle/agent' (same path the agent-loop uses internally). Importing via deep
+  // relative paths produces a separate module instance under tsx + Node ESM workspace
+  // resolution → mutations would not propagate. Diagnostic probe + Gen 1 partial
+  // b5avslp51 confirmed empirically.
+  REGISTRY,
+  registerShape,
+  type PromptShape,
 } from '@waggle/agent';
-
-import { REGISTRY } from '../../../../packages/agent/src/prompt-shapes/selector.js';
-import { type PromptShape } from '../../../../packages/agent/src/prompt-shapes/types.js';
 
 import { type CorpusInstance } from '../../src/faza-1/corpus.js';
 import {
@@ -385,9 +390,12 @@ async function runOneEval(cand: Candidate, instance: CorpusInstance, embedder: E
   // For Faza 1 simplicity, we register candidate as override under its unique name:
   let agentResult: AgentRunResult;
   try {
-    // Expose candidate shape via REGISTRY mutation (scoped to this script invocation).
-    // Use the candidate's `name` (e.g., 'qwen-thinking-gen1-v1') and pass modelAlias = candidate.shape's class.
-    (REGISTRY as any)[cand.promptShape.name] = cand.promptShape;
+    // Amendment 8 §canonical_mutation_api: register the candidate via the sanctioned
+    // mutation path. registerShape() is imported from '@waggle/agent' so it mutates
+    // the SAME REGISTRY instance the agent-loop's selectShape() reads from. Direct
+    // (REGISTRY as any)[name] = shape is forbidden post-Amendment-8 (would mutate a
+    // separate module instance under tsx + Node ESM workspace resolution).
+    registerShape(cand.promptShape.name, cand.promptShape);
     agentResult = await runRetrievalAgentLoop({
       modelAlias: SUBJECT_ALIAS,
       persona: instance.personaText,

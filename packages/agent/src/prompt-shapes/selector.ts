@@ -35,6 +35,46 @@ export const REGISTRY: Record<string, PromptShape> = {
   'generic-simple': genericSimpleShape,
 };
 
+/**
+ * Canonical mutation API for the prompt-shape REGISTRY.
+ *
+ * BACKGROUND (manifest v7 Amendment 8 §canonical_mutation_api): under tsx +
+ * Node ESM with workspace path resolution, importing REGISTRY via a deep
+ * relative path (e.g., '../../../../packages/agent/src/prompt-shapes/selector.js')
+ * vs via the package path '@waggle/agent' produces TWO distinct module
+ * instances, each with its own REGISTRY object. Mutations to one instance
+ * do NOT propagate to the other. This was confirmed empirically via the
+ * Gen 1 partial run b5avslp51 + diagnostic probe (probe-registry-injection.ts).
+ *
+ * To inject a runtime-defined shape (e.g., a GEPA mutation candidate) into
+ * the REGISTRY in a way that selectShape() — wherever it's called from —
+ * can see, callers MUST import this function from '@waggle/agent' (the same
+ * import path the agent-loop uses internally) and invoke it. Direct
+ * `(REGISTRY as any)[name] = shape` assignment from a non-package import
+ * path will silently mutate the wrong instance.
+ *
+ * RULE (Amendment 8 §lint_rule_or_grep_check): no direct REGISTRY assignment
+ * outside this function. Codebase grep should return zero matches for
+ * `REGISTRY[`<key>`] = ` outside selector.ts.
+ *
+ * @param name unique shape name (typically `<base-shape>-<variant>`, e.g.
+ *             `claude-gen1-v1`); empty string rejected.
+ * @param shape PromptShape object satisfying the public contract.
+ * @throws if `name` is empty or `shape` is missing required PromptShape fields.
+ */
+export function registerShape(name: string, shape: PromptShape): void {
+  if (typeof name !== 'string' || name.length === 0) {
+    throw new Error('prompt-shapes registerShape: name must be a non-empty string');
+  }
+  if (!shape || typeof shape !== 'object' || typeof shape.systemPrompt !== 'function') {
+    throw new Error(
+      `prompt-shapes registerShape: shape for "${name}" missing required PromptShape fields ` +
+      `(expected object with systemPrompt method)`,
+    );
+  }
+  REGISTRY[name] = shape;
+}
+
 let cachedConfig: ConfigSchema | null = null;
 const DEFAULT_CONFIG_PATH = path.resolve(__dirname, '../../config/model-prompt-shapes.json');
 

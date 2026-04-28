@@ -57,6 +57,7 @@ export {
   listShapes,
   getShapeMetadata,
   REGISTRY,
+  registerShape,
   claudeShape,
   qwenThinkingShape,
   qwenNonThinkingShape,
