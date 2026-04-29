@@ -277,9 +277,15 @@ class LocalAdapter {
     persona?: string,
     autonomy?: { level: 'normal' | 'trusted' | 'yolo'; expiresAt?: number },
   ): AsyncGenerator<StreamEvent> {
+    // CC Sesija A §2.2 — thread the user-selected Faza 1 GEPA shape into the
+    // chat body. Sidecar /api/chat ignores `shape` until A3.1 wires it into
+    // runRetrievalAgentLoop; carrying it now means A3.1 is a one-line server
+    // change with no client redeploy needed.
+    const { getSelectedShape } = await import('./shape-selection');
+    const shape = getSelectedShape();
     const res = await this.fetch('/api/chat', {
       method: 'POST',
-      body: JSON.stringify({ workspaceId, message, sessionId, persona, autonomy }),
+      body: JSON.stringify({ workspaceId, message, sessionId, persona, autonomy, shape }),
     });
 
     if (!res.body) return;

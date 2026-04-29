@@ -20,6 +20,7 @@ import {
 import type { UserTier } from '@/lib/dock-tiers';
 import ModelSelector from '@/components/os/ModelSelector';
 import ModelPilotCard from '@/components/os/ModelPilotCard';
+import { AVAILABLE_SHAPES, useSelectedShape, type PromptShape } from '@/lib/shape-selection';
 
 type SettingsTab = 'general' | 'models' | 'billing' | 'permissions' | 'team' | 'backup' | 'enterprise' | 'advanced';
 
@@ -44,6 +45,11 @@ const SettingsApp = () => {
   const [tier, setTier] = useState('FREE');
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
+
+  // CC Sesija A §2.2 — Faza 1 GEPA prompt shape selection. Persisted in
+  // localStorage; threaded into adapter.sendMessage body. Sidecar honors it
+  // once A3.1 ships (currently ignored — selection still survives reloads).
+  const [selectedShape, setSelectedShape] = useSelectedShape();
 
   // Theme
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
@@ -321,6 +327,30 @@ const SettingsApp = () => {
             <div>
               <label className="text-xs text-muted-foreground block mb-1.5">Default Model</label>
               <ModelSelector value={defaultModel} onChange={setDefaultModel} providers={providers} variant="dropdown" />
+            </div>
+
+            {/* CC Sesija A §2.2 — Faza 1 GEPA prompt shape selector */}
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1.5">
+                Prompt Shape
+                <HintTooltip
+                  content="Faza 1 GEPA-evolved prompt variant. Threaded into chat requests; sidecar honors it once the A3.1 server patch lands."
+                />
+              </label>
+              <select
+                value={selectedShape}
+                onChange={(e) => setSelectedShape(e.target.value as PromptShape)}
+                className="w-full bg-muted/50 border border-border/30 rounded-lg px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
+              >
+                {AVAILABLE_SHAPES.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                {AVAILABLE_SHAPES.find((s) => s.id === selectedShape)?.description}
+              </p>
             </div>
 
             {/* Daily budget */}
