@@ -1,5 +1,15 @@
 // LocalAdapter — HTTP/SSE/WS client for Waggle backend
 import { fetchWithTimeout } from './fetch-utils';
+import {
+  isTauri,
+  recallMemory as tauriRecallMemory,
+  saveMemory as tauriSaveMemory,
+  searchEntities as tauriSearchEntities,
+  getIdentity as tauriGetIdentity,
+  type FrameImportance,
+  type FrameSource,
+  type IdentityResponse,
+} from './tauri-bindings';
 import type {
   Workspace, WorkspaceContext, ChatMessage, MemoryFrame,
   AgentStep, Session, SkillPack, FleetSession, CronJob,
@@ -7,6 +17,14 @@ import type {
   Connector, Settings, StreamEvent, KGNode, KGEdge,
   ModelPricing, WaggleSignal, FileEntry, WorkspaceTemplate,
 } from './types';
+
+/**
+ * CC Sesija A §2.2 — map adapter `MemoryFrame.importance` (number 1-4) to the
+ * Tauri command's string enum. Inverse of IMPORTANCE_MAP.
+ */
+const IMPORTANCE_NUM_TO_STRING: Record<number, FrameImportance> = {
+  1: 'low', 2: 'normal', 3: 'high', 4: 'critical',
+};
 
 const DEFAULT_SERVER = 'http://127.0.0.1:3333';
 
@@ -351,6 +369,21 @@ class LocalAdapter {
   }
 
   async addMemoryFrame(frame: Omit<MemoryFrame, 'id'>): Promise<MemoryFrame> {
+    // CC Sesija A §2.2 — Tauri IPC path for desktop builds.
+    if (isTauri()) {
+      const importance = typeof frame.importance === 'number'
+        ? IMPORTANCE_NUM_TO_STRING[frame.importance]
+        : undefined;
+      const raw = await tauriSaveMemory({
+        content: frame.content,
+        workspaceId: frame.workspaceId,
+        importance,
+        source: (frame.metadata?.source as FrameSource | undefined) ?? undefined,
+      });
+      // Sidecar shapes vary; let normalizeFrame handle either { frame } envelope or raw frame
+      const frameObj = (raw.frame as Record<string, unknown>) ?? raw;
+      return normalizeFrame(frameObj);
+    }
     const res = await this.fetch('/api/memory/frames', { method: 'POST', body: JSON.stringify(frame) });
     return res.json();
   }
@@ -372,6 +405,14 @@ class LocalAdapter {
   }
 
   async searchMemory(query: string, scope?: string): Promise<MemoryFrame[]> {
+    // CC Sesija A §2.2 — Tauri IPC path for desktop builds.
+    if (isTauri()) {
+      const resp = await tauriRecallMemory({
+        query,
+        scope: scope as 'all' | 'personal' | 'workspace' | 'global' | undefined,
+      });
+      return resp.results.map((r) => normalizeFrame(r as Record<string, any>));
+    }
     const res = await this.fetch(`/api/memory/search?q=${encodeURIComponent(query)}${scope ? `&scope=${scope}` : ''}`);
     return unwrapArray(await res.json()).map(normalizeFrame);
   }
@@ -408,6 +449,22 @@ class LocalAdapter {
   }
 
   async getKnowledgeGraph(workspaceId: string, scope?: 'current' | 'personal' | 'all'): Promise<{ nodes: KGNode[]; edges: KGEdge[] }> {
+    // CC Sesija A §2.2 — Tauri IPC path for desktop builds.
+    if (isTauri()) {
+      const args: { workspaceId?: string; scope?: 'all' | 'personal' | 'workspace' | 'global' } = {};
+      if (scope === 'all') {
+        args.scope = 'all';
+      } else if (scope === 'personal') {
+        args.scope = 'personal';
+      } else {
+        args.workspaceId = workspaceId;
+      }
+      const data = await tauriSearchEntities(args);
+      return {
+        nodes: ((data as { nodes?: unknown; entities?: unknown }).nodes ?? (data as { entities?: unknown }).entities ?? []) as KGNode[],
+        edges: ((data as { edges?: unknown; relations?: unknown }).edges ?? (data as { relations?: unknown }).relations ?? []) as KGEdge[],
+      };
+    }
     const params = new URLSearchParams();
     if (scope === 'all') {
       params.set('scope', 'all');
@@ -422,6 +479,28 @@ class LocalAdapter {
       nodes: data.nodes ?? data.entities ?? [],
       edges: data.edges ?? data.relations ?? [],
     };
+  }
+
+  /**
+   * CC Sesija A §2.2 — get the current user identity record.
+   * Tauri path returns the IdentityLayer record (or A1.1 placeholder while
+   * the sidecar /api/identity route is pending). Web path also calls the
+   * sidecar route directly; gracefully degrades to the placeholder shape if
+   * the route 404s so callers do not need to branch.
+   */
+  async getIdentity(): Promise<IdentityResponse> {
+    if (isTauri()) {
+      return tauriGetIdentity();
+    }
+    try {
+      const res = await this.fetch('/api/identity');
+      if (res.status === 404) {
+        return { configured: false, name: null, email: null, preferences: {}, _note: 'sidecar /api/identity not implemented (A1.1 follow-up)' };
+      }
+      return res.json();
+    } catch {
+      return { configured: false, name: null, email: null, preferences: {}, _note: 'identity fetch failed' };
+    }
   }
 
   // --- Events ---
