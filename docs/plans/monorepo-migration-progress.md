@@ -370,6 +370,74 @@ Per Wave 1 brief 2026-04-29 LOCKED 2026-04-30 + `feedback_memory_install_dead_si
 
 ---
 
+## §2.5 + §2.6 + §2.7 — Closing trio (COMPLETE 2026-04-30)
+
+Closing batch authorized as a single sprint per brief Tasks B16-B27.
+
+### §2.5 Apache 2.0 + CONTRIBUTING.md (Tasks B16-B19)
+
+| Task | Status | Detail |
+|---|---|---|
+| B16 LICENSE | ✓ already present | All 12 hive-mind-* packages have Apache 2.0 LICENSE |
+| B17 README | ✓ already present | All 12 have README.md — `hive-mind-core` README has SOTA claim placeholder pending arxiv preprint |
+| B18 CONTRIBUTING.md | ✓ NEW | `packages/hive-mind-core/CONTRIBUTING.md` — distribution model + dev setup + style + PR guidelines + code of conduct |
+| B19 Workspace config | ✓ no change needed | Root `package.json` `workspaces: ["apps/*", "packages/*"]` already covers hive-mind-* via glob |
+
+### §2.6 OSS subtree split prep (Tasks B20-B22)
+
+- **B20** — `scripts/oss-subtree-split.sh` (NEW): auto-discovers `packages/hive-mind-*`, runs `git subtree split` for each, sentinel-checks for monorepo-level leaks. Idempotent (drops + recreates branches each run).
+- **B21** — Local test run produced clean `oss-<package>-export` branches for all 12 hive-mind-* packages. Sentinel passes (no proprietary leak). Manual `git push` gate preserved per OSS launch playbook.
+- **B22** — `.github/workflows/sync-mind.yml` + `mind-parity-check.yml`: deprecation comments added at file headers. Workflows preserved as audit-trail anchors — trigger paths invalid post-migration so workflows do not fire.
+
+### §2.7 Tests + import paths + smoke + final acceptance (Tasks B23-B27)
+
+- **B23** ✓ Import path audit clean — 0 leftover `@waggle/core/mind`/`@waggle/core/harvest` deep imports, 0 `@hive-mind/*` references in repo. Backward-compat re-export works.
+- **B24** ✓ Full test suite: **5949 passed / 31 failed / 145 skipped (6125 total)** — IDENTICAL to §2.3 baseline. Zero regression. 99.5% pass rate. PM halt-trigger NOT triggered.
+- **B25** ✓ tsc clean across all 16 packages.
+- **B26** ✓ Smoke: `node packages/hive-mind-cli/dist/index.js doctor` after `init` reports all 4 steps PASS on Win32.
+- **B27** ✓ Final commit `9cf43b8` + this progress doc commit + emit follows.
+
+### CC-discovered runtime fixes during smoke (no scope creep)
+
+The smoke test (B26) revealed 4 latent issues from §2.3 needing fixing for production runtime:
+
+1. **TypeScript-source-as-main pattern incompatible with Node runtime.** `packages/hive-mind-*` + `packages/shared` had `main: "src/index.ts"` (vitest dev pattern). vitest transforms TS at load time; Node runtime cannot load `.ts`. Fix: rewrote main fields to `dist/index.js` + conditional exports for all 12 hive-mind-* + shared.
+2. **postinstall.js + `"type": "module"` collision.** `packages/hive-mind-cli/postinstall.js` used CommonJS `require()`; package's `type: "module"` made `.js` files ES modules → `ReferenceError`. Fix: renamed to `postinstall.cjs` + updated `scripts.postinstall`.
+3. **Self-package imports in `multi-mind.ts` + `multi-mind-cache.ts`.** Both imported `MindDB` etc. from `@waggle/hive-mind-core` (their own package). After main → dist change, this caused class-identity mismatch with tests' source imports — 28 multi-mind.test.ts tests failed. Fix: rewrote to relative paths.
+4. **`runDoctor` missing lazy env open + FK constraint on `gop_id`.** Doctor threw if env undefined; once that fixed, FrameStore.createIFrame failed FK check (`memory_frames.gop_id` references `sessions.gop_id`). Fix: matched `status` lazy-open pattern + ensured active session via `SessionStore.ensureActive('doctor-probe')` before `createIFrame`.
+
+All four documented in commit `9cf43b8`.
+
+### Cumulative cost reconciliation (final)
+
+| Phase | Spend | Notes |
+|---|---|---|
+| §0 preflight | $0 | read-only |
+| §1 scope | $0 | doc + memory writes |
+| §2.1 pre-migration safety | $0 | git tags + branch creation |
+| §2.2 4-stream merge | $0 | 2 merges + cherry-pick attempt + tsc + tests |
+| §2.3 file migration + Plan A AMENDMENT + test relocation | $0 | file moves + sed import rewrites + tsc + tests |
+| §2.4 Wave 1 cleanup | $0 | postinstall + bundled asset + CI yaml + docs + doctor + tsc |
+| §2.5+§2.6+§2.7 closing trio | $0 | CONTRIBUTING + OSS subtree script + sync deprecation + production-runtime fixes + smoke |
+| **Cumulative §0→§2.7 (full sprint)** | **$0 of $75 cap** | **entire CC Sesija B sprint zero-LLM** — every phase landed on local tooling without any LLM calls |
+
+### Final branch state snapshot
+
+- **`feature/hive-mind-monorepo-migration` HEAD on origin:** `9cf43b8` (closing trio commit) + this progress doc commit
+- **CC Sesija B sprint cumulative commits:** ~19+ commits since §2.1 close `4859b67`
+- **Test count post-§2.7:** 5949 / 31 / 145 (6125 total) — 99.5% pass rate, IDENTICAL to §2.3 baseline (zero regression)
+- **OSS subtree-split branches (LOCAL ONLY, ready for Day 0 manual push):** `oss-hive-mind-{core,shim-core,cli,mcp-server,wiki-compiler,hooks-claude-code}-export` + 6× `oss-hive-mind-hooks-{cursor,hermes,openclaw,codex,claude-desktop,codex-desktop}-export`
+
+**§2.5+§2.6+§2.7 STATUS:** COMPLETE.
+
+---
+
+## PHASE 5 SESIJA B — COMPLETE 2026-04-30
+
+CC Sesija B (hive-mind monorepo migration) end-to-end complete in a single multi-day session at $0 LLM spend. All brief acceptance criteria met. Migration branch on origin ready for Marko's Day 0 GitHub push (OSS hive-mind launch + arxiv preprint coupling).
+
+---
+
 ## Audit-trail anchors
 
 - This file: `D:/Projects/waggle-os/docs/plans/monorepo-migration-progress.md`
