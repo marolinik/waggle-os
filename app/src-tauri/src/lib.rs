@@ -1,6 +1,7 @@
 // Tauri 2 requires a lib.rs for the cdylib/staticlib crate types.
 // The actual app entry point is main.rs.
 
+mod commands;
 mod service;
 mod tray;
 
@@ -42,6 +43,11 @@ pub fn run() {
             service::stop_service,
             service::get_service_port,
             show_notification,
+            commands::memory::recall_memory,
+            commands::memory::save_memory,
+            commands::memory::search_entities,
+            commands::memory::get_identity,
+            commands::memory::compile_wiki_section,
         ])
         .setup(|app| {
             tray::setup_tray(app.handle())?;
