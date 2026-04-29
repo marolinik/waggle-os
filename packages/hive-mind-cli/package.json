@@ -1,7 +1,7 @@
 {
   "name": "@waggle/hive-mind-cli",
   "version": "0.1.0",
-  "description": "Command-line tools for hive-mind: recall, save, harvest, compile-wiki, maintenance. Designed to run from SessionStart/Stop hooks and nightly cron.",
+  "description": "Command-line tools for hive-mind: recall, save, harvest, compile-wiki, maintenance, doctor. Designed to run from SessionStart/Stop hooks and nightly cron. Includes Windows .cmd shim postinstall fix for Claude Code MCP integration.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "src/index.ts",
@@ -11,10 +11,20 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "files": [
+    "dist",
+    "src",
+    "assets",
+    "docs",
+    "postinstall.js",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc --build",
     "clean": "tsc --build --clean",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "postinstall": "node postinstall.js"
   },
   "dependencies": {
     "@waggle/hive-mind-core": "*",
@@ -37,6 +47,10 @@
     "hive-mind",
     "harvest",
     "wiki-compiler",
-    "ai"
+    "ai",
+    "claude-code",
+    "mcp",
+    "windows-installer",
+    "doctor"
   ]
 }

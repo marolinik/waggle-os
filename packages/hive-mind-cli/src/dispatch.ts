@@ -13,6 +13,7 @@ import { runInit, renderInitResult } from './commands/init.js';
 import { runStatus, renderStatusResult } from './commands/status.js';
 import { runMcpStart } from './commands/mcp-start.js';
 import { runMcpCall, renderMcpCallResult } from './commands/mcp-call.js';
+import { runDoctor, renderDoctorResult } from './commands/doctor.js';
 import type { CliEnv } from './setup.js';
 import type { Importance } from '@waggle/hive-mind-core';
 
@@ -173,7 +174,28 @@ export async function dispatch(args: DispatchArgs): Promise<string | undefined> 
       return fmt === 'json' ? json(result) : renderMcpCallResult(result, 'plain');
     }
 
+    case 'doctor': {
+      // Wave 1 cleanup — self-diagnostic smoke test independent of upstream hook.
+      // Spawn probe (Windows .cmd shim) → save+recall frame → cache cleanup.
+      if (!env) {
+        throw new Error('doctor command requires an opened CliEnv (personal.mind).');
+      }
+      const result = await runDoctor({ env });
+      // Doctor command sets process exit code via dispatch's caller (index.ts)
+      // by checking result.ok in the json/plain return shape. We surface a non-zero
+      // exit through throwing on fail to match the existing dispatch convention.
+      if (fmt === 'json') {
+        return json(result);
+      }
+      const rendered = renderDoctorResult(result);
+      if (!result.ok) {
+        // Throw here so index.ts's top-level catch sets exit code 1.
+        throw new Error(rendered);
+      }
+      return rendered;
+    }
+
     default:
-      throw new Error(`Unknown subcommand: "${subcommand}". Try: init, status, recall-context, save-session, harvest-local, cognify, compile-wiki, maintenance, mcp start, mcp call <tool>`);
+      throw new Error(`Unknown subcommand: "${subcommand}". Try: init, status, doctor, recall-context, save-session, harvest-local, cognify, compile-wiki, maintenance, mcp start, mcp call <tool>`);
   }
 }

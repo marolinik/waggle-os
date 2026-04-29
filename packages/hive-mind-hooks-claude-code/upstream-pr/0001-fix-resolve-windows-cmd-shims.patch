@@ -1,0 +1,55 @@
+From cf6e6c5d430bd5040088a6a65f4b4e10795a9bd1 Mon Sep 17 00:00:00 2001
+From: Marko Markovic <marko.markovic@egzakta.com>
+Date: Wed, 29 Apr 2026 13:28:18 +0200
+Subject: [PATCH] fix: resolve Windows .cmd shims in MCP health-check
+ probeCommandServer
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+On Windows, child_process.spawn cannot find npm-installed CLI shims
+(.cmd / .bat) without shell: true. This caused the PreToolUse hook to
+fail with `spawn <name> ENOENT` for healthy MCP servers (hive-mind-cli,
+npx-launched chrome-devtools), then quarantine them for the entire
+backoff window — blocking working servers from any tool calls.
+
+Fix: enable shell: true and windowsHide: true on win32 only.
+POSIX behavior preserved (Linux/macOS handle shebangs natively).
+---
+ scripts/hooks/mcp-health-check.js | 18 +++++++++++++-----
+ 1 file changed, 13 insertions(+), 5 deletions(-)
+
+diff --git a/scripts/hooks/mcp-health-check.js b/scripts/hooks/mcp-health-check.js
+index 80a535e..17f081e 100644
+--- a/scripts/hooks/mcp-health-check.js
++++ b/scripts/hooks/mcp-health-check.js
+@@ -312,13 +312,21 @@ function probeCommandServer(serverName, config) {
+       resolve(result);
+     }
+ 
++    const spawnOptions = {
++      env: mergedEnv,
++      cwd: process.cwd(),
++      stdio: ['pipe', 'ignore', 'pipe']
++    };
++    if (process.platform === 'win32') {
++      // Required so .cmd/.bat shims (e.g., npm-installed CLIs like hive-mind-cli)
++      // resolve via cmd.exe instead of failing with spawn ENOENT.
++      spawnOptions.shell = true;
++      spawnOptions.windowsHide = true;
++    }
++
+     let child;
+     try {
+-      child = spawn(command, args, {
+-        env: mergedEnv,
+-        cwd: process.cwd(),
+-        stdio: ['pipe', 'ignore', 'pipe']
+-      });
++      child = spawn(command, args, spawnOptions);
+     } catch (error) {
+       finish({
+         ok: false,
+-- 
+2.51.0.windows.1
+
