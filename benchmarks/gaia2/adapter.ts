@@ -46,12 +46,44 @@ export interface Gaia2HfTask {
   readonly id: string;
   readonly scenario_id: string;
   readonly split: string;
+  /**
+   * HF top-level `category` field (mini/standard/agent2agent/noise/...
+   * routing tag — observed at first probe dump 2026-04-30, NOT
+   * documented in HF dataset card sample). Treat as informational; not
+   * consumed by the narrow-proxy adapter.
+   */
+  readonly category?: string;
+  /**
+   * NOTE: HF stores `data` on disk as a SERIALIZED JSON STRING (not a
+   * nested object — HF dataset card sample shows the post-parse form).
+   * dump-tasks.py parses the string at dump time so on-disk JSONL we
+   * load here has data as the structured object.
+   *
+   * SCHEMA NOTES (verified against first probe dump 2026-04-30,
+   * `mini/validation/0741_*`):
+   *   - `apps` is an ARRAY of `{app_state, class_name, name}` objects
+   *     (12 apps for `mini` config; HF dataset card showed it as a
+   *     dict for documentation simplicity).
+   *   - `events` is an ARRAY of `{action, class_name, dependencies,
+   *     event_id, event_relative_time, event_time, event_type,
+   *     metadata}` objects. `event_type` ∈ {'USER', 'AGENT', 'ENV', ...}.
+   *     The user instruction lives in events with `event_type==='USER'`,
+   *     `action.function==='send_message_to_agent'`, with the message
+   *     text in `action.args[].value` where `args[].name==='content'`.
+   *   - `metadata.definition` carries scenario-level metadata
+   *     (`duration`, `hints`, `scenario_id`, `start_time`, `tags`) but
+   *     NOT the user-facing instruction. Description extraction routes
+   *     through events. See `extractTaskDescription` impl.
+   *   - `data` may also carry `augmentation` and `version` siblings,
+   *     not consumed by the narrow-proxy adapter.
+   */
   readonly data: {
     readonly metadata: {
       readonly definition: Record<string, unknown>;
     };
-    readonly apps: Record<string, unknown>;
-    readonly events: readonly unknown[];
+    /** Array per real schema; HF card showed dict for doc simplicity. */
+    readonly apps: readonly Record<string, unknown>[] | Record<string, unknown>;
+    readonly events: readonly Record<string, unknown>[];
   };
 }
 
@@ -262,10 +294,19 @@ export function flattenAppStateToCorpus(
 ): readonly { id: string; content: string }[] {
   const docs: { id: string; content: string }[] = [];
 
-  for (const [appKey, appData] of Object.entries(task.data.apps)) {
-    const appObj = (appData ?? {}) as Record<string, unknown>;
-    const className = typeof appObj.class_name === 'string' ? appObj.class_name : appKey;
-    const state = appObj.state ?? appObj;
+  // `apps` is an ARRAY of {app_state, class_name, name} per real schema
+  // (HF card sample showed dict — doc simplification). Handle both for
+  // forward-compat.
+  const appsList: readonly Record<string, unknown>[] = Array.isArray(task.data.apps)
+    ? (task.data.apps as readonly Record<string, unknown>[])
+    : (Object.values(task.data.apps) as readonly Record<string, unknown>[]);
+
+  for (const app of appsList) {
+    const className = typeof app.class_name === 'string' ? app.class_name : 'UnknownApp';
+    const name = typeof app.name === 'string' ? app.name : className;
+    // Real format uses `app_state` key for the app's initial-state JSON;
+    // HF card sample showed `state`. Try both.
+    const state = app.app_state ?? app.state ?? app;
     let stateJson: string;
     try {
       stateJson = JSON.stringify(state, null, 2);
@@ -273,13 +314,13 @@ export function flattenAppStateToCorpus(
       stateJson = '(unserializable app state)';
     }
     docs.push({
-      id: `app:${appKey}`,
-      content: `[${className}] ${appKey}\n${stateJson}`,
+      id: `app:${name}`,
+      content: `[${className}] ${name}\n${stateJson}`,
     });
   }
 
   // Task definition itself goes into the corpus so the agent can
-  // retrieve task-related context if needed.
+  // retrieve task-related metadata (tags, hints, duration).
   let defJson: string;
   try {
     defJson = JSON.stringify(task.data.metadata.definition, null, 2);
@@ -294,8 +335,27 @@ export function flattenAppStateToCorpus(
   return docs;
 }
 
+/**
+ * Extracts the user instruction from a Gaia2 task.
+ *
+ * Real schema: instruction lives in events with `event_type === 'USER'`,
+ * `action.function === 'send_message_to_agent'`, with the text in
+ * `action.args[]` where `args[i].name === 'content'`. A scenario can have
+ * multiple USER events injected over time (multi-turn). For the narrow
+ * proxy we concatenate them into one prompt block — the agent doesn't
+ * see the time evolution but does see the cumulative ask.
+ *
+ * Falls back through:
+ *   1. definition.description (HF card schema; not present in mini/validation
+ *      first probe but may be present in other configs)
+ *   2. definition.instruction / definition.task (defensive)
+ *   3. concatenated user-message events (real schema, primary path)
+ *   4. stringified definition + tags (last-resort, never empty question)
+ */
 export function extractTaskDescription(task: Gaia2HfTask): string {
   const def = task.data.metadata.definition as Record<string, unknown>;
+
+  // Strategy 1: HF card sample fields (defensive).
   if (typeof def.description === 'string' && def.description.trim().length > 0) {
     return def.description;
   }
@@ -305,9 +365,46 @@ export function extractTaskDescription(task: Gaia2HfTask): string {
   if (typeof def.task === 'string' && def.task.trim().length > 0) {
     return def.task;
   }
-  // Fallback: stringify the definition (smoke pattern; better than empty
-  // question, signals adapter what fields it should have looked at).
-  return `Task definition (no recognized field): ${JSON.stringify(def).slice(0, 1000)}`;
+
+  // Strategy 2: extract from USER events (primary path for real schema).
+  const events = task.data.events;
+  const userMessages: string[] = [];
+  for (const ev of events) {
+    if (ev.event_type !== 'USER') continue;
+    const action = ev.action as Record<string, unknown> | undefined;
+    if (!action) continue;
+    const args = action.args;
+    if (Array.isArray(args)) {
+      for (const arg of args) {
+        const argObj = arg as Record<string, unknown>;
+        const name = argObj.name;
+        const value = argObj.value;
+        if (
+          typeof value === 'string' &&
+          (name === 'content' || name === 'message' || name === 'text')
+        ) {
+          userMessages.push(value);
+        }
+      }
+    } else if (typeof args === 'object' && args !== null) {
+      const argsObj = args as Record<string, unknown>;
+      const candidate = argsObj.content ?? argsObj.message ?? argsObj.text;
+      if (typeof candidate === 'string' && candidate.trim().length > 0) {
+        userMessages.push(candidate);
+      }
+    }
+  }
+  if (userMessages.length > 0) {
+    return userMessages.length === 1
+      ? userMessages[0]
+      : userMessages
+          .map((m, i) => `--- User message ${i + 1}/${userMessages.length} ---\n${m}`)
+          .join('\n\n');
+  }
+
+  // Strategy 3: fallback (never empty question).
+  const tags = Array.isArray(def.tags) ? (def.tags as readonly string[]).join(', ') : '';
+  return `Gaia2 scenario ${task.id} (tags: ${tags || 'none'}). Definition: ${JSON.stringify(def).slice(0, 500)}`;
 }
 
 // ─── Simple in-memory FTS RetrievalSearchFn ──────────────────────────

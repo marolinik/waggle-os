@@ -145,7 +145,10 @@ function makeOpenRouterCallFn(opts: { apiKey: string }): LlmCallFn {
             Authorization: `Bearer ${opts.apiKey}`,
             // OpenRouter conventions:
             'HTTP-Referer': 'https://waggle-os.ai',
-            'X-Title': 'Waggle Sesija C — Gaia2 narrow-proxy probe',
+            // ASCII-only — fetch() rejects non-ByteString header values
+            // (U+2014 em dash etc. throw "Cannot convert argument to a
+            // ByteString" at request time).
+            'X-Title': 'Waggle Sesija C - Gaia2 narrow-proxy probe',
           },
           body: JSON.stringify(payload),
         });

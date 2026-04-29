@@ -58,7 +58,21 @@ def main() -> int:
         for i, record in enumerate(ds):
             if i >= args.limit:
                 break
-            # Each record matches Gaia2HfTask: {id, scenario_id, split, data}
+            # HF stores `data` as a serialized JSON STRING (not a nested
+            # object). HF dataset card sample showed the post-parse form;
+            # actual on-disk format is a string. Parse here so the JSONL
+            # written matches benchmarks/gaia2/adapter.ts Gaia2HfTask
+            # interface (data: { metadata, apps, events }).
+            data_field = record.get("data")
+            if isinstance(data_field, str):
+                try:
+                    record["data"] = json.loads(data_field)
+                except json.JSONDecodeError as e:
+                    print(
+                        f"WARN: record {record.get('id')} has unparseable `data` "
+                        f"string ({e}); writing raw string",
+                        file=sys.stderr,
+                    )
             f.write(json.dumps(record, ensure_ascii=False))
             f.write("\n")
             written += 1
