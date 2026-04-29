@@ -1,0 +1,405 @@
+# Phase 5 deployment manifest — GEPA-evolved variants production canary
+# Inherits Faza 1 manifest v7 LOCKED scope (claude::gen1-v1 + qwen-thinking::gen1-v1)
+# Authority: PM (Marko Markovic) — brief LOCKED 2026-04-29; cost amendment LOCKED 2026-04-30
+# Drives: §2 canary toggle + §3 monitoring + §4 exit criteria coverage + §5 cross-stream
+
+manifest_version: phase-5-deployment-v1
+manifest_type: production_canary_deployment
+locked_date: 2026-04-29
+cost_amendment_locked_date: 2026-04-30
+authority: |
+  PM (Marko Markovic).
+  Brief ratified "sve ok idemo dalje" 2026-04-29.
+  Cost cap amendment ratified "stavi visi slobodno" 2026-04-30.
+sprint: phase_5_canary
+task: variant_canary_deployment
+phase: phase_5_canary
+branch: phase-5-deployment-v2
+substrate_anchor_short: 6bc2089
+implementation_authoring_sha: TBD-fill-at-§1-commit-via-git-rev-parse-HEAD
+pre_canary_kickoff_sha: TBD-recorded-at-PM-canary-kickoff-via-git-rev-parse-HEAD
+supersedes: NONE  # First Phase 5 manifest
+
+# ── Inherits ────────────────────────────────────────────────────────────────
+
+inherits_from:
+  - manifest_v7_gepa_faza1_2026_04_28_substrate_freeze_c9bda3d
+  - faza_1_closure_2026_04_29_manifest_terminus_6bc2089
+  - phase_5_brief_LOCKED_2026_04_29
+  - phase_5_scope_LOCKED_2026_04_29
+  - branch_architecture_opcija_c_2026_04_30
+  - phase_5_cost_amendment_LOCKED_2026_04_30
+
+# ── Substrate anchor ────────────────────────────────────────────────────────
+
+substrate_anchor:
+  branch: gepa-faza-1
+  also_pinned_by: phase-5-deployment-v2  # Phase 5 branch HEAD = 6bc2089 at preflight time
+  commit_sha: 6bc20897d3851072eda34e80070faf39772bee66
+  commit_sha_short: 6bc2089
+  phase_label: "Faza 1 Checkpoint C closure (held-out validation 15/15 + manifest v7 11 amendments terminus)"
+  pin_method: branch_pointer + reachability_proof
+  ancestry_verification_command: "git merge-base --is-ancestor 6bc2089 HEAD"
+  ancestry_verification_result: PASS  # verified §0.1 #4 in preflight-evidence.md
+  derived_variants:
+    - name: claude::gen1-v1
+      file: packages/agent/src/prompt-shapes/gepa-evolved/claude-gen1-v1.ts
+      shape_constant: claudeGen1V1Shape
+      shape_name: claude-gen1-v1
+      registration: "registerShape('claude::gen1-v1', claudeGen1V1Shape)"
+      default_max_tokens: 4096
+      substrate_evidence:
+        pass_ii_in_sample_n8: "100%"
+        pass_ii_held_out_n5: "100%"
+        pass_ii_combined_n13: "100%"
+        held_out_gap_pp: 0
+        in_sample_uplift_vs_baseline_pp: 12.5
+        f5_cond_2_overfitting_bound_check: PASS  # 0pp gap < ±15pp bound
+    - name: qwen-thinking::gen1-v1
+      file: packages/agent/src/prompt-shapes/gepa-evolved/qwen-thinking-gen1-v1.ts
+      shape_constant: qwenThinkingGen1V1Shape
+      shape_name: qwen-thinking-gen1-v1
+      registration: "registerShape('qwen-thinking::gen1-v1', qwenThinkingGen1V1Shape)"
+      default_max_tokens: 16000
+      substrate_evidence:
+        pass_ii_in_sample_uplift_pp: 12.5
+        held_out_gap_pp: 0
+        retrieval_engagement_mean: 2.231  # = 96% of Opus parity 2.33
+        opus_parity_pct: 96
+        phase_4_5_mechanism_status: CONFIRMED_OUT_OF_DISTRIBUTION
+
+# ── Scope (LOCKED, no-substitution rule) ────────────────────────────────────
+
+scope_LOCKED:
+  in_scope:
+    - claude::gen1-v1
+    - qwen-thinking::gen1-v1
+  withheld:
+    - name: gpt::gen1-v2
+      reason: "Selection-biased on in-sample (in-sample +25pp → held-out +5pp = 20pp gap > ±15pp overfitting bound). WITHHELD until Faza 2 N=16 re-validation."
+      audit_chain_anchor: gpt-gen1-v2_failure_methodology_working_as_designed
+  no_substitution_rule: |
+    Mid-flight scope changes (add gpt, swap variants, drugi Generation) require
+    new LOCKED decision memo + Marko ratifikacija. CC must halt-and-PM if
+    discovery suggests scope changes. Per Faza 1 Amendment 11 terminal_calibration_clause
+    precedent.
+  scope_LOCKED_anchor: D:/Projects/PM-Waggle-OS/decisions/2026-04-29-phase-5-scope-LOCKED.md
+
+# ── Config differential vs Faza 1 manifest v7 (§0.2 PASS) ────────────────────
+
+config_differential:
+  inheritance_rule: "Production deployment task-type ≠ Faza 1 evolution task-type. Implicit defaults FORBIDDEN; every field below carries explicit value + justification."
+  audit_anchor: gepa-phase-5/preflight-evidence.md#§0.2
+  fields:
+    temperature:
+      faza_1_value: "agent default 0.3; corpus gen 0.7; ground truth 0.5; judge primary 1.0; oracle 1.0"
+      phase_5_value: 0.3
+      justification: "Production-default 0.3 inherits agent-side default. No corpus generation or judging in Phase 5. May be re-tuned post-canary if probe surfaces variant-specific recommendation."
+    max_tokens:
+      faza_1_value: "judge 3000, agent default 16000, oracle 8000, mutation-oracle response_format 6000"
+      phase_5_value:
+        claude_gen1_v1: 4096
+        qwen_thinking_gen1_v1: 16000
+      justification: "Aligns with Phase 4.5 retrieval engagement finding. Qwen 1.33×/task → target ≥1.7 (thinking budget required). Claude narrative+XML structure is more output-efficient, so lower default."
+    judge_model_primary:
+      faza_1_value: "trio = claude-opus-4-7 + gpt-5.4 + minimax-m27 (κ=0.7878)"
+      phase_5_value: NOT_APPLICABLE
+      justification: "Phase 5 production deployment has no inline judge. §3 monitoring metrics (Pass II rate proxy, retrieval engagement, latency, cost, error rate) replace evaluation judging. Judge invocation deferred to Faza 2 re-validation runs."
+    evaluation_corpus_source:
+      faza_1_value: "50-instance NorthLane CFO synthesis corpus + LoCoMo dataset (held-out 5 instances of slice 8-12 of seed=42 shuffle for Checkpoint C)"
+      phase_5_value: production_live_traffic
+      justification: "Inherent task-type shift. Phase 5 evaluates in-the-wild against actual user prompts; production traffic distribution unknown a priori — §3 monitoring + §4 promotion criteria provide acceptance bounds."
+    failure_mode_taxonomy:
+      faza_1_value: "Amendment 4 texture audit — F1-F5 task family classifier + per-family Pass II rate; F6 = T2 modes"
+      phase_5_value: production_threshold_based_classifier  # see rollback_triggers below + opcija_c_addendum
+      justification: "New mapping — production threshold-based detection vs. content-classifier."
+      opcija_c_addendum:
+        added_trigger: loop_exhausted_rate_gt_5pct_baseline
+        rationale: "Phase 4 long-task fixes not inherited per Opcija C §3. Halt with 'long-task fixes potrebni' diagnostic; selective cherry-pick option from feature/c3-v3-wrapper available."
+    cost_per_request_baseline:
+      faza_1_value: "$0.27/instance (Amendment 3 probe-corrected)"
+      phase_5_value:
+        claude_gen1_v1_p50: 0.0239
+        claude_gen1_v1_p95: 0.0432
+        qwen_thinking_gen1_v1_p50: 0.0064
+        qwen_thinking_gen1_v1_p95: 0.0176
+      justification: "§0.3 probe-validated 2026-04-29 via LiteLLM proxy (10 requests). Cost may shift with production cache hit rates and conversation-context size."
+
+# ── Cost economics (post-amendment LOCKED 2026-04-30) ────────────────────────
+
+cost_governance:
+  amendment_LOCKED_anchor: D:/Projects/PM-Waggle-OS/decisions/2026-04-30-phase-5-cost-amendment-LOCKED.md
+  cost_regime_classification: production_deployment  # per feedback_production_vs_research_cost_discipline
+  hard_cap_usd: 75
+  halt_trigger_usd: 60
+  expected_total_usd_min: 35
+  expected_total_usd_max: 45
+  buffer_above_probe_validated_pct: 96  # = 75 / 38.34
+  probe_validated_p95_ceiling_usd: 38.34
+  probe_validated_anchor:
+    formula: "740 requests × max(p95_per_variant) × 1.20 buffer"
+    computation: "740 × $0.0432 × 1.20 = $38.34"
+    p95_max_variant: claude_gen1_v1
+    probe_artifact: gepa-phase-5/cost-probe-2026-04-29.jsonl
+    probe_summary: gepa-phase-5/cost-probe-2026-04-29-summary.md
+    probe_total_spend_usd: 0.1628
+  pricing_snapshot:
+    snapshot_date: 2026-04-29
+    claude_opus_4_7:
+      input_per_million_tokens: 5.00
+      output_per_million_tokens: 25.00
+      cache_hits_per_million_tokens: 0.50
+      source_url: https://platform.claude.com/docs/en/docs/about-claude/pricing
+    dashscope_qwen_35b_a3b_intl_thinking:
+      input_per_million_tokens: 0.25
+      output_per_million_tokens: 2.00
+      source_url: https://www.alibabacloud.com/help/en/model-studio/billing-for-model-studio
+  cost_dominance_mechanism: |
+    claude::gen1-v1 stretch case (1500 output tokens × Opus 4.7 $25/M output) dominates
+    canary cost ceiling. qwen-thinking::gen1-v1 ~3× cheaper per request even at higher
+    output volume because $2/M output vs $25/M output.
+  amendment_history:
+    - version: v0
+      hard_cap_usd: 25
+      halt_trigger_usd: 20
+      expected_total_usd: [8, 13]
+      authored_in: phase_5_brief_v1_LOCKED_2026_04_29
+      superseded_by: amendment_LOCKED_2026_04_30
+      reason_for_supersession: probe_validated_ceiling_38.34_exceeded_25_hard_cap
+    - version: v1_LOCKED
+      hard_cap_usd: 75
+      halt_trigger_usd: 60
+      expected_total_usd: [35, 45]
+      authored_in: D:/Projects/PM-Waggle-OS/decisions/2026-04-30-phase-5-cost-amendment-LOCKED.md
+      ratification: "Marko: stavi visi slobodno (2026-04-30)"
+
+# ── Volume estimate (brief §5.2) ─────────────────────────────────────────────
+
+volume_estimate:
+  canary_phase_total: 740  # across both variants, 7 days
+  per_day_breakdown:
+    day_0_1_canary_10pct: 40   # 10 req/day × 2 variants × 2 days
+    day_1_3_canary_25pct: 100  # 25 × 2 × 2
+    day_3_5_canary_50pct: 200  # 50 × 2 × 2
+    day_5_plus_canary_100pct: 400  # 100 × 2 × 2 initial
+  production_sustained_volume: TBD_post_canary_re_projected_at_4_3_production_stable_transition
+
+# ── Canary toggle (§2.1, §0.4 #3) ────────────────────────────────────────────
+
+canary_toggle:
+  env_var: WAGGLE_PHASE5_CANARY_PCT
+  allowed_values: [0, 10, 25, 50, 100]
+  default_until_PM_ratification: 0
+  routing_strategy: deterministic_per_request_id_bucket  # preserves A/B paired-comparison validity
+  hot_reconfig_method: process_restart_or_SIGHUP  # no code redeploy required per §0.4 #3
+  flip_authority: PM_canary_kick_off_ratification_per_§7.3
+  binding_rule: |
+    NE flip canary toggle (canary_pct = 10) bez explicit PM canary kick-off ratifikacije.
+    CC implementation must default to 0 and emit "PHASE 5 §1-§5 IMPLEMENTATION COMPLETE
+    — awaiting PM canary kick-off ratification" before any flip.
+  gradient_schedule:
+    - day_offset: 0
+      canary_pct: 10
+      observation_window_hours: 24
+    - day_offset_min: 1
+      day_offset_max: 2
+      canary_pct: 25
+      observation_window_hours: 48
+    - day_offset_min: 3
+      day_offset_max: 5
+      canary_pct: 50
+      observation_window_hours: 72
+    - day_offset_min: 5
+      canary_pct_full_enable_candidate: 100
+      condition: all_§4_1_promotion_criteria_PASS_per_pre_registered_thresholds
+
+# ── Promotion criteria (§4.1 BIND, ε=1e-9 inclusive) ─────────────────────────
+
+promotion_criteria:
+  binding_rule: no_revisit_without_amendment
+  amendment_authority: PM_ratification + LOCKED_memo
+  inclusive_boundary_epsilon: 1.0e-9
+  applies_at: canary_to_full_enable_promotion
+  criteria:
+    - id: pass_ii_rate
+      condition: "variant_pass_ii ≥ baseline_pass_ii + 0pp − ε"
+      stretch_goal_pp: 5  # not blocking
+      sample_floor_per_metric: 30
+    - id: retrieval_engagement
+      condition_qwen_thinking: "variant_retrieval ≥ baseline_retrieval × 0.80"
+      condition_claude: "variant_retrieval ≥ baseline_retrieval"
+      rationale: "qwen-thinking is Phase 4.5 mechanism-validated retrieval-driver; claude::gen1-v1 evolution different type (narrative XML restructure, not retrieval-engagement-targeted)."
+      qwen_thinking_baseline_reference_mean_calls: 2.231  # Faza 1 evidence
+    - id: latency_p95
+      condition: "variant_p95 ≤ baseline_p95 × 1.20"
+    - id: cost_per_request
+      condition: "variant_cost ≤ baseline_cost × 1.15"
+      anchor: feedback_cost_projection_real_anchoring
+    - id: error_rate
+      condition: "variant_error ≤ baseline_error + 1pp"
+  wall_clock_floor:
+    formula: "max(7_days_since_canary_kickoff, 30_samples_per_variant_per_metric)"
+    days_min: 7
+    samples_per_metric_min: 30
+    canonical_intent: |
+      Both conditions must be met (whichever takes longer wins). Brief §2.2 specifies
+      max(); brief §4.1 specifies min(). Manifest binds to max() per brief §2.2 + intent
+      ("sample floor je hard guard protiv small-sample-effect stage promotion"); §4.1
+      wording 'min(...)' is treated as authoring typo. Flag for PM correction.
+
+# ── Rollback triggers (§4.2 BIND, immediate) ─────────────────────────────────
+
+rollback_triggers:
+  binding_rule: automatic_rollback_per_section_2_3
+  no_silent_rollback: true
+  rollback_log_path: gepa-phase-5/rollback-log.jsonl
+  triggers:
+    - id: pass_ii_collapse
+      condition: "variant_pass_ii < baseline_pass_ii − 10pp"
+      consecutive_windows: 2
+      window_size: 10
+    - id: error_rate_spike
+      condition: "variant_error > baseline_error + 5pp"
+      consecutive_window_hours: 24
+    - id: cost_per_request_spike
+      condition: "variant_cost > baseline_cost × 2.0"
+      window: single_immediate
+    - id: latency_p95_spike
+      condition: "variant_p95 > baseline_p95 × 3.0"
+      window: single_immediate
+    - id: manual_halt_or_pm
+      authority: [PM, Marko, CC_observed_anomaly_outside_pre_registered_thresholds]
+      condition: anomaly_outside_pre_registered_thresholds
+    - id: opcija_c_long_task_loop_exhausted
+      condition: "loop_exhausted_rate > 5%_baseline"
+      rationale: "Phase 4 long-task fixes not inherited per Opcija C §3; halt with 'long-task fixes potrebni' diagnostic + selective cherry-pick option"
+      cherry_pick_candidate_set:
+        - c9bda3d  # already inherited via gen1-v1 shape baseline pins
+        - be8f702
+        - e906114
+        - 4d0542f
+        - 8b8a940
+
+# ── Production-stable definition (§4.3) ──────────────────────────────────────
+
+production_stable_status:
+  unblocks: cross_stream_dependencies
+  conditions:
+    days_zero_rollback: 30
+    metrics_within_pass_bands_count: 5  # all 5 §4.1 metrics maintained
+    halt_and_pm_emissions: 0
+
+# ── Cross-stream dependencies (§5/§6, Waggle primary per feedback rule) ──────
+
+cross_stream_primary:
+  rationale_anchor: feedback_waggle_primary_framing
+  rationale: |
+    Waggle is the demand-creation engine for KVARK (CLAUDE.md §1 strategic function).
+    Waggle landing/launch comms are PRIMARY trigger surface; Phase 5 production-stable
+    is a 'Waggle-launch-readiness gate' with KVARK as downstream beneficiary.
+  destinations:
+    - id: waggle_landing_v3_proof_card_swap
+      brief_section_anchor: §6.1
+      trigger_condition: "phase_5_production_stable + Pass_II_numbers + retrieval_engagement_validated_samples"
+      action: "Update Landing v2.3 Proof Card 1 sa PROVENANCE → BENCHMARK swap (concrete numbers from Phase 5)"
+      owner: PM_authoring + claude.ai_design_generation
+      timing_post_production_stable: 2_to_3_weeks
+      additional_audit_anchor: project_landing_v2_basics_2026_04_28
+    - id: waggle_launch_comms
+      brief_section_anchor: §6.1_implicit_extension
+      trigger_condition: phase_5_production_stable
+      action: "Public launch comms — Waggle production-stable evidence as anchor; KVARK pitch is downstream consumption of same evidence"
+      owner: Marko + PM
+      timing_post_production_stable: aligned_with_landing_v3_swap
+    - id: arxiv_5_1_5_2_methodology_results
+      brief_section_anchor: §6.2  # §6.2 §5.1 + §5.2 portion only — §5.3 is secondary
+      trigger_condition: "phase_5_production_stable + Marko_arxiv_co_author_roster_ratification + endorsement_contact"
+      action: "arxiv §5.1 (methodology + manifest v7 + 11 amendments transparent narrative) + §5.2 (Faza 1 results: cross-family generalization, claude + qwen-thinking pass; gpt selection bias scoping) — Waggle-primary academic credibility"
+      owner: Marko_authoring
+      timing_post_production_stable: TBD
+
+cross_stream_secondary:
+  rationale_anchor: feedback_waggle_primary_framing
+  rationale: |
+    Downstream beneficiaries of Phase 5 production-stable evidence. Sequenced after
+    Waggle-primary cross-stream destinations consume the evidence. Reversing primary/
+    secondary order misframes KVARK as entry point rather than upgrade path.
+  destinations:
+    - id: kvark_pitch_deck
+      brief_section_anchor: §6.3
+      trigger_condition: "phase_5_production_stable + Marko_pitch_deck_draft_approval"
+      action: "KVARK enterprise pitch deck section: 'On-prem Qwen + Waggle harness validated Opus-class on real production traffic, X% retrieval parity, Y% Pass II floor'"
+      owner: Marko
+      timing_post_production_stable: TBD_post_landing_v3_swap
+      relationship_to_primary: downstream_beneficiary_of_landing_v3_evidence
+    - id: arxiv_section_5_3_kvark_enterprise
+      brief_section_anchor: §6.2_§5.3_only
+      trigger_condition: phase_5_production_stable
+      action: "arxiv §5.3 KVARK enterprise narrative — Qwen 35B = Opus-class on production traffic = KVARK pitch scientific anchor"
+      relationship_to_primary: downstream_beneficiary_of_section_5_1_5_2_evidence
+    - id: faza_2_sprint_planning
+      brief_section_anchor: §6.4
+      trigger_condition: "phase_5_production_stable + 2_weeks_observation"
+      scope:
+        - gpt_gen1_v2_n_16_re_validation
+        - qwen_non_thinking_deeper_investigation_retrieval_quality_decoupling
+        - generic_simple_investigation_necessary_but_not_sufficient_retrieval_scoping
+        - arxiv_section_5_4_finalization
+      budget_headroom_usd: 71.51  # decoupled from Phase 5 cap (Faza 1 unspent of $115 cap)
+      timing_post_production_stable: 2_weeks_observation_then_kick_off
+
+# ── Halt-and-PM trigger automation ───────────────────────────────────────────
+
+halt_and_pm_triggers:
+  active: true
+  emit_path: phase-5-alerts/<ISO_date>.jsonl
+  authority: automated_threshold_breach + manual_PM_or_Marko
+  triggers:
+    - rollback_triggering_threshold_breach  # any §4.2 trigger
+    - cost_overshoot_above_halt_60
+    - cost_overshoot_above_hard_cap_75
+    - probe_re_run_cost_shift_gt_25pct_from_baseline
+    - discovery_outside_scope  # prompt-shape registry mismatch, manifest emit fail, monitoring stub no-op
+  binding_rule: |
+    No silent degradation. Sve threshold breaches MUST emit THRESHOLD_BREACH log entry.
+    Rollback-triggering breaches MUST invoke §2.3 rollback procedure (or stub equivalent
+    pre-canary-kickoff: log + alert file write).
+
+# ── Audit chain anchors ──────────────────────────────────────────────────────
+
+audit_anchors:
+  brief_LOCKED: D:/Projects/PM-Waggle-OS/briefs/2026-04-29-phase-5-deployment-brief-v1.md
+  brief_LOCKED_ratification: D:/Projects/PM-Waggle-OS/decisions/2026-04-29-phase-5-brief-LOCKED.md
+  scope_LOCKED: D:/Projects/PM-Waggle-OS/decisions/2026-04-29-phase-5-scope-LOCKED.md
+  faza_1_closure: D:/Projects/PM-Waggle-OS/decisions/2026-04-29-gepa-faza1-results.md
+  branch_architecture_opcija_c: D:/Projects/PM-Waggle-OS/decisions/2026-04-30-branch-architecture-opcija-c.md
+  cost_amendment_LOCKED: D:/Projects/PM-Waggle-OS/decisions/2026-04-30-phase-5-cost-amendment-LOCKED.md
+  preflight_evidence: D:/Projects/waggle-os/gepa-phase-5/preflight-evidence.md
+  faza_1_manifest_v7: D:/Projects/waggle-os/benchmarks/preregistration/manifest-v7-gepa-faza1.yaml
+  cost_probe_jsonl: D:/Projects/waggle-os/gepa-phase-5/cost-probe-2026-04-29.jsonl
+  cost_probe_summary: D:/Projects/waggle-os/gepa-phase-5/cost-probe-2026-04-29-summary.md
+  this_manifest: D:/Projects/waggle-os/gepa-phase-5/manifest.yaml
+
+binding_feedback_rules:
+  - feedback_epsilon_inclusive_boundary  # §4.1 #1 ε=1e-9 inclusive
+  - feedback_external_contract_validation  # §0.1 registerShape canonical API enforced
+  - feedback_cost_projection_real_anchoring  # §0.3 three-element decomposition + probe-validation
+  - feedback_substrate_readiness_gate  # §0 grep evidence binding before §2 deployment
+  - feedback_config_inheritance_audit  # §0.2 explicit differential block, no implicit defaults
+  - feedback_brief_wall_clock_discipline  # wall-clock 2-4 dana labeled "projection NOT trigger"
+  - feedback_production_vs_research_cost_discipline  # NEW 2026-04-30: cost amendment regime classification
+  - feedback_waggle_primary_framing  # NEW 2026-04-30: cross_stream_primary (Waggle) vs secondary (KVARK)
+
+# ── Manifest history ─────────────────────────────────────────────────────────
+
+manifest_history:
+  - version: phase-5-deployment-v1
+    locked_date: 2026-04-29
+    cost_amendment_locked_date: 2026-04-30
+    authoring_session: phase_5_§1_§5_implementation_2026_04_29_post_pm_amendment_post_restart
+    drives:
+      - §2_canary_toggle_implementation
+      - §3_monitoring_infrastructure
+      - §4_exit_criteria_coverage_doc
+      - §5_cross_stream_dependencies_doc
+    audit_chain_terminus: this_file

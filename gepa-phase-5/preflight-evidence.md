@@ -315,4 +315,56 @@ Beyond initial 1-2h estimate due to two halt-and-PM rounds — expected per pre-
 
 ---
 
-**End of §0 preflight evidence. Awaiting PM ratification on 3 halt-and-PM asks before proceeding to §1.**
+## Round 3 — Post-amendment §0 PASS aggregate (2026-04-30)
+
+PM amended Phase 5 brief §5.4 cost ceiling per `decisions/2026-04-30-phase-5-cost-amendment-LOCKED.md`:
+
+| Field | Original (v0, brief §5.4 v1) | Amended (v1, LOCKED 2026-04-30) |
+|---|---|---|
+| Hard cap | $25 | **$75** |
+| Halt trigger | $20 | **$60** |
+| Expected total | $8-13 | **$35-45** |
+| Buffer above probe-validated $38.34 | (negative; ceiling exceeded) | ~96% (= $75 / $38.34) |
+
+Marko ratification: "stavi visi slobodno" (2026-04-30).
+
+### Regime classification
+
+Per `feedback_production_vs_research_cost_discipline` (NEW memory entry authored alongside this Round 3 update): cost cap discipline differs by regime. Phase 5 is **production deployment**, where the cap is an operational projection that can be amended via PM decision memo + ratification when probe data reveals an underestimate. Amendment does NOT invalidate prior evidence (scope LOCK, manifests, validation runs upstream remain binding). Faza N research evals operate under a stricter no-revisit-without-amendment binding regime; the two were briefly conflated when PM proposed Opcija C qwen-only as "cleaner math" — Marko corrected.
+
+### §0.3 verdict revision
+
+`canary_cost_p95_ceiling = $38.34 < halt_trigger $60 < hard_cap $75` → **§0.3 PASS** (post-amendment).
+
+Probe data unchanged; only the cost ceiling threshold revised. Probe artifacts at `gepa-phase-5/cost-probe-2026-04-29.jsonl` (per-row JSONL) + `gepa-phase-5/cost-probe-2026-04-29-summary.md` (verdict summary) remain authoritative.
+
+### §0 aggregate verdict revision
+
+```
+§0_verdict_aggregate (Round 3) = §0.1 (PASS post-quarantine) AND §0.2 (PASS) AND §0.3 (PASS post-amendment) AND §0.4 (PASS-design-stage)
+                               = PASS sva 4 sub-gates
+```
+
+**CC unblocked for §1-§5 implementation per Phase 5 brief.** Halt-and-PM cleared. §0.4 deferred items (#2 monitoring stubs, #3 canary toggle, #5 halt-and-PM automation) become §1-§3 deliverables verified before canary kick-off (§7.3 PM ratification gate), not before §0 advancement.
+
+### Cumulative cost summary (§0)
+
+| Item | Spent | Budget |
+|---|---|---|
+| Pricing snapshots (web fetches) | $0.00 (free) | n/a |
+| §0.3 probe (5 requests per variant, 10 total) | $0.1628 | $0.30-$0.50 |
+| **§0 total spent** | **$0.1628** | $1.00 hard cap (§0 alone) |
+
+§1-§5 implementation budget envelope (per amended cost cap): $74.84 remaining of $75 hard cap. Implementation work itself (§1 manifest authoring, §2 canary toggle code, §3 monitoring stubs, §4 coverage doc, §5 cross-stream doc) burns no LLM cost.
+
+### Audit anchor for Round 3
+
+| Item | Path |
+|---|---|
+| Cost amendment LOCKED memo | `D:/Projects/PM-Waggle-OS/decisions/2026-04-30-phase-5-cost-amendment-LOCKED.md` |
+| New memory entry — cost regime | `C:/Users/MarkoMarkovic/.claude/projects/D--Projects-waggle-os/memory/feedback_production_vs_research_cost_discipline.md` |
+| New memory entry — Waggle primary framing | `C:/Users/MarkoMarkovic/.claude/projects/D--Projects-waggle-os/memory/feedback_waggle_primary_framing.md` |
+
+---
+
+**End of §0 preflight evidence. §0 PASS aggregate Round 3. CC implementing §1-§5.**
