@@ -48,6 +48,7 @@ pub fn run() {
             commands::memory::search_entities,
             commands::memory::get_identity,
             commands::memory::compile_wiki_section,
+            commands::agent::run_agent_query,
         ])
         .setup(|app| {
             tray::setup_tray(app.handle())?;

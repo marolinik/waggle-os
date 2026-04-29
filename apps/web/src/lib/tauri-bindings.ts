@@ -14,6 +14,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
 // ─── Shared enums ──────────────────────────────────────────────────────────
 
@@ -162,6 +163,90 @@ export interface CompileWikiResponse {
 
 export function compileWikiSection(args: CompileWikiArgs = {}): Promise<CompileWikiResponse> {
   return invoke<CompileWikiResponse>('compile_wiki_section', args as unknown as Record<string, unknown>);
+}
+
+// ─── run_agent_query (streaming) ───────────────────────────────────────────
+// CC Sesija A §2.1 Task A3.
+
+export interface AgentQueryArgs {
+  query: string;
+  /**
+   * Optional shape selector — Faza 1 GEPA-evolved variant id (e.g.
+   * `claude::gen1-v1`, `qwen-thinking::gen1-v1`). A3.1 follow-up: sidecar
+   * `/api/chat` does not yet honor this field; the Tauri command carries it
+   * through the body so a single sidecar patch wires the behavior without
+   * binding changes.
+   */
+  shape?: string;
+  workspaceId?: string;
+  persona?: string;
+  model?: string;
+  session?: string;
+}
+
+/**
+ * One parsed SSE event. `event` is the SSE event name (defaults to "message"
+ * if the server didn't emit `event:` lines). `data` is the parsed JSON value
+ * when the data payload was JSON, otherwise the raw concatenated data text.
+ */
+export interface AgentStreamChunk {
+  event: string;
+  data: unknown;
+}
+
+/** Payload of the end event — either `{ ok: true }` or an error envelope. */
+export interface AgentStreamEnd {
+  ok?: boolean;
+  error?: string;
+  body?: string;
+}
+
+export interface AgentQuerySubscription {
+  /** Server-issued correlation id; also encoded in the Tauri event names. */
+  requestId: string;
+  /** Stop receiving chunk events. Always also call `endUnlisten`. */
+  unlisten: UnlistenFn;
+}
+
+/**
+ * Start an agent query and subscribe to its chunk events.
+ *
+ * The Tauri command spawns a background task that POSTs to the sidecar's
+ * `/api/chat` SSE endpoint and emits one Tauri event per parsed SSE event.
+ * Returns the request_id (for correlation + listening to the end event) and
+ * an unlisten handle so the caller can detach when the consumer unmounts.
+ *
+ * The end event is intentionally a separate subscription (`listenAgentEnd`)
+ * so callers can wire completion + error handling without funneling through
+ * the per-chunk handler.
+ */
+export async function runAgentQuery(
+  args: AgentQueryArgs,
+  onChunk: (chunk: AgentStreamChunk) => void,
+): Promise<AgentQuerySubscription> {
+  const requestId = await invoke<string>(
+    'run_agent_query',
+    args as unknown as Record<string, unknown>,
+  );
+  const unlisten = await listen<AgentStreamChunk>(
+    `agent-stream-${requestId}`,
+    (event) => onChunk(event.payload),
+  );
+  return { requestId, unlisten };
+}
+
+/**
+ * Subscribe to the end-of-stream event for a previously started agent query.
+ * The handler fires exactly once per request_id; the returned unlisten can be
+ * called to release the subscription early.
+ */
+export function listenAgentEnd(
+  requestId: string,
+  onEnd: (payload: AgentStreamEnd) => void,
+): Promise<UnlistenFn> {
+  return listen<AgentStreamEnd>(`agent-stream-${requestId}-end`, (event) =>
+    onEnd(event.payload),
+  );
 }
 
 // ─── Runtime detection ─────────────────────────────────────────────────────
