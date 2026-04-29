@@ -81,8 +81,19 @@ async fn stream_chat(
     model: Option<String>,
     session: Option<String>,
 ) -> Result<(), String> {
-    let url = format!("http://127.0.0.1:{}/api/chat", port);
-    let mut body = json!({ "message": query });
+    // A3.1 (2026-04-30): re-pointed from /api/chat to /api/agent/run.
+    // /api/agent/run is the dedicated shape-aware structured-retrieval
+    // endpoint (runRetrievalAgentLoop) — distinct from /api/chat which is
+    // for conversational multi-turn dialogue (runAgentLoop). Shape now flows
+    // end-to-end: Tauri body field "shape" → sidecar promptShapeOverride
+    // → runRetrievalAgentLoop pickShape().
+    //
+    // The TS binding's `session` arg is intentionally ignored here:
+    // /api/agent/run is one-shot (no persistent session), so passing
+    // session through would just be dead weight. Binding signature stays
+    // stable so callers don't break.
+    let url = format!("http://127.0.0.1:{}/api/agent/run", port);
+    let mut body = json!({ "question": query });
     if let Some(ws) = workspace_id {
         body["workspace"] = json!(ws);
     }
@@ -92,15 +103,12 @@ async fn stream_chat(
     if let Some(m) = model {
         body["model"] = json!(m);
     }
-    if let Some(s) = session {
-        body["session"] = json!(s);
-    }
     if let Some(sh) = shape {
-        // A3.1 follow-up: sidecar /api/chat does not yet honor `shape`.
-        // Carrying through the body so the future patch is a one-line
-        // sidecar change — Tauri command surface stays stable.
         body["shape"] = json!(sh);
     }
+    // `session` arg accepted by the Tauri command for binding-stability but
+    // not threaded into /api/agent/run (one-shot). Suppress unused-warn.
+    let _ = session;
 
     let event_name = format!("agent-stream-{}", request_id);
     let end_event = format!("agent-stream-{}-end", request_id);
