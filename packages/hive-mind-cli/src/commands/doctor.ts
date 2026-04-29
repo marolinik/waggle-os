@@ -24,8 +24,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { spawn } from 'node:child_process';
-import { FrameStore, type Importance } from '@waggle/hive-mind-core';
-import type { CliEnv } from '../setup.js';
+import { FrameStore, SessionStore, type Importance } from '@waggle/hive-mind-core';
+import { openPersonalMind, resolveDataDir, type CliEnv } from '../setup.js';
 
 export interface DoctorResult {
   ok: boolean;
@@ -123,12 +123,18 @@ async function frameRoundtripProbe(env: CliEnv): Promise<DoctorStep[]> {
   const steps: DoctorStep[] = [];
   const probeContent = `[doctor probe ${new Date().toISOString()}] hive-mind-cli self-test`;
 
-  // Save: create an I-frame in a dedicated 'doctor-probe' GOP for isolation.
+  // memory_frames.gop_id has a FOREIGN KEY to sessions.gop_id, so we must
+  // ensure a session exists before saving a frame. SessionStore.ensureActive
+  // creates one if missing (idempotent — same session ID returns).
+  const sessions = new SessionStore(env.db);
+  const session = sessions.ensureActive('doctor-probe');
+
+  // Save: create an I-frame using the active session's gop_id.
   let frameId: number | null = null;
   try {
     const frames = new FrameStore(env.db);
     const created = frames.createIFrame(
-      'doctor-probe',
+      session.gop_id,
       probeContent,
       'temporary' as Importance,
       'tool_verified',
@@ -206,18 +212,51 @@ function inspectAndCleanQuarantineCache(): DoctorStep {
 }
 
 export interface DoctorOptions {
-  env: CliEnv;
+  /** Optional opened CliEnv. If omitted, doctor opens personal.mind lazily via openPersonalMind() — same pattern as status command. */
+  env?: CliEnv;
+  dataDir?: string;
 }
 
-export async function runDoctor(opts: DoctorOptions): Promise<DoctorResult> {
+export async function runDoctor(opts: DoctorOptions = {}): Promise<DoctorResult> {
   const steps: DoctorStep[] = [];
 
   // Step 1: spawn probe (catches Windows .cmd shim ENOENT)
   steps.push(await spawnSelfProbe());
 
-  // Step 2-3: frame save+recall (catches substrate wiring)
-  const roundtrip = await frameRoundtripProbe(opts.env);
+  // Step 2-3: frame save+recall — lazy-open env if not provided.
+  let env: CliEnv | null = opts.env ?? null;
+  let envOpenedHere = false;
+  if (!env) {
+    const dataDir = opts.dataDir ?? resolveDataDir();
+    const personalMindPath = path.join(dataDir, 'personal.mind');
+    if (!fs.existsSync(personalMindPath)) {
+      steps.push({
+        name: 'Saving probe frame to personal.mind',
+        ok: false,
+        errorMessage: `personal.mind not found at ${personalMindPath}. Run "hive-mind-cli init" first.`,
+      });
+      const ok = false;
+      return {
+        ok,
+        steps,
+        remediation: 'Run "hive-mind-cli init" to scaffold the data dir + personal.mind, then re-run doctor.',
+      };
+    }
+    env = openPersonalMind(dataDir);
+    envOpenedHere = true;
+  }
+
+  const roundtrip = await frameRoundtripProbe(env);
   steps.push(...roundtrip);
+
+  // If we opened the env here, close it back so we don't leak handles.
+  if (envOpenedHere && env.db && typeof (env.db as unknown as { close?: () => void }).close === 'function') {
+    try {
+      (env.db as unknown as { close: () => void }).close();
+    } catch {
+      // ignore close errors — substrate cleanup, not user-facing
+    }
+  }
 
   // Step 4: clean stale quarantine
   steps.push(inspectAndCleanQuarantineCache());

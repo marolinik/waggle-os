@@ -1,5 +1,20 @@
 name: mind-parity-check
 
+# DEPRECATED 2026-04-30 — CC Sesija B monorepo migration §2.6 Task B22.
+#
+# This workflow ran the (then-external) hive-mind repo's mind/+harvest/ tests
+# against waggle-os's substrate to verify behavioral parity while the same code
+# lived in both repos. After CC Sesija B migration, the substrate lives ONLY in
+# waggle-os/packages/hive-mind-core/, and the OSS mirror at
+# github.com/marolinik/hive-mind is generated FROM waggle-os via subtree-split
+# (not maintained as a parallel codebase). Parity checking is therefore
+# definitionally trivial — the OSS export is byte-identical to its source.
+#
+# This workflow is preserved as the deprecation anchor. It will NOT fire on
+# push because trigger paths (packages/core/src/mind/**) no longer exist as
+# tracked content. See sync-mind.yml's deprecation note for the full migration
+# context.
+
 # Memory Sync Repair Step 3.1. Verifies that hive-mind's mind/ + harvest/
 # tests pass against waggle-os's substrate. The check runs the waggle-os
 # committed Step 2 ports (which include adapted versions like db.test.ts)

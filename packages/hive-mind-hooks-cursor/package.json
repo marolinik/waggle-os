@@ -4,9 +4,12 @@
   "description": "STUB — hive-mind silent capture shim for cursor. Wave 2/3 of marolinik/waggle-os monorepo migration. Implementation pending.",
   "license": "Apache-2.0",
   "type": "module",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
   "scripts": {
     "build": "tsc --build"
@@ -37,5 +40,6 @@
     "ai",
     "hook",
     "stub"
-  ]
+  ],
+  "types": "dist/index.d.ts"
 }

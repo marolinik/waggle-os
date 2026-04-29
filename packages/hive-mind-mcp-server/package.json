@@ -4,12 +4,15 @@
   "description": "MCP server exposing hive-mind memory (21 tools + 4 resources) over stdio for Claude Code, Claude Desktop, Codex, and any MCP-compatible client",
   "license": "Apache-2.0",
   "type": "module",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
   "bin": {
     "hive-mind-memory-mcp": "dist/index.js"
   },
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
   "scripts": {
     "build": "tsc --build",
@@ -22,14 +25,18 @@
     "@waggle/hive-mind-wiki-compiler": "*",
     "zod": "^3.23.0"
   },
-  "publishConfig": { "access": "public" },
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/marolinik/waggle-os.git",
     "directory": "packages/hive-mind-mcp-server"
   },
   "homepage": "https://github.com/marolinik/waggle-os/tree/main/packages/hive-mind-mcp-server#readme",
-  "bugs": { "url": "https://github.com/marolinik/waggle-os/issues" },
+  "bugs": {
+    "url": "https://github.com/marolinik/waggle-os/issues"
+  },
   "author": "Egzakta Group d.o.o. <hello@egzakta.com> (https://egzakta.com)",
   "keywords": [
     "mcp",
@@ -41,5 +48,8 @@
     "ai",
     "hive-mind"
   ],
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  },
+  "types": "dist/index.d.ts"
 }

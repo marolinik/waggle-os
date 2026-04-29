@@ -4,16 +4,19 @@
   "description": "Anthropic Claude Code silent capture shim for hive-mind. Adds SessionStart / UserPromptSubmit / Stop / PreCompact hooks that route conversation episodes into hive-mind frames via @waggle/hive-mind-shim-core. Reversible install — additive merge into ~/.claude/settings.json with byte-identical uninstall.",
   "license": "Apache-2.0",
   "type": "module",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
   "bin": {
     "claude-code-hooks": "dist/bin/claude-code-hooks-cli.js"
   },
   "exports": {
-    ".": "./src/index.ts",
-    "./hooks/session-start": "./src/hooks/session-start.ts",
-    "./hooks/user-prompt-submit": "./src/hooks/user-prompt-submit.ts",
-    "./hooks/stop": "./src/hooks/stop.ts",
-    "./hooks/pre-compact": "./src/hooks/pre-compact.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./hooks/session-start": "./dist/hooks/session-start.js",
+    "./hooks/user-prompt-submit": "./dist/hooks/user-prompt-submit.js",
+    "./hooks/stop": "./dist/hooks/stop.js",
+    "./hooks/pre-compact": "./dist/hooks/pre-compact.js"
   },
   "scripts": {
     "build": "tsc --build",
@@ -58,5 +61,6 @@
     "mcp",
     "hook",
     "silent-capture"
-  ]
+  ],
+  "types": "dist/index.d.ts"
 }

@@ -1,8 +1,8 @@
-import { MindDB } from '@waggle/hive-mind-core';
-import { IdentityLayer, type Identity } from '@waggle/hive-mind-core';
-import { AwarenessLayer, type AwarenessItem } from '@waggle/hive-mind-core';
-import { FrameStore, type MemoryFrame } from '@waggle/hive-mind-core';
-import { createCoreLogger } from '@waggle/hive-mind-core';
+import { MindDB } from './mind/db.js';
+import { IdentityLayer, type Identity } from './mind/identity.js';
+import { AwarenessLayer, type AwarenessItem } from './mind/awareness.js';
+import { FrameStore, type MemoryFrame } from './mind/frames.js';
+import { createCoreLogger } from './logger.js';
 
 const log = createCoreLogger('multi-mind');
 

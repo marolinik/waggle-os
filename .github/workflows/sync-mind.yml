@@ -1,5 +1,30 @@
 name: sync-mind-to-hive-mind
 
+# DEPRECATED 2026-04-30 — CC Sesija B monorepo migration §2.6 Task B22.
+#
+# This workflow was the bidirectional-sync mechanism between waggle-os and the
+# now-archived `marolinik/hive-mind` repo while substrate code lived in BOTH
+# places (packages/core/src/mind/ + packages/core/src/harvest/ in waggle-os,
+# duplicated in hive-mind/packages/core/src/{mind,harvest}/).
+#
+# After CC Sesija B migration (commits ff5b4aa..b59d188 on
+# feature/hive-mind-monorepo-migration), the substrate lives ONLY in
+# waggle-os/packages/hive-mind-core/. The OSS distribution mechanism is now
+# `git subtree split` from waggle-os monorepo to public mirror — see
+# `scripts/oss-subtree-split.sh` and `packages/hive-mind-core/CONTRIBUTING.md`.
+#
+# This workflow is preserved for AUDIT TRAIL purposes (the historical
+# trigger paths and concurrency settings are referenced in EXTRACTION.md and
+# the .github/sync.md operating manual). It will NOT fire on push because the
+# trigger paths (packages/core/src/mind/** + packages/core/src/harvest/**) no
+# longer exist as tracked content — they were git-mv'd to packages/hive-mind-core/
+# on commit 3b556c0.
+#
+# DO NOT delete this file as part of cleanup — leave it as the deprecation
+# anchor. If the workflow ever needs reactivation, trigger paths must be
+# updated to the new packages/hive-mind-core/ location AND the
+# @hive-mind ↔ @waggle name remapping must be added.
+
 # Memory Sync Repair Step 3.2 — waggle-os → hive-mind direction.
 #
 # Triggered when waggle-os main receives a push that touches shared

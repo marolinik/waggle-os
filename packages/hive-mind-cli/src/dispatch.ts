@@ -177,9 +177,7 @@ export async function dispatch(args: DispatchArgs): Promise<string | undefined> 
     case 'doctor': {
       // Wave 1 cleanup — self-diagnostic smoke test independent of upstream hook.
       // Spawn probe (Windows .cmd shim) → save+recall frame → cache cleanup.
-      if (!env) {
-        throw new Error('doctor command requires an opened CliEnv (personal.mind).');
-      }
+      // Lazy-opens env if not provided (matches status command pattern).
       const result = await runDoctor({ env });
       // Doctor command sets process exit code via dispatch's caller (index.ts)
       // by checking result.ok in the json/plain return shape. We surface a non-zero

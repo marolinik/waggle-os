@@ -4,9 +4,12 @@
   "description": "Foundation utilities for hive-mind cross-IDE silent capture shims: frame encoding, workspace resolution, hive-mind-cli mcp call bridge, hook event types, importance classifier, deterministic prompt summarizer, retry-with-jitter, structured logger.",
   "license": "Apache-2.0",
   "type": "module",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
   "scripts": {
     "build": "tsc --build",
@@ -38,5 +41,6 @@
     "mcp",
     "shim",
     "foundation"
-  ]
+  ],
+  "types": "dist/index.d.ts"
 }

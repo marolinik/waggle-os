@@ -1,6 +1,6 @@
 import path from 'node:path';
-import { MindDB } from '@waggle/hive-mind-core';
-import { createCoreLogger } from '@waggle/hive-mind-core';
+import { MindDB } from './mind/db.js';
+import { createCoreLogger } from './logger.js';
 
 const log = createCoreLogger('multi-mind-cache');
 
