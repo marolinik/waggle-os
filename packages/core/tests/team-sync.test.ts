@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { frameToEntity, entityToSyncedFrame, TeamSync, type TeamSyncConfig } from '../src/team-sync.js';
-import type { MemoryFrame } from '../src/mind/frames.js';
+import type { MemoryFrame } from '@waggle/hive-mind-core';
 
 describe('frameToEntity', () => {
   it('converts a MemoryFrame to team entity format', () => {

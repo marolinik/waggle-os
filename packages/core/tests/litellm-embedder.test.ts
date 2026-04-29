@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createLiteLLMEmbedder } from '../src/mind/litellm-embedder.js';
+import { createLiteLLMEmbedder } from '@waggle/hive-mind-core';
 
 describe('createLiteLLMEmbedder', () => {
   const baseConfig = {

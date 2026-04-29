@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { MindDB } from '../src/mind/db.js';
+import { MindDB } from '@waggle/hive-mind-core';
 import { CronStore, type CreateScheduleInput } from '../src/cron-store.js';
 
 describe('CronStore', () => {

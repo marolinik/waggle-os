@@ -3,7 +3,7 @@ import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createEmbeddingProvider, EmbeddingQuotaExceededError, getMinimumTierForProvider } from '../src/mind/embedding-provider.js';
+import { createEmbeddingProvider, EmbeddingQuotaExceededError, getMinimumTierForProvider } from '@waggle/hive-mind-core';
 import { TierError, TIER_CAPABILITIES } from '@waggle/shared';
 
 describe('Embedding Provider — Tier & Quota Enforcement', () => {
