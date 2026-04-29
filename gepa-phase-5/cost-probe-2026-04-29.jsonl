@@ -1,0 +1,10 @@
+{"variant":"claude::gen1-v1","complexity":"trivial","model_alias":"claude-opus-4-7","input_tokens":638,"output_tokens":39,"cost_usd":0.004165,"latency_ms":2404,"ts":"2026-04-29T11:15:29.751Z"}
+{"variant":"claude::gen1-v1","complexity":"medium-1","model_alias":"claude-opus-4-7","input_tokens":816,"output_tokens":600,"cost_usd":0.01908,"latency_ms":11367,"ts":"2026-04-29T11:15:41.119Z"}
+{"variant":"claude::gen1-v1","complexity":"medium-2","model_alias":"claude-opus-4-7","input_tokens":787,"output_tokens":800,"cost_usd":0.023935,"latency_ms":15666,"ts":"2026-04-29T11:15:56.786Z"}
+{"variant":"claude::gen1-v1","complexity":"complex","model_alias":"claude-opus-4-7","input_tokens":953,"output_tokens":1200,"cost_usd":0.034765,"latency_ms":21553,"ts":"2026-04-29T11:16:18.341Z"}
+{"variant":"claude::gen1-v1","complexity":"stretch","model_alias":"claude-opus-4-7","input_tokens":1135,"output_tokens":1500,"cost_usd":0.043175,"latency_ms":27587,"ts":"2026-04-29T11:16:45.930Z"}
+{"variant":"qwen-thinking::gen1-v1","complexity":"trivial","model_alias":"qwen3.6-35b-a3b-via-dashscope-direct","input_tokens":152,"output_tokens":950,"cost_usd":0.001938,"latency_ms":7596,"ts":"2026-04-29T11:16:53.528Z"}
+{"variant":"qwen-thinking::gen1-v1","complexity":"medium-1","model_alias":"qwen3.6-35b-a3b-via-dashscope-direct","input_tokens":277,"output_tokens":2278,"cost_usd":0.00462525,"latency_ms":17009,"ts":"2026-04-29T11:17:10.538Z"}
+{"variant":"qwen-thinking::gen1-v1","complexity":"medium-2","model_alias":"qwen3.6-35b-a3b-via-dashscope-direct","input_tokens":237,"output_tokens":3189,"cost_usd":0.00643725,"latency_ms":24995,"ts":"2026-04-29T11:17:35.534Z"}
+{"variant":"qwen-thinking::gen1-v1","complexity":"complex","model_alias":"qwen3.6-35b-a3b-via-dashscope-direct","input_tokens":350,"output_tokens":3496,"cost_usd":0.0070795,"latency_ms":29499,"ts":"2026-04-29T11:18:05.034Z"}
+{"variant":"qwen-thinking::gen1-v1","complexity":"stretch","model_alias":"qwen3.6-35b-a3b-via-dashscope-direct","input_tokens":506,"output_tokens":8752,"cost_usd":0.0176305,"latency_ms":66591,"ts":"2026-04-29T11:19:11.626Z"}

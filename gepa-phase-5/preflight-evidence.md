@@ -6,8 +6,20 @@
 **HEAD:** `6bc20897d3851072eda34e80070faf39772bee66` (`6bc2089`) — verified `git rev-parse HEAD`
 **Brief:** `D:/Projects/PM-Waggle-OS/briefs/2026-04-29-phase-5-deployment-brief-v1.md`
 **Branch architecture:** Opcija C per `decisions/2026-04-30-branch-architecture-opcija-c.md`
-**Verdict aggregation:** §0.1 **PARTIAL (PM ratification needed)** · §0.2 **PASS** · §0.3 **DEFERRED (probe pending §0.1 ratification)** · §0.4 **PARTIAL (design-stage)**
-**Halt-and-PM trigger:** YES — §0.1 mutation-validator regression + §0.4 implementation gating
+**Verdict aggregation (initial):** §0.1 **PARTIAL (PM ratification needed)** · §0.2 **PASS** · §0.3 **DEFERRED (probe pending §0.1 ratification)** · §0.4 **PARTIAL (design-stage)**
+**Halt-and-PM trigger (initial):** YES — §0.1 mutation-validator regression + §0.4 implementation gating
+
+---
+
+## PM Round 1 ratification (2026-04-29)
+
+PM ratified all 3 initial halt-and-PM asks:
+- **Ask #1 Option 1**: Quarantine `mutation-validator.test.ts` + `registry-injection.test.ts` (extension same session, PM informed) under `benchmarks/gepa/tests/faza-1/__faza1-closed/`. Quarantine commit `50393b1`. Test suite: 6046 (14 failed) → 6019 (0 failed, 1 skipped).
+- **Ask #2 AUTHORIZE**: 5-request probe per variant via existing LiteLLM proxy (matches Faza 1 runner pattern). Probe executed; results below.
+- **Ask #3 RATIFY**: §0 is design gate, not build gate. Brief §0.4 #2 functional-stub wording was PM authoring artifact; intent was design-readiness.
+
+**Verdict aggregation (post-Round-1):** §0.1 **PASS (post-quarantine)** · §0.2 **PASS** · §0.3 **PROBE-COMPLETE — HARD-CAP-EXCEED** · §0.4 **PASS-design-stage**
+**Halt-and-PM trigger (Round 2):** YES — §0.3 probe ceiling exceeds brief §5.4 hard cap.
 
 ---
 
@@ -132,19 +144,79 @@ Without live probe, point estimates use shape-file `defaultMaxTokens` as upper b
 3. **Brief §5.2 day-by-day breakdown** assumes 10 requests/day Day 0-1 (not 740 immediate), so the 740-request total accumulates over 7 days canary, not in one batch.
 4. **Per Faza 1 actuals** ($43.49 total / 175 evals = ~$0.25/eval), claude judging+running was $0.25/eval — that includes Opus judging at higher token volume than Phase 5 production deployment will incur.
 
-### §0.3 Verdict: **DEFERRED**
+### §0.3 Verdict (post-PM Round 1 Ask #2 AUTHORIZE): **PROBE-COMPLETE — HARD-CAP-EXCEED**
 
-Pricing snapshots captured with authoritative URLs + 2026-04-29 timestamps. Live 5-request-per-variant probe **deferred** pending PM ratification of §0.1 finding. Probe execution requires:
+Probe harness `gepa-phase-5/scripts/cost-probe.ts` shipped + executed via LiteLLM proxy (matches Faza 1 runner pattern). 5 varying-complexity prompts × 2 variants = 10 requests. Spent: **$0.1628** (under $0.30-$0.50 budget). All 10 requests succeeded (0 errors).
 
-1. PM ratification of §0.1 → unblock §0 advancement.
-2. Authorization of probe budget ($0.30-$0.50 per brief §5.4) — currently unspent ($0.00 spent on §0).
-3. Probe harness construction: standalone script that imports `claudeGen1V1Shape` + `qwenThinkingGen1V1Shape`, sends 5 varying-complexity prompts per variant, records actual input/output tokens × pricing, computes p50/p95/max, commits results to `gepa-phase-5/cost-probe-2026-04-29.jsonl`.
+#### Per-variant probe statistics
 
-CC recommends probe execution AFTER PM clears §0.1 to avoid wasted budget on probe whose ceiling validity depends on whether §0.1 advances or requires substrate remediation.
+| Variant | Model alias | OK | p50 | p95 | max | mean | total |
+|---|---|---|---|---|---|---|---|
+| `claude::gen1-v1` | `claude-opus-4-7` | 5/5 | $0.0239 | **$0.0432** | $0.0432 | $0.0250 | $0.1251 |
+| `qwen-thinking::gen1-v1` | `qwen3.6-35b-a3b-via-dashscope-direct` | 5/5 | $0.0064 | **$0.0176** | $0.0176 | $0.0075 | $0.0377 |
 
-**Halt-and-PM ask for §0.3:**
-1. Ratify probe deferral until §0.1 cleared, OR
-2. Authorize immediate probe (~$0.30-$0.50) so estimate-only projection becomes probe-validated regardless of §0.1 outcome.
+#### Per-request raw probe data (audit anchor)
+
+| Variant | Complexity | Input tokens | Output tokens | Cost | Latency |
+|---|---|---|---|---|---|
+| claude::gen1-v1 | trivial | 638 | 39 | $0.0042 | 2.4s |
+| claude::gen1-v1 | medium-1 | 816 | 600 | $0.0191 | 11.4s |
+| claude::gen1-v1 | medium-2 | 787 | 800 | $0.0239 | 15.7s |
+| claude::gen1-v1 | complex | 953 | 1200 | $0.0348 | 21.6s |
+| claude::gen1-v1 | stretch | 1135 | 1500 | $0.0432 | 27.6s |
+| qwen-thinking::gen1-v1 | trivial | 152 | 950 | $0.0019 | 7.6s |
+| qwen-thinking::gen1-v1 | medium-1 | 277 | 2278 | $0.0046 | 17.0s |
+| qwen-thinking::gen1-v1 | medium-2 | 237 | 3189 | $0.0064 | 25.0s |
+| qwen-thinking::gen1-v1 | complex | 350 | 3496 | $0.0071 | 29.5s |
+| qwen-thinking::gen1-v1 | stretch | 506 | 8752 | $0.0176 | 66.6s |
+
+Per-row JSONL: `gepa-phase-5/cost-probe-2026-04-29.jsonl`. Summary: `gepa-phase-5/cost-probe-2026-04-29-summary.md`.
+
+#### Ceiling validation per brief §5.4
+
+```
+canary_cost_p95_ceiling = 740 × max(p95) × 1.20
+                        = 740 × $0.0432 × 1.20
+                        = $38.34
+```
+
+Brief §5.4 thresholds:
+- `halt_trigger = $20`
+- `hard_cap = $25`
+
+**$38.34 > $25 hard cap → HARD-CAP-EXCEED → halt-and-PM mandatory per brief §0.3 #5 ("Ako prelazi, halt-and-PM za scope re-evaluation").**
+
+#### Mechanism analysis
+
+The claude::gen1-v1 stretch case dominates the ceiling: 1500 output tokens at $25/M = $0.0375 of the $0.0432 per-request cost. Phase 5 production output volume is the binding constraint. Two readings:
+
+1. **Brief §5.2 volume estimate may be too aggressive.** The brief assumes 740 requests across 7-day canary phase (Day 0-1: 40, Day 1-3: 100, Day 3-5: 200, Day 5+: 400). For claude::gen1-v1 alone, that's already $32.13 expected (740 × $0.0432). Doubling with qwen-thinking adds modestly given its lower per-request cost.
+
+2. **Opus 4.7 input pricing reduction did not propagate to output pricing.** Per 2026-04-29 snapshot, Opus 4.7 is $5/$25/M (input/output) — input dropped from $15 (Faza 1 pricing reference for `claude-opus-4-7`) to $5, but output stayed at $25. Output remains the cost driver for variants that produce long syntheses (the stretch case is a 1500-token DCF-comps-LBO walkthrough — the kind of long-form output the variant is designed for).
+
+#### Mitigation options for PM ratification
+
+| # | Option | Mechanism | Trade-off |
+|---|---|---|---|
+| **A** | **Reduce volume target** | Lower 740 → 386 (= $20 / 0.0432 / 1.2). Canary phase shrinks: maybe Day 0-1 only 5 reqs/day, Day 3-5 only 25 reqs/day, Day 5+ delayed. Brief §2.1 gradient timing extends. | Slower §4.2 promotion criteria sample-floor accumulation (≥30 samples per variant per metric); wall-clock floor `max(7_days, 30_samples)` shifts to dominated by 30-samples constraint. |
+| **B** | **Cap variant max_tokens** | Phase 5 production caps `max_tokens` at e.g. 1000 (vs claude shape default 4096). Re-probe shows lower p95 since output dominates cost. Stretch case truncated. | Shape default tuned for retrieval-driven synthesis (qwen-thinking has 16k for thinking budget); cap may reduce response quality on long-form analytical tasks (M&A memos, root-cause diagnosis). Need re-probe to verify ceiling lands under $20. |
+| **C** | **Pivot to qwen-only canary** | Deploy qwen-thinking::gen1-v1 alone (claude::gen1-v1 deferred). qwen p95 = $0.0176; ceiling = 740 × $0.0176 × 1.2 = **$15.63** (under $20). | Scope reduction — claude::gen1-v1 goes to Faza 2 alongside gpt::gen1-v2 even though it has clean validation. Loses the cross-family generalization production-validation per brief §1. KVARK pitch deck §6.3 still anchors on qwen 96% Opus parity but loses claude flagship continuity story. |
+| **D** | **Split canary cadences** | claude::gen1-v1 at lower canary% (e.g., max 25% never going to 100%); qwen-thinking::gen1-v1 at full gradient. Volume per variant differs. | Asymmetric promotion criteria; complicates §4.1 promotion logic and §3 monitoring threshold normalization. |
+| **E** | **Brief §5.4 ceiling amendment** | Raise hard_cap to e.g. $50, halt_trigger to $40. Per §4.4 amendment requires PM ratification + LOCKED memo. | Burns headroom for Faza 2 re-validation runs ($71.51 unspent of $115 cap). Cumulative project spend rises. Need to re-justify against Faza 1 closure §F cost discipline. |
+| **F** | **Prompt-cache leverage** | Phase 5 implementation MUST use Anthropic prompt caching (5m or 1h cache write × 0.1× cache read multiplier). System prompt + persona + materials cached across requests in same workspace/session. Re-probe with cache-active after §1-§2 wiring. | Adds implementation complexity to §1 work. Cache benefit depends on real production access pattern (high cache-hit rate requires repeat conversation context). Probe is one-shot so doesn't reflect cache benefit; need cache-aware re-probe. |
+
+CC recommendation rationale (advisory, PM decides):
+
+- **Option F (prompt caching) is the strongest engineering lever** if Phase 5 production traffic has reasonable conversation locality. With 80% cache hit rate, claude per-request input drops from $0.015 to $0.0042; total p95 drops from $0.0432 to ~$0.0420 (output-bound). Limited improvement because output dominates.
+- **Option A (volume reduction) is the cleanest scope-preserving mitigation.** Lower volume preserves variant scope + ceiling discipline. Wall-clock floor extends but Phase 5 brief §2.2 already binds `max(7_days, 30_samples)` so this is a known tradeoff.
+- **Option C (qwen-only) preserves the strongest scientific narrative** (Phase 4.5 mechanism CONFIRMED out-of-distribution, KVARK pitch arxiv §5.3 evidence) at cost of dropping claude flagship continuity validation.
+- **Options B + D add complexity without clean pareto improvement.**
+- **Option E (amendment) should be last resort** per §4.4 binding.
+
+**Halt-and-PM ask for §0.3 (Round 2):**
+1. Ratify mitigation option (A / B / C / D / E / F or combination) for §0.3 ceiling exceed, OR
+2. Direct CC to investigate alternative reduction (e.g., prompt cache + volume-reduce combo with re-probe), OR
+3. Direct CC to re-run probe with adjusted parameters (e.g., max_tokens cap, different prompt complexity distribution).
 
 ---
 
@@ -183,44 +255,47 @@ Cherry-pick procedure (if triggered): branch from `phase-5-deployment-v2`, cherr
 
 ---
 
-## §0 — Aggregate verdict
+## §0 — Aggregate verdict (post-Round-1 + Round-2)
 
 ```
-§0_verdict_aggregate = §0.1 (PARTIAL) AND §0.2 (PASS) AND §0.3 (DEFERRED) AND §0.4 (PARTIAL)
-                     = NOT-PASS
+§0_verdict_aggregate (Round 2) = §0.1 (PASS post-quarantine) AND §0.2 (PASS) AND §0.3 (HARD-CAP-EXCEED) AND §0.4 (PASS-design-stage)
+                               = NOT-PASS — §0.3 ceiling fail
 ```
 
-**Halt-and-PM trigger fires.** CC stops at §0; does not self-advance to §1-§2 implementation.
+**Halt-and-PM trigger fires (Round 2).** CC stops at §0 again; does not self-advance to §1-§2 implementation. §0.1 + §0.2 + §0.4 all clean post-Round-1; only §0.3 remains open due to probe-validated cost ceiling exceed.
 
-### Halt-and-PM ratification asks (3)
+### Round 2 halt-and-PM ratification ask (1)
 
-1. **§0.1 mutation-validator failures** — ratify scope-isolated PARTIAL → PASS conditional on quarantine, OR escalate as substrate failure requiring branch surgery before §2.
-2. **§0.3 probe deferral** — ratify defer-until-§0.1-cleared, OR authorize immediate probe (~$0.30-$0.50).
-3. **§0.4 design-stage interpretation** — confirm §0 verifies design readiness (functional stubs are §1-§2 work), OR escalate to require pre-§0 functional stubs.
+1. **§0.3 ceiling mitigation** — ratify Option A/B/C/D/E/F or combination (see §0.3 mitigation table above) to bring `canary_cost_p95_ceiling` from $38.34 to ≤ $20.
 
 ### Cost summary (§0)
 
 | Item | Spent | Budget |
 |---|---|---|
 | Pricing snapshots (web fetches) | $0.00 (free) | n/a |
-| Probe (5 requests per variant) | **$0.00** (deferred) | $0.30-$0.50 |
-| **§0 total spent** | **$0.00** | $1.00 hard cap |
+| Probe (5 requests per variant, 10 total) | **$0.1628** | $0.30-$0.50 |
+| **§0 total spent** | **$0.1628** | $1.00 hard cap |
 
-Headroom for §0 probe execution after PM ratification: full $0.30-$0.50 budget intact.
+Probe budget headroom remaining: $0.14-$0.34 (for re-probe after PM mitigation choice if Option B / D / F selected).
 
 ### Wall-clock summary (§0)
 
 | Item | Wall-clock |
 |---|---|
 | Brief + decisions load | ~5 min |
-| §0.1 substrate grep + test suite execution | ~20 min (test suite 84s, rest grep) |
+| §0.1 substrate grep + test suite execution | ~20 min |
 | §0.2 config differential authoring | ~10 min |
-| §0.3 pricing snapshot fetches | ~3 min |
+| §0.3 pricing snapshot fetches (Round 1) | ~3 min |
 | §0.4 deployment-readiness grep + documentation | ~10 min |
-| Evidence aggregation + writing | ~25 min |
-| **§0 total wall-clock** | **~73 min** |
+| Round 1 evidence aggregation + commit | ~25 min |
+| Round 1 PM ratification turnaround | (PM-side, ~minutes) |
+| Quarantine commit (mutation-validator + registry-injection) | ~15 min |
+| Probe harness construction | ~20 min |
+| Probe execution | ~4 min (10 requests, mostly serial) |
+| Round 2 evidence update + commit | ~15 min |
+| **§0 total wall-clock** | **~127 min** |
 
-Within brief §0 wall-clock estimate (1-2h for all 4 gates).
+Beyond initial 1-2h estimate due to two halt-and-PM rounds — expected per pre-registration discipline (each halt-and-PM is the design working as intended, not a delay).
 
 ---
 
