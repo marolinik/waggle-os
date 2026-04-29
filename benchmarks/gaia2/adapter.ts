@@ -1,102 +1,47 @@
 #!/usr/bin/env tsx
 /**
- * Sesija C Phase 3a — Gaia2 ARE adapter (TYPES + DESIGN ONLY).
+ * Sesija C Phase 3b — Gaia2 ARE narrow-proxy adapter (IMPLEMENTATION).
  *
  * Wraps a Gaia2 task (HuggingFace dataset record) for execution against
  * `runRetrievalAgentLoop` from `@waggle/agent`. Selects a prompt shape per
- * config (`claude::gen1-v1`, `qwen-thinking::gen1-v1`, baselines).
+ * config (`claude-gen1-v1`, `qwen-thinking-gen1-v1`, baselines).
  * Captures per-run telemetry to JSONL.
  *
- * Phase 3b will add: implementation of `runGaia2TaskWithShape`,
- * `loadGaia2TasksFromHf`, `flattenAppStateToCorpus`, the JSONL logger,
- * `config.yaml` parser. Phase 4 (Docker) will add ARE write-action
- * verifier integration; until then `Gaia2RunRecord.pass` stays nullable.
+ * Phase 3a was types-only (commit b93db4c). Phase 3b adds real function
+ * bodies. See Phase 3a SCOPE NOTE below for narrow-proxy intent — this
+ * adapter is NOT a full Gaia2 evaluation; it is cost-projection
+ * ground-truth + GEPA-variant smoke + type-fit verification.
  *
- * ─── SCOPE NOTE — narrow proxy, not full Gaia2 ─────────────────────────
+ * ─── Reference anchors (unchanged from Phase 3a) ─────────────────────
  *
- * Gaia2 is a multi-app tool-use simulation: 12 simulated apps, 101 tools,
- * dynamic event timeline, write-action verifier per scenario. Our
- * `runRetrievalAgentLoop` is a multi-step search-then-finalize agent
- * (HybridSearch retrieval + multi-turn answer synthesis). Semantically
- * these don't naturally compose.
- *
- * Phase 3 adapter implements a NARROW PROXY:
- *   1. Extract the user-facing question from `task.data.metadata.definition`
- *      (Gaia2 task definition includes a description string per HF dataset
- *      card sample structure).
- *   2. Flatten `task.data.apps` initial state into a searchable text corpus
- *      (concatenated app states act as the "world snapshot" the agent can
- *      retrieve from).
- *   3. Run `runRetrievalAgentLoop` with selected shape + question + corpus
- *      search function.
- *   4. Capture raw response + token usage + cost + failure modes.
- *
- * What this adapter is NOT:
- *   - Not a full Gaia2 evaluation (skips event timeline, dynamic state
- *     evolution, multi-app tool calls, write-action state changes).
- *   - Not directly comparable to ARE-native runs (different evaluation
- *     surface; lower bound on what GEPA-evolved variants can achieve).
- *   - Not the path to MemAgents Workshop submission (post-launch Phase 3
- *     sprint Week 4-8 will use ARE-native runtime via Docker — see
- *     `decisions/2026-04-30-pre-launch-sprint-consolidation-LOCKED.md` §5).
- *
- * What this adapter IS:
- *   - Cost-projection ground-truth: real LLM calls on Gaia2-shaped input
- *     give us per-task cost numbers more accurate than paper estimates
- *     (closes Phase 2 §0.3 paper-estimate gap with empirical data).
- *   - Type-fit verification: confirms Gaia2 HF schema parses cleanly
- *     into our retrieval-agent-loop input contract.
- *   - GEPA-variant smoke: detects gross regressions of GEPA-evolved
- *     shapes vs baselines on Gaia2-shaped questions. Positive signal
- *     here is necessary-but-not-sufficient for post-launch Phase 3
- *     sprint Week 6 full-run kickoff.
- *
- * ─── Reference anchors ─────────────────────────────────────────────────
- *
- * - Brief: `briefs/2026-04-30-cc-sesija-C-gaia2-setup-dry-verification.md`
- *   §2.2 Task C3+C4.
- * - HuggingFace dataset card schema verified 2026-04-30 (CC-BY-4.0,
- *   800 scenarios across 6 configs of 200 each):
- *   https://huggingface.co/datasets/meta-agents-research-environments/gaia2
- * - ARE platform pinned SHA: `0330191f` (MIT, 2026-04-20),
- *   `external/meta-agents-research-environments/`.
- * - Phase 2 smoke evidence (output format reference):
- *   `benchmarks/gaia2/smoke-evidence.md` §3+§4.
- * - GEPA-evolved shapes (Faza 1 closure 2026-04-29):
- *   `packages/agent/src/prompt-shapes/gepa-evolved/claude-gen1-v1.ts`
- *   `packages/agent/src/prompt-shapes/gepa-evolved/qwen-thinking-gen1-v1.ts`
- * - Retrieval agent loop entry (line 516 of file):
- *   `packages/agent/src/retrieval-agent-loop.ts::runRetrievalAgentLoop`
+ * - Brief: briefs/2026-04-30-cc-sesija-C-gaia2-setup-dry-verification.md §2.2
+ * - HF dataset: huggingface.co/datasets/meta-agents-research-environments/gaia2 (CC-BY-4.0)
+ * - ARE pinned SHA: 0330191f (MIT, 2026-04-20)
+ * - Phase 2 smoke: benchmarks/gaia2/smoke-evidence.md §3+§4
+ * - GEPA shapes: packages/agent/src/prompt-shapes/gepa-evolved/
+ * - Retrieval loop: packages/agent/src/retrieval-agent-loop.ts::runRetrievalAgentLoop (line 516)
+ * - PM ratifications: 1B (branch base), γ (probe), A (narrow-proxy scope)
+ * - Faza 1 LlmCallFn pattern: benchmarks/gepa/scripts/faza-1/run-gen-1.ts:230
  */
 
-import type {
-  AgentRunResult,
-  LlmCallFn,
-  RetrievalSearchFn,
-  MultiStepAgentRunConfig,
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import {
+  runRetrievalAgentLoop,
+  type AgentRunResult,
+  type LlmCallFn,
+  type RetrievalSearchFn,
+  type MultiStepAgentRunConfig,
 } from '../../packages/agent/src/retrieval-agent-loop.js';
+import {
+  registerShape,
+  REGISTRY,
+} from '../../packages/agent/src/prompt-shapes/index.js';
+import type { PromptShape } from '../../packages/agent/src/prompt-shapes/types.js';
 
 // ─── Gaia2 dataset record types (HuggingFace schema) ──────────────────
 
-/**
- * One Gaia2 task as loaded from
- * `meta-agents-research-environments/gaia2` HuggingFace dataset.
- *
- * Per HF dataset card sample structure (verified 2026-04-30):
- *   - `id`: stable scenario instance id
- *     (e.g. `0000_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`).
- *   - `scenario_id`: scenario template/family id
- *     (e.g. `scenario_universe_00_id`).
- *   - `split`: dataset split label (`validation`, `test`, `train`).
- *   - `data`: serialized ARE Scenario dataclass (large JSON,
- *     2.44–2.67M chars per scenario per HF card byte-size estimate).
- *
- * `data` is intentionally typed as a record-of-unknown — it is the raw
- * deserialized ARE Scenario JSON. The adapter reads only specific
- * sub-fields (see `Gaia2TaskDefinition`, `Gaia2AppSnapshot`) and never
- * mutates the input record. Casting to richer types is done at the
- * extraction-helper boundary (Phase 3b).
- */
 export interface Gaia2HfTask {
   readonly id: string;
   readonly scenario_id: string;
@@ -110,35 +55,11 @@ export interface Gaia2HfTask {
   };
 }
 
-/**
- * Subset of `data.metadata.definition` we read. The full ARE Scenario
- * dataclass has dozens of fields; we only care about the user-facing
- * question/instruction text for the narrow-proxy adapter.
- *
- * Phase 3b implementation will runtime-validate via Zod (per
- * common/coding-style.md "validate at system boundaries").
- */
 export interface Gaia2TaskDefinition {
-  /**
-   * The user-visible task description / instruction. Source of truth
-   * for the question the agent answers. Field name in ARE source is
-   * `description` (see `external/meta-agents-research-environments/are/simulation/scenarios/scenario.py`
-   * dataclass field discovery, Phase 3b).
-   */
   readonly description: string;
-  /**
-   * Optional capability tags from ARE `CapabilityTag` enum. Used to
-   * tag JSONL records for downstream stratified analysis.
-   */
   readonly capability_tags?: readonly string[];
 }
 
-/**
- * One simulated-app snapshot from `data.apps`. Adapter flattens these
- * into a search corpus (Phase 3b `flattenAppStateToCorpus`). Schema is
- * app-class-dependent (Email/Calendar/FileSystem/etc. each have
- * different state); adapter treats them as opaque key-value blobs.
- */
 export interface Gaia2AppSnapshot {
   readonly class_name: string;
   readonly state?: Record<string, unknown>;
@@ -146,13 +67,6 @@ export interface Gaia2AppSnapshot {
 
 // ─── Shape selection types ────────────────────────────────────────────
 
-/**
- * Shape alias passed to `selectShape`. GEPA-evolved variants (gen1-v1)
- * are the Phase 5 deployment-authorized claude + qwen-thinking shapes
- * (per `decisions/2026-04-29-gepa-faza1-results.md` §B). Baseline shapes
- * are controls. Generic-simple + qwen-non-thinking + gpt are present for
- * completeness; not used in the brief's 4-shape sweep.
- */
 export type ShapeAlias =
   | 'claude'
   | 'claude-gen1-v1'
@@ -170,61 +84,35 @@ export type ShapeAlias =
   | 'generic-simple-gen1-v1'
   | 'generic-simple-gen1-v2';
 
-/**
- * Brief 4-shape sweep (Task C5). The actual config.yaml in Phase 3b
- * will list these exactly.
- */
 export const BRIEF_DRY_RUN_SHAPES: readonly ShapeAlias[] = [
-  'claude',                  // baseline control 1
-  'claude-gen1-v1',          // GEPA-evolved variant 1 (AUTHORIZED Faza 1 §B)
-  'qwen-thinking',           // baseline control 2
-  'qwen-thinking-gen1-v1',   // GEPA-evolved variant 2 (AUTHORIZED Faza 1 §B)
+  'claude',
+  'claude-gen1-v1',
+  'qwen-thinking',
+  'qwen-thinking-gen1-v1',
 ] as const;
 
-// ─── Failure-mode taxonomy (matches Phase 5 monitoring emitter naming) ──
+// ─── Failure-mode taxonomy ────────────────────────────────────────────
 
-/**
- * Failure-mode taxonomy aligned with `phase-5-monitoring.ts` emitter
- * naming (per `gepa-phase-5/manifest.yaml` §3). Adapter records ONE
- * primary failure mode per run; multiple causes are folded under a
- * priority cascade (Phase 3b).
- */
 export type FailureMode =
-  | 'loop_exhausted'    // ran out of steps before finalizing
-  | 'timeout'           // exceeded scenario_timeout (ARE-derived; Windows-blocked pre-Docker)
-  | 'parse_fail'        // model output couldn't be normalized
-  | 'judge_failure'     // self-judge or trio-strict judge errored
-  | 'cost_halt'         // perCallHaltUsd or perCellHaltUsd tripped
-  | 'llm_error';        // upstream LLM call returned an error
+  | 'loop_exhausted'
+  | 'timeout'
+  | 'parse_fail'
+  | 'judge_failure'
+  | 'cost_halt'
+  | 'llm_error';
 
 // ─── Adapter run record (one row per JSONL output) ────────────────────
 
-/**
- * One per-task per-shape run record. Written to
- * `benchmarks/gaia2/runs/<ISO_date>/<shape>.jsonl`, one line per record.
- *
- * Schema is intentionally a superset of `output.jsonl` from
- * `are-benchmark run` (smoke-evidence.md §4). The shared fields
- * `task_id`, `scenario_id`, `score` enable cross-comparison if Phase 4
- * Docker run produces ARE-native output for the same task ids.
- */
 export interface Gaia2RunRecord {
-  // ─── Identity (matches ARE output.jsonl shape) ──────────────────────
-  readonly task_id: string;             // Gaia2HfTask.id
-  readonly scenario_id: string;         // Gaia2HfTask.scenario_id
-
-  // ─── Adapter-specific ──────────────────────────────────────────────
+  readonly task_id: string;
+  readonly scenario_id: string;
   readonly shape: ShapeAlias;
-  readonly run_number: number;          // 1-indexed, supports Pass@k via re-runs
-  readonly started_at: string;          // ISO 8601
-  readonly ended_at: string;            // ISO 8601
-
-  // ─── Response capture ──────────────────────────────────────────────
+  readonly run_number: number;
+  readonly started_at: string;
+  readonly ended_at: string;
   readonly raw_response: string;
   readonly normalized_response: string;
-  readonly prompt_shape_name: string;   // mirror of AgentRunResult.promptShapeName for audit
-
-  // ─── Telemetry ─────────────────────────────────────────────────────
+  readonly prompt_shape_name: string;
   readonly total_tokens_in: number;
   readonly total_tokens_out: number;
   readonly total_cost_usd: number;
@@ -232,122 +120,440 @@ export interface Gaia2RunRecord {
   readonly steps_taken: number;
   readonly retrieval_calls: number;
   readonly loop_exhausted: boolean;
-
-  // ─── Outcome ───────────────────────────────────────────────────────
-  /**
-   * Pass / fail when verifier is wired. Phase 3 narrow-proxy + Phase 4
-   * pre-Docker: stays `null` (not measured). Phase 4 with Docker + ARE
-   * write-action verifier: `boolean`. Phase 3 sprint full run with
-   * trio-strict judge: `boolean`.
-   */
   readonly pass: boolean | null;
-
-  /**
-   * Primary failure mode if not `null`. `null` on success or when
-   * pass-status is not yet measured.
-   */
   readonly failure_mode: FailureMode | null;
-
-  /**
-   * Errors collected from `AgentRunResult.errors`. Always an array; may
-   * be empty.
-   */
   readonly errors: readonly string[];
-
-  // ─── Adapter scope flag ────────────────────────────────────────────
-  /**
-   * True when this record was produced by the narrow-proxy adapter
-   * (Phase 3 / pre-Docker Phase 4). Phase 4 Docker runs flip this to
-   * false. Downstream comparison code uses this flag to gate
-   * apples-to-apples claims.
-   */
   readonly narrow_proxy_run: boolean;
 }
 
-// ─── Adapter config (loaded from benchmarks/gaia2/config.yaml in 3b) ─
+// ─── Adapter config ───────────────────────────────────────────────────
 
-/**
- * Adapter configuration. Phase 3b parses `config.yaml` into this type
- * via Zod. Field names mirror the brief §2.2 Task C4 spec.
- */
 export interface Gaia2AdapterConfig {
-  readonly task_count_dry_run: number;          // 5 or 10 per shape (PM ratification γ)
-  readonly shapes: readonly ShapeAlias[];       // 4-shape sweep typical
-  readonly baseline_shape: ShapeAlias;          // control for relative measurement
+  readonly task_count_dry_run: number;
+  readonly shapes: readonly ShapeAlias[];
+  readonly baseline_shape: ShapeAlias;
   readonly judge_methodology:
     | 'self-judge-dry-run'
     | 'trio-strict'
     | 'write-action-verifier'
-    | 'narrow-proxy-no-judge';                  // Phase 3 adapter default (pass=null)
-  readonly cost_cap_usd: number;                // hard cap (brief: 10)
-  readonly halt_trigger_usd: number;            // soft halt (brief: 8 — γ probe)
-  readonly per_call_halt_usd: number;           // per-LLM-call ceiling
-  readonly probe_invocation_count: number;      // first-batch-as-probe size (PM ratification γ)
-  readonly output_dir_root: string;             // e.g. "benchmarks/gaia2/runs"
-  readonly hf_dataset: string;                  // "meta-agents-research-environments/gaia2"
-  readonly hf_config: string;                   // "mini" | "search" | etc.
-  readonly hf_split: string;                    // "validation"
+    | 'narrow-proxy-no-judge';
+  readonly cost_cap_usd: number;
+  readonly halt_trigger_usd: number;
+  readonly per_call_halt_usd: number;
+  readonly probe_invocation_count: number;
+  readonly output_dir_root: string;
+  readonly hf_dataset: string;
+  readonly hf_config: string;
+  readonly hf_split: string;
 }
 
-// ─── Phase 3b primary entry points (signatures only) ──────────────────
+// ─── Shape → model mapping ────────────────────────────────────────────
+// gen1-v1 variants run on the SAME model as their baseline (the prompt
+// shape is the manipulated variable, not the model). Aligns with Faza 1
+// methodology where shape-evolution effect is measured on a fixed model.
 
-/**
- * Phase 3b will implement. Loads N tasks from HF dataset (via
- * `huggingface-hub` Python helper called as subprocess OR via direct
- * HTTP from Node — TBD in Phase 3b based on credential availability),
- * caches locally for reproducibility.
- */
-export declare function loadGaia2TasksFromHf(
-  config: Gaia2AdapterConfig,
-  count: number,
-): Promise<readonly Gaia2HfTask[]>;
+const SHAPE_TO_MODEL: Record<ShapeAlias, string> = {
+  claude: 'claude-opus-4-7',
+  'claude-gen1-v1': 'claude-opus-4-7',
+  'claude-gen1-v2': 'claude-opus-4-7',
+  'qwen-thinking': 'qwen3.6-35b-a3b',
+  'qwen-thinking-gen1-v1': 'qwen3.6-35b-a3b',
+  'qwen-thinking-gen1-v2': 'qwen3.6-35b-a3b',
+  'qwen-non-thinking': 'qwen3.6-35b-a3b',
+  'qwen-non-thinking-gen1-v1': 'qwen3.6-35b-a3b',
+  'qwen-non-thinking-gen1-v2': 'qwen3.6-35b-a3b',
+  gpt: 'gpt-5.4',
+  'gpt-gen1-v1': 'gpt-5.4',
+  'gpt-gen1-v2': 'gpt-5.4',
+  'generic-simple': 'claude-haiku-4-5',
+  'generic-simple-gen1-v1': 'claude-haiku-4-5',
+  'generic-simple-gen1-v2': 'claude-haiku-4-5',
+};
 
-/**
- * Phase 3b will implement. Flattens `task.data.apps` initial-state
- * snapshot into a searchable text corpus suitable for
- * `runRetrievalAgentLoop`'s injected `RetrievalSearchFn`. One "doc" per
- * app, with class_name as identifier and JSON-stringified state as
- * content.
- */
-export declare function flattenAppStateToCorpus(
+// ─── GEPA-evolved shape registration (lazy, idempotent) ───────────────
+// Same pattern as benchmarks/gepa/scripts/faza-1/run-gen-1.ts:405-409.
+// Shape `name` field is the REGISTRY key (hyphen format). Keep the set
+// minimal — we register only the shapes referenced in BRIEF_DRY_RUN_SHAPES.
+
+const GEPA_EVOLVED_FILES: Readonly<Record<ShapeAlias, string>> = Object.freeze({
+  'claude-gen1-v1': '../../packages/agent/src/prompt-shapes/gepa-evolved/claude-gen1-v1.js',
+  'claude-gen1-v2': '../../packages/agent/src/prompt-shapes/gepa-evolved/claude-gen1-v2.js',
+  'qwen-thinking-gen1-v1': '../../packages/agent/src/prompt-shapes/gepa-evolved/qwen-thinking-gen1-v1.js',
+  'qwen-thinking-gen1-v2': '../../packages/agent/src/prompt-shapes/gepa-evolved/qwen-thinking-gen1-v2.js',
+  'gpt-gen1-v1': '../../packages/agent/src/prompt-shapes/gepa-evolved/gpt-gen1-v1.js',
+  'gpt-gen1-v2': '../../packages/agent/src/prompt-shapes/gepa-evolved/gpt-gen1-v2.js',
+  'qwen-non-thinking-gen1-v1': '../../packages/agent/src/prompt-shapes/gepa-evolved/qwen-non-thinking-gen1-v1.js',
+  'qwen-non-thinking-gen1-v2': '../../packages/agent/src/prompt-shapes/gepa-evolved/qwen-non-thinking-gen1-v2.js',
+  'generic-simple-gen1-v1': '../../packages/agent/src/prompt-shapes/gepa-evolved/generic-simple-gen1-v1.js',
+  'generic-simple-gen1-v2': '../../packages/agent/src/prompt-shapes/gepa-evolved/generic-simple-gen1-v2.js',
+  // Baselines are pre-registered via prompt-shapes/index.ts; map to empty path.
+  claude: '',
+  'qwen-thinking': '',
+  'qwen-non-thinking': '',
+  gpt: '',
+  'generic-simple': '',
+});
+
+const registeredShapes = new Set<ShapeAlias>();
+
+export async function ensureShapeRegistered(shape: ShapeAlias): Promise<void> {
+  if (registeredShapes.has(shape)) return;
+  if (REGISTRY[shape] !== undefined) {
+    registeredShapes.add(shape);
+    return;
+  }
+  const filePath = GEPA_EVOLVED_FILES[shape];
+  if (!filePath) {
+    throw new Error(
+      `ensureShapeRegistered: shape "${shape}" not in REGISTRY and not a GEPA-evolved file (baseline shapes are pre-registered via prompt-shapes/index.ts).`,
+    );
+  }
+  // Resolve relative path to absolute file:// URL for ESM dynamic import on Windows.
+  const adapterDir = path.dirname(new URL(import.meta.url).pathname.replace(/^\//, ''));
+  const absPath = path.resolve(adapterDir, filePath.replace(/\.js$/, '.ts'));
+  const mod: Record<string, unknown> = await import(pathToFileURL(absPath).href);
+  // Find the exported PromptShape (single export per file convention,
+  // mirrors run-gen-1.ts:215).
+  const promptShape = Object.values(mod).find(
+    (v): v is PromptShape =>
+      typeof v === 'object' &&
+      v !== null &&
+      'name' in v &&
+      'systemPrompt' in v &&
+      'soloUserPrompt' in v,
+  );
+  if (!promptShape) {
+    throw new Error(`ensureShapeRegistered: no PromptShape export in ${absPath}`);
+  }
+  registerShape(promptShape.name, promptShape);
+  registeredShapes.add(shape);
+}
+
+// ─── Loaders ──────────────────────────────────────────────────────────
+
+export function loadGaia2TasksFromJsonl(
+  filepath: string,
+  limit: number,
+): readonly Gaia2HfTask[] {
+  if (!fs.existsSync(filepath)) {
+    throw new Error(
+      `loadGaia2TasksFromJsonl: file not found: ${filepath}\n` +
+        `Run benchmarks/gaia2/scripts/dump-tasks.py first to produce this file.`,
+    );
+  }
+  const raw = fs.readFileSync(filepath, 'utf-8');
+  const lines = raw.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  const tasks: Gaia2HfTask[] = [];
+  for (let i = 0; i < Math.min(limit, lines.length); i++) {
+    try {
+      tasks.push(JSON.parse(lines[i]) as Gaia2HfTask);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`loadGaia2TasksFromJsonl: parse error on line ${i + 1}: ${msg}`);
+    }
+  }
+  return tasks;
+}
+
+// ─── Task → corpus + question extraction ──────────────────────────────
+
+export function flattenAppStateToCorpus(
   task: Gaia2HfTask,
-): readonly { id: string; content: string }[];
+): readonly { id: string; content: string }[] {
+  const docs: { id: string; content: string }[] = [];
 
-/**
- * Phase 3b will implement. Runs ONE Gaia2 task with ONE shape against
- * `runRetrievalAgentLoop`. Writes one `Gaia2RunRecord` to JSONL.
- * Halts (returns record with `failure_mode: 'cost_halt'`) if any
- * per-call or cumulative threshold tripped.
- */
-export declare function runGaia2TaskWithShape(
+  for (const [appKey, appData] of Object.entries(task.data.apps)) {
+    const appObj = (appData ?? {}) as Record<string, unknown>;
+    const className = typeof appObj.class_name === 'string' ? appObj.class_name : appKey;
+    const state = appObj.state ?? appObj;
+    let stateJson: string;
+    try {
+      stateJson = JSON.stringify(state, null, 2);
+    } catch {
+      stateJson = '(unserializable app state)';
+    }
+    docs.push({
+      id: `app:${appKey}`,
+      content: `[${className}] ${appKey}\n${stateJson}`,
+    });
+  }
+
+  // Task definition itself goes into the corpus so the agent can
+  // retrieve task-related context if needed.
+  let defJson: string;
+  try {
+    defJson = JSON.stringify(task.data.metadata.definition, null, 2);
+  } catch {
+    defJson = '(unserializable task definition)';
+  }
+  docs.push({
+    id: 'task:definition',
+    content: `[Task Definition]\n${defJson}`,
+  });
+
+  return docs;
+}
+
+export function extractTaskDescription(task: Gaia2HfTask): string {
+  const def = task.data.metadata.definition as Record<string, unknown>;
+  if (typeof def.description === 'string' && def.description.trim().length > 0) {
+    return def.description;
+  }
+  if (typeof def.instruction === 'string' && def.instruction.trim().length > 0) {
+    return def.instruction;
+  }
+  if (typeof def.task === 'string' && def.task.trim().length > 0) {
+    return def.task;
+  }
+  // Fallback: stringify the definition (smoke pattern; better than empty
+  // question, signals adapter what fields it should have looked at).
+  return `Task definition (no recognized field): ${JSON.stringify(def).slice(0, 1000)}`;
+}
+
+// ─── Simple in-memory FTS RetrievalSearchFn ──────────────────────────
+// Substring-match scoring is intentionally minimal — the narrow-proxy
+// adapter is NOT trying to optimize retrieval quality. It's verifying
+// the adapter contract end-to-end. Phase 4 Docker run uses ARE-native
+// app interactions, no synthetic search.
+
+export function buildSimpleSearch(
+  corpus: readonly { id: string; content: string }[],
+): RetrievalSearchFn {
+  const lowercased = corpus.map((doc) => ({
+    id: doc.id,
+    content: doc.content,
+    lower: doc.content.toLowerCase(),
+  }));
+
+  return async (input) => {
+    const tokens = input.query
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((t) => t.length > 2);
+
+    const scored = lowercased.map((doc) => {
+      let score = 0;
+      for (const tok of tokens) {
+        if (doc.lower.includes(tok)) score += 1;
+      }
+      return { id: doc.id, content: doc.content, score };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+    const top = scored.slice(0, input.limit).filter((d) => d.score > 0);
+
+    if (top.length === 0) {
+      return { formattedResults: '(no results matched the query in the available app state)', resultCount: 0 };
+    }
+
+    const formatted = top.map((d) => `## ${d.id}\n${d.content}`).join('\n\n---\n\n');
+    return { formattedResults: formatted, resultCount: top.length };
+  };
+}
+
+// ─── Failure-mode classifier (post-hoc, from AgentRunResult) ─────────
+
+function classifyFailure(
+  result: AgentRunResult | null,
+  errMessage: string | null,
+): FailureMode | null {
+  if (!result && !errMessage) return null;
+  if (errMessage) {
+    const lower = errMessage.toLowerCase();
+    if (lower.includes('cost') || lower.includes('halt')) return 'cost_halt';
+    if (lower.includes('parse')) return 'parse_fail';
+    if (lower.includes('judge')) return 'judge_failure';
+    if (lower.includes('timeout')) return 'timeout';
+    return 'llm_error';
+  }
+  if (result?.loopExhausted) return 'loop_exhausted';
+  return null;
+}
+
+// ─── Main: run one task with one shape ────────────────────────────────
+
+export async function runGaia2TaskWithShape(
   task: Gaia2HfTask,
   shape: ShapeAlias,
   config: Gaia2AdapterConfig,
   llmCall: LlmCallFn,
-  // search is computed inside via flattenAppStateToCorpus + simple FTS
-  runNumber?: number,
-): Promise<Gaia2RunRecord>;
+  runNumber: number = 1,
+): Promise<Gaia2RunRecord> {
+  await ensureShapeRegistered(shape);
 
-/**
- * Phase 3b will implement. Driver for the full dry-run sweep
- * (4 shapes × N tasks). Implements PM ratification γ:
- *   1. Run first `probe_invocation_count` invocations as the probe.
- *   2. Project total cost from probe.
- *   3. Halt-and-PM if projection > halt_trigger_usd.
- *   4. Else continue to full sweep.
- */
-export declare function runDryRunSweep(
-  config: Gaia2AdapterConfig,
-  llmCall: LlmCallFn,
-): Promise<{
+  const startedAt = new Date().toISOString();
+  const startMs = Date.now();
+
+  const question = extractTaskDescription(task);
+  const corpus = flattenAppStateToCorpus(task);
+  const search = buildSimpleSearch(corpus);
+  const model = SHAPE_TO_MODEL[shape];
+
+  let result: AgentRunResult | null = null;
+  let errMessage: string | null = null;
+
+  const runConfig: MultiStepAgentRunConfig = {
+    modelAlias: model,
+    persona:
+      'You are an AI agent operating within a simulated environment with multiple applications. ' +
+      'Use the search tool to retrieve relevant app state, then answer the user task. ' +
+      'Be concise and decisive.',
+    question,
+    llmCall,
+    search,
+    promptShapeOverride: shape,
+    perCallHaltUsd: config.per_call_halt_usd,
+    perCellHaltUsd: config.per_call_halt_usd * 5,
+    maxSteps: 5,
+    maxRetrievalsPerStep: 8,
+    contextTag: `gaia2-narrow-proxy:${task.id}:${shape}:run${runNumber}`,
+  };
+
+  try {
+    result = await runRetrievalAgentLoop(runConfig);
+  } catch (err: unknown) {
+    errMessage = err instanceof Error ? err.message : String(err);
+  }
+
+  const endedAt = new Date().toISOString();
+  const errors: string[] = [];
+  if (errMessage) errors.push(errMessage);
+  if (result?.errors) errors.push(...result.errors);
+
+  return {
+    task_id: task.id,
+    scenario_id: task.scenario_id,
+    shape,
+    run_number: runNumber,
+    started_at: startedAt,
+    ended_at: endedAt,
+    raw_response: result?.rawResponse ?? '',
+    normalized_response: result?.normalizedResponse ?? '',
+    prompt_shape_name: result?.promptShapeName ?? shape,
+    total_tokens_in: result?.totalTokensIn ?? 0,
+    total_tokens_out: result?.totalTokensOut ?? 0,
+    total_cost_usd: result?.totalCostUsd ?? 0,
+    total_latency_ms: result?.totalLatencyMs ?? Date.now() - startMs,
+    steps_taken: result?.stepsTaken ?? 0,
+    retrieval_calls: result?.retrievalCalls ?? 0,
+    loop_exhausted: result?.loopExhausted ?? false,
+    pass: null, // Phase 4 Docker + ARE write-action verifier wires this.
+    failure_mode: classifyFailure(result, errMessage),
+    errors,
+    narrow_proxy_run: true,
+  };
+}
+
+// ─── Driver: γ probe-first sweep ──────────────────────────────────────
+
+export interface DryRunSweepResult {
   readonly probe_records: readonly Gaia2RunRecord[];
   readonly probe_cost_usd: number;
   readonly projected_total_usd: number;
   readonly halt_triggered: boolean;
   readonly full_sweep_records: readonly Gaia2RunRecord[];
   readonly final_total_cost_usd: number;
-}>;
+}
 
-// ─── Re-exports for downstream tools ──────────────────────────────────
+export async function runDryRunSweep(
+  config: Gaia2AdapterConfig,
+  llmCall: LlmCallFn,
+  options: {
+    tasksFile: string;
+    /** If true, halt after probe regardless of projection (for Phase 3b sample). */
+    haltAfterProbe?: boolean;
+  },
+): Promise<DryRunSweepResult> {
+  const tasks = loadGaia2TasksFromJsonl(options.tasksFile, config.task_count_dry_run);
+
+  if (tasks.length === 0) {
+    throw new Error(`runDryRunSweep: no tasks loaded from ${options.tasksFile}`);
+  }
+
+  // Probe: round-robin invocations across (task, shape) pairs until
+  // probe_invocation_count is reached.
+  const probe_records: Gaia2RunRecord[] = [];
+  let probe_cost_usd = 0;
+  let invocationsRun = 0;
+
+  outer: for (const task of tasks) {
+    for (const shape of config.shapes) {
+      if (invocationsRun >= config.probe_invocation_count) break outer;
+      const rec = await runGaia2TaskWithShape(task, shape, config, llmCall, 1);
+      probe_records.push(rec);
+      probe_cost_usd += rec.total_cost_usd;
+      invocationsRun++;
+    }
+  }
+
+  // Project full sweep cost from probe.
+  const totalInvocations = config.shapes.length * config.task_count_dry_run;
+  const avgCostPerInvocation =
+    probe_records.length > 0 ? probe_cost_usd / probe_records.length : 0;
+  const projected_total_usd = avgCostPerInvocation * totalInvocations;
+  const halt_triggered =
+    options.haltAfterProbe === true || projected_total_usd > config.halt_trigger_usd;
+
+  if (halt_triggered) {
+    return {
+      probe_records,
+      probe_cost_usd,
+      projected_total_usd,
+      halt_triggered: true,
+      full_sweep_records: probe_records,
+      final_total_cost_usd: probe_cost_usd,
+    };
+  }
+
+  // Continue full sweep. Skip the (task, shape) pairs already covered
+  // by the probe.
+  const fullRecords: Gaia2RunRecord[] = [...probe_records];
+  let totalCost = probe_cost_usd;
+  const probeKeys = new Set(probe_records.map((r) => `${r.task_id}::${r.shape}`));
+
+  for (const task of tasks) {
+    for (const shape of config.shapes) {
+      const key = `${task.id}::${shape}`;
+      if (probeKeys.has(key)) continue;
+      // Cost-cap check before each invocation (defensive — per-call halt
+      // also enforced via runConfig).
+      if (totalCost >= config.cost_cap_usd) {
+        return {
+          probe_records,
+          probe_cost_usd,
+          projected_total_usd,
+          halt_triggered: true,
+          full_sweep_records: fullRecords,
+          final_total_cost_usd: totalCost,
+        };
+      }
+      const rec = await runGaia2TaskWithShape(task, shape, config, llmCall, 1);
+      fullRecords.push(rec);
+      totalCost += rec.total_cost_usd;
+    }
+  }
+
+  return {
+    probe_records,
+    probe_cost_usd,
+    projected_total_usd,
+    halt_triggered: false,
+    full_sweep_records: fullRecords,
+    final_total_cost_usd: totalCost,
+  };
+}
+
+// ─── JSONL writer ─────────────────────────────────────────────────────
+
+export function writeRecordsToJsonl(
+  records: readonly Gaia2RunRecord[],
+  outputPath: string,
+): void {
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  const lines = records.map((r) => JSON.stringify(r)).join('\n');
+  fs.writeFileSync(outputPath, lines + (lines.length > 0 ? '\n' : ''), 'utf-8');
+}
+
+// ─── Re-exports ───────────────────────────────────────────────────────
 
 export type { AgentRunResult, LlmCallFn, RetrievalSearchFn, MultiStepAgentRunConfig };
