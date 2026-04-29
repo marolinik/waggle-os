@@ -17,11 +17,23 @@ import { HybridSearch } from '@waggle/core';
 import {
   runRetrievalAgentLoop,
   listShapes,
+  registerShape,
+  claudeGen1V1Shape,
+  qwenThinkingGen1V1Shape,
   type LlmCallFn,
   type LlmCallInput,
   type LlmCallResult,
   type RetrievalSearchFn,
 } from '@waggle/agent';
+
+// CC Sesija A A3.2 (2026-04-30): register Faza 1 GEPA-evolved variants into
+// the prompt-shape REGISTRY at module-load. Phase 5 LOCKED scope is just two
+// shapes (claude-gen1-v1 + qwen-thinking-gen1-v1) — gen1-v2 variants stay
+// out per decisions/2026-04-29-phase-5-scope-LOCKED.md (Faza 2 OVERFIT
+// exposed in Checkpoint C). Registration is idempotent: registerShape()
+// overwrites by name, so duplicate route loads (HMR, tests) are safe.
+registerShape('claude-gen1-v1', claudeGen1V1Shape);
+registerShape('qwen-thinking-gen1-v1', qwenThinkingGen1V1Shape);
 
 const DEFAULT_LITELLM_URL = process.env.WAGGLE_LITELLM_URL ?? 'http://localhost:4000';
 const LITELLM_KEY =

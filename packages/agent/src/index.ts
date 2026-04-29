@@ -63,6 +63,8 @@ export {
   qwenNonThinkingShape,
   gptShape,
   genericSimpleShape,
+  claudeGen1V1Shape,
+  qwenThinkingGen1V1Shape,
   MULTI_STEP_ACTION_CONTRACT,
   type PromptShape,
   type PromptShapeMetadata,

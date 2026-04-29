@@ -18,7 +18,10 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
-export type PromptShape = 'claude::gen1-v1' | 'qwen-thinking::gen1-v1';
+// A3.2 (2026-04-30): canonical names match shape.name in the @waggle/agent
+// REGISTRY (hyphen-format, not the manifest's double-colon convention).
+// Phase 5 LOCKED scope per decisions/2026-04-29-phase-5-scope-LOCKED.md.
+export type PromptShape = 'claude-gen1-v1' | 'qwen-thinking-gen1-v1';
 
 export interface ShapeOption {
   id: PromptShape;
@@ -28,18 +31,18 @@ export interface ShapeOption {
 
 export const AVAILABLE_SHAPES: ReadonlyArray<ShapeOption> = [
   {
-    id: 'claude::gen1-v1',
+    id: 'claude-gen1-v1',
     label: 'Claude (Gen 1 v1)',
     description: 'Default. Faza 1 GEPA-evolved Claude variant — best Pass II quality.',
   },
   {
-    id: 'qwen-thinking::gen1-v1',
+    id: 'qwen-thinking-gen1-v1',
     label: 'Qwen Thinking (Gen 1 v1)',
     description: 'Faza 1 GEPA-evolved Qwen variant — open-weights / sovereign track.',
   },
 ];
 
-export const DEFAULT_SHAPE: PromptShape = 'claude::gen1-v1';
+export const DEFAULT_SHAPE: PromptShape = 'claude-gen1-v1';
 
 const STORAGE_KEY = 'waggle:selected-shape';
 
