@@ -1,0 +1,41 @@
+{
+  "name": "@waggle/hive-mind-hooks-claude-desktop",
+  "version": "0.0.1",
+  "description": "STUB — hive-mind silent capture shim for claude-desktop. Wave 2/3 of marolinik/waggle-os monorepo migration. Implementation pending.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --build"
+  },
+  "dependencies": {
+    "@waggle/hive-mind-shim-core": "*"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/marolinik/waggle-os.git",
+    "directory": "packages/hive-mind-hooks-claude-desktop"
+  },
+  "homepage": "https://github.com/marolinik/waggle-os/tree/main/packages/hive-mind-hooks-claude-desktop#readme",
+  "bugs": {
+    "url": "https://github.com/marolinik/waggle-os/issues"
+  },
+  "author": "Egzakta Group d.o.o. <hello@egzakta.com> (https://egzakta.com)",
+  "keywords": [
+    "claude-desktop",
+    "hive-mind",
+    "memory",
+    "ai",
+    "hook",
+    "stub"
+  ]
+}
