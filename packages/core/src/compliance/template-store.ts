@@ -12,7 +12,7 @@
  * substrate and doesn't need append-only triggers or cross-layer migration tracking.
  */
 
-import type { MindDB } from '../mind/db.js';
+import type { MindDB } from '@waggle/hive-mind-core';
 import type {
   AIActRiskLevel,
   ComplianceTemplate,

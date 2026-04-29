@@ -13,8 +13,8 @@
  * - Last-write-wins at frame level (frames are append-mostly, conflicts are rare)
  */
 
-import type { MemoryFrame, FrameType, Importance } from './mind/frames.js';
-import { createCoreLogger } from './logger.js';
+import type { MemoryFrame, FrameType, Importance } from '@waggle/hive-mind-core';
+import { createCoreLogger } from '@waggle/hive-mind-core';
 const log = createCoreLogger('team-sync');
 
 export interface TeamSyncConfig {

@@ -1,9 +1,9 @@
 {
   "name": "@waggle/core",
   "version": "0.1.0",
-  "description": "Waggle core — MindDB, Identity, Awareness, Frames, Sessions, Search, Knowledge",
+  "description": "Waggle-specific orchestration: config, multi-mind, workspace, vault, telemetry, install-audit, cron, skills, file-store, file-indexer, memory-import, optimization-log, compliance. Re-exports substrate from @waggle/hive-mind-core for backward compatibility.",
   "type": "module",
-  "main": "src/mind/db.ts",
+  "main": "src/index.ts",
   "exports": {
     ".": "./src/index.ts"
   },
@@ -12,10 +12,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@huggingface/transformers": "^3.8.1",
+    "@waggle/hive-mind-core": "*",
     "better-sqlite3": "^12.6.2",
-    "cron-parser": "^4.9.0",
-    "sqlite-vec": "^0.1.7-alpha.2"
+    "cron-parser": "^4.9.0"
   },
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.1019.0",
