@@ -1,0 +1,46 @@
+{
+  "name": "@waggle/hive-mind-wiki-compiler",
+  "version": "0.1.0",
+  "description": "Compile memory frames and knowledge graph entities into interlinked wiki pages via LLM synthesis",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean"
+  },
+  "dependencies": {
+    "@waggle/hive-mind-core": "*"
+  },
+  "peerDependencies": {
+    "@anthropic-ai/sdk": "^0.24.0"
+  },
+  "peerDependenciesMeta": {
+    "@anthropic-ai/sdk": { "optional": true }
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "^0.24.0"
+  },
+  "publishConfig": { "access": "public" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/marolinik/waggle-os.git",
+    "directory": "packages/hive-mind-wiki-compiler"
+  },
+  "homepage": "https://github.com/marolinik/waggle-os/tree/main/packages/hive-mind-wiki-compiler#readme",
+  "bugs": { "url": "https://github.com/marolinik/waggle-os/issues" },
+  "author": "Egzakta Group d.o.o. <hello@egzakta.com> (https://egzakta.com)",
+  "keywords": [
+    "wiki",
+    "memory",
+    "knowledge-graph",
+    "llm",
+    "ai",
+    "synthesis",
+    "hive-mind"
+  ],
+  "engines": { "node": ">=20" }
+}
