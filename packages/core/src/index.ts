@@ -74,13 +74,14 @@ export {
   type ImportSourceType, type ImportItemType, type UniversalImportItem, type DistilledKnowledge,
   type HarvestPipelineResult, type HarvestSource, type SourceAdapter, type FilesystemAdapter,
   type ClassifiedItem, type ExtractedContent, type KnowledgeProvenance,
+  // Plan A AMENDMENT 2026-04-30 — multi-workspace orchestration
+  MultiMind, type MultiMindSearchResult, type MindSource, type SearchScope,
+  MultiMindCache, type MultiMindCacheConfig,
+  WorkspaceManager, type WorkspaceConfig, type CreateWorkspaceOptions,
 } from '@waggle/hive-mind-core';
 
 // ── Waggle-specific orchestration (stays in @waggle/core) ──
 export { WaggleConfig, type ProviderEntry, type TeamServerConfig } from './config.js';
-export { MultiMind, type MultiMindSearchResult, type MindSource, type SearchScope } from './multi-mind.js';
-export { MultiMindCache, type MultiMindCacheConfig } from './multi-mind-cache.js';
-export { WorkspaceManager, type WorkspaceConfig, type CreateWorkspaceOptions } from './workspace-config.js';
 export { needsMigration, migrateToMultiMind } from './migration.js';
 export { TeamSync, frameToEntity, entityToSyncedFrame, type TeamSyncConfig, type SyncedFrame } from './team-sync.js';
 export {

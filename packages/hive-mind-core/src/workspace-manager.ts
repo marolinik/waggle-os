@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { AIActRiskLevel } from './compliance/types.js';
+type AIActRiskLevel = 'minimal' | 'limited' | 'high-risk' | 'unacceptable';
 
 export interface WorkspaceConfig {
   id: string;

@@ -80,3 +80,11 @@ export type {
   HarvestPipelineResult, HarvestSource, SourceAdapter, FilesystemAdapter,
   ClassifiedItem, ExtractedContent, KnowledgeProvenance,
 } from './harvest/types.js';
+
+// ── Multi-workspace orchestration (Plan A AMENDMENT 2026-04-30) ──
+// MultiMind + MultiMindCache + WorkspaceManager were originally part of
+// @hive-mind/core in marolinik/hive-mind. PM Q3 ratified Plan A widening
+// 2026-04-30 to keep hive-mind-core OSS-self-contained for mcp-server + cli.
+export { MultiMind, type MultiMindSearchResult, type MindSource, type SearchScope } from './multi-mind.js';
+export { MultiMindCache, type MultiMindCacheConfig } from './multi-mind-cache.js';
+export { WorkspaceManager, type WorkspaceConfig, type CreateWorkspaceOptions } from './workspace-manager.js';
