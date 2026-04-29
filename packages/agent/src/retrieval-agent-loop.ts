@@ -56,6 +56,12 @@ import {
   maybeCompressMessages,
   type MessagesContextManagerConfig,
 } from './long-task/messages-compressor.js';
+// Phase 5 canary — production wiring activates when WAGGLE_PHASE5_CANARY_PCT > 0.
+// routeRequestToVariant returns baseline shape when canary_pct = 0 OR base
+// shape has no canary mapping (LOCKED scope: claude + qwen-thinking only) OR
+// variant not in REGISTRY. Otherwise: bucket-deterministic per requestId.
+// Audit: gepa-phase-5/manifest.yaml § canary_toggle, § scope_LOCKED.
+import { routeRequestToVariant } from './canary/phase-5-router.js';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Injected dependencies
@@ -258,8 +264,24 @@ function resolveNormalizationConfig(
   return preset;
 }
 
-function pickShape(modelAlias: string, override?: string): PromptShape {
-  return selectShape(modelAlias, { override });
+/**
+ * Resolve the prompt shape for a request. Routes through the Phase 5 canary
+ * router so that GEPA-evolved variants (claude::gen1-v1, qwen-thinking::gen1-v1)
+ * receive the configured canary fraction of traffic; everything else falls
+ * back to the baseline shape selectShape() would have returned.
+ *
+ * The canary router is fail-safe: when WAGGLE_PHASE5_CANARY_PCT is 0 (or
+ * malformed), or when the base shape is out of LOCKED scope, or when the
+ * canary variant isn't registered, the baseline shape is returned unchanged.
+ *
+ * Audit: gepa-phase-5/manifest.yaml § canary_toggle, § scope_LOCKED.
+ */
+function pickShape(
+  modelAlias: string,
+  override: string | undefined,
+  requestId: string,
+): PromptShape {
+  return routeRequestToVariant(modelAlias, requestId, { override }).shape;
 }
 
 function normalizeFinal(text: string, preset: NormalizationPresetName | NormalizationConfig | undefined) {
@@ -393,7 +415,11 @@ function parseAgentAction(text: string): ParsedAction {
  * pilot's `runCellSolo` behavior (Cells A and C). One LLM call, one response.
  */
 export async function runSoloAgent(config: SoloAgentRunConfig): Promise<AgentRunResult> {
-  const shape = pickShape(config.modelAlias, config.promptShapeOverride);
+  // Phase 5 canary requires a stable per-request id for deterministic bucket
+  // routing. Reuse config.runId when provided (also used by Phase 3.4
+  // checkpoint resume); otherwise generate fresh per call.
+  const requestId = config.runId ?? crypto.randomUUID();
+  const shape = pickShape(config.modelAlias, config.promptShapeOverride, requestId);
 
   const systemPrompt = shape.systemPrompt({
     persona: config.persona,
@@ -488,7 +514,10 @@ const DEFAULT_MAX_RETRIEVALS_PER_STEP = 8;
  * intermediate JSON action emissions; only the FINAL response is normalized.
  */
 export async function runRetrievalAgentLoop(config: MultiStepAgentRunConfig): Promise<AgentRunResult> {
-  const shape = pickShape(config.modelAlias, config.promptShapeOverride);
+  // Resolve runId BEFORE pickShape so the canary router can bucket
+  // deterministically on the same id used for Phase 3.4 checkpoint resume.
+  const runId = config.runId ?? crypto.randomUUID();
+  const shape = pickShape(config.modelAlias, config.promptShapeOverride, runId);
   const maxSteps = config.maxSteps ?? DEFAULT_MAX_STEPS;
   const maxRetrievalsPerStep = config.maxRetrievalsPerStep ?? DEFAULT_MAX_RETRIEVALS_PER_STEP;
 
@@ -496,7 +525,6 @@ export async function runRetrievalAgentLoop(config: MultiStepAgentRunConfig): Pr
   const checkpointStore = config.checkpointStore;
   const contextManager = config.contextManager;
   const emit: AgentRunProgressCallback = config.onProgress ?? (() => {});
-  const runId = config.runId ?? crypto.randomUUID();
   const resumeEnabled = config.resumeFromCheckpoint ?? Boolean(checkpointStore);
 
   const systemPrompt = shape.systemPrompt({

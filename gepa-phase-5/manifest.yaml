@@ -16,8 +16,9 @@ task: variant_canary_deployment
 phase: phase_5_canary
 branch: phase-5-deployment-v2
 substrate_anchor_short: 6bc2089
-implementation_authoring_sha: TBD-fill-at-§1-commit-via-git-rev-parse-HEAD
-pre_canary_kickoff_sha: TBD-recorded-at-PM-canary-kickoff-via-git-rev-parse-HEAD
+implementation_authoring_sha: 19152cf59cbca5e68ce8faacd428166d747cdde4  # short=19152cf — final §1-§5 implementation commit "docs(phase-5): §4 exit criteria coverage map + §5 cross-stream Waggle-primary declaration"
+pre_canary_kickoff_sha: 19152cf59cbca5e68ce8faacd428166d747cdde4  # short=19152cf — HEAD parent of canary kick-off commit; rollback target per §2.3 procedure
+canary_kickoff_locked_date: 2026-04-30  # Day 0 LIVE — PM signoff D:/Projects/PM-Waggle-OS/decisions/2026-04-30-phase-5-1-5-pm-signoff-canary-authorize.md
 supersedes: NONE  # First Phase 5 manifest
 
 # ── Inherits ────────────────────────────────────────────────────────────────
@@ -189,14 +190,27 @@ volume_estimate:
 canary_toggle:
   env_var: WAGGLE_PHASE5_CANARY_PCT
   allowed_values: [0, 10, 25, 50, 100]
-  default_until_PM_ratification: 0
+  default_until_PM_ratification: 0  # historical; superseded post-kick-off — see binding_rule
+  post_kick_off_code_default: 10
+  post_kick_off_locked_date: 2026-04-30
+  code_default_source: packages/agent/src/feature-flags.ts:parsePhase5CanaryPct  # undefined-branch returns 10
+  test_default_pin: 0  # vitest.setup.ts pins WAGGLE_PHASE5_CANARY_PCT='0' for shape-selection determinism
   routing_strategy: deterministic_per_request_id_bucket  # preserves A/B paired-comparison validity
   hot_reconfig_method: process_restart_or_SIGHUP  # no code redeploy required per §0.4 #3
-  flip_authority: PM_canary_kick_off_ratification_per_§7.3
+  flip_authority: PM_canary_kick_off_ratification_per_§7.3  # exercised 2026-04-30 — kick-off complete
   binding_rule: |
-    NE flip canary toggle (canary_pct = 10) bez explicit PM canary kick-off ratifikacije.
-    CC implementation must default to 0 and emit "PHASE 5 §1-§5 IMPLEMENTATION COMPLETE
-    — awaiting PM canary kick-off ratification" before any flip.
+    POST-KICK-OFF (canary Day 0 LIVE 2026-04-30): default_until_PM_ratification=0
+    superseded by post_kick_off_code_default=10 in
+    packages/agent/src/feature-flags.ts:parsePhase5CanaryPct undefined-branch
+    (PM signoff D:/Projects/PM-Waggle-OS/decisions/2026-04-30-phase-5-1-5-pm-signoff-canary-authorize.md).
+    Override path retained: WAGGLE_PHASE5_CANARY_PCT env var resolves first.
+    Set WAGGLE_PHASE5_CANARY_PCT=0 to roll back canary OFF without redeploy
+    per §2.3 procedure. Gradient advance to 25/50/100 requires PM ratification
+    per §2.1 per-step AND-gate (max(7d, 30 samples) per metric per variant).
+    Production wiring landed in same commit: pickShape() in
+    packages/agent/src/retrieval-agent-loop.ts now delegates to
+    routeRequestToVariant() so each LLM call buckets via FNV-1a hash of
+    config.runId (Phase 3.4 checkpoint id, also used here for canary id).
   gradient_schedule:
     - day_offset: 0
       canary_pct: 10
