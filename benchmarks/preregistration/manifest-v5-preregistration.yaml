@@ -1,0 +1,498 @@
+# Manifest v5 — Task 2.5 Stage 3 N=400 Pre-Registration (RPM-Throttled)
+# Canonical markdown surface: manifest-v5-preregistration.md
+# Supersedes manifest v4 (anchor dedd698) — v5 governs all Stage 3 re-kick.
+# SHA-256 of this YAML's bytes recorded in v5 anchor commit message.
+
+manifest_version: v5.0.0-preregistration
+manifest_type: stage_3_n400_preregistration_v5_rpm_throttled
+locked_date: 2026-04-24
+authority: PM (Marko Markovic) — P4 path (manifest v5 + concurrency=1) ratified 2026-04-24 on §1.3b IN_SCOPE verdict; inherits §1.1 + §1.2 ratifications
+sprint: 12
+task: 2.5
+stage: 3
+branch: feature/c3-v3-wrapper
+code_freeze_head: 373516c2784807da8536dbc0c194c54f4e4cd4be
+code_freeze_head_short: 373516c
+supersedes: manifest_v4_2026_04_24_anchor_dedd698
+inherits_from: bench_spec_lock_v1_2026_04_22
+
+# ── v5 Delta Log ────────────────────────────────────────────────────────────
+
+v5_delta_log:
+  trigger:
+    event: stage_3_gate_p_plus_probe_FAIL
+    anchor_commit: 66dcd5a1b18b9367662b04f1c9e1b66d855a9481
+    date: 2026-04-24
+    observation: "24 / 50 HTTP 429 on gemini-3.1-pro-preview at 1.67 RPS steady"
+    root_cause: "Google PRODUCT POLICY — per-model preview cap 25 RPM on generativelanguage.googleapis.com/generate_requests_per_model, independent of account billing tier"
+    google_429_body_excerpt: "Quota exceeded for metric: generativelanguage.googleapis.com/generate_requests_per_model, limit: 25, model: gemini-3.1-pro"
+  scope_audit:
+    anchor_commit: 69a14708f78a74d2cb7ef07faf2d949f6ffc3209
+    memo: benchmarks/results/manifest-v4-litellm-config-scope-audit.md
+    verdict: IN_SCOPE
+    rationale: "MD narrow (`litellm-config.yaml judge aliases`) + YAML strict (flat `litellm-config.yaml` in frozen_paths) both yield IN_SCOPE for any rpm:20 edit"
+    p2_status: terminally_blocked
+    fallback_path: P4_manifest_v5_concurrency_1
+  changes_from_v4:
+    sample_concurrency:
+      v4: 2
+      v5: 1
+      rationale: "halves peak Gemini RPS; pairs with LiteLLM rpm:20 throttle for safety margin under 25 RPM Google cap"
+    judge_ensemble_section_5_2:
+      v4: "no rate-limit metadata on any judge alias"
+      v5: "rpm: 20 addendum on gemini-3.1-pro-preview alias block in litellm-config.yaml"
+      rationale: "20 < 25 Google cap with 5 RPM margin for burst variance"
+      permitted_exception: true
+      exception_scope: single_edit_single_file
+      exception_target_path: litellm-config.yaml
+      exception_target_line_range_approx: "361-364 (gemini-3.1-pro-preview alias block)"
+    stopping_rule_7_4:
+      v4: "concurrent_runners: FORBIDDEN (cross-process); §1.1 waiver permits intra-wrapper parallel"
+      v5: "concurrent_runners: SEQUENTIAL (parallel-concurrency=1); §1.1 cross-process-only waiver still governs but moot under sequential design"
+    code_freeze_section_11:
+      v4: "HEAD 373516c; no file modifications during run"
+      v5: "HEAD 373516c; the SINGLE permitted pre-run modification = litellm-config.yaml §5.2 addendum (rpm:20 on gemini-3.1-pro-preview). All other frozen paths unchanged."
+    budget_wall_clock_estimate:
+      v4: "40-60 min (optimistic, pre-empirical)"
+      v5: "2-3 hours under concurrency=1 + rpm:20 Gemini throttle"
+    cli_invocation:
+      v4_flag: "--parallel-concurrency 2"
+      v5_flag: "--parallel-concurrency 1"
+      v5_manifest_flag: "--manifest benchmarks/preregistration/manifest-v5-preregistration.yaml"
+  unchanged_from_v4:
+    sections:
+      - "§1 primary hypothesis (Fisher one-sided p<0.10 on retrieval − no-context ≥ 5pp)"
+      - "§2 secondary endpoints S1-S5"
+      - "§4 dataset (LoCoMo 1531 instances, raw SHA 79fa87e9..., canonical SHA 39e415e2...)"
+      - "§6 substrate (HybridSearch conv-scope top-K=20, nomic-embed-text)"
+      - "§7 SYSTEM_AGENTIC verbatim bytes (SHA-256 6facae6d..., 1467 bytes)"
+      - "§9 post-hoc exclusion policy NONE"
+      - "§10 deviation policy (halt + restart-required)"
+      - "§12 scope boundaries + SOTA composition reserved for PM"
+      - "§13 PM gates structure (Gate P / Gate D)"
+      - "budget envelope §14 dollar amounts ($30/$28/~$23)"
+  parent_chain:
+    v4_predecessor: dedd69888e008fb1584bc249aff43b19f55a88e5
+    section_1_1_lock_waiver: 67eb89914a49ec38049379bf952d5f62b82c188d
+    section_1_2_rca: 274e9871b54599077a3d72de88d505550803a805
+    section_1_3_probe_fail: 66dcd5a1b18b9367662b04f1c9e1b66d855a9481
+    section_1_3b_scope_audit: 69a14708f78a74d2cb7ef07faf2d949f6ffc3209
+
+# ── Field 7 slots (preregistration.ts PreregistrationManifestPayload) ───────
+
+manifest_path: benchmarks/preregistration/manifest-v5-preregistration.yaml
+manifest_locked_at: 2026-04-24T00:00:00Z
+
+dataset:
+  name: locomo
+  source_url: https://raw.githubusercontent.com/snap-research/locomo/main/data/locomo10.json
+  raw_archive_path: benchmarks/data/locomo10.json
+  raw_archive_sha256: 79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4
+  raw_archive_bytes: 2805274
+  canonical_path: benchmarks/data/locomo/locomo-1540.jsonl
+  canonical_sha256: 39e415e2f3a0fa1bd3cb1804a58d0b440b50d3070b2100698437e4ec402a5b24
+  canonical_instance_count: 1531
+  paper_total_claim: 1540
+  paper_reference: "Maharana et al., ACL-2024 — Evaluating Very Long-Term Conversational Memory of LLM Agents"
+  category_distribution:
+    single_hop: 841
+    multi_hop: 281
+    temporal: 320
+    open_ended: 89
+
+# ── Primary hypothesis (unchanged from v4) ──────────────────────────────────
+
+primary_hypothesis:
+  name: memory_lift_retrieval_vs_no_context
+  direction: one_sided_positive
+  statement: "retrieval_judge_accuracy − no-context_judge_accuracy ≥ 5pp"
+  test: fisher_exact_one_sided
+  alpha_threshold: 0.10
+  effect_size_threshold_pp: 5
+  justification_ex_ante:
+    - gate_b_dry_run_conv_scope_20_of_20_vs_whole_corpus_8_of_20_leak_2026_04_24
+    - gate_c_monotonicity_no_context_0_10_lt_retrieval_0_35_lt_agentic_0_40_lt_oracle_0_55
+
+# ── Secondary endpoints (unchanged from v4) ─────────────────────────────────
+
+secondary_endpoints:
+  S1_monotonicity_no_context_leq_retrieval:
+    direction: one_sided_positive
+    threshold_pp: 0
+    test: fisher_exact_one_sided
+    alpha: 0.20
+  S2_monotonicity_retrieval_leq_agentic:
+    direction: one_sided_positive
+    threshold_pp: 0
+    test: fisher_exact_one_sided
+    alpha: 0.20
+  S3_monotonicity_agentic_leq_oracle_context:
+    direction: one_sided_positive
+    threshold_pp: 0
+    test: fisher_exact_one_sided
+    alpha: 0.20
+  S4_agentic_lift_over_retrieval:
+    direction: descriptive
+    threshold_pp: 0
+    report: [point_estimate, wilson_95_ci]
+  S5_abstain_penalty_oracle_minus_full_context:
+    direction: descriptive_expected_positive
+    report: [point_estimate]
+
+# ── Sample design (CHANGED: concurrency 2 → 1) ──────────────────────────────
+
+sample:
+  cells:
+    - no-context
+    - oracle-context
+    - full-context
+    - retrieval
+    - agentic
+  n_per_cell: 400
+  total_evaluations: 2000
+  instance_selection_seed: 42
+  instance_selection_method: "shuffle-then-take-first-N, deterministic given seed"
+  matched_pairs: true
+  concurrency: 1
+  concurrency_rationale: "§1.3 Gate P+ empirical finding — Gemini per-model 25 RPM cap. Concurrency=1 halves peak Gemini RPS; pairs with §5.2 addendum rpm:20 for 5 RPM margin."
+
+# ── Cells semantics (unchanged from v4, frozen at HEAD 373516c) ─────────────
+
+cells_semantics:
+  no_context:
+    system_prompt: SYSTEM_BASELINE
+    user_prompt: "Question: {question}"
+    memory_injection: none
+    added_at: stage_2_retry_1_1_2026_04_24
+  oracle_context:
+    system_prompt: SYSTEM_BASELINE
+    user_prompt: "Context: {instance.context}\\n\\nQuestion: {instance.question}"
+    memory_injection: oracle_fed_by_locomo
+    harness_alias: raw
+  full_context:
+    system_prompt: SYSTEM_EVOLVED
+    memory_injection: oracle_fed_plus_evolved_abstain
+  retrieval:
+    system_prompt: SYSTEM_BASELINE
+    substrate: waggle_core_hybrid_search
+    scope: conversation_scoped_via_gopId
+    top_k_default: 20
+    top_k_upper_clamp: 50
+  agentic:
+    system_prompt: SYSTEM_AGENTIC_softened_stage2_retry
+    system_prompt_sha256: 6facae6decc44a6404290514accb4f7cb364081b32d02847a20f8e871633e328
+    system_prompt_bytes: 1467
+    tool_allowlist:
+      - search_memory
+    tool_binding: "search_memory bound to instance.conversation_id; non-overridable"
+    max_turns: 3
+    timeout_ms: 180000
+    forced_answer_fallback:
+      enabled: true
+      system_prompt: SYSTEM_AGENTIC_FORCED_FALLBACK
+      gate_c_firing_rate: 0
+
+# ── Model stack (CHANGED: §5.2 addendum rpm:20 on Gemini alias) ─────────────
+
+subject_model: qwen3.6-35b-a3b-via-dashscope-direct
+subject_fallback_1: qwen3.6-35b-a3b-via-openrouter
+subject_fallback_2: NOT_AVAILABLE
+
+subject_route_table:
+  primary:
+    alias: qwen3.6-35b-a3b-via-dashscope-direct
+    litellm_model: qwen3.6-35b-a3b-via-dashscope-direct
+    upstream_route: "LiteLLM local alias -> openai/qwen3.6-35b-a3b @ https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+    provider: alibaba
+    thinking: on
+    max_tokens: 16000
+    price_per_million_input_usd: 0.20
+    price_per_million_output_usd: 0.80
+    context_window: 262144
+    pinning_surface: floating_alias
+  fallback_1:
+    alias: qwen3.6-35b-a3b-via-openrouter
+    litellm_model: qwen3.6-35b-a3b-via-openrouter
+    upstream_route: "LiteLLM -> OpenRouter bridge (openrouter/qwen/qwen3.5-35b-a3b)"
+    thinking: on
+    max_tokens: 64000
+    pinning_surface: floating_alias
+    trigger_condition: fetch_error_on_primary
+  fallback_2:
+    alias: NOT_AVAILABLE
+
+judge_ensemble:
+  primary:
+    - judge_role: primary
+      slot: primary_judge_1
+      model_id: claude-opus-4-7
+      provider: anthropic
+      litellm_model: claude-opus-4-7
+      pinning_surface: anthropic_immutable
+      rate_limit_v5: null
+      price_per_million_input_usd: 15.00
+      price_per_million_output_usd: 75.00
+    - judge_role: primary
+      slot: primary_judge_2
+      model_id: gpt-5.4
+      provider: openai_via_openrouter
+      litellm_model: gpt-5.4
+      pinning_surface: floating_alias
+      rate_limit_v5: null
+      price_per_million_input_usd: 10.00
+      price_per_million_output_usd: 30.00
+    - judge_role: primary
+      slot: primary_judge_3
+      model_id: gemini-3.1-pro-preview
+      provider: google
+      litellm_model: gemini-3.1-pro-preview
+      pinning_surface: floating_alias
+      rate_limit_v5:
+        rpm: 20
+        rationale: "v5 §5.2 addendum under 25 RPM Google per-model cap (§1.3 probe root cause); 5 RPM margin for burst variance"
+        delivery_mechanism: "inline in litellm-config.yaml model_list[gemini-3.1-pro-preview] block (the SINGLE permitted §11 exception)"
+        fail_escalation:
+          - rpm_15_if_probe_v2_FAIL_at_20
+          - openrouter_route_swap_P7_if_throttle_insufficient
+      price_per_million_input_usd: 3.50
+      price_per_million_output_usd: 10.50
+  tiebreak:
+    judge_role: reserve
+    model_id: grok-4.20
+    provider: xai_via_openrouter
+    litellm_model: openrouter/x-ai/grok-4.20
+    rate_limit_v5: null
+    trigger: three_way_split_1_1_1
+    defensive_2_2_path: pm-escalation
+  consistency_constraint: same_physical_judge_models_as_stage_1_stage_1_5_stage_2_stage_2_retry_v4
+  vote_policy: majority_with_grok_reserve_on_1_1_1_split
+
+judge_primary:
+  id: claude-opus-4-7
+judge_secondary:
+  id: gpt-5.4
+judge_tie_breaker:
+  id: gemini-3.1-pro-preview
+
+# ── Substrate (unchanged from v4) ───────────────────────────────────────────
+
+substrate:
+  implementation: "@waggle/core::HybridSearch (RRF-fused FTS5 + vec0)"
+  scope_filter:
+    parameter: gopId
+    source_location: packages/core/src/mind/search.ts:14
+    field_name: SearchOptions.gopId
+    benchmark_binding: instance.conversation_id
+  top_k_default: 20
+  top_k_upper_clamp: 50
+  embedder:
+    factory: createOllamaEmbedder
+    base_url: http://localhost:11434
+    model: nomic-embed-text
+    dims: 1024
+    cost: zero_local_inference
+  ingest_batch_size: 200
+
+# ── κ, CI, failure taxonomy (all unchanged from v4) ─────────────────────────
+
+kappa_monitoring:
+  baseline_reference: sprint_10_task_2_2_kappa_0_7458
+  compute: fleiss_kappa_on_pre_tiebreak_vote_matrix
+  thresholds:
+    pass_no_flag_kappa_min: 0.65
+    pass_with_flag_kappa_range: [0.60, 0.65]
+    halt_kappa_max: 0.60
+    halt_drop_from_baseline_max_pp: 10
+
+confidence_intervals:
+  primary:
+    method: wilson_score_95
+  secondary:
+    method: cluster_bootstrap_95
+    iterations: 10000
+    seed: 42
+    cluster_unit: conversation_id
+
+failure_taxonomy:
+  version: v1
+  categories:
+    - {code: F1, name: contradicts_ground_truth}
+    - {code: F2, name: partial_answer}
+    - {code: F3, name: off_topic}
+    - {code: F4, name: refusal}
+    - {code: F5, name: tool_use_error}
+    - {code: F6, name: format_violation}
+
+# ── Stopping rules (§7.4 updated under concurrency=1) ───────────────────────
+
+stopping_rules:
+  budget_hard_halt_usd: 28.00
+  budget_cap_usd: 30.00
+  streak_halt: "3 consecutive subject fetch failures -> halt (streak-tracker.ts)"
+  pre_cell_health_check: "GET /health/liveliness + POST /v1/chat/completions ping per model -> halt on any 5xx/fetch-error"
+  runner_lock: "concurrent_runners: SEQUENTIAL (parallel-concurrency=1); §1.1 cross-process waiver still governs — moot under sequential design"
+  deviation_from_preregistration: "any change to §1-§9 during run -> immediate halt + PM raise"
+  no_interim_looks: true
+  mid_run_amendment_policy: halt_restart_required
+
+# ── Post-hoc exclusion: NONE (unchanged from v4) ────────────────────────────
+
+post_hoc_exclusion:
+  policy: none
+  evaluator_loss_handling:
+    included_in_denominator: true
+    reported_separately: true
+    denominator_formula: "correct + incorrect + evaluator_loss"
+
+# ── Budget (envelope unchanged; wall-clock re-estimated) ────────────────────
+
+budget:
+  cap_usd: 30.00
+  hard_halt_usd: 28.00
+  expected_burn_usd: 23.00
+  variance_ceiling_usd: 28.00
+  breakdown_expected:
+    subject_qwen_dashscope_direct_usd: 2.50
+    judge_triple_opus_gpt5_gemini_usd: 20.00
+    embedding_ollama_local_usd: 0.00
+    tie_break_grok_reserve_usd: 0.50
+  wall_clock_estimate:
+    v4_optimistic_min: 40
+    v4_optimistic_max: 60
+    v5_realistic_hours_min: 2
+    v5_realistic_hours_max: 3
+    v5_floor_minutes_derived_from_rpm_20_and_2000_evals: 100
+
+# ── Target sample + CLI invocation (v5-specific) ────────────────────────────
+
+target_N: 400
+target_cells:
+  - no-context
+  - oracle-context
+  - full-context
+  - retrieval
+  - agentic
+target_total_evaluations: 2000
+target_concurrency: 1
+
+cli_invocation_template: >
+  npx tsx scripts/run-mini-locomo.ts
+  --manifest benchmarks/preregistration/manifest-v5-preregistration.yaml
+  --subject qwen3.6-35b-a3b-via-dashscope-direct
+  --subject-fallback-1 qwen3.6-35b-a3b-via-openrouter
+  --judge-ensemble claude-opus-4-7,gpt-5.4,gemini-3.1-pro
+  --v3-cells --N 400 --parallel-concurrency 1 --seed 42
+
+# ── Code freeze — SINGLE permitted exception ────────────────────────────────
+
+code_freeze:
+  head: 373516c2784807da8536dbc0c194c54f4e4cd4be
+  branch: feature/c3-v3-wrapper
+  frozen_paths:
+    - benchmarks/harness/src/cells.ts
+    - benchmarks/harness/src/substrate.ts
+    - benchmarks/harness/src/judge-client.ts
+    - benchmarks/harness/src/judge-runner.ts
+    - benchmarks/harness/src/health-check.ts
+    - benchmarks/harness/src/streak-tracker.ts
+    - benchmarks/harness/src/runner-lock.ts
+    - benchmarks/harness/src/runner.ts
+    - benchmarks/harness/config/models.json
+    - packages/agent/src/agent-loop.ts
+    - packages/agent/src/tools.ts
+    - packages/core/src/mind/search.ts
+    - packages/core/src/mind/frames.ts
+    - packages/core/src/mind/sessions.ts
+    - packages/core/src/mind/db.ts
+    - litellm-config.yaml
+  permitted_delta_during_run:
+    - "new JSONL files emitted to benchmarks/results/ by the N=400 run"
+  permitted_pre_run_delta_v5_single_exception:
+    path: litellm-config.yaml
+    scope: "add rpm: 20 to gemini-3.1-pro-preview alias block (model_list entry); no other fields modified"
+    committed_separately_before_run: true
+    justification: "manifest v5 §5.2 addendum; only permitted exception to §11 freeze; governed by v5 delta log"
+
+# ── Deviation policy (unchanged from v4) ────────────────────────────────────
+
+deviation_policy:
+  on_detection:
+    - immediate_halt
+    - pm_raise
+    - re_preregister_new_manifest_v6_if_accepted
+
+# ── PM gates (unchanged from v4 structure) ──────────────────────────────────
+
+pm_gates:
+  gate_p_plus_v5_pre_run:
+    trigger: "anchor commit of v5 md + yaml + litellm-config.yaml §5.2 addendum on feature/c3-v3-wrapper"
+    pre_kick_checks_required:
+      - section_1_1_lock_semantics_ratified
+      - section_1_2_rca_ratified
+      - section_1_3_probe_v1_FAIL_adjudicated
+      - section_1_3b_scope_audit_ratified
+      - section_1_3c_throttle_probe_v2_PASS
+      - section_1_3e_rpd_feasibility_FEASIBLE
+    action: "CC-1 halts; awaits GATE-D-REKICK-GO after §1.3c + §1.3e"
+  gate_d_post_run:
+    trigger: "N=400 run exit (clean or halted per stopping_rules)"
+    action: "CC-1 writes Gate D exit report at PM-Waggle-OS/sessions/2026-04-24-task25-stage3-n400-complete.md; halts"
+    outcomes:
+      - compose_sota_claim_authority_pm
+      - publish_gate
+      - further_scope
+  cc1_self_advance: forbidden_at_both_gates
+
+# ── Scope boundaries (unchanged from v4) ────────────────────────────────────
+
+scope_boundaries:
+  claimable_at_gate_d:
+    - memory_lift_magnitude_and_significance_conv_scope_qwen_harness_head_373516c
+    - per_cell_judge_accuracy_wilson_95
+    - monotonicity_chain_observation_5_cell
+    - conv_scope_fair_comparison_methodology
+    - agentic_discipline_search_rate_turns_unknown_fallback
+  not_claimable_at_gate_d:
+    - direct_comparability_to_mem0_91_6_different_scope_and_memory_layer
+    - multi_model_generalization_stage_3_is_qwen_only
+    - production_waggle_orchestrator_performance
+  reserved_for_pm_at_gate_d:
+    - public_claim_phrasing_venue
+    - matched_scope_mem0_co_run_stage_4
+    - publication_timing
+  cc1_does_not_compose_public_sota_claim: true
+
+# ── Related artefacts ───────────────────────────────────────────────────────
+
+related:
+  v4_predecessor: dedd69888e008fb1584bc249aff43b19f55a88e5
+  section_1_1_lock_waiver: 67eb89914a49ec38049379bf952d5f62b82c188d
+  section_1_2_rca: 274e9871b54599077a3d72de88d505550803a805
+  section_1_3_probe_fail: 66dcd5a1b18b9367662b04f1c9e1b66d855a9481
+  section_1_3b_scope_audit: 69a14708f78a74d2cb7ef07faf2d949f6ffc3209
+  bench_spec_lock_v1_parent: PM-Waggle-OS/decisions/2026-04-22-bench-spec-locked.manifest.yaml
+  stage_2_retry_gate_c_exit: PM-Waggle-OS/sessions/2026-04-24-task25-stage2-retry-complete.md
+  stage_3_rekick_brief_option_a: PM-Waggle-OS/briefs/2026-04-24-cc-task25-stage3-rekick-option-a.md
+  rollback_tag: checkpoint/pre-self-evolution-2026-04-14
+  canonical_md_surface: benchmarks/preregistration/manifest-v5-preregistration.md
+
+# ── Validation gates ────────────────────────────────────────────────────────
+
+validation_gates:
+  before_n400_kickoff_v5:
+    - v5_anchor_commit_sha_recorded
+    - v5_md_sha256_recorded_in_commit_message
+    - v5_yaml_sha256_recorded_in_commit_message
+    - litellm_config_rpm_20_edit_committed_separately
+    - section_1_3c_throttle_probe_v2_PASS
+    - section_1_3e_rpd_feasibility_FEASIBLE
+    - pm_gate_d_rekick_go_received
+    - kickoff_mechanism_clean_foreground_non_harness_process_tree
+  at_gate_d_exit_v5:
+    - all_2000_evals_accounted_in_denominators
+    - evaluator_loss_reported_separately
+    - primary_fisher_one_sided_computed
+    - secondary_endpoints_reported
+    - budget_reconciled
+    - deviation_count_reported
+    - code_freeze_reverified_head_373516c_plus_single_litellm_addendum

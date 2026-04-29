@@ -1,0 +1,23 @@
+2026-04-24T11:52:53.225915+00:00 [probe] START — PROJECT=gen-lang-client-0674908699 LOCATION=us-central1 MODEL=publishers/google/models/gemini-3.1-pro-preview
+2026-04-24T11:53:12.466058+00:00 [probe] sdk versions: aiplatform=1.148.1 storage=3.10.1
+2026-04-24T11:53:12.475509+00:00 [build] wrote 5 requests to D:\Projects\waggle-os\benchmarks\probes\vertex-batch-eligibility\probe-input.jsonl
+2026-04-24T11:53:13.396231+00:00 [upload] FATAL UnicodeEncodeError: 'charmap' codec can't encode character '\u2192' in position 125: character maps to <undefined>
+2026-04-24T11:53:13.396734+00:00 [probe] VERDICT=INCONCLUSIVE reason=gcs_upload_fail
+2026-04-24T11:53:54.790890+00:00 [probe] START — PROJECT=gen-lang-client-0674908699 LOCATION=us-central1 MODEL=publishers/google/models/gemini-3.1-pro-preview
+2026-04-24T11:54:13.959901+00:00 [probe] sdk versions: aiplatform=1.148.1 storage=3.10.1
+2026-04-24T11:54:13.960905+00:00 [build] wrote 5 requests to D:\Projects\waggle-os\benchmarks\probes\vertex-batch-eligibility\probe-input.jsonl
+2026-04-24T11:54:14.922979+00:00 [upload] D:\Projects\waggle-os\benchmarks\probes\vertex-batch-eligibility\probe-input.jsonl ->gs://egzakta-vertex-batch-probe-2026-04/probe-input.jsonl (9801 bytes)
+2026-04-24T11:54:16.176968+00:00 [submit:preview] ERROR NotFound: 404 The PublisherModel gemini-3.1-pro-preview does not exist.
+2026-04-24T11:54:16.179084+00:00 [submit:legacy] ERROR RuntimeError: BatchPredictionJob resource has not been created.
+2026-04-24T11:54:16.180087+00:00 [probe] SUBMISSION FAILED on both preview and legacy APIs
+2026-04-24T11:54:16.181088+00:00 [probe] VERDICT=INFEASIBLE reason=submission_rejected
+2026-04-24T11:57:19.970025+00:00 [probe] START - PROJECT=gen-lang-client-0674908699 LOCATION=us-central1 MODEL=publishers/google/models/gemini-3.1-pro-preview
+2026-04-24T11:57:39.425526+00:00 [probe] sdk versions: aiplatform=1.148.1 storage=3.10.1
+2026-04-24T11:57:39.425526+00:00 [build] wrote 5 requests to D:\Projects\waggle-os\benchmarks\probes\vertex-batch-eligibility\probe-input.jsonl
+2026-04-24T11:57:40.931139+00:00 [upload] D:\Projects\waggle-os\benchmarks\probes\vertex-batch-eligibility\probe-input.jsonl ->gs://egzakta-vertex-batch-probe-2026-04/probe-input.jsonl (9801 bytes)
+2026-04-24T11:57:42.065981+00:00 [submit:preview:gemini-3.1-pro-preview] ERROR NotFound: 404 The PublisherModel gemini-3.1-pro-preview does not exist.
+2026-04-24T11:57:42.844454+00:00 [submit:preview:publishers/google/models/gemini-3.1-pro-preview] ERROR NotFound: 404 The PublisherModel gemini-3.1-pro-preview does not exist.
+2026-04-24T11:57:42.845455+00:00 [submit:preview] all variants exhausted; trying legacy API
+2026-04-24T11:57:42.846958+00:00 [submit:legacy] ERROR RuntimeError: BatchPredictionJob resource has not been created.
+2026-04-24T11:57:42.848577+00:00 [probe] SUBMISSION FAILED on all preview model variants + legacy API
+2026-04-24T11:57:42.848577+00:00 [probe] VERDICT=INFEASIBLE reason=submission_rejected_all_variants

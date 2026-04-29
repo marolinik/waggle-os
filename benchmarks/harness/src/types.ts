@@ -34,8 +34,42 @@ export type { FailureCode } from './failure-taxonomy/codes.js';
 export type { FailureDistribution } from './failure-taxonomy/aggregate.js';
 import type { FailureCode } from './failure-taxonomy/codes.js';
 import type { FailureDistribution } from './failure-taxonomy/aggregate.js';
+// Sprint 12 Task 2.5 Stage 1 (2026-04-23): Substrate is imported type-only so
+// types.ts has zero runtime dependency on substrate.ts / @waggle/core. The
+// field threads through RunConfig → runOne → CellInput for the retrieval +
+// agentic cells.
+import type { Substrate } from './substrate.js';
 
-export type CellName = 'raw' | 'filtered' | 'compressed' | 'full-context';
+/**
+ * Cell names. Sprint 9 / Sprint 12 Task 1 Blocker #2 shipped the first four
+ * (`raw`, `filtered`, `compressed`, `full-context`). Sprint 12 Task 2.5
+ * Stage 1 (2026-04-23) added `retrieval` and `agentic` — backed by real
+ * `@waggle/core::HybridSearch` and `@waggle/agent::agent-loop` respectively.
+ *
+ * Sprint 12 Task 2.5 Stage 2-Retry (2026-04-24) added `no-context` — a
+ * true zero-memory baseline (question-only prompt, no `instance.context`,
+ * no retrieval). The Stage 2 N=20 FAIL exit revealed that Sprint 9 `raw`
+ * is NOT a zero-context baseline on LoCoMo (its prompt embeds the
+ * oracle-selected `instance.context`); `no-context` is the honest
+ * comparator for the retrieval memory-lift criterion.
+ *
+ * The v3 PM-facing vocabulary for Stage 2-Retry is
+ * `[no-context, oracle-context, full-context, retrieval, agentic]`; mapping
+ * to harness internal ids via `scripts/run-mini-locomo.ts::V3_TO_V1_CELLS`:
+ *   no-context     → no-context      (NEW; true zero-memory baseline)
+ *   oracle-context → raw             (alias — oracle-fed diagnostic; harness `raw` kept for back-compat)
+ *   full-context   → full-context    (unchanged)
+ *   retrieval      → retrieval       (now conv-scope top-K=20)
+ *   agentic        → agentic         (now conv-scope + softened SYSTEM_AGENTIC + fallback)
+ */
+export type CellName =
+  | 'raw'
+  | 'filtered'
+  | 'compressed'
+  | 'full-context'
+  | 'retrieval'
+  | 'agentic'
+  | 'no-context';
 export type ControlName = 'verbose-fixed';
 export type RunKind = { kind: 'cell'; name: CellName } | { kind: 'control'; name: ControlName };
 
@@ -49,6 +83,14 @@ export interface DatasetInstance {
   context: string;
   /** Canonical reference answer(s) for automated scoring. */
   expected: string[];
+  /** Sprint 12 Task 2.5 Stage 2-Retry (2026-04-24): identifier of the
+   *  conversation this QA pair was authored within. For LoCoMo this is the
+   *  `conversation_id` / `sample_id` carried by the canonical archive (e.g.
+   *  `conv-26`). Retrieval + agentic cells use this as a `gopId` filter so
+   *  HybridSearch scopes to the instance's conversation only, matching the
+   *  QA-pair locality LoCoMo was authored for. Undefined for synthetic runs
+   *  and pre-Stage-2-Retry JSONL artefacts. */
+  conversation_id?: string;
 }
 
 export interface DatasetSpec {
@@ -206,6 +248,27 @@ export interface RunConfig {
    * disabled — pre-registration payload emits an empty array in that case.
    */
   judgeModelsResolved?: import('./preregistration.js').JudgeModelManifestEntry[];
+  // ── Sprint 12 Task 2.5 Stage 1 (2026-04-23) — substrate deps for retrieval + agentic cells ─
+  /**
+   * Ephemeral MindDB + HybridSearch pair built by main() via
+   * `createSubstrate({embedder})` and pre-populated via
+   * `ingestLoCoMoCorpus(...)` BEFORE any cell fires. Required only when the
+   * run roster includes `retrieval` or `agentic`; the other four cells ignore
+   * it. Lifecycle is owned by main() — `close()` is called in its `finally`.
+   */
+  substrate?: Substrate;
+  /**
+   * LiteLLM URL + API key surfaced to CellInput so the `agentic` cell's
+   * inner `runAgentLoop` can talk to the proxy directly (agent-loop does
+   * not route through the cell's `LlmClient`). Other cells ignore.
+   */
+  litellm?: { url: string; apiKey: string };
+  /** Retrieval cell top-K override. Default 10 (GATE-S0 lock). */
+  retrievalTopK?: number;
+  /** Agentic cell turn cap override. Default 3 (GATE-S0 lock). */
+  agenticMaxTurns?: number;
+  /** Agentic cell AbortController timeout override. Default 180_000 ms. */
+  agenticTimeoutMs?: number;
 }
 
 /** Judge failure-mode taxonomy codes. Must match the enum the judge module

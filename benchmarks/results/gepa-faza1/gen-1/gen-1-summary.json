@@ -1,0 +1,334 @@
+{
+  "manifestAnchor": "manifest-v7-gepa-faza1",
+  "manifestShaAmendment7": "bc0bcf9bd8b0c8344b25e5f8ab15b0475039ba28a1f782ebffe4cc1c4ff7d1de",
+  "generated_at": "2026-04-28T23:03:24.479Z",
+  "mode": "full",
+  "totalEvals": 120,
+  "totalCostUsd": 15.024593800000005,
+  "haltReason": null,
+  "perCandidateTierBreakdown": [
+    {
+      "candidateId": "claude::baseline",
+      "shape": "claude",
+      "variant": "baseline",
+      "evalCount": 8,
+      "trioStrictPassRateII": 0.875,
+      "meanRetrievalCallsPerTask": 1.25,
+      "meanEvalCostUsd": 0.1222645125,
+      "costOvershoot": false,
+      "tieredFitness": {
+        "tier1DeltaPP": 0,
+        "tier2RetrievalBonus": 0,
+        "tier3CellSemanticInvarianceBonus": 0.1,
+        "aggregateSaturatedRegime": 0.1,
+        "saturatedRegimeApplied": true,
+        "cellSemanticAnchorInvarianceCount": 7
+      }
+    },
+    {
+      "candidateId": "claude::gen1-v1",
+      "shape": "claude",
+      "variant": "gen1-v1",
+      "evalCount": 8,
+      "trioStrictPassRateII": 1,
+      "meanRetrievalCallsPerTask": 1.625,
+      "meanEvalCostUsd": 0.1265505875,
+      "costOvershoot": false,
+      "tieredFitness": {
+        "tier1DeltaPP": 12.5,
+        "tier2RetrievalBonus": 0,
+        "tier3CellSemanticInvarianceBonus": 0.1,
+        "aggregateSaturatedRegime": 0.1,
+        "saturatedRegimeApplied": true,
+        "cellSemanticAnchorInvarianceCount": 7
+      }
+    },
+    {
+      "candidateId": "claude::gen1-v2",
+      "shape": "claude",
+      "variant": "gen1-v2",
+      "evalCount": 8,
+      "trioStrictPassRateII": 0.75,
+      "meanRetrievalCallsPerTask": 1.75,
+      "meanEvalCostUsd": 0.12172862500000001,
+      "costOvershoot": false,
+      "tieredFitness": {
+        "tier1DeltaPP": -12.5,
+        "tier2RetrievalBonus": 0,
+        "tier3CellSemanticInvarianceBonus": 0.1,
+        "aggregateSaturatedRegime": 0.1,
+        "saturatedRegimeApplied": true,
+        "cellSemanticAnchorInvarianceCount": 7
+      }
+    },
+    {
+      "candidateId": "qwen-thinking::baseline",
+      "shape": "qwen-thinking",
+      "variant": "baseline",
+      "evalCount": 8,
+      "trioStrictPassRateII": 0.875,
+      "meanRetrievalCallsPerTask": 1.625,
+      "meanEvalCostUsd": 0.12110161250000001,
+      "costOvershoot": false,
+      "tieredFitness": {
+        "tier1DeltaPP": 0,
+        "tier2RetrievalBonus": 0.25,
+        "tier3CellSemanticInvarianceBonus": 0.1,
+        "aggregateSaturatedRegime": 0.35,
+        "saturatedRegimeApplied": true,
+        "cellSemanticAnchorInvarianceCount": 7
+      }
+    },
+    {
+      "candidateId": "qwen-thinking::gen1-v1",
+      "shape": "qwen-thinking",
+      "variant": "gen1-v1",
+      "evalCount": 8,
+      "trioStrictPassRateII": 1,
+      "meanRetrievalCallsPerTask": 2.375,
+      "meanEvalCostUsd": 0.12490944999999999,
+      "costOvershoot": false,
+      "tieredFitness": {
+        "tier1DeltaPP": 12.5,
+        "tier2RetrievalBonus": 0.25,
+        "tier3CellSemanticInvarianceBonus": 0.1,
+        "aggregateSaturatedRegime": 0.35,
+        "saturatedRegimeApplied": true,
+        "cellSemanticAnchorInvarianceCount": 7
+      }
+    },
+    {
+      "candidateId": "qwen-thinking::gen1-v2",
+      "shape": "qwen-thinking",
+      "variant": "gen1-v2",
+      "evalCount": 8,
+      "trioStrictPassRateII": 0.75,
+      "meanRetrievalCallsPerTask": 2.125,
+      "meanEvalCostUsd": 0.1217289,
+      "costOvershoot": false,
+      "tieredFitness": {
+        "tier1DeltaPP": -12.5,
+        "tier2RetrievalBonus": 0.25,
+        "tier3CellSemanticInvarianceBonus": 0.1,
+        "aggregateSaturatedRegime": 0.35,
+        "saturatedRegimeApplied": true,
+        "cellSemanticAnchorInvarianceCount": 7
+      }
+    },
+    {
+      "candidateId": "qwen-non-thinking::baseline",
+      "shape": "qwen-non-thinking",
+      "variant": "baseline",
+      "evalCount": 8,
+      "trioStrictPassRateII": 1,
+      "meanRetrievalCallsPerTask": 1.125,
+      "meanEvalCostUsd": 0.1258152375,
+      "costOvershoot": false,
+      "tieredFitness": {
+        "tier1DeltaPP": 0,
+        "tier2RetrievalBonus": 0,
+        "tier3CellSemanticInvarianceBonus": 0.1,
+        "aggregateSaturatedRegime": 0.1,
+        "saturatedRegimeApplied": true,
+        "cellSemanticAnchorInvarianceCount": 7
+      }
+    },
+    {
+      "candidateId": "qwen-non-thinking::gen1-v1",
+      "shape": "qwen-non-thinking",
+      "variant": "gen1-v1",
+      "evalCount": 8,
+      "trioStrictPassRateII": 0.875,
+      "meanRetrievalCallsPerTask": 2.125,
+      "meanEvalCostUsd": 0.1264146,
+      "costOvershoot": false,
+      "tieredFitness": {
+        "tier1DeltaPP": -12.5,
+        "tier2RetrievalBonus": 0.25,
+        "tier3CellSemanticInvarianceBonus": 0.1,
+        "aggregateSaturatedRegime": 0.35,
+        "saturatedRegimeApplied": true,
+        "cellSemanticAnchorInvarianceCount": 7
+      }
+    },
+    {
+      "candidateId": "qwen-non-thinking::gen1-v2",
+      "shape": "qwen-non-thinking",
+      "variant": "gen1-v2",
+      "evalCount": 8,
+      "trioStrictPassRateII": 0.75,
+      "meanRetrievalCallsPerTask": 2.625,
+      "meanEvalCostUsd": 0.1297142625,
+      "costOvershoot": false,
+      "tieredFitness": {
+        "tier1DeltaPP": -25,
+        "tier2RetrievalBonus": 0.25,
+        "tier3CellSemanticInvarianceBonus": 0.1,
+        "aggregateSaturatedRegime": 0.35,
+        "saturatedRegimeApplied": true,
+        "cellSemanticAnchorInvarianceCount": 7
+      }
+    },
+    {
+      "candidateId": "gpt::baseline",
+      "shape": "gpt",
+      "variant": "baseline",
+      "evalCount": 8,
+      "trioStrictPassRateII": 0.75,
+      "meanRetrievalCallsPerTask": 1,
+      "meanEvalCostUsd": 0.12141195,
+      "costOvershoot": false,
+      "tieredFitness": {
+        "tier1DeltaPP": 0,
+        "tier2RetrievalBonus": 0,
+        "tier3CellSemanticInvarianceBonus": 0.1,
+        "aggregateSaturatedRegime": 0.1,
+        "saturatedRegimeApplied": true,
+        "cellSemanticAnchorInvarianceCount": 7
+      }
+    },
+    {
+      "candidateId": "gpt::gen1-v1",
+      "shape": "gpt",
+      "variant": "gen1-v1",
+      "evalCount": 8,
+      "trioStrictPassRateII": 0.875,
+      "meanRetrievalCallsPerTask": 1.5,
+      "meanEvalCostUsd": 0.1295505375,
+      "costOvershoot": false,
+      "tieredFitness": {
+        "tier1DeltaPP": 12.5,
+        "tier2RetrievalBonus": 0,
+        "tier3CellSemanticInvarianceBonus": 0.1,
+        "aggregateSaturatedRegime": 0.1,
+        "saturatedRegimeApplied": true,
+        "cellSemanticAnchorInvarianceCount": 7
+      }
+    },
+    {
+      "candidateId": "gpt::gen1-v2",
+      "shape": "gpt",
+      "variant": "gen1-v2",
+      "evalCount": 8,
+      "trioStrictPassRateII": 1,
+      "meanRetrievalCallsPerTask": 2,
+      "meanEvalCostUsd": 0.1298605,
+      "costOvershoot": false,
+      "tieredFitness": {
+        "tier1DeltaPP": 25,
+        "tier2RetrievalBonus": 0,
+        "tier3CellSemanticInvarianceBonus": 0.1,
+        "aggregateSaturatedRegime": 0.1,
+        "saturatedRegimeApplied": true,
+        "cellSemanticAnchorInvarianceCount": 7
+      }
+    },
+    {
+      "candidateId": "generic-simple::baseline",
+      "shape": "generic-simple",
+      "variant": "baseline",
+      "evalCount": 8,
+      "trioStrictPassRateII": 0.75,
+      "meanRetrievalCallsPerTask": 1.125,
+      "meanEvalCostUsd": 0.1202141125,
+      "costOvershoot": false,
+      "tieredFitness": {
+        "tier1DeltaPP": -12.5,
+        "tier2RetrievalBonus": 0,
+        "tier3CellSemanticInvarianceBonus": 0.1,
+        "aggregateSaturatedRegime": 0.1,
+        "saturatedRegimeApplied": true,
+        "cellSemanticAnchorInvarianceCount": 7
+      }
+    },
+    {
+      "candidateId": "generic-simple::gen1-v1",
+      "shape": "generic-simple",
+      "variant": "gen1-v1",
+      "evalCount": 8,
+      "trioStrictPassRateII": 0.75,
+      "meanRetrievalCallsPerTask": 2.5,
+      "meanEvalCostUsd": 0.12606087500000002,
+      "costOvershoot": false,
+      "tieredFitness": {
+        "tier1DeltaPP": -12.5,
+        "tier2RetrievalBonus": 0,
+        "tier3CellSemanticInvarianceBonus": 0.1,
+        "aggregateSaturatedRegime": 0.1,
+        "saturatedRegimeApplied": true,
+        "cellSemanticAnchorInvarianceCount": 7
+      }
+    },
+    {
+      "candidateId": "generic-simple::gen1-v2",
+      "shape": "generic-simple",
+      "variant": "gen1-v2",
+      "evalCount": 8,
+      "trioStrictPassRateII": 0.875,
+      "meanRetrievalCallsPerTask": 3.25,
+      "meanEvalCostUsd": 0.1307484625,
+      "costOvershoot": false,
+      "tieredFitness": {
+        "tier1DeltaPP": 0,
+        "tier2RetrievalBonus": 0,
+        "tier3CellSemanticInvarianceBonus": 0.1,
+        "aggregateSaturatedRegime": 0.1,
+        "saturatedRegimeApplied": true,
+        "cellSemanticAnchorInvarianceCount": 7
+      }
+    }
+  ],
+  "retrievalEngagementDeltasPerQwenShape": {
+    "qwen-thinking": {
+      "nullBaselineMean": 1.12,
+      "gen1PartialMean": 2.0416666666666665,
+      "deltaAbsolute": 0.9216666666666664
+    },
+    "qwen-non-thinking": {
+      "nullBaselineMean": 1.25,
+      "gen1PartialMean": 1.9583333333333333,
+      "deltaAbsolute": 0.7083333333333333
+    }
+  },
+  "cellSemanticAnchorInvarianceCountPerCandidate": {
+    "claude::baseline": 7,
+    "claude::gen1-v1": 7,
+    "claude::gen1-v2": 7,
+    "qwen-thinking::baseline": 7,
+    "qwen-thinking::gen1-v1": 7,
+    "qwen-thinking::gen1-v2": 7,
+    "qwen-non-thinking::baseline": 7,
+    "qwen-non-thinking::gen1-v1": 7,
+    "qwen-non-thinking::gen1-v2": 7,
+    "gpt::baseline": 7,
+    "gpt::gen1-v1": 7,
+    "gpt::gen1-v2": 7,
+    "generic-simple::baseline": 7,
+    "generic-simple::gen1-v1": 7,
+    "generic-simple::gen1-v2": 7
+  },
+  "preRegisteredDeltaFloorVerdict": {
+    "threshold1AggregateTier1": "FAIL",
+    "threshold1ValuePP": -1.6666666666666718,
+    "threshold2QwenRetrievalAbsolute": "PASS",
+    "threshold2MaxDeltaAbsolute": 0.9216666666666664,
+    "threshold3CompoundTier1PlusTier2": "FAIL",
+    "threshold3Tier1ValuePP": -1.6666666666666718,
+    "threshold3Tier2Aggregate": 0.20833333333333334,
+    "overallVerdict": "PROCEED"
+  },
+  "midRunHaltsBindingThresholds": {
+    "perCandidateCostOvershoot": {
+      "threshold": 0.15537499999999999,
+      "candidatesOvershoot": 0
+    },
+    "perShapeVariance": {
+      "thresholdPP": 40,
+      "maxRangeObservedPP": 25
+    },
+    "qwenRetrievalRegression": {
+      "triggered": false,
+      "details": "no_regression"
+    }
+  }
+}

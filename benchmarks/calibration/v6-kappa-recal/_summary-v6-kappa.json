@@ -1,0 +1,76 @@
+{
+  "verdict": "PASS",
+  "k_opus_gpt": 0.847958297132928,
+  "k_opus_minimax": 0.8548922056384745,
+  "k_gpt_minimax": 0.7877758913412564,
+  "k_conservative_trio": 0.7877758913412564,
+  "minimax_parse_success": 100,
+  "minimax_n_total": 100,
+  "minimax_lat_p50_ms": 11927,
+  "minimax_lat_p95_ms": 31426,
+  "minimax_routing_errors": 0,
+  "minimax_retries_total": 0,
+  "minimax_prompt_tokens_total": 53855,
+  "minimax_completion_tokens_total": 48920,
+  "cost_actual_usd": 0.0749,
+  "per_cell": [
+    {
+      "cell": "no-context",
+      "n": 20,
+      "mm_parsed": 20,
+      "k_og": 1.0,
+      "k_om": 1.0,
+      "k_gm": 1.0
+    },
+    {
+      "cell": "oracle-context",
+      "n": 20,
+      "mm_parsed": 20,
+      "k_og": 0.7058823529411763,
+      "k_om": 0.7916666666666667,
+      "k_gm": 0.7058823529411763
+    },
+    {
+      "cell": "full-context",
+      "n": 20,
+      "mm_parsed": 20,
+      "k_og": 0.8,
+      "k_om": 0.7,
+      "k_gm": 0.7058823529411763
+    },
+    {
+      "cell": "retrieval",
+      "n": 20,
+      "mm_parsed": 20,
+      "k_og": 1.0,
+      "k_om": 0.8936170212765956,
+      "k_gm": 0.8936170212765956
+    },
+    {
+      "cell": "agentic",
+      "n": 20,
+      "mm_parsed": 20,
+      "k_og": 0.782608695652174,
+      "k_om": 0.8979591836734693,
+      "k_gm": 0.6874999999999999
+    }
+  ],
+  "confusion_opus_gpt": {
+    "correct_correct": 32,
+    "correct_incorrect": 7,
+    "incorrect_correct": 0,
+    "incorrect_incorrect": 61
+  },
+  "confusion_opus_minimax": {
+    "correct_correct": 37,
+    "correct_incorrect": 2,
+    "incorrect_correct": 5,
+    "incorrect_incorrect": 56
+  },
+  "confusion_gpt_minimax": {
+    "correct_correct": 32,
+    "correct_incorrect": 0,
+    "incorrect_correct": 10,
+    "incorrect_incorrect": 58
+  }
+}

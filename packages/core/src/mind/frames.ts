@@ -1,6 +1,21 @@
 import { createHash } from 'node:crypto';
 import type { MindDB } from './db.js';
 
+/** Strict ISO-8601 check used by `createIFrame` to decide whether to honor
+ *  a caller-supplied `createdAt`. Requires the `T` separator and a
+ *  timezone suffix (`Z` or `±HH:MM`) — anything looser is high-risk for
+ *  range queries on `memory_frames.created_at`. Ported from hive-mind
+ *  9ec75e6 (Stage 0 root cause: harvest path was discarding original
+ *  source timestamps and stamping every frame with ingest wall-clock,
+ *  which made date-scoped retrieval queries return ABSTAIN on real
+ *  Claude.ai exports). */
+function isValidIsoTimestamp(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})$/.test(value)) {
+    return false;
+  }
+  return Number.isFinite(Date.parse(value));
+}
+
 export type FrameType = 'I' | 'P' | 'B';
 export type Importance = 'critical' | 'important' | 'normal' | 'temporary' | 'deprecated';
 export type FrameSource = 'user_stated' | 'tool_verified' | 'agent_inferred' | 'import' | 'system' | 'personal' | 'workspace' | 'team_sync';
@@ -39,17 +54,48 @@ export class FrameStore {
     this.db = db;
   }
 
-  createIFrame(gopId: string, content: string, importance: Importance = 'normal', source: FrameSource = 'user_stated'): MemoryFrame {
+  createIFrame(
+    gopId: string,
+    content: string,
+    importance: Importance = 'normal',
+    source: FrameSource = 'user_stated',
+    /** Optional override for `memory_frames.created_at`. Supplied by the harvest
+     *  path so frames ingested from an export preserve the original source
+     *  timestamp (e.g. Claude session `create_time`) instead of getting
+     *  stamped with the ingest wall-clock. Callers that don't care about
+     *  temporal-anchor preservation (live agent writes, cognify, etc.)
+     *  should omit this argument and let the `datetime('now')` default apply.
+     *
+     *  Value must be a valid ISO-8601 string with `T` separator and timezone;
+     *  invalid / null / undefined falls back to the schema default. The
+     *  caller (harvest route) is responsible for validating + logging the
+     *  fallback path — this function stays minimal and side-effect-free.
+     *
+     *  Ported from hive-mind 9ec75e6. */
+    createdAt?: string | null,
+  ): MemoryFrame {
     // L1: Dedup — if identical content exists, update access count instead of duplicating
     const existing = this.findDuplicate(content);
     if (existing) return existing;
 
     const t = this.nextT(gopId);
     const raw = this.db.getDatabase();
-    const result = raw.prepare(`
-      INSERT INTO memory_frames (frame_type, gop_id, t, base_frame_id, content, importance, source)
-      VALUES ('I', ?, ?, NULL, ?, ?, ?)
-    `).run(gopId, t, content, importance, source);
+    // Branch on whether the caller supplied a valid ISO-8601 createdAt.
+    // Valid → INSERT also overrides created_at + last_accessed (last_accessed
+    // mirrors created_at on initial insert for consistency).
+    // Invalid / null / undefined → fall back to the schema default
+    // (datetime('now')) — never write junk timestamps that would corrupt
+    // range queries.
+    const useProvidedTs = typeof createdAt === 'string' && isValidIsoTimestamp(createdAt);
+    const result = useProvidedTs
+      ? raw.prepare(`
+          INSERT INTO memory_frames (frame_type, gop_id, t, base_frame_id, content, importance, source, created_at, last_accessed)
+          VALUES ('I', ?, ?, NULL, ?, ?, ?, ?, ?)
+        `).run(gopId, t, content, importance, source, createdAt, createdAt)
+      : raw.prepare(`
+          INSERT INTO memory_frames (frame_type, gop_id, t, base_frame_id, content, importance, source)
+          VALUES ('I', ?, ?, NULL, ?, ?, ?)
+        `).run(gopId, t, content, importance, source);
 
     const frame = raw.prepare('SELECT * FROM memory_frames WHERE id = ?').get(result.lastInsertRowid) as MemoryFrame;
     this.indexFts(frame);

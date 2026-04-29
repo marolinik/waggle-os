@@ -70,6 +70,55 @@ describe('Memory Frames (Layer 2 - The Codec)', () => {
       const frame = frames.createIFrame(session.gop_id, 'Keyframe');
       expect(frame.base_frame_id).toBeNull();
     });
+
+    // ── Sprint 9 Task 0 regression (port of hive-mind 9ec75e6) ───────────
+    // The harvest path depends on `createdAt` overriding the schema
+    // default so frames preserve the original source timestamp instead of
+    // the ingest wall-clock. Without these guards a future refactor could
+    // silently re-introduce the Stage 0 ABSTAIN failure mode.
+
+    it('createIFrame honors a valid ISO-8601 createdAt override', () => {
+      const session = sessions.create();
+      const ts = '2025-12-01T14:32:00Z';
+      const f = frames.createIFrame(session.gop_id, 'harvested content', 'normal', 'import', ts);
+      expect(f.created_at).toBe(ts);
+      expect(f.last_accessed).toBe(ts);
+    });
+
+    it('createIFrame with undefined createdAt falls back to schema default (NOW())', () => {
+      const session = sessions.create();
+      const before = Date.now();
+      const f = frames.createIFrame(session.gop_id, 'undefined-ts content', 'normal', 'import', undefined);
+      const after = Date.now();
+      // SQLite datetime('now') returns UTC "YYYY-MM-DD HH:MM:SS" (no T, no Z).
+      expect(f.created_at).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+      const parsed = Date.parse(f.created_at.replace(' ', 'T') + 'Z');
+      expect(parsed).toBeGreaterThanOrEqual(before - 5000);
+      expect(parsed).toBeLessThanOrEqual(after + 5000);
+    });
+
+    it('createIFrame with invalid-ISO string falls back to schema default (no junk in DB)', () => {
+      const session = sessions.create();
+      const f = frames.createIFrame(
+        session.gop_id,
+        'invalid-ts content',
+        'normal',
+        'import',
+        'not-a-valid-iso-string',
+      );
+      // The literal junk must never reach storage — otherwise range queries
+      // on created_at silently break.
+      expect(f.created_at).not.toBe('not-a-valid-iso-string');
+      expect(f.created_at).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+    });
+
+    it('createIFrame with null createdAt falls back to schema default', () => {
+      // null is the explicit "no timestamp" signal the harvest route
+      // passes after its own validator rejects malformed input.
+      const session = sessions.create();
+      const f = frames.createIFrame(session.gop_id, 'null-ts content', 'normal', 'import', null);
+      expect(f.created_at).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+    });
   });
 
   describe('P-Frame creation', () => {

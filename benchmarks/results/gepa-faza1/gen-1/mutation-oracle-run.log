@@ -1,0 +1,39 @@
+[2026-04-28T13:06:46.971Z] [start] mutation oracle for 5 shapes × 2 mutations
+[2026-04-28T13:06:46.973Z] [claude] baseline loaded; modelClass=claude description="Narrative system prompt with XML-style structure; for Claude..."
+[2026-04-28T13:06:46.973Z] [claude-gen1-v1] oracle call attempt 1; prompt_len=7224c
+[2026-04-28T13:07:10.034Z] [claude-gen1-v1] validator failed: validator violations: shape_file_imports_modified: Required import "from './types.js'" missing from candidate shape file
+[2026-04-28T13:07:10.034Z] [claude-gen1-v1] oracle call attempt 2; prompt_len=7224c
+[2026-04-28T13:07:34.102Z] [claude-gen1-v1] validator failed: validator violations: shape_file_imports_modified: Required import "from './types.js'" missing from candidate shape file
+[2026-04-28T13:07:34.104Z] [claude-gen1-v2] oracle call attempt 1; prompt_len=7224c
+[2026-04-28T13:07:59.270Z] [claude-gen1-v2] validator failed: validator violations: shape_file_imports_modified: Required import "from './types.js'" missing from candidate shape file
+[2026-04-28T13:07:59.271Z] [claude-gen1-v2] oracle call attempt 2; prompt_len=7224c
+[2026-04-28T13:08:24.105Z] [claude-gen1-v2] validator failed: validator violations: shape_file_imports_modified: Required import "from './types.js'" missing from candidate shape file
+[2026-04-28T13:08:24.105Z] [HALT] 2 consecutive invalid mutations from oracle (per brief §5) — stopping
+[2026-04-28T13:08:24.105Z] [done] 2 mutations attempted; 0 valid; cumulative $0.7312
+[2026-04-28T13:09:10.841Z] [start] mutation oracle for 5 shapes × 2 mutations
+[2026-04-28T13:09:10.842Z] [claude] baseline loaded; modelClass=claude description="Narrative system prompt with XML-style structure; for Claude..."
+[2026-04-28T13:09:10.842Z] [claude-gen1-v1] oracle call attempt 1; prompt_len=7224c
+[2026-04-28T13:09:34.474Z] [claude-gen1-v1] OK; cost=$0.1957; latency=23630ms; file=claude-gen1-v1.ts
+[2026-04-28T13:09:34.474Z] [claude-gen1-v2] oracle call attempt 1; prompt_len=7224c
+[2026-04-28T13:10:00.163Z] [claude-gen1-v2] OK; cost=$0.1955; latency=25688ms; file=claude-gen1-v2.ts
+[2026-04-28T13:10:00.163Z] [qwen-thinking] baseline loaded; modelClass=qwen-thinking description="Minimal scaffolding for Qwen thinking-on; the model handles ..."
+[2026-04-28T13:10:00.163Z] [qwen-thinking-gen1-v1] oracle call attempt 1; prompt_len=7339c
+[2026-04-28T13:10:17.955Z] [qwen-thinking-gen1-v1] OK; cost=$0.1439; latency=17791ms; file=qwen-thinking-gen1-v1.ts
+[2026-04-28T13:10:17.955Z] [qwen-thinking-gen1-v2] oracle call attempt 1; prompt_len=7339c
+[2026-04-28T13:10:34.621Z] [qwen-thinking-gen1-v2] OK; cost=$0.1293; latency=16665ms; file=qwen-thinking-gen1-v2.ts
+[2026-04-28T13:10:34.621Z] [qwen-non-thinking] baseline loaded; modelClass=qwen-non-thinking description="Explicit structured-output template for Qwen thinking-off; f..."
+[2026-04-28T13:10:34.622Z] [qwen-non-thinking-gen1-v1] oracle call attempt 1; prompt_len=7295c
+[2026-04-28T13:10:52.996Z] [qwen-non-thinking-gen1-v1] OK; cost=$0.1391; latency=18373ms; file=qwen-non-thinking-gen1-v1.ts
+[2026-04-28T13:10:52.996Z] [qwen-non-thinking-gen1-v2] oracle call attempt 1; prompt_len=7295c
+[2026-04-28T13:11:11.565Z] [qwen-non-thinking-gen1-v2] OK; cost=$0.1532; latency=18568ms; file=qwen-non-thinking-gen1-v2.ts
+[2026-04-28T13:11:11.565Z] [gpt] baseline loaded; modelClass=gpt description="Terse direct framing for GPT-5.4 and other reasoning-heavy G..."
+[2026-04-28T13:11:11.565Z] [gpt-gen1-v1] oracle call attempt 1; prompt_len=6587c
+[2026-04-28T13:11:23.524Z] [gpt-gen1-v1] OK; cost=$0.1040; latency=11958ms; file=gpt-gen1-v1.ts
+[2026-04-28T13:11:23.525Z] [gpt-gen1-v2] oracle call attempt 1; prompt_len=6587c
+[2026-04-28T13:11:40.447Z] [gpt-gen1-v2] OK; cost=$0.1166; latency=16921ms; file=gpt-gen1-v2.ts
+[2026-04-28T13:11:40.447Z] [generic-simple] baseline loaded; modelClass=generic description="Portable fallback shape — plain markdown, no model-specific ..."
+[2026-04-28T13:11:40.448Z] [generic-simple-gen1-v1] oracle call attempt 1; prompt_len=6670c
+[2026-04-28T13:11:54.218Z] [generic-simple-gen1-v1] OK; cost=$0.1157; latency=13762ms; file=generic-simple-gen1-v1.ts
+[2026-04-28T13:11:54.218Z] [generic-simple-gen1-v2] oracle call attempt 1; prompt_len=6670c
+[2026-04-28T13:12:13.309Z] [generic-simple-gen1-v2] OK; cost=$0.1358; latency=19089ms; file=generic-simple-gen1-v2.ts
+[2026-04-28T13:12:13.309Z] [done] 10 mutations attempted; 10 valid; cumulative $1.4289

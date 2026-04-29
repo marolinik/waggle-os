@@ -51,6 +51,25 @@ import { cells, isCellName, isControlName } from './cells.js';
 import { controls } from './controls.js';
 import { createJudgeLlmClient, type JudgeClientCostEntry } from './judge-client.js';
 import { runJudge, type JudgeConfig } from './judge-runner.js';
+// Sprint 12 Task 2.5 Stage 1 (2026-04-23) — substrate hookup for retrieval +
+// agentic cells. Substrate is created once in main() when the cell roster
+// includes `retrieval` or `agentic`, pre-ingested from raw LoCoMo, then
+// threaded through RunConfig → CellInput to each iteration.
+import { createSubstrate, type Substrate } from './substrate.js';
+import { extractTurnsFromLocomoRaw, ingestLoCoMoCorpus } from './ingest.js';
+// Sprint 12 Task 2.5 Stage 1.5 §7.2 — consecutive fetch-transport failure
+// halt. Prevents the v2 full-context saturation cascade from burning the
+// full instance budget on dead calls.
+import { StreakTracker } from './streak-tracker.js';
+// Sprint 12 Task 2.5 Stage 1.5 §7.3 — pre-cell health check. Probes every
+// upstream route the run depends on before spending instance-budget on them.
+import { preCellHealthCheck } from './health-check.js';
+// Sprint 12 Task 2.5 Stage 1.5 §7.4 — single-runner PID+heartbeat lock.
+// Encodes `concurrent_runners: FORBIDDEN` at the process level. Uses a
+// single global sentinel under benchmarks/results/ so two harness processes
+// can never both run even against different datasets/models (they still
+// share the LiteLLM proxy + provider bridges — the v2 saturation root cause).
+import { acquireRunnerLock, type LockHandle } from './runner-lock.js';
 
 // ── Arg parsing ────────────────────────────────────────────────────────────
 
@@ -96,6 +115,17 @@ interface ParsedArgs {
    *  vendor fires on 1-1-1) and `pm-escalation` (2-2 escalates to PM).
    *  `majority` is accepted as an explicit-default alias. */
   judgeTiebreak?: string;
+  // ── Sprint 12 Task 2.5 Stage 1 (2026-04-23) — substrate flags ────────────
+  /** Path to the raw LoCoMo archive (`locomo10.json`). Required when the cell
+   *  roster includes `retrieval` or `agentic`. Relative paths resolve against
+   *  the current working directory. */
+  locomoRawPath?: string;
+  /** Retrieval top-K (default 10, GATE-S0 lock). Threaded into CellInput. */
+  retrievalTopK?: number;
+  /** Agentic hard turn cap (default 3, GATE-S0 lock). */
+  agenticMaxTurns?: number;
+  /** Agentic AbortController timeout in ms (default 180_000). */
+  agenticTimeoutMs?: number;
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -164,6 +194,41 @@ function parseArgs(argv: string[]): ParsedArgs {
         out.judgeTiebreak = next;
         i++;
         break;
+      // ── Sprint 12 Task 2.5 Stage 1 substrate flags ───────────────────────
+      case '--locomo-raw-path':
+        if (typeof next !== 'string' || next.length === 0) {
+          throw new Error(`Invalid --locomo-raw-path value: expected path, got ${next ?? '(missing)'}`);
+        }
+        out.locomoRawPath = next;
+        i++;
+        break;
+      case '--retrieval-top-k': {
+        const n = Number(next);
+        if (!Number.isInteger(n) || n <= 0 || n > 100) {
+          throw new Error(`Invalid --retrieval-top-k value: expected 1..100 integer, got ${next ?? '(missing)'}`);
+        }
+        out.retrievalTopK = n;
+        i++;
+        break;
+      }
+      case '--agentic-max-turns': {
+        const n = Number(next);
+        if (!Number.isInteger(n) || n <= 0 || n > 10) {
+          throw new Error(`Invalid --agentic-max-turns value: expected 1..10 integer, got ${next ?? '(missing)'}`);
+        }
+        out.agenticMaxTurns = n;
+        i++;
+        break;
+      }
+      case '--agentic-timeout-ms': {
+        const n = Number(next);
+        if (!Number.isFinite(n) || n < 1000) {
+          throw new Error(`Invalid --agentic-timeout-ms value: expected ≥1000 ms, got ${next ?? '(missing)'}`);
+        }
+        out.agenticTimeoutMs = n;
+        i++;
+        break;
+      }
       case '--help':
       case '-h':
         printHelp();
@@ -223,6 +288,23 @@ Flags:
                     Tie-break strategy surfaced into the pre-registration
                     payload. One of: quadri-vendor | pm-escalation | majority.
                     Default: quadri-vendor (per A3 LOCK § B2).
+
+  Task 2.5 Stage 1 substrate flags (2026-04-23):
+  --locomo-raw-path P
+                    Path to raw LoCoMo archive (snap-research/locomo10.json).
+                    REQUIRED when --cell is 'retrieval' or 'agentic'. Main()
+                    builds an ephemeral :memory: MindDB + HybridSearch pair,
+                    ingests every turn as one I-frame (frame-per-turn per
+                    GATE-S0 lock), then tears it down at end of run.
+  --retrieval-top-k N
+                    Top-K turn frames the retrieval cell recalls per question.
+                    Default 10 (GATE-S0 lock). Range 1..100.
+  --agentic-max-turns N
+                    Hard turn cap for the agentic cell's inner agent-loop.
+                    Default 3 (GATE-S0 lock). Range 1..10.
+  --agentic-timeout-ms N
+                    AbortController timeout for the agentic cell. Default
+                    180_000 ms. Minimum 1000 ms.
 
   --help, -h        This text
 `);
@@ -303,6 +385,12 @@ async function runOne(config: RunConfig): Promise<void> {
   let totalCost = 0;
   let budgetStoppedAt: number | null = null;
   const latenciesByInstance: number[] = [];
+  // §7.2 Stage 1.5 streak halt — track consecutive fetch-transport failures.
+  // Tracker is cell-local: each cell gets a fresh counter so a streak in the
+  // previous cell doesn't poison the next.
+  const streakTracker = new StreakTracker();
+  let streakHaltAt: number | null = null;
+  let streakHaltSummary: string | null = null;
 
   for (let i = 0; i < sampled.length; i++) {
     if (totalCost >= config.budgetUsd) {
@@ -311,11 +399,29 @@ async function runOne(config: RunConfig): Promise<void> {
     }
     const instance = sampled[i];
     const turnId = generateTurnId();
-    const cellOrControlFn = config.run.kind === 'cell'
-      ? cells[config.run.name as CellName]
-      : controls[config.run.name as ControlName];
 
-    const result = await cellOrControlFn({ instance, model: config.model, llm, turnId });
+    // Task 2.5 Stage 1: cells and controls have diverged CellInput/ControlInput
+    // shapes — cells now accept optional substrate + litellm + per-cell knobs
+    // that controls don't need. Split the dispatch so each side gets only the
+    // fields it understands.
+    let result;
+    if (config.run.kind === 'cell') {
+      const cellFn = cells[config.run.name as CellName];
+      result = await cellFn({
+        instance,
+        model: config.model,
+        llm,
+        turnId,
+        substrate: config.substrate,
+        litellm: config.litellm,
+        retrievalTopK: config.retrievalTopK,
+        agenticMaxTurns: config.agenticMaxTurns,
+        agenticTimeoutMs: config.agenticTimeoutMs,
+      });
+    } else {
+      const controlFn = controls[config.run.name as ControlName];
+      result = await controlFn({ instance, model: config.model, llm, turnId });
+    }
     latenciesByInstance.push(result.latencyMs);
 
     const accuracy = result.failureMode ? 0 : scoreAccuracy(result.text, instance.expected);
@@ -426,6 +532,16 @@ async function runOne(config: RunConfig): Promise<void> {
       model_revision_hash: null,
     };
     writer.write(record);
+
+    // §7.2 Stage 1.5 streak halt — check AFTER writing the current record so
+    // the failure-forensic row persists. Break out of the loop; the error is
+    // thrown AFTER writer.close() below so JSONL + summary files flush
+    // cleanly. Caller (main) surfaces the error to the operator.
+    if (streakTracker.record(result.failureMode)) {
+      streakHaltAt = i + 1;
+      streakHaltSummary = streakTracker.summary();
+      break;
+    }
   }
 
   await writer.close();
@@ -445,6 +561,19 @@ async function runOne(config: RunConfig): Promise<void> {
     `cost=$${summary.metrics.totalUsd} ` +
     `jsonl=${config.outputPath}`,
   );
+
+  // §7.2 Stage 1.5 — throw AFTER writer + summary flushed so partial data
+  // persists for forensic review (same pattern as budget-stop, except budget
+  // is a soft stop that doesn't throw). The surfaced error lets main()
+  // decide whether to continue other cells or bail the whole invocation.
+  if (streakHaltAt !== null) {
+    throw new Error(
+      `[bench:halt] cell '${config.run.name}' aborted at instance ${streakHaltAt}/${sampled.length} ` +
+      `due to consecutive fetch-transport failures (${streakHaltSummary}). ` +
+      `Likely upstream saturation — check LiteLLM proxy + provider health before re-running. ` +
+      `Partial JSONL persisted at ${config.outputPath}.`,
+    );
+  }
 }
 
 function round(n: number, decimals: number): number {
@@ -563,10 +692,16 @@ function buildRuns(args: ParsedArgs): RunKind[] {
   const runs: RunKind[] = [];
   // Sprint 12 Task 1 Blocker #3: `--per-cell` (multi-value) overrides the
   // single-cell / all-cells dispatch when at least one value is supplied.
+  // Sprint 12 Task 2.5 Stage 2-Retry §1.5: valid-name list extended to
+  // include retrieval + agentic (Stage 1) + no-context (Stage 2-Retry).
+  // `--all-cells` is preserved at the Sprint 9 quartet for backward
+  // compatibility per PM ratification; `scripts/run-mini-locomo.ts
+  // --v3-cells` expands to the Stage 2-Retry 5-cell list via --per-cell.
+  const VALID_CELLS = 'raw | filtered | compressed | full-context | retrieval | agentic | no-context';
   if (args.perCell && args.perCell.length > 0) {
     for (const name of args.perCell) {
       if (!isCellName(name)) {
-        throw new Error(`Unknown cell: ${name}. Valid: raw | filtered | compressed | full-context`);
+        throw new Error(`Unknown cell: ${name}. Valid: ${VALID_CELLS}`);
       }
       runs.push({ kind: 'cell', name });
     }
@@ -583,7 +718,7 @@ function buildRuns(args: ParsedArgs): RunKind[] {
     runs.push({ kind: 'control', name: args.control });
   } else if (args.cell) {
     if (!isCellName(args.cell)) {
-      throw new Error(`Unknown cell: ${args.cell}. Valid: raw | filtered | compressed | full-context`);
+      throw new Error(`Unknown cell: ${args.cell}. Valid: ${VALID_CELLS}`);
     }
     runs.push({ kind: 'cell', name: args.cell });
   } else {
@@ -698,39 +833,131 @@ async function main(): Promise<void> {
   // pinning fields so every pre-registration emit carries audit-anchor
   // metadata without repeating the models.json lookup per runOne.
   const judgeModelsResolved = resolveJudgeModelsForPreregistration(models, args);
-  for (const run of runs) {
-    const outputPath = args.output ?? defaultOutputPath(run, args.dataset);
-    await runOne({
-      run,
-      dataset,
-      model,
-      limit: args.limit,
-      seed: args.seed,
-      budgetUsd: args.budget,
-      outputPath,
-      dryRun,
-      litellmUrl,
-      litellmApiKey,
-      sampleLockPath: args.sampleLock,
-      judgeConfig,
-      onJudgeCall: entry => judgeCosts.push(entry),
-      manifestHash: args.manifestHash,
-      emitPreregistrationEvent: args.emitPreregistrationEvent,
-      perCellList,
-      judgeTiebreak: args.judgeTiebreak,
-      judgeModelsResolved,
-    });
-  }
 
-  // Surface judge spend separately from cell spend so the brief's "$5
-  // alarm per run" guardrail applies cleanly to the judge-layer budget.
-  if (judgeCosts.length > 0) {
-    const judgeTotalUsd = judgeCosts.reduce((sum, e) => sum + e.usd, 0);
-    const judgeOk = judgeCosts.filter(e => e.ok).length;
-    console.log(
-      `[bench:judge-summary] calls=${judgeCosts.length} ok=${judgeOk} ` +
-      `failed=${judgeCosts.length - judgeOk} total_usd=$${judgeTotalUsd.toFixed(6)}`,
-    );
+  // Sprint 12 Task 2.5 Stage 1: when the cell roster includes retrieval or
+  // agentic, build an ephemeral substrate and pre-ingest every LoCoMo turn as
+  // an I-frame (frame-per-turn per GATE-S0 lock). Substrate is shared across
+  // every cell in this invocation so the corpus is indexed once, not per-cell.
+  // Lifecycle is owned here; `close()` fires in the `finally` block below.
+  const substrateNeeded = runs.some(
+    r => r.kind === 'cell' && (r.name === 'retrieval' || r.name === 'agentic'),
+  );
+  let substrate: Substrate | null = null;
+  let runnerLock: LockHandle | null = null;
+  try {
+    // §7.4 Stage 1.5 — acquire the global single-runner lock FIRST. Fail
+    // fast before any substrate ingest or health-probe cost is spent.
+    // Sentinel lives under benchmarks/results/ so any two runner invocations
+    // contend regardless of their --output paths.
+    const lockSentinel = path.join(harnessRoot(), '..', 'results', '.benchmark-runner');
+    runnerLock = acquireRunnerLock(lockSentinel);
+    console.log(`[bench:lock] acquired ${runnerLock.lockPath} (pid=${process.pid})`);
+
+    // §7.3 Stage 1.5 — pre-cell health check. Probes /health/liveliness + a
+    // short ping call per (subject + judge ensemble). Skipped in dry-run
+    // mode (no upstream to probe). Any 5xx or network error aborts before
+    // any instance budget is spent.
+    if (!dryRun) {
+      const judgePingModels = args.judgeEnsemble
+        ? [...args.judgeEnsemble]
+        : (args.judge ? [args.judge] : []);
+      const hc = await preCellHealthCheck({
+        litellmUrl,
+        litellmApiKey,
+        subjectModel: model.litellmModel,
+        judgeModels: judgePingModels,
+      });
+      if (!hc.ok) {
+        const summary = hc.failures.map(f => `${f.endpoint} → ${f.error}`).join('; ');
+        throw new Error(
+          `[bench:health-check] FAILED in ${hc.durationMs}ms against ${litellmUrl}: ${summary}. ` +
+          `Aborting before any instance budget is spent. Check LiteLLM proxy + provider keys.`,
+        );
+      }
+      console.log(
+        `[bench:health-check] OK — probed subject + ${judgePingModels.length} judge(s) in ${hc.durationMs}ms`,
+      );
+    }
+
+    if (substrateNeeded) {
+      if (dryRun) {
+        // Retrieval + agentic aren't meaningful in dry-run mode (the agent
+        // loop would 404 against the stub LLM, and the embedder would still
+        // need a live Ollama server). Fail loudly rather than ship silently
+        // broken results.
+        throw new Error(
+          'retrieval/agentic cells cannot run in dry-run mode. Remove --dry-run ' +
+          'or set LITELLM_URL to activate live mode.',
+        );
+      }
+      if (!args.locomoRawPath) {
+        throw new Error(
+          'retrieval/agentic cells require --locomo-raw-path <path>. ' +
+          'Point it at the raw snap-research/locomo10.json archive.',
+        );
+      }
+      const rawPath = path.isAbsolute(args.locomoRawPath)
+        ? args.locomoRawPath
+        : path.resolve(process.cwd(), args.locomoRawPath);
+      substrate = createSubstrate();  // default: :memory: + ollama-embedder
+      const substrateStart = Date.now();
+      const turns = extractTurnsFromLocomoRaw(rawPath);
+      const stats = await ingestLoCoMoCorpus(
+        substrate.db, substrate.search, substrate.frames, substrate.sessions, turns,
+      );
+      console.log(
+        `[bench:substrate] turns_found=${turns.length} frames_created=${stats.count} ` +
+        `ingest_ms=${stats.ingestMs} index_ms=${stats.indexMs} total_ms=${Date.now() - substrateStart}`,
+      );
+    }
+
+    for (const run of runs) {
+      const outputPath = args.output ?? defaultOutputPath(run, args.dataset);
+      await runOne({
+        run,
+        dataset,
+        model,
+        limit: args.limit,
+        seed: args.seed,
+        budgetUsd: args.budget,
+        outputPath,
+        dryRun,
+        litellmUrl,
+        litellmApiKey,
+        sampleLockPath: args.sampleLock,
+        judgeConfig,
+        onJudgeCall: entry => judgeCosts.push(entry),
+        manifestHash: args.manifestHash,
+        emitPreregistrationEvent: args.emitPreregistrationEvent,
+        perCellList,
+        judgeTiebreak: args.judgeTiebreak,
+        judgeModelsResolved,
+        // Task 2.5 Stage 1 — substrate deps (undefined for non-substrate cells)
+        substrate: substrate ?? undefined,
+        litellm: { url: litellmUrl, apiKey: litellmApiKey },
+        retrievalTopK: args.retrievalTopK,
+        agenticMaxTurns: args.agenticMaxTurns,
+        agenticTimeoutMs: args.agenticTimeoutMs,
+      });
+    }
+
+    // Surface judge spend separately from cell spend so the brief's "$5
+    // alarm per run" guardrail applies cleanly to the judge-layer budget.
+    if (judgeCosts.length > 0) {
+      const judgeTotalUsd = judgeCosts.reduce((sum, e) => sum + e.usd, 0);
+      const judgeOk = judgeCosts.filter(e => e.ok).length;
+      console.log(
+        `[bench:judge-summary] calls=${judgeCosts.length} ok=${judgeOk} ` +
+        `failed=${judgeCosts.length - judgeOk} total_usd=$${judgeTotalUsd.toFixed(6)}`,
+      );
+    }
+  } finally {
+    if (substrate) {
+      substrate.close();
+    }
+    if (runnerLock) {
+      runnerLock.release();
+    }
   }
 }
 

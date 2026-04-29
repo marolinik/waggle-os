@@ -1,0 +1,163 @@
+name: mind-parity-check
+
+# Memory Sync Repair Step 3.1. Verifies that hive-mind's mind/ + harvest/
+# tests pass against waggle-os's substrate. The check runs the waggle-os
+# committed Step 2 ports (which include adapted versions like db.test.ts)
+# AS BASELINE, then ALSO injects the latest hive-mind tests into the
+# waggle-os checkout under `<basename>-hive-mind.test.ts` filenames so
+# any NEW hive-mind cases since the Step 2 port get exercised.
+#
+# Triggers ONLY when shared substrate paths change. Failure blocks merge
+# unless the failing test is allowlisted in `.parity-allowlist` at the
+# repo root with a documented reason.
+#
+# See `.github/sync.md` for full design rationale and allowlist policy.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/core/src/mind/**'
+      - 'packages/core/src/harvest/**'
+      - 'packages/core/tests/mind/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packages/core/src/mind/**'
+      - 'packages/core/src/harvest/**'
+      - 'packages/core/tests/mind/**'
+
+concurrency:
+  group: mind-parity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  parity-check:
+    name: hive-mind ↔ waggle-os mind substrate parity
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout waggle-os
+        uses: actions/checkout@v4
+        with:
+          path: waggle-os
+
+      - name: Checkout hive-mind master
+        uses: actions/checkout@v4
+        with:
+          repository: marolinik/hive-mind
+          ref: master
+          path: hive-mind
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Cache npm dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('waggle-os/**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
+      - name: Install waggle-os dependencies
+        working-directory: waggle-os
+        run: npm install
+
+      - name: Run waggle-os baseline mind/ tests (committed Step 2 ports)
+        working-directory: waggle-os
+        run: npx vitest run --reporter=default packages/core/tests/mind/
+
+      - name: Inject latest hive-mind tests as -hive-mind suffix files
+        working-directory: waggle-os
+        run: |
+          set -euo pipefail
+
+          allowlist_file=".parity-allowlist"
+          allowlist_basenames=()
+          if [ -f "$allowlist_file" ]; then
+            while IFS= read -r line; do
+              # Strip comments + leading/trailing whitespace; skip blanks
+              clean="${line%%#*}"
+              clean="$(echo "$clean" | tr -d '[:space:]')"
+              [ -z "$clean" ] && continue
+              allowlist_basenames+=("$clean")
+            done < "$allowlist_file"
+            echo "Allowlist entries: ${allowlist_basenames[@]:-<none>}"
+          else
+            echo "No .parity-allowlist file present — no skips."
+          fi
+
+          # Helper: is a basename in the allowlist?
+          is_allowlisted() {
+            local name="$1"
+            for a in "${allowlist_basenames[@]:-}"; do
+              [ "$a" = "$name" ] && return 0
+            done
+            return 1
+          }
+
+          target_dir="packages/core/tests/mind"
+          source_dir="../hive-mind/packages/core/src/mind"
+          injected=0
+          skipped=0
+
+          already_committed=0
+          for src in "$source_dir"/*.test.ts; do
+            [ -e "$src" ] || continue
+            base="$(basename "$src" .test.ts)"
+            target_name="${base}-hive-mind.test.ts"
+            target_path="$target_dir/$target_name"
+
+            if is_allowlisted "$target_name"; then
+              echo "  SKIP (allowlist): $target_name"
+              skipped=$((skipped + 1))
+              continue
+            fi
+
+            if [ -f "$target_path" ]; then
+              # File is committed (Step 2 port). Preserve its bespoke
+              # header comments + any waggle-os adaptations. The
+              # committed version IS what the parity check should
+              # exercise — it's exactly what landed in main.
+              already_committed=$((already_committed + 1))
+              echo "  KEEP (committed): $target_name"
+              continue
+            fi
+
+            cp "$src" "$target_path"
+            # Adapt import paths from hive-mind's adjacent style (`./x.js`) to
+            # waggle-os's separate-tests-folder style (`../../src/mind/x.js`).
+            sed -i "s|from \"\\./|from \"../../src/mind/|g" "$target_path"
+            sed -i "s|from '\\./|from '../../src/mind/|g" "$target_path"
+            injected=$((injected + 1))
+            echo "  INJECT: $target_name"
+          done
+
+          echo ""
+          echo "Injected: $injected new hive-mind test file(s) under -hive-mind suffix"
+          echo "Kept:     $already_committed already-committed Step 2 port file(s)"
+          echo "Skipped:  $skipped allowlisted file(s)"
+
+      - name: Run combined waggle-os + injected hive-mind suite
+        working-directory: waggle-os
+        run: npx vitest run --reporter=default packages/core/tests/mind/
+
+      - name: Informational diff — shared substrate file sizes
+        working-directory: waggle-os
+        if: always()
+        run: |
+          echo "## Substrate file size comparison (informational)"
+          for f in db.ts schema.ts frames.ts search.ts knowledge.ts identity.ts awareness.ts sessions.ts scoring.ts reconcile.ts ontology.ts concept-tracker.ts entity-normalizer.ts embedding-provider.ts inprocess-embedder.ts; do
+            wf="packages/core/src/mind/$f"
+            hf="../hive-mind/packages/core/src/mind/$f"
+            if [ -f "$wf" ] && [ -f "$hf" ]; then
+              wsize=$(wc -c < "$wf")
+              hsize=$(wc -c < "$hf")
+              diff_pct=$(awk -v w="$wsize" -v h="$hsize" 'BEGIN { if (h == 0) print "n/a"; else printf "%.1f%%", ((w - h) / h) * 100 }')
+              echo "  $f: waggle-os=$wsize hive-mind=$hsize delta=$diff_pct"
+            fi
+          done

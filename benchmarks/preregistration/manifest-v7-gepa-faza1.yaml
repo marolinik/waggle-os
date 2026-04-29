@@ -1,0 +1,1606 @@
+# Manifest v7 — GEPA Tier 2 Prompt-Shapes Evolution Faza 1 (Pilot Proof-of-Concept)
+# Extends manifest v6 (anchor SHA-256 5d5c1023421cd1a79f4913bb4c0a59415e21f50797255bff7dfec8e16b68e3ed)
+# Authority: PM (Marko Markovic) — RATIFIED via Amendment 1 (briefs/2026-04-28-cc4-faza1-amendment-1.md)
+# Locked upon paste-into-CC-2 + worktree creation 2026-04-28
+# Substrate freeze: c9bda3d (Phase 4.7 HEAD on feature/c3-v3-wrapper)
+
+manifest_version: v7.0.0-gepa-faza1
+manifest_type: gepa_tier2_prompt_shapes_faza1_proof_of_concept
+locked_date: 2026-04-28
+authority: PM (Marko Markovic) — Amendment 1 ratification 2026-04-28 on closure of pre-flight halt-and-PM
+sprint: 12
+task: 2.5_gepa_tier2_extension
+stage: 4_post_phase_4_3_verdict
+phase: faza_1_pilot
+branch: feature/c3-v3-wrapper
+substrate_freeze_head: c9bda3d6dd4c0a4f715e09f3757a96d01ff01cd7
+substrate_freeze_head_short: c9bda3d
+supersedes: NONE  # v7 EXTENDS v6, does not supersede
+inherits_from:
+  - manifest_v6_2026_04_24_anchor_5d5c1023
+  - pilot_2026_04_26_judge_config_runner_8a6251e2
+  - kappa_v6_phase_1_recal_60d061e_38a830e_01f7ead
+
+# ── v7 Delta Log ────────────────────────────────────────────────────────────
+
+v7_delta_log:
+  trigger:
+    event: pm_brief_2026_04_28_authored_followed_by_pre_flight_halt_and_amendment_1_ratification
+    chain:
+      - id: phase_4_3_verdict
+        anchor_commit: c9bda3d
+        finding: H3/H4 fail = 72.2% T2 (reasoning/planning gap), 5.6% T1; Phase 1.1 normalize delta = 0% all 12 cells; worst-case T1 ceiling 27.8% < 30% threshold → Tier 2 GEPA work required pre Phase 5
+      - id: brief_2026_04_28_authored
+        path: D:/Projects/PM-Waggle-OS/briefs/2026-04-28-cc4-gepa-tier2-evolution-faza1-brief.md
+        scope: GEPA Faza 1 pilot proof-of-concept ($100 cap, H3 cell, 5 shapes, 2 generations)
+      - id: cc4_pre_flight_halt
+        path: D:/Projects/PM-Waggle-OS/briefs/2026-04-28-cc4-faza1-preflight-report.md
+        ratification_asks:
+          - "A: H3 cell semantics (3-instance pilot vs 400-instance LoCoMo vs net-new corpus)"
+          - "B: trio_strict_pass operationalization for Likert"
+          - "C: canonical κ=0.7878 source citation"
+          - "D: path correction packages/core/ → packages/agent/"
+          - "E: feedback_config_inheritance_audit.md reconstruction"
+      - id: amendment_1_ratified
+        path: D:/Projects/PM-Waggle-OS/briefs/2026-04-28-cc4-faza1-amendment-1.md
+        resolution_summary: "A=Option C corpus expansion 50 instances; B=op (ii) trio_mean ≥ 4.0; C=cite v6-kappa-recal commits 60d061e/38a830e/01f7ead; D=ratified; E=alternative inline §A in launch decision"
+
+  changes_from_v6:
+    new_section: gepa
+      delta: "v6 has no GEPA section; v7 adds full GEPA Faza 1 specification (population, generations, oracle, mutation surface, validator)"
+    new_section: corpus_design
+      delta: "v6 inherits LoCoMo dataset for 5-cell stage 3; v7 adds 50-instance NorthLane CFO synthesis corpus for GEPA Faza 1 H3 evaluation"
+    new_section: substrate_anchor
+      delta: "v6 freezes HEAD at 373516c with worktree-less main repo operation; v7 pins HEAD at c9bda3d with isolated worktree D:/Projects/waggle-os-faza1-wt for race-condition guard vs CC-1 parallel Phase 4.4/4.5 work"
+    new_section: canonical_kappa_anchor
+      delta: "v6 §5.4 specifies kappa policy floor (≥0.70 pass); v7 pins specific value 0.7878 with file SHA256 for ±0.05 drift threshold per brief §4 condition 3"
+    new_section: metric_operationalization
+      delta: "v6 LoCoMo binary correctness (accuracy=1); v7 adds Likert trio_strict_pass operationalization for synthesis tasks per Amendment 1 Ask B"
+    new_section: judges
+      delta: "v6 §5.2 max_tokens 1024/1024/4096 = LoCoMo factoid baseline; v7 inherits pilot 2026-04-26 runner SHA 8a6251e2 line 626 max_tokens=3000 for synthesis Likert (all 3 judges)"
+    new_section: gepa_acceptance_criteria
+      delta: "v6 has Gate D acceptance for Stage 3 N=400; v7 adds Faza 1 PASS/FAIL conditions per brief §4 (updated condition 1 prose per Amendment 1 §6)"
+    new_section: cost_super_linear_governance
+      delta: "v6 budget envelope $50-60; v7 §cost adds 1.5× baseline token projection + +30% mid-run halt per brief §6.7"
+    locked_substrate_inherited_from_v6:
+      sections:
+        - "v6 §1 primary hypothesis (memory_lift_retrieval_vs_no_context) — Faza 1 does NOT re-test"
+        - "v6 §2 secondary endpoints S1-S5 — Faza 1 does NOT re-test"
+        - "v6 §3 sample design (concurrency=1, 5 cells sequential, N=400, seed=42) — Faza 1 substrate locked but not re-run"
+        - "v6 §4 LoCoMo dataset — Faza 1 substrate locked but not source corpus"
+        - "v6 §6 substrate (HybridSearch, gopId scope, nomic-embed-text) — Faza 1 inherits exactly"
+        - "v6 §7 SYSTEM_AGENTIC verbatim bytes (SHA-256 6facae6d...) — Faza 1 cell semantic LOCK"
+
+# ── Substrate anchor (Discovery 4.5 from Amendment 1) ──────────────────────
+
+substrate_anchor:
+  branch: feature/c3-v3-wrapper
+  commit_sha: c9bda3d6dd4c0a4f715e09f3757a96d01ff01cd7
+  commit_sha_short: c9bda3d
+  phase_label: "Phase 4.7 (compression-engaged-end-to-end assertion test post-fold-in)"
+  commit_message_first_line: "[agent-fix Phase 4.7] test(agent/long-task): compression-engaged-end-to-end assertion"
+  pin_method: git_worktree_isolated
+  worktree_path: D:/Projects/waggle-os-faza1-wt
+  worktree_state: detached_HEAD_at_c9bda3d
+  ancestry_verified_at: 2026-04-28
+  ancestry_verification_command: "git merge-base --is-ancestor c9bda3d HEAD"
+  ancestry_verification_result: PASS
+  rationale: race_condition_guard_vs_CC1_Phase_4_4_4_5_parallel_work
+  integration_back_to_branch: "Final Faza 1 commits land back on feature/c3-v3-wrapper at HEAD via cherry-pick or merge at Checkpoint C; CC-2 designs integration sequence and reports in Checkpoint C halt"
+  notes:
+    - "git fetch origin feature/c3-v3-wrapper FAILED at lock time (couldn't find remote ref) — repo has no origin remote configured for this branch; substrate freshness verified locally only via git rev-parse + ancestry check"
+    - "main repo D:/Projects/waggle-os is currently AT c9bda3d (HEAD on branch matches anchor); worktree creation is forward-looking guard rather than current-state hedge"
+
+# ── Canonical κ anchor (Ask C from Amendment 1) ────────────────────────────
+
+canonical_kappa_anchor:
+  value: 0.7877758913412564  # exact from _summary-v6-kappa.json k_conservative_trio
+  value_rounded_4dp: 0.7878
+  source_file: benchmarks/calibration/v6-kappa-recal/_summary-v6-kappa.json
+  source_file_sha256: 657d4490bab28d35cf8a9c3ccea8a6b79e92835d700155184e51f3900836684c
+  source_file_size_bytes: 1822
+  source_file_modified: "2026-04-24T17:34:00Z"
+  supplementary_files:
+    - path: benchmarks/calibration/v6-kappa-recal/v6-kappa-memo.md
+      sha256: 24b18112f7648ea3aa235281af19970ff4712925124301a0e60a8fd05bf5bb33
+    - path: benchmarks/calibration/v6-kappa-recal/kappa-v6-analysis.md
+      sha256: 457357db1ad7f5941c045c3ef6724b653d2050ba8a4b61bf3f02a751adae5d47
+  ratified_commits:
+    - sha: 60d061e
+      message: "[v6] manifest pre-registration: judge ensemble swap to MiniMax M2.7 primary + Kimi K2.6 backup per §1.3g-§1.3h-C validation"
+    - sha: 38a830e
+      message: "[v6] litellm-config amendment: add minimax-m27 + kimi-k26 aliases per judge swap ratification; anchor=60d061e"
+    - sha: 01f7ead
+      message: "[v6] kappa re-calibration on new trio: conservative trio kappa=0.7878 (PASS); anchor=60d061e"
+  ratified_date: 2026-04-24
+  drift_threshold: 0.05  # per brief §4 condition 3
+  drift_band:
+    pass: [0.7378, 0.8378]    # 0.7878 ± 0.05
+    fail_low: 0.7378           # < this triggers Faza 1 condition §4.3 FAIL
+    fail_high: 0.8378          # > this also fails (judge ensemble drifted upward → may indicate confound)
+  pairwise_components:
+    k_opus_gpt: 0.847958297132928
+    k_opus_minimax: 0.8548922056384745
+    k_gpt_minimax: 0.7877758913412564  # MIN — canonical conservative trio
+    confusion_matrices_available: true  # see _summary-v6-kappa.json lines 58-75
+  per_cell_breakdown_at_ratification:
+    no-context: 1.0000
+    oracle-context: 0.7059
+    full-context: 0.7000
+    retrieval: 0.8936
+    agentic: 0.6875  # BORDERLINE at cell-level per v6-kappa-memo.md (GPT-MiniMax pair)
+  notes:
+    - "Amendment 1 Ask C cited path 'benchmarks/calibration/2026-04-24-trio-strict-recal.json' which does NOT exist at HEAD"
+    - "Path correction applied: actual canonical files live in benchmarks/calibration/v6-kappa-recal/ subdirectory (matches manifest v6 §5.4 + audit chain)"
+    - "Per Ask C halt-and-PM trigger language ('if file is absent at HEAD: halt-and-PM, signal of repo state divergence'): file IS present, just at slightly different path within same calibration dir tree — interpreted as path typo similar to packages/core/ → packages/agent/ Ask D precedent, NOT state divergence"
+
+# ── Metric operationalization (Ask B from Amendment 1) ─────────────────────
+
+metric_operationalization:
+  trio_strict_pass:
+    method_primary: aggregate_trio_mean_threshold
+    method_primary_id: "(ii)"
+    threshold_primary: 4.0
+    citation: "Amendment 1 Ask B ratification (trio_mean ≥ 4.0 per pilot artifact pattern interpretation)"
+    method_supplementary: per_judge_mean_threshold_with_quorum
+    method_supplementary_id: "(i)"
+    threshold_supplementary_per_judge: 3.5
+    threshold_supplementary_quorum: "≥ 2 of 3 judges with mean ≥ 3.5"
+    citation_supplementary: "pilot 2026-04-26 runner SHA 8a6251e2 line 657 actually-deployed code"
+    discrepancy_note:
+      detected: true
+      summary: "Amendment 1 Ask B specifies that operationalization (ii) reuses 'pilot 2026-04-26 already-deployed pattern'. Pre-flight discovery during runner archeology found the deployed code uses (i), not (ii). Both happen to agree on the pilot's 12 sample data points but can diverge for candidates near boundary."
+      resolution: "Faza 1 computes BOTH methods for every evaluation, reports both in raw judge logs + summary. Acceptance per brief §4 condition 1 (Amendment 1 §6 update) uses (ii) trio_mean ≥ 4.0 as PRIMARY. (i) reported as supplementary diagnostic for cross-checking against pilot baseline."
+      pm_visibility: "Reported at Pre-A halt + Checkpoint A + Checkpoint C; PM may override to (i) primary if cross-method delta exceeds ±2pp on NULL-baseline."
+  trio_critical_fail:
+    method: per_judge_mean_threshold_with_quorum
+    threshold_per_judge: 2.0
+    threshold_quorum: "≥ 2 of 3 judges with mean < 2.0 AND > 0 (excludes failed parses)"
+    citation: "pilot 2026-04-26 runner SHA 8a6251e2 line 658"
+    inheritance: unchanged_from_pilot
+  trio_mean:
+    method: arithmetic_mean_of_valid_judge_means
+    valid_judge_means_filter: "judge.mean > 0 (excludes failed parse / 2-of-2 quorum fallback per v6 §5.2.1)"
+    fallback: "If all 3 judges fail: trio_mean = 0, flagged as evaluator_loss per v6 §9"
+  retrieval_engagement_bonus:
+    added_by: amendment_2
+    rationale: "Phase 4.5 empirical signal — Qwen retrieves 1.33×/task vs Opus 2.33×/task on byte-identical MULTI_STEP_ACTION_CONTRACT surface; H4 score gap mechanistically traces to under-engagement, not tool format"
+    applies_to_shapes: [qwen-thinking, qwen-non-thinking]
+    excluded_shapes: [claude, gpt, generic-simple]  # exclusion rationale: these don't exhibit the engagement gap
+    metric: mean_retrieval_calls_per_task
+    bands:
+      bonus_plus_5pp: ">= 2.0"   # Opus parity proxy
+      bonus_zero: "[1.5, 2.0)"
+      bonus_minus_5pp: "< 1.5"   # Qwen baseline behavior penalty
+    encoded_as_decimals:
+      "+0.05": ">= 2.0"
+      "0.00": "[1.5, 2.0)"
+      "-0.05": "< 1.5"
+    threshold_choice_rationale:
+      width_5pp: "matches brief §4 condition 1 +5pp threshold for signal magnitude consistency"
+      threshold_2_0: "Opus mean 2.33 is parity target; 2.0 = slight relaxation acknowledging Faza 1 shapes are mid-evolution; achievement signals engagement gap closed to within 14% of Opus"
+      threshold_1_5: "midpoint between Qwen baseline 1.33 and Opus parity 2.33; below this = Qwen baseline behavior unimproved"
+    telemetry_source: agent_harness_existing_retrieval_calls_counter  # no new API calls per Amendment 2 §7
+    pilot_anchor_data:
+      qwen_baseline: "1.33 mean (Cells D across task-{1,2,3})"
+      opus_baseline: "2.33 mean (Cells B across task-{1,2,3})"
+      gap_pp: 43  # Qwen under-engagement vs Opus
+      source: pilot-2026-04-26 + Phase 4.5 audit decisions/2026-04-28-phase-4-5-tools-audit-results.md
+  per_shape_fitness_formula:
+    qwen_targeted:
+      shapes: [qwen-thinking, qwen-non-thinking]
+      formula: "trio_strict_pass_rate + retrieval_engagement_bonus - cost_penalty"
+    non_qwen:
+      shapes: [claude, gpt, generic-simple]
+      formula: "trio_strict_pass_rate - cost_penalty"
+    cost_penalty:
+      method: linear_per_dollar_above_baseline_median
+      coefficient_pp_per_dollar_10c: 0.5  # -0.5pp per $0.10 above per-shape baseline median
+      baseline_reference: per_shape_null_baseline_median_cost_usd
+
+# ── Judges block (Discovery 3.1 from Amendment 1) ──────────────────────────
+
+judges:
+  primary:
+    - slot: primary_judge_1
+      model_id: claude-opus-4-7
+      provider: anthropic
+      max_tokens: 3000
+      thinking: false
+      temperature_explicit: 1.0  # per pilot runner line 385
+      price_per_million_input_usd: 15.0
+      price_per_million_output_usd: 75.0
+      inherited_from: pilot_2026_04_26_runner_sha256_8a6251e2_line_626
+    - slot: primary_judge_2
+      model_id: gpt-5.4
+      provider: openai_via_openrouter
+      max_tokens: 3000
+      thinking: false
+      temperature: omitted  # reasoning model per pilot runner line 387
+      price_per_million_input_usd: 2.5  # per pilot runner line 131 (deviates from v6 §5.2 10.0)
+      price_per_million_output_usd: 10.0  # per pilot runner line 131 (deviates from v6 §5.2 30.0)
+      inherited_from: pilot_2026_04_26_runner_sha256_8a6251e2_line_626
+      pricing_note: "Pilot runner uses GPT pricing 2.5/10.0 per million; v6 §5.2 had 10.0/30.0 — v7 inherits from pilot which is more recent"
+    - slot: primary_judge_3
+      model_id: minimax-m27-via-openrouter
+      provider: openrouter_bridge
+      upstream_identifier: openrouter/minimax/minimax-m2.7
+      max_tokens: 3000
+      thinking: false
+      temperature: omitted  # reasoning model per pilot runner line 387
+      price_per_million_input_usd: 0.7  # per pilot runner line 132 (deviates from v6 §5.2 0.30)
+      price_per_million_output_usd: 2.8  # per pilot runner line 132 (deviates from v6 §5.2 1.20)
+      inherited_from: pilot_2026_04_26_runner_sha256_8a6251e2_line_626
+      pricing_note: "Pilot runner uses MiniMax pricing 0.7/2.8; v6 §5.2 had 0.30/1.20 — v7 inherits from pilot which is more recent"
+  retries:
+    max_per_judge: 3
+    pattern: "exponential backoff per pilot runner; on 3 fail, judge marked __JUDGE_FAILED__ + 0 mean + excluded from trio_mean per metric_operationalization.trio_mean.valid_judge_means_filter"
+  fallback_quorum:
+    activation: when_minimax_fails
+    rule: "2-of-2 Opus+GPT quorum per v6 §5.2.1; trio_mean computed from 2 valid judges"
+    expected_failure_rate_per_eval: lt_0_05  # observed in pilot ~0.2% per JSONL inspection
+
+# ── Subject model (inherited from pilot runner — H3 = Qwen synthesis) ──────
+
+subject:
+  model_alias: qwen3.6-35b-a3b-via-dashscope-direct
+  fallback_alias: qwen3.6-35b-a3b-via-openrouter
+  max_tokens: 16000
+  thinking: true  # enable_thinking=true via extra_body per pilot runner line 394
+  temperature: 0.3  # default per pilot runner line 380
+  inherited_from: pilot_2026_04_26_runner_sha256_8a6251e2_amendment_v2
+  notes:
+    - "H3 hypothesis space = Qwen solo synthesis; Faza 1 evolves prompt-shapes for Qwen + 4 other shapes (proof-of-concept whether GEPA generalizes)"
+    - "Cells C/D in pilot use this exact subject; Faza 1 NULL-baseline also uses this subject"
+
+# ── Corpus design (Ask A Option C from Amendment 1) ────────────────────────
+
+corpus_design:
+  total_instances: 50
+  generation_oracle:
+    model: claude-opus-4-7
+    max_tokens: 8000
+    thinking: true
+    temperature: 0.7  # higher for instance variation
+    rationale: "Opus 4.7 chosen for consistency with mutation oracle (brief §3.3); single-oracle design minimizes confounders across pre-work + GEPA pipeline"
+  domain: NorthLane_CFO_synthesis
+  domain_anchor: pilot_2026_04_26_brief_dir_D__Projects_PM_Waggle_OS_briefs_2026_04_26_agentic_knowledge_work_pilot
+  stratification_axes:
+    primary_axis: task_family
+    primary_axis_count: 5
+    secondary_axis: persona_company_stage
+    secondary_axis_count: 10  # 5 personas × 2 company stages
+    cells_per_family: 10
+  task_families:
+    - id: F1_strategic_synthesis
+      description: "Multi-document risk identification + prioritized action planning (mirror pilot task-1)"
+      mirror_pilot_task: task-1
+      docs_per_instance: 7
+      example_prompt_template: "Identify the 3 most critical risks for $COMPANY in $PERIOD and propose action plan for each."
+    - id: F2_cross_thread_coordination
+      description: "Multi-stakeholder alignment across email/Slack/document threads (mirror pilot task-2)"
+      mirror_pilot_task: task-2
+      docs_per_instance: 6
+      example_prompt_template: "Reconcile conflicting positions from $STAKEHOLDERS and propose unified approach."
+    - id: F3_decision_support
+      description: "Go/no-go recommendations with explicit tradeoff analysis (mirror pilot task-3)"
+      mirror_pilot_task: task-3
+      docs_per_instance: 6
+      example_prompt_template: "Recommend $DECISION based on materials; justify, address counter-arguments."
+    - id: F4_investor_communications
+      description: "Board update memos + investor Q&A prep (NEW family, NorthLane domain extension)"
+      mirror_pilot_task: NONE
+      docs_per_instance: 6
+      example_prompt_template: "Draft Q$N investor update covering $METRICS + addressing $CONCERNS."
+    - id: F5_scenario_planning
+      description: "Multi-scenario forecast + decision-tree comparison (NEW family, NorthLane domain extension)"
+      mirror_pilot_task: NONE
+      docs_per_instance: 7
+      example_prompt_template: "Compare $N scenarios for $DECISION_AREA; recommend hedging strategy."
+  persona_axis:
+    - p1_founder_ceo
+    - p2_cfo  # mirrors pilot persona
+    - p3_coo
+    - p4_vp_finance
+    - p5_independent_director
+  company_stage_axis:
+    - stage_a_series_b_growth_burning  # mirrors NorthLane state
+    - stage_b_post_profitable_consolidation
+  stratified_sampling:
+    method: deterministic_fully_crossed
+    seed: 42
+    yield: "5 task_families × 5 personas × 2 company_stages = 50 cells; each cell = 1 instance"
+  rubric_per_instance:
+    dimensions: [completeness, accuracy, synthesis, judgment, actionability, structure]
+    scale: likert_1_5
+    inherited_from: pilot_judge_rubric_sha256_2e24826eb75e92ef1e64055bb2c632eec64ded8fedf7d5b6897ccaec9ffff2eb
+  per_instance_quality_floor:
+    docs_per_instance_min: 6
+    docs_per_instance_max: 8
+    avg_doc_length_chars: 800-1500
+    persona_chars: 100-300
+    scenario_chars: 200-500
+    question_chars: 100-300
+  spot_audit:
+    sample_size: 5
+    sampling: random_seeded_42
+    audit_dimensions:
+      - "instance has ≥6 source docs (count check)"
+      - "persona + scenario coherent + plausible (manual read)"
+      - "question answerable from materials (no fabrication required)"
+      - "rubric dims applicable (no edge case e.g. binary yes/no)"
+      - "domain anchor preserved (NorthLane CFO context recognizable)"
+    halt_on: "any 1 of 5 fails any dimension → corpus regeneration required"
+    pre_a_checkpoint_binding: true
+  expected_generation_cost_usd: 5.00
+  generation_cost_breakdown: "50 instances × ~16k tokens output × $0.075/1k = ~$60... actual estimate ~$5 with prompt caching + Opus 4.7 efficient generation; halt at $7 generation cost (40% buffer)"
+  generation_artifact_path: benchmarks/results/gepa-faza1/corpus/h3-northlane-cfo-50-instances.jsonl
+  spot_audit_report_path: benchmarks/results/gepa-faza1/corpus/h3-spot-audit-pre-a-report.md
+
+# ── GEPA Faza 1 specification ──────────────────────────────────────────────
+
+gepa:
+  faza: 1
+  type: pilot_proof_of_concept
+  cell_scope:
+    label: H3
+    semantic: Qwen_solo_synthesis
+    source_corpus: corpus_design.task_families  # 50 NorthLane CFO instances
+  shape_scope:
+    target_count: 5
+    targets:
+      - claude
+      - qwen-thinking  # primary substrate (H3 = Qwen)
+      - qwen-non-thinking
+      - gpt
+      - generic-simple
+    target_path: packages/agent/src/prompt-shapes/  # CORRECTION per Ask D from packages/core/
+    cell_scope_per_shape: H3
+  population:
+    candidates_per_shape: 3
+    seed_candidate_per_shape: current_baseline_shape  # @ c9bda3d
+    mutation_count_per_shape: 2
+    total_candidates: 15  # 5 shapes × 3 candidates
+  generations:
+    count: 2
+    gen_0: initial_population_with_baseline_seeds
+    gen_1: one_round_of_mutations
+    convergence_search: false  # explicitly NOT a convergence run
+  evaluation:
+    n_per_candidate: 8
+    instance_selection: deterministic_stratified_seed_42_from_corpus_design
+    evaluation_type: trio_judged_per_metric_operationalization
+  mutation_oracle:
+    model: claude-opus-4-7
+    max_tokens: 8000
+    thinking: true
+    temperature: 0.5
+    prompt_template_path_qwen: benchmarks/results/gepa-faza1/oracle/mutation-prompt-template-qwen.md
+    prompt_template_path_non_qwen: benchmarks/results/gepa-faza1/oracle/mutation-prompt-template-non-qwen.md
+    fork_method: shape_class_routing  # see mutation_oracle_design section below — added by Amendment 2
+    constraints:
+      - "preserve cell semantics: do NOT modify MULTI_STEP_ACTION_CONTRACT in types.ts"
+      - "preserve cell semantics: do NOT modify cell.system_prompt or cell.scoring_rubric"
+      - "modify only reasoning scaffold, planning step structure, or chain-of-thought triggers"
+      - "do NOT modify task framing (persona/question/materials section labels)"
+    failure_handling: "2 consecutive invalid mutations from oracle (per brief §5 halt trigger) → halt-and-PM"
+  mutation_validator:
+    type: cell_semantic_preservation_audit
+    inputs: [baseline_shape_file, candidate_shape_file]
+    diff_target: shape_file_only
+    invalid_diff_targets:
+      - types.ts (entire file LOCKED)
+      - selector.ts (entire file LOCKED)
+      - index.ts (entire file LOCKED)
+      - shape_file.metadata (only evidence_link can update; description/modelClass/defaultThinking/defaultMaxTokens LOCKED)
+      - shape_file.imports (LOCKED)
+      - MULTI_STEP_ACTION_CONTRACT (LOCKED — single hashable boundary)
+    valid_diff_targets:
+      - shape_file.systemPrompt method body (string-building only)
+      - shape_file.soloUserPrompt method body
+      - shape_file.multiStepKickoffUserPrompt method body
+      - shape_file.retrievalInjectionUserPrompt method body
+      - shape_file.metadata.evidence_link (MUST update to point to GEPA Gen 1 results)
+    boundary_anchor:
+      file: packages/agent/src/prompt-shapes/types.ts
+      constant_name: MULTI_STEP_ACTION_CONTRACT
+      sha256_at_substrate_anchor: NOT_YET_COMPUTED  # CC-2 computes pre-launch decision
+      enforcement: "any candidate that produces non-zero diff against this string at the byte level → automatic INVALID, candidate dropped, oracle re-prompted (consumes 1 of 2 tolerance per brief §5)"
+    output: validity_verdict_per_candidate_with_diff_artifact
+
+# ── Faza 1 acceptance criteria (per brief §4 + Amendment 1 §6 update) ──────
+
+faza_1_acceptance:
+  conditions_all_must_hold:
+    - id: condition_1_updated_twice
+      brief_section: "§4 condition 1 UPDATED per Amendment 1 §6 + Amendment 2 §5 (third update — Qwen-shape sub-criterion added)"
+      statement: "Best GEPA candidate per shape beats NULL-baseline by ≥+5pp on trio_strict_pass rate (where trio_strict_pass = trio_mean ≥ 4.0 per Ask B ratification). For Qwen-targeted shapes (qwen-thinking, qwen-non-thinking), additionally: best candidate must have mean retrieval_calls per task ≥ 1.7 (engagement gap closed by ≥50% relative to Qwen baseline 1.33 → Opus parity 2.33)."
+      operationalization_primary: metric_operationalization.trio_strict_pass.method_primary
+      delta_threshold_pp: 5
+      qwen_retrieval_engagement_floor_per_task: 1.7  # 50% gap closure threshold
+      n_per_evaluation: 8
+      ci_pp_at_95: 17  # binomial CI for N=8 — fitness signal not statistical claim
+      signal_disclaimer: "+5pp threshold is FITNESS SIGNAL indicator, not publishable statistical claim per brief §6.5 σ-aware acceptance"
+    - id: condition_2
+      brief_section: "§4 condition 2 unchanged"
+      statement: "At least 3/5 shapes show positive delta"
+      rationale: "avoids cherry-picking single shape that lucked out"
+    - id: condition_3
+      brief_section: "§4 condition 3 unchanged"
+      statement: "Trio judge κ remains within ±0.05 of canonical 0.7878"
+      drift_band: canonical_kappa_anchor.drift_band
+    - id: condition_4
+      brief_section: "§4 condition 4 unchanged"
+      statement: "Zero cell semantic violations detected per gepa.mutation_validator audit"
+  conditions_pass_fail_NEW_per_amendment_2:
+    - id: condition_5_NEW_false_positive_guard
+      brief_section: "§4.5 NEW per Amendment 2 §5 — false-positive evolution guard"
+      statement: "If best Qwen-shape candidate achieves +5pp trio_strict delta WITHOUT closing retrieval engagement gap (mean retrieval_calls per task < 1.5), this signals false-positive evolution (improvement via mutation-noise rather than mechanistic fix). Result: candidate REJECTED, shape marked FAIL even if other criteria pass."
+      applies_to_shapes: [qwen-thinking, qwen-non-thinking]
+      rejection_threshold_retrieval_calls_per_task: 1.5
+      rejection_with_trio_delta_at_or_above: 5  # pp
+      pm_action_on_trigger: "PM ratifies whether to re-run mutation generation with stronger anti-premature-finalization scaffolding or escalate"
+  fail_conditions_any_triggers_fail:
+    - "condition_1 fails (best candidate delta < +5pp on majority shapes; OR Qwen shape passes trio delta but fails retrieval engagement floor 1.7)"
+    - "condition_5 triggers (Qwen false-positive guard — +5pp trio delta with retrieval_calls < 1.5 → REJECTED)"
+    - "best candidate beats NULL-baseline only by overfitting evaluation set (detected via held-out 5 instances per shape)"
+    - "condition_3 fails (κ drift > 0.05 from 0.7878 → judge ensemble unreliable)"
+    - "condition_4 fails (cell semantic violation found in best candidate)"
+  on_fail: "fallback PHF; GEPA work parked; paper claim #2 multiplier teza reframes per decisions/2026-04-26-decision-matrix-self-judge-reframe.md"
+  on_pass: "Faza 2 expansion brief authoring authorized; CC-1 Phase 5 NULL-baseline run gated on Faza 1 PASS"
+
+# ── Cost & halt governance (brief §5 + §6.7 + Amendment 1 §4) ──────────────
+
+cost_governance:
+  hard_cap_usd: 115.00  # raised from $100 by Amendment 3 (inherited estimate correction, NOT scope creep)
+  hard_cap_usd_pre_amendment_3: 100.00  # historical for audit chain
+  internal_halt_usd: 90.00  # raised from $80 by Amendment 3 (proportional to cap raise)
+  internal_halt_usd_pre_amendment_3: 80.00
+  expected_total_usd: 109.08  # corpus $13.58 + NULL $20 + Gen 1 $60 + held-out $12.50 + mutation $3
+  expected_total_usd_pre_amendment_3: 100.50  # Amendment 1 §4 historical
+  super_linear_buffer:
+    base_token_projection_multiplier: 1.5  # per brief §6.7 worst-case 1.5× baseline
+    mid_run_halt_threshold_pct: 30  # halt if actual exceeds projection by >30%
+    audit_frequency: every_20_evaluations
+  pre_phase_boundary_reprojection:  # NEW per Amendment 3 binding rule
+    rule: "Re-project downstream phase cost from actual cost-per-eval telemetry of just-completed phase before kicking next phase. Halt if downstream projection exceeds manifest target by >30%."
+    applies_to:
+      - "Pre-Gen-1: after NULL-baseline (Checkpoint A), before Gen 1 kick"
+    halt_trigger_threshold_pct: 30
+    halt_options:
+      - "raise downstream cap proportionally (Amendment 3 precedent)"
+      - "reduce downstream scope (e.g. 3 candidates × 6 instances OR 2 candidates × 8 instances)"
+      - "pause Faza 1 + report; PM decides path"
+  breakdown:
+    corpus_generation:
+      n_instances: 50
+      cost_per_instance_usd: 0.27  # corrected from $0.10 by Amendment 3 probe data
+      cost_per_instance_usd_pre_amendment_3: 0.10  # inherited generic LLM estimate (incorrect)
+      subtotal_usd: 13.58  # 50 × $0.2716 actual Opus 4.7 cost
+      subtotal_usd_pre_amendment_3: 5.00
+      payment: claude-opus-4-7_generation_oracle
+      cost_halt_usd: 15.00  # raised from $7 by Amendment 3 (40% buffer over $13.58 expected)
+      cost_halt_usd_pre_amendment_3: 7.00
+    null_baseline:
+      n_shapes: 5
+      n_instances: 8
+      cost_per_run_usd: 0.50
+      subtotal_usd: 20.00
+      payment: subject_qwen + judge_trio
+    gepa_gen_1:
+      n_shapes: 5
+      n_candidates: 3
+      n_instances: 8
+      cost_per_run_usd: 0.50
+      subtotal_usd: 60.00
+      payment: subject_qwen + judge_trio
+    held_out_validation:
+      n_shapes: 5
+      n_top_candidates: 1
+      n_instances: 5
+      cost_per_run_usd: 0.50
+      subtotal_usd: 12.50
+      payment: subject_qwen + judge_trio
+    mutation_oracle:
+      n_shapes: 5
+      n_mutations_per_gen: 2
+      n_generations: 2
+      cost_per_mutation_usd: 0.15
+      subtotal_usd: 3.00
+      payment: claude-opus-4-7_mutation_oracle
+  halt_triggers:
+    - "cumulative spend > $90 (internal halt — raised from $80 by Amendment 3)"
+    - "cumulative spend > $115 (hard cap — raised from $100 by Amendment 3)"
+    - "mid-run actual > projection by 30% (super-linear sub-rule)"
+    - "PRE-GEN-1 (Checkpoint A → Gen 1): downstream Gen 1 projection from actual NULL-baseline telemetry > $78 (30% over $60 manifest target) — halt + PM ratify per pre_phase_boundary_reprojection rule"
+    - "κ drift detected mid-run (sample audit every 20 calls)"
+    - "cell semantic violation detected"
+    - "mutation oracle 2 consecutive invalid mutations"
+    - "any LLM API blocker (rate-limit cascade, auth failure)"
+
+# ── Halt-and-PM checkpoints (brief §7 + Amendment 1 §5) ────────────────────
+
+checkpoints:
+  pre_a_NEW_per_amendment_1:
+    cumulative_spend_usd: 5
+    trigger: post_corpus_generation_plus_spot_audit_5_random
+    pm_action: ratify_corpus_quality_plus_null_baseline_kick_authorization
+    binding: true
+    artifact: benchmarks/results/gepa-faza1/corpus/h3-spot-audit-pre-a-report.md
+  checkpoint_a:
+    cumulative_spend_usd: 25
+    trigger: post_null_baseline_5_shapes_x_8_instances
+    pm_action: ratify_null_trio_strict_in_18_24_pct_range_plus_kappa_stability_plus_gen_1_kick
+    binding: true
+    artifact: benchmarks/results/gepa-faza1/null-baseline/checkpoint-a-report.md
+  checkpoint_b:
+    cumulative_spend_usd_range: [50, 65]
+    trigger: mid_gen_1_after_30_evaluations
+    pm_action: ratify_intermediate_kappa_plus_cell_semantic_violations_review_plus_complete_gen_1
+    binding: true
+    artifact: benchmarks/results/gepa-faza1/gen-1/checkpoint-b-report.md
+  checkpoint_c:
+    cumulative_spend_usd: 100
+    trigger: post_held_out_validation_5_shapes_top_1_x_5_instances
+    pm_action: faza_1_acceptance_verdict_per_faza_1_acceptance + faza_2_expansion_authorize_OR_phf_fallback
+    binding: true
+    artifact: decisions/2026-04-XX-gepa-faza1-results.md  # XX = checkpoint C date
+
+# ── §A inherited pre-flight rules anchor (Ask E alternative) ───────────────
+
+inherited_pre_flight_rules:
+  source: brief_section_6_verbatim
+  embedded_in: decisions/2026-04-28-gepa-faza1-launch.md_section_A
+  rule_count: 8
+  binding_for_entire_faza_1: true
+  citation_pattern: "All Faza 1 audit references that would cite 'feedback_config_inheritance_audit.md' instead cite 'Faza 1 launch decision §A inherited pre-flight rules from PM brief §6'"
+  pm_alternative_rationale: "External feedback file lives at /sessions/inspiring-festive-lamport/mnt/.auto-memory/ (PM session memory, persists cross-sessions); CC-2 cannot reach the path; reconstructing in waggle-os would create duplicate-but-stale copy that may drift from PM authoritative version; inline §A is self-contained binding contract for entire Faza 1 work"
+
+# ── Out-of-scope (locked) ──────────────────────────────────────────────────
+
+out_of_scope_for_faza_1:
+  - "H2 + H4 cells (Faza 2 expansion)"
+  - "More than 2 GEPA generations"
+  - "Population > 3 candidates per shape"
+  - "N > 8 per evaluation in Gen 1"
+  - "System prompt / cell semantics evolution (locked by brief §2 scope, enforced by gepa.mutation_validator)"
+  - "mind/ substrate modifications (locked by substrate_anchor)"
+  - "Apples-to-apples re-eval against pilot 2026-04-26 with original 12 instances (separate Korak 12 work; Faza 1 corpus is net-new per Ask A)"
+  - "Paper §5.4 framing update (post Phase 5 GEPA-evolved variant complete)"
+
+newly_in_scope_per_amendment_1:
+  - "50-instance H3 corpus generation (Ask A Option C)"
+  - "Pre-A halt-and-PM checkpoint (corpus quality gate)"
+  - "Substrate anchor pin via git worktree D:/Projects/waggle-os-faza1-wt (Discovery 4.5)"
+  - "κ anchor SHA256 verification (Ask C)"
+  - "Inline §A inherited rules in launch decision (Ask E alternative)"
+  - "Pilot judge config archeology + max_tokens=3000 inheritance (Discovery 3.1)"
+  - "Dual operationalization reporting for trio_strict_pass per pilot-vs-Amendment-1 discrepancy (metric_operationalization.discrepancy_note)"
+
+# ── Cross-references ───────────────────────────────────────────────────────
+
+cross_references:
+  predecessor_brief: D:/Projects/PM-Waggle-OS/briefs/2026-04-28-cc4-gepa-tier2-evolution-faza1-brief.md
+  pre_flight_report: D:/Projects/PM-Waggle-OS/briefs/2026-04-28-cc4-faza1-preflight-report.md
+  amendment_1: D:/Projects/PM-Waggle-OS/briefs/2026-04-28-cc4-faza1-amendment-1.md
+  phase_4_3_verdict: D:/Projects/PM-Waggle-OS/decisions/2026-04-28-phase-4-3-rescore-delta-report.md
+  pilot_artifact: benchmarks/results/pilot-2026-04-26/pilot-task-{1,2,3}-{A,B,C,D}.jsonl
+  pilot_runner_sha256: 8a6251e2fc4e3c44ba2f23bfe7a452c316cd58f2d30a5ae45928238d72e01104
+  pilot_runner_path: scripts/run-pilot-2026-04-26.ts
+  manifest_v6_anchor: benchmarks/preregistration/manifest-v6-preregistration.yaml (SHA-256 5d5c1023421cd1a79f4913bb4c0a59415e21f50797255bff7dfec8e16b68e3ed)
+  stage_3_v6_5_cell_summary: benchmarks/results/stage3-n400-v6-final-5cell-summary.md
+  kappa_anchor_file: benchmarks/calibration/v6-kappa-recal/_summary-v6-kappa.json (SHA-256 657d4490bab28d35cf8a9c3ccea8a6b79e92835d700155184e51f3900836684c)
+  prompt_shapes_dir: packages/agent/src/prompt-shapes/  # corrected per Ask D
+  multi_step_action_contract: packages/agent/src/prompt-shapes/types.ts (constant MULTI_STEP_ACTION_CONTRACT, lines 99-101)
+  launch_decision: D:/Projects/PM-Waggle-OS/decisions/2026-04-28-gepa-faza1-launch.md (LOCK upon authoring)
+  results_decision: D:/Projects/PM-Waggle-OS/decisions/2026-04-XX-gepa-faza1-results.md (post Checkpoint C)
+
+# ── Mutation oracle design (Amendment 2 §4 — forked Qwen vs non-Qwen) ──────
+
+mutation_oracle_design:
+  added_by: amendment_2
+  rationale: "Phase 4.5 finding requires Qwen-specific scaffolding to address mechanistic under-engagement; uniform mutation guidance would not target the empirical gap; forked oracle prompts ensure Qwen mutations explore the engagement-bonus reward landscape while non-Qwen mutations explore the broader scaffold space"
+  fork_routing:
+    method: shape_class_string_match
+    qwen_targeted_shapes: [qwen-thinking, qwen-non-thinking]
+    non_qwen_shapes: [claude, gpt, generic-simple]
+  qwen_prompt_template:
+    path: benchmarks/results/gepa-faza1/oracle/mutation-prompt-template-qwen.md
+    additional_guidance:
+      - "Emphasize multi-turn retrieval over single-shot retrieval"
+      - "Discourage premature finalization. Example phrasing: 'Continue retrieving until you have evidence from at least 2 distinct queries before finalizing'"
+      - "Encourage iterative refinement of retrieval queries based on prior turn results"
+      - "Anti-premature-finalization scaffolding. Example: 'Before finalizing, ask: what gap in evidence remains? Issue another retrieval if any gap exists.'"
+      - "Preserve cell semantic boundary (per Amendment 1 §6.4 mutation validator) — DO NOT modify MULTI_STEP_ACTION_CONTRACT bytes"
+    standard_constraints_inherited: gepa.mutation_oracle.constraints
+  non_qwen_prompt_template:
+    path: benchmarks/results/gepa-faza1/oracle/mutation-prompt-template-non-qwen.md
+    additional_guidance: "standard mutation guidance per original brief §3.3 — no Qwen-specific scaffolding (these shapes do not exhibit the engagement gap per Phase 4.5 audit)"
+    standard_constraints_inherited: gepa.mutation_oracle.constraints
+  fork_validation:
+    test: "shape-routing test in scaffold tests must verify oracle template selection per shape class"
+    coverage: "Qwen branch: 2 shapes × at least 1 test each; non-Qwen branch: 3 shapes × at least 1 test each"
+
+# ── Amendment 2 master integration section (binding context) ───────────────
+
+amendment_2_integration:
+  amendment_doc: D:/Projects/PM-Waggle-OS/briefs/2026-04-28-cc4-faza1-amendment-2.md
+  ratification_date: 2026-04-28
+  trigger_doc: decisions/2026-04-28-phase-4-5-tools-audit-results.md
+  trigger_source_session: CC-1 Phase 4.5 tools audit
+  source_anchor_pilot: benchmarks/results/pilot-2026-04-26
+  authority: PM (Marko Markovic)
+  empirical_signal_summary:
+    finding: "Qwen retrieval engagement 1.33×/task vs Opus 2.33×/task — same MULTI_STEP_ACTION_CONTRACT bytes (your 70a1701d hash), so behavior gap is prompting-strategy / confidence-calibration, NOT tool format"
+    source_table: amendment_2_doc_section_2_pilot_table
+    cells_observed: [task-1/B, task-1/D, task-2/B, task-2/D, task-3/B, task-3/D]
+    means:
+      qwen_retrieval_calls_per_task: 1.33
+      opus_retrieval_calls_per_task: 2.33
+      delta_pp: 43  # Qwen under-engagement vs Opus
+      qwen_trio_mean_avg: 4.30  # Cells D mean
+      opus_trio_mean_avg: 4.94  # Cells B mean
+      delta_score_avg: -0.65  # Qwen below Opus on every task
+    loop_exhausted_pattern: "Opus 67% (2/3 retrieval runs); Qwen 0% — Opus wants more retrievals than 5-turn budget"
+    interpretation: "Qwen finalizes prematurely with insufficient evidence base; mutation surface (prompt-shape body) is the lever to address this on Qwen-targeted shapes"
+  changes_from_v7_initial_lock:
+    metric_operationalization:
+      added_subsection: retrieval_engagement_bonus
+      added_subsection: per_shape_fitness_formula
+      reason: "Per-shape fitness function fork enables Qwen-specific reward shaping for engagement; non-Qwen shapes use original (trio_strict only) fitness to avoid distorting their measurement"
+    gepa_mutation_oracle:
+      changed_field: prompt_template_path → forked into prompt_template_path_qwen + prompt_template_path_non_qwen
+      added_field: fork_method
+      reason: "Qwen mutations need explicit anti-premature-finalization scaffolding; non-Qwen don't"
+    new_top_level_section: mutation_oracle_design
+      reason: "Forked design needs first-class manifest section for auditability"
+    faza_1_acceptance:
+      changed_condition: condition_1_updated → condition_1_updated_twice (added Qwen retrieval floor 1.7 sub-criterion)
+      added_condition: condition_5_NEW_false_positive_guard (REJECT Qwen candidate that achieves +5pp trio without retrieval engagement closure)
+      added_fail_condition: condition_5_trigger
+      reason: "Acceptance must reflect mechanistic intent — score gain without retrieval engagement = false-positive evolution"
+  changes_NOT_required:
+    - cost_governance: "no change — retrieval_calls is existing telemetry, no new API calls"
+    - canonical_kappa_anchor: "no change — Phase 4.5 finding orthogonal to κ"
+    - substrate_anchor: "no change — same c9bda3d worktree"
+    - corpus_design: "no change — corpus pre-dates retrieval engagement consideration; Pre-A spot-audit unchanged"
+    - subject_model: "no change — same Qwen alias + max_tokens + thinking"
+    - judges block: "no change — same max_tokens=3000 + retries"
+    - checkpoints: "no change — same 4 mandatory + Pre-A"
+  scaffold_test_coverage_NEW_requirements:
+    fitness_function_module:
+      coverage_target_pct: 80
+      mandatory_boundary_tests:
+        - "qwen-thinking shape, mean retrieval_calls = 1.49 → expect bonus = -0.05"
+        - "qwen-thinking shape, mean retrieval_calls = 1.50 → expect bonus = 0.00"
+        - "qwen-thinking shape, mean retrieval_calls = 1.99 → expect bonus = 0.00"
+        - "qwen-thinking shape, mean retrieval_calls = 2.00 → expect bonus = +0.05"
+        - "qwen-thinking shape, mean retrieval_calls = 2.50 → expect bonus = +0.05"
+      mandatory_routing_tests:
+        - "claude shape: bonus computation NOT applied (excluded from retrieval engagement weighting)"
+        - "gpt shape: bonus computation NOT applied"
+        - "generic-simple shape: bonus computation NOT applied"
+        - "qwen-thinking shape: bonus computation IS applied"
+        - "qwen-non-thinking shape: bonus computation IS applied"
+      mandatory_acceptance_tests:
+        - "§4.5 FAIL: Qwen candidate with trio_strict_pass_delta = +6pp AND mean retrieval_calls = 1.4 → REJECTED (false-positive guard fires)"
+        - "§4.5 PASS path: Qwen candidate with trio_strict_pass_delta = +6pp AND mean retrieval_calls = 1.7 → ACCEPTED (engagement floor met)"
+  phase_5_forward_record_NOT_FAZA_1:
+    note: "Per Amendment 2 §6 — Phase 5 GEPA-evolved variant has separate acceptance criteria (engagement parity ≥ Opus + score parity narrowed by ≥0.30 H4 trio_mean delta). CC-2 must NOT optimize for Phase 5 criteria during Faza 1 selection. Faza 1 selection is per faza_1_acceptance only."
+  cross_references:
+    amendment_2_doc: D:/Projects/PM-Waggle-OS/briefs/2026-04-28-cc4-faza1-amendment-2.md
+    amendment_1_doc: D:/Projects/PM-Waggle-OS/briefs/2026-04-28-cc4-faza1-amendment-1.md
+    phase_4_5_decision: decisions/2026-04-28-phase-4-5-tools-audit-results.md
+    pilot_anchor: benchmarks/results/pilot-2026-04-26/pilot-task-{1,2,3}-{B,D}.jsonl
+
+# ── Amendment 3 master integration section (binding context) ──────────────
+
+amendment_3_integration:
+  amendment_doc: D:/Projects/PM-Waggle-OS/briefs/2026-04-28-cc4-faza1-amendment-3.md  # PM oral ratification embedded in CC-2 session — PM may formalize as separate doc later
+  ratification_date: 2026-04-28
+  trigger: "Probe revealed actual Opus 4.7 cost ($0.2716/instance) is 170% over inherited generic LLM estimate ($0.10/instance) used in Amendment 1 cost projection"
+  source_anchor_pilot: probe_h3-F1-p1_founder_ceo-stage_a_series_b_growth_burning-001 (cost $0.2716, latency 64205ms, 3461 output tokens)
+  authority: PM (Marko Markovic)
+  empirical_signal_summary:
+    finding: "Manifest v7 §corpus_design.expected_generation_cost_usd = $5 (inherited from $0.10/instance × 50) was incorrect inheritance — actual Opus 4.7 generation cost = $0.27/instance for high-quality synthesis instances matching pilot 2026-04-26 quality dimension parity."
+    interpretation: "Cost correction is for inherited estimate being off-by-2.7×, NOT scope expansion. Quality dimension parity with pilot baseline (~5300c materials → ~6700c materials) preserved for apples-to-apples Phase 5 GEPA-evolved variant comparison. Apples-to-apples is methodologically load-bearing."
+    precedent_scope: "This precedent does NOT apply to scope expansion. Cap is correction for inherited error, not creep. Future cost surprises from scope expansion (e.g. requesting more shapes, more generations) require separate ratification."
+  changes_from_v7_amendment_2:
+    cost_governance:
+      hard_cap_usd: 100 → 115
+      internal_halt_usd: 80 → 90
+      expected_total_usd: 100.50 → 109.08
+      breakdown.corpus_generation.cost_per_instance_usd: 0.10 → 0.27
+      breakdown.corpus_generation.subtotal_usd: 5.00 → 13.58
+      breakdown.corpus_generation.cost_halt_usd: 7.00 → 15.00
+      added_field: pre_phase_boundary_reprojection (new binding rule)
+      added_halt_trigger: PRE-GEN-1 cost re-projection halt at Checkpoint A → Gen 1 boundary
+  rejected_options:
+    option_b_tighten_prompt:
+      description: "Reduce per-instance materials by ~34% to fit $7 halt"
+      rejection_reason: "drifts difficulty profile from pilot baseline; risks 50/50 cost-vs-quality outcome"
+    option_d_reduce_n_to_40:
+      description: "Reduce corpus to 40 instances (bare §6.3 minimum)"
+      rejection_reason: "loses 13-instance buffer; pipeline has known failure modes (assembleInstance bug already surfaced); insufficient margin for retries"
+  new_binding_rule_pre_gen_1_cost_reprojection:
+    rule: "After NULL-baseline run completes (Checkpoint A), BEFORE Gen 1 kick, CC-GEPA must (1) compute actual cost-per-evaluation from NULL-baseline telemetry, (2) project Gen 1 cost = 5 shapes × 3 candidates × 8 instances × actual per-eval cost, (3) if projected Gen 1 > $78 (30% over $60 manifest projection), halt-and-PM with options."
+    halt_options:
+      a: "raise Gen 1 cap proportionally (Amendment 3-style correction)"
+      b: "reduce Gen 1 scope (3 candidates × 6 instances OR 2 candidates × 8 instances)"
+      c: "pause Faza 1 + PM decides path"
+    rationale: "Codifies CC-GEPA insight from probe-cost-surprise as binding. Phase-boundary re-projection catches projection errors that continuous monitoring misses — re-baselines against fresh telemetry rather than original (potentially wrong) projection."
+    applies_to_phases: [Pre-Gen-1, future_phase_boundaries_if_PM_extends]
+  cumulative_actual_spend_at_amendment_3_ratification: 0.40  # ~$0.27 successful probe + ~$0.13 failed probe (not tracked due to validation failure path)
+
+# ── Amendment 4 master integration section (binding context) ──────────────
+
+amendment_4_integration:
+  ratification_date: 2026-04-28
+  authority: PM (Marko Markovic)
+  predecessor: Amendment 3 cost cap raise
+  trigger: "PM Option B ratification on Pre-A halt — retry 3 failed cells via JSON-mode response_format with binding texture-audit caveat"
+  scope:
+    - "Document corpus retry methodology (JSON-mode response_format on Opus 4.7)"
+    - "Embed texture-audit binding rule (Pre-A caveat from PM Amendment 4)"
+    - "Document final 50/50 corpus state + texture audit verdict (NO DRIFT)"
+  rationale:
+    - "Phase 5 inheritance: Phase 5 GEPA-evolved variant uses Faza 1 corpus as baseline; cleaner 50/50 corpus = cleaner Phase 5 measurement + fewer methodological caveats in paper §5.4"
+    - "JSON-mode mitigation pattern documentation: reusable insurance for Faza 2 expansion + Phase 5 GEPA-evolved variant if same failure class recurs"
+    - "Reviewer dynamics: '50/50 with JSON-mode mitigation' is cleaner narrative than '47/50 because σ noise floor'"
+  retry_methodology:
+    cells_retried:
+      - h3-F4-p2_cfo-stage_a_series_b_growth_burning-001
+      - h3-F4-p2_cfo-stage_b_post_profitable_consolidation-001
+      - h3-F5-p1_founder_ceo-stage_a_series_b_growth_burning-001
+    failure_class: "Opus 4.7 emitted unescaped quotation marks inside long doc-body strings, breaking JSON envelope at positions 7042 / 7821 / 8823 in original generation"
+    mitigation:
+      response_format: '{"type":"json_object"}'
+      max_tokens: 6000  # reduced from 8000 to constrain output volume
+      temperature: omitted  # Anthropic Opus 4.7 deprecates temperature when response_format set; matches GPT-5.4/MiniMax pilot precedent
+    retry_cost_usd: 0.8040  # 3 cells × ~$0.27/cell
+    retry_outcome: 3_of_3_succeeded
+    retry_latency_each_seconds: ~64
+    notes:
+      - "First retry attempt failed with `temperature is deprecated for this model` Anthropic API error when temperature=0.3 was sent alongside response_format. Mitigation: omit temperature when JSON-mode requested. Discovery + fix landed mid-retry."
+      - "Latent resume bug in generator script (mode==='all' guard on JSONL load) caused JSONL truncation when --retry-failed wrote with 'w' flag. Recovery: git checkout restored 47 originals, then appended 3 retry instances. Fix landed in script: resume logic now triggers for any non-dry-run mode."
+  texture_audit_binding_rule:
+    trigger: "After JSON-mode generation of retry instances completes (any future use of JSON-mode retry on this corpus class)"
+    scope_required:
+      - "spot-audit retry instances against same quality criteria as original spot-audit"
+      - "side-by-side narrative texture comparison: 5 random originals (different seed than spot-audit) vs all retry instances"
+      - "score texture match qualitatively + quantitatively (paragraph length, sentence length, bullet density, table density, pronoun register, persona-stage consistency)"
+    drift_decision_rule:
+      drift_detected_signal: "visibly shorter/longer paragraphs, different framing, different register vs originals"
+      action_on_drift: "PIVOT TO OPTION A (accept partial corpus); document drift as caveat in Pre-A addendum + manifest amendment"
+      action_on_match: "accept retried-corpus version, kick downstream phase"
+    insurance_rationale: "JSON-mode response_format changes generation control flow (constrained decoding); subtle narrative texture shift possible that non-side-by-side spot-audit doesn't catch. Insurance value > 5-10 min audit cost."
+  final_corpus_state:
+    instances_target: 50
+    instances_generated: 50
+    spot_audit_seed_42_verdict: PASS
+    texture_audit_seed_99_verdict: NO_DRIFT_DETECTED
+    cc2_verdict: ACCEPT_50_OF_50
+    corpus_sha256_file_bytes: 9fa2bef83eb604f361419bf0ead70cf1560484a44ea01c5ebdc170a2c25c4ea3
+    corpus_sha256_canonical_fields: 9336ae2467e0728f20dd64a8972e3095b795f248676d679039bd1dd79a11bfef
+    corpus_sha256_pre_retry_47_instances: cc9b9ae210cbd20f48f98675a45551366eebb9aa15fca93fd2eda6b366a2b912  # historical
+    final_corpus_cost_usd: 13.3457  # original 12.5417 + retry 0.8040
+    cumulative_faza_1_spend_at_amendment_4_ratification: 13.74  # corpus + probe attempts ~$0.40
+  texture_audit_quantitative_deltas:
+    notes: "Retry mean vs original-sample mean (5 originals at seed=99). Most deltas within natural variance; outlier-driven items annotated."
+    n_docs_pct: -1.1
+    total_chars_pct: +7.8  # retry slightly enriched
+    first_two_chars_pct: +7.0
+    n_paragraphs_pct: +14.3
+    avg_para_chars_pct: -7.0
+    avg_sent_chars_pct: +13.5
+    bullets_pct: -15.2  # marginal
+    headers_pct: 0
+    tables_pct: +100  # OUTLIER-DRIVEN: 1 retry instance has tabular CFO P&L (genre-appropriate); originals also include tabular P&L (h3-F4-p3_coo-stage_b)
+    pronouns_first_pct_naive: -36.4
+    pronouns_first_pct_non_tabular: -15.8  # corrected for tabular outlier
+    pronouns_second_pct: 0
+  changes_from_v7_amendment_3:
+    cost_governance.breakdown.corpus_generation:
+      subtotal_usd: 13.58 → 13.35  # actual post-retry
+      retry_subtotal_usd_added: 0.80
+    new_top_level_section: amendment_4_integration
+    new_pre_phase_boundary_invocation: "Texture-audit binding rule (above) now applies for any future JSON-mode retry within Faza 1; PM may extend scope to other phase transitions"
+  cross_references:
+    pre_a_addendum: benchmarks/results/gepa-faza1/corpus/h3-spot-audit-pre-a-addendum.md
+    texture_audit_artefact: benchmarks/results/gepa-faza1/corpus/texture-audit-side-by-side.md
+    amendment_3_section: amendment_3_integration
+
+# ── Amendment 5 master integration section (binding context) ──────────────
+
+amendment_5_integration:
+  ratification_date: 2026-04-28
+  authority: PM (Marko Markovic)
+  predecessor: Amendment 4 corpus retry + texture-audit binding rule
+  trigger: "Checkpoint A halt-and-PM (post NULL-baseline) surfaced 2 methodological items + Pre-Gen-1 cost gate PASS"
+  scope:
+    - "judge_metric_design (raw agreement primary for synthesis Likert + κ audit + Cohen-1960 paradox annotation + drift band 65% raw)"
+    - "F-saturated-baseline-rule (saturated NULL → no-regression + mechanistic-improvement reformulation for §F.1)"
+  rationale:
+    judge_metric:
+      - "Canonical κ=0.7878 was measured on LoCoMo factoid binary correctness with balanced base rate (~50% pass per cell); this is structurally different from synthesis Likert binarized at trio_mean ≥ 4.0 with 88% base rate"
+      - "Cohen's κ exhibits known high-base-rate paradox (Cohen 1960; Feinstein & Cicchetti 1990): when both raters near-uniformly agree, expected agreement is high, so observed - expected can be small or negative even when raw agreement is healthy"
+      - "Faza 1 NULL-baseline raw agreement is 70-80% across all judge pairs — judges genuinely agree; literal κ = -0.111 conservative trio at threshold 4.0 is artifact, not drift"
+      - "Sensitivity check: at threshold 4.25 where pass rates spread (65%/10%/72.5%), κ_om recovers to +0.480 — confirming high-real-agreement"
+    saturated_baseline:
+      - "qwen-thinking shape achieves 8/8 (100%) trio_strict_pass at NULL-baseline — saturation"
+      - "§F condition 1 ≥+5pp delta is structurally inapplicable (cannot improve beyond 100%)"
+      - "Reformulation needed: no-regression + mechanistic-improvement (Amendment 2 retrieval-engagement signal) for saturated shapes"
+      - "Other 4 shapes (claude 50%, qwen-non-thinking 75%, gpt 88%, generic-simple 88%) are non-saturated; original §F.1 ≥+5pp criterion applies unchanged"
+  changes_from_v7_amendment_4:
+    new_top_level_section_judge_metric_design: "Adds raw agreement matrix as PRIMARY for synthesis Likert + κ retained as AUDIT REFERENCE with Cohen paradox note + drift band 65% raw"
+    new_top_level_section_F_saturated_baseline_rule: "Reformulates §F.1 acceptance for shapes with saturated NULL-baseline (trio_strict_pass = 100%) to no-regression + mechanistic-improvement"
+    faza_1_acceptance_condition_1_addendum: "Per-shape rule selection: saturated-baseline rule for qwen-thinking; original ≥+5pp rule for non-saturated shapes"
+  post_hoc_phase_4_3_clarification:
+    note: "PM will append clarification note to decisions/2026-04-28-phase-4-3-rescore-delta-report.md documenting that H3 verdict was partially confounded by shape×subject mismatch in pilot 2026-04-26. Faza 1 NULL empirically shows qwen-thinking on Qwen subject ≥ claude shape on Qwen subject. Does NOT change Phase 5 brief outcome direction (Tier 2 GEPA work still required for retrieval engagement gap closure), but sharpens mechanistic interpretation. CC-2 need not action."
+  cumulative_actual_spend_at_amendment_5_ratification: 18.70  # corpus 13.35 + null 4.95 + probe 0.4
+
+# ── Judge metric design (Amendment 5 §judge_metric_design — BINDING) ───────
+
+judge_metric_design:
+  added_by: amendment_5
+  primary_metric_for_synthesis_likert:
+    name: pairwise_raw_agreement_rate
+    method: "binary derived from per-judge mean ≥ trio_strict_threshold (default 4.0 per Ask B); count fraction where each pair agrees on pass/fail; report all 3 pairs + min"
+    drift_band_raw_agreement_min_pct: 65  # min raw agreement across pairs must be ≥ 65%
+    rationale: "Robust to high-base-rate skew; directly interpretable as 'how often do judges agree pass-vs-fail'; matches PM intent of §F.3 ('validate ensemble didn't drift mid-run')"
+  audit_reference_metric:
+    name: cohens_kappa_pairwise
+    method: "standard Cohen 1960 κ on same binary"
+    cohen_paradox_note: "high-base-rate paradox per Feinstein & Cicchetti 1990 — when both raters near-uniformly say PASS (e.g. 90%), expected chance agreement is ~85%, so observed - expected → small or negative κ even with high raw agreement"
+    canonical_value_with_caveat:
+      value: 0.7878
+      measured_on: "LoCoMo factoid binary correctness with balanced base rate (~50% pass per cell)"
+      not_directly_comparable_to: "synthesis Likert binarized at trio_mean ≥ 4.0 (Faza 1 ~88% base rate)"
+      use_for: audit_reference_only
+  drift_decision_rule_synthesis_likert:
+    primary: "raw agreement min(pair) ≥ 65% → PASS"
+    secondary: "report literal κ values for audit chain; flag if ≥ 2 pairs simultaneously go below 50% raw agreement (genuine ensemble drift signal)"
+    pm_verdict: "primary PER CHECKPOINT with full context; no automatic verdict from κ alone"
+  parallel_report_format:
+    columns:
+      - pair: opus_gpt
+        raw_agreement_pct: "<computed>"
+        cohens_kappa: "<computed>"
+      - pair: opus_minimax
+        raw_agreement_pct: "<computed>"
+        cohens_kappa: "<computed>"
+      - pair: gpt_minimax
+        raw_agreement_pct: "<computed>"
+        cohens_kappa: "<computed>"
+    aggregates:
+      - min_raw_agreement_pct: "<min across pairs>"
+      - min_cohens_kappa: "<conservative trio>"
+  faza_1_null_baseline_results_at_amendment_5:
+    raw_agreement:
+      opus_gpt_pct: 75.0
+      opus_minimax_pct: 80.0
+      gpt_minimax_pct: 70.0
+      min_pct: 70.0
+      verdict: PASS  # 70% ≥ 65% threshold
+    kappa:
+      opus_gpt: 0.342
+      opus_minimax: -0.111
+      gpt_minimax: 0.211
+      min: -0.111
+      audit_note: "Cohen high-base-rate paradox; literal verdict DRIFT_LOW would be misleading; raw agreement primary verdict PASS"
+    pass_rates_at_threshold_4_0:
+      opus_pct: 90.0
+      gpt_pct: 65.0
+      minimax_pct: 90.0
+
+# ── F-saturated-baseline rule (Amendment 5 — BINDING; REVOKED BY AMENDMENT 7) ─
+
+F_saturated_baseline_rule:
+  added_by: amendment_5
+  status: REVOKED_BY_AMENDMENT_7  # see amendment_7_integration.saturated_baseline_revocation
+  status_history:
+    - { amendment: 5, status: ACTIVE,   note: "applied to qwen-thinking (8/8 = 100% NULL artifactual)" }
+    - { amendment: 6, status: PAUSED,   note: "pending real per-shape NULL data after promptShapeOverride bug fix" }
+    - { amendment: 7, status: REVOKED,  note: "real per-shape NULL data shows no shape with Wilson CI low ≥ 0.88; global revoke; original §F.1 ≥+5pp delta applies to all 5 shapes" }
+  trigger_condition: "Shape's NULL-baseline trio_strict_pass_rate (op ii) = 1.0 (100%, all evals pass)"
+  applies_immediately_to:
+    - qwen-thinking  # 8/8 = 100% at NULL per Checkpoint A
+  reformulated_acceptance_for_saturated_shape:
+    rationale: "§F condition 1 ≥+5pp delta is structurally inapplicable when baseline already 100%; reformulate as no-regression + mechanistic-improvement"
+    condition_1a_no_regression: "Best GEPA candidate maintains trio_strict_pass = 100% (i.e., 8/8 pass on Gen 1 evaluation set)"
+    condition_1b_qwen_targeted_engagement: "For Qwen-targeted shapes (qwen-thinking, qwen-non-thinking): mean retrieval_calls per task ≥ 1.5 (escape Amendment 2 penalty zone)"
+    condition_1b_non_qwen: "For non-Qwen shapes: mean retrieval_calls per task ≥ NULL-baseline retrieval mean (no regression)"
+  shape_classification_at_checkpoint_a:
+    saturated:
+      qwen-thinking: { null_pass_rate: 1.0, rule: F_saturated_baseline }
+    non_saturated:
+      claude: { null_pass_rate: 0.50, rule: original_F_1_5pp_delta }
+      qwen-non-thinking: { null_pass_rate: 0.75, rule: original_F_1_5pp_delta }
+      gpt: { null_pass_rate: 0.875, rule: original_F_1_5pp_delta }
+      generic-simple: { null_pass_rate: 0.875, rule: original_F_1_5pp_delta }
+  classification_re_evaluation: "If a non-saturated shape reaches 100% on Gen 1, the saturated rule retroactively applies; document at Checkpoint C"
+
+# ── Amendment 6 master integration section (binding) ──────────────────────
+
+amendment_6_integration:
+  ratification_date: 2026-04-28
+  authority: PM (Marko Markovic)
+  predecessor: Amendment 5 (judge metric + F-saturated-baseline rule)
+  trigger: "Post-Checkpoint-A bug discovery: run-null-baseline.ts didn't forward shape parameter to runRetrievalAgentLoop, causing all 40 evals to use the model-alias-default shape (qwen-thinking for Qwen subject). The 'per-shape pass rates' in the original Checkpoint A report were 5×8 replicates of the same shape, NOT shape-vs-shape comparison."
+  bug_summary:
+    file: benchmarks/gepa/scripts/faza-1/run-null-baseline.ts
+    issue: "runOneEval(shape, ...) received PromptShape but did NOT pass promptShapeOverride to runRetrievalAgentLoop call"
+    consequence: "selectShape(modelAlias) resolved 'qwen3.6-35b-a3b-via-dashscope-direct' to 'qwen-thinking' for all 40 evals; the runner's shape parameter was effectively unused"
+    detection_method: code review post-Checkpoint-A while authoring Gen 1 runner
+    detection_evidence: "runRetrievalAgentLoop config interface line 119 has promptShapeOverride?: string; the runner code did not pass it"
+  fix:
+    edit_summary: "Added `promptShapeOverride: shape.name` to the runRetrievalAgentLoop call in run-null-baseline.ts:runOneEval"
+    regression_test: benchmarks/gepa/tests/faza-1/null-baseline-shape-override.test.ts (4 tests, all passing)
+  reversals_from_amendment_5:
+    F_saturated_baseline_rule:
+      status: PAUSED
+      condition_for_reinstatement: "qwen-thinking real (post-fix) NULL pass rate ≥ 0.88 (saturated threshold per N=8 binomial CI)"
+      condition_for_revocation: "qwen-thinking real NULL < 0.88 → rule revoked entirely; original §F.1 (≥+5pp delta) applies to all shapes"
+      rationale: "Original saturation classification (qwen-thinking 8/8 = 100%) was based on artifactual data; real per-shape NULL data needed before invoking saturated-rule machinery"
+    phase_4_3_clarification_note:
+      status: REVOKED
+      original_proposal: "PM appends 'shape×subject mismatch' clarification note to decisions/2026-04-28-phase-4-3-rescore-delta-report.md"
+      revocation_reason: "Original 'qwen-thinking outperforms claude' finding was artifactual (single-shape variance). Phase 4.3 verdict (72.2% T2 reasoning failure) remains binding as authored. No follow-up note appended."
+    judge_metric_design_amendment_5:
+      status: STAYS
+      rationale: "Judge ensemble metrics (raw agreement + κ + Cohen paradox annotation) are computed on actual response content regardless of which shape produced it. Methodology valid even with artifactual shape labels."
+  re_run_plan:
+    sequence:
+      - "1. Fix run-null-baseline.ts (DONE; commit pending)"
+      - "2. Add regression test (DONE)"
+      - "3. Preserve old NULL artifacts as -artifactual-bug-superseded (DONE)"
+      - "4. Re-run NULL-baseline (5 shapes × 8 instances = 40 evals)"
+      - "5. Re-compute κ + raw agreement on real per-shape data"
+      - "6. Author NEW Checkpoint A report"
+      - "7. Re-evaluate §F-saturated rule per real NULL pass rates"
+      - "8. Re-project Pre-Gen-1 cost"
+      - "9. HALT-AND-PM at NEW Checkpoint A"
+      - "10. Then proceed to Gen 1 kick"
+    sunk_cost_acknowledged_usd: 4.95  # original artifactual NULL-baseline cost
+    new_cost_projected_usd: 5.0       # re-run NULL-baseline
+    cumulative_post_re_run_usd: 25.13  # corpus 13.35 + probe 0.40 + sunk null 4.95 + re-null 5.0 + mutations 1.43
+  preserved_artifacts:
+    - benchmarks/results/gepa-faza1/null-baseline/null-baseline-eval-artifactual-bug-superseded.jsonl
+    - benchmarks/results/gepa-faza1/null-baseline/null-baseline-summary-artifactual-bug-superseded.json
+    - benchmarks/results/gepa-faza1/null-baseline/null-baseline-run-artifactual-bug-superseded.log
+    - benchmarks/results/gepa-faza1/null-baseline/checkpoint-a-aggregates-artifactual-bug-superseded.json
+    - benchmarks/results/gepa-faza1/null-baseline/checkpoint-a-report-artifactual-bug-superseded.md
+  unaffected:
+    - "Mutation oracle 10 candidates (cell-semantic preservation valid; cost $1.43)"
+    - "Corpus 50/50 (no dependency on shape selection)"
+    - "Manifest v7 Amendments 1-5 (conceptually correct; fix is implementation-side only)"
+    - "Pre-Gen-1 cost projection $14.86 (cost is shape-independent: subject + judge dominate)"
+    - "Headroom under $115 cap remains healthy (~$90 post re-run)"
+
+# ── Amendment 7 master integration section (binding) ──────────────────────
+
+amendment_7_integration:
+  ratification_date: 2026-04-28
+  authority: PM (Marko Markovic)
+  predecessor: Amendment 6 (NULL-baseline shape-override bug fix)
+  trigger: "Checkpoint A v2 halt-and-PM. LOCKED §C verdict ANOMALOUS due to claude shape +37.5pp delta vs artifactual band. Per Amendment 6 root-cause analysis, the artifactual per-shape labels had ZERO informational content (5×8 replicates of qwen-thinking shape; not shape-vs-shape data). Pre-registered bands therefore structurally biased toward triggering anomaly. PM ratifies Option C (Hybrid override per Checkpoint A v2 §F.2): GO Gen 1 with tightened Checkpoint B + retrieval engagement weighting addendum."
+  scope:
+    - "§saturated_baseline_revocation: §F-saturated rule REVOKED globally (no shape's Wilson CI low ≥0.88); §F.1 fitness function applies to all 5 shapes"
+    - "§lock_override_acknowledgment: Checkpoint A v2 ANOMALOUS classified as structurally-induced; LOCK pre-registration discipline preserved; PM ratifies override per Option C"
+    - "§fitness_function_tiered: Tier 1 NULL-delta (TIE-BREAKER + acceptance gate), Tier 2 retrieval-engagement (PRIMARY in saturated regime, +0.05 per pp above NULL baseline, cap 0.25), Tier 3 cell-semantic-anchor invariance (SECONDARY, +0.10 if all 7 anchors invariant)"
+    - "§gen_1_pre_registered_delta_floor: 3 OR-gated Δ-floor thresholds at Checkpoint B (ANY pass → continue; ALL fail → HALT + Investigate)"
+    - "§checkpoint_b_tightened: mid-run halt thresholds + report extensions + PM ratify gate"
+    - "§sha_chain: Amendment 7 SHA appended to manifest v7 chain (becomes 7-SHA chain)"
+
+  saturated_baseline_revocation:
+    status: REVOKED_BY_AMENDMENT_7
+    predecessor_state_amendment_5: "F_saturated_baseline_rule applied to qwen-thinking (8/8 = 100% NULL artifactual)"
+    predecessor_state_amendment_6: "F_saturated_baseline_rule PAUSED — pending real per-shape NULL data"
+    revocation_basis: "Real per-shape NULL data (Checkpoint A v2 §B.2 + §D): no shape has Wilson 95% CI lower bound ≥ 0.88. Highest CI low: qwen-non-thinking at 0.676 (8/8 = 100% sample but N=8 binomial CI prevents saturated-rule invocation)."
+    decision: GLOBAL_REVOKE
+    consequence: "Apply original §F.1 (≥+5pp delta on trio_strict_pass) to all 5 shapes (no per-shape exception)"
+    re_instate_threshold: "Any shape with CI low ≥ 0.88 on a future expanded NULL run (e.g., N=16+); not achievable within Faza 1 N=8 cap; defer to Faza 2 if relevant"
+
+  lock_override_acknowledgment:
+    locked_verdict_from_checkpoint_a_v2: ANOMALOUS
+    classification: structurally_induced
+    structural_root_cause: "Pre-registered §C bands anchored on artifactual per-shape labels (Amendment 6 root cause: bug-affected NULL-baseline ran 5×8 replicates of qwen-thinking shape, not shape-vs-shape). Bands structurally biased toward triggering anomaly even under correct experiment."
+    pre_registration_discipline_status: PRESERVED_AS_DOCUMENTED
+    pre_registration_discipline_value: "LOCK enforced honest classification — system did NOT silently rationalize verdict away. PM was forced to make explicit override decision rather than retroactively redefining bands. This is the EXACT handoff pre-registration is supposed to produce."
+    pm_ratification: Option_C_Hybrid
+    pm_authority_to_override: "Pre-registration LOCK is discipline tool, not absolute halt. PM has override authority when (a) rationale documented (this section), (b) basis empirically grounded (Amendment 6 root cause), (c) hypothesis tree exercised (Checkpoint A v2 §F.1 H1/H2/H3). All three conditions met."
+    three_pillars_pass_evidence:
+      mutation_invariance: "7 cell-semantic anchors byte-identical to Amendment 6 pins (substrate intact)"
+      cost_sensitivity: "+0.2% per-eval, +0.3% Pre-Gen-1 projection ($14.91 vs $78 halt — 5.2× margin)"
+      raw_agreement: "65% min PASS Amendment 5 §judge_metric_design 65% threshold (exact boundary, inclusive)"
+    kappa_recovery_signal: "κ recovery -0.111 → +0.724 (Opus↔MiniMax pair) — judge agreement was destroyed by the bug, now restored to substantial. Health signal supporting H1 (~70% credence) dominance in Checkpoint A v2 §F.1 hypothesis tree."
+    audit_chain_preserved: "Original LOCKED §C verdict ANOMALOUS remains documented at Checkpoint A v2 report. This Amendment 7 supersedes literal verdict via PM ratification but does NOT erase original audit trail. Pre-registration discipline is honored even when overridden."
+
+  fitness_function_tiered:
+    applies_to: all_5_shapes
+    saturated_regime_definition: "NULL pass rate ≥ 75% for ≥4 of 5 shapes (current state per Checkpoint A v2 §B.2: 5/5 ≥75%)"
+    structural_problem: "Tier 1 (NULL delta) becomes noise-bound on N=8 binomial in saturated regime — statistical noise floor ±15pp at 95% CI swamps the +5pp acceptance threshold. Per-shape NULL improvement is therefore NOT a reliable Tier 1 fitness signal in saturated regime."
+    resolution: "Use Tier 2 + Tier 3 as PRIMARY differentiators in saturated regime; Tier 1 retained as TIE-BREAKER + ACCEPTANCE GATE (≥+5pp from launch decision §F.1 unchanged)."
+    tier_1:
+      label: NULL_pass_rate_delta
+      role_in_saturated_regime: TIE_BREAKER
+      role_as_acceptance_gate: "≥+5pp delta on trio_strict_pass op (ii); UNCHANGED from Amendment 5 launch decision §F.1"
+      computation: "candidate.trioStrictPassRateII − shape_specific_null_baseline_pass_rate, expressed in pp (×100)"
+      noise_floor_pp_at_n_8_95ci: 15
+      noise_floor_basis: "Wilson 95% CI for binomial(N=8, p=0.875) is roughly [0.529, 0.978] = ±22pp; for binomial(N=8, p=0.75) is [0.41, 0.93] = ±26pp. ±15pp practitioner estimate is conservative for headroom analysis."
+    tier_2:
+      label: retrieval_engagement_bonus_continuous
+      role_in_saturated_regime: PRIMARY_DIFFERENTIATOR
+      applies_to_shapes: [qwen-thinking, qwen-non-thinking]
+      excluded_shapes: [claude, gpt, generic-simple]
+      formula: "bonus = clamp(0.05 × (candidate_mean_retrieval − per_shape_null_baseline_mean_retrieval) × 100, 0, 0.25)"
+      formula_interpretation: "0.05 absolute bonus per percentage point ('pp' = 0.01 absolute increase in mean_retrieval_calls_per_task) above per-shape NULL baseline. Cap 0.25 reached at +5pp absolute (e.g., baseline 1.12 → candidate 1.17). Floor 0 (no negative bonus from this formula — see relation_to_amendment_2 below for negative-bonus path)."
+      relation_to_amendment_2_band_bonus: "Amendment 2 §3 band-based bonus (-0.05 / 0.00 / +0.05) remains BINDING for §F.5 false-positive guard + Qwen 1.7 acceptance threshold. Amendment 7 Tier 2 is SUPPLEMENTARY tiered-fitness ranking signal (continuous, granular) — both apply in parallel: Amendment 2 bands gate acceptance + provide negative-band penalty; Amendment 7 Tier 2 ranks candidates within accepted population."
+      pre_registered_at_amendment_7: true
+    tier_3:
+      label: cell_semantic_anchor_invariance
+      role_in_saturated_regime: SECONDARY_DIFFERENTIATOR
+      applies_to_shapes: all_5
+      formula: "bonus = 0.10 if mutation_validator(candidate).valid === true (all 7 anchors invariant per BOUNDARY_SHAS + BASELINE_SHAPE_SHAS pins); bonus = 0 otherwise"
+      seven_anchors:
+        - "packages/agent/src/prompt-shapes/types.ts (whole file SHA pin 1a9fa329e4b6...)"
+        - "MULTI_STEP_ACTION_CONTRACT body bytes (252 bytes SHA pin 70a1701dfa12...)"
+        - "Baseline claude.ts (cbaf0c37b067...)"
+        - "Baseline qwen-thinking.ts (848a4e4917ba...)"
+        - "Baseline qwen-non-thinking.ts (35be379be9a8...)"
+        - "Baseline gpt.ts (5dc6d750d52a...)"
+        - "Baseline generic-simple.ts (81189817f560...)"
+      operationalization_for_gen_1: "All 10 mutation candidates passed mutation_validator at $1.43 oracle run (per audit chain); pre-flight Tier 3 = 0.10 for all 10 candidates. Per-eval Tier 3 = candidate-file invariance (read-only at runtime; agent does not modify shape source files)."
+    aggregate_fitness_in_saturated_regime: "tier_2 + tier_3 (Tier 1 reserved as tie-breaker + acceptance gate; cost penalty per Amendment 2 supplementary diagnostic only — NOT in tiered ranking aggregate)"
+    aggregate_fitness_in_non_saturated_regime: "Amendment 2 form unchanged: trio_strict_pass_rate + retrieval_engagement_bonus_amendment_2_band − cost_penalty (applicability: Faza 1 has no non-saturated shape per Checkpoint A v2 §B.2; retained for Faza 2 expansion if any future shape's NULL pass rate < 75%)"
+    cross_reference_to_existing_acceptance_ts: "evaluateCandidate() in benchmarks/gepa/src/faza-1/acceptance.ts UNCHANGED — operates on §F.1 acceptance gate (Tier 1 ≥+5pp + Qwen 1.7 floor + §F.5 false-positive guard)"
+    fitness_ts_extension: "computeTieredFitness() added to benchmarks/gepa/src/faza-1/fitness.ts; existing computeFitness() retained for Amendment 2 backward-compat reports"
+
+  gen_1_pre_registered_delta_floor:
+    purpose: "Pre-register Gen 1 floor for 'evolution worked at all' to determine whether to continue past Checkpoint B. Looser than §F.1 acceptance threshold (≥+5pp); evolution-worked signal for early HALT."
+    pre_registered_at: amendment_7
+    locked_pre_run: true
+    pm_ratification: Option_C_Hybrid
+    interpretation: "Three OR-gated thresholds. ANY ONE passes at Checkpoint B (30 evals) → proceed (subject to §checkpoint_b_tightened.pm_ratify_gate). ALL THREE fail → HALT + Investigate report."
+    threshold_1_aggregate_tier_1:
+      condition: "aggregate_fitness_delta_pp ≥ 3pp absolute on Tier 1 (NULL pass rate delta)"
+      operationalization: "Mean trio_strict_pass_rate_II across all 30 Checkpoint B evals (across all candidates × shapes evaluated). Compare to mean NULL-baseline 87.5% (Checkpoint A v2 aggregate). Delta in pp must be ≥+3pp."
+      threshold_pp: 3
+      basis: "Loosened from §F.1 ≥+5pp by 2pp for early-HALT signal. ±15pp noise floor on N=30 narrows to ~±8.6pp (sqrt scaling); +3pp ≈ 1/3 noise floor — meaningful early signal that evolution moved the needle."
+    threshold_2_qwen_retrieval_absolute:
+      condition: "Qwen-targeted retrieval engagement ≥+0.10 absolute above per-shape NULL baseline mean retrieval calls per task"
+      operationalization: "For Qwen-targeted candidates evaluated by Checkpoint B (qwen-thinking::* + qwen-non-thinking::*), compute mean retrieval_calls per task. Subtract per-shape NULL baseline (qwen-thinking 1.12, qwen-non-thinking 1.25 per Checkpoint A v2 §B.2). If max delta across Qwen shapes ≥ +0.10 → pass."
+      threshold_absolute: 0.10
+      basis: "Phase 4.5 mechanistic signal direction. +0.10 absolute = closing ~10% of Qwen→Opus gap (1.12 → 1.22 vs 2.33 target). Fits Qwen-targeted shape mutations' explicit anti-premature-finalization scaffolding."
+    threshold_3_compound_tier_1_plus_tier_2:
+      condition: "(aggregate Tier 1 delta ≥ 0pp) AND (aggregate Tier 2 bonus ≥ 0.05)"
+      operationalization: "Tier 1 ≥0pp = no regression on trio_strict. Tier 2 ≥0.05 = aggregate retrieval bonus across Qwen-targeted candidates ≥ 0.05 (per §fitness_function_tiered.tier_2 formula). Both must hold simultaneously."
+      basis: "Compound signal: even if neither threshold 1 nor 2 alone trips, mild improvement on BOTH dimensions suggests evolution moved the needle without regressing anything. Lower-bar but informative."
+    halt_on_all_three_fail:
+      verdict: HALT_AND_INVESTIGATE
+      action: "Stop run at Checkpoint B (30 evals). Author Investigate report at benchmarks/results/gepa-faza1/gen-1/investigate-report.md detailing per-candidate Tier 1/2/3 breakdowns + Δ-floor verdict + hypothesis on why evolution showed no signal. PM ratify investigation path: re-run mutation oracle with stronger anti-premature-finalization scaffolding / scope reduction / Faza 1 abandon."
+      investigate_budget_separate: true
+    proceed_on_any_one_pass:
+      verdict: PROCEED_TO_CHECKPOINT_B_REPORT
+      action: "Author Checkpoint B halt-and-PM report (per §checkpoint_b_tightened.report_extensions). Halt at 30 evals as scheduled per launch decision §E. PM ratifies Checkpoint B (per §checkpoint_b_tightened.pm_ratify_gate) → continue Gen 1 to full 120 evals."
+
+  checkpoint_b_tightened:
+    overrides_standard_checkpoint_b: "Standard B per launch decision §E (post-partial verdict + cost re-projection). Tightened version adds mid-run halt thresholds + report extensions + PM ratify gate."
+    mid_run_halt_thresholds:
+      per_candidate_cost_overshoot:
+        condition: "Per-candidate mean per-eval cost overshoots projection by >25%"
+        projection_basis_per_eval_usd: 0.1243  # Checkpoint A v2 §E
+        overshoot_threshold_per_eval_usd: 0.156  # 0.1243 × 1.25
+        overshoot_candidate_count_to_halt: 3   # >3 candidates with overshoot triggers halt
+        action: "HALT + investigate cost regression. Likely cause: judge ensemble drift, prompt token bloat, retrieval noise."
+      per_shape_variance_widens:
+        condition: "Per-shape variance (max-min trio_strict_pass_rate_II range across that shape's candidates evaluated so far) widens to >40pp"
+        threshold_pp: 40
+        action: "HALT + investigate unstable evolution. Likely cause: oracle producing high-variance mutations that wreck some candidates while improving others."
+      qwen_retrieval_engagement_regression:
+        condition: "Mean retrieval engagement on Qwen-targeted candidates drops below per-shape NULL baseline (qwen-thinking 1.12, qwen-non-thinking 1.25) at any aggregation point with ≥3 evals on that shape"
+        action: "HALT + investigate semantic regression (evolution made retrieval WORSE — opposite Phase 4.5 signal direction; mutation oracle may have introduced anti-engagement scaffolding)."
+    report_extensions:
+      beyond_standard: "Standard Checkpoint B fitness/cost/sample_efficiency fields per launch decision §E remain. Amendment 7 adds:"
+      per_candidate_tier_breakdown: "tier_1 (delta_pp signed), tier_2 (continuous bonus 0..0.25 for Qwen-targeted; N/A for non-Qwen), tier_3 (binary 0 or 0.10), aggregate = tier_2 + tier_3 (saturated regime), tie_breaker_tier_1 (delta_pp signed), saturated_regime_applied (boolean)"
+      retrieval_engagement_deltas_per_qwen_shape: "qwen-thinking + qwen-non-thinking concrete numbers (null_baseline_mean, gen1_partial_mean, delta_absolute, delta_pp)"
+      cell_semantic_anchor_invariance_count_per_candidate: "0..7 scale (where 7 = all anchors invariant per mutation_validator); pre-flight all 10 candidates = 7"
+      pre_registered_delta_floor_pass_fail: "threshold_1_aggregate_tier_1 (PASS|FAIL), threshold_2_qwen_retrieval_absolute (PASS|FAIL), threshold_3_compound_tier_1_plus_tier_2 (PASS|FAIL), overall_delta_floor_verdict (PROCEED|HALT_INVESTIGATE)"
+    pm_ratify_gate:
+      gate_position: "Before post-Checkpoint-B continuation (Gen 1 30 → 120 evals)"
+      pm_action: "Read Checkpoint B halt-and-PM report; ratify continuation OR halt-and-investigate OR scope-reduce-and-continue"
+      no_silent_advance: true
+      brief_authoring_responsibility: PM_side_once_checkpoint_b_lands
+
+  cross_references:
+    pm_brief_session_authored_at: "Session start 2026-04-28 (PM RATIFY brief §1-§8)"
+    checkpoint_a_v2_report: benchmarks/results/gepa-faza1/null-baseline/checkpoint-a-report.md
+    amendment_5_F_saturated_rule: "F_saturated_baseline_rule.status: REVOKED_BY_AMENDMENT_7 (added inline)"
+    amendment_6_root_cause: amendment_6_integration.bug_summary
+    fitness_function_implementation_target: benchmarks/gepa/src/faza-1/fitness.ts (computeTieredFitness function added)
+    delta_floor_implementation_target: benchmarks/gepa/scripts/faza-1/run-gen-1.ts (DELTA_FLOOR_THRESHOLDS constants + verdict computation)
+    halt_thresholds_implementation_target: benchmarks/gepa/scripts/faza-1/run-gen-1.ts (mid-run halt threshold constants + check logic)
+
+  cumulative_actual_spend_at_amendment_7_ratification: 25.18  # corpus 13.35 + sunk null 4.95 + re-null 4.97 + mutations 1.43 + probes 0.40 + misc 0.08
+  pre_gen_1_partial_cost_projection_unchanged: 14.91  # Checkpoint A v2 §E
+  cumulative_post_gen_1_partial_projection_usd: 40.09  # 25.18 + 14.91
+  hard_cap_usd_unchanged: 115.00
+  headroom_post_gen_1_partial_usd: 74.91
+
+# ── Amendment 8 master integration section (binding) ──────────────────────
+
+amendment_8_integration:
+  ratification_date: 2026-04-28
+  authority: PM (Marko Markovic)
+  predecessor: Amendment 7 (Option C — saturated revoke + tiered fitness + Δ-floor + tightened Checkpoint B)
+  trigger: "Gen 1 partial run b5avslp51 halted at 11/30 evals via Amendment 7 §checkpoint_b_tightened.qwen_retrieval_engagement_regression. Investigate report (benchmarks/results/gepa-faza1/gen-1/investigate-report.md) surfaced CRITICAL secondary finding: REGISTRY-injection bug. All 16 attempted mutation-candidate evals (claude::gen1-v1/v2 × 8 each) failed with `prompt-shapes selector: override 'claude-gen1-v1' not in REGISTRY`. PM ratifies Probe-first prerequisite + Option B (Fix-and-Restart Fresh)."
+  scope:
+    - "§canonical_mutation_api: registerShape() is the only sanctioned path for runtime REGISTRY mutation; direct (REGISTRY as any)[name] = shape forbidden post-Amendment-8"
+    - "§registry_invariant_test: cross-module-boundary regression test (benchmarks/gepa/tests/faza-1/registry-injection.test.ts, 7 tests) documents H1 failure mode + verifies fix"
+    - "§lint_rule_or_grep_check: grep-based codebase scan for direct REGISTRY mutation outside selector.ts; expected matches = 1 (selector.ts:75 inside registerShape itself); deliberate failure-mode demonstration in benchmarks/gepa/scripts/faza-1/probe-registry-injection.ts is exempted (audit artifact)"
+    - "§sunk_disposition: 11 baseline evals from b5avslp51 archived with -void-registry-bug-superseded suffix; NOT carried into fresh Gen 1 run"
+    - "§sha_chain: Amendment 8 SHA appended to manifest v7 chain (becomes 8-SHA chain)"
+
+  probe_verdict:
+    diagnostic_artifact: benchmarks/gepa/scripts/faza-1/probe-registry-injection.ts
+    run_at: 2026-04-28T17:30:00Z (approximate; pre-fix probe run)
+    verdict: H1_CONFIRMED
+    smoking_gun:
+      object_identity_a_eq_b: false  # script deep-relative-path REGISTRY ≠ @waggle/agent REGISTRY
+      object_identity_a_eq_c: false  # script deep-relative-path REGISTRY ≠ @waggle/agent REGISTRY (2nd import)
+      object_identity_b_eq_c: true   # both @waggle/agent imports → same instance
+      mutation_via_a_visible_to_a: true
+      mutation_via_a_visible_to_b: false  # ← bug confirmed
+      mutation_via_a_visible_to_c: false
+      selectShape_via_b: "throws: prompt-shapes selector: override 'claude-gen1-v1-probe' not in REGISTRY"
+    structural_root_cause: "tsx + Node ESM with workspace path resolution: importing REGISTRY via deep relative path '../../../../packages/agent/src/prompt-shapes/selector.js' vs via '@waggle/agent' produces TWO distinct module instances. The worktree has @waggle/agent symlinked to MAIN REPO's packages/agent (via npm-workspaces hoisting), which means worktree's deep-relative-path resolves to worktree's source tree but @waggle/agent resolves to main-repo's source tree — genuinely different files at different absolute paths."
+    pm_directive_satisfied: "If H1 confirmed: implement registerShape API; PM ratify Option B (Fix-and-Restart Fresh) authorized."
+    if_not_h1_action_avoided: "PM brief stipulated halt-and-PM if probe verdict NOT H1. Verdict IS H1, so probe-first prerequisite passes; proceeding with Option B fix without escalation to Option C interface refactor."
+
+  canonical_mutation_api:
+    api_signature: "registerShape(name: string, shape: PromptShape): void"
+    location: packages/agent/src/prompt-shapes/selector.ts (lines 38-76)
+    main_repo_mirror: D:/Projects/waggle-os/packages/agent/src/prompt-shapes/selector.ts (identical content; required because worktree's @waggle/agent symlinks to main repo via npm workspaces)
+    re_export_paths:
+      - packages/agent/src/prompt-shapes/index.ts (re-exports registerShape)
+      - packages/agent/src/index.ts (re-exports registerShape via prompt-shapes/index.js)
+      - "@waggle/agent" (public package import — canonical caller-facing path)
+    rationale: "Callers must import registerShape from '@waggle/agent' (NOT a deep relative path) so that the mutation hits the SAME REGISTRY instance the agent-loop's selectShape() reads from. Importing registerShape from a deep relative path would still suffer the H1 module-identity issue."
+    forbidden_patterns:
+      - "(REGISTRY as any)[name] = shape"
+      - "REGISTRY[name] = shape (outside selector.ts internal implementation)"
+      - "Object.assign(REGISTRY, { [name]: shape })"
+      - "Reflect.set(REGISTRY, name, shape)"
+    sanctioned_pattern: |
+      import { registerShape, type PromptShape } from '@waggle/agent';
+      registerShape(candidateName, candidateShape);
+    validation_in_registerShape:
+      - "name is non-empty string (else throws)"
+      - "shape has required PromptShape fields (else throws)"
+      - "last-write-wins re-registration semantics (registerShape can be called multiple times for same name)"
+
+  registry_invariant_test:
+    test_file: benchmarks/gepa/tests/faza-1/registry-injection.test.ts
+    test_count: 7
+    test_purposes:
+      - "Documents H1 failure mode (deep-path REGISTRY ≠ package REGISTRY) — assertion 1 + 2"
+      - "Verifies fix: registerShape via @waggle/agent makes shape visible from selectShape() — assertion 3"
+      - "Validates registerShape input rejection (empty name, malformed shape) — assertion 4 + 5"
+      - "Validates last-write-wins re-registration semantics — assertion 6"
+      - "Validates listShapes() inspector reflects registerShape mutations — assertion 7"
+    binding: "Test must remain green for all future Faza 1 runs + Faza 2 expansion + Phase 5 GEPA-evolved variant work. If test-1 (object-identity assertion) ever inverts (i.e., deep-path === package), the underlying ESM resolver behavior has changed — flag immediately + audit downstream impacts."
+
+  lint_rule_or_grep_check:
+    method: codebase_grep
+    grep_pattern_for_writes: "REGISTRY\\[.+\\]\\s*=\\s*[^=]"
+    grep_pattern_for_writes_via_cast: "\\(REGISTRY as any\\)\\[.+\\]\\s*=\\s*"
+    expected_matches:
+      - file: packages/agent/src/prompt-shapes/selector.ts
+        line: 75
+        text: "REGISTRY[name] = shape;"
+        verdict: SANCTIONED (inside registerShape function body)
+      - file: benchmarks/gepa/scripts/faza-1/probe-registry-injection.ts
+        line: ~91
+        text: "(RegistryFromScriptDeepPath as any)[PROBE_SHAPE_NAME] = probeShape;"
+        verdict: SANCTIONED (deliberate failure-mode demonstration; audit artifact for the bug-fix narrative)
+    forbidden_locations: "Anywhere else in codebase. CC-2 enforcement at code review time + automated grep at CI time (proposed). Deviations require Amendment 9+ ratification."
+    cleanup_rationale: "Forbidden direct mutation pattern includes the failure-mode demonstration in tests/regression test (benchmarks/gepa/tests/faza-1/registry-injection.test.ts) — but those usages are GUARDED by `Record<string, PromptShape>` cast (not `as any`) and are EXPLICITLY documented as failure-mode witnesses. Acceptable as test-only usage."
+
+  sunk_disposition:
+    sunk_run_id: b5avslp51
+    sunk_evals_count: 11
+    sunk_cost_usd: 1.3572
+    sunk_breakdown:
+      - candidate: claude::baseline
+        evals_completed: 8
+        outcome: 8/8 trio_strict_pass_II  # 100% baseline drift vs NULL 87.5% = +12.5pp variance
+      - candidate: qwen-thinking::baseline
+        evals_completed: 3
+        outcome: 2/3 trio_strict_pass_II  # 66.7% on small sample = -20.83pp from NULL 87.5% (variance)
+    rationale: "Mutation-candidate evals never executed (16/16 failed instantly with REGISTRY-injection error). Only baseline evals completed. These are NOT evolution data — they're partial baseline replicates on a different sample subset than NULL-baseline. Including them in fresh Gen 1 would mix pre-fix + post-fix evals and contaminate the analysis."
+    archive_action:
+      method: rename_with_suffix
+      suffix: "-void-registry-bug-superseded"
+      files_archived:
+        - benchmarks/results/gepa-faza1/gen-1/gen-1-eval.jsonl → gen-1-eval-void-registry-bug-superseded.jsonl
+        - benchmarks/results/gepa-faza1/gen-1/gen-1-summary.json → gen-1-summary-void-registry-bug-superseded.json
+        - benchmarks/results/gepa-faza1/gen-1/gen-1-run.log → gen-1-run-void-registry-bug-superseded.log
+      preserved_unchanged:
+        - benchmarks/results/gepa-faza1/gen-1/investigate-report.md (root-cause narrative, audit chain)
+    fresh_gen_1_starting_state: "Empty gen-1-eval.jsonl + empty gen-1-run.log + no gen-1-summary.json. Runner writes fresh files at original paths."
+    cumulative_spend_post_archive_pre_restart: 26.54  # unchanged ($25.18 pre-Gen-1 + $1.36 sunk)
+
+  fresh_gen_1_kick_authorization:
+    authorization_basis: "PM brief 2026-04-28 RATIFY GO message §4 — 'Discard sunk run. Run fresh Gen 1 on full 30 evals (8 baseline + 16 mutation + 6 retrieval probes). $4.96 expected. Halt-and-PM at Checkpoint B with extended report per Amendment 7.'"
+    pre_kick_gates:
+      - id: probe_verdict_h1
+        status: PASS  # documented in §probe_verdict above
+      - id: registerShape_implemented
+        status: PASS  # selector.ts (worktree) + selector.ts (main repo mirror)
+      - id: registerShape_re_exported
+        status: PASS  # prompt-shapes/index.ts + index.ts in BOTH worktree + main repo
+      - id: regression_test_green
+        status: PASS  # 7/7 tests in registry-injection.test.ts
+      - id: full_faza_1_test_suite_green
+        status: PASS  # 206/206 tests across 10 test files (was 199; +7 from regression test)
+      - id: runner_dry_run_green
+        status: PASS  # all 5 baselines + 10 mutations load + register + dry-run candidate enumeration completes
+      - id: sunk_evals_archived
+        status: PENDING_THIS_COMMIT  # archive action defined in §sunk_disposition; will land in same commit as Amendment 8
+    cost_projection_fresh_gen_1: 4.96  # full 30 evals × $0.124/eval = $3.72 + judge variance buffer + retry overhead
+    cumulative_post_fresh_gen_1_partial_projection_usd: 31.50  # 26.54 sunk + 4.96 fresh
+    headroom_under_115_cap_usd: 83.50
+
+  mid_run_halt_thresholds_unchanged:
+    note: "Amendment 7 §checkpoint_b_tightened mid-run halt thresholds remain ACTIVE for fresh Gen 1 run. Per PM brief step 5: 'If qwen_retrieval_engagement triggers AGAIN on fresh run (post-fix, with mutations actually executing), THAT is a real signal — escalate to Option C investigate even mid-run.'"
+    interpretation: "Pre-fix halt was variance-driven (mutations didn't execute). Post-fix halt would mean evolution genuinely makes retrieval WORSE — opposite Phase 4.5 signal direction → mechanistic regression deserving immediate investigation, not auto-recovery."
+
+  cross_references:
+    pm_brief_session_authored_at: "Session start 2026-04-28 (PM RATIFY brief §1-§8 + later Probe-first + Option B ratify)"
+    investigate_report: benchmarks/results/gepa-faza1/gen-1/investigate-report.md
+    diagnostic_probe: benchmarks/gepa/scripts/faza-1/probe-registry-injection.ts
+    regression_test: benchmarks/gepa/tests/faza-1/registry-injection.test.ts
+    canonical_mutation_api_source_worktree: packages/agent/src/prompt-shapes/selector.ts (lines 38-76)
+    canonical_mutation_api_source_main_repo: D:/Projects/waggle-os/packages/agent/src/prompt-shapes/selector.ts (mirrored content; required for runtime resolution)
+    runner_post_fix: benchmarks/gepa/scripts/faza-1/run-gen-1.ts (registerShape import + call site updated)
+    sunk_run_command: "npx tsx benchmarks/gepa/scripts/faza-1/run-gen-1.ts --checkpoint-b (background job b5avslp51, 2026-04-28 15:59 UTC)"
+
+  cumulative_actual_spend_at_amendment_8_ratification: 26.54  # Amendment 7 ratification 25.18 + Gen 1 partial sunk 1.36
+  pre_fresh_gen_1_cost_projection: 4.96  # full 30-eval Checkpoint-B halt budget
+  cumulative_post_fresh_gen_1_partial_projection_usd: 31.50  # 26.54 + 4.96
+  hard_cap_usd_unchanged: 115.00
+  headroom_post_fresh_gen_1_partial_usd: 83.50
+
+# ── Amendment 9 master integration section (binding) ──────────────────────
+
+amendment_9_integration:
+  ratification_date: 2026-04-28
+  authority: PM (Marko Markovic)
+  predecessor: Amendment 8 (Probe-first + Option B fix — registerShape canonical mutation API + sunk archive)
+  trigger: "Checkpoint B halt-and-PM (fresh Gen 1 partial 30/30 evals, buc5febjp). PM ratifies Option A (continue full Gen 1) + explicit interpretation lock on §C qwen-thinking::baseline retrieval anomaly: +0.547 absolute delta is BASELINE-RUNNING variance, NOT Qwen evolution mechanism activation. Pre-registers anti-misattribution discipline + Phase 4.5 verdict capture rules BEFORE remaining 90 evals run (preserves pre-registration discipline)."
+  scope:
+    - "§qwen_baseline_anomaly_disposition: anti-misattribution lock — qwen-thinking::baseline n=6/8 retrieval +0.547 vs NULL is variance NOT evolution; cannot be cited as Phase 4.5 mechanism validation"
+    - "§qwen_evolution_verdict_capture: pre-registered rules for what counts as positive vs negative Phase 4.5 mechanistic Qwen-evolution signal at full Gen 1 close"
+    - "§option_a_ratification: PM rationale for choosing Option A over B/C — pre-registration discipline + multi-shape replication + control shape disentanglement + Phase 4.5 strategic spine + cost discipline"
+    - "§sha_chain: Amendment 9 SHA appended to manifest v7 chain (becomes 9-SHA chain)"
+
+  qwen_baseline_anomaly_disposition:
+    locked_pre_run: true  # ratified BEFORE Qwen mutation evals execute
+    pm_authority: PM_explicit_ratification_via_PM_brief_2026_04_28_post_checkpoint_b
+    anti_misattribution_clause: |
+      qwen-thinking::baseline n=6/8 retrieval delta of +0.547pp vs NULL is caused
+      by stochastic agent-planning variance on baseline (no evolution applied).
+      It triggered Δ-floor threshold 2 procedurally. It does NOT constitute
+      evidence that Qwen retrieval engagement responds to evolved prompts.
+      Phase 4.5 mechanistic Qwen-evolution test occurs only when
+      qwen-thinking::gen1-v1 and qwen-thinking::gen1-v2 mutation candidates
+      run, which is in the remaining 90 evals.
+    binding_for_writeups:
+      - arxiv_preprint
+      - internal_memos
+      - landing_copy
+      - paper_section_5_4
+      - all_future_decisions_referencing_faza_1_qwen_findings
+    forbidden_attribution_examples:
+      - "Faza 1 Gen 1 validates Phase 4.5 Qwen retrieval engagement hypothesis (citing baseline variance)"
+      - "Qwen retrieval gap closed by GEPA evolution (citing +0.547 absolute Δ-floor pass)"
+      - "Tier 2 retrieval bonus reached cap (0.25) on Qwen-thinking shape (citing baseline run)"
+    sanctioned_attribution_examples:
+      - "Faza 1 Gen 1 Checkpoint B observed +0.547 retrieval delta on qwen-thinking::baseline run on a 6/8 instance subset; this reflects agent-planning variance and does NOT indicate evolution mechanism activation."
+      - "Phase 4.5 Qwen mechanism test is pending — requires evaluation of qwen-thinking::gen1-v1, gen1-v2, qwen-non-thinking::baseline, gen1-v1, gen1-v2 (90 evals scheduled in remaining Gen 1)."
+    why_locked_pre_run_not_post: "Post-data interpretation locks are weaker — the temptation is to retroactively explain whatever results land. Pre-registering the anti-misattribution clause BEFORE the remaining 90 evals run forces the team to commit to the interpretation framework before knowing the outcome. This is the same discipline that made Checkpoint A v2 §C lock meaningful."
+
+  qwen_evolution_verdict_capture:
+    locked_pre_run: true  # pre-registered before mutation evals execute
+    pm_authority: PM_explicit_ratification_via_PM_brief_2026_04_28_post_checkpoint_b
+    purpose: "Define what counts as positive vs negative Phase 4.5 mechanistic Qwen-evolution signal at full Gen 1 close. Both directions are valid science findings — Faza 1 doesn't fail if mechanism doesn't activate; it fails only if the test isn't run."
+    qwen_targeted_shapes: [qwen-thinking, qwen-non-thinking]
+    candidates_to_evaluate:
+      - qwen-thinking::baseline (2 evals remaining; total 8/8 needed)
+      - qwen-thinking::gen1-v1 (8 evals)
+      - qwen-thinking::gen1-v2 (8 evals)
+      - qwen-non-thinking::baseline (8 evals)
+      - qwen-non-thinking::gen1-v1 (8 evals)
+      - qwen-non-thinking::gen1-v2 (8 evals)
+    positive_signal_definition:
+      condition_1_acceptance_gate: "Best mutation candidate per Qwen-targeted shape beats Qwen-shape NULL-baseline by ≥+5pp on trio_strict_pass_II (Amendment 5 §F.1 unchanged)"
+      condition_2_qwen_retrieval_engagement_floor: "Best mutation candidate has mean retrieval_calls per task ≥ 1.7 (Amendment 5 §F.1 Qwen sub-criterion + Amendment 2 §F.5 false-positive guard at 1.5)"
+      both_must_hold: true
+      false_positive_guard: "If condition_1 passes but mean retrieval_calls < 1.5 → REJECTED per Amendment 2 §F.5 (false-positive evolution via mutation-noise rather than mechanistic fix)"
+      mutation_must_outperform_baseline: "Mutation candidate's retrieval engagement must exceed the SAME shape's baseline retrieval running on the SAME 8 instances. Comparing mutation to NULL-baseline is necessary but not sufficient — the comparison must isolate evolution effect from baseline-run variance."
+    negative_signal_definitions:
+      direction_1_no_change: "Qwen mutation candidates' retrieval engagement statistically indistinguishable from same-shape baseline (mean delta < 0.10 absolute, well within agent-planning variance band observed at Checkpoint B)"
+      direction_2_regression: "Qwen mutation candidates' retrieval engagement DROPS BELOW same-shape baseline. If mid-run halt qwen_retrieval_engagement_regression triggers WITH mutations actually executing, this is the direction_2 verdict — mechanism active in opposite direction (mutations made retrieval worse). Halt + capture as Phase 4.5 negative finding."
+    null_signal_definition: "Mutation candidates' retrieval engagement varies in direction but neither candidate exceeds same-shape baseline by ≥+0.10 absolute. Inconclusive."
+    mid_run_halt_binding: "Per PM brief 2026-04-28 step 5: if qwen_retrieval_engagement_regression mid-run halt fires WITH qwen-thinking::gen1-v1/v2 mutation candidates executing (NOT just baseline), the halt itself is the Phase 4.5 mechanistic verdict signal (negative direction). Author Phase 4.5 verdict capture report at the halt; do NOT auto-recover."
+    interpretation_consistency_with_amendment_2:
+      band_bonus_remains_binding: "Amendment 2 §3 retrieval engagement band bonus (-0.05 / 0.00 / +0.05) still applies for §F.5 false-positive guard. Amendment 7 Tier 2 (continuous +0.05/pp cap 0.25) is supplementary tiered-fitness ranking signal. Both apply in parallel."
+      qwen_threshold_1_7_unchanged: "Amendment 5 §F.1 Qwen sub-criterion threshold (≥1.7 mean retrieval_calls) unchanged by Amendment 9. This is the binary acceptance gate; Tier 2 continuous formula is for ranking within accepted population."
+    audit_chain_pin:
+      - benchmarks/results/gepa-faza1/null-baseline/checkpoint-a-report.md (NULL per-shape baselines for Qwen comparison)
+      - benchmarks/results/gepa-faza1/gen-1/checkpoint-b-report.md (interpretation context for §C anomaly disposition)
+      - benchmarks/results/gepa-faza1/gen-1/gen-1-eval.jsonl (post-resume will contain 30 + 90 = 120 records for full Gen 1)
+
+  option_a_ratification:
+    pm_path_chosen: A
+    cost_incremental: 11.07  # 90 evals × $0.123/eval
+    cumulative_post_full_gen_1: 41.30  # 30.23 + 11.07
+    headroom_under_115_cap: 73.70
+    pm_rationale_summary:
+      - "Pre-registered design is 5 shapes × 3 candidates. Stopping at 1/5 shapes (Option B) breaks the pre-registration discipline Amendment 7 was authored to enforce."
+      - "claude::gen1-v1 +12.5pp on N=8 with CI [0.676, 1.000] — wide. Parallel-shape evidence reduces effective variance; multi-shape replication separates publishable result from war story."
+      - "gpt + generic-simple are CONTROL SHAPES. Without them, claude::gen1-v1 +12.5pp could be interpreted as 'Waggle-evolution improves any non-Qwen prompt regardless of shape semantics.' Controls disentangle shape-specific from generic improvement."
+      - "Phase 4.5 Qwen mechanistic test is the strategic spine of Tier 2 fitness function (Amendment 7). UNTESTED = unprovable strategic claim."
+      - "Cost: $73.70 headroom remains after full Gen 1. Budget is not a binding constraint."
+    paths_rejected:
+      option_b: "Stop at Checkpoint B; treat claude::gen1-v1 as sole finding. REJECTED: violates pre-registration; insufficient for Faza 2 gating; doesn't test Phase 4.5 strategic spine."
+      option_c: "Scope-reduce to Qwen shapes only. REJECTED: skips control shapes that disentangle shape-specific from generic improvement; partial coverage degrades Faza 1 → Faza 2 generalization claim."
+    methodological_principle: "Spending $11 to complete a pre-registered design is cheap relative to the cost of incomplete data + retroactive scope reductions. Pre-registration is most valuable when honored even when its data turns out cheaper than expected."
+
+  cross_references:
+    pm_brief_session_authored_at: "Session 2026-04-28 PM brief — post-Checkpoint-B Option A ratification + §C interpretation lock"
+    checkpoint_b_report: benchmarks/results/gepa-faza1/gen-1/checkpoint-b-report.md
+    null_baseline_report: benchmarks/results/gepa-faza1/null-baseline/checkpoint-a-report.md
+    amendment_5_F_1_qwen_subcriterion: amendment_5_integration (§F.1 ≥1.7 retrieval gate)
+    amendment_2_F_5_false_positive_guard: amendment_2_integration (band bonus + 1.5 floor)
+    amendment_7_F_saturated_revoked: F_saturated_baseline_rule.status = REVOKED_BY_AMENDMENT_7
+    amendment_7_tier_2_continuous: amendment_7_integration.fitness_function_tiered.tier_2
+
+  cumulative_actual_spend_at_amendment_9_ratification: 30.23  # corpus 13.35 + sunk null 4.95 + re-null 4.97 + mutations 1.43 + probes 0.40 + sunk-gen-1 1.36 + fresh-gen-1-partial 3.69 + misc 0.08
+  pre_full_gen_1_remaining_cost_projection: 11.07  # 90 evals × $0.123/eval
+  cumulative_post_full_gen_1_projection_usd: 41.30
+  hard_cap_usd_unchanged: 115.00
+  headroom_post_full_gen_1_projection_usd: 73.70
+
+# ── Amendment 10 master integration section (binding) ─────────────────────
+
+amendment_10_integration:
+  ratification_date: 2026-04-28
+  authority: PM (Marko Markovic)
+  predecessor: Amendment 9 (Option A ratify + Qwen baseline anomaly anti-misattribution lock + Phase 4.5 verdict capture)
+  trigger: "Full Gen 1 halt at 53/120 evals (b1t474yqd) fired Amendment 7 §checkpoint_b_tightened.qwen_retrieval_engagement_regression on qwen-non-thinking::baseline n=5 (mean 1.200 vs NULL 1.250 = -0.05 absolute, within ±0.10 stochastic noise band documented at Checkpoint B). Second consecutive halt firing on baseline-only data within noise; calibration concern empirically confirmed. PM ratifies Option A — tighten halt threshold + resume to full Gen 1 to test §F.2 (≥3/5 shapes positive delta) + Phase 4.5 reproducibility on qwen-non-thinking."
+  scope:
+    - "§10.1 calibration_fix: QWEN_RETRIEVAL_REGRESSION_MIN_EVALS 3 → 5 + ONLY fire halt when at least one mutation candidate has been evaluated for that shape (baseline-only data does NOT trigger halt)"
+    - "§10.2 §F.2_verdict_gate: continue testing all 5 shapes for §F.2 verdict (≥3/5 shapes positive delta); document method scope per outcome"
+    - "§10.3 Phase 4.5 reproducibility on qwen-non-thinking: pre-register reproducibility verdict capture rules (PASS strengthens claim; FAIL produces scoped publishable finding)"
+    - "§10.4 sha_chain: append Amendment 10 SHA to manifest v7 chain (becomes 10-SHA chain)"
+
+  calibration_fix:
+    pre_registered_at: amendment_10
+    locked_pre_resume: true
+    rationale_empirical_basis:
+      run_1: "b5avslp51 (sunk pre-Amendment-8): mid-run halt fired on qwen-thinking::baseline mean retrieval 1.000 at n=3 vs NULL 1.12 (-0.120 absolute). Mutations were ALSO failing via REGISTRY-injection bug at this run — but halt fired on baseline data BEFORE the mutation failure was even detectable as a separate finding."
+      run_2: "b1t474yqd (full Gen 1 post-fix): mid-run halt fired on qwen-non-thinking::baseline mean retrieval 1.200 at n=5 vs NULL 1.250 (-0.050 absolute). Mutations for qwen-non-thinking did NOT execute — halt fired during baseline phase with 5/8 evals on the same instance subset that NULL covered."
+      noise_floor_characterization: "Both runs fired halts at baseline-running deltas of ≤0.12 absolute. Checkpoint B documented qwen-thinking::baseline +0.547 absolute lift on n=6 partial, also baseline noise. Empirical noise band: ±0.55 absolute on N=3-6 baseline samples; settles toward true rate as N grows."
+    code_changes:
+      file: benchmarks/gepa/scripts/faza-1/run-gen-1.ts
+      change_1_constant_raise:
+        before: "const QWEN_RETRIEVAL_REGRESSION_MIN_EVALS = 3;  // Amendment 7"
+        after:  "const QWEN_RETRIEVAL_REGRESSION_MIN_EVALS = 5;  // Amendment 10 §10.1 (raised from 3)"
+        effect: "Each candidate must have 5+ evals to enter the per-shape aggregate retrieval check; reduces N=3 binomial-tail noise sensitivity"
+      change_2_mutation_execution_gate:
+        before: |
+          for (const shape of ['qwen-thinking', 'qwen-non-thinking'] as const) {
+            const baseline = NULL_BASELINE_PER_SHAPE[shape].meanRetrievalCallsPerTask;
+            const shapeAccs = [...accs.values()].filter(a => a.shape === shape && a.evalCount >= QWEN_RETRIEVAL_REGRESSION_MIN_EVALS);
+            if (shapeAccs.length === 0) continue;
+            // ... aggregate check
+          }
+        after: |
+          for (const shape of ['qwen-thinking', 'qwen-non-thinking'] as const) {
+            // Amendment 10 §10.1 mutation_execution_gate: halt only fires when at least
+            // one mutation candidate has been evaluated for this shape. Baseline-only
+            // data does NOT trigger halt (matches Amendment 9 §qwen_evolution_verdict_capture
+            // .mid_run_halt_binding intent that halt represents mutation-direction signal).
+            const allShapeAccs = [...accs.values()].filter(a => a.shape === shape);
+            const hasMutationEvalsForShape = allShapeAccs.some(a => a.variant !== 'baseline' && a.evalCount > 0);
+            if (!hasMutationEvalsForShape) continue;
+
+            const baseline = NULL_BASELINE_PER_SHAPE[shape].meanRetrievalCallsPerTask;
+            const shapeAccs = allShapeAccs.filter(a => a.evalCount >= QWEN_RETRIEVAL_REGRESSION_MIN_EVALS);
+            if (shapeAccs.length === 0) continue;
+            // ... aggregate check (unchanged)
+          }
+        effect: "Halt only triggers when mutations are executing for that shape; preserves Amendment 9 §qwen_evolution_verdict_capture intent."
+    binding_per_run_protocol: "If halt fires AGAIN with the calibration fix in place — i.e., MIN_EVALS=5 + mutation_execution_gate=true — that IS the Phase 4.5 negative-direction verdict per Amendment 9 §qwen_evolution_verdict_capture. Halt + capture as direction_2 finding; do NOT auto-recover. Escalate to Option C (Amendment 11 interface refactor)."
+    why_locked_pre_resume: "Calibration parameters tuned to data are vulnerable to overfitting the analyst's preferred verdict. Pre-registering the tightening BEFORE the resume run runs (with empirical justification from 2 prior halts) preserves pre-registration discipline."
+
+  F2_verdict_gate:
+    purpose: "Continue Gen 1 to all 5 shapes evaluated; produce §F.2 verdict for Faza 1 acceptance gate (≥3/5 shapes positive delta)"
+    pre_registered_at: amendment_10
+    locked_pre_resume: true
+    pass_path:
+      condition: "≥3 of 5 shapes show best-mutation-candidate beating NULL by ≥+5pp on trio_strict_pass_II (Amendment 5 §F.1 + Amendment 7 §F-saturated revoked)"
+      consequence: "Faza 1 §F.2 PASS — methodologically sound for Phase 5 GEPA-evolved variant deployment authorization; Faza 2 expansion authorized per launch decision §F.5 condition_2"
+    fail_path:
+      condition: "≤2 of 5 shapes positive"
+      consequence: "Faza 1 §F.2 FAIL — but valid negative result; document scope of validated method (claude + qwen-thinking) for arxiv §5.4 framing; Faza 2 brief authoring re-scoped"
+    interpretation_invariant: "PASS and FAIL outcomes both scientifically valid. Faza 1 fails methodologically only if §F.2 is left unverdicted (test isn't run)."
+    state_at_resume: "claude (3/3 candidates) + qwen-thinking (3/3 candidates) at full N=8 coverage. Remaining: qwen-non-thinking::baseline (3 evals) + gen1-v1 (8) + gen1-v2 (8); gpt (3 candidates × 8 = 24); generic-simple (3 candidates × 8 = 24). Total 67 evals."
+
+  phase_4_5_reproducibility_qwen_non_thinking:
+    purpose: "Pre-register what counts as Phase 4.5 reproducibility verdict on qwen-non-thinking shape — second Qwen variant tests robustness across reasoning depth"
+    pre_registered_at: amendment_10
+    locked_pre_resume: true
+    candidates_to_evaluate: [qwen-non-thinking::baseline (3 remaining), qwen-non-thinking::gen1-v1, qwen-non-thinking::gen1-v2]
+    positive_signal_definition: "qwen-non-thinking::gen1-v1 OR gen1-v2 satisfies ALL 4 Amendment 9 §qwen_evolution_verdict_capture.positive_signal_definition gates: (1) ≥+5pp trio_strict vs NULL, (2) mean retrieval ≥1.7, (3) mutation > same-shape baseline retrieval, (4) ≥1.5 false-positive guard"
+    positive_outcome_interpretation: "'Qwen evolution method robust across reasoning depth' — claim strengthened. Both qwen-thinking + qwen-non-thinking show retrieval engagement closure. Generalizability to non-thinking variants of Qwen models established."
+    null_outcome_interpretation: "Qwen-non-thinking mutations do not significantly close the retrieval gap (delta ≤+0.10 absolute vs same-shape baseline). Inconclusive — neither validates nor refutes mechanism on this variant."
+    negative_outcome_interpretation: "qwen-non-thinking mutations REGRESS retrieval below same-shape baseline → 'Evolution works on thinking-mode Qwen, not non-thinking' — scoped finding, still publishable as Phase 4.5 partial mechanistic validation; arxiv §5.4 reflects scope. Halt-and-PM via direction_2 verdict per Amendment 9 (NOT direction_1 baseline-only as previously)."
+    binding_anti_misattribution: "Per Amendment 9 §qwen_baseline_anomaly_disposition, qwen-non-thinking::baseline retrieval delta of -0.05pp at full Gen 1 halt is NOT cited as evidence that qwen-non-thinking evolution will fail. The mutation candidates have not executed yet. The baseline finding is variance, not mechanism."
+
+  sha_chain:
+    amendment_9_sha_pinned: "5e3ad831c61beb19ccb4ff42b455b4c3964d830808944d4915189c5e9b1709b8 (post-Amendment-9 manifest SHA — fills prior NOT_YET_COMPUTED placeholder)"
+    amendment_10_placeholder: "manifest_sha256_post_amendment_10: NOT_YET_COMPUTED  # CC-2 computes post Edit"
+    becomes_chain: "10-SHA chain (initial_lock + post-A2 + post-A3 + post-A4 + post-A5 + post-A6 + post-A7 + post-A8 + post-A9 + Amendment 10 placeholder)"
+
+  cross_references:
+    pm_brief_session_authored_at: "Session 2026-04-28 PM brief — full Gen 1 halt Option A ratification + Amendment 10 §10.1-§10.4 directives"
+    full_gen_1_halt_report: benchmarks/results/gepa-faza1/gen-1/full-gen-1-halt-report.md
+    amendment_7_halt_threshold_amended: amendment_7_integration.checkpoint_b_tightened.mid_run_halt_thresholds.qwen_retrieval_engagement_regression
+    amendment_9_phase_4_5_verdict_pre_registration: amendment_9_integration.qwen_evolution_verdict_capture
+    amendment_9_anti_misattribution: amendment_9_integration.qwen_baseline_anomaly_disposition
+    code_change_target: benchmarks/gepa/scripts/faza-1/run-gen-1.ts (lines tracking QWEN_RETRIEVAL_REGRESSION_MIN_EVALS + checkMidRunHalts function)
+
+  cumulative_actual_spend_at_amendment_10_ratification: 33.09  # corpus 13.35 + sunk-null 4.95 + re-null 4.97 + mutations 1.43 + probes 0.40 + sunk-gen-1 1.36 + cumulative-gen-1 6.55 + misc 0.08
+  pre_resume_remaining_cost_projection: 8.31  # 67 evals × $0.124/eval
+  cumulative_post_full_gen_1_projection_usd: 41.40
+  hard_cap_usd_unchanged: 115.00
+  headroom_post_full_gen_1_projection_usd: 73.60
+
+# ── Amendment 11 master integration section (binding) ─────────────────────
+
+amendment_11_integration:
+  ratification_date: 2026-04-29
+  authority: PM (Marko Markovic)
+  predecessor: Amendment 10 (Option A continue + halt threshold calibration_fix MIN_EVALS 3→5 + mutation_execution_gate)
+  trigger: "Post-Amendment-10 resume halt at 57/120 evals (bj1vq1gxq) fired Amendment 7 §checkpoint_b_tightened.qwen_retrieval_engagement_regression on qwen-non-thinking aggregate baseline-only despite Amendment 10 calibration_fix in place. Root cause: second-order interaction bug between mutation_execution_gate (≥1 eval threshold) + MIN_EVALS=5 individual-candidate filter — mutation gen1-v1 had 1 eval (gate satisfied) but excluded from aggregate (1<5), so aggregate computed baseline-only. PM ratifies Option D-α: second-order calibration patch + resume + terminal_calibration_clause."
+  scope:
+    - "§11.1 second_order_calibration_patch: mutation_execution_gate threshold tightened ≥1 → ≥MIN_EVALS (=5) — halt only fires when at least one mutation candidate has statistically meaningful sample size"
+    - "§11.2 terminal_calibration_clause (BINDING): this is the LAST calibration patch in Faza 1; if halt fires AGAIN with §11.1 active + mutation ≥MIN_EVALS, escalate to Option C (Amendment 12 interface refactor); no further calibration patches accepted; PM cannot override post-hoc"
+    - "§11.3 bug_acknowledgment_record: transparent disclosure that Amendment 10 §10.1 created second-order interaction bug; halt fired on calibration bug NOT on Phase 4.5 negative direction; arxiv §5.4 cites this entry"
+    - "§11.4 §F.2_verdict_gate_continued: §F.2 (≥3/5 positive) still pending; full Gen 1 close required for verdict"
+    - "§11.5 sha_chain: append Amendment 11 SHA to manifest v7 chain (becomes 11-SHA chain)"
+
+  second_order_calibration_patch:
+    pre_registered_at: amendment_11
+    locked_pre_resume: true
+    rationale_substantive: |
+      Amendment 10 §10.1 mutation_execution_gate was authored to prevent baseline-only halts.
+      Empirical reality post-resume showed it doesn't fully prevent them: when the mutation
+      candidate has 1 eval (mutation_execution_gate=true) but 1 < MIN_EVALS=5
+      (filtered out of aggregate by individual-candidate eval count threshold),
+      the aggregate is computed from BASELINE evals only and halt fires on
+      baseline-only data. The two thresholds need to align — gate must require
+      mutation has ≥MIN_EVALS evals, not just ≥1 eval.
+    code_change:
+      file: benchmarks/gepa/scripts/faza-1/run-gen-1.ts
+      function: checkMidRunHalts
+      change_before: |
+        const hasMutationEvalsForShape = allShapeAccs.some(a => a.variant !== 'baseline' && a.evalCount > 0);
+      change_after: |
+        const hasStatisticallyMeaningfulMutationForShape = allShapeAccs.some(a => a.variant !== 'baseline' && a.evalCount >= QWEN_RETRIEVAL_REGRESSION_MIN_EVALS);
+      effect: "Halt only fires when at least one mutation candidate (variant !== 'baseline') has ≥MIN_EVALS=5 evals — guaranteeing the mutation IS in the aggregate and the halt is NOT firing on baseline-only data."
+    interaction_with_amendment_10_changes:
+      change_1_min_evals_5_unchanged: "QWEN_RETRIEVAL_REGRESSION_MIN_EVALS = 5 unchanged from Amendment 10 §10.1"
+      change_2_mutation_gate_threshold_raised: "≥1 eval → ≥MIN_EVALS evals; logically tightens what 'mutation executing' means from 'has started' to 'has statistically meaningful sample'"
+    when_halt_can_now_fire:
+      precondition_1: "≥1 mutation candidate has ≥5 evals on the shape (mutation IS in aggregate)"
+      precondition_2: "aggregate retrieval (across all candidates with ≥5 evals on shape) < per-shape NULL baseline"
+      consequence: "Halt represents direction_2 verdict per Amendment 9 — mutations regressing retrieval BELOW baseline at meaningful sample size; this is the genuine Phase 4.5 negative-direction signal"
+
+  terminal_calibration_clause:
+    pre_registered_at: amendment_11
+    locked_pre_resume: true
+    binding: true
+    non_overridable_post_hoc: true
+    pm_authority_acknowledgment: "PM cannot override §11.2 once ratified, even by future PM directive within this Faza 1. This clause exists specifically to prevent infinite calibration cycles."
+    rule: "If Amendment 7 §checkpoint_b_tightened.qwen_retrieval_engagement_regression fires AGAIN with §11.1 calibration ACTIVE — i.e., aggregate computed across ≥1 mutation candidate with ≥MIN_EVALS=5 evals — that IS the Phase 4.5 negative-direction verdict per Amendment 9 §qwen_evolution_verdict_capture.negative_signal_definitions.direction_2."
+    consequence_on_trigger: "HALT + capture Phase 4.5 direction_2 verdict; do NOT auto-recover; do NOT author further calibration patches. Faza 1 closes at that data with documented partial verdict. Escalate to Option C: author Amendment 12 §interface_refactor authorizing redesign of mutation injection mechanism (e.g., promptShapeObject parameter) for Faza 2 expansion."
+    rationale: "Pre-registration discipline binds when trigger fires on the mechanism. Two prior halts (b1t474yqd + bj1vq1gxq) fired on calibration bugs in trigger detection. Amendment 11 fixes the bug class. If halt fires AGAIN despite §11.1 fix, that is PRESUMPTIVELY mechanism — not a third calibration cycle. Cap the cycles at 2 patches (Amendment 10 + Amendment 11) to preserve methodological integrity."
+    cycle_count: "Amendment 8 (registerShape API fix) + Amendment 10 (calibration_fix MIN_EVALS + mutation_execution_gate) + Amendment 11 (second-order calibration patch) = 3 fix amendments. §11.2 caps at no further calibration cycles in Faza 1."
+
+  bug_acknowledgment_record:
+    purpose: "Transparent disclosure of calibration evolution for arxiv §5.4 methodology section. Not hidden — methodologically important to document iterative calibration as legitimate empirical refinement, not as deviation from pre-registration."
+    bug_class: "Second-order interaction between two threshold parameters intended to work together: mutation_execution_gate (Amendment 10 §10.1 change_2) + MIN_EVALS individual-candidate filter (Amendment 7 + Amendment 10 §10.1 change_1)."
+    bug_summary: "When mutation candidate has 1 eval (gate=true at ≥1 eval) but 1 < MIN_EVALS=5 (excluded from aggregate by individual filter), aggregate is computed from baseline-only data while gate is mechanically met. Halt fires on baseline-aggregate while structurally appearing to fire on mutation-direction signal."
+    bug_was_NOT: "Phase 4.5 negative direction signal. Amendment 11 §11.3 explicitly disclaims the qwen-non-thinking halt (bj1vq1gxq) as evidence of mechanism failure."
+    mechanistic_reality_documented:
+      qwen_non_thinking_baseline_n_8_mean: 1.125
+      qwen_non_thinking_gen_1_v1_n_1_mean: 2.0
+      delta_mutation_vs_same_shape_baseline_absolute: +0.875  # POSITIVE direction
+      hypothetical_aggregate_with_mutation_n_9: 1.222  # (1.125*8 + 2.0*1)/9
+      delta_hypothetical_aggregate_vs_NULL_baseline: -0.028  # within ±0.10 noise band documented at Checkpoint B
+      conclusion: "Single mutation eval shows POSITIVE direction lift; hypothetical aggregate including it would NOT have triggered halt. Halt fired on calibration interaction, not mechanism."
+    arxiv_5_4_disclosure_text: |
+      "Faza 1 Gen 1 mid-run halt thresholds underwent two empirical refinements during
+      execution. Amendment 10 §10.1 raised the per-candidate minimum eval threshold
+      from N=3 to N=5 and added a mutation_execution_gate to prevent baseline-only
+      halts. Post-Amendment-10 a second-order interaction emerged where the
+      mutation_execution_gate fired on the existence of any mutation eval (≥1)
+      while the MIN_EVALS=5 filter excluded under-powered mutation evals from the
+      aggregate, allowing baseline-aggregate halts to still fire. Amendment 11
+      §11.1 tightened the gate to require mutation candidates have ≥MIN_EVALS
+      evals (5), eliminating the second-order false-positive class. Amendment 11
+      §11.2 capped further calibration cycles, binding any subsequent halt as
+      genuine mechanism signal. We disclose this evolution as transparent
+      empirical refinement rather than retroactive design change."
+
+  F2_verdict_gate_continued:
+    purpose: "§F.2 (≥3/5 shapes positive delta) verdict still pending; current 2/5 confirmed. Full Gen 1 close required."
+    current_status:
+      claude: PASS  # gen1-v1 +12.5pp (full N=8)
+      qwen-thinking: PASS  # gen1-v1 +12.5pp + retrieval 2.375 (full N=8)
+      qwen-non-thinking: AMBIGUOUS_PENDING_RESUME  # gen1-v1 N=1 +0.875 retrieval lift; need ≥7 more evals for verdict
+      gpt: NOT_EVALUATED  # 24 evals planned
+      generic-simple: NOT_EVALUATED  # 24 evals planned
+    pass_path: "≥3/5 shapes show best-mutation +5pp trio_strict delta. Faza 1 §F.2 PASS → Faza 2 expansion + Phase 5 GEPA-evolved variant deployment authorized per launch decision §F.5 condition_2"
+    fail_path: "≤2/5 shapes positive. Faza 1 §F.2 FAIL — scoped publishable finding (claude + qwen-thinking confirmed; qwen-non-thinking + gpt + generic-simple as evaluated); arxiv §5.4 framing reflects scope of validated method"
+    interpretation_invariant: "PASS and FAIL outcomes both scientifically valid. §F.2 unverdicted is the unacceptable state."
+    expected_state_at_resume: "57/120 evals; 63 remaining; cost projection $7.78 (63 × $0.124); cumulative post-full-Gen-1 $41.35; headroom $73.65"
+
+  sha_chain:
+    amendment_10_sha_pinned: "7fb2fb930670b5a28e417a76c64ca1a556f05afb9cf0761aba9f83f0c5de1c9b (post-Amendment-10 manifest SHA — fills prior NOT_YET_COMPUTED placeholder)"
+    amendment_11_placeholder: "manifest_sha256_post_amendment_11: NOT_YET_COMPUTED  # CC-2 computes post Edit"
+    becomes_chain: "11-SHA chain (initial_lock + post-A2 + post-A3 + post-A4 + post-A5 + post-A6 + post-A7 + post-A8 + post-A9 + post-A10 + Amendment 11 placeholder)"
+
+  cross_references:
+    pm_brief_session_authored_at: "Session 2026-04-28 PM brief — post-Amendment-10 halt + Option D-α ratification + Amendment 11 §11.1-§11.5 directives"
+    post_amendment_10_halt_report: benchmarks/results/gepa-faza1/gen-1/post-amendment-10-halt-report.md
+    amendment_10_calibration_fix: amendment_10_integration.calibration_fix
+    amendment_9_phase_4_5_verdict: amendment_9_integration.qwen_evolution_verdict_capture
+    amendment_9_anti_misattribution: amendment_9_integration.qwen_baseline_anomaly_disposition
+    code_change_target: benchmarks/gepa/scripts/faza-1/run-gen-1.ts (checkMidRunHalts function — mutation_execution_gate threshold)
+
+  cumulative_actual_spend_at_amendment_11_ratification: 33.57  # corpus 13.35 + sunk-null 4.95 + re-null 4.97 + mutations 1.43 + probes 0.40 + sunk-gen-1 1.36 + cumulative-gen-1 7.03 + misc 0.08
+  pre_resume_remaining_cost_projection: 7.78  # 63 evals × $0.124/eval
+  cumulative_post_full_gen_1_projection_usd: 41.35
+  hard_cap_usd_unchanged: 115.00
+  headroom_post_full_gen_1_projection_usd: 73.65
+
+# ── Manifest path + lock metadata ──────────────────────────────────────────
+
+manifest_path: benchmarks/preregistration/manifest-v7-gepa-faza1.yaml
+manifest_locked_at: 2026-04-28T00:00:00Z
+manifest_amendment_2_supplemented_at: 2026-04-28T00:30:00Z
+manifest_amendment_3_supplemented_at: 2026-04-28T00:45:00Z
+manifest_amendment_4_supplemented_at: 2026-04-28T01:00:00Z
+manifest_amendment_5_supplemented_at: 2026-04-28T11:00:00Z
+manifest_amendment_6_supplemented_at: 2026-04-28T15:30:00Z  # NULL-baseline shape-override bug fix
+manifest_amendment_7_supplemented_at: 2026-04-28T17:30:00Z  # PM ratify Option C — saturated revoke + tiered fitness + Δ-floor + tightened Checkpoint B
+manifest_amendment_8_supplemented_at: 2026-04-28T18:45:00Z  # PM ratify Probe-first + Option B Fix-and-Restart — registerShape canonical mutation API + sunk archive
+manifest_amendment_9_supplemented_at: 2026-04-28T19:45:00Z  # PM ratify Option A full-Gen-1 + §qwen_baseline_anomaly_disposition anti-misattribution lock + §qwen_evolution_verdict_capture pre-registration
+manifest_amendment_10_supplemented_at: 2026-04-28T20:30:00Z  # PM ratify Option A continue + §10.1 calibration_fix (MIN_EVALS 3→5 + mutation_execution_gate) + §10.2 §F.2_verdict_gate + §10.3 Phase 4.5 reproducibility on qwen-non-thinking
+manifest_amendment_11_supplemented_at: 2026-04-29T00:30:00Z  # PM ratify Option D-α + §11.1 second_order_calibration_patch (mutation_execution_gate ≥1 → ≥MIN_EVALS) + §11.2 terminal_calibration_clause (BINDING) + §11.3 bug_acknowledgment_record + §11.4 §F.2_verdict_gate_continued
+manifest_sha256_initial_lock: 1d592a6113c918b7a07fc9aba748c8bdd12a6ce1c6943943c0492678299fa700
+manifest_sha256_post_amendment_2: 583712dde139ffc87fb1ab21643f68d52c56469ded9e8090a624980b05969beb
+manifest_sha256_post_amendment_3: e43d13793535077c92a0e2c24f948ebb9d6e04000293690fdf38c4ba957aa972
+manifest_sha256_post_amendment_4: 1f7a6d6fa01403f6c8d6855893adbfa5e82898a81b7583cfa55628e5eba60196
+manifest_sha256_post_amendment_5: 062dfc4935aaa89f0b25595c5dc3ce4af06c95c4c261075a1f0226d8af3f3dee
+manifest_sha256_post_amendment_6: 0b55d8e353299594254e1a4a76f26f53014d726315dc6a0e5d6dc1a3a44a368a
+manifest_sha256_post_amendment_7: bc0bcf9bd8b0c8344b25e5f8ab15b0475039ba28a1f782ebffe4cc1c4ff7d1de
+manifest_sha256_post_amendment_8: 85858f12f1270da28277dd4d98e454d1dae8ef970537cb8c561f484599c4e2e9
+manifest_sha256_post_amendment_9: 5e3ad831c61beb19ccb4ff42b455b4c3964d830808944d4915189c5e9b1709b8
+manifest_sha256_post_amendment_10: 7fb2fb930670b5a28e417a76c64ca1a556f05afb9cf0761aba9f83f0c5de1c9b
+manifest_sha256_post_amendment_11: NOT_YET_COMPUTED  # CC-2 computes post Edit
+audit_chain_terminus: this_file

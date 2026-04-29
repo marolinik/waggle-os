@@ -1,0 +1,170 @@
+[2026-04-28T13:14:37.215Z] [loaded] corpus=50; sample=8 via seed=42
+[2026-04-28T13:14:56.003Z] [loaded] corpus=50; sample=8 via seed=42
+[2026-04-28T13:14:56.071Z] [loaded] 5 shapes × 3 candidates each
+[2026-04-28T13:14:56.071Z] [dry-run] would run 5×3×8 = 120 evals (or halt at 30 = Checkpoint B)
+[2026-04-28T13:14:56.071Z] [dry-run] candidate=claude::baseline variant=baseline shape.name=claude
+[2026-04-28T13:14:56.071Z] [dry-run] candidate=claude::gen1-v1 variant=gen1-v1 shape.name=claude-gen1-v1
+[2026-04-28T13:14:56.071Z] [dry-run] candidate=claude::gen1-v2 variant=gen1-v2 shape.name=claude-gen1-v2
+[2026-04-28T13:14:56.074Z] [dry-run] candidate=qwen-thinking::baseline variant=baseline shape.name=qwen-thinking
+[2026-04-28T13:14:56.074Z] [dry-run] candidate=qwen-thinking::gen1-v1 variant=gen1-v1 shape.name=qwen-thinking-gen1-v1
+[2026-04-28T13:14:56.074Z] [dry-run] candidate=qwen-thinking::gen1-v2 variant=gen1-v2 shape.name=qwen-thinking-gen1-v2
+[2026-04-28T13:14:56.074Z] [dry-run] candidate=qwen-non-thinking::baseline variant=baseline shape.name=qwen-non-thinking
+[2026-04-28T13:14:56.074Z] [dry-run] candidate=qwen-non-thinking::gen1-v1 variant=gen1-v1 shape.name=qwen-non-thinking-gen1-v1
+[2026-04-28T13:14:56.074Z] [dry-run] candidate=qwen-non-thinking::gen1-v2 variant=gen1-v2 shape.name=qwen-non-thinking-gen1-v2
+[2026-04-28T13:14:56.074Z] [dry-run] candidate=gpt::baseline variant=baseline shape.name=gpt
+[2026-04-28T13:14:56.074Z] [dry-run] candidate=gpt::gen1-v1 variant=gen1-v1 shape.name=gpt-gen1-v1
+[2026-04-28T13:14:56.074Z] [dry-run] candidate=gpt::gen1-v2 variant=gen1-v2 shape.name=gpt-gen1-v2
+[2026-04-28T13:14:56.074Z] [dry-run] candidate=generic-simple::baseline variant=baseline shape.name=generic-simple
+[2026-04-28T13:14:56.074Z] [dry-run] candidate=generic-simple::gen1-v1 variant=gen1-v1 shape.name=generic-simple-gen1-v1
+[2026-04-28T13:14:56.074Z] [dry-run] candidate=generic-simple::gen1-v2 variant=gen1-v2 shape.name=generic-simple-gen1-v2
+[2026-04-28T15:18:44.679Z] [loaded] corpus=50; sample=8 via seed=42
+[2026-04-28T15:18:44.707Z] [loaded] 5 shapes × 3 candidates each
+[2026-04-28T15:18:44.708Z] [validator] claude::gen1-v1 valid=true violations=0
+[2026-04-28T15:18:44.709Z] [validator] claude::gen1-v2 valid=true violations=0
+[2026-04-28T15:18:44.709Z] [validator] qwen-thinking::gen1-v1 valid=true violations=0
+[2026-04-28T15:18:44.710Z] [validator] qwen-thinking::gen1-v2 valid=true violations=0
+[2026-04-28T15:18:44.710Z] [validator] qwen-non-thinking::gen1-v1 valid=true violations=0
+[2026-04-28T15:18:44.710Z] [validator] qwen-non-thinking::gen1-v2 valid=true violations=0
+[2026-04-28T15:18:44.711Z] [validator] gpt::gen1-v1 valid=true violations=0
+[2026-04-28T15:18:44.711Z] [validator] gpt::gen1-v2 valid=true violations=0
+[2026-04-28T15:18:44.712Z] [validator] generic-simple::gen1-v1 valid=true violations=0
+[2026-04-28T15:18:44.712Z] [validator] generic-simple::gen1-v2 valid=true violations=0
+[2026-04-28T15:18:44.712Z] [dry-run] would run 5×3×8 = 120 evals (or halt at 30 = Checkpoint B)
+[2026-04-28T15:18:44.712Z] [dry-run] candidate=claude::baseline variant=baseline shape.name=claude
+[2026-04-28T15:18:44.712Z] [dry-run] candidate=claude::gen1-v1 variant=gen1-v1 shape.name=claude-gen1-v1
+[2026-04-28T15:18:44.712Z] [dry-run] candidate=claude::gen1-v2 variant=gen1-v2 shape.name=claude-gen1-v2
+[2026-04-28T15:18:44.712Z] [dry-run] candidate=qwen-thinking::baseline variant=baseline shape.name=qwen-thinking
+[2026-04-28T15:18:44.712Z] [dry-run] candidate=qwen-thinking::gen1-v1 variant=gen1-v1 shape.name=qwen-thinking-gen1-v1
+[2026-04-28T15:18:44.712Z] [dry-run] candidate=qwen-thinking::gen1-v2 variant=gen1-v2 shape.name=qwen-thinking-gen1-v2
+[2026-04-28T15:18:44.712Z] [dry-run] candidate=qwen-non-thinking::baseline variant=baseline shape.name=qwen-non-thinking
+[2026-04-28T15:18:44.712Z] [dry-run] candidate=qwen-non-thinking::gen1-v1 variant=gen1-v1 shape.name=qwen-non-thinking-gen1-v1
+[2026-04-28T15:18:44.713Z] [dry-run] candidate=qwen-non-thinking::gen1-v2 variant=gen1-v2 shape.name=qwen-non-thinking-gen1-v2
+[2026-04-28T15:18:44.713Z] [dry-run] candidate=gpt::baseline variant=baseline shape.name=gpt
+[2026-04-28T15:18:44.713Z] [dry-run] candidate=gpt::gen1-v1 variant=gen1-v1 shape.name=gpt-gen1-v1
+[2026-04-28T15:18:44.713Z] [dry-run] candidate=gpt::gen1-v2 variant=gen1-v2 shape.name=gpt-gen1-v2
+[2026-04-28T15:18:44.713Z] [dry-run] candidate=generic-simple::baseline variant=baseline shape.name=generic-simple
+[2026-04-28T15:18:44.713Z] [dry-run] candidate=generic-simple::gen1-v1 variant=gen1-v1 shape.name=generic-simple-gen1-v1
+[2026-04-28T15:18:44.713Z] [dry-run] candidate=generic-simple::gen1-v2 variant=gen1-v2 shape.name=generic-simple-gen1-v2
+[2026-04-28T15:52:02.626Z] [loaded] corpus=50; sample=8 via seed=42
+[2026-04-28T15:52:02.664Z] [loaded] 5 shapes × 3 candidates each
+[2026-04-28T15:52:02.665Z] [validator] claude::gen1-v1 valid=true violations=0
+[2026-04-28T15:52:02.666Z] [validator] claude::gen1-v2 valid=true violations=0
+[2026-04-28T15:52:02.667Z] [validator] qwen-thinking::gen1-v1 valid=true violations=0
+[2026-04-28T15:52:02.668Z] [validator] qwen-thinking::gen1-v2 valid=true violations=0
+[2026-04-28T15:52:02.668Z] [validator] qwen-non-thinking::gen1-v1 valid=true violations=0
+[2026-04-28T15:52:02.670Z] [validator] qwen-non-thinking::gen1-v2 valid=true violations=0
+[2026-04-28T15:52:02.670Z] [validator] gpt::gen1-v1 valid=true violations=0
+[2026-04-28T15:52:02.671Z] [validator] gpt::gen1-v2 valid=true violations=0
+[2026-04-28T15:52:02.671Z] [validator] generic-simple::gen1-v1 valid=true violations=0
+[2026-04-28T15:52:02.672Z] [validator] generic-simple::gen1-v2 valid=true violations=0
+[2026-04-28T15:52:02.673Z] [mode=checkpoint-b] target eval count: 30
+[2026-04-28T15:52:02.673Z] [claude::baseline__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T15:52:44.450Z] [claude::baseline__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] subject_done; retrievals=1 steps=2 cost=$0.0047
+[2026-04-28T15:53:06.373Z] [claude::baseline__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] judged; trio_mean=4.389 pass_ii=true retrievals=1 eval_cost=$0.1170
+[2026-04-28T15:53:06.374Z] [cumulative] $0.1170 / $26 halt; 1 evals total
+[2026-04-28T15:53:06.374Z] [claude::baseline__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T15:53:31.026Z] [claude::baseline__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0028
+[2026-04-28T15:54:08.537Z] [claude::baseline__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.056 pass_ii=true retrievals=1 eval_cost=$0.1339
+[2026-04-28T15:54:08.538Z] [cumulative] $0.2508 / $26 halt; 2 evals total
+[2026-04-28T15:54:08.538Z] [claude::baseline__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] start
+[2026-04-28T15:54:52.508Z] [claude::baseline__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0050
+[2026-04-28T15:55:22.483Z] [claude::baseline__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] judged; trio_mean=4.611 pass_ii=true retrievals=1 eval_cost=$0.1382
+[2026-04-28T15:55:22.484Z] [cumulative] $0.3891 / $26 halt; 3 evals total
+[2026-04-28T15:55:22.484Z] [claude::baseline__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T15:56:00.154Z] [claude::baseline__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0035
+[2026-04-28T15:56:54.313Z] [claude::baseline__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.167 pass_ii=true retrievals=1 eval_cost=$0.1193
+[2026-04-28T15:56:54.314Z] [cumulative] $0.5083 / $26 halt; 4 evals total
+[2026-04-28T15:56:54.314Z] [claude::baseline__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T15:57:42.319Z] [claude::baseline__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] subject_done; retrievals=2 steps=3 cost=$0.0060
+[2026-04-28T15:58:13.542Z] [claude::baseline__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] judged; trio_mean=4.222 pass_ii=true retrievals=2 eval_cost=$0.1253
+[2026-04-28T15:58:13.543Z] [cumulative] $0.6336 / $26 halt; 5 evals total
+[2026-04-28T15:58:13.543Z] [claude::baseline__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T15:58:34.355Z] [claude::baseline__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] subject_done; retrievals=1 steps=2 cost=$0.0032
+[2026-04-28T15:59:09.056Z] [claude::baseline__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] judged; trio_mean=4.278 pass_ii=true retrievals=1 eval_cost=$0.1058
+[2026-04-28T15:59:09.056Z] [cumulative] $0.7394 / $26 halt; 6 evals total
+[2026-04-28T15:59:09.056Z] [claude::baseline__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T16:00:39.489Z] [claude::baseline__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] subject_done; retrievals=2 steps=4 cost=$0.0108
+[2026-04-28T16:01:20.733Z] [claude::baseline__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.722 pass_ii=true retrievals=2 eval_cost=$0.1476
+[2026-04-28T16:01:20.733Z] [cumulative] $0.8870 / $26 halt; 7 evals total
+[2026-04-28T16:01:20.733Z] [claude::baseline__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T16:02:06.944Z] [claude::baseline__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] subject_done; retrievals=2 steps=3 cost=$0.0052
+[2026-04-28T16:02:41.286Z] [claude::baseline__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] judged; trio_mean=4.389 pass_ii=true retrievals=2 eval_cost=$0.0958
+[2026-04-28T16:02:41.287Z] [cumulative] $0.9828 / $26 halt; 8 evals total
+[2026-04-28T16:02:41.287Z] [claude::gen1-v1__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T16:02:41.299Z] [skip] claude::gen1-v1__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001: agent loop failed: prompt-shapes selector: override "claude-gen1-v1" not in REGISTRY. Available: claude, qwen-thinking, qwen-non-thinking, gpt, generic-simple
+[2026-04-28T16:02:41.299Z] [claude::gen1-v1__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T16:02:41.308Z] [skip] claude::gen1-v1__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001: agent loop failed: prompt-shapes selector: override "claude-gen1-v1" not in REGISTRY. Available: claude, qwen-thinking, qwen-non-thinking, gpt, generic-simple
+[2026-04-28T16:02:41.308Z] [claude::gen1-v1__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] start
+[2026-04-28T16:02:41.317Z] [skip] claude::gen1-v1__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001: agent loop failed: prompt-shapes selector: override "claude-gen1-v1" not in REGISTRY. Available: claude, qwen-thinking, qwen-non-thinking, gpt, generic-simple
+[2026-04-28T16:02:41.317Z] [claude::gen1-v1__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T16:02:41.326Z] [skip] claude::gen1-v1__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001: agent loop failed: prompt-shapes selector: override "claude-gen1-v1" not in REGISTRY. Available: claude, qwen-thinking, qwen-non-thinking, gpt, generic-simple
+[2026-04-28T16:02:41.326Z] [claude::gen1-v1__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T16:02:41.335Z] [skip] claude::gen1-v1__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001: agent loop failed: prompt-shapes selector: override "claude-gen1-v1" not in REGISTRY. Available: claude, qwen-thinking, qwen-non-thinking, gpt, generic-simple
+[2026-04-28T16:02:41.335Z] [claude::gen1-v1__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T16:02:41.358Z] [skip] claude::gen1-v1__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001: agent loop failed: prompt-shapes selector: override "claude-gen1-v1" not in REGISTRY. Available: claude, qwen-thinking, qwen-non-thinking, gpt, generic-simple
+[2026-04-28T16:02:41.358Z] [claude::gen1-v1__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T16:02:41.366Z] [skip] claude::gen1-v1__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001: agent loop failed: prompt-shapes selector: override "claude-gen1-v1" not in REGISTRY. Available: claude, qwen-thinking, qwen-non-thinking, gpt, generic-simple
+[2026-04-28T16:02:41.367Z] [claude::gen1-v1__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T16:02:41.375Z] [skip] claude::gen1-v1__h3-F3-p3_coo-stage_a_series_b_growth_burning-001: agent loop failed: prompt-shapes selector: override "claude-gen1-v1" not in REGISTRY. Available: claude, qwen-thinking, qwen-non-thinking, gpt, generic-simple
+[2026-04-28T16:02:41.375Z] [claude::gen1-v2__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T16:02:41.383Z] [skip] claude::gen1-v2__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001: agent loop failed: prompt-shapes selector: override "claude-gen1-v2" not in REGISTRY. Available: claude, qwen-thinking, qwen-non-thinking, gpt, generic-simple
+[2026-04-28T16:02:41.384Z] [claude::gen1-v2__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T16:02:41.391Z] [skip] claude::gen1-v2__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001: agent loop failed: prompt-shapes selector: override "claude-gen1-v2" not in REGISTRY. Available: claude, qwen-thinking, qwen-non-thinking, gpt, generic-simple
+[2026-04-28T16:02:41.392Z] [claude::gen1-v2__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] start
+[2026-04-28T16:02:41.400Z] [skip] claude::gen1-v2__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001: agent loop failed: prompt-shapes selector: override "claude-gen1-v2" not in REGISTRY. Available: claude, qwen-thinking, qwen-non-thinking, gpt, generic-simple
+[2026-04-28T16:02:41.401Z] [claude::gen1-v2__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T16:02:41.410Z] [skip] claude::gen1-v2__h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001: agent loop failed: prompt-shapes selector: override "claude-gen1-v2" not in REGISTRY. Available: claude, qwen-thinking, qwen-non-thinking, gpt, generic-simple
+[2026-04-28T16:02:41.410Z] [claude::gen1-v2__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T16:02:41.419Z] [skip] claude::gen1-v2__h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001: agent loop failed: prompt-shapes selector: override "claude-gen1-v2" not in REGISTRY. Available: claude, qwen-thinking, qwen-non-thinking, gpt, generic-simple
+[2026-04-28T16:02:41.419Z] [claude::gen1-v2__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T16:02:41.427Z] [skip] claude::gen1-v2__h3-F4-p3_coo-stage_b_post_profitable_consolidation-001: agent loop failed: prompt-shapes selector: override "claude-gen1-v2" not in REGISTRY. Available: claude, qwen-thinking, qwen-non-thinking, gpt, generic-simple
+[2026-04-28T16:02:41.427Z] [claude::gen1-v2__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T16:02:41.462Z] [skip] claude::gen1-v2__h3-F5-p2_cfo-stage_a_series_b_growth_burning-001: agent loop failed: prompt-shapes selector: override "claude-gen1-v2" not in REGISTRY. Available: claude, qwen-thinking, qwen-non-thinking, gpt, generic-simple
+[2026-04-28T16:02:41.463Z] [claude::gen1-v2__h3-F3-p3_coo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T16:02:41.471Z] [skip] claude::gen1-v2__h3-F3-p3_coo-stage_a_series_b_growth_burning-001: agent loop failed: prompt-shapes selector: override "claude-gen1-v2" not in REGISTRY. Available: claude, qwen-thinking, qwen-non-thinking, gpt, generic-simple
+[2026-04-28T16:02:41.472Z] [qwen-thinking::baseline__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] start
+[2026-04-28T16:03:22.693Z] [qwen-thinking::baseline__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] subject_done; retrievals=1 steps=2 cost=$0.0043
+[2026-04-28T16:04:07.393Z] [qwen-thinking::baseline__h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] judged; trio_mean=4.611 pass_ii=true retrievals=1 eval_cost=$0.1209
+[2026-04-28T16:04:07.394Z] [cumulative] $1.1037 / $26 halt; 9 evals total
+[2026-04-28T16:04:07.394Z] [qwen-thinking::baseline__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] start
+[2026-04-28T16:06:58.892Z] [qwen-thinking::baseline__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0037
+[2026-04-28T16:07:45.512Z] [qwen-thinking::baseline__h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] judged; trio_mean=3.556 pass_ii=false retrievals=1 eval_cost=$0.1300
+[2026-04-28T16:07:45.513Z] [cumulative] $1.2337 / $26 halt; 10 evals total
+[2026-04-28T16:07:45.513Z] [qwen-thinking::baseline__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] start
+[2026-04-28T16:08:21.799Z] [qwen-thinking::baseline__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] subject_done; retrievals=1 steps=2 cost=$0.0050
+[2026-04-28T16:09:12.427Z] [qwen-thinking::baseline__h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] judged; trio_mean=4.167 pass_ii=true retrievals=1 eval_cost=$0.1235
+[2026-04-28T16:09:12.427Z] [HALT-A7] Amendment 7 §checkpoint_b_tightened.qwen_retrieval_engagement_regression: shape=qwen-thinking mean=1.000 < NULL baseline 1.120 (n=3)
+[2026-04-28T16:09:12.429Z] [summary] wrote D:\Projects\waggle-os-faza1-wt\benchmarks\results\gepa-faza1\gen-1\gen-1-summary.json
+[2026-04-28T16:09:12.429Z] [delta-floor] verdict=PROCEED
+[2026-04-28T16:09:12.429Z] [delta-floor]   threshold_1_aggregate_tier_1=PASS (value=3.41pp)
+[2026-04-28T16:09:12.429Z] [delta-floor]   threshold_2_qwen_retrieval_absolute=FAIL (max_delta=-0.120)
+[2026-04-28T16:09:12.429Z] [delta-floor]   threshold_3_compound_tier_1_plus_tier_2=FAIL (tier1=3.41pp tier2_agg=0.000)
+[2026-04-28T16:09:12.429Z] [done] 11 evals; total cost $1.3572; halt_reason=Amendment 7 §checkpoint_b_tightened.qwen_retrieval_engagement_regression: shape=qwen-thinking mean=1.000 < NULL baseline 1.120 (n=3)
+[2026-04-28T16:44:50.490Z] [loaded] corpus=50; sample=8 via seed=42
+[2026-04-28T16:44:50.528Z] [loaded] 5 shapes × 3 candidates each
+[2026-04-28T16:44:50.530Z] [validator] claude::gen1-v1 valid=true violations=0
+[2026-04-28T16:44:50.530Z] [validator] claude::gen1-v2 valid=true violations=0
+[2026-04-28T16:44:50.531Z] [validator] qwen-thinking::gen1-v1 valid=true violations=0
+[2026-04-28T16:44:50.531Z] [validator] qwen-thinking::gen1-v2 valid=true violations=0
+[2026-04-28T16:44:50.531Z] [validator] qwen-non-thinking::gen1-v1 valid=true violations=0
+[2026-04-28T16:44:50.532Z] [validator] qwen-non-thinking::gen1-v2 valid=true violations=0
+[2026-04-28T16:44:50.532Z] [validator] gpt::gen1-v1 valid=true violations=0
+[2026-04-28T16:44:50.532Z] [validator] gpt::gen1-v2 valid=true violations=0
+[2026-04-28T16:44:50.533Z] [validator] generic-simple::gen1-v1 valid=true violations=0
+[2026-04-28T16:44:50.533Z] [validator] generic-simple::gen1-v2 valid=true violations=0
+[2026-04-28T16:44:50.533Z] [dry-run] would run 5×3×8 = 120 evals (or halt at 30 = Checkpoint B)
+[2026-04-28T16:44:50.533Z] [dry-run] candidate=claude::baseline variant=baseline shape.name=claude
+[2026-04-28T16:44:50.533Z] [dry-run] candidate=claude::gen1-v1 variant=gen1-v1 shape.name=claude-gen1-v1
+[2026-04-28T16:44:50.533Z] [dry-run] candidate=claude::gen1-v2 variant=gen1-v2 shape.name=claude-gen1-v2
+[2026-04-28T16:44:50.533Z] [dry-run] candidate=qwen-thinking::baseline variant=baseline shape.name=qwen-thinking
+[2026-04-28T16:44:50.533Z] [dry-run] candidate=qwen-thinking::gen1-v1 variant=gen1-v1 shape.name=qwen-thinking-gen1-v1
+[2026-04-28T16:44:50.533Z] [dry-run] candidate=qwen-thinking::gen1-v2 variant=gen1-v2 shape.name=qwen-thinking-gen1-v2
+[2026-04-28T16:44:50.533Z] [dry-run] candidate=qwen-non-thinking::baseline variant=baseline shape.name=qwen-non-thinking
+[2026-04-28T16:44:50.534Z] [dry-run] candidate=qwen-non-thinking::gen1-v1 variant=gen1-v1 shape.name=qwen-non-thinking-gen1-v1
+[2026-04-28T16:44:50.534Z] [dry-run] candidate=qwen-non-thinking::gen1-v2 variant=gen1-v2 shape.name=qwen-non-thinking-gen1-v2
+[2026-04-28T16:44:50.534Z] [dry-run] candidate=gpt::baseline variant=baseline shape.name=gpt
+[2026-04-28T16:44:50.534Z] [dry-run] candidate=gpt::gen1-v1 variant=gen1-v1 shape.name=gpt-gen1-v1
+[2026-04-28T16:44:50.534Z] [dry-run] candidate=gpt::gen1-v2 variant=gen1-v2 shape.name=gpt-gen1-v2
+[2026-04-28T16:44:50.534Z] [dry-run] candidate=generic-simple::baseline variant=baseline shape.name=generic-simple
+[2026-04-28T16:44:50.534Z] [dry-run] candidate=generic-simple::gen1-v1 variant=gen1-v1 shape.name=generic-simple-gen1-v1
+[2026-04-28T16:44:50.534Z] [dry-run] candidate=generic-simple::gen1-v2 variant=gen1-v2 shape.name=generic-simple-gen1-v2

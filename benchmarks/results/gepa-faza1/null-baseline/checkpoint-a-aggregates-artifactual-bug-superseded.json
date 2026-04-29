@@ -1,0 +1,65 @@
+{
+  "shape_aggregates": {
+    "claude": {
+      "n": 8,
+      "pass_ii": 4,
+      "pass_i": 8,
+      "mean_trio": 4.055555555555555,
+      "mean_retr": 1.125,
+      "mean_cost": 0.1223564125,
+      "loop_exh": 0.0,
+      "mean_steps": 2.375
+    },
+    "qwen-thinking": {
+      "n": 8,
+      "pass_ii": 8,
+      "pass_i": 8,
+      "mean_trio": 4.305555555555555,
+      "mean_retr": 1.0,
+      "mean_cost": 0.1238191375,
+      "loop_exh": 0.0,
+      "mean_steps": 2.25
+    },
+    "qwen-non-thinking": {
+      "n": 8,
+      "pass_ii": 6,
+      "pass_i": 7,
+      "mean_trio": 4.222222222222222,
+      "mean_retr": 1.125,
+      "mean_cost": 0.12258377499999999,
+      "loop_exh": 0.0,
+      "mean_steps": 2.25
+    },
+    "gpt": {
+      "n": 8,
+      "pass_ii": 7,
+      "pass_i": 8,
+      "mean_trio": 4.326388888888889,
+      "mean_retr": 1.125,
+      "mean_cost": 0.12451407499999999,
+      "loop_exh": 0.0,
+      "mean_steps": 2.125
+    },
+    "generic-simple": {
+      "n": 8,
+      "pass_ii": 7,
+      "pass_i": 8,
+      "mean_trio": 4.347222222222222,
+      "mean_retr": 1.0,
+      "mean_cost": 0.1259724875,
+      "loop_exh": 0.0,
+      "mean_steps": 2.0
+    }
+  },
+  "kappa": {
+    "opus_gpt": 0.3421052631578946,
+    "opus_minimax": -0.11111111111111124,
+    "gpt_minimax": 0.21052631578947334,
+    "conservative_trio": -0.11111111111111124
+  },
+  "pre_gen1": {
+    "per_eval": 0.12384917749999999,
+    "gen1_projected": 14.8619013,
+    "halt_threshold": 78
+  }
+}
