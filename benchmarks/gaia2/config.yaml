@@ -34,10 +34,18 @@ judge_methodology: narrow-proxy-no-judge
 
 # ─── Cost guards ─────────────────────────────────────────────────────────
 # All caps in USD. Cumulative across Sesija C from $0 starting point.
+#
+# RETROACTIVE AMENDMENT 2026-04-30 (PM Phase 3 closure ratification):
+#   Hard cap raised $15 → $20 to accommodate probe overshoot ($16.38 actual
+#   vs $15 cap = $1.38 overshoot) plus closure memo writing finalization.
+#   Probe-first protocol γ ROI: $147 saved vs full-sweep blind execution
+#   ($163.77 projected). Cost amendment is acceptable per probe-first
+#   discipline (cheap discovery vs expensive blind execution).
+#   See `feedback_probe_first_roi_demonstration.md` memory entry.
 
-cost_cap_usd: 15            # Hard cap — abort if cumulative spend reaches
-halt_trigger_usd: 8         # Halt-and-PM trigger (PM ratification γ)
-per_call_halt_usd: 0.50     # Per-LLM-call ceiling (single-call abort)
+cost_cap_usd: 20            # Hard cap — retroactive amendment 2026-04-30 ($15 → $20)
+halt_trigger_usd: 8         # Halt-and-PM trigger (PM ratification γ — unchanged)
+per_call_halt_usd: 0.50     # Per-LLM-call ceiling (single-call abort — unchanged)
 
 # PM ratification γ first-batch-as-probe: run this many invocations
 # first, project total, halt-and-PM if projection > halt_trigger_usd.

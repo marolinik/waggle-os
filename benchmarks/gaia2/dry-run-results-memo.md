@@ -176,4 +176,37 @@ The probe already gave us the most valuable Phase 3 deliverable: a probe-validat
 
 ---
 
-**End of memo. Phase 3b-B-2 HALT — awaiting PM Option A/B/C/D ratification.**
+---
+
+## §9 — PM RATIFICATION STAMP — Phase 3 closure (2026-04-30)
+
+**Decision:** **Option B ratified** + retroactive cost amendment $15 → $20.
+
+**Phase 3 closure verdict:** **COMPLETE**.
+
+**Phase 3 re-framed deliverable scope (post probe-validated reality):**
+1. **Pipeline integrity verification** — PASS (adapter contract works end-to-end on real Gaia2 schema; USER-event instruction extraction + apps-as-array handling + GEPA shape routing + cost-tracking PRICE_TABLE fallback all confirmed in 4 live invocations).
+2. **Cost reconciliation methodology** — PASS (anchor-then-multiply methodology gap exposed; probe-first protocol γ saved $147 vs blind full-sweep execution).
+3. **GEPA shape routing out-of-distribution verification** — PASS (visible behavioral difference between `claude` baseline and `claude-gen1-v1` on Gaia2 task confirms Phase 4.5 mechanism activation outside Faza 1's LoCoMo training distribution; arxiv §5.4 evidence).
+4. **Schema fixes documented + committed** — `data` JSON-string parse, `apps`-as-array handling, USER-event extraction strategy ladder, ASCII-only HTTP headers (em-dash byte-string fix). All four are reusable Phase 4 setup artifacts.
+
+**Real evaluation (full N=200 Gaia2 Search + Execution split):** **deferred to Phase 4 Docker** (per benchmark portfolio brief §5 Week 4–8). ARE-native targeted tool calls bypass the bulk-retrieval cost driver entirely (160× input volume reduction projected from selective `app.api(...)` invocations vs full `app.initial_state` corpus injection).
+
+**Sesija C status:** **STANDBY**. Phase 4 setup is separate decision (Docker / WSL / CI runner host choice + Phase 4 budget allocation + ERL methodology integration plan authoring per Task C7+C8 — all queued to Phase 4 kickoff).
+
+**Cumulative Sesija C spend:** $16.38 of amended $20 cap. Headroom $3.62 retained for any closure-stage micro-spend.
+
+**Refused options for the audit trail:**
+- A (narrow-proxy heuristic) — investment in wrong abstraction; throwaway before Phase 4.
+- C (DashScope-direct Qwen tiny subset) — selection bias risk; no cross-family generalization signal.
+- D ($15 → $50 cost amendment without scope reframe) — full sweep N=40 still $164, 3× over $50; not a real solution unless raised to $200+ which is significant cumulative budget overhead.
+
+**Memory entries created at closure:**
+- `feedback_anchor_multiply_input_size_regime.md` — methodology rule for cost projection
+- `feedback_probe_first_roi_demonstration.md` — probe-first ROI evidence + amendment precedent
+- `project_gepa_ood_arxiv_evidence.md` — arxiv §5.4 cross-domain methodology validation hook
+- `project_are_native_docker_architectural_solution.md` — Phase 4 Docker architectural argument
+
+---
+
+**End of memo. Phase 3 CLOSED. Sesija C STANDBY pending Phase 4 setup ratification.**
