@@ -1,62 +1,25 @@
-// CC Sesija A §2.1 Task A1 — memory + wiki + identity Tauri commands.
+// CC Sesija A §2.1 Tasks A1 + A4 — memory + KG + identity Tauri commands.
 //
 // Architecture: thin HTTP proxies to local sidecar (Fastify, port from ServiceState).
 // Tauri Rust shell intentionally has no direct sqlite/sqlite-vec dependencies — all
 // substrate access goes through the sidecar so that the storage layer (FrameStore,
 // HybridSearch, KnowledgeGraph, wiki-compiler) lives in one process.
 //
-// Command surface matches brief §2.1 Task A1 names:
-//   recall_memory          → GET  /api/memory/search
-//   save_memory            → POST /api/memory/frames
-//   search_entities        → GET  /api/memory/graph
-//   compile_wiki_section   → POST /api/wiki/compile
-//   get_identity           → GET  /api/identity   (route not yet implemented in sidecar
-//                                                  — graceful 404 → placeholder JSON;
-//                                                  follow-up A1.1 will add sidecar route)
+// Command surface (4 commands here; wiki commands moved to commands/wiki.rs at A4):
+//   recall_memory   → GET  /api/memory/search
+//   save_memory     → POST /api/memory/frames
+//   search_entities → GET  /api/memory/graph
+//   get_identity    → GET  /api/identity   (route not yet in sidecar — graceful 404
+//                                            → placeholder; A1.1 follow-up adds route)
 //
-// All commands return serde_json::Value so the React/TS adapter layer (apps/web/src/lib/
-// adapter.ts → tauri-bindings.ts) can keep its existing fetch-style response handling.
+// Shared HTTP helpers extracted to commands/http.rs at A4 (rule of two — wiki.rs is
+// the second consumer).
 
 use serde_json::{json, Value};
 use tauri::State;
 
+use crate::commands::http::{http_get, http_post, parse_json, sidecar_url};
 use crate::service::ServiceState;
-
-const SIDECAR_HOST: &str = "127.0.0.1";
-
-fn sidecar_url(port: u16, path: &str) -> String {
-    format!("http://{}:{}{}", SIDECAR_HOST, port, path)
-}
-
-async fn http_get(url: &str) -> Result<reqwest::Response, String> {
-    reqwest::get(url)
-        .await
-        .map_err(|e| format!("HTTP GET {} failed: {}", url, e))
-}
-
-async fn http_post(url: &str, body: &Value) -> Result<reqwest::Response, String> {
-    let client = reqwest::Client::new();
-    client
-        .post(url)
-        .json(body)
-        .send()
-        .await
-        .map_err(|e| format!("HTTP POST {} failed: {}", url, e))
-}
-
-async fn parse_json(resp: reqwest::Response) -> Result<Value, String> {
-    let status = resp.status();
-    if !status.is_success() {
-        let body_text = resp
-            .text()
-            .await
-            .unwrap_or_else(|_| "<unreadable body>".to_string());
-        return Err(format!("sidecar returned {}: {}", status, body_text));
-    }
-    resp.json::<Value>()
-        .await
-        .map_err(|e| format!("sidecar returned non-JSON body: {}", e))
-}
 
 /// Recall memory frames matching `query`. Optional `scope` (all|personal|workspace),
 /// `limit` (default sidecar-side ~20), `workspace_id` (workspace mind to search).
@@ -164,21 +127,4 @@ fn identity_placeholder() -> Value {
         "preferences": {},
         "_note": "identity sidecar route not implemented (CC Sesija A A1.1 follow-up)"
     })
-}
-
-/// Trigger wiki compilation for the active or specified workspace. Returns the
-/// compilation summary (page count, entities, gaps) from packages/wiki-compiler.
-#[tauri::command]
-pub async fn compile_wiki_section(
-    state: State<'_, ServiceState>,
-    workspace_id: Option<String>,
-) -> Result<Value, String> {
-    let mut body = json!({});
-    if let Some(ws) = workspace_id {
-        body["workspace"] = json!(ws);
-    }
-
-    let url = sidecar_url(state.port, "/api/wiki/compile");
-    let resp = http_post(&url, &body).await?;
-    parse_json(resp).await
 }

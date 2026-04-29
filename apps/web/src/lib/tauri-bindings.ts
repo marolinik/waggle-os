@@ -143,7 +143,42 @@ export function getIdentity(): Promise<IdentityResponse> {
   return invoke<IdentityResponse>('get_identity');
 }
 
-// ─── compile_wiki_section ──────────────────────────────────────────────────
+// ─── wiki commands (A4) ────────────────────────────────────────────────────
+// CC Sesija A §2.1 Task A4. Reads compiled wiki pages from sidecar (sourced
+// from per-workspace MindDB by packages/wiki-compiler) + triggers compile.
+
+/**
+ * One entry in the wiki page index from GET /api/wiki/pages. Shape varies by
+ * page type (entity/concept/synthesis); raw fields preserved for the React
+ * adapter to project into typed UI cells.
+ */
+export interface WikiPageMeta {
+  slug: string;
+  title?: string;
+  type?: string;
+  [key: string]: unknown;
+}
+
+export interface WikiPageContent {
+  slug: string;
+  content: string;
+  [key: string]: unknown;
+}
+
+/** List all compiled wiki pages (slug + metadata, no body). */
+export function getWikiPages(): Promise<WikiPageMeta[] | { pages: WikiPageMeta[] }> {
+  return invoke<WikiPageMeta[] | { pages: WikiPageMeta[] }>('get_wiki_pages');
+}
+
+/** Fetch a single wiki page's metadata by slug. */
+export function getWikiPage(slug: string): Promise<WikiPageMeta> {
+  return invoke<WikiPageMeta>('get_wiki_page', { slug });
+}
+
+/** Fetch the full markdown content for a wiki page by slug. */
+export function getWikiPageContent(slug: string): Promise<WikiPageContent> {
+  return invoke<WikiPageContent>('get_wiki_page_content', { slug });
+}
 
 export interface CompileWikiArgs {
   workspaceId?: string;

@@ -47,7 +47,10 @@ pub fn run() {
             commands::memory::save_memory,
             commands::memory::search_entities,
             commands::memory::get_identity,
-            commands::memory::compile_wiki_section,
+            commands::wiki::get_wiki_pages,
+            commands::wiki::get_wiki_page,
+            commands::wiki::get_wiki_page_content,
+            commands::wiki::compile_wiki_section,
             commands::agent::run_agent_query,
         ])
         .setup(|app| {
