@@ -110,6 +110,7 @@ import { agentGroupRoutes } from './routes/agent-groups.js';
 import { harvestRoutes } from './routes/harvest.js';
 import { wikiRoutes } from './routes/wiki.js';
 import { identityRoutes } from './routes/identity.js';
+import { agentRunRoutes } from './routes/agent-run.js';
 import { localInferenceRoutes } from './routes/local-inference.js';
 import { complianceRoutes } from './routes/compliance.js';
 import { OfflineManager } from './offline-manager.js';
@@ -1959,6 +1960,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(harvestRoutes);
   await server.register(wikiRoutes);
   await server.register(identityRoutes);
+  await server.register(agentRunRoutes);
   await server.register(localInferenceRoutes);
   await server.register(complianceRoutes);
 
