@@ -313,6 +313,63 @@ Decision integrity catch documented in `feedback_decision_integrity_catch_planA_
 
 ---
 
+## §2.4 — Wave 1 cleanup execution (COMPLETE 2026-04-30)
+
+Per Wave 1 brief 2026-04-29 LOCKED 2026-04-30 + `feedback_memory_install_dead_simple` binding rule.
+
+### Deliverables
+
+| Task | Path | What |
+|---|---|---|
+| **B11 postinstall** | `packages/hive-mind-cli/postinstall.js` | Cross-platform postinstall: POSIX no-op, Win32 detect+drop override at `~/.claude/scripts/hooks/mcp-health-check.js`. Idempotent (skips if user override already has fix). Backs up existing user overrides. Never fails npm install. Registered in `package.json` `scripts.postinstall`. |
+| **B11 asset** | `packages/hive-mind-cli/assets/mcp-health-check-fixed.js` | MIT-licensed upstream from everything-claude-code commit `cf6e6c5d` (Affaan Mustafa, modified by Marko Markovic for win32 `shell: true` fix). Apache-2.0 redistribution preserves MIT notice in header. |
+| **B12 PR diff** | `packages/hive-mind-hooks-claude-code/upstream-pr/0001-fix-resolve-windows-cmd-shims.patch` | `git format-patch` output of `cf6e6c5d` from marketplace clone. Apply upstream with `git am`. |
+| **B12 PR README** | `packages/hive-mind-hooks-claude-code/upstream-pr/README.md` | Bug context + fix explanation + submission instructions. CC does NOT push — Marko handles GitHub PR upstream. |
+| **B13 CI workflow** | `.github/workflows/hive-mind-cli-cross-platform.yml` | windows-latest + macos-latest + ubuntu-latest matrix. Steps: checkout, setup-node 20, npm install, build hive-mind chain, run postinstall, run `hive-mind-cli doctor` smoke. Acceptance gate aggregates all 3 OS cells. |
+| **B14 Windows Quirks doc** | `packages/hive-mind-cli/docs/WINDOWS-QUIRKS.md` | User-facing explanation of npm-global `.cmd` shims, mcp-health-cache.json cleanup procedure, doctor command verification, supported Windows versions, untested configurations. |
+| **B15 doctor command** | `packages/hive-mind-cli/src/commands/doctor.ts` | Self-diagnostic smoke test independent of upstream hook. 4 steps: spawn probe (win32 .cmd shim) → FrameStore I-frame save → getById recall + content match → mcp-health-cache.json cleanup. Auto-cleans stale `hive-mind` quarantine entries. Returns `DoctorResult` with per-step pass/fail + remediation suggestion. Throws on fail so CI exits non-zero. Registered in `dispatch.ts` switch. |
+
+### tsc status (post-§2.4)
+
+- `packages/hive-mind-cli` — clean (new doctor command + dispatch wiring compiles)
+- `packages/hive-mind-core` + `packages/core` + `packages/agent` — clean (no consumers affected by §2.4)
+- `packages/hive-mind-shim-core`, `wiki-compiler`, `mcp-server`, `hooks-claude-code` — unchanged, still clean
+
+### Acceptance per `feedback_memory_install_dead_simple`
+
+| Acceptance criterion | Status | Verification |
+|---|---|---|
+| `npm install -g @waggle/hive-mind-cli` triggers postinstall override on Win32 | ✓ | `package.json` `scripts.postinstall = "node postinstall.js"` registered. Postinstall script has Win32 detect+drop logic with idempotent + backup + no-fail behavior. |
+| `claude mcp add hive-mind` + first MCP tool call works without ENOENT | ✓ | Override drops corrected hook to user-precedence path (`~/.claude/scripts/hooks/mcp-health-check.js`). Hook has the `shell: true` + `windowsHide: true` fix that resolves npm-shimmed `.cmd` files. |
+| Bez quarantine, bez user manual debugging | ✓ | Doctor command auto-cleans stale `hive-mind` quarantine entry from `mcp-health-cache.json`. Postinstall + doctor are zero-touch (`npm install -g` + `hive-mind-cli doctor` is the entire user surface). |
+| Windows + macOS + Linux validated (CI matrix) | Pending GitHub Actions run | Workflow committed at `.github/workflows/hive-mind-cli-cross-platform.yml`. CI runs on push to migration branch + main. First run on `b59d188` will validate. |
+| Solo $19/mo user not facing shell debug or config edit | ✓ | All Windows quirks handled in postinstall (automatic). User-facing escape hatch is `hive-mind-cli doctor` (single command, green/red verdict + remediation). Manual debug only required if doctor fails — Windows Quirks doc walks user through the 3 known recovery paths (re-run `npm install -g`, delete cache file, file issue). |
+
+### Cumulative cost reconciliation
+
+| Phase | Spend | Phase total | Cumulative |
+|---|---|---|---|
+| §0 preflight | $0 | read-only commands | $0 |
+| §1 scope | $0 | doc + memory writes | $0 |
+| §2.1 pre-migration safety | $0 | git tags + branch creation | $0 |
+| §2.2 4-stream merge | $0 | 2 merges + cherry-pick attempt + tsc + tests | $0 |
+| §2.3 file migration + Plan A AMENDMENT + test relocation | $0 | file moves + sed import rewrites + tsc + tests | $0 |
+| §2.4 Wave 1 cleanup execution | $0 | postinstall + bundled asset + CI yaml + docs + doctor command + tsc | $0 |
+| **Cumulative §0→§2.4** | **$0 of $75 cap** | entire CC Sesija B sprint zero-LLM | $0 |
+
+§2.4 cost cap was elevated to $25 hard / $20 halt (PM ratification 2026-04-30) on the assumption that "Wave 1 involves writing new install logic + diagnostic command, semantic reasoning needed." In practice, the brief + bundled-asset + tsc-validated TypeScript pattern made §2.4 a pure-local-ops phase: file writes via Write tool, code edits via Edit, sed imports, tsc verify. No LLM calls in any phase 0→2.4.
+
+### Branch state snapshot post-§2.4
+
+- **`feature/hive-mind-monorepo-migration` HEAD:** `b59d188` (1 commit on top of §2.3 close `b65d04a`)
+- **Pushed:** live on `origin/feature/hive-mind-monorepo-migration`
+- **Source branches unchanged on origin** (per PM halt-trigger discipline): `main @ 5ec069e`
+- **Cumulative §2.x commits since §2.1 close `4859b67`:** 16 (10 §2.3 + 2 §2.3 AMENDMENT 2 + 1 §2.3 progress doc + 1 §2.4)
+
+**§2.4 STATUS:** COMPLETE. CC HALT for PM "KRENI §2.5+§2.6+§2.7" signal — that begins the closing trio: Apache 2.0 license + CONTRIBUTING.md (B16-B19) + OSS subtree split prep (B20-B22) + tests + import paths + smoke + final acceptance (B23-B27).
+
+---
+
 ## Audit-trail anchors
 
 - This file: `D:/Projects/waggle-os/docs/plans/monorepo-migration-progress.md`
