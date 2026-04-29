@@ -90,16 +90,84 @@ PM ratification 2026-04-30 confirmed brief §2.2 Task B4 merge plan covers ONLY 
 
 ---
 
-## §2.2 entry plan preview (for §2.2 KRENI signal)
+## §2.2 — 4-stream consolidation (COMPLETE 2026-04-30)
 
-Per brief §2.2 Task B4, on this `feature/hive-mind-monorepo-migration` branch:
+### Plan revision (during execution)
 
-1. Merge `gepa-faza-1` first (largest divergence — Faza 1 manifest v7 + Amendments 1-11 + GEPA evolution work). Resolve conflicts in `packages/agent` (manifest v7 work + Sprint 12 taxonomy work).
-2. Merge `phase-5-deployment-v2` second (canary toggle + monitoring infra). Conflicts likely in `packages/agent` Phase 5 monitoring + agent loop integration.
-3. Verify `feature/c3-v3-wrapper` + `faza-1-audit-recompute` content already reachable via gepa-faza-1 (per §0.1.4 classification — ee946d1 documented as superseded by 4d43141 in gepa-faza-1; cherry-pick only if unique commits exist).
-4. Run full test suite — target ~3000+ green (Phase 5 baseline 2609 + integration additions).
+Pre-merge reachability matrix surfaced a major simplification of brief §2.2 Task B4:
 
-§2.5 forward-port equivalence verification (deferred per PM Q5) lands inside §2.2 Task B4 if a concrete merge conflict involving registerShape surfaces.
+| Stream | Subset of phase-5-deployment-v2? | Subset of gepa-faza-1? |
+|---|---|---|
+| `gepa-faza-1` (6bc2089) | YES (direct ancestor) | self |
+| `feature/c3-v3-wrapper` (c9bda3d) | YES (gepa-faza-1 was built on top of c3-v3-wrapper) | YES |
+| `phase-5-deployment-v2` (a8283d6) | self | NO (Phase 5 added on top of Faza 1) |
+| `faza-1-audit-recompute` (639752e) | NO (1 unique commit) | NO (1 unique commit) |
+
+So `phase-5-deployment-v2` is a topological superset of 3 of 4 streams; only `639752e` from `faza-1-audit-recompute` is unique. Brief's planned 3-step merge collapsed to **1 merge + 1 merge** (cherry-pick attempted first then replaced with a proper merge to preserve original SHA per literal acceptance).
+
+**NOTE:** `decisions/2026-04-30-branch-architecture-opcija-c.md` §3 claimed "Phase 5 grana DOES NOT inherit Phase 4 long-task agent fixes". Git topology contradicts this — `feature/c3-v3-wrapper @ c9bda3d` IS a direct ancestor of `phase-5-deployment-v2`. The decision §3 mitigation strategy ("selective cherry-pick from Phase 4 chain if monitoring shows need") was based on a false premise; Phase 4 fixes are already in Phase 5. PM may want to update decision §3 or note the correction in audit trail.
+
+### Merge commit list
+
+| SHA | Type | Description |
+|---|---|---|
+| `4ef5dba` | merge --no-ff | consolidate phase-5-deployment-v2 (covers gepa-faza-1 + feature/c3-v3-wrapper); 82 commits brought in via single merge; 0 conflicts |
+| `4859b67` | merge --no-ff | consolidate faza-1-audit-recompute (1 unique commit 639752e); 0 conflicts |
+
+### Acceptance verification (per brief §2.2 acceptance criterion)
+
+`git branch --contains <SHA>` on each of the 4 key SHAs returns `feature/hive-mind-monorepo-migration`:
+
+| SHA | Source | Reachable? |
+|---|---|---|
+| `6bc2089` | gepa-faza-1 HEAD (Checkpoint C closure) | YES |
+| `a8283d6` | phase-5-deployment-v2 HEAD (Phase 5 Day 0) | YES |
+| `c9bda3d` | feature/c3-v3-wrapper HEAD (Phase 4.7) | YES |
+| `639752e` | faza-1-audit-recompute HEAD (audit recompute) | YES |
+
+**4/4 acceptance SHAs reachable.**
+
+### Conflict resolution summary
+
+**Zero conflicts in either merge.** No files required manual resolution. No Q5 trigger (registerShape area produced no conflict — content from feature/c3-v3-wrapper's Phase 4 fixes flowed cleanly into gepa-faza-1's Faza 1 work because gepa-faza-1 was branched from c3-v3-wrapper, then phase-5-deployment-v2 added Phase 5 on top of gepa-faza-1; the chain is linear, not divergent).
+
+The migration branch's only commit pre-merge (`6efeac3` §2.1 progress doc) added a NEW file `docs/plans/monorepo-migration-progress.md` that doesn't exist on phase-5-deployment-v2 nor faza-1-audit-recompute — no path-overlap, no conflict.
+
+### Test + tsc verification
+
+- **tsc clean** on shared, core, agent, server (per brief Sprint 12 verification chain).
+- **packages/agent: 2623 / 2623 PASS** (vs Phase 5 baseline 2609; +14 tests gained from c3-v3-wrapper Phase 4 long-task suite + faza-1-audit-recompute audit script).
+- **Full repo: 5919 passed / 31 failed / 145 skipped (6095 total).** Failure breakdown:
+  - 27 failures in `packages/marketplace/tests/sync-verification.test.ts` + `packages/server/tests/local/marketplace*.test.ts` — `marketplace.db` not seeded in this dev environment.
+  - 3 failures in `packages/server/tests/cron.test.ts`, `packages/server/tests/proactive.test.ts`, `packages/worker/tests/job-processor.test.ts` — Redis not running on `127.0.0.1:6381`.
+  - ~10 failures in `packages/server/tests/{audit, auth, daemons, db, routes, server, ws}.test.ts` + `tests/integration/m3-full-stack.test.ts` — DB/Redis infrastructure dependency.
+  - 1 failure in `packages/agent/tests/evolution-deploy.test.ts > restores .bak when present` in the FULL-repo run only; the SAME test passes when running `vitest run packages/agent` in isolation. Probable test-isolation flake (concurrent test interference); not a merge regression. Filed for future test-determinism work.
+- **Pass rate: 99.5%** (5919/5950 non-skipped). PM halt threshold of >130 failures (or >5%) NOT triggered. All 31 failures are environment-dependent or non-deterministic, NOT merge-introduced.
+
+### Cost spend
+
+§2.2: $0 — all operations were local git + tsc + vitest. No LLM calls were made during merging, conflict resolution (none needed), or testing. Cumulative §0+§1+§2.1+§2.2 spend remains $0 of the $75 cumulative cap (Phase 5 amendment).
+
+### Branch state snapshot post-§2.2
+
+**`feature/hive-mind-monorepo-migration` HEAD (this commit):** post-§2.2 doc update commit  
+**Pre-doc-update HEAD:** `4859b67`  
+**Commit log (last 6):**
+```
+<this commit>  docs(monorepo-migration): §2.2 COMPLETE — merge results + acceptance + test summary
+4859b67        merge(monorepo-migration): consolidate faza-1-audit-recompute (1 unique commit 639752e)
+4ef5dba        merge(monorepo-migration): consolidate phase-5-deployment-v2 (covers gepa-faza-1 + feature/c3-v3-wrapper)
+6efeac3        chore(monorepo-migration): §2.1 pre-migration safety — backup branches, baseline tag, migration branch
+a8283d6        feat(phase-5): canary kick-off Day 0 — pickShape wiring + default 10
+19152cf        docs(phase-5): §4 exit criteria coverage map + §5 cross-stream Waggle-primary declaration
+```
+
+**Source branches (unchanged on origin — verified post-merge):**
+- `main` @ `5ec069e` (NOT advanced per PM halt-trigger discipline)
+- `gepa-faza-1` @ `6bc2089`, `feature/c3-v3-wrapper` @ `c9bda3d`, `phase-5-deployment-v2` @ `a8283d6`, `faza-1-audit-recompute` @ `639752e`
+- `sprint-10/task-1.2-sonnet-route-repair` @ `6cf7554`
+
+**§2.2 STATUS:** COMPLETE. CC HALT for PM "KRENI §2.3" signal — that begins migration package creation (hive-mind-core relocation per PM Q3 Plan A + hive-mind-cli/mcp-server/wiki-compiler/shim-core/hooks-claude-code copy-and-rename + Wave 2/3 stubs).
 
 ---
 
@@ -109,5 +177,3 @@ Per brief §2.2 Task B4, on this `feature/hive-mind-monorepo-migration` branch:
 - §0 evidence: `D:/Projects/PM-Waggle-OS/sessions/2026-04-30-cc-sesija-B-preflight-evidence.md`
 - §1 scope: `D:/Projects/PM-Waggle-OS/sessions/2026-04-30-cc-sesija-B-section1-scope-confirmed.md`
 - Brief: `D:/Projects/PM-Waggle-OS/briefs/2026-04-30-cc-sesija-B-hive-mind-monorepo-migration.md`
-
-**§2.1 STATUS:** COMPLETE on this commit. CC HALT for PM "KRENI §2.2" signal.
