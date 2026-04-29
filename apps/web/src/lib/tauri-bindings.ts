@@ -124,17 +124,22 @@ export function searchEntities(args: SearchEntitiesArgs = {}): Promise<SearchEnt
 /**
  * Identity record from packages/core/src/mind/identity.ts (IdentityLayer).
  *
- * NOTE (CC Sesija A A1.1 follow-up): the sidecar does not yet register a
- * `/api/identity` route. Until that ships, the Tauri command returns a
- * placeholder `{ configured: false, name: null, email: null, preferences: {},
- * _note: "..." }`. Consumers should branch on `configured` to render either
- * the unconfigured-onboarding hint or the populated profile.
+ * Backed by /api/identity sidecar route (A1.1 shipped 2026-04-30). Returns
+ * either a configured identity (configured: true + IdentityLayer fields) or
+ * a placeholder (configured: false + nullable fields + optional _note) so
+ * consumers can branch on `configured` for onboarding-vs-populated rendering
+ * with one type.
  */
 export interface IdentityResponse {
   configured: boolean;
   name: string | null;
-  email: string | null;
-  preferences: Record<string, unknown>;
+  role?: string | null;
+  department?: string | null;
+  personality?: string | null;
+  capabilities?: string | null;
+  system_prompt?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
   _note?: string;
   [key: string]: unknown;
 }

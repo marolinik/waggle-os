@@ -488,11 +488,12 @@ class LocalAdapter {
   }
 
   /**
-   * CC Sesija A §2.2 — get the current user identity record.
-   * Tauri path returns the IdentityLayer record (or A1.1 placeholder while
-   * the sidecar /api/identity route is pending). Web path also calls the
-   * sidecar route directly; gracefully degrades to the placeholder shape if
-   * the route 404s so callers do not need to branch.
+   * CC Sesija A §2.2 + A1.1 — get the current user identity record.
+   * Backed end-to-end by /api/identity sidecar route (A1.1, 2026-04-30):
+   * returns either a configured identity (configured: true + IdentityLayer
+   * fields) or a placeholder (configured: false + null fields + _note).
+   * Tauri path uses IPC; web path uses HTTP fetch. 404/error fallbacks
+   * remain as defense-in-depth for sidecar outages.
    */
   async getIdentity(): Promise<IdentityResponse> {
     if (isTauri()) {
@@ -501,11 +502,11 @@ class LocalAdapter {
     try {
       const res = await this.fetch('/api/identity');
       if (res.status === 404) {
-        return { configured: false, name: null, email: null, preferences: {}, _note: 'sidecar /api/identity not implemented (A1.1 follow-up)' };
+        return { configured: false, name: null, _note: 'sidecar route 404 (unexpected post-A1.1)' };
       }
       return res.json();
     } catch {
-      return { configured: false, name: null, email: null, preferences: {}, _note: 'identity fetch failed' };
+      return { configured: false, name: null, _note: 'identity fetch failed' };
     }
   }
 

@@ -104,27 +104,32 @@ pub async fn search_entities(
 
 /// Get the user identity record from sidecar's IdentityLayer.
 ///
-/// SIDECAR GAP (CC Sesija A §2.1 A1 follow-up A1.1): the sidecar does not yet
-/// register a `/api/identity` route. Until that route ships, this command returns
-/// a placeholder identity object so the React UI integration is not blocked.
-/// The placeholder shape matches what packages/core/src/mind/identity.ts produces
-/// for an unconfigured workspace, so downstream consumers see consistent fields.
+/// Backed by /api/identity sidecar route (A1.1 shipped 2026-04-30). The route
+/// always returns a 200 with either configured: true + IdentityLayer fields,
+/// or configured: false + null fields + optional _note. The 404 + transport-
+/// error fallbacks here remain as defense-in-depth — they were the original
+/// pre-A1.1 placeholders and now only fire on hard sidecar outages.
 #[tauri::command]
 pub async fn get_identity(state: State<'_, ServiceState>) -> Result<Value, String> {
     let url = sidecar_url(state.port, "/api/identity");
     match http_get(&url).await {
-        Ok(resp) if resp.status().as_u16() == 404 => Ok(identity_placeholder()),
+        Ok(resp) if resp.status().as_u16() == 404 => Ok(identity_placeholder("sidecar route 404 (unexpected post-A1.1)")),
         Ok(resp) => parse_json(resp).await,
-        Err(_) => Ok(identity_placeholder()),
+        Err(_) => Ok(identity_placeholder("sidecar unreachable")),
     }
 }
 
-fn identity_placeholder() -> Value {
+fn identity_placeholder(note: &str) -> Value {
     json!({
         "configured": false,
         "name": null,
-        "email": null,
-        "preferences": {},
-        "_note": "identity sidecar route not implemented (CC Sesija A A1.1 follow-up)"
+        "role": null,
+        "department": null,
+        "personality": null,
+        "capabilities": null,
+        "system_prompt": null,
+        "created_at": null,
+        "updated_at": null,
+        "_note": note
     })
 }
