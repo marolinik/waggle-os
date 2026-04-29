@@ -11,11 +11,12 @@
 ```
 benchmarks/gaia2/
 ├── README.md                         (this file — directory pointer)
+├── smoke-evidence.md                 (Phase 2, Task C1+C2 — install + smoke verification + Windows compat)
 ├── adapter.ts                        (Phase 3, Task C3 — runRetrievalAgentLoop wrap)
 ├── config.yaml                       (Phase 3, Task C4 — shapes + cost guards + judge methodology)
 ├── erl-integration-plan.md           (Phase 5, Task C7+C8 — post-launch Phase 3 sprint plan)
 ├── dry-run-results-memo.md           (Phase 6, Task C10 — close-out signal for Phase 3 sprint go/no-go)
-├── runs/                             (Phase 4, Task C5 — per-run JSONL logs; <ISO_date>/ subdirs)
+├── runs/                             (Phase 4, Task C5 — per-run JSONL logs; gitignored except .gitkeep)
 └── scripts/                          (helper scripts as needed)
 ```
 
@@ -23,8 +24,10 @@ benchmarks/gaia2/
 
 ARE platform installed at `D:/Projects/waggle-os/external/meta-agents-research-environments/` (Phase 2, Task C1).
 - Repo: https://github.com/facebookresearch/meta-agents-research-environments (MIT).
-- Dataset: HuggingFace `meta-agents-research-environments/gaia2` (CC-BY-4.0).
-- Install method: `uv` (verified available `uv 0.8.17`); fallback `pip install meta-agents-research-environments`.
+- **Pinned upstream SHA** (verified via `git rev-parse HEAD` post-clone): `0330191ffef8581e3c0620b78df9c7408bcb98b0` (2026-04-20).
+- Dataset: HuggingFace `meta-agents-research-environments/gaia2` (CC-BY-4.0); 800 scenarios across 6 configs (search/execution/adaptability/time/ambiguity/mini, 200 each).
+- Install method: `uv sync --frozen` (verified — 95 deps, ~1.5min, exit 0). uv-managed Python 3.10.18.
+- Smoke verification: `benchmarks/gaia2/smoke-evidence.md` (Phase 2 deliverable). Windows compat: SIGALRM blocker in scenario timeout enforcement → Phase 4 host choice (Docker/WSL/Linux) deferred to PM.
 
 ## Authority chain
 

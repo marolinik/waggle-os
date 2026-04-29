@@ -184,3 +184,14 @@ tmp_bench_results-v5.json
 
 # Bee regen backup folders — rollback artifacts, not committed
 apps/www/public/brand/_backup-*/
+
+# Sesija C external dependencies — vendored per-clone, not committed
+# (ARE platform installed under external/meta-agents-research-environments;
+# pinned SHA tracked in benchmarks/gaia2/README.md)
+external/
+
+# Sesija C per-run output dirs — large JSONL traces, not committed
+# (Phase 2 smoke evidence summarized in benchmarks/gaia2/smoke-evidence.md;
+# Phase 4 dry run JSONLs stay local + summarized in dry-run-results-memo.md)
+benchmarks/gaia2/runs/*
+!benchmarks/gaia2/runs/.gitkeep
