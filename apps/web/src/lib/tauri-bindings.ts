@@ -289,6 +289,28 @@ export function listenAgentEnd(
   );
 }
 
+// ─── onboarding (A10) ──────────────────────────────────────────────────────
+// CC Sesija A §2.3 Task A10. First-launch detection via Rust-managed
+// filesystem flag at `~/.waggle/first-launch.flag` (durable across reinstalls,
+// unlike browser localStorage). useOnboarding still uses localStorage for the
+// per-step state shape; these commands gate the initial wizard show/hide
+// decision in Tauri builds.
+
+/** Returns true if the user has not yet completed onboarding. */
+export function isFirstLaunch(): Promise<boolean> {
+  return invoke<boolean>('is_first_launch');
+}
+
+/** Marks onboarding as complete (writes the flag file). Idempotent. */
+export function markFirstLaunchComplete(): Promise<void> {
+  return invoke<void>('mark_first_launch_complete');
+}
+
+/** Resets the first-launch flag — re-triggers onboarding. Dev/QA only. */
+export function resetFirstLaunch(): Promise<void> {
+  return invoke<void>('reset_first_launch');
+}
+
 // ─── Runtime detection ─────────────────────────────────────────────────────
 
 /**

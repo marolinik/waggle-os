@@ -52,6 +52,9 @@ pub fn run() {
             commands::wiki::get_wiki_page_content,
             commands::wiki::compile_wiki_section,
             commands::agent::run_agent_query,
+            commands::onboarding::is_first_launch,
+            commands::onboarding::mark_first_launch_complete,
+            commands::onboarding::reset_first_launch,
         ])
         .setup(|app| {
             tray::setup_tray(app.handle())?;
