@@ -171,6 +171,148 @@ a8283d6        feat(phase-5): canary kick-off Day 0 — pickShape wiring + defau
 
 ---
 
+## §2.3 — File migration + Plan A AMENDMENT (COMPLETE 2026-04-30)
+
+### Commit list (12 commits chained on top of `6087d2b` §2.2 close)
+
+| SHA | Subject | Files |
+|---|---|---|
+| `ff5b4aa` | B5.a — packages/hive-mind-core skeleton (Apache 2.0) | 5 |
+| `3b556c0` | B5.b — relocate mind/+harvest/+logger+injection-scanner from packages/core | 45 |
+| `aa9faf8` | B5.c — packages/core re-exports substrate from @waggle/hive-mind-core | 16 |
+| `49a445b` | B5b — packages/hive-mind-shim-core/ from hive-mind-clients (NEW per PM Q3) | 25 |
+| `4a2ca1b` | B5 AMENDMENT — widen Plan A: move multi-mind + MultiMindCache + WorkspaceManager | 6 |
+| `4e4d76c` | B8 — packages/hive-mind-wiki-compiler/ from hive-mind | 14 |
+| `d715bc6` | B7 — packages/hive-mind-mcp-server/ from hive-mind | 18 |
+| `0d8afd8` | B6 — packages/hive-mind-cli/ from hive-mind | 21 |
+| `8314bf6` | B9 — packages/hive-mind-hooks-claude-code/ from hive-mind-clients | 28 |
+| `c88953a` | B10 — 6 Wave 2/3 hook stub packages | 30 |
+| `05c9ec3` | B5 AMENDMENT 2a — relocate substrate tests to hive-mind-core/tests/ | 37 (renames) |
+| `87fecf8` | B5 AMENDMENT 2b — sed-update hybrid test imports in packages/core/tests | 10 |
+
+Each commit ≤ 50 files (PM halt-trigger #1 respected).
+
+### File move log per package
+
+**packages/hive-mind-core/ (NEW — Apache 2.0, OSS subtree-split target)**
+- `src/mind/` (22 files) ← moved from packages/core/src/mind/
+- `src/harvest/` (18 files) ← moved from packages/core/src/harvest/
+- `src/logger.ts` ← moved from packages/core/src/logger.ts
+- `src/injection-scanner.ts` ← moved from packages/core/src/injection-scanner.ts
+- `src/multi-mind.ts` ← moved from packages/core/src/multi-mind.ts (Plan A AMENDMENT)
+- `src/multi-mind-cache.ts` ← moved from packages/core/src/multi-mind-cache.ts (AMENDMENT)
+- `src/workspace-manager.ts` ← moved from packages/core/src/workspace-config.ts (AMENDMENT, renamed for hive-mind convention; AIActRiskLevel inlined as 4-value string union to avoid cross-package compliance/types dep)
+- `src/index.ts` (NEW — barrel mirroring substrate exports + multi-workspace orchestration)
+- `tests/mind/` (29 files) ← moved from packages/core/tests/mind/ (AMENDMENT 2a)
+- `tests/harvest/` (4 files) ← moved from packages/core/tests/harvest/ (AMENDMENT 2a)
+- `tests/multi-mind.test.ts`, `tests/entity-normalizer.test.ts`, `tests/ontology.test.ts`, `tests/workspace-manager.test.ts` (AMENDMENT 2a)
+- `package.json` (NEW), `tsconfig.json` (NEW), `LICENSE` (NEW Apache 2.0), `README.md` (NEW)
+
+**packages/hive-mind-shim-core/ (NEW per PM Q3 — Apache 2.0)**
+- 9 src files + 9 tests (8 standalone + 1 integration) copied from hive-mind-clients/packages/shim-core/. package.json renamed @hive-mind → @waggle. LICENSE added.
+
+**packages/hive-mind-cli/ (MIGRATED — Apache 2.0)**
+- 16 src files + 1 test copied from hive-mind/packages/cli/. package.json renamed @hive-mind/cli → @waggle/hive-mind-cli. tsconfig project refs updated. bin: hive-mind-cli (preserved). 3 deps rewritten.
+
+**packages/hive-mind-mcp-server/ (MIGRATED — Apache 2.0)**
+- 13 src files copied from hive-mind/packages/mcp-server/. package.json renamed. tsconfig refs updated. bin: hive-mind-memory-mcp (preserved). 2 deps rewritten.
+
+**packages/hive-mind-wiki-compiler/ (MIGRATED — Apache 2.0)**
+- 9 src files copied from hive-mind/packages/wiki-compiler/. package.json renamed. tsconfig refs updated. peerDep @anthropic-ai/sdk preserved.
+
+**packages/hive-mind-hooks-claude-code/ (MIGRATED — Apache 2.0)**
+- 12 src files + 9 tests copied from hive-mind-clients/packages/claude-code-hooks/. package.json renamed. bin: claude-code-hooks (preserved). HIVE_MIND_MARKER constant retained as `@hive-mind/claude-code-hooks` for runtime backward compat with users who installed pre-monorepo OSS package.
+
+**packages/hive-mind-hooks-{cursor,hermes,openclaw,codex,claude-desktop,codex-desktop}/ (NEW STUBS, version 0.0.1)**
+- Each: package.json (Apache 2.0, dep @waggle/hive-mind-shim-core), src/index.ts (`export {}` + TODO), README.md (STUB placeholder), tsconfig.json (extends ../../tsconfig.base.json + project ref to ../hive-mind-shim-core), LICENSE.
+
+**packages/core/ (RESHAPED — substrate re-exports from @waggle/hive-mind-core)**
+- src/mind/, src/harvest/, src/logger.ts, src/injection-scanner.ts, src/multi-mind.ts, src/multi-mind-cache.ts, src/workspace-config.ts → MOVED to hive-mind-core (per Plan A + AMENDMENT)
+- src/index.ts barrel rewritten — substrate exports come from @waggle/hive-mind-core; non-substrate (config, migration, vault, telemetry, install-audit, cron-store, skill-hashes, team-sync, file-store, file-indexer, memory-import, optimization-log, compliance/) stays local
+- 12 internal source files updated (sed sweep) — imports of './mind/X.js', './harvest/X.js', './logger.js', './injection-scanner.js' rewritten to '@waggle/hive-mind-core'
+- 17 test files updated (AMENDMENT 2b) — same import sweep across packages/core/tests/
+- package.json: deps reshuffled — added '@waggle/hive-mind-core: *' (workspace), removed sqlite-vec + @huggingface/transformers (now in hive-mind-core), kept better-sqlite3 (used by telemetry.ts directly)
+
+**Root: tsconfig.base.json (NEW)**
+- Created at waggle-os root with base TypeScript config matching hive-mind + hive-mind-clients conventions. Used by tsconfig extends from new hive-mind-* packages.
+
+### Import path sweep summary
+
+| From | To | Count | Files |
+|---|---|---|---|
+| `@hive-mind/core` (in mcp-server, cli, wiki-compiler) | `@waggle/hive-mind-core` | ~18 | 13 source files |
+| `@hive-mind/wiki-compiler` (in mcp-server, cli) | `@waggle/hive-mind-wiki-compiler` | ~3 | 2 source files |
+| `@hive-mind/mcp-server` (in cli) | `@waggle/hive-mind-mcp-server` | ~1 | 1 source file |
+| `@hive-mind/shim-core` (in hooks-claude-code) | `@waggle/hive-mind-shim-core` | ~7 | 7 source files |
+| `@hive-mind/cli` (in hooks-claude-code peerDep) | `@waggle/hive-mind-cli` | ~1 | 1 source file |
+| `'./mind/<X>.js'` etc. (in packages/core/src) | `'@waggle/hive-mind-core'` | ~17 | 12 source files |
+| `'./logger.js'`, `'./injection-scanner.js'` (in packages/core/src) | `'@waggle/hive-mind-core'` | ~6 | 4 source files |
+| `'../src/mind/<X>.js'` etc. (in packages/core/tests) | `'@waggle/hive-mind-core'` | ~92 | 17 test files |
+| Doc-comments in hooks-claude-code header jsdoc | Updated to mention both old + new package names | 2 | 2 source files |
+| `tsconfig.json` project references `'../core'` | `'../hive-mind-core'` | 4 | 4 tsconfig files |
+| `tsconfig.json` project references `'../wiki-compiler'`, `'../mcp-server'`, `'../shim-core'`, `'../cli'` | `'../hive-mind-X'` | 7 | 4 tsconfig files |
+
+### tsc status per package
+
+| Package | tsc verdict |
+|---|---|
+| `packages/hive-mind-core` | clean |
+| `packages/hive-mind-shim-core` | clean |
+| `packages/hive-mind-wiki-compiler` | clean |
+| `packages/hive-mind-mcp-server` | clean |
+| `packages/hive-mind-cli` | clean |
+| `packages/hive-mind-hooks-claude-code` | clean |
+| `packages/hive-mind-hooks-{cursor,hermes,openclaw,codex,claude-desktop,codex-desktop}` (6 stubs) | all clean |
+| `packages/core` | clean |
+| `packages/agent` | clean (consumers via @waggle/core unchanged — backward-compat re-export verified) |
+| `packages/server` | clean |
+
+PM halt-trigger #2 (`tsc fails in >5 packages`) NOT triggered.
+
+### Test count delta
+
+| Metric | §2.2 baseline | §2.3 final | Δ |
+|---|---|---|---|
+| Tests passed | 5919 | 5949 | **+30** |
+| Tests failed | 31 | 31 | **0** |
+| Tests skipped | 145 | 145 | 0 |
+| Total tests | 6095 | 6125 | +30 |
+| Test files passed | 389 | 396 | +7 |
+| Test files failed | 23 | 35 | +12 |
+| Pass rate (non-skipped) | 99.5% | 99.5% | 0 |
+
+The +12 failed test files are the same env-dependent tests (marketplace.db not seeded + Redis on 6381 not running + Postgres not running) that surfaced in §2.2, just now spread across more packages because each new hive-mind-* package brings its own integration tests (none of which run in this dev environment lacking Redis/Postgres). The +30 passing tests come from B5b shim-core (8 tests) + B6/B7/B8 packages (~22 new tests). 0 new merge regressions, 0 substrate test regressions.
+
+PM halt-trigger #1 (`>5% / >130 fails`) NOT triggered.
+
+### Cumulative spend reconciliation
+
+| Phase | LLM spend | Notes |
+|---|---|---|
+| §0 preflight | $0 | Read-only commands |
+| §1 scope | $0 | Doc + memory writes |
+| §2.1 pre-migration safety | $0 | Git tags + branch creation |
+| §2.2 4-stream merge | $0 | 2 merges + 1 cherry-pick + tsc + tests |
+| §2.3 file migration | $0 | File moves + sed import rewrites + tsc + tests |
+| **Cumulative** | **$0** | of $75 cumulative cap (Phase 5 amendment) — entire CC Sesija B sprint zero-LLM. |
+
+### Plan A AMENDMENT note
+
+PM Q3 Plan A (2026-04-30) ratified narrow substrate scope `mind/+harvest/`. CC discovery during §2.3 mcp-server + cli migration revealed broader OSS substrate boundary in original `@hive-mind/core` — `WorkspaceManager` + `MultiMindCache` were also substrate-level. Halt-and-PM surfaced 3 options. PM ratified Plan A AMENDMENT 2026-04-30: widen scope to also relocate `multi-mind.ts`, `multi-mind-cache.ts`, `workspace-config.ts` (renamed `workspace-manager.ts`) — preserves OSS subtree-split self-containment goal for Day 0 launch. Backward compat preserved via @waggle/core re-export of these symbols from @waggle/hive-mind-core; ZERO consumer-side changes in packages/agent + packages/server + apps/web.
+
+Decision integrity catch documented in `feedback_decision_integrity_catch_planA_amendment` memory entry (CC-side) + pending PM backfill in `decisions/2026-04-30-branch-architecture-opcija-c.md`.
+
+### Final branch state snapshot post-§2.3
+
+- **`feature/hive-mind-monorepo-migration` HEAD:** `87fecf8` — 12 §2.3 commits on top of §2.2 close `6087d2b`
+- **Pushed:** all 12 commits live on `origin/feature/hive-mind-monorepo-migration`
+- **Source branches unchanged on origin** (per PM halt-trigger discipline): `main @ 5ec069e`, `gepa-faza-1`, `phase-5-deployment-v2`, `feature/c3-v3-wrapper`, `faza-1-audit-recompute`
+- **Sister hive-mind-* packages on origin via this branch:** 9 (`hive-mind-core`, `hive-mind-shim-core`, `hive-mind-cli`, `hive-mind-mcp-server`, `hive-mind-wiki-compiler`, `hive-mind-hooks-claude-code` + 6 Wave 2/3 stubs)
+
+**§2.3 STATUS:** COMPLETE. CC HALT for PM "KRENI §2.4" signal — that begins Wave 1 cleanup brief execution (Tasks B11-B15 — postinstall + .cmd shim resolution + 'hive-mind-cli doctor' command + Windows Quirks doc + windows-latest CI test).
+
+---
+
 ## Audit-trail anchors
 
 - This file: `D:/Projects/waggle-os/docs/plans/monorepo-migration-progress.md`
