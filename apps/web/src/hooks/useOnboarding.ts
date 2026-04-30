@@ -31,6 +31,20 @@ function loadState(): OnboardingState {
       return done;
     }
 
+    // PM walkthrough bypass (DEV only): ?forceWizard=true forces the wizard to
+    // render at step 0 regardless of localStorage state OR the auto-complete
+    // branch in this hook (which fires when /api/workspaces.length > 0,
+    // including the boot-time default-workspace stub from
+    // wsManager.ensureDefault). Mirrors ?skipOnboarding=true above as the
+    // symmetric "always run" counterpart. Gated on import.meta.env.DEV so a
+    // production deployment can't accidentally re-trigger onboarding for
+    // returning users via a stray URL.
+    if (import.meta.env.DEV && params.get('forceWizard') === 'true') {
+      const fresh: OnboardingState = { ...defaultState, completed: false, step: 0 };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
+      return fresh;
+    }
+
     // Migrate from old key
     if (localStorage.getItem('waggle_onboarding_complete') === 'true') {
       localStorage.removeItem('waggle_onboarding_complete');
@@ -76,6 +90,14 @@ export const useOnboarding = () => {
   // re-run the wizard.
   useEffect(() => {
     if (state.completed) return;
+    // PM walkthrough bypass (DEV only): when ?forceWizard=true is set, skip
+    // the auto-complete branch so the wizard renders even though the
+    // backend's wsManager.ensureDefault has created the default-workspace
+    // stub. Symmetric with the loadState() bypass above.
+    if (import.meta.env.DEV) {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('forceWizard') === 'true') return;
+    }
     let cancelled = false;
     (async () => {
       try {
