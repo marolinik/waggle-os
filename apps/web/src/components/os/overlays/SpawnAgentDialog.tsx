@@ -56,10 +56,25 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
         adapter.getModelPricing().catch(() => [] as ModelPricing[]),
         adapter.getProviders().catch(() => ({ providers: [] as Array<{ hasKey: boolean }> })),
       ]);
-      setModels(m);
+      // /api/litellm/models is empty when LiteLLM is unreachable. Chat handles
+      // this with a hardcoded FALLBACK_MODELS list, but those identifiers
+      // (provider/model with dots) don't match the runtime model IDs the
+      // backend actually accepts. Fall back to the runtime active model so
+      // Spawn Agent always offers at least one valid option when the
+      // built-in Anthropic proxy is the active provider.
+      let modelList = m;
+      if (modelList.length === 0) {
+        try {
+          const active = await adapter.getModel();
+          if (active) modelList = [active];
+        } catch (err) {
+          console.error('[SpawnAgentDialog] runtime-model fallback failed:', err);
+        }
+      }
+      setModels(modelList);
       setPricing(p);
       setProvidersWithKeys(countProvidersWithKeys(providers.providers));
-      const defaultModel = selectDefaultModel(wsModel, m);
+      const defaultModel = selectDefaultModel(wsModel, modelList);
       setForm(f => ({ ...f, model: f.model || defaultModel }));
     } catch (err) {
       setModelsError(err instanceof Error ? err.message : 'Failed to fetch models');
