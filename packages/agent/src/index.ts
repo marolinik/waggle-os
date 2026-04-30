@@ -184,6 +184,7 @@ export { WORKFLOW_TEMPLATES, listWorkflowTemplates, createResearchTeamTemplate, 
 export { loadCustomWorkflows, saveCustomWorkflow, deleteCustomWorkflow, listAllWorkflows } from './custom-workflows.js';
 export { createWorkflowTools, type WorkflowToolsConfig } from './workflow-tools.js';
 export { detectTaskShape, type TaskShape, type TaskShapeType, type TaskShapeSignal, type ComponentPhase } from './task-shape.js';
+export { PromptAssembler, type AssembledPrompt, type AssembleOptions, type AssembleInput, type ScaffoldStyle } from './prompt-assembler.js';
 export {
   composeWorkflow, validateTemplate,
   type WorkflowPlan, type ExecutionMode, type PlanStep as ComposerPlanStep, type ComposerContext, type ValidationError,

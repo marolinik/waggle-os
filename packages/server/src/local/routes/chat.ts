@@ -15,7 +15,7 @@ import { emitWaggleSignal } from './waggle-signals.js';
 import { emitAuditEvent } from './events.js';
 import { getOptimizerService } from '../services/optimizer-service.js';
 import { validateOrigin } from '../cors-config.js';
-import { listPersonas, composePersonaPrompt, BEHAVIORAL_SPEC } from '@waggle/agent';
+import { listPersonas, composePersonaPrompt, BEHAVIORAL_SPEC, isEnabled, detectTaskShape, type AssembledPrompt } from '@waggle/agent';
 
 /**
  * Persona resolver that includes built-ins AND on-disk custom personas
@@ -129,16 +129,37 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
   // Phase A.2: accepts an optional `personaOverride` so different chat windows
   // on the same workspace can run different personas without touching the
   // workspace record.
-  function buildSystemPrompt(orch: Orchestrator, workspacePath?: string, sessionId?: string, historyLength?: number, workspaceId?: string, personaOverride?: string): string {
+  function buildSystemPrompt(
+    orch: Orchestrator,
+    workspacePath?: string,
+    sessionId?: string,
+    historyLength?: number,
+    workspaceId?: string,
+    personaOverride?: string,
+    /**
+     * FR #4: when PROMPT_ASSEMBLER is on, the caller pre-fetches a structured
+     * AssembledPrompt via `orch.buildAssembledPrompt(query, persona, opts)`.
+     * If provided, its `system` replaces the basic `orch.buildSystemPrompt()`
+     * call below — the rest of the wrapper (profile, skills, workspaceNow,
+     * behavioralSpec rules, persona) still layers on top because the assembler
+     * does not include those. Caching is skipped when assembled is provided
+     * because memory recall results vary per turn.
+     */
+    assembled?: AssembledPrompt | null,
+  ): string {
     // Resolve the active persona: per-window override > workspace default.
     const wsConfig = workspaceId ? server.workspaceManager?.get(workspaceId) : null;
     const activePersonaId = personaOverride ?? wsConfig?.personaId ?? null;
 
-    // Check cache: reuse if same session, workspace, workspaceId, skill count, and persona
+    // Check cache: reuse if same session, workspace, workspaceId, skill count, and persona.
+    // Skip cache entirely when assembled is provided — it reflects per-turn
+    // memory recall + task-shape detection that should not be cached across turns.
     const cacheKey = sessionId ?? 'default';
-    const cached = systemPromptCache.get(cacheKey);
-    if (cached && cached.workspace === workspacePath && cached.workspaceId === workspaceId && cached.skillCount === skills.length && cached.personaId === activePersonaId && cached.historyLength === historyLength) {
-      return cached.prompt;
+    if (!assembled) {
+      const cached = systemPromptCache.get(cacheKey);
+      if (cached && cached.workspace === workspacePath && cached.workspaceId === workspaceId && cached.skillCount === skills.length && cached.personaId === activePersonaId && cached.historyLength === historyLength) {
+        return cached.prompt;
+      }
     }
     const now = new Date();
     const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
@@ -151,8 +172,13 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
       prompt += userSystemPrompt + '\n\n';
     }
 
-    // Orchestrator's built prompt (identity + self-awareness + preloaded context)
-    prompt += orch.buildSystemPrompt();
+    // Orchestrator's built prompt (identity + self-awareness + preloaded context).
+    // FR #4: when PromptAssembler is on, swap in the structured assembled prompt
+    // — adds Identity + Persona + State + Recent + Memory sections via the
+    // sixth-layer assembler. The remaining wrapper layers (profile, skills,
+    // workspaceNow, behavioralSpec, persona-via-composePersonaPrompt) still
+    // run below because the assembler does not include those.
+    prompt += assembled?.system ?? orch.buildSystemPrompt();
 
     // Inject user profile context (review Major #4: cached by mtime, no sync I/O per turn)
     try {
@@ -284,8 +310,19 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       prompt = composePersonaPrompt(prompt, null, undefined, workspaceTone);
     }
 
-    // C3: Cache the built prompt
-    systemPromptCache.set(cacheKey, { prompt, workspace: workspacePath, workspaceId, skillCount: skills.length, personaId: activePersonaId, historyLength });
+    // FR #4: append the assembler's task-shape responseScaffold as a final
+    // response-shape note. The scaffold guides the model toward the format
+    // the task type calls for ("Cite source. Answer." etc.). Empty when the
+    // task shape has low confidence or the tier is frontier.
+    if (assembled?.responseScaffold) {
+      prompt += '\n\n## Response shape\n' + assembled.responseScaffold;
+    }
+
+    // C3: Cache the built prompt — only when there's no per-turn assembler
+    // input. Caching an assembled prompt would replay stale memory recall.
+    if (!assembled) {
+      systemPromptCache.set(cacheKey, { prompt, workspace: workspacePath, workspaceId, skillCount: skills.length, personaId: activePersonaId, historyLength });
+    }
 
     return prompt;
   }
@@ -793,9 +830,33 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           }
         }
 
+        // FR #4: pre-fetch a structured AssembledPrompt when PROMPT_ASSEMBLER is on.
+        // The assembler runs sixth-layer prompt packaging (Identity + Persona +
+        // memory sections + task-shape scaffold). Failures fall back gracefully
+        // to the static system prompt — never block a chat turn on assembler errors.
+        let assembled: AssembledPrompt | null = null;
+        if (!hasCustomRunner && isEnabled('PROMPT_ASSEMBLER')) {
+          try {
+            const wsConfigForAssembler = effectiveWorkspace ? server.workspaceManager?.get(effectiveWorkspace) : null;
+            const personaIdForAssembler = personaOverride ?? wsConfigForAssembler?.personaId ?? null;
+            const personaForAssembler = personaIdForAssembler ? resolvePersona(personaIdForAssembler) : null;
+            const taskShape = detectTaskShape(agentMessage);
+            assembled = await sessionOrch.buildAssembledPrompt(agentMessage, personaForAssembler, { taskShape, turnId });
+            log.info(
+              `[prompt-assembler] applied turn=${turnId.slice(0, 8)} `
+              + `shape=${taskShape.type ?? 'none'} conf=${taskShape.confidence.toFixed(2)} `
+              + `tier=${assembled.debug.tier} sections=${assembled.debug.sectionsIncluded.length} `
+              + `frames=${assembled.debug.framesUsed} chars=${assembled.debug.totalChars}`
+            );
+          } catch (err) {
+            log.warn(`[prompt-assembler] failed, falling back to static prompt: ${(err as Error).message}`);
+            assembled = null;
+          }
+        }
+
         const systemPrompt = hasCustomRunner
           ? 'You are a helpful AI assistant.'
-          : ambiguityPrefix + buildSystemPrompt(sessionOrch, workspacePath, sessionId, history.length, effectiveWorkspace, personaOverride) + templateContext + recalledContext;
+          : ambiguityPrefix + buildSystemPrompt(sessionOrch, workspacePath, sessionId, history.length, effectiveWorkspace, personaOverride, assembled) + templateContext + recalledContext;
 
         // Register a per-request pre:tool hook for confirmation gates
         // This fires during the agent loop and pauses until user approves/denies

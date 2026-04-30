@@ -6,7 +6,7 @@
 import type { FastifyInstance } from 'fastify';
 import { parseTier, getCapabilities } from '@waggle/shared';
 import { requireTier } from '../../middleware/assert-tier.js';
-import { runAgentLoop } from '@waggle/agent';
+import { runAgentLoop, isEnabled, detectTaskShape, listPersonas } from '@waggle/agent';
 import { emitWaggleSignal } from './waggle-signals.js';
 import { persistMessage } from './chat-persistence.js';
 import { createLogger } from '../logger.js';
@@ -148,7 +148,40 @@ export async function fleetRoutes(fastify: FastifyInstance) {
           metadata: { sessionId: spawnSessionId, model: resolvedModel },
         });
 
-        const systemPrompt = session.orchestrator.buildSystemPrompt();
+        // FR #4: when PROMPT_ASSEMBLER is on, use the structured assembler
+        // path so spawn benefits from the same task-shape scaffolding +
+        // tier-adaptive section trimming chat does. Falls back gracefully
+        // to the bare orchestrator prompt if the assembler errors.
+        let systemPrompt: string;
+        if (isEnabled('PROMPT_ASSEMBLER')) {
+          try {
+            const taskShape = detectTaskShape(task);
+            const personaForAssembler = session.personaId
+              ? (listPersonas().find(p => p.id === session.personaId) ?? null)
+              : null;
+            const assembled = await session.orchestrator.buildAssembledPrompt(
+              task,
+              personaForAssembler,
+              { taskShape },
+            );
+            systemPrompt = assembled.system;
+            if (assembled.responseScaffold) {
+              systemPrompt += '\n\n## Response shape\n' + assembled.responseScaffold;
+            }
+            log.info(
+              `[fleet/spawn] prompt-assembler applied session=${spawnSessionId} `
+              + `shape=${taskShape.type ?? 'none'} conf=${taskShape.confidence.toFixed(2)} `
+              + `tier=${assembled.debug.tier} sections=${assembled.debug.sectionsIncluded.length} `
+              + `frames=${assembled.debug.framesUsed} chars=${assembled.debug.totalChars}`
+            );
+          } catch (err) {
+            log.warn(`[fleet/spawn] prompt-assembler failed, falling back: ${(err as Error).message}`);
+            systemPrompt = session.orchestrator.buildSystemPrompt();
+          }
+        } else {
+          systemPrompt = session.orchestrator.buildSystemPrompt();
+        }
+
         const result = await runAgentLoop({
           litellmUrl: fastify.localConfig.litellmUrl,
           litellmApiKey: fastify.agentState.litellmApiKey,
