@@ -15,7 +15,23 @@ import { emitWaggleSignal } from './waggle-signals.js';
 import { emitAuditEvent } from './events.js';
 import { getOptimizerService } from '../services/optimizer-service.js';
 import { validateOrigin } from '../cors-config.js';
-import { getPersona, composePersonaPrompt, BEHAVIORAL_SPEC } from '@waggle/agent';
+import { listPersonas, composePersonaPrompt, BEHAVIORAL_SPEC } from '@waggle/agent';
+
+/**
+ * Persona resolver that includes built-ins AND on-disk custom personas
+ * (Faza 1 evolved variants like `claude::gen1-v1`, `qwen-thinking::gen1-v1`,
+ * plus user-saved customs in `~/.waggle/personas/`).
+ *
+ * Previously `getPersona(id)` was used here, which only consulted the static
+ * built-in PERSONAS array — `listPersonas()` adds the custom ones from disk
+ * via `loadCustomPersonas()`. The deploy comment in evolution-deploy.ts
+ * explicitly says "loader picks it up on next listPersonas() call", but
+ * the chat consumer was reading the wrong function. See FR #3 in
+ * docs/GEPA-SCOPE-AUDIT-2026-04-30.md.
+ */
+function resolvePersona(id: string) {
+  return listPersonas().find(p => p.id === id) ?? null;
+}
 import { TeamSync, WaggleConfig } from '@waggle/core';
 
 // ── Extracted modules ──────────────────────────────────────────────────
@@ -261,7 +277,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // W7.3: Pass workspace tone to composePersonaPrompt
     const workspaceTone = wsConfig?.tone;
     if (activePersonaId) {
-      const persona = getPersona(activePersonaId);
+      const persona = resolvePersona(activePersonaId);
       prompt = composePersonaPrompt(prompt, persona, undefined, workspaceTone);
     } else if (workspaceTone) {
       // Even without a persona, apply tone if workspace has one set
@@ -921,7 +937,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         const wsConfig = effectiveWorkspace ? server.workspaceManager?.get(effectiveWorkspace) : null;
         const activePersonaId = personaOverride ?? wsConfig?.personaId ?? null;
         if (!hasCustomRunner && activePersonaId) {
-          const persona = getPersona(activePersonaId);
+          const persona = resolvePersona(activePersonaId);
           if (persona) {
             // Allowlist: keep only declared tools + always-available (if persona declares any)
             if (persona.tools.length > 0) {
