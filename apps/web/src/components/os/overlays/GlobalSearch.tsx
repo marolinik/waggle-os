@@ -3,6 +3,7 @@ import {
   Search, MessageSquare, Brain, Clock, Settings, Loader2,
   LayoutDashboard, Bot, FolderOpen, Activity, Package, Plug,
   Store, Mic, Sparkles, Shield, Users, FileText, Globe,
+  Radio, Zap, Lock, UserCircle,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
@@ -29,15 +30,23 @@ interface GlobalSearchProps {
   onNavigate: (type: string, id: string) => void;
 }
 
-/* ── Commands (static) ── */
+/* ── Commands (static) ──
+ * NOTE: keep aligned with `appConfig` in Desktop.tsx — every app id with a
+ * dock/window entry should be discoverable here. Drift between the two is the
+ * cause of FR #13. Long-term fix: hoist appConfig into a shared catalog
+ * module and derive both lists from it. Minimal fix for now: keep both lists
+ * in sync by hand and review on every new app.
+ */
 const COMMANDS: SearchResult[] = [
   { category: 'command', id: 'dashboard', title: 'Dashboard', subtitle: 'Home overview', icon: LayoutDashboard, score: 0 },
   { category: 'command', id: 'chat', title: 'Chat', subtitle: 'Open conversation', icon: MessageSquare, score: 0 },
-  { category: 'command', id: 'agents', title: 'Agents', subtitle: 'Manage personas & groups', icon: Bot, score: 0 },
+  { category: 'command', id: 'agents', title: 'Personas', subtitle: 'Manage personas & groups', icon: Bot, score: 0 },
   { category: 'command', id: 'files', title: 'Files', subtitle: 'Workspace documents', icon: FolderOpen, score: 0 },
   { category: 'command', id: 'memory', title: 'Memory', subtitle: 'Knowledge frames', icon: Brain, score: 0 },
-  { category: 'command', id: 'cockpit', title: 'Command Center', subtitle: 'System health & ops', icon: Activity, score: 0 },
+  { category: 'command', id: 'cockpit', title: 'Cockpit', subtitle: 'System health & ops', icon: Activity, score: 0 },
+  { category: 'command', id: 'mission-control', title: 'Mission Control', subtitle: 'Multi-agent overview', icon: Radio, score: 0 },
   { category: 'command', id: 'capabilities', title: 'Skills & Apps', subtitle: 'Installed capabilities', icon: Package, score: 0 },
+  { category: 'command', id: 'waggle-dance', title: 'Waggle Dance', subtitle: 'Cross-workspace signals', icon: Zap, score: 0 },
   { category: 'command', id: 'connectors', title: 'Connectors', subtitle: 'Service integrations', icon: Plug, score: 0 },
   { category: 'command', id: 'scheduled-jobs', title: 'Scheduled Jobs', subtitle: 'Recurring tasks', icon: Clock, score: 0 },
   { category: 'command', id: 'marketplace', title: 'Marketplace', subtitle: 'Browse extensions', icon: Store, score: 0 },
@@ -45,6 +54,12 @@ const COMMANDS: SearchResult[] = [
   { category: 'command', id: 'room', title: 'Room', subtitle: 'Sub-agent canvas', icon: Users, score: 0 },
   { category: 'command', id: 'approvals', title: 'Approvals', subtitle: 'Pending approvals', icon: Shield, score: 0 },
   { category: 'command', id: 'timeline', title: 'Timeline', subtitle: 'Workspace activity history', icon: Clock, score: 0 },
+  { category: 'command', id: 'events', title: 'Events', subtitle: 'System events stream', icon: Activity, score: 0 },
+  { category: 'command', id: 'vault', title: 'Vault', subtitle: 'Encrypted secrets & API keys', icon: Lock, score: 0 },
+  { category: 'command', id: 'profile', title: 'My Profile', subtitle: 'User profile, identity & preferences', icon: UserCircle, score: 0 },
+  { category: 'command', id: 'backup', title: 'Backup & Restore', subtitle: 'Mind backups', icon: Activity, score: 0 },
+  { category: 'command', id: 'telemetry', title: 'Usage & Telemetry', subtitle: 'Token + cost analytics', icon: Activity, score: 0 },
+  { category: 'command', id: 'governance', title: 'Team Governance', subtitle: 'Roles & permissions', icon: Shield, score: 0 },
   { category: 'command', id: 'settings', title: 'Settings', subtitle: 'Configuration', icon: Settings, score: 0 },
 ];
 
