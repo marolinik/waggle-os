@@ -88,14 +88,48 @@ class LocalAdapter {
   async connect(): Promise<{ wsToken: string }> {
     this._connectAttempted = true;
     try {
-      const res = await this.fetch('/health');
-      const data = await res.json();
+      const data = await this.healthProbe();
       this.authToken = data.wsToken;
       this._connected = true;
       return data;
     } catch (e) {
       this._connected = false;
       throw e;
+    }
+  }
+
+  /**
+   * Probe `/health` against the configured baseUrl, with a single auto-discovery
+   * fallback to DEFAULT_SERVER (FR #10).
+   *
+   * Why this exists: localStorage may carry a stale `waggle:server-url` from a
+   * prior Tauri build or wrong port, or be empty after a manual clear. The
+   * constructor already falls back to DEFAULT_SERVER when localStorage is empty,
+   * but a stored-but-stale URL would otherwise stick until the user navigates
+   * to Settings. Auto-rediscovery keeps a fresh user on the rails.
+   *
+   * On a successful fallback we persist DEFAULT_SERVER so the next cold start
+   * begins on the right URL. On total failure we restore the original baseUrl
+   * (so Settings still shows what the user had configured) and rethrow the
+   * original error — the second-attempt error is less informative.
+   */
+  private async healthProbe(): Promise<SystemHealth> {
+    try {
+      const res = await this.fetch('/health');
+      return await res.json();
+    } catch (firstErr) {
+      if (this.baseUrl === DEFAULT_SERVER) throw firstErr;
+      const prevUrl = this.baseUrl;
+      this.baseUrl = DEFAULT_SERVER;
+      try {
+        const res = await this.fetch('/health');
+        const data = await res.json();
+        try { localStorage.setItem('waggle:server-url', DEFAULT_SERVER); } catch { /* private mode etc. */ }
+        return data;
+      } catch {
+        this.baseUrl = prevUrl;
+        throw firstErr;
+      }
     }
   }
 
@@ -871,8 +905,10 @@ class LocalAdapter {
 
   // --- Health ---
   async getSystemHealth(): Promise<SystemHealth> {
-    const res = await this.fetch('/health');
-    return res.json();
+    // Use the same auto-discovery fallback as connect() so the offline pill
+    // converges on the working URL even if useOfflineStatus polls before
+    // ServiceProvider's connect() effect runs (FR #10).
+    return this.healthProbe();
   }
 
   // --- Connectors ---
