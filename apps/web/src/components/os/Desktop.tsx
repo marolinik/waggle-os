@@ -469,7 +469,13 @@ const Desktop = () => {
           onDismiss={() => updateOnboarding({ tooltipsDismissed: true })}
         />
       )}
-      {onboardingState.completed && ov.showLoginBriefing && (
+      {/* FR #45: gate LoginBriefing on tooltipsDismissed so the post-onboarding
+          flow shows ONE overlay at a time — Tour renders first, then the
+          briefing is allowed to mount only after the user dismisses Tour.
+          Returning users (tooltipsDismissed=true on first render) see the
+          briefing immediately, preserving the previous "session start"
+          behavior without the multi-overlay race. */}
+      {onboardingState.completed && onboardingState.tooltipsDismissed && ov.showLoginBriefing && (
         <LoginBriefing
           onDismiss={(permanent) => {
             // M-25 / ENG-4: `permanent=true` → persist the flag so the

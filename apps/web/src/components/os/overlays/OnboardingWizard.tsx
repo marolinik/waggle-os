@@ -392,7 +392,13 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
       exit={{ opacity: 0 }}
       role="region"
       aria-label="Waggle onboarding"
-      className="fixed inset-0 z-[9999] bg-background flex flex-col"
+      // FR #33: explicit dark+blurred chrome. `bg-background` alone resolves
+      // through theme tokens whose alpha is undefined in some Tauri builds,
+      // allowing the desktop wallpaper to bleed through step 1. The wizard
+      // should be visually focal across every theme (dark, light, custom),
+      // so we use a fixed `rgba(0,0,0,0.85)` backdrop with blur regardless of
+      // the active theme. PM walkthrough on 2026-05-01 surfaced the bleed.
+      className="fixed inset-0 z-[9999] bg-black/85 backdrop-blur-md flex flex-col"
     >
       {/* Progress bar — A11y audit #2: carries the semantic progress signal for screen readers */}
       <div
@@ -430,8 +436,15 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
             </button>
           )}
           {displayStep !== null && (
+            // FR #34: previously "Step X of 6" — but step 6 (API key) auto-skips
+            // when the vault already has a key for the selected provider, so a
+            // returning user only sees 5 interactive steps. The fixed "of 6"
+            // would mislabel the total. Dots below carry the progress signal;
+            // dropping the explicit total avoids the mismatch and removes the
+            // PM-visible "CC said 8, screen says 6" friction without churning
+            // every visible-step caller.
             <span className="text-xs font-display text-muted-foreground">
-              Step {displayStep} of 6
+              Step {displayStep}
             </span>
           )}
           {/* A11y audit #6: render 6 dots matching the "of 6" label (was 8, confusing).

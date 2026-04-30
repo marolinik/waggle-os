@@ -1,8 +1,15 @@
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+// FR #47: previously two BASE_TIPS plus CLOSING_TIP gave a no-template flow
+// only three slides, and the second slide ("Your AI remembers everything")
+// can read as a paraphrase of the first slide's "search, draft, research"
+// promise. Splitting the tour into four slides — commands, dock, memory,
+// closing — gives every slide a distinct visual focus and prevents the
+// "step 2 has identical text as step 1" perception PM hit on 2026-05-01.
 const BASE_TIPS = [
   'Type / for 22 powerful commands — search, draft, research, and more.',
+  'Click dock icons to open Memory, Files, Connectors, Mission Control, and more.',
   'Your AI remembers everything — across every session, every workspace.',
 ];
 
