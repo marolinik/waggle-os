@@ -598,6 +598,17 @@ class LocalAdapter {
 
   async spawnAgent(data: { task: string; persona?: string; model?: string; parentWorkspaceId?: string }): Promise<FleetSession> {
     const res = await this.fetch('/api/fleet/spawn', { method: 'POST', body: JSON.stringify(data) });
+    if (!res.ok) {
+      // FR #15 Phase A: surface backend errors instead of returning the
+      // error body as if it were a successful FleetSession (which is what
+      // produced the "silent no-op" symptom in PM friction report #15).
+      let detail: string | undefined;
+      try {
+        const body = await res.clone().json();
+        detail = (body?.message as string) ?? (body?.error as string);
+      } catch { /* not JSON */ }
+      throw new Error(`Spawn failed (${res.status}): ${detail ?? res.statusText}`);
+    }
     return res.json();
   }
 

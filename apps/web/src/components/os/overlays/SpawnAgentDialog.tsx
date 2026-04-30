@@ -3,6 +3,7 @@ import { Rocket, RefreshCw, ChevronDown, ChevronRight, ArrowLeft, Zap, Key } fro
 import { adapter } from '@/lib/adapter';
 import { PERSONAS } from '@/lib/personas';
 import { countProvidersWithKeys, selectDefaultModel } from '@/lib/spawn-agent-helpers';
+import { useToast } from '@/hooks/use-toast';
 import type { Workspace, ModelPricing } from '@/lib/types';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -23,6 +24,7 @@ interface SpawnAgentDialogProps {
 }
 
 const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWorkspaceCreated, onSpawned }: SpawnAgentDialogProps) => {
+  const { toast } = useToast();
   const [spawning, setSpawning] = useState(false);
   const [step, setStep] = useState<'config' | 'confirm'>('config');
   const [models, setModels] = useState<string[]>([]);
@@ -115,11 +117,25 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
         parentWorkspaceId: targetWorkspaceId || undefined,
       });
 
+      toast({
+        title: 'Agent spawned',
+        description: `Running on ${form.model.split('/').pop()} — see Waggle Dance for live signals.`,
+      });
       onClose();
       setStep('config');
       setForm({ task: '', persona: '', model: models[0] || '', workspaceMode: 'existing', workspaceId: activeWorkspaceId || '', newWorkspaceName: '' });
       onSpawned?.();
-    } catch { /* ignore */ }
+    } catch (err) {
+      // FR #15 Phase A: previously caught silently — backend errors now
+      // surface to the user so a half-broken spawn is visible immediately.
+      const message = err instanceof Error ? err.message : 'Failed to spawn agent';
+      console.error('[SpawnAgentDialog] spawn failed:', err);
+      toast({
+        title: 'Spawn failed',
+        description: message,
+        variant: 'destructive',
+      });
+    }
     finally { setSpawning(false); }
   };
 

@@ -6,6 +6,7 @@
 import type { FastifyInstance } from 'fastify';
 import { parseTier, getCapabilities } from '@waggle/shared';
 import { requireTier } from '../../middleware/assert-tier.js';
+import { emitWaggleSignal } from './waggle-signals.js';
 
 export async function fleetRoutes(fastify: FastifyInstance) {
   // GET /api/fleet — list all active workspace sessions
@@ -44,6 +45,19 @@ export async function fleetRoutes(fastify: FastifyInstance) {
   });
 
   // POST /api/fleet/spawn — spawn a new agent session (free for all tiers — agents generate memory)
+  //
+  // FR #15 Phase A: properly create the workspace session via getOrCreate so
+  // Room/Mission Control register it as live, and emit an `agent:spawned`
+  // Waggle Dance signal so the cross-workspace feed reflects the spawn.
+  // The previous implementation called sessionManager.create() with a
+  // (wsId, {persona, model}) signature that mismatched the real
+  // (wsId, mind, orchestrator, tools, personaId) signature — every spawn
+  // threw silently inside the route handler and returned a 500 that the
+  // adapter parsed as a successful FleetSession-shaped response.
+  //
+  // Phase B (followup) wires runAgentLoop fire-and-forget so the agent
+  // actually executes the task; this Phase A delivers the visible-state
+  // halves of PM acceptance: live session count + Waggle Dance signal.
   fastify.post<{
     Body: { task: string; persona?: string; model?: string; parentWorkspaceId?: string };
   }>('/api/fleet/spawn', async (request, reply) => {
@@ -51,17 +65,63 @@ export async function fleetRoutes(fastify: FastifyInstance) {
     if (!task) return reply.code(400).send({ error: 'task is required' });
 
     const wsId = parentWorkspaceId || fastify.workspaceManager.getDefault() || fastify.workspaceManager.list()[0]?.id || 'default-workspace';
-    const sessionManager = (fastify as any).sessionManager;
+    const sessionManager = fastify.sessionManager;
     if (!sessionManager) return reply.code(503).send({ error: 'Session manager not available' });
 
-    const session = sessionManager.create(wsId, { persona, model });
-    return {
+    // Acquire the workspace mind. Without it we cannot construct a session
+    // orchestrator, so the spawn would be a no-op against the runtime.
+    const mind = fastify.agentState.getWorkspaceMindDb(wsId);
+    if (!mind) {
+      return reply.code(404).send({
+        error: 'workspace_not_found',
+        message: `Workspace ${wsId} has no mind on disk; cannot spawn`,
+      });
+    }
+
+    // Resolve the model up front so the persisted session metadata + the
+    // signal payload reflect the real model the agent will use.
+    const resolvedModel = model
+      ?? fastify.workspaceManager?.get(wsId)?.model
+      ?? fastify.agentState?.currentModel
+      ?? 'default';
+
+    let session;
+    try {
+      session = sessionManager.getOrCreate(
+        wsId,
+        () => mind,
+        (m) => fastify.agentState.createSessionOrchestrator(m),
+        (m, o) => fastify.agentState.buildToolsForSession(o, wsId, wsId),
+        persona ?? fastify.workspaceManager?.get(wsId)?.personaId ?? undefined,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return reply.code(409).send({ error: 'spawn_failed', message });
+    }
+
+    // Synchronously emit the spawn signal so Waggle Dance shows the new
+    // entry within the same response cycle. Phase B will add :running and
+    // :completed signals from the agent loop itself.
+    emitWaggleSignal({
+      type: 'agent:spawned',
       workspaceId: wsId,
-      sessionId: session?.id ?? `session-${Date.now()}`,
-      status: 'active',
+      content: task.length > 200 ? `${task.slice(0, 197)}…` : task,
+      metadata: {
+        persona: persona ?? null,
+        model: resolvedModel,
+        sessionId: session.workspaceId,
+      },
+    });
+
+    return {
+      id: session.workspaceId,
+      workspaceId: wsId,
+      sessionId: session.workspaceId,
+      status: session.status,
+      startedAt: new Date(session.lastActivity).toISOString(),
       task,
-      persona: persona ?? null,
-      model: model ?? fastify.agentState?.currentModel ?? 'default',
+      persona: persona ?? session.personaId ?? null,
+      model: resolvedModel,
     };
   });
 
