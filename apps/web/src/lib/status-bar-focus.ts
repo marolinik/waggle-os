@@ -49,6 +49,12 @@ export function buildStatusBarFocus(args: BuildStatusBarFocusArgs): string | nul
   const afterStrip = wsName.length > 0 ? stripWorkspacePrefix(rawTitle, wsName) : rawTitle;
   const cleaned = afterStrip.trim();
   if (cleaned.length === 0) return null;
+  // FR #12: when the focused-window label is identical to the workspace name
+  // (e.g. a fresh chat with no template + default persona where getWindowTitle
+  // returns just the workspaceName), the StatusBar would otherwise render
+  // "· Default Workspace · Default Workspace ·". Suppress the duplicate so
+  // the breadcrumb falls back to the cleaner "· Default Workspace ·" form.
+  if (wsName.length > 0 && cleaned.toLowerCase() === wsName.toLowerCase()) return null;
 
   if (cleaned.length <= maxLength) return cleaned;
   // slice -1 leaves room for the single-char ellipsis

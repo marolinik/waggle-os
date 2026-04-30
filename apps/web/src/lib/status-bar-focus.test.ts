@@ -75,4 +75,25 @@ describe('buildStatusBarFocus', () => {
       focused: { appId: 'chat', title: 'Chat', minimized: false },
     })).toBe('Chat');
   });
+
+  it('FR #12: returns null when the title equals the workspace name (default-persona chat)', () => {
+    expect(buildStatusBarFocus({
+      focused: { appId: 'chat', title: 'Default Workspace' },
+      workspaceName: 'Default Workspace',
+    })).toBeNull();
+  });
+
+  it('FR #12: case-insensitive workspace-name equality check', () => {
+    expect(buildStatusBarFocus({
+      focused: { appId: 'chat', title: 'default workspace' },
+      workspaceName: 'Default Workspace',
+    })).toBeNull();
+  });
+
+  it('FR #12: still keeps a label that contains the workspace name as a substring', () => {
+    expect(buildStatusBarFocus({
+      focused: { appId: 'chat', title: 'Default Workspace · Researcher' },
+      workspaceName: 'Default Workspace',
+    })).toBe('Researcher');
+  });
 });
