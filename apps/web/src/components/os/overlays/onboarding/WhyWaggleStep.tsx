@@ -45,7 +45,11 @@ const WhyWaggleStep = ({ goToStep, onSkipSetup, skipDisabled }: WhyWaggleStepPro
             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-display text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             data-testid="onboarding-skip-setup"
           >
-            <Zap className="w-3.5 h-3.5" /> Skip and set me up
+            {/* FR #36: previous label "Skip and set me up" read as paradoxical
+                ("skipping" but also "setting up"). The action sets sensible
+                defaults instantly — "Skip — quick setup" surfaces both halves
+                without the contradiction. */}
+            <Zap className="w-3.5 h-3.5" /> Skip — quick setup
           </button>
         </HintTooltip>
       )}

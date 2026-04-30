@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Brain, Upload, FileJson, Loader2, Check, Zap, ExternalLink } from 'lucide-react';
+import { Brain, Upload, Loader2, Check, Zap, ExternalLink } from 'lucide-react';
 import { fadeSlide } from './constants';
 import type { ImportStepProps } from './types';
 
@@ -8,14 +8,28 @@ import type { ImportStepProps } from './types';
  * Each tile maps to a `UniversalAdapter`-supported source string. File pickers
  * accept .json, .txt, .md, .csv (matching HarvestTab's accept set) so non-JSON
  * exports (Cursor pastes, markdown threads) flow through the same handler.
+ *
+ * FR #38: each tile carries a brand swatch (foreground emoji + tinted ring +
+ * tinted background) so users scanning a row of generic file icons can
+ * recognise their tool of choice at a glance. Trademarks remain Anthropic's,
+ * OpenAI's, Google's, etc. — these are decorative tints sized to match a small
+ * file-icon, not full marks.
  */
-const SOURCE_TILES: ReadonlyArray<{ id: string; name: string; desc: string }> = [
-  { id: 'chatgpt',    name: 'ChatGPT',    desc: 'OpenAI export (.json)' },
-  { id: 'claude',     name: 'Claude',     desc: 'Anthropic export (.json)' },
-  { id: 'gemini',     name: 'Gemini',     desc: 'Google Takeout (.json)' },
-  { id: 'perplexity', name: 'Perplexity', desc: 'Threads export' },
-  { id: 'cursor',     name: 'Cursor',     desc: 'Editor history' },
-  { id: 'unknown',    name: 'Other',      desc: 'Any text or JSON' },
+const SOURCE_TILES: ReadonlyArray<{
+  id: string;
+  name: string;
+  desc: string;
+  /** Single-glyph mark — emoji used as a brand-recognisable swatch. */
+  glyph: string;
+  /** Tailwind class for the glyph color/tile accent. */
+  accent: string;
+}> = [
+  { id: 'chatgpt',    name: 'ChatGPT',    desc: 'OpenAI export (.json)',  glyph: '✦', accent: 'text-emerald-400 bg-emerald-500/10 ring-emerald-500/30' },
+  { id: 'claude',     name: 'Claude',     desc: 'Anthropic export (.json)', glyph: '✧', accent: 'text-orange-400 bg-orange-500/10 ring-orange-500/30' },
+  { id: 'gemini',     name: 'Gemini',     desc: 'Google Takeout (.json)', glyph: '✦', accent: 'text-sky-400 bg-sky-500/10 ring-sky-500/30' },
+  { id: 'perplexity', name: 'Perplexity', desc: 'Threads export',         glyph: '◆', accent: 'text-teal-400 bg-teal-500/10 ring-teal-500/30' },
+  { id: 'cursor',     name: 'Cursor',     desc: 'Editor history',         glyph: '▸', accent: 'text-violet-400 bg-violet-500/10 ring-violet-500/30' },
+  { id: 'unknown',    name: 'Other',      desc: 'Any text or JSON',       glyph: '·', accent: 'text-muted-foreground bg-muted/30 ring-border/40' },
 ];
 
 const ImportStep = ({
@@ -32,8 +46,13 @@ const ImportStep = ({
   <motion.div key="step-3" {...fadeSlide}>
     <div className="text-center mb-6">
       <Brain className="w-10 h-10 text-primary mx-auto mb-3" />
+      {/* FR #37: previous heading "Where does your AI life live?" leaned on a
+          metaphor that reads awkwardly to non-native English speakers and
+          buries the actual question. The new heading names the action plainly
+          ("Where do you use AI today?") and the subtitle still carries the
+          value prop. */}
       <h2 className="text-2xl font-display font-bold text-foreground mb-2">
-        Where does your AI life live?
+        Where do you use AI today?
       </h2>
       <p className="text-sm text-muted-foreground">
         Bring your existing conversations — Waggle extracts decisions, preferences, and knowledge into your persistent memory.
@@ -73,7 +92,17 @@ const ImportStep = ({
             key={src.id}
             className="glass-strong rounded-xl p-3.5 cursor-pointer hover:border-primary/40 transition-colors text-left group flex flex-col gap-1"
           >
-            <FileJson className="w-4 h-4 text-primary mb-0.5" />
+            {/* FR #38: branded swatch instead of generic FileJson. Each tile
+                carries a tinted glyph that signals provider at a glance —
+                ChatGPT green, Claude orange, Gemini blue, Perplexity teal,
+                Cursor violet, Other neutral. Glyphs are decorative emoji-class
+                marks, not trademarked logos. */}
+            <span
+              aria-hidden="true"
+              className={`inline-flex items-center justify-center w-7 h-7 rounded-lg ring-1 mb-0.5 text-base font-bold ${src.accent}`}
+            >
+              {src.glyph}
+            </span>
             <h3 className="text-xs font-display font-semibold text-foreground">{src.name}</h3>
             <p className="text-[11px] text-muted-foreground">{src.desc}</p>
             <div className="flex items-center gap-1 text-[11px] text-primary group-hover:text-primary/80 mt-0.5">
