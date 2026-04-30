@@ -323,6 +323,25 @@ export function useWindowManager(workspaces: Workspace[], opts: UseWindowManager
     setWindows(prev => prev.filter(w => w.instanceId !== instanceId));
   }, []);
 
+  // FR #7: when the focused window disappears (closed via closeApp, evicted
+  // during workspace reconciliation, or filtered out on first render), the
+  // StatusBar breadcrumb and Ctrl+` cycling can otherwise hold a dangling
+  // focusedInstanceId. Reassign focus to the top non-minimized remaining
+  // window — or null if none — so the focused-window indicator stays
+  // coherent without callers having to manage focus alongside every removal.
+  useEffect(() => {
+    if (!focusedInstanceId) return;
+    if (windows.some(w => w.instanceId === focusedInstanceId)) return;
+    if (windows.length === 0) {
+      setFocusedInstanceId(null);
+      return;
+    }
+    const visible = windows.filter(w => !w.minimized);
+    const pool = visible.length > 0 ? visible : windows;
+    const target = pool.reduce((a, b) => (a.zIndex > b.zIndex ? a : b));
+    setFocusedInstanceId(target.instanceId);
+  }, [windows, focusedInstanceId]);
+
   const minimizeApp = useCallback((instanceId: string) => {
     setWindows(prev => prev.map(w => w.instanceId === instanceId ? { ...w, minimized: true } : w));
   }, []);
