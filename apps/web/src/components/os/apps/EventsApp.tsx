@@ -13,6 +13,31 @@ const stepIcons: Record<string, React.ElementType> = {
   spawn: GitBranch,
 };
 
+// FR #19: defensive formatters for partially-populated event payloads.
+// Some emitters drop type/description/timestamp on the floor; without
+// these guards the UI renders the literal string "undefined" and
+// "Invalid Date".
+function formatType(type: string | null | undefined): string {
+  if (!type || typeof type !== 'string') return 'unknown';
+  return type.replace(/_/g, ' ');
+}
+
+function formatTimestamp(ts: string | number | null | undefined): string {
+  if (ts === null || ts === undefined || ts === '') return 'just now';
+  const d = new Date(ts);
+  return Number.isNaN(d.getTime()) ? 'just now' : d.toLocaleTimeString();
+}
+
+function formatDescription(
+  description: string | null | undefined,
+  type: string | null | undefined,
+): string {
+  if (description && typeof description === 'string' && description !== 'undefined') {
+    return decodeHtmlEntities(description);
+  }
+  return type ? `${formatType(type)} event` : 'Unknown event';
+}
+
 const stepColors: Record<string, string> = {
   running: 'text-primary border-primary/30',
   complete: 'text-emerald-400 border-emerald-400/30',
@@ -47,11 +72,11 @@ const StepCard = ({ step, onAbort }: { step: AgentStep; onAbort?: () => void }) 
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-xs text-foreground">{decodeHtmlEntities(step.description)}</p>
+          <p className="text-xs text-foreground">{formatDescription(step.description, step.type)}</p>
           <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
-            <span className="capitalize">{step.type.replace('_', ' ')}</span>
+            <span className="capitalize">{formatType(step.type)}</span>
             {step.duration && <span>{step.duration}ms</span>}
-            <span>{new Date(step.timestamp).toLocaleTimeString()}</span>
+            <span>{formatTimestamp(step.timestamp)}</span>
           </div>
         </div>
         {step.status === 'running' && onAbort && (
@@ -205,7 +230,7 @@ const TreeNode = ({ node, depth = 0 }: { node: AgentNode; depth?: number }) => {
           <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
             {node.model && <span>{node.model}</span>}
             <span>{node.stepCount} steps</span>
-            <span>{new Date(node.timestamp).toLocaleTimeString()}</span>
+            <span>{formatTimestamp(node.timestamp)}</span>
           </div>
           {node.task && depth > 0 && (
             <p className="text-[11px] text-muted-foreground/70 mt-0.5 truncate">{node.task}</p>
@@ -278,7 +303,11 @@ const EventsApp = ({ steps, autoScroll, onToggleAutoScroll, filter, onFilterChan
 
   // Group steps by session/time for replay
   const stepsByTime = steps.reduce<Record<string, AgentStep[]>>((acc, step) => {
-    const timeKey = new Date(step.timestamp).toLocaleDateString();
+    // FR #19: events without a parseable timestamp would otherwise group
+    // under the literal "Invalid Date" key. Bucket them under "Earlier"
+    // so the day-grouped replay panel still reads cleanly.
+    const d = step.timestamp ? new Date(step.timestamp) : null;
+    const timeKey = d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString() : 'Earlier';
     if (!acc[timeKey]) acc[timeKey] = [];
     acc[timeKey].push(step);
     return acc;
