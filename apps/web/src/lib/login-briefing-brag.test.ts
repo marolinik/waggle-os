@@ -176,6 +176,25 @@ describe('formatBragLine', () => {
     expect(line).toBe('100 memories · 20 entities · 30 relations across 2 workspaces');
   });
 
+  it('suppresses the active-suffix when totalFrames is 0 even if lastActiveLabel is set', () => {
+    // FR #24/#26: fresh user has a default workspace (workspaceCount=1) whose
+    // `lastActive` is just the creation time. Without this guard the brag line
+    // reads "0 memories across 1 workspace · active 2h ago", which falsely
+    // implies the user has activity worth tracking. Suppress the suffix until
+    // the user actually has memories.
+    const line = formatBragLine({
+      totalFrames: 0,
+      totalEntities: 0,
+      totalRelations: 0,
+      workspaceCount: 1,
+      pendingCount: 0,
+      lastActiveIso: '2026-04-19T20:00:00Z',
+      lastActiveLabel: '2h ago',
+    });
+    expect(line).not.toContain('active');
+    expect(line).toBe('0 memories across 1 workspace');
+  });
+
   it('renders the empty state copy when zero memories + zero workspaces', () => {
     const line = formatBragLine({
       totalFrames: 0,

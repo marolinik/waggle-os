@@ -991,7 +991,20 @@ const ChatApp = ({
           {messages.length === 0 && workspaceId && (
             <WorkspaceBriefing
               workspaceId={workspaceId}
-              onSendMessage={(msg) => { setInput(msg); inputRef.current?.focus(); }}
+              onSendMessage={(msg) => {
+                // FR #32: starter prompts auto-send after a 1s confirm delay so
+                // the first turn is a single click. Pre-filling the input first
+                // gives the user a visible "this is what's about to ship" beat;
+                // editing the input within the 1s cancels the auto-send.
+                setInput(msg);
+                inputRef.current?.focus();
+                setTimeout(() => {
+                  if (inputRef.current?.value === msg) {
+                    onSendMessage(msg);
+                    setInput('');
+                  }
+                }, 1000);
+              }}
               onSelectSession={onSelectSession}
             />
           )}

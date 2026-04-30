@@ -147,7 +147,11 @@ export function formatBragLine(summary: BragSummary): string {
 
   let line = parts.join(' · ');
   line += ` across ${summary.workspaceCount} ${plural('workspace', summary.workspaceCount)}`;
-  if (summary.lastActiveLabel) {
+  // FR #24/#26: suppress the "active Xago" suffix on a fresh-state user
+  // (totalFrames === 0). The lastActive timestamp on a brand-new workspace
+  // tracks creation time, not activity, so labels like "active 2h ago" or
+  // "active 1w ago" mislead — they imply work happened that hasn't.
+  if (summary.lastActiveLabel && summary.totalFrames > 0) {
     line += ` · active ${summary.lastActiveLabel}`;
   }
   return line;

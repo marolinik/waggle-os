@@ -77,7 +77,7 @@ const WorkspaceBriefing = ({ workspaceId, onSendMessage, onSelectSession }: Work
         >
           <ChevronDown className="w-3.5 h-3.5" />
           <span className="font-display">
-            {ctx.greeting || `Briefing for ${ctx.workspace?.name ?? 'workspace'}`}
+            {ctx.greeting || (ctx.workspace?.name ? `Briefing for ${ctx.workspace.name}` : 'Briefing')}
           </span>
         </button>
       </div>
@@ -90,7 +90,7 @@ const WorkspaceBriefing = ({ workspaceId, onSendMessage, onSelectSession }: Work
       <div className="mb-6 flex items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-display font-bold text-foreground mb-1">
-            {ctx.greeting || `Welcome to ${ctx.workspace?.name ?? 'workspace'}`}
+            {ctx.greeting || (ctx.workspace?.name ? `Welcome to ${ctx.workspace.name}` : 'Welcome')}
           </h2>
           {ctx.summary && (
             <p className="text-sm text-muted-foreground">{ctx.summary}</p>

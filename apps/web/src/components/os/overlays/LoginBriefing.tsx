@@ -228,7 +228,20 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
                       <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-display font-medium text-foreground">{ws.name}</span>
-                          <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">{ws.group}</span>
+                          {/* FR #27: tooltip clarifies what the Personal/Team
+                              tag means. Personal workspaces are private to the
+                              account; Team workspaces (Pro/Teams tiers) are
+                              shared. Without this hint the colored chip reads
+                              as decorative metadata. */}
+                          <HintTooltip
+                            content={
+                              ws.group === 'Personal'
+                                ? 'Personal workspaces are visible only to you.'
+                                : 'Team workspaces (Pro/Enterprise) are shared across the organisation.'
+                            }
+                          >
+                            <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground cursor-help">{ws.group}</span>
+                          </HintTooltip>
                         </div>
                         <ChevronRight className="w-3 h-3 text-muted-foreground group-hover:text-primary transition-colors" />
                       </div>
@@ -240,7 +253,12 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
                       <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
                         <span><Brain className="w-2.5 h-2.5 inline mr-0.5" />{ws.memoryCount}</span>
                         <span><MessageSquare className="w-2.5 h-2.5 inline mr-0.5" />{ws.sessionCount}</span>
-                        {ws.lastActive && (
+                        {/* FR #24/#26: only render the lastActive chip when the
+                            workspace has actual activity. For a brand-new
+                            workspace `lastActive` reflects creation time, not
+                            work, so "Last active 5/1/2026" reads as if the user
+                            already worked there when they haven't. */}
+                        {ws.lastActive && (ws.memoryCount > 0 || ws.sessionCount > 0) && (
                           <span><Clock className="w-2.5 h-2.5 inline mr-0.5" />{new Date(ws.lastActive).toLocaleDateString()}</span>
                         )}
                         {ws.pendingTasks && ws.pendingTasks.length > 0 && (
