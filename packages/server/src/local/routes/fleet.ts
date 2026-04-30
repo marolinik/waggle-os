@@ -6,7 +6,12 @@
 import type { FastifyInstance } from 'fastify';
 import { parseTier, getCapabilities } from '@waggle/shared';
 import { requireTier } from '../../middleware/assert-tier.js';
+import { runAgentLoop } from '@waggle/agent';
 import { emitWaggleSignal } from './waggle-signals.js';
+import { persistMessage } from './chat-persistence.js';
+import { createLogger } from '../logger.js';
+
+const log = createLogger('fleet');
 
 export async function fleetRoutes(fastify: FastifyInstance) {
   // GET /api/fleet — list all active workspace sessions
@@ -100,8 +105,7 @@ export async function fleetRoutes(fastify: FastifyInstance) {
     }
 
     // Synchronously emit the spawn signal so Waggle Dance shows the new
-    // entry within the same response cycle. Phase B will add :running and
-    // :completed signals from the agent loop itself.
+    // entry within the same response cycle.
     emitWaggleSignal({
       type: 'agent:spawned',
       workspaceId: wsId,
@@ -113,10 +117,104 @@ export async function fleetRoutes(fastify: FastifyInstance) {
       },
     });
 
+    // FR #15 Phase B: fire-and-forget runAgentLoop dispatch. The route
+    // returns immediately with the synthetic spawn session id; the agent
+    // executes in the background, emits agent:started / tool:called /
+    // agent:completed signals as it runs, and persists the user task +
+    // assistant response under sessions/spawn-{ts}.jsonl so the user can
+    // open Chat for the parent workspace and pick the spawn session from
+    // the session list to view the result.
+    //
+    // Scoped out vs chat parity (separate followup): credential pool +
+    // provider fallback chain, trace recorder for evolution substrate,
+    // file_created events, TeamSync push, governance.allowedSources
+    // enforcement, custom user-system-prompt + profile injection. Spawn
+    // uses the orchestrator's bare buildSystemPrompt() — enough for
+    // autonomous tool-use, not as personalized as chat.
+    const spawnSessionId = `spawn-${Date.now()}`;
+    const userMessage = { role: 'user' as const, content: task };
+    try {
+      persistMessage(fastify.localConfig.dataDir, wsId, spawnSessionId, userMessage);
+    } catch (err) {
+      log.warn(`[fleet/spawn] persist user message failed: ${(err as Error).message}`);
+    }
+
+    void (async () => {
+      try {
+        emitWaggleSignal({
+          type: 'agent:started',
+          workspaceId: wsId,
+          content: task.length > 200 ? `${task.slice(0, 197)}…` : task,
+          metadata: { sessionId: spawnSessionId, model: resolvedModel },
+        });
+
+        const systemPrompt = session.orchestrator.buildSystemPrompt();
+        const result = await runAgentLoop({
+          litellmUrl: fastify.localConfig.litellmUrl,
+          litellmApiKey: fastify.agentState.litellmApiKey,
+          model: resolvedModel,
+          systemPrompt,
+          tools: session.tools,
+          messages: [userMessage],
+          maxTurns: 10,
+          signal: session.abortController.signal,
+          onToolUse: (name, input) => {
+            emitWaggleSignal({
+              type: 'tool:called',
+              workspaceId: wsId,
+              content: `${name}(${JSON.stringify(input).slice(0, 100)})`,
+              metadata: { sessionId: spawnSessionId },
+            });
+          },
+        });
+
+        try {
+          persistMessage(fastify.localConfig.dataDir, wsId, spawnSessionId, {
+            role: 'assistant',
+            content: result.content,
+          });
+        } catch (err) {
+          log.warn(`[fleet/spawn] persist assistant response failed: ${(err as Error).message}`);
+        }
+
+        const totalTokens = (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0);
+        if (totalTokens > 0) fastify.sessionManager.addTokens(wsId, totalTokens);
+        fastify.sessionManager.touch(wsId);
+
+        emitWaggleSignal({
+          type: 'agent:completed',
+          workspaceId: wsId,
+          content: `Completed: ${result.toolsUsed.length} tool${result.toolsUsed.length === 1 ? '' : 's'} used, ${totalTokens.toLocaleString()} tokens`,
+          metadata: {
+            sessionId: spawnSessionId,
+            model: resolvedModel,
+            toolsUsed: result.toolsUsed,
+            inputTokens: result.usage?.inputTokens ?? 0,
+            outputTokens: result.usage?.outputTokens ?? 0,
+          },
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        log.error(`[fleet/spawn] agent loop failed for ${wsId}/${spawnSessionId}: ${msg}`);
+        try {
+          persistMessage(fastify.localConfig.dataDir, wsId, spawnSessionId, {
+            role: 'assistant',
+            content: `[spawn failed] ${msg}`,
+          });
+        } catch { /* persist best-effort */ }
+        emitWaggleSignal({
+          type: 'agent:error',
+          workspaceId: wsId,
+          content: `Failed: ${msg.length > 200 ? `${msg.slice(0, 197)}…` : msg}`,
+          metadata: { sessionId: spawnSessionId, model: resolvedModel },
+        });
+      }
+    })();
+
     return {
       id: session.workspaceId,
       workspaceId: wsId,
-      sessionId: session.workspaceId,
+      sessionId: spawnSessionId,
       status: session.status,
       startedAt: new Date(session.lastActivity).toISOString(),
       task,
