@@ -7,13 +7,26 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import type { WaggleSignal } from '@/lib/types';
 import { sortSignalsForDisplay } from '@/lib/waggle-signals';
 
-const typeConfig: Record<WaggleSignal['type'], { icon: React.ElementType; color: string; label: string }> = {
+type TypeConfigEntry = { icon: React.ElementType; color: string; label: string };
+
+const typeConfig: Record<WaggleSignal['type'], TypeConfigEntry> = {
   discovery: { icon: Eye, color: 'text-amber-400', label: 'Discovery' },
   handoff: { icon: ArrowRightLeft, color: 'text-sky-400', label: 'Handoff' },
   insight: { icon: Lightbulb, color: 'text-emerald-400', label: 'Insight' },
   alert: { icon: AlertTriangle, color: 'text-rose-400', label: 'Alert' },
   coordination: { icon: Radio, color: 'text-violet-400', label: 'Coordination' },
 };
+
+const FALLBACK_TYPE_CONFIG: TypeConfigEntry = {
+  icon: Zap,
+  color: 'text-muted-foreground',
+  label: 'Activity',
+};
+
+function getTypeConfig(type: string): TypeConfigEntry {
+  const known = (typeConfig as Record<string, TypeConfigEntry>)[type];
+  return known ?? { ...FALLBACK_TYPE_CONFIG, label: type };
+}
 
 const filterTypes: (WaggleSignal['type'] | 'all')[] = ['all', 'discovery', 'handoff', 'insight', 'alert', 'coordination'];
 
@@ -78,7 +91,7 @@ const WaggleDanceApp = () => {
               </div>
             )}
             {orderedSignals.map(signal => {
-              const cfg = typeConfig[signal.type];
+              const cfg = getTypeConfig(signal.type);
               const Icon = cfg.icon;
               const isSelected = selectedSignal?.id === signal.id;
               return (
@@ -127,11 +140,11 @@ const WaggleDanceApp = () => {
             <div className="p-3 flex-1 overflow-auto">
               <div className="flex items-center gap-2 mb-2">
                 {(() => {
-                  const cfg = typeConfig[selectedSignal.type];
+                  const cfg = getTypeConfig(selectedSignal.type);
                   const Icon = cfg.icon;
                   return <Icon className={`w-5 h-5 ${cfg.color}`} />;
                 })()}
-                <Badge variant="outline" className="text-[11px]">{typeConfig[selectedSignal.type].label}</Badge>
+                <Badge variant="outline" className="text-[11px]">{getTypeConfig(selectedSignal.type).label}</Badge>
                 {selectedSignal.priority && selectedSignal.priority !== 'normal' && selectedSignal.priority !== 'low' && (
                   <Badge variant={selectedSignal.priority === 'critical' ? 'destructive' : 'outline'} className="text-[11px]">
                     {selectedSignal.priority.toUpperCase()}
