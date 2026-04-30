@@ -574,7 +574,21 @@ class LocalAdapter {
   // --- Fleet ---
   async getFleet(): Promise<FleetSession[]> {
     const res = await this.fetch('/api/fleet');
-    return unwrapArray(await res.json());
+    const list = unwrapArray<Record<string, unknown>>(await res.json());
+    // Server (packages/server/src/local/routes/fleet.ts) emits
+    // { durationMs, tokensUsed, ... } but the frontend FleetSession contract
+    // declares { duration, tokenUsage, ... }. MissionControlApp renders
+    // s.tokenUsage.toLocaleString() inline — undefined → crash. Normalise
+    // here. Accept either shape so the server can converge later.
+    return list.map((s) => ({
+      workspaceId: String(s.workspaceId ?? ''),
+      workspaceName: String(s.workspaceName ?? s.workspaceId ?? ''),
+      status: (s.status as FleetSession['status']) ?? 'idle',
+      duration: Number(s.duration ?? s.durationMs ?? 0),
+      toolCount: Number(s.toolCount ?? 0),
+      model: String(s.model ?? 'default'),
+      tokenUsage: Number(s.tokenUsage ?? s.tokensUsed ?? 0),
+    }));
   }
 
   async fleetAction(workspaceId: string, action: 'pause' | 'resume' | 'stop'): Promise<void> {

@@ -124,10 +124,10 @@ const MissionControlApp = ({ onSpawnOpen }: MissionControlAppProps) => {
                   </div>
                 </div>
                 <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
-                  <span className="flex items-center gap-0.5"><Clock className="w-2.5 h-2.5" />{Math.round(s.duration / 60)}m</span>
-                  <span className="flex items-center gap-0.5"><Zap className="w-2.5 h-2.5" />{s.toolCount} tools</span>
-                  <span>{s.model}</span>
-                  <span>{s.tokenUsage.toLocaleString()} tokens</span>
+                  <span className="flex items-center gap-0.5"><Clock className="w-2.5 h-2.5" />{Math.round((s.duration ?? 0) / 60)}m</span>
+                  <span className="flex items-center gap-0.5"><Zap className="w-2.5 h-2.5" />{s.toolCount ?? 0} tools</span>
+                  <span>{s.model ?? 'default'}</span>
+                  <span>{(s.tokenUsage ?? 0).toLocaleString()} tokens</span>
                 </div>
               </div>
             ))}
