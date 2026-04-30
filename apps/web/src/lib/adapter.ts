@@ -482,7 +482,12 @@ class LocalAdapter {
 
   async getModel(): Promise<string> {
     const res = await this.fetch('/api/agent/model');
-    return res.json();
+    const data = await res.json();
+    // Server returns { model: "..." }; the declared contract is a plain string.
+    // Defensively accept either shape so older callers and future raw-string
+    // server responses both keep working.
+    if (typeof data === 'string') return data;
+    return data?.model ?? '';
   }
 
   // --- Skills ---
