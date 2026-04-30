@@ -13,6 +13,7 @@ import waggleLogoDark from "@/assets/waggle-logo.jpeg";
 import waggleLogoLight from "@/assets/waggle-logo.png";
 import StatusBar from "./StatusBar";
 import { buildStatusBarFocus } from "@/lib/status-bar-focus";
+import { computeCascadePosition } from "@/lib/window-cascade";
 import Dock from "./Dock";
 import AppWindow from "./AppWindow";
 import AppErrorBoundary from "./ErrorBoundary";
@@ -394,7 +395,19 @@ const Desktop = () => {
           const config = appConfig[win.appId];
           if (!config) return null;
           const saved = win.appId !== 'chat' ? getSavedPosition(win.appId) : null;
-          const pos = saved ? { x: saved.x, y: saved.y } : { x: config.pos.x + win.cascadeOffset * 30, y: config.pos.y + win.cascadeOffset * 30 };
+          // FR #8: every unsaved window cascades from a single viewport-centered
+          // base — see lib/window-cascade.ts. The previous formula started each
+          // app from its own appConfig.pos, so opening different apps in
+          // sequence teleported rather than cascading.
+          const pos = saved
+            ? { x: saved.x, y: saved.y }
+            : computeCascadePosition({
+                cascadeOffset: win.cascadeOffset,
+                viewport: {
+                  width: typeof window !== 'undefined' ? window.innerWidth : 1280,
+                  height: typeof window !== 'undefined' ? window.innerHeight : 800,
+                },
+              });
           const size = saved ? { w: `${saved.width}px`, h: `${saved.height}px` } : config.size;
           return (
             <AppWindow key={win.instanceId} appId={win.appId} title={wm.getWindowTitle(win, config.title)} icon={config.icon}
