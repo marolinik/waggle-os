@@ -105,11 +105,32 @@ export interface CronScheduleLike {
 
 /**
  * Build a time-aware greeting based on hour-of-day and workspace inactivity.
- * If the workspace has been inactive for >24h, the greeting reflects the absence duration.
+ *
+ * Branch precedence (highest first):
+ *   1. **Fresh state** — `frameCount===0 && !lastActiveIso`: first-time copy that
+ *      sets expectations ("anything you discuss here will be remembered").
+ *      FR #29: prevents "Working late. Here's your current state:" from
+ *      surfacing on a brand-new workspace where there is no current state.
+ *   2. **Inactivity override** — workspace last active >24h ago: "You've been
+ *      away N days. Here's what happened:".
+ *   3. **Time-of-day** — morning/afternoon/evening/late-night fallback.
  */
-export function buildTimeAwareGreeting(lastActiveIso: string | null): string {
+export function buildTimeAwareGreeting(
+  lastActiveIso: string | null,
+  opts: { frameCount?: number } = {},
+): string {
   const now = new Date();
   const hour = now.getHours();
+
+  // Fresh-state branch — empty workspace, no captured memory yet. Take this
+  // branch BEFORE the inactivity override and time-of-day fallback so a fresh
+  // user landing at 2am doesn't see "Working late. Here's your current state:"
+  // before any state exists. Note: `lastActiveIso` may still be set (e.g. to
+  // `ws.created` from `workspaces.ts`), so we key the fresh-state branch on
+  // `frameCount` alone — if there are no memories, there is nothing to brief.
+  if ((opts.frameCount ?? 0) === 0) {
+    return 'Welcome — anything you discuss here will be remembered.';
+  }
 
   // Check inactivity override (>24 hours)
   if (lastActiveIso) {
@@ -215,11 +236,12 @@ export function buildWorkspaceNowBlock(opts: {
 
     // Build summary from mind DB (still needed — structuredState doesn't carry it)
     let summary = '';
+    let memoryCount = 0;
     let wsDb: MindDB | null = null;
     try {
       wsDb = new MindDB(mindPath);
       const raw = wsDb.getDatabase();
-      const memoryCount = (raw.prepare('SELECT COUNT(*) as cnt FROM memory_frames').get() as { cnt: number }).cnt;
+      memoryCount = (raw.prepare('SELECT COUNT(*) as cnt FROM memory_frames').get() as { cnt: number }).cnt;
       const frames = raw.prepare(
         `SELECT content, importance, created_at FROM memory_frames
          WHERE importance != 'deprecated' AND importance != 'temporary'
@@ -245,7 +267,7 @@ export function buildWorkspaceNowBlock(opts: {
 
     // Compute last active from active threads or structured state
     const lastActiveThread = structuredState.active[0]?.dateLastTouched ?? null;
-    const greeting = buildTimeAwareGreeting(lastActiveThread);
+    const greeting = buildTimeAwareGreeting(lastActiveThread, { frameCount: memoryCount });
     const pendingTasks = extractPendingTasks(progressItems);
     const upcomingSchedules = buildUpcomingSchedules(opts.cronSchedules ?? [], workspaceId);
 
@@ -266,13 +288,14 @@ export function buildWorkspaceNowBlock(opts: {
   // ── Fallback: legacy path (no structured state available) ────
   let summary = '';
   let decisions: string[] = [];
+  let memoryCount = 0;
   let wsDb: MindDB | null = null;
 
   try {
     wsDb = new MindDB(mindPath);
     const raw = wsDb.getDatabase();
 
-    const memoryCount = (raw.prepare('SELECT COUNT(*) as cnt FROM memory_frames').get() as { cnt: number }).cnt;
+    memoryCount = (raw.prepare('SELECT COUNT(*) as cnt FROM memory_frames').get() as { cnt: number }).cnt;
     if (memoryCount === 0) {
       wsDb.close();
       return null;
@@ -357,7 +380,7 @@ export function buildWorkspaceNowBlock(opts: {
     } catch { /* */ }
   }
 
-  const greeting = buildTimeAwareGreeting(legacyLastActive);
+  const greeting = buildTimeAwareGreeting(legacyLastActive, { frameCount: memoryCount });
   const pendingTasks = extractPendingTasks(progressItems);
   const upcomingSchedules = buildUpcomingSchedules(opts.cronSchedules ?? [], workspaceId);
 

@@ -530,8 +530,12 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
     const welcomeMessage = ws.templateId ? TEMPLATE_WELCOME[ws.templateId] : undefined;
 
     // Wave 3.1: Time-aware greeting, pending tasks, and upcoming schedules
+    // FR #29: pass memoryCount so a brand-new workspace shows fresh-state copy
+    // ("Welcome — anything you discuss here will be remembered.") instead of
+    // the time-of-day fallback (e.g. "Working late. Here's your current state:")
+    // surfacing on a workspace with no current state.
     const lastActive = recentThreads[0]?.lastActive ?? ws.created;
-    const greeting = buildTimeAwareGreeting(lastActive);
+    const greeting = buildTimeAwareGreeting(lastActive, { frameCount: memoryCount });
 
     const pendingTasks = progressItems
       .filter(p => p.type === 'task' || p.type === 'blocker')
@@ -559,7 +563,11 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
 
     return {
       workspace: { id: ws.id, name: ws.name, group: ws.group, model: ws.model, directory: ws.directory, templateId: ws.templateId, personaId: ws.personaId },
-      summary: summary || `This is your ${ws.name} workspace. Everything you discuss here stays in context — decisions, research, and progress are remembered across sessions.`,
+      // FR #25: avoid the "Default Workspace workspace" duplication when the
+      // workspace name already includes the word "workspace". The fallback now
+      // names the workspace inline rather than treating "workspace" as a noun
+      // suffix on top of the name.
+      summary: summary || `Everything you discuss in ${ws.name} stays in context — decisions, research, and progress are remembered across sessions.`,
       recentThreads,
       recentDecisions,
       suggestedPrompts,
