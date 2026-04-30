@@ -834,7 +834,22 @@ class LocalAdapter {
 
   async getModelPricing(): Promise<ModelPricing[]> {
     const res = await this.fetch('/api/litellm/pricing');
-    return res.json();
+    const raw = await res.json();
+    // Server (packages/server/src/local/routes/litellm.ts) emits
+    // { inputPer1k, outputPer1k } but the frontend ModelPricing contract
+    // declares { inputCostPer1k, outputCostPer1k }. Normalise here so callers
+    // (currently only SpawnAgentDialog) can rely on the declared shape and
+    // the .toFixed() formatting in the confirm step does not throw on
+    // undefined. Accept either shape so the server can converge later
+    // without breaking older frontends.
+    const list = Array.isArray(raw) ? raw : Array.isArray(raw?.pricing) ? raw.pricing : [];
+    return list.map((p: Record<string, unknown>) => ({
+      model: String(p.model ?? ''),
+      inputCostPer1k: Number(p.inputCostPer1k ?? p.inputPer1k ?? 0),
+      outputCostPer1k: Number(p.outputCostPer1k ?? p.outputPer1k ?? 0),
+      estimatedTokens: p.estimatedTokens as ModelPricing['estimatedTokens'],
+      estimatedCost: p.estimatedCost as ModelPricing['estimatedCost'],
+    }));
   }
 
   // --- Personas ---
