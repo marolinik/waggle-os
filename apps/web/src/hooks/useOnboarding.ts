@@ -42,6 +42,12 @@ function loadState(): OnboardingState {
     if (import.meta.env.DEV && params.get('forceWizard') === 'true') {
       const fresh: OnboardingState = { ...defaultState, completed: false, step: 0 };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
+      // FR #47: also clear the tour completion flag so the post-wizard Tour
+      // renders fresh after the wizard completes. Without this clear, a
+      // second walkthrough run would skip Tour because OnboardingTooltips
+      // reads localStorage independently of `tooltipsDismissed` in the
+      // onboarding state object. Symmetric reset for both surfaces.
+      localStorage.removeItem('waggle:tooltips_done');
       return fresh;
     }
 

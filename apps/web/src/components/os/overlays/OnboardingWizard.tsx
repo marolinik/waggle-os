@@ -392,13 +392,20 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
       exit={{ opacity: 0 }}
       role="region"
       aria-label="Waggle onboarding"
-      // FR #33: explicit dark+blurred chrome. `bg-background` alone resolves
-      // through theme tokens whose alpha is undefined in some Tauri builds,
-      // allowing the desktop wallpaper to bleed through step 1. The wizard
-      // should be visually focal across every theme (dark, light, custom),
-      // so we use a fixed `rgba(0,0,0,0.85)` backdrop with blur regardless of
-      // the active theme. PM walkthrough on 2026-05-01 surfaced the bleed.
-      className="fixed inset-0 z-[9999] bg-black/85 backdrop-blur-md flex flex-col"
+      // FR #33: PM walkthrough on 2026-05-01 surfaced the desktop wallpaper +
+      // Chat + LoginBriefing bleeding through step 1. Initial fix attempted
+      // Tailwind utilities (`bg-black/85 backdrop-blur-md`) but the bleed-
+      // through persisted — likely Tailwind v3 JIT serving stale CSS for a
+      // class string that was new in this file. Inline style bypasses the
+      // scanner entirely so the backdrop is deterministic regardless of any
+      // Vite HMR cache state, theme token alpha, or build pipeline quirk.
+      // -webkit- prefix carried for Safari/older Tauri WebView2 builds.
+      className="fixed inset-0 z-[9999] flex flex-col"
+      style={{
+        backgroundColor: 'rgba(0, 0, 0, 0.85)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+      }}
     >
       {/* Progress bar — A11y audit #2: carries the semantic progress signal for screen readers */}
       <div
