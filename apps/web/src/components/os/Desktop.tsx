@@ -240,6 +240,29 @@ const Desktop = () => {
     refreshWorkspaces();
   }, [selectWorkspace, wm.openChatForWorkspace, refreshWorkspaces]);
 
+  // FR #33 round 3 — when the onboarding wizard is active, render ONLY the
+  // wizard. No wallpaper, no dock, no chat windows, no overlays. Mirrors the
+  // macOS first-launch pattern where the desktop is visually absent until
+  // setup completes. This is structurally cleaner than relying on a backdrop
+  // opacity to mask Desktop content (rgba(0,0,0,0.85) + 8px blur was still
+  // letting Chat text read through on PM Pass 5). Hooks above this line
+  // continue running so onboarding completion can immediately re-render with
+  // workspaces / sessions / personas already populated. Early-return placed
+  // after handleOnboardingComplete + handleOnboardingFinish callbacks so the
+  // wizard receives stable callback identities.
+  if (!onboardingState.completed) {
+    return (
+      <OnboardingWizard
+        serverBaseUrl={adapter.getServerUrl()}
+        state={onboardingState}
+        onUpdate={updateOnboarding}
+        onComplete={handleOnboardingComplete}
+        onDismiss={completeOnboarding}
+        onFinish={handleOnboardingFinish}
+      />
+    );
+  }
+
   // Render app content inside windows
   const renderAppContent = (win: WindowState) => {
     switch (win.appId) {
@@ -459,10 +482,9 @@ const Desktop = () => {
       <KeyboardShortcutsHelp open={ov.showKeyboardHelp} onClose={() => ov.setShowKeyboardHelp(false)} />
       <SpawnAgentDialog open={ov.showSpawnAgent} onClose={() => ov.setShowSpawnAgent(false)}
         workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} onWorkspaceCreated={(ws) => selectWorkspace(ws.id)} />
-      {!onboardingState.completed && (
-        <OnboardingWizard serverBaseUrl={adapter.getServerUrl()} state={onboardingState} onUpdate={updateOnboarding}
-          onComplete={handleOnboardingComplete} onDismiss={completeOnboarding} onFinish={handleOnboardingFinish} />
-      )}
+      {/* OnboardingWizard rendered via early-return above (FR #33 round 3) when
+          !onboardingState.completed — the main JSX now only handles the post-
+          onboarding flow (Tour + LoginBriefing). */}
       {onboardingState.completed && !onboardingState.tooltipsDismissed && (
         <OnboardingTooltips
           templateId={onboardingState.templateId}
