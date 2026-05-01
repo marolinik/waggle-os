@@ -263,6 +263,63 @@ The trigger ID will be recorded in this doc once created.
 
 ---
 
+## 5b. PM Pass 7 friction notes (2026-05-01)
+
+Three small items PM caught while verifying Phase 1 features. None blocked
+Block C state restore — captured here so the May-8 follow-up agent has the
+list.
+
+### FR Pass7-A — P2 — Replay tour resets onboarding when wizard incomplete
+
+**Repro:** Land on `?forceWizard=true`, mid-wizard click Settings → Advanced
+→ Replay tour.
+
+**Observed:** `replayTour()` clears `waggle:tooltips_done` AND flips
+`tooltipsDismissed: false`, but if the wizard hasn't completed yet, the
+state's `completed` flag is also still `false` — so on next render Desktop
+re-shows the wizard at step 0 instead of just restarting the tour.
+
+**Root cause:** `replayTour()` is wizard-aware in name but not in guard.
+Should be a no-op (or surface a toast "Finish setup first to replay the
+tour") when `state.completed === false`.
+
+**Fix:** in `useOnboarding.ts` `replayTour`, early-return if
+`state.completed !== true`. ~5 LOC + 1 test. Day-2 Wave 1.
+
+### FR Pass7-B — P3 cosmetic — Window state persists across page reload
+
+**Repro:** Open Settings + Memory windows, hard reload page.
+
+**Observed:** windows reappear stacked the same way. Ideally a hard reload
+returns to a clean Desktop (no windows open) so the post-onboarding state
+matches a fresh launch.
+
+**Probable file:** `useWindowManager.ts` reads window state from somewhere
+(likely localStorage). Either don't persist or wipe on first
+`onboardingState.completed === true && tooltipsDismissed === true` boundary.
+
+**Fix:** investigate persistence side; clear on Desktop mount when no
+windows existed in the prior session. ~30 LOC. Day-2 Wave 2.
+
+### FR Pass7-C — P3 cosmetic — Memory window opens layered over Dashboard
+
+**Repro:** Open Dashboard, then open Memory.
+
+**Observed:** Memory window mounts directly on top of Dashboard — same
+viewport-centered base from `window-cascade.ts`. Cascade offset should
+push subsequent windows down-right per FR #8 baseline.
+
+**Probable file:** `apps/web/src/lib/window-cascade.ts` —
+`computeCascadePosition` must not be honouring `cascadeOffset` for the
+Memory window's mount.
+
+**Fix:** trace `cascadeOffset` from `useWindowManager` through
+`computeCascadePosition`; likely a missed increment when opening the
+second window. ~10 LOC. Day-2 Wave 1 (paired with FR Pass7-A as both are
+single-file edits).
+
+---
+
 ## 6. NOT in this Day-2 batch (defer further)
 
 - Tier-gated variants of addiction features (free vs Pro vs Teams).
