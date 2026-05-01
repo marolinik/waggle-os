@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react';
 import {
   Cpu, Shield, Palette, Save, Loader2, Users, Database,
   Download, Upload, Link2, Building, Wrench, DollarSign, Key, Lock, BarChart3, Trash2,
+  RotateCcw, GraduationCap,
 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 import { useFeatureGate } from '@/hooks/useFeatureGate';
 import { useBilling } from '@/hooks/useBilling';
 import LockedFeature from '@/components/os/LockedFeature';
@@ -63,7 +65,9 @@ const SettingsApp = () => {
   const { providers, search, activeSearch, loading: providersLoading } = useProviders();
 
   // Dock tier
-  const { state: onboardingState, update: updateOnboarding } = useOnboarding();
+  const { state: onboardingState, update: updateOnboarding, replayTour, reset: resetOnboarding } = useOnboarding();
+  const { toast } = useToast();
+  const [showWizardReplayConfirm, setShowWizardReplayConfirm] = useState(false);
 
   // Billing
   const billing = useBilling();
@@ -811,6 +815,84 @@ const SettingsApp = () => {
                 </div>
                 <p className="text-[11px] text-muted-foreground">Show token counts and per-call cost in the status bar. Off by default.</p>
               </div>
+              {/* Phase 1 #6 — Help & Tutorials section. Tour replay clears the
+                  OnboardingTooltips localStorage flag + flips tooltipsDismissed
+                  so the post-wizard coachmark sequence renders again. Wizard
+                  replay is gated behind a confirm dialog because it resets the
+                  full setup flow (workspaces / memory / vault stay intact). */}
+              <div className="p-3 rounded-xl bg-secondary/30 border border-border/30" data-testid="help-tutorials-section">
+                <p className="text-xs font-display font-medium text-foreground mb-2">Help & Tutorials</p>
+
+                <div className="flex items-start gap-3 mb-3">
+                  <GraduationCap className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-[11px] font-display font-medium text-foreground">Replay onboarding tour</p>
+                    <p className="text-[11px] text-muted-foreground mb-2">
+                      Re-show the 4-slide coachmark tour with Waggle's core gestures.
+                    </p>
+                    <button
+                      onClick={() => {
+                        replayTour();
+                        toast({
+                          title: 'Tour restarting…',
+                          description: 'The coachmark tour will appear shortly.',
+                        });
+                      }}
+                      data-testid="replay-tour-button"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg bg-muted/50 text-foreground hover:bg-muted transition-colors"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      Replay tour
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 pt-3 border-t border-border/30">
+                  <RotateCcw className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-[11px] font-display font-medium text-foreground">Replay onboarding wizard (advanced)</p>
+                    <p className="text-[11px] text-muted-foreground mb-2">
+                      Restart the full 8-step setup. Workspaces, memory, and vault are preserved — only
+                      onboarding state resets.
+                    </p>
+                    {!showWizardReplayConfirm ? (
+                      <button
+                        onClick={() => setShowWizardReplayConfirm(true)}
+                        data-testid="replay-wizard-button"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg bg-muted/50 text-foreground hover:bg-muted transition-colors"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        Replay wizard
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-amber-400">Restart the 8-step setup now?</span>
+                        <button
+                          onClick={() => {
+                            resetOnboarding();
+                            setShowWizardReplayConfirm(false);
+                            toast({
+                              title: 'Wizard restarting…',
+                              description: 'Setup begins again. Your data is preserved.',
+                            });
+                          }}
+                          data-testid="replay-wizard-confirm"
+                          className="px-2 py-1 text-[11px] rounded bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 transition-colors"
+                        >
+                          Yes, restart
+                        </button>
+                        <button
+                          onClick={() => setShowWizardReplayConfirm(false)}
+                          className="px-2 py-1 text-[11px] rounded bg-muted/50 text-muted-foreground hover:bg-muted transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
                 <div className="flex items-center justify-between mb-1">
                   <p className="text-xs font-display font-medium text-foreground">Debug Logging</p>

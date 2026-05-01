@@ -151,5 +151,21 @@ export const useOnboarding = () => {
     setState(fresh);
   }, []);
 
-  return { state, update, complete, reset };
+  // Phase 1 #6 — replay just the post-wizard Tour without rerunning the full
+  // wizard. Clears the OnboardingTooltips localStorage flag (read independently
+  // of the onboarding state object) AND flips `tooltipsDismissed` so Desktop's
+  // gate fires the Tour overlay on next render. Wizard completion remains
+  // intact — workspaces, persona, tier all preserved.
+  const replayTour = useCallback(() => {
+    try {
+      window.localStorage.removeItem('waggle:tooltips_done');
+    } catch { /* storage disabled — state-side flip still triggers re-render */ }
+    setState(prev => {
+      const next = { ...prev, tooltipsDismissed: false };
+      saveState(next);
+      return next;
+    });
+  }, []);
+
+  return { state, update, complete, reset, replayTour };
 };
