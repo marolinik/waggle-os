@@ -11,6 +11,8 @@ import HarvestTab from './memory/HarvestTab';
 import WeaverPanel from './memory/WeaverPanel';
 import WikiTab from './memory/WikiTab';
 import EvolutionTab from './memory/EvolutionTab';
+import ImportReminderBanner from './memory/ImportReminderBanner';
+import { useOnboarding } from '@/hooks/useOnboarding';
 
 const frameTypeIcons: Record<string, string> = {
   fact: '📋', event: '📅', insight: '💡', decision: '⚖️', task: '✅', entity: '🏷️',
@@ -67,6 +69,10 @@ const MemoryApp = ({
   const [view, setView] = useState<'timeline' | 'graph' | 'harvest' | 'weaver' | 'wiki' | 'evolution'>('timeline');
   const [showFilters, setShowFilters] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ position: { x: number; y: number }; items: ContextMenuItem[] } | null>(null);
+  // Phase 1 #7 — onboarding flag controls reminder-banner eligibility. Pull
+  // here rather than threading through props so the banner can mount even
+  // when MemoryApp is rendered as a window without explicit prop wiring.
+  const { state: onboardingState } = useOnboarding();
 
   const handleFrameContextMenu = (e: React.MouseEvent, frame: MemoryFrame) => {
     e.preventDefault();
@@ -195,6 +201,15 @@ const MemoryApp = ({
 
       {/* Main content area */}
       <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Phase 1 #7 — Pending Imports Reminder banner. Mounts above the tab
+            bar so it sits at the very top of MemoryApp's main view. The banner
+            self-suppresses based on onboarding state, frame count, retired
+            flag, and 7-day dismissal cadence (see import-reminder-state.ts). */}
+        <ImportReminderBanner
+          onboardingCompleted={onboardingState.completed}
+          totalFrameCount={stats.total}
+          onOpenHarvest={() => setView('harvest')}
+        />
         {/* QW-2: labeled tab bar — icon + text per view */}
         <div className="flex border-b border-border/50 bg-background/60">
           {MEMORY_TABS.map(tab => {
