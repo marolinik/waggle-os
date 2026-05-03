@@ -1,49 +1,70 @@
+import Navbar from './_components/Navbar';
+import Hero from './_components/Hero';
+import ProofPointsBand from './_components/ProofPointsBand';
+import HowItWorks from './_components/HowItWorks';
+import BrandPersonasCard from './_components/BrandPersonasCard';
+import Pricing from './_components/Pricing';
+import TrustBand from './_components/TrustBand';
+import FinalCTA from './_components/FinalCTA';
+import Footer from './_components/Footer';
+import { resolveHeroVariant } from './_lib/hero-headline-resolver';
+
+interface HomePageProps {
+  readonly searchParams: Promise<{
+    readonly p?: string | string[];
+    readonly utm_source?: string | string[];
+  }>;
+}
+
 /**
- * Homepage placeholder for the Next.js 15 App Router scaffold (§1).
+ * Waggle landing page — v3.2 (Sesija D §2.4).
  *
- * The full landing page (Navbar, Hero, ProofPointsBand, Features, CrownJewels,
- * HowItWorks, Pricing, Enterprise, BetaSignup, Footer) ports in §2 from
- * `apps/www/src/components/`. This placeholder gives the scaffold a working
- * route at `/` immediately — verifies layout + globals.css + font loading
- * end-to-end without depending on §2 component work.
+ * Renders the 8 locked sections in IA order:
+ *   Navbar → Hero (5 variants resolved server-side from URL search params)
+ *   → ProofPointsBand → HowItWorks → Personas (BrandPersonasCard wrapper)
+ *   → Pricing → TrustBand → FinalCTA → Footer
+ *
+ * Hero variant resolution per amendment §1.1: explicit `?p=` overrides
+ * `utm_source` heuristic; default → A (Marcus). Reading `searchParams`
+ * makes the page dynamic per-request (acceptable for v1; no static
+ * regen).
  */
-export default function HomePage() {
+export default async function HomePage({ searchParams }: HomePageProps) {
+  const params = await searchParams;
+  const variantId = resolveHeroVariant({
+    p: pickFirst(params.p),
+    utm_source: pickFirst(params.utm_source),
+  });
+
   return (
-    <main
-      style={{
-        minHeight: '100vh',
-        background: 'var(--hive-950, #08090c)',
-        color: 'var(--hive-50, #f0f2f7)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '24px',
-        fontFamily: "'Inter', system-ui, sans-serif",
-      }}
-    >
-      <div style={{ textAlign: 'center', maxWidth: 640 }}>
-        <h1
-          style={{
-            fontSize: 'clamp(28px, 4vw, 40px)',
-            fontWeight: 700,
-            margin: 0,
-            color: 'var(--honey-400, #f5b731)',
-            letterSpacing: '-0.01em',
-          }}
+    <>
+      <Navbar />
+      <main>
+        <Hero variantId={variantId} />
+        <ProofPointsBand />
+        <HowItWorks />
+        <section
+          id="personas"
+          style={{ background: 'var(--hive-950, #08090c)' }}
+          aria-labelledby="waggle-hive-heading"
         >
-          Waggle
-        </h1>
-        <p
-          style={{
-            marginTop: 16,
-            fontSize: 16,
-            lineHeight: 1.5,
-            color: 'var(--hive-300, #a0a3ad)',
-          }}
-        >
-          Next.js 15 App Router scaffold — full landing page ports in §2.
-        </p>
-      </div>
-    </main>
+          <BrandPersonasCard
+            eyebrow="Built for"
+            heading="Thirteen ways people work. One memory layer."
+            subtitle="Hunters chase, builders ship, orchestrators coordinate. Waggle remembers — across roles, across tools, across the moments in between."
+          />
+        </section>
+        <Pricing />
+        <TrustBand />
+        <FinalCTA />
+      </main>
+      <Footer />
+    </>
   );
+}
+
+/** Coerce the search param shape to a single string (Next.js may pass arrays). */
+function pickFirst(value: string | string[] | undefined): string | undefined {
+  if (Array.isArray(value)) return value[0];
+  return value;
 }

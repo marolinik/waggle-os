@@ -34,6 +34,8 @@ const personaByOrder = new Map<number, Persona>(
 );
 
 export interface BrandPersonasCardProps {
+  /** Optional uppercase kicker rendered above the heading (e.g. "Built for"). */
+  eyebrow?: string;
   heading?: string;
   subtitle?: string;
   showFillerTiles?: boolean;
@@ -55,6 +57,7 @@ export interface BrandPersonasCardProps {
  * @todo compact variant scaffolding — implement in future sprint
  */
 export default function BrandPersonasCard({
+  eyebrow,
   heading = DEFAULT_HEADING,
   subtitle = DEFAULT_SUBTITLE,
   showFillerTiles = true,
@@ -98,6 +101,7 @@ export default function BrandPersonasCard({
       style={sectionStyle}
     >
       <header style={headerStyle}>
+        {eyebrow ? <p style={eyebrowStyle}>{eyebrow}</p> : null}
         <h2 id="waggle-hive-heading" style={headingStyle}>
           {heading}
         </h2>
@@ -265,6 +269,17 @@ const headerStyle: CSSProperties = {
   maxWidth: 1200,
   margin: '0 auto 48px',
   textAlign: 'center',
+};
+
+const eyebrowStyle: CSSProperties = {
+  fontFamily: "'Inter', system-ui, sans-serif",
+  fontSize: 11,
+  fontWeight: 600,
+  textTransform: 'uppercase',
+  letterSpacing: '0.12em',
+  color: 'var(--honey-500, #e5a000)',
+  margin: 0,
+  marginBottom: 12,
 };
 
 const headingStyle: CSSProperties = {
