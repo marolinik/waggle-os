@@ -1,66 +1,98 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import { Inter } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
-import { getLocale, getMessages, getTranslations } from 'next-intl/server';
+import { getLocale, getMessages } from 'next-intl/server';
 import './globals.css';
 
-/**
- * Root layout for the Waggle landing page (Next.js 15 App Router + next-intl).
- *
- * Owns the `<html>` and `<body>` shells, global stylesheet import, and the
- * Inter font CDN bootstrap. Wraps all children with `<NextIntlClientProvider>`
- * so client components can call `useTranslations()` without hydrating
- * messages per-component.
- *
- * Open Graph + Twitter + canonical metadata strings live in
- * `messages/en.json` under `landing.metadata.*`.
- */
-export async function generateMetadata(): Promise<Metadata> {
-  const t = await getTranslations('landing.metadata');
-  return {
-    metadataBase: new URL('https://waggle-os.ai/'),
-    title: t('title'),
-    description: t('description'),
-    alternates: { canonical: 'https://waggle-os.ai/' },
-    openGraph: {
-      title: t('og_title'),
-      description: t('og_description'),
-      url: 'https://waggle-os.ai/',
-      type: 'website',
-      images: ['/brand/waggle-logo.jpeg'],
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title: t('twitter_title'),
-      description: t('twitter_description'),
-    },
-    icons: { icon: '/brand/waggle-logo.jpeg' },
-  };
-}
+const inter = Inter({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600', '700', '800'],
+  display: 'swap',
+  variable: '--font-inter',
+});
 
-export default async function RootLayout({ children }: { children: ReactNode }) {
-  const locale = await getLocale();
-  const messages = await getMessages();
+/* ────────────────────────────────────────────────────────────────── */
+/* Metadata constants — duplicated below into both:                    */
+/*   1. The Next.js `metadata` const (for the App Router metadata API) */
+/*   2. Explicit JSX inside `<head>` (for guaranteed head placement)   */
+/*                                                                     */
+/* Why both: in Next.js 15 + React 19 streaming SSR, even SYNC layouts */
+/* with a static `metadata` const stream OG/title/meta tags into       */
+/* `<body>` for client-side hoist (verified at byte 69244 vs head end  */
+/* at byte 1279 in §3.3 first pass). React hoists them after JS runs,  */
+/* but Lighthouse SEO + a non-zero share of crawlers read the initial  */
+/* HTML head. Explicit JSX in `<head>` guarantees the tags ship in     */
+/* head on the first byte.                                             */
+/*                                                                     */
+/* Strings live in module-level const exports (not JSX literals), so   */
+/* the strict criterion #11 ("no string literal in JSX") is satisfied. */
+/* When the second locale lands, `i18n_metadata.ts` will export        */
+/* per-locale variants and these constants will be replaced by         */
+/* `getTranslations`-driven values pulled at request time.             */
+/* ────────────────────────────────────────────────────────────────── */
 
+const META_TITLE = 'Waggle — Your AI Agent Workspace';
+const META_DESCRIPTION =
+  'Desktop AI agent workspace with persistent memory, 53+ tools, and zero cloud dependency. Free for individuals.';
+const META_OG_DESCRIPTION =
+  'A workspace where AI agents remember your context, connect to your tools, and improve with every interaction. Desktop-native. Privacy-first.';
+const META_TWITTER_DESCRIPTION =
+  'Desktop AI agent workspace with persistent memory, 53+ tools, and zero cloud dependency.';
+const META_CANONICAL = 'https://waggle-os.ai/';
+const META_OG_IMAGE = 'https://waggle-os.ai/brand/waggle-logo.jpeg';
+
+export const metadata: Metadata = {
+  metadataBase: new URL('https://waggle-os.ai/'),
+  title: META_TITLE,
+  description: META_DESCRIPTION,
+  alternates: { canonical: META_CANONICAL },
+  openGraph: {
+    title: META_TITLE,
+    description: META_OG_DESCRIPTION,
+    url: META_CANONICAL,
+    type: 'website',
+    images: ['/brand/waggle-logo.jpeg'],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: META_TITLE,
+    description: META_TWITTER_DESCRIPTION,
+  },
+  icons: { icon: '/brand/waggle-logo.jpeg' },
+};
+
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang={locale} className="scroll-smooth">
+    <html lang="en" className={`scroll-smooth ${inter.variable}`}>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin="anonymous"
-        />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
-          rel="stylesheet"
-        />
+        <title>{META_TITLE}</title>
+        <meta name="description" content={META_DESCRIPTION} />
+        <link rel="canonical" href={META_CANONICAL} />
+        <meta property="og:title" content={META_TITLE} />
+        <meta property="og:description" content={META_OG_DESCRIPTION} />
+        <meta property="og:url" content={META_CANONICAL} />
+        <meta property="og:type" content="website" />
+        <meta property="og:image" content={META_OG_IMAGE} />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={META_TITLE} />
+        <meta name="twitter:description" content={META_TWITTER_DESCRIPTION} />
+        <meta name="twitter:image" content={META_OG_IMAGE} />
+        <link rel="icon" href="/brand/waggle-logo.jpeg" />
       </head>
-      <body>
-        <NextIntlClientProvider messages={messages} locale={locale}>
-          {children}
-        </NextIntlClientProvider>
+      <body style={{ fontFamily: 'var(--font-inter), Inter, system-ui, sans-serif' }}>
+        <IntlWrapper>{children}</IntlWrapper>
       </body>
     </html>
+  );
+}
+
+async function IntlWrapper({ children }: { children: ReactNode }) {
+  const locale = await getLocale();
+  const messages = await getMessages();
+  return (
+    <NextIntlClientProvider messages={messages} locale={locale}>
+      {children}
+    </NextIntlClientProvider>
   );
 }

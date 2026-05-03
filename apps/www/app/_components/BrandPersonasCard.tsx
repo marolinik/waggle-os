@@ -214,6 +214,7 @@ function PersonaTile({
             src={persona.imagePath}
             alt={persona.alt}
             decoding="async"
+            loading="lazy"
             width={256}
             height={256}
             className="waggle-persona-asset"

@@ -119,3 +119,6 @@ apps/www/public/brand/_backup-*/
 .next/
 .vercel/
 
+# Lighthouse audit artifacts (regenerable via `npx lighthouse`)
+apps/www/lighthouse-report.json
+

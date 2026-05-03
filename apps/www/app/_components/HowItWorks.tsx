@@ -33,7 +33,15 @@ export default async function HowItWorks() {
           {STEP_KEYS.map((key, i) => (
             <li key={key} style={stepItemStyle}>
               <div style={beeWrapperStyle}>
-                <img src={STEP_BEES[i]} alt="" width={96} height={96} style={beeImgStyle} />
+                <img
+                  src={STEP_BEES[i]}
+                  alt=""
+                  width={96}
+                  height={96}
+                  loading="lazy"
+                  decoding="async"
+                  style={beeImgStyle}
+                />
                 <span style={stepNumberStyle} aria-hidden="true">
                   {t(`${key}.number`)}
                 </span>
