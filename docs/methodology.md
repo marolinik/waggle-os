@@ -1,9 +1,7 @@
 # Waggle Methodology Documentation
 
-**Status:** Draft for github commit (target path: `waggle-os/docs/methodology.md`)
-**Date:** 2026-05-02
-**Authority:** Day 0 Trust Band Card 4 link target per Path D landing decoupling
-**Companion:** Forthcoming arxiv preprint *"Apples-to-Apples on LoCoMo: A Bitemporal Local-First Memory Substrate and a +27.35-Point Methodology Gap"* (scheduled within 60 days post-launch)
+**Date:** 2026-05-02 (v1)
+**Companion:** Forthcoming arxiv preprint *"Apples-to-Apples on LoCoMo: A Bitemporal Local-First Memory Substrate and a +27.35-Point Methodology Gap"* (scheduled within 60 days post-publication)
 
 ---
 
@@ -134,7 +132,7 @@ A standalone companion paper covering the GEPA cross-family generalization findi
 
 ### 5.1 Code
 
-The Waggle hive-mind substrate is open source under Apache 2.0 license at github.com/marolinik/hive-mind (or successor repo, see canonical reference at waggle-os.ai/oss). Substrate retrieval, bitemporal knowledge graph implementation, and frame compression are all in repo.
+The Waggle hive-mind substrate is open source under Apache 2.0 license at github.com/marolinik/hive-mind. Substrate retrieval, bitemporal knowledge graph implementation, and frame compression are all in repo.
 
 The evaluation harness, judge ensemble configuration, and prompt evolution implementation are also Apache 2.0 licensed. Repository link is in the companion arxiv preprint Appendix.
 
@@ -202,7 +200,7 @@ Forthcoming Waggle arxiv preprint will provide full bibliographic details, metho
 
 This methodology document accompanies the forthcoming Waggle arxiv preprint *"Apples-to-Apples on LoCoMo: A Bitemporal Local-First Memory Substrate and a +27.35-Point Methodology Gap"* (scheduled within 60 days of this document publication). A standalone GEPA cross-family generalization paper is also in preparation.
 
-For the most current evaluation results, methodology amendments, and reproducibility artifacts, consult the Waggle research repository at github.com/marolinik/waggle/research (or canonical reference at waggle-os.ai/research).
+For the most current evaluation results, methodology amendments, and reproducibility artifacts, consult the Waggle research repository at github.com/marolinik/hive-mind (canonical OSS substrate distribution).
 
 ---
 
