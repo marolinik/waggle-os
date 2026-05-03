@@ -1,0 +1,271 @@
+{
+  "landing": {
+    "metadata": {
+      "title": "Waggle — Your AI Agent Workspace",
+      "description": "Desktop AI agent workspace with persistent memory, 53+ tools, and zero cloud dependency. Free for individuals.",
+      "og_title": "Waggle — Your AI Agent Workspace",
+      "og_description": "A workspace where AI agents remember your context, connect to your tools, and improve with every interaction. Desktop-native. Privacy-first.",
+      "twitter_title": "Waggle — Your AI Agent Workspace",
+      "twitter_description": "Desktop AI agent workspace with persistent memory, 53+ tools, and zero cloud dependency."
+    },
+    "navbar": {
+      "links": {
+        "how_it_works": "How it works",
+        "personas": "Personas",
+        "pricing": "Pricing",
+        "open_source": "Open source",
+        "audit": "Audit"
+      },
+      "ctas": {
+        "sign_in": "Sign in",
+        "download": "Download",
+        "download_mobile": "Download →"
+      },
+      "aria": {
+        "toggle_menu": "Toggle menu"
+      }
+    },
+    "hero": {
+      "variant_a": {
+        "eyebrow": "AI workspace with memory",
+        "headline_lead": "Your AI doesn't reset.",
+        "headline_emphasis": "Your work doesn't either.",
+        "subhead": "Persistent memory across every LLM you use. Claude, GPT, Qwen, Gemini, your local model — all drawing from the same locally-stored knowledge graph.",
+        "body": "Stop the paste-context-fatigue cycle. Your context lives once, persists across models, and compounds with every session you finish."
+      },
+      "variant_b": {
+        "eyebrow": "AI for regulated industries, finally",
+        "headline_lead": "AI workspace that satisfies your CISO.",
+        "subhead": "Local-first by default, EU AI Act audit reports built into the workflow, backed by Egzakta Group's regulated-industries practice.",
+        "body": "Your CISO blocked ChatGPT for good reasons. Waggle keeps the work on your machine and generates Article 12 audit reports automatically — no separate compliance workstream."
+      },
+      "variant_c": {
+        "eyebrow": "Shared context for moving teams",
+        "headline_lead": "Your team's memory, before someone has to write it down.",
+        "subhead": "Notion wikis go stale. Slack search is hostile. Waggle captures the context as you work — no extra step.",
+        "body": "Onboarding an 8-person team gets shorter when context auto-organizes from work activity, not from someone remembering to write the wiki page."
+      },
+      "variant_d": {
+        "eyebrow": "Memory substrate for any agent",
+        "headline_lead": "Memory layer that doesn't lock you to a vendor.",
+        "subhead": "Apache 2.0, MCP-native, runs locally. The substrate plugs into whatever agent harness you're already running.",
+        "body": "Mem0 is cloud-only. LangMem is toy-tier. Letta is agent-centric. Waggle is the substrate — fork the source, audit the graph, deploy on your infra."
+      },
+      "variant_e": {
+        "eyebrow": "AI for confidential work",
+        "headline_lead": "AI that never sees your client matter.",
+        "subhead": "Local-first by design, bar association compatible, full audit log per matter — work stays on your machine.",
+        "body": "ChatGPT-as-malpractice-risk has stalled adoption in legal. Waggle's hive lives on the device; every recall carries provenance, every matter has a trail."
+      },
+      "secondary_cta": "See how it works →",
+      "microcopy": "17 AI platforms · Local-first · Apache 2.0 · EU AI Act ready"
+    },
+    "hero_visual": {
+      "aria_label": "Waggle hive memory visualization",
+      "svg_aria_label": "Hive memory connecting four LLM providers",
+      "window_left": "~/.waggle/hive · live",
+      "window_right": "local · signed · 42ms",
+      "center_label": "your hive",
+      "chips": {
+        "claude_primary": "claude · sonnet",
+        "claude_sub": "recall",
+        "gpt_primary": "gpt · 5",
+        "gpt_sub": "recall",
+        "qwen_primary": "qwen · local",
+        "qwen_sub": "commit",
+        "gemini_primary": "gemini · 2.5",
+        "gemini_sub": "recall"
+      },
+      "stats": {
+        "edges_value": "12,847",
+        "edges_label": "EDGES",
+        "providers_value": "17",
+        "providers_label": "PROVIDERS",
+        "recall_value": "42ms",
+        "recall_label": "P99 RECALL",
+        "cloud_value": "0",
+        "cloud_label": "CLOUD CALLS"
+      },
+      "dev_tabs_aria": "Hero variant preview (dev only)"
+    },
+    "proof": {
+      "eyebrow": "Validated",
+      "headline": "Numbers that survive peer review.",
+      "subhead": "Five proof points. Trio-strict judge ensemble (Opus + GPT + MiniMax). Frozen seeds, published manifests. The methodology is in the arxiv preprint."
+    },
+    "how_it_works": {
+      "eyebrow": "How it works",
+      "headline": "Three steps. No new habits.",
+      "subhead": "Waggle stays out of the way. You install it once, keep using the AI you already use, and your context starts compounding.",
+      "step_01": {
+        "number": "01",
+        "title": "Install once",
+        "body": "Download the desktop app, choose your LLM provider — local, frontier, or both. Waggle starts capturing the moment you begin working."
+      },
+      "step_02": {
+        "number": "02",
+        "title": "Work normally",
+        "body": "Use any AI like before. Switch models mid-thread. The memory persists across providers, sessions, and machines, automatically."
+      },
+      "step_03": {
+        "number": "03",
+        "title": "Compound, don't repeat",
+        "body": "Every conversation builds your knowledge graph. The next prompt starts where the last one left off. You never paste the same context twice."
+      }
+    },
+    "personas_section": {
+      "eyebrow": "Built for",
+      "heading": "Thirteen ways people work. One memory layer.",
+      "subtitle": "Hunters chase, builders ship, orchestrators coordinate. Waggle remembers — across roles, across tools, across the moments in between."
+    },
+    "pricing": {
+      "eyebrow": "Pricing",
+      "headline": "Free for individuals. Honest pricing for everyone else.",
+      "subhead": "Three tiers. No feature-count games. You pay for the scale of the team using the memory, not for arbitrary check-marks.",
+      "toggle": {
+        "monthly": "Monthly",
+        "annual": "Annual",
+        "save_pill": "save 17%",
+        "aria_group": "Billing period"
+      },
+      "popular_badge": "Most popular",
+      "loading": "Loading…",
+      "tiers": {
+        "solo": {
+          "name": "Solo",
+          "price_monthly": "$0",
+          "price_annual": "$0",
+          "note": "Free, forever",
+          "tagline": "For individuals exploring AI workspace",
+          "audience": "Knowledge workers · students · hobbyist developers",
+          "bullet_personal_memory": "Personal memory graph",
+          "bullet_all_llms": "All major LLMs supported",
+          "bullet_local_first": "Local-first by default",
+          "bullet_audit_reports": "EU AI Act audit reports",
+          "bullet_apache_substrate": "Apache 2.0 substrate",
+          "bullet_community_support": "Community support"
+        },
+        "pro": {
+          "name": "Pro",
+          "price_monthly": "$19/month",
+          "price_annual": "$190/year — save $38",
+          "tagline": "For power users compounding across projects",
+          "audience": "Senior ICs · consultants · founders",
+          "cta": "Start free trial",
+          "bullet_everything_solo": "Everything in Solo",
+          "bullet_priority_sync": "Priority sync across multiple devices",
+          "bullet_advanced_queries": "Advanced graph queries",
+          "bullet_key_vault": "Personal API key vault",
+          "bullet_free_trial": "14-day free trial, no credit card",
+          "bullet_support": "Email support, 48h SLA"
+        },
+        "teams": {
+          "name": "Teams",
+          "price_monthly": "$49/seat/month",
+          "price_annual": "$490/seat/year — save $98",
+          "note": "3-seat minimum",
+          "tagline": "For teams that want shared memory without losing privacy",
+          "audience": "Small teams (3–50 seats) in regulated industries",
+          "cta": "Start team trial →",
+          "bullet_everything_pro": "Everything in Pro",
+          "bullet_shared_memory": "Shared team memory graph",
+          "bullet_sso_rbac": "SSO and role-based access",
+          "bullet_soc2": "SOC 2 Type II report on request",
+          "bullet_csm": "Dedicated account manager",
+          "bullet_kvark_bridge": "KVARK bridge for sovereign deployment escalation"
+        }
+      },
+      "comparison": {
+        "summary": "Compare tiers in detail",
+        "headers": {
+          "feature": "Feature",
+          "solo": "Solo",
+          "pro": "Pro",
+          "teams": "Teams"
+        }
+      },
+      "errors": {
+        "checkout_default": "Checkout configuration required. Please try again later.",
+        "network": "Could not connect to server. Please try again later."
+      }
+    },
+    "trust": {
+      "eyebrow_badge": "Backed since 2010",
+      "headline": "Built and backed by Egzakta Group, advising regulated industries in DACH, CEE, and the UK since 2010.",
+      "subhead": "Not a venture-funded startup pivoting through positioning cycles. An advisory practice that has shipped to banks, insurers, and law firms for 16 years.",
+      "signals": {
+        "zero_cloud": "Zero cloud transit — by default",
+        "eu_ai_act": "EU AI Act compliant — Article 12 audit reports",
+        "apache": "Apache 2.0 — open source substrate",
+        "arxiv": "Published methodology — arxiv preprint",
+        "egzakta": "Egzakta Group backed — regulated-industries since 2010"
+      }
+    },
+    "final_cta": {
+      "headline": "Stop pasting context. Start using AI that remembers.",
+      "subhead": "Free for individuals. Pro for power users. Teams for organizations. KVARK for sovereign deployments.",
+      "compare_cta": "Compare tiers →",
+      "kvark_text": "Need it on your organization's sovereign infrastructure?",
+      "kvark_cta": "Talk to KVARK team →"
+    },
+    "footer": {
+      "brand": {
+        "wordmark": "Waggle",
+        "description": "The AI workspace where memory persists. Local-first, model-agnostic, audit-ready.",
+        "attribution": "A product of Egzakta Group · waggle-os.ai"
+      },
+      "columns": {
+        "product": {
+          "title": "Product",
+          "links": {
+            "download": "Download",
+            "pricing": "Pricing",
+            "personas": "Personas",
+            "how_it_works": "How it works"
+          }
+        },
+        "research": {
+          "title": "Research",
+          "links": {
+            "arxiv": "arxiv preprint",
+            "methodology": "Methodology",
+            "benchmarks": "Benchmarks",
+            "changelog": "Changelog"
+          }
+        },
+        "company": {
+          "title": "Company",
+          "links": {
+            "about_egzakta": "About Egzakta",
+            "blog": "Blog",
+            "press": "Press",
+            "contact": "Contact"
+          }
+        },
+        "legal": {
+          "title": "Legal",
+          "links": {
+            "terms": "Terms",
+            "privacy": "Privacy",
+            "eu_ai_act": "EU AI Act statement",
+            "apache": "Apache 2.0 license"
+          }
+        }
+      },
+      "base_line": {
+        "left": "© 2026 Egzakta Advisory · Waggle is a product of Egzakta Group",
+        "right": "v1.0 · waggle-os.ai · built calmly across DACH · CEE · UK"
+      }
+    },
+    "download_cta": {
+      "default": "Download",
+      "with_os": "Download for {os}"
+    },
+    "brand_personas": {
+      "default_heading": "The Waggle Hive",
+      "default_subtitle": "Thirteen personas for the work your AI does while you sleep.",
+      "compact_aria": "Waggle persona grid (compact variant)",
+      "tile_aria_template": "Waggle {title} bee mascot"
+    }
+  }
+}

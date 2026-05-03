@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useState, type CSSProperties } from 'react';
+import { useTranslations } from 'next-intl';
 import { Check } from 'lucide-react';
 import DownloadCTA from './DownloadCTA';
 import { emit, events } from '../_lib/event-taxonomy';
@@ -8,73 +9,60 @@ import { emit, events } from '../_lib/event-taxonomy';
 type BillingPeriod = 'monthly' | 'annual';
 type TierId = 'SOLO' | 'PRO' | 'TEAMS';
 
-interface Tier {
+interface TierDef {
   readonly id: TierId;
-  readonly name: string;
-  readonly priceMonthly: string;
-  readonly priceAnnual: string;
-  readonly note?: string;
-  readonly tagline: string;
-  readonly audience: string;
-  readonly bullets: readonly string[];
-  readonly highlighted?: boolean;
-  readonly cta: { readonly type: 'download' } | { readonly type: 'stripe'; readonly label: string };
+  readonly nsKey: 'solo' | 'pro' | 'teams';
+  readonly highlighted: boolean;
+  readonly hasNote: boolean;
+  readonly bulletKeys: readonly string[];
+  readonly ctaType: 'download' | 'stripe';
 }
 
-const TIERS: readonly Tier[] = [
+const TIER_DEFS: readonly TierDef[] = [
   {
     id: 'SOLO',
-    name: 'Solo',
-    priceMonthly: '$0',
-    priceAnnual: '$0',
-    note: 'Free, forever',
-    tagline: 'For individuals exploring AI workspace',
-    audience: 'Knowledge workers · students · hobbyist developers',
-    bullets: [
-      'Personal memory graph',
-      'All major LLMs supported',
-      'Local-first by default',
-      'EU AI Act audit reports',
-      'Apache 2.0 substrate',
-      'Community support',
+    nsKey: 'solo',
+    highlighted: false,
+    hasNote: true,
+    bulletKeys: [
+      'bullet_personal_memory',
+      'bullet_all_llms',
+      'bullet_local_first',
+      'bullet_audit_reports',
+      'bullet_apache_substrate',
+      'bullet_community_support',
     ],
-    cta: { type: 'download' },
+    ctaType: 'download',
   },
   {
     id: 'PRO',
-    name: 'Pro',
-    priceMonthly: '$19/month',
-    priceAnnual: '$190/year — save $38',
-    tagline: 'For power users compounding across projects',
-    audience: 'Senior ICs · consultants · founders',
+    nsKey: 'pro',
     highlighted: true,
-    bullets: [
-      'Everything in Solo',
-      'Priority sync across multiple devices',
-      'Advanced graph queries',
-      'Personal API key vault',
-      '14-day free trial, no credit card',
-      'Email support, 48h SLA',
+    hasNote: false,
+    bulletKeys: [
+      'bullet_everything_solo',
+      'bullet_priority_sync',
+      'bullet_advanced_queries',
+      'bullet_key_vault',
+      'bullet_free_trial',
+      'bullet_support',
     ],
-    cta: { type: 'stripe', label: 'Start free trial' },
+    ctaType: 'stripe',
   },
   {
     id: 'TEAMS',
-    name: 'Teams',
-    priceMonthly: '$49/seat/month',
-    priceAnnual: '$490/seat/year — save $98',
-    note: '3-seat minimum',
-    tagline: 'For teams that want shared memory without losing privacy',
-    audience: 'Small teams (3–50 seats) in regulated industries',
-    bullets: [
-      'Everything in Pro',
-      'Shared team memory graph',
-      'SSO and role-based access',
-      'SOC 2 Type II report on request',
-      'Dedicated account manager',
-      'KVARK bridge for sovereign deployment escalation',
+    nsKey: 'teams',
+    highlighted: false,
+    hasNote: true,
+    bulletKeys: [
+      'bullet_everything_pro',
+      'bullet_shared_memory',
+      'bullet_sso_rbac',
+      'bullet_soc2',
+      'bullet_csm',
+      'bullet_kvark_bridge',
     ],
-    cta: { type: 'stripe', label: 'Start team trial →' },
+    ctaType: 'stripe',
   },
 ];
 
@@ -102,15 +90,8 @@ const COMPARISON_ROWS: readonly ComparisonRow[] = [
 const STRIPE_ENDPOINT =
   (process.env.NEXT_PUBLIC_API_URL ?? '').replace(/\/$/, '') + '/api/stripe/checkout';
 
-/**
- * Pricing — 3 tiers (Solo / Pro / Teams) with monthly/annual toggle and a
- * collapsible comparison table per amendment §2.3 (kept `<details>`).
- *
- * Stripe checkout posts to internal `/api/stripe/checkout` (route lands in
- * §3). When env vars are placeholder pk_test_REPLACE_ME / sk_test_REPLACE_ME
- * the route returns a "configuration required" error per §0.b ratification.
- */
 export default function Pricing() {
+  const t = useTranslations('landing.pricing');
   const [billing, setBilling] = useState<BillingPeriod>('monthly');
   const [loading, setLoading] = useState<TierId | null>(null);
 
@@ -137,38 +118,34 @@ export default function Pricing() {
           if (data.url) window.open(data.url, '_blank');
         } else {
           const err = (await res.json().catch(() => ({}))) as { message?: string };
-          alert(err.message ?? 'Checkout configuration required. Please try again later.');
+          alert(err.message ?? t('errors.checkout_default'));
         }
       } catch {
-        alert('Could not connect to server. Please try again later.');
+        alert(t('errors.network'));
       } finally {
         setLoading(null);
       }
     },
-    [billing],
+    [billing, t],
   );
 
   return (
     <section id="pricing" style={sectionStyle}>
       <div style={containerStyle}>
         <header style={headerStyle}>
-          <p style={eyebrowStyle}>Pricing</p>
-          <h2 style={headlineStyle}>Free for individuals. Honest pricing for everyone else.</h2>
-          <p style={subheadStyle}>
-            Three tiers. No feature-count games. You pay for the scale of the team using
-            the memory, not for arbitrary check-marks.
-          </p>
+          <p style={eyebrowStyle}>{t('eyebrow')}</p>
+          <h2 style={headlineStyle}>{t('headline')}</h2>
+          <p style={subheadStyle}>{t('subhead')}</p>
         </header>
 
-        {/* Monthly / annual toggle */}
-        <div role="group" aria-label="Billing period" style={toggleRowStyle}>
+        <div role="group" aria-label={t('toggle.aria_group')} style={toggleRowStyle}>
           <button
             type="button"
             onClick={() => handleBillingChange('monthly')}
             style={billing === 'monthly' ? toggleActiveStyle : toggleInactiveStyle}
             aria-pressed={billing === 'monthly'}
           >
-            Monthly
+            {t('toggle.monthly')}
           </button>
           <button
             type="button"
@@ -176,17 +153,16 @@ export default function Pricing() {
             style={billing === 'annual' ? toggleActiveStyle : toggleInactiveStyle}
             aria-pressed={billing === 'annual'}
           >
-            Annual{' '}
+            {t('toggle.annual')}{' '}
             <span style={{ color: 'var(--honey-400, #f5b731)', fontWeight: 600, marginLeft: 4 }}>
-              save 17%
+              {t('toggle.save_pill')}
             </span>
           </button>
         </div>
 
-        {/* Tier cards */}
         <div style={tiersGridStyle} className="pricing-grid">
-          {TIERS.map((tier) => {
-            const price = billing === 'monthly' ? tier.priceMonthly : tier.priceAnnual;
+          {TIER_DEFS.map((tier) => {
+            const priceKey = billing === 'monthly' ? 'price_monthly' : 'price_annual';
             return (
               <div
                 key={tier.id}
@@ -196,19 +172,26 @@ export default function Pricing() {
                   ...(tier.highlighted ? cardHighlightedStyle : null),
                 }}
               >
-                {tier.highlighted && <span style={badgeStyle}>Most popular</span>}
-                <h3 style={tierNameStyle}>{tier.name}</h3>
-                <p style={tierTaglineStyle}>{tier.tagline}</p>
-                <p style={tierAudienceStyle}>{tier.audience}</p>
+                {tier.highlighted && (
+                  <span style={badgeStyle}>{t('popular_badge')}</span>
+                )}
+                <h3 style={tierNameStyle}>{t(`tiers.${tier.nsKey}.name`)}</h3>
+                <p style={tierTaglineStyle}>{t(`tiers.${tier.nsKey}.tagline`)}</p>
+                <p style={tierAudienceStyle}>{t(`tiers.${tier.nsKey}.audience`)}</p>
 
                 <p style={priceStyle}>
-                  {price}
-                  {tier.note && <span style={priceNoteStyle}> · {tier.note}</span>}
+                  {t(`tiers.${tier.nsKey}.${priceKey}`)}
+                  {tier.hasNote && (
+                    <span style={priceNoteStyle}>
+                      {' · '}
+                      {t(`tiers.${tier.nsKey}.note`)}
+                    </span>
+                  )}
                 </p>
 
                 <ul style={bulletsStyle}>
-                  {tier.bullets.map((b) => (
-                    <li key={b} style={bulletItemStyle}>
+                  {tier.bulletKeys.map((bk) => (
+                    <li key={bk} style={bulletItemStyle}>
                       <Check
                         size={16}
                         style={{
@@ -217,12 +200,12 @@ export default function Pricing() {
                           marginTop: 2,
                         }}
                       />
-                      <span>{b}</span>
+                      <span>{t(`tiers.${tier.nsKey}.${bk}`)}</span>
                     </li>
                   ))}
                 </ul>
 
-                {tier.cta.type === 'download' ? (
+                {tier.ctaType === 'download' ? (
                   <DownloadCTA
                     section="solo-tier"
                     variant="primary"
@@ -236,7 +219,7 @@ export default function Pricing() {
                     className="btn-press"
                     style={tier.highlighted ? primaryCtaStyle : ghostCtaStyle}
                   >
-                    {loading === tier.id ? 'Loading…' : tier.cta.label}
+                    {loading === tier.id ? t('loading') : t(`tiers.${tier.nsKey}.cta`)}
                   </button>
                 )}
               </div>
@@ -244,17 +227,16 @@ export default function Pricing() {
           })}
         </div>
 
-        {/* Collapsible comparison table */}
         <details style={comparisonDetailsStyle}>
-          <summary style={comparisonSummaryStyle}>Compare tiers in detail</summary>
+          <summary style={comparisonSummaryStyle}>{t('comparison.summary')}</summary>
           <div style={tableWrapperStyle}>
             <table style={tableStyle}>
               <thead>
                 <tr>
-                  <th style={thStyleFeature} scope="col">Feature</th>
-                  <th style={thStyleValue} scope="col">Solo</th>
-                  <th style={thStyleValue} scope="col">Pro</th>
-                  <th style={thStyleValue} scope="col">Teams</th>
+                  <th style={thStyleFeature} scope="col">{t('comparison.headers.feature')}</th>
+                  <th style={thStyleValue} scope="col">{t('comparison.headers.solo')}</th>
+                  <th style={thStyleValue} scope="col">{t('comparison.headers.pro')}</th>
+                  <th style={thStyleValue} scope="col">{t('comparison.headers.teams')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -277,24 +259,16 @@ export default function Pricing() {
   );
 }
 
-/* ────────────────────────────────────────────────────────────────── */
-
 const sectionStyle: CSSProperties = {
   padding: '96px 24px',
   fontFamily: "'Inter', system-ui, sans-serif",
 };
-
-const containerStyle: CSSProperties = {
-  maxWidth: 1200,
-  margin: '0 auto',
-};
-
+const containerStyle: CSSProperties = { maxWidth: 1200, margin: '0 auto' };
 const headerStyle: CSSProperties = {
   textAlign: 'center',
   maxWidth: 640,
   margin: '0 auto 40px',
 };
-
 const eyebrowStyle: CSSProperties = {
   fontSize: 11,
   fontWeight: 600,
@@ -303,20 +277,17 @@ const eyebrowStyle: CSSProperties = {
   marginBottom: 12,
   color: 'var(--honey-500, #e5a000)',
 };
-
 const headlineStyle: CSSProperties = {
   fontSize: 'clamp(28px, 4vw, 40px)',
   fontWeight: 700,
   marginBottom: 16,
   color: 'var(--hive-50, #f0f2f7)',
 };
-
 const subheadStyle: CSSProperties = {
   fontSize: 16,
   lineHeight: 1.6,
   color: 'var(--hive-300, #7d869e)',
 };
-
 const toggleRowStyle: CSSProperties = {
   display: 'flex',
   justifyContent: 'center',
@@ -328,7 +299,6 @@ const toggleRowStyle: CSSProperties = {
   width: 'fit-content',
   margin: '0 auto 48px',
 };
-
 const toggleBaseStyle: CSSProperties = {
   fontSize: 13,
   fontWeight: 500,
@@ -338,19 +308,16 @@ const toggleBaseStyle: CSSProperties = {
   cursor: 'pointer',
   fontFamily: "'Inter', system-ui, sans-serif",
 };
-
 const toggleActiveStyle: CSSProperties = {
   ...toggleBaseStyle,
   background: 'var(--hive-700, #1f2433)',
   color: 'var(--hive-50, #f0f2f7)',
 };
-
 const toggleInactiveStyle: CSSProperties = {
   ...toggleBaseStyle,
   background: 'transparent',
   color: 'var(--hive-300, #7d869e)',
 };
-
 const tiersGridStyle: CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'repeat(3, 1fr)',
@@ -358,7 +325,6 @@ const tiersGridStyle: CSSProperties = {
   maxWidth: 1100,
   margin: '0 auto 48px',
 };
-
 const cardStyle: CSSProperties = {
   position: 'relative',
   borderRadius: 16,
@@ -368,13 +334,11 @@ const cardStyle: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
 };
-
 const cardHighlightedStyle: CSSProperties = {
   background: 'var(--hive-850, #11141c)',
   borderColor: 'var(--honey-500, #e5a000)',
   boxShadow: 'var(--shadow-honey)',
 };
-
 const badgeStyle: CSSProperties = {
   position: 'absolute',
   top: -12,
@@ -389,46 +353,39 @@ const badgeStyle: CSSProperties = {
   background: 'var(--honey-500, #e5a000)',
   color: 'var(--hive-950, #08090c)',
 };
-
 const tierNameStyle: CSSProperties = {
   fontSize: 20,
   fontWeight: 700,
   marginBottom: 4,
   color: 'var(--hive-50, #f0f2f7)',
 };
-
 const tierTaglineStyle: CSSProperties = {
   fontSize: 13,
   color: 'var(--hive-200, #b0b7cc)',
   marginBottom: 4,
 };
-
 const tierAudienceStyle: CSSProperties = {
   fontSize: 12,
   color: 'var(--hive-400, #5a6380)',
   marginBottom: 18,
 };
-
 const priceStyle: CSSProperties = {
   fontSize: 24,
   fontWeight: 700,
   color: 'var(--hive-50, #f0f2f7)',
   marginBottom: 24,
 };
-
 const priceNoteStyle: CSSProperties = {
   fontSize: 12,
   fontWeight: 400,
   color: 'var(--hive-400, #5a6380)',
 };
-
 const bulletsStyle: CSSProperties = {
   listStyle: 'none',
   padding: 0,
   marginBottom: 24,
   flexGrow: 1,
 };
-
 const bulletItemStyle: CSSProperties = {
   display: 'flex',
   alignItems: 'flex-start',
@@ -438,7 +395,6 @@ const bulletItemStyle: CSSProperties = {
   marginBottom: 10,
   lineHeight: 1.5,
 };
-
 const primaryCtaStyle: CSSProperties = {
   display: 'block',
   width: '100%',
@@ -454,7 +410,6 @@ const primaryCtaStyle: CSSProperties = {
   cursor: 'pointer',
   fontFamily: "'Inter', system-ui, sans-serif",
 };
-
 const ghostCtaStyle: CSSProperties = {
   display: 'block',
   width: '100%',
@@ -469,7 +424,6 @@ const ghostCtaStyle: CSSProperties = {
   cursor: 'pointer',
   fontFamily: "'Inter', system-ui, sans-serif",
 };
-
 const comparisonDetailsStyle: CSSProperties = {
   maxWidth: 1100,
   margin: '0 auto',
@@ -478,7 +432,6 @@ const comparisonDetailsStyle: CSSProperties = {
   background: 'var(--hive-900, #0c0e14)',
   overflow: 'hidden',
 };
-
 const comparisonSummaryStyle: CSSProperties = {
   padding: '16px 24px',
   fontSize: 14,
@@ -487,18 +440,15 @@ const comparisonSummaryStyle: CSSProperties = {
   cursor: 'pointer',
   listStyle: 'none',
 };
-
 const tableWrapperStyle: CSSProperties = {
   overflowX: 'auto',
   borderTop: '1px solid var(--hive-700, #1f2433)',
 };
-
 const tableStyle: CSSProperties = {
   width: '100%',
   borderCollapse: 'collapse',
   fontSize: 13,
 };
-
 const thStyleFeature: CSSProperties = {
   textAlign: 'left',
   padding: '12px 16px',
@@ -507,25 +457,21 @@ const thStyleFeature: CSSProperties = {
   background: 'var(--hive-850, #11141c)',
   borderBottom: '1px solid var(--hive-700, #1f2433)',
 };
-
 const thStyleValue: CSSProperties = {
   ...thStyleFeature,
   textAlign: 'center',
 };
-
 const tdFeatureStyle: CSSProperties = {
   padding: '10px 16px',
   color: 'var(--hive-300, #7d869e)',
   borderBottom: '1px solid var(--hive-800, #171b26)',
 };
-
 const tdValueStyle: CSSProperties = {
   padding: '10px 16px',
   color: 'var(--hive-100, #dce0eb)',
   textAlign: 'center',
   borderBottom: '1px solid var(--hive-800, #171b26)',
 };
-
 const pricingResponsiveCss = `
   @media (max-width: 1023px) {
     .pricing-grid {

@@ -1,39 +1,44 @@
 'use client';
 
 import { useState, type CSSProperties } from 'react';
-import { heroVariants, type HeroVariantId } from '../_data/hero-variants';
+import { useTranslations } from 'next-intl';
+import { heroVariantsMeta, type HeroVariantId } from '../_data/hero-variants';
 
 interface HeroVisualProps {
   readonly initialVariant?: HeroVariantId;
 }
 
+const CHIP_KEYS = ['claude', 'gpt', 'qwen', 'gemini'] as const;
+const CHIP_POSITIONS: ReadonlyArray<{ x: number; y: number }> = [
+  { x: 80, y: 60 },
+  { x: 400, y: 60 },
+  { x: 80, y: 260 },
+  { x: 400, y: 260 },
+];
+
+const STAT_KEYS = ['edges', 'providers', 'recall', 'cloud'] as const;
+
+const VARIANT_IDS: readonly HeroVariantId[] = ['A', 'B', 'C', 'D', 'E'];
+
 /**
  * Hero visualization — macOS-style window mockup containing a central
  * rotating hexagon (the hive) connected to 4 LLM provider chips, with a
- * stat strip at the bottom.
+ * stat strip at the bottom (v3.2 LOCKED stats: 12,847 EDGES · 17 PROVIDERS
+ * · 42ms P99 RECALL · 0 CLOUD CALLS, lock #2).
  *
- * Numbers per amendment §1.1 (v3.2 LOCKED): 12,847 EDGES · 17 PROVIDERS ·
- * 42ms P99 RECALL · 0 CLOUD CALLS. Lock #2 swaps the legacy "4 PROVIDERS"
- * for "17 PROVIDERS" — reflects actual harvest scope from Memory app
- * Pass 7 verification (ChatGPT/Claude/Claude Code/Claude Desktop/Gemini/
- * AI Studio/Perplexity/Grok/Cursor/Manus/GenSpark/Qwen/MiniMax/z.ai/Other +
- * 2 more = 17).
+ * All strings load from `messages/en.json` under `landing.hero_visual.*`.
  *
- * Animations (hexagon rotation + concentric pulse rings) are suppressed
- * via `@media (prefers-reduced-motion: reduce)`.
- *
- * Variant tabs (A · Marcus through E · Petra) are dev-only — visible only
- * when `process.env.NODE_ENV !== 'production'`.
+ * Animations (hexagon rotation + concentric pulse rings) suppress via
+ * `@media (prefers-reduced-motion: reduce)`. Variant tabs hidden in
+ * production builds.
  */
 export default function HeroVisual({ initialVariant = 'A' }: HeroVisualProps) {
+  const t = useTranslations('landing.hero_visual');
   const [activeVariant, setActiveVariant] = useState<HeroVariantId>(initialVariant);
   const showDevTabs = process.env.NODE_ENV !== 'production';
 
-  const variantIds: readonly HeroVariantId[] = ['A', 'B', 'C', 'D', 'E'];
-
   return (
-    <div style={containerStyle} aria-label="Waggle hive memory visualization">
-      {/* macOS-style window frame */}
+    <div style={containerStyle} aria-label={t('aria_label')}>
       <div style={windowFrameStyle}>
         <div style={titleBarStyle}>
           <div style={trafficLightsStyle} aria-hidden="true">
@@ -41,26 +46,25 @@ export default function HeroVisual({ initialVariant = 'A' }: HeroVisualProps) {
             <span style={{ ...dotStyle, background: '#3a3f4a' }} />
             <span style={{ ...dotStyle, background: '#3a3f4a' }} />
           </div>
-          <span style={titleStyleLeft}>~/.waggle/hive · live</span>
-          <span style={titleStyleRight}>local · signed · 42ms</span>
+          <span style={titleStyleLeft}>{t('window_left')}</span>
+          <span style={titleStyleRight}>{t('window_right')}</span>
         </div>
 
-        {/* Body — SVG diagram */}
         <div style={bodyStyle}>
           <svg
             viewBox="0 0 480 320"
             xmlns="http://www.w3.org/2000/svg"
             style={{ width: '100%', height: 'auto', display: 'block' }}
             role="img"
-            aria-label="Hive memory connecting four LLM providers"
+            aria-label={t('svg_aria_label')}
           >
-            {/* Connecting lines from each chip to the central hex */}
+            {/* Connecting lines */}
             <line x1="80" y1="60" x2="240" y2="160" stroke="#3d4560" strokeWidth="1" />
             <line x1="400" y1="60" x2="240" y2="160" stroke="#3d4560" strokeWidth="1" />
             <line x1="80" y1="260" x2="240" y2="160" stroke="#3d4560" strokeWidth="1" />
             <line x1="400" y1="260" x2="240" y2="160" stroke="#3d4560" strokeWidth="1" />
 
-            {/* Concentric pulse rings around the central hex */}
+            {/* Concentric pulse rings */}
             <g className="hive-pulse-ring">
               <polygon
                 points="240,120 275,140 275,180 240,200 205,180 205,140"
@@ -82,7 +86,7 @@ export default function HeroVisual({ initialVariant = 'A' }: HeroVisualProps) {
               />
             </g>
 
-            {/* Central rotating hexagon */}
+            {/* Central rotating hex */}
             <g className="hive-pulse-hex">
               <polygon
                 points="240,128 268,144 268,176 240,192 212,176 212,144"
@@ -92,7 +96,7 @@ export default function HeroVisual({ initialVariant = 'A' }: HeroVisualProps) {
               />
             </g>
 
-            {/* "your hive" label below central hex */}
+            {/* Center label */}
             <text
               x="240"
               y="220"
@@ -102,33 +106,35 @@ export default function HeroVisual({ initialVariant = 'A' }: HeroVisualProps) {
               textAnchor="middle"
               letterSpacing="0.05em"
             >
-              your hive
+              {t('center_label')}
             </text>
 
-            {/* 4 LLM provider chips */}
-            <ChipLabel x={80} y={60} primary="claude · sonnet" sub="recall" />
-            <ChipLabel x={400} y={60} primary="gpt · 5" sub="recall" />
-            <ChipLabel x={80} y={260} primary="qwen · local" sub="commit" />
-            <ChipLabel x={400} y={260} primary="gemini · 2.5" sub="recall" />
+            {/* 4 LLM chips */}
+            {CHIP_KEYS.map((key, i) => (
+              <ChipLabel
+                key={key}
+                x={CHIP_POSITIONS[i].x}
+                y={CHIP_POSITIONS[i].y}
+                primary={t(`chips.${key}_primary`)}
+                sub={t(`chips.${key}_sub`)}
+              />
+            ))}
           </svg>
         </div>
 
-        {/* Stat strip — v3.2 LOCKED text per amendment §1.1 */}
         <div style={statsStripStyle}>
-          <Stat value="12,847" label="EDGES" />
-          <span style={statSeparator}>·</span>
-          <Stat value="17" label="PROVIDERS" />
-          <span style={statSeparator}>·</span>
-          <Stat value="42ms" label="P99 RECALL" />
-          <span style={statSeparator}>·</span>
-          <Stat value="0" label="CLOUD CALLS" />
+          {STAT_KEYS.map((key, i) => (
+            <span key={key} style={statSeriesStyle}>
+              <Stat value={t(`stats.${key}_value`)} label={t(`stats.${key}_label`)} />
+              {i < STAT_KEYS.length - 1 && <span style={statSeparator}>·</span>}
+            </span>
+          ))}
         </div>
       </div>
 
-      {/* Dev-only variant tabs */}
       {showDevTabs && (
-        <div style={devTabsStyle} role="tablist" aria-label="Hero variant preview (dev only)">
-          {variantIds.map((id) => {
+        <div style={devTabsStyle} role="tablist" aria-label={t('dev_tabs_aria')}>
+          {VARIANT_IDS.map((id) => {
             const isActive = id === activeVariant;
             return (
               <button
@@ -142,7 +148,7 @@ export default function HeroVisual({ initialVariant = 'A' }: HeroVisualProps) {
                   ...(isActive ? devTabActiveStyle : null),
                 }}
               >
-                {id} · {heroVariants[id].persona}
+                {id} · {heroVariantsMeta[id].persona}
               </button>
             );
           })}
@@ -212,17 +218,12 @@ function Stat({ value, label }: StatProps) {
   );
 }
 
-/* ────────────────────────────────────────────────────────────────── */
-/* Styles                                                              */
-/* ────────────────────────────────────────────────────────────────── */
-
 const containerStyle: CSSProperties = {
   width: '100%',
   maxWidth: 560,
   margin: '0 auto',
   fontFamily: "'Inter', system-ui, sans-serif",
 };
-
 const windowFrameStyle: CSSProperties = {
   borderRadius: 12,
   overflow: 'hidden',
@@ -230,7 +231,6 @@ const windowFrameStyle: CSSProperties = {
   background: 'linear-gradient(180deg, #0f1218 0%, #080a0f 100%)',
   boxShadow: '0 16px 48px rgba(0,0,0,0.5)',
 };
-
 const titleBarStyle: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
@@ -239,38 +239,32 @@ const titleBarStyle: CSSProperties = {
   borderBottom: '1px solid var(--hive-700, #1f2433)',
   background: '#11141c',
 };
-
 const trafficLightsStyle: CSSProperties = {
   display: 'flex',
   gap: 6,
   marginRight: 8,
 };
-
 const dotStyle: CSSProperties = {
   width: 10,
   height: 10,
   borderRadius: '50%',
   display: 'block',
 };
-
 const titleStyleLeft: CSSProperties = {
   fontSize: 11,
   color: 'var(--hive-300, #7d869e)',
   fontFamily: "'JetBrains Mono', monospace",
 };
-
 const titleStyleRight: CSSProperties = {
   marginLeft: 'auto',
   fontSize: 11,
   color: 'var(--hive-400, #5a6380)',
   fontFamily: "'JetBrains Mono', monospace",
 };
-
 const bodyStyle: CSSProperties = {
   padding: '24px 16px',
   background: '#080a0f',
 };
-
 const statsStripStyle: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
@@ -281,31 +275,31 @@ const statsStripStyle: CSSProperties = {
   background: '#0a0c12',
   flexWrap: 'wrap',
 };
-
+const statSeriesStyle: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 8,
+};
 const statItemStyle: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'baseline',
   gap: 6,
   fontFamily: "'JetBrains Mono', monospace",
 };
-
 const statValueStyle: CSSProperties = {
   fontSize: 13,
   fontWeight: 600,
   color: 'var(--hive-100, #dce0eb)',
 };
-
 const statLabelStyle: CSSProperties = {
   fontSize: 9,
   color: 'var(--hive-400, #5a6380)',
   letterSpacing: '0.08em',
 };
-
 const statSeparator: CSSProperties = {
   color: 'var(--hive-500, #3d4560)',
   fontSize: 11,
 };
-
 const devTabsStyle: CSSProperties = {
   display: 'flex',
   gap: 6,
@@ -316,7 +310,6 @@ const devTabsStyle: CSSProperties = {
   borderRadius: 8,
   flexWrap: 'wrap',
 };
-
 const devTabStyle: CSSProperties = {
   flex: '1 1 auto',
   padding: '6px 10px',
@@ -328,13 +321,11 @@ const devTabStyle: CSSProperties = {
   borderRadius: 4,
   cursor: 'pointer',
 };
-
 const devTabActiveStyle: CSSProperties = {
   color: 'var(--honey-400, #f5b731)',
   border: '1px solid var(--hive-600, #2a3044)',
   background: '#11141c',
 };
-
 const scopedCss = `
   .hive-pulse-hex {
     transform-origin: 240px 160px;

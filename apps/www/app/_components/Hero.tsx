@@ -1,7 +1,8 @@
 import type { CSSProperties } from 'react';
+import { getTranslations } from 'next-intl/server';
 import DownloadCTA from './DownloadCTA';
 import HeroVisual from './HeroVisual';
-import { heroVariants, type HeroVariantId } from '../_data/hero-variants';
+import { heroVariantsMeta, type HeroVariantId } from '../_data/hero-variants';
 
 interface HeroProps {
   readonly variantId: HeroVariantId;
@@ -10,50 +11,52 @@ interface HeroProps {
 /**
  * Hero section — 5-variant copy resolved server-side from URL search params
  * via `_lib/hero-headline-resolver.ts`. Variant A (Marcus, default) renders
- * with split-color headline; B-E use single-sentence headlines.
+ * with split-color headline (lead in cool light + honey emphasis); B-E use
+ * single-sentence headlines.
  *
  * Microcopy strip below CTAs is v3.2 LOCKED (lock #1):
  *   "17 AI platforms · Local-first · Apache 2.0 · EU AI Act ready"
  *
- * Right-column `<HeroVisual>` is a Client Component (animations + dev variant
- * tabs); this server component composes it directly.
+ * All strings load from `messages/en.json` under `landing.hero.*`.
+ * `<HeroVisual>` is a Client Component (animations + dev variant tabs);
+ * this server component composes it directly.
  */
-export default function Hero({ variantId }: HeroProps) {
-  const variant = heroVariants[variantId];
+export default async function Hero({ variantId }: HeroProps) {
+  const meta = heroVariantsMeta[variantId];
+  const t = await getTranslations('landing.hero');
+  const tv = await getTranslations(`landing.hero.${meta.i18nKey}`);
 
   return (
     <section id="hero" style={sectionStyle} className="honeycomb-bg">
       <div style={containerStyle} className="hero-grid">
         {/* Left column — text + CTAs */}
         <div style={leftColStyle}>
-          <p style={eyebrowStyle}>{variant.eyebrow}</p>
+          <p style={eyebrowStyle}>{tv('eyebrow')}</p>
 
           <h1 style={headlineStyle}>
-            {variant.headlineLead}
-            {variant.headlineEmphasis ? (
+            {tv('headline_lead')}
+            {meta.hasEmphasis ? (
               <>
                 {' '}
                 <span style={{ color: 'var(--honey-400, #f5b731)' }}>
-                  {variant.headlineEmphasis}
+                  {tv('headline_emphasis')}
                 </span>
               </>
             ) : null}
           </h1>
 
-          <p style={subheadStyle}>{variant.subhead}</p>
-          <p style={bodyStyle}>{variant.body}</p>
+          <p style={subheadStyle}>{tv('subhead')}</p>
+          <p style={bodyStyle}>{tv('body')}</p>
 
           <div style={ctaRowStyle}>
             <DownloadCTA section="hero" variant="primary" />
             <a href="#how-it-works" style={secondaryCTAStyle} className="btn-press">
-              See how it works →
+              {t('secondary_cta')}
             </a>
           </div>
 
           {/* v3.2 LOCKED (lock #1) */}
-          <p style={microcopyStyle}>
-            17 AI platforms · Local-first · Apache 2.0 · EU AI Act ready
-          </p>
+          <p style={microcopyStyle}>{t('microcopy')}</p>
         </div>
 
         {/* Right column — SVG hive diagram */}
@@ -66,8 +69,6 @@ export default function Hero({ variantId }: HeroProps) {
     </section>
   );
 }
-
-/* ────────────────────────────────────────────────────────────────── */
 
 const sectionStyle: CSSProperties = {
   position: 'relative',
@@ -88,9 +89,7 @@ const containerStyle: CSSProperties = {
   alignItems: 'center',
 };
 
-const leftColStyle: CSSProperties = {
-  maxWidth: 560,
-};
+const leftColStyle: CSSProperties = { maxWidth: 560 };
 
 const rightColStyle: CSSProperties = {
   display: 'flex',

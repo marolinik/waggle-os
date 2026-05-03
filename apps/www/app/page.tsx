@@ -1,3 +1,4 @@
+import { getTranslations } from 'next-intl/server';
 import Navbar from './_components/Navbar';
 import Hero from './_components/Hero';
 import ProofPointsBand from './_components/ProofPointsBand';
@@ -17,17 +18,11 @@ interface HomePageProps {
 }
 
 /**
- * Waggle landing page — v3.2 (Sesija D §2.4).
+ * Waggle landing page — v3.2 (Sesija D §3.2 with full i18n).
  *
- * Renders the 8 locked sections in IA order:
- *   Navbar → Hero (5 variants resolved server-side from URL search params)
- *   → ProofPointsBand → HowItWorks → Personas (BrandPersonasCard wrapper)
- *   → Pricing → TrustBand → FinalCTA → Footer
- *
- * Hero variant resolution per amendment §1.1: explicit `?p=` overrides
- * `utm_source` heuristic; default → A (Marcus). Reading `searchParams`
- * makes the page dynamic per-request (acceptable for v1; no static
- * regen).
+ * Renders 8 locked sections in IA order. Hero variant resolves server-side
+ * from URL search params per amendment §1.1; Personas wrapper copy lives in
+ * `messages/en.json` under `landing.personas_section.*`.
  */
 export default async function HomePage({ searchParams }: HomePageProps) {
   const params = await searchParams;
@@ -35,6 +30,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     p: pickFirst(params.p),
     utm_source: pickFirst(params.utm_source),
   });
+
+  const t = await getTranslations('landing.personas_section');
 
   return (
     <>
@@ -49,9 +46,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           aria-labelledby="waggle-hive-heading"
         >
           <BrandPersonasCard
-            eyebrow="Built for"
-            heading="Thirteen ways people work. One memory layer."
-            subtitle="Hunters chase, builders ship, orchestrators coordinate. Waggle remembers — across roles, across tools, across the moments in between."
+            eyebrow={t('eyebrow')}
+            heading={t('heading')}
+            subtitle={t('subtitle')}
           />
         </section>
         <Pricing />
@@ -63,7 +60,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   );
 }
 
-/** Coerce the search param shape to a single string (Next.js may pass arrays). */
 function pickFirst(value: string | string[] | undefined): string | undefined {
   if (Array.isArray(value)) return value[0];
   return value;

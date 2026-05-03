@@ -1,35 +1,32 @@
 'use client';
 
 import { useEffect, useState, type CSSProperties } from 'react';
+import { useTranslations } from 'next-intl';
 import { Menu, X, Download } from 'lucide-react';
 
 interface NavLink {
-  readonly label: string;
+  readonly key: string;
   readonly href: string;
   readonly external?: boolean;
 }
 
 const NAV_LINKS: readonly NavLink[] = [
-  { label: 'How it works', href: '#how-it-works' },
-  { label: 'Personas', href: '#personas' },
-  { label: 'Pricing', href: '#pricing' },
-  { label: 'Open source', href: 'https://github.com/marolinik/waggle-os', external: true },
-  { label: 'Audit', href: '#trust' },
+  { key: 'how_it_works', href: '#how-it-works' },
+  { key: 'personas', href: '#personas' },
+  { key: 'pricing', href: '#pricing' },
+  { key: 'open_source', href: 'https://github.com/marolinik/waggle-os', external: true },
+  { key: 'audit', href: '#trust' },
 ];
 
 const RELEASES_URL = 'https://github.com/marolinik/waggle-os/releases/latest';
 
 /**
- * Top navigation per v3.2 dump.
+ * Top navigation per v3.2 dump. All strings under `landing.navbar.*`.
  *
- * Nav links: How it works · Personas · Pricing · Open source · Audit.
- * CTAs: "Sign in" (text link, placeholder href) + "Download" (honey-filled,
- * jumps to GitHub Releases). Brand block has version pill "v1.0" per dump.
- *
- * Stays a Client Component because of scroll-aware `scrolled` state +
- * mobile menu toggle.
+ * Stays a Client Component for scroll-aware backdrop blur + mobile menu state.
  */
 export default function Navbar() {
+  const t = useTranslations('landing.navbar');
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -45,11 +42,13 @@ export default function Navbar() {
         ...navStyle,
         background: scrolled ? 'rgba(12,14,20,0.95)' : 'transparent',
         backdropFilter: scrolled ? 'blur(12px)' : undefined,
-        borderBottom: scrolled ? '1px solid var(--hive-700, #1f2433)' : '1px solid transparent',
+        borderBottom: scrolled
+          ? '1px solid var(--hive-700, #1f2433)'
+          : '1px solid transparent',
       }}
     >
       <div style={containerStyle}>
-        <a href="#hero" style={brandLinkStyle}>
+        <a href="#hero" style={brandLinkStyle} aria-label="Waggle">
           <img
             src="/brand/waggle-logo.jpeg"
             alt="Waggle"
@@ -64,17 +63,17 @@ export default function Navbar() {
         <div style={desktopNavStyle} className="nav-desktop">
           {NAV_LINKS.map((l) => (
             <a
-              key={l.label}
+              key={l.key}
               href={l.href}
               {...(l.external ? { target: '_blank', rel: 'noopener noreferrer' } : null)}
               style={navLinkStyle}
               className="nav-link"
             >
-              {l.label}
+              {t(`links.${l.key}`)}
             </a>
           ))}
           <a href="#" style={signInLinkStyle} className="nav-link">
-            Sign in
+            {t('ctas.sign_in')}
           </a>
           <a
             href={RELEASES_URL}
@@ -84,7 +83,7 @@ export default function Navbar() {
             className="btn-press"
           >
             <Download size={14} />
-            Download
+            {t('ctas.download')}
           </a>
         </div>
 
@@ -93,7 +92,7 @@ export default function Navbar() {
           onClick={() => setMobileOpen((v) => !v)}
           style={mobileToggleStyle}
           className="nav-mobile-toggle"
-          aria-label="Toggle menu"
+          aria-label={t('aria.toggle_menu')}
           aria-expanded={mobileOpen}
         >
           {mobileOpen ? <X size={20} /> : <Menu size={20} />}
@@ -104,13 +103,13 @@ export default function Navbar() {
         <div style={mobileMenuStyle}>
           {NAV_LINKS.map((l) => (
             <a
-              key={l.label}
+              key={l.key}
               href={l.href}
               {...(l.external ? { target: '_blank', rel: 'noopener noreferrer' } : null)}
               onClick={() => setMobileOpen(false)}
               style={mobileLinkStyle}
             >
-              {l.label}
+              {t(`links.${l.key}`)}
             </a>
           ))}
           <a
@@ -120,7 +119,7 @@ export default function Navbar() {
             style={{ ...mobileLinkStyle, color: 'var(--honey-400, #f5b731)', fontWeight: 600 }}
             onClick={() => setMobileOpen(false)}
           >
-            Download →
+            {t('ctas.download_mobile')}
           </a>
         </div>
       )}
@@ -139,7 +138,6 @@ const navStyle: CSSProperties = {
   transition: 'background 0.3s, border-color 0.3s',
   fontFamily: "'Inter', system-ui, sans-serif",
 };
-
 const containerStyle: CSSProperties = {
   maxWidth: 1200,
   margin: '0 auto',
@@ -149,27 +147,23 @@ const containerStyle: CSSProperties = {
   alignItems: 'center',
   justifyContent: 'space-between',
 };
-
 const brandLinkStyle: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 10,
   textDecoration: 'none',
 };
-
 const logoStyle: CSSProperties = {
   width: 32,
   height: 32,
   borderRadius: 8,
   display: 'block',
 };
-
 const brandTextStyle: CSSProperties = {
   fontSize: 18,
   fontWeight: 700,
   color: 'var(--hive-50, #f0f2f7)',
 };
-
 const versionPillStyle: CSSProperties = {
   fontSize: 10,
   fontWeight: 500,
@@ -180,13 +174,11 @@ const versionPillStyle: CSSProperties = {
   fontFamily: "'JetBrains Mono', monospace",
   letterSpacing: '0.02em',
 };
-
 const desktopNavStyle: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 28,
 };
-
 const navLinkStyle: CSSProperties = {
   fontSize: 14,
   fontWeight: 500,
@@ -194,12 +186,10 @@ const navLinkStyle: CSSProperties = {
   textDecoration: 'none',
   transition: 'color 0.2s',
 };
-
 const signInLinkStyle: CSSProperties = {
   ...navLinkStyle,
   color: 'var(--hive-200, #b0b7cc)',
 };
-
 const downloadButtonStyle: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
@@ -213,7 +203,6 @@ const downloadButtonStyle: CSSProperties = {
   textDecoration: 'none',
   boxShadow: 'var(--shadow-honey)',
 };
-
 const mobileToggleStyle: CSSProperties = {
   display: 'none',
   padding: 8,
@@ -222,7 +211,6 @@ const mobileToggleStyle: CSSProperties = {
   border: 'none',
   cursor: 'pointer',
 };
-
 const mobileMenuStyle: CSSProperties = {
   padding: '16px 24px',
   background: 'var(--hive-900, #0c0e14)',
@@ -231,7 +219,6 @@ const mobileMenuStyle: CSSProperties = {
   flexDirection: 'column',
   gap: 4,
 };
-
 const mobileLinkStyle: CSSProperties = {
   display: 'block',
   fontSize: 14,
@@ -240,7 +227,6 @@ const mobileLinkStyle: CSSProperties = {
   color: 'var(--hive-200, #b0b7cc)',
   textDecoration: 'none',
 };
-
 const navResponsiveCss = `
   .nav-link:hover { color: var(--honey-500, #e5a000); }
   @media (max-width: 1023px) {

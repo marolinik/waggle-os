@@ -1,48 +1,49 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import { NextIntlClientProvider } from 'next-intl';
+import { getLocale, getMessages, getTranslations } from 'next-intl/server';
 import './globals.css';
 
 /**
- * Root layout for the Waggle landing page (Next.js 15 App Router).
+ * Root layout for the Waggle landing page (Next.js 15 App Router + next-intl).
  *
  * Owns the `<html>` and `<body>` shells, global stylesheet import, and the
- * Inter font CDN bootstrap (preserved verbatim from the legacy Vite
- * `index.html` to keep paint behaviour identical post-migration).
+ * Inter font CDN bootstrap. Wraps all children with `<NextIntlClientProvider>`
+ * so client components can call `useTranslations()` without hydrating
+ * messages per-component.
  *
- * Open Graph + Twitter + canonical metadata mirror the legacy `index.html`
- * tags; canonical URL switched from `marolinik.github.io/waggle/` to
- * `waggle-os.ai/` per CLAUDE.md §1 — confirm before launch.
+ * Open Graph + Twitter + canonical metadata strings live in
+ * `messages/en.json` under `landing.metadata.*`.
  */
-export const metadata: Metadata = {
-  metadataBase: new URL('https://waggle-os.ai/'),
-  title: 'Waggle — Your AI Agent Workspace',
-  description:
-    'Desktop AI agent workspace with persistent memory, 53+ tools, and zero cloud dependency. Free for individuals.',
-  alternates: {
-    canonical: 'https://waggle-os.ai/',
-  },
-  openGraph: {
-    title: 'Waggle — Your AI Agent Workspace',
-    description:
-      'A workspace where AI agents remember your context, connect to your tools, and improve with every interaction. Desktop-native. Privacy-first.',
-    url: 'https://waggle-os.ai/',
-    type: 'website',
-    images: ['/brand/waggle-logo.jpeg'],
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'Waggle — Your AI Agent Workspace',
-    description:
-      'Desktop AI agent workspace with persistent memory, 53+ tools, and zero cloud dependency.',
-  },
-  icons: {
-    icon: '/brand/waggle-logo.jpeg',
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations('landing.metadata');
+  return {
+    metadataBase: new URL('https://waggle-os.ai/'),
+    title: t('title'),
+    description: t('description'),
+    alternates: { canonical: 'https://waggle-os.ai/' },
+    openGraph: {
+      title: t('og_title'),
+      description: t('og_description'),
+      url: 'https://waggle-os.ai/',
+      type: 'website',
+      images: ['/brand/waggle-logo.jpeg'],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: t('twitter_title'),
+      description: t('twitter_description'),
+    },
+    icons: { icon: '/brand/waggle-logo.jpeg' },
+  };
+}
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const locale = await getLocale();
+  const messages = await getMessages();
+
   return (
-    <html lang="en" className="scroll-smooth">
+    <html lang={locale} className="scroll-smooth">
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
@@ -55,7 +56,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        <NextIntlClientProvider messages={messages} locale={locale}>
+          {children}
+        </NextIntlClientProvider>
+      </body>
     </html>
   );
 }

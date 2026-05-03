@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { useTranslations } from 'next-intl';
 import { detectOSFromUserAgent, type OSId } from '../_lib/os-detection';
 import { emit, events } from '../_lib/event-taxonomy';
 
@@ -41,11 +42,11 @@ const GHOST_STYLE: CSSProperties = {
 
 /**
  * OS-aware download CTA. Renders a generic "Download" label at SSR + first
- * paint, then swaps to "Download for {macOS|Windows|Linux}" after hydration
- * via `navigator.userAgent` detection.
+ * paint, then swaps to "Download for {os}" after hydration via
+ * `navigator.userAgent` detection.
  *
- * Used in 3 places per amendment §3 acceptance criterion 13: Hero primary,
- * Pricing Solo tier, Final CTA primary.
+ * Strings live in `messages/en.json` under `landing.download_cta.*` with an
+ * ICU placeholder for the OS name.
  */
 export default function DownloadCTA({
   variant = 'primary',
@@ -53,6 +54,7 @@ export default function DownloadCTA({
   children,
   style,
 }: DownloadCTAProps) {
+  const t = useTranslations('landing.download_cta');
   const [os, setOS] = useState<OSId | null>(null);
 
   useEffect(() => {
@@ -61,11 +63,15 @@ export default function DownloadCTA({
     }
   }, []);
 
-  const label = children ?? (os ? `Download for ${os}` : 'Download');
+  const label =
+    children ?? (os ? t('with_os', { os }) : t('default'));
   const baseStyle = variant === 'primary' ? PRIMARY_STYLE : GHOST_STYLE;
 
   const handleClick = () => {
-    emit({ name: events.ctaClick, properties: { section, os: os ?? 'unknown' } });
+    emit({
+      name: events.ctaClick,
+      properties: { section, os: os ?? 'unknown' },
+    });
   };
 
   return (

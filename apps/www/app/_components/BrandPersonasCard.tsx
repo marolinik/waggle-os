@@ -7,16 +7,13 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   HEX_TEXTURE_PATH,
   personas,
   type Persona,
   type PersonaSlug,
 } from '../_data/personas';
-
-const DEFAULT_HEADING = 'The Waggle Hive';
-const DEFAULT_SUBTITLE =
-  'Thirteen personas for the work your AI does while you sleep.';
 
 /**
  * 4x4 grid sequence in row-major order. `'filler'` slots occupy top-left,
@@ -58,14 +55,17 @@ export interface BrandPersonasCardProps {
  */
 export default function BrandPersonasCard({
   eyebrow,
-  heading = DEFAULT_HEADING,
-  subtitle = DEFAULT_SUBTITLE,
+  heading,
+  subtitle,
   showFillerTiles = true,
   variant = 'landing',
   onTileHover,
   onPersonaClick,
   cta,
 }: BrandPersonasCardProps) {
+  const t = useTranslations('landing.brand_personas');
+  const resolvedHeading = heading ?? t('default_heading');
+  const resolvedSubtitle = subtitle ?? t('default_subtitle');
   const [erroredSlugs, setErroredSlugs] = useState<ReadonlySet<PersonaSlug>>(
     () => new Set(),
   );
@@ -84,7 +84,7 @@ export default function BrandPersonasCard({
       <div
         data-testid="brand-personas-card-compact"
         data-variant="compact"
-        aria-label="Waggle persona grid (compact variant)"
+        aria-label={t('compact_aria')}
       >
         {/* Compact variant scaffolding — intentional stub.
             TypeScript interface is stable; parent pages may wire props today
@@ -103,9 +103,9 @@ export default function BrandPersonasCard({
       <header style={headerStyle}>
         {eyebrow ? <p style={eyebrowStyle}>{eyebrow}</p> : null}
         <h2 id="waggle-hive-heading" style={headingStyle}>
-          {heading}
+          {resolvedHeading}
         </h2>
-        <p style={subtitleStyle}>{subtitle}</p>
+        <p style={subtitleStyle}>{resolvedSubtitle}</p>
       </header>
 
       <ul
