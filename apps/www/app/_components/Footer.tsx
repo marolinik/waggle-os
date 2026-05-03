@@ -15,8 +15,10 @@ const PRODUCT_LINKS: readonly FooterLink[] = [
 ];
 
 const RESEARCH_LINKS: readonly FooterLink[] = [
-  { key: 'arxiv', href: '#', external: true },
-  { key: 'methodology', href: '#', external: true },
+  // arxiv preprint dropped per Path D landing decoupling (PM 2026-05-02):
+  // Day 0 ships methodology.md in OSS repo, arxiv linked retroactively
+  // post-launch news cycle.
+  { key: 'methodology', href: '/docs/methodology' },
   { key: 'benchmarks', href: '#', external: true },
   { key: 'changelog', href: '#' },
 ];

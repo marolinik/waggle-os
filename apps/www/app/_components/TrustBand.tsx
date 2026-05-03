@@ -5,12 +5,14 @@ const SIGNAL_KEYS = [
   'zero_cloud',
   'eu_ai_act',
   'apache',
-  'arxiv',
+  'methodology',
   'egzakta',
 ] as const;
 
 const SIGNAL_HREFS: Partial<Record<(typeof SIGNAL_KEYS)[number], string>> = {
-  arxiv: '#',
+  // Path D landing decoupling (PM 2026-05-02): Day 0 ships methodology.md
+  // in OSS repo; arxiv preprint linked retroactively post-launch news cycle.
+  methodology: '/docs/methodology',
 };
 
 /**

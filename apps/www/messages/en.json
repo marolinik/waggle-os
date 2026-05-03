@@ -197,7 +197,7 @@
         "zero_cloud": "Zero cloud transit — by default",
         "eu_ai_act": "EU AI Act compliant — Article 12 audit reports",
         "apache": "Apache 2.0 — open source substrate",
-        "arxiv": "Published methodology — arxiv preprint",
+        "methodology": "Open methodology — github docs",
         "egzakta": "Egzakta Group backed — regulated-industries since 2010"
       }
     },
@@ -227,7 +227,6 @@
         "research": {
           "title": "Research",
           "links": {
-            "arxiv": "arxiv preprint",
             "methodology": "Methodology",
             "benchmarks": "Benchmarks",
             "changelog": "Changelog"
