@@ -4,8 +4,10 @@
  * Copy is ratified per `PM-Waggle-OS/decisions/2026-04-22-personas-card-copy-locked.md`.
  * Do NOT rewrite or paraphrase in consumer components — import from this module only.
  *
- * Asset paths are relative (no leading slash) to work with Vite's `base: '/waggle/'`
- * configuration. This matches the existing convention in `components/Hero.tsx`.
+ * Asset paths are root-absolute (`/brand/...`) per Sesija D §1 ratification (c):
+ * the legacy Vite-relative form (`brand/...` resolved against `base: '/waggle/'`)
+ * was a GitHub Pages staging artifact, not production. waggle-os.ai does not
+ * apply a path prefix.
  */
 
 export type PersonaSlug =
@@ -32,7 +34,7 @@ export interface Persona {
   readonly role: string;
   /** Accessible image label — "Waggle {title} bee mascot". */
   readonly alt: string;
-  /** Relative asset path, resolved against Vite `base`. */
+  /** Root-absolute asset path served from /public. */
   readonly imagePath: string;
   /** 1-13 canonical reading order (input → process → output → meta). */
   readonly order: number;
@@ -49,7 +51,7 @@ function buildPersona(
     title,
     role,
     alt: `Waggle ${title} bee mascot`,
-    imagePath: `brand/bee-${slug}-dark.png`,
+    imagePath: `/brand/bee-${slug}-dark.png`,
     order,
   };
 }
@@ -120,4 +122,4 @@ export const personaBySlug: Readonly<Record<PersonaSlug, Persona>> = Object.free
  * Path to the hex-texture PNG used as filler-tile background and as
  * placeholder canvas when a persona asset fails to load.
  */
-export const HEX_TEXTURE_PATH = 'brand/hex-texture-dark.png';
+export const HEX_TEXTURE_PATH = '/brand/hex-texture-dark.png';

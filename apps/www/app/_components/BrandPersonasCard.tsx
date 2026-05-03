@@ -12,7 +12,7 @@ import {
   personas,
   type Persona,
   type PersonaSlug,
-} from '../data/personas';
+} from '../_data/personas';
 
 const DEFAULT_HEADING = 'The Waggle Hive';
 const DEFAULT_SUBTITLE =
@@ -47,7 +47,7 @@ export interface BrandPersonasCardProps {
  * Single-surface canon of the 13 Waggle bee personas.
  *
  * @remarks
- * Copy is imported verbatim from `data/personas.ts` — do not override in-place.
+ * Copy is imported verbatim from `_data/personas.ts` — do not override in-place.
  * Assets are loaded via plain `<img>` tags with an `onError` fallback that flips
  * the tile to a hex-texture placeholder. The placeholder auto-disables when an
  * asset loads successfully, so shipping new PNGs requires no code change.

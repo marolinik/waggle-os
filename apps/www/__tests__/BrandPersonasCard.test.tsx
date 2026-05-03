@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach } from 'vitest';
-import BrandPersonasCard from '../src/components/BrandPersonasCard';
-import { personas, type PersonaSlug } from '../src/data/personas';
+import BrandPersonasCard from '../app/_components/BrandPersonasCard';
+import { personas, type PersonaSlug } from '../app/_data/personas';
 
 afterEach(() => {
   cleanup();

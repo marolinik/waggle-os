@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import BrandPersonasCard from '@/src/components/BrandPersonasCard';
+import BrandPersonasCard from '@/app/_components/BrandPersonasCard';
 
 /**
  * Isolated preview route for the `BrandPersonasCard` landing variant.
