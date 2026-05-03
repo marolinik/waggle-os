@@ -9,7 +9,7 @@
 
 ---
 
-## Commit ledger (10 commits, 9 CC + 1 Marko mid-session)
+## Commit ledger (12 commits, 11 CC + 1 Marko mid-session)
 
 | # | SHA | Phase | Description |
 |---|---|---|---|
@@ -23,7 +23,8 @@
 | 8 | `b716b04` | §3.3 | Lighthouse audit pass — Performance 96 / Accessibility 96 / SEO 100 |
 | — | `7d1e0fc` | (Marko) | docs: add methodology documentation (211-line docs/methodology.md at repo root) |
 | 9 | `8ecddff` | §3.4 | Path D landing decoupling — arxiv → methodology in Trust + Footer |
-| 10 | (this) | §4 | Final verification artifacts: variant smoke + 3 full-page screenshots + this manifest |
+| 10 | `c353e49` | §4   | Initial verification artifacts: variant smoke + 3 full-page screenshots + manifest |
+| 11 | (this)   | §4.1 | NEW /docs/methodology Next.js route (react-markdown + remark-gfm) + app/sitemap.ts + 4th screenshot |
 
 ---
 
@@ -72,7 +73,7 @@
 | `next/image` migration for 13 persona PNGs | medium | Lighthouse "Improve image delivery" 50 | AVIF/WebP auto-conversion + responsive srcsets. ~200 line refactor. |
 | `/` route bfcache restoration | low | Lighthouse perf sub-100 | Currently 0 due to `Cache-Control: no-store` on dynamic searchParams route. Move variant resolver client-side to keep `/` static. |
 | next-intl message tree-shaking | low | Lighthouse "Reduce unused JS" 50 | next-intl ships full message bundle to client. v1.5 audit. |
-| `/docs/methodology` route handler | medium | §3.4 Path D landing decoupling | Marko shipped `docs/methodology.md` in `7d1e0fc` at REPO ROOT. The link in Trust Band Card 4 + Footer Research Methodology entry expects either `apps/www/app/docs/methodology/page.tsx` (Next.js route rendering markdown) OR redirect to GitHub-hosted file. Currently 404s. |
+| ~~`/docs/methodology` route handler~~ | ✅ resolved | §4.1 PM ratify | Shipped in §4.1 — `app/docs/methodology/page.tsx` reads `docs/methodology.md` at build (force-static) via react-markdown + remark-gfm. Live at `waggle-os.ai/docs/methodology` once deployed. |
 | Vercel preview Lighthouse re-measure | medium | §3.3 carryover | Local 96/96/100 is conservative floor; production CDN typically +5-10. Re-measure on Vercel preview before launch as final confirmation. |
 | Stripe real keys + live price IDs | high (pre-launch) | §0.b ratification | Marko-side action Monday 2026-05-03 with finance team. Replace `sk_test_REPLACE_ME` / `pk_test_REPLACE_ME` + populate `STRIPE_PRICE_{PRO,TEAMS}_{MONTHLY,ANNUAL}` env vars. Route auto-stops returning 503 once real keys are in place. |
 | Sign-in flow | low (post-launch) | navbar | Currently `href="#"` placeholder. Auth provider + sign-in page defer to post-launch. |
@@ -82,12 +83,13 @@
 
 ## Verification artifacts
 
-- **Build output:** `next build` produces 6 routes (`/` ƒ Dynamic 8.95kB / 127kB First Load · `/_not-found` ○ Static 989B · `/api/stripe/checkout` ƒ Dynamic 121B · `/design/personas` ○ Static 2.97kB).
+- **Build output:** `next build` produces **8 routes** (`/` ƒ Dynamic 8.96kB / 127kB First Load · `/_not-found` ○ Static 989B · `/api/stripe/checkout` ƒ Dynamic 129B · `/design/personas` ○ Static 2.98kB · `/docs/methodology` ○ Static 129B / 102kB · `/sitemap.xml` ○ Static).
 - **Tests:** `npx vitest run` → 10/10 BrandPersonasCard tests pass.
 - **Typecheck:** `npx tsc --noEmit` → clean (silent).
 - **Lighthouse:** local prod build at port 8005 — **Perf 96 / A11y 96 / SEO 100**. Full report in `apps/www/LIGHTHOUSE.md`.
 - **Variant smoke:** all 5 (A/B/C/D/E) resolve correctly, eyebrow text matched per variant via `?p=` or `utm_source` param.
-- **Screenshots:** `apps/www/.screenshots/` contains 3 full-page PNGs at 1440×900 (variant A default + variant B compliance + variant E legal-tech). Mid-page persona tiles render lazy-loaded; this is intentional design — `loading="lazy"` was the perf fix that boosted LCP from 66.5s → 2.7s.
+- **Screenshots:** `apps/www/.screenshots/` contains **4 full-page PNGs** at 1440×900 (variant A default + variant B compliance + variant E legal-tech + `/docs/methodology` page). Mid-page persona tiles render lazy-loaded; this is intentional design — `loading="lazy"` was the perf fix that boosted LCP from 66.5s → 2.7s.
+- **Sitemap:** `app/sitemap.ts` auto-generates `/sitemap.xml` with 2 entries (homepage priority 1.0 weekly + `/docs/methodology` priority 0.7 monthly). `/design/personas` intentionally omitted (robots-blocked playground).
 
 ---
 
@@ -95,7 +97,7 @@
 
 - `apps/www/src/` is **empty** (all 9 legacy components either dropped per §2.1 or ported into `app/_components/` via §2.2 + §2.3).
 - `apps/www/vite-env.d.ts` deleted (no more `import.meta.env` consumers).
-- `apps/www/app/` houses everything: `_components/` (12 files) + `_data/` (3 files) + `_lib/` (3 files) + `api/stripe/checkout/route.ts` + `design/personas/` (preview playground + 2 PNGs) + `globals.css` + `layout.tsx` + `page.tsx`.
+- `apps/www/app/` houses everything: `_components/` (12 files) + `_data/` (3 files) + `_lib/` (3 files) + `api/stripe/checkout/route.ts` + `design/personas/` (preview playground + 2 PNGs) + `docs/methodology/page.tsx` (NEW §4.1) + `sitemap.ts` (NEW §4.1) + `globals.css` + `layout.tsx` + `page.tsx`.
 - `apps/www/messages/en.json` is the canonical i18n source (~190 keys).
 - `apps/www/i18n/request.ts` configures next-intl single-locale (`en`).
 - `apps/www/LIGHTHOUSE.md` documents the audit + remediation backlog.
@@ -108,10 +110,10 @@
 Sesija D scope per amendment delivered in 9 commits (10 with Marko's methodology.md mid-session). All 16 amendment §3 acceptance criteria meet thresholds. Build green, types green, tests green, Lighthouse green.
 
 PM Pass 8 ready. Marko-side actions before Day 0 launch:
-1. Push `main` to `origin/main` (currently +20 ahead)
+1. Push `main` to `origin/main` (currently +22 ahead)
 2. Wire real Stripe keys in production env (Vercel/Cloudflare/wherever production lands)
-3. Re-measure Lighthouse on Vercel preview as final confirmation
-4. Create `apps/www/app/docs/methodology/page.tsx` route OR redirect `/docs/methodology` to GitHub-hosted markdown (currently 404s)
-5. Resolve sign-in flow CTA (currently `#` placeholder)
+3. Re-measure Lighthouse on Vercel preview as final confirmation (re-test `/docs/methodology` since it's now a real route, not just a planned link)
+4. Resolve sign-in flow CTA (currently `#` placeholder)
+5. Confirm `docs/methodology.md` content is locked before deploy (currently labeled "Status: Draft for github commit") — methodology page bakes this content at build time, so updates require a rebuild + redeploy.
 
 Cost cap unspent. Standing down.
