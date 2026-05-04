@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Inter } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
+import { ClerkProvider } from '@clerk/nextjs';
 import './globals.css';
 
 const inter = Inter({
@@ -81,7 +82,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <link rel="icon" href="/brand/waggle-logo.jpeg" />
       </head>
       <body style={{ fontFamily: 'var(--font-inter), Inter, system-ui, sans-serif' }}>
-        <IntlWrapper>{children}</IntlWrapper>
+        <ClerkProvider>
+          <IntlWrapper>{children}</IntlWrapper>
+        </ClerkProvider>
       </body>
     </html>
   );
