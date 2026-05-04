@@ -28,19 +28,69 @@ import './globals.css';
  * and <UserButton> popover. Per-component overrides are layered on top
  * via `appearance` prop only when needed.
  * ────────────────────────────────────────────────────────────────────────── */
+// NOTE: do NOT use `as const` here. Clerk's `Appearance` type is a wide
+// discriminated union; deeply-readonly literals from `as const` over-narrow
+// it and at least one Clerk version silently dropped the `baseTheme` field
+// when the prop value didn't match the expected mutable shape.
 const HIVE_CLERK_APPEARANCE = {
   baseTheme: dark,
   variables: {
     colorPrimary: '#e5a000',
     colorBackground: '#08090c',
     colorText: '#dce0eb',
+    colorTextSecondary: '#7d869e',
     colorInputBackground: '#171b26',
     colorInputText: '#dce0eb',
-    colorTextSecondary: '#7d869e',
+    colorNeutral: '#7d869e',
     borderRadius: '8px',
     fontFamily: 'Inter, system-ui, sans-serif',
   },
-} as const;
+  // Belt-and-braces element-level overrides. apps/www does NOT use Tailwind
+  // (vanilla CSS + custom properties only — see app/globals.css), so these
+  // are CSSProperties objects, not className strings. Clerk's appearance API
+  // accepts either form per element.
+  //
+  // Each entry targets a Clerk internal element key (stable API, see
+  // https://clerk.com/docs/customization/appearance-prop). Values match
+  // Hive DS hex literals so they survive SSR without needing CSS-var
+  // resolution from a parent.
+  elements: {
+    card: {
+      backgroundColor: '#08090c',
+      border: '1px solid #1f2433',
+      boxShadow: '0 4px 16px rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.3)',
+    },
+    headerTitle: { color: '#dce0eb' },
+    headerSubtitle: { color: '#7d869e' },
+    socialButtonsBlockButton: {
+      backgroundColor: '#171b26',
+      border: '1px solid #2a3044',
+      color: '#dce0eb',
+    },
+    socialButtonsBlockButtonText: { color: '#dce0eb' },
+    socialButtonsBlockButtonArrow: { color: '#7d869e' },
+    dividerLine: { backgroundColor: '#2a3044' },
+    dividerText: { color: '#7d869e' },
+    formFieldLabel: { color: '#b0b7cc' },
+    formFieldInput: {
+      backgroundColor: '#171b26',
+      border: '1px solid #2a3044',
+      color: '#dce0eb',
+    },
+    formButtonPrimary: {
+      backgroundColor: '#e5a000',
+      color: '#08090c',
+      fontWeight: 600,
+    },
+    footerActionText: { color: '#7d869e' },
+    footerActionLink: { color: '#e5a000' },
+    identityPreviewText: { color: '#dce0eb' },
+    identityPreviewEditButton: { color: '#e5a000' },
+    // Modal-specific (the `<SignInButton mode="modal">` flow).
+    modalContent: { backgroundColor: '#08090c' },
+    modalCloseButton: { color: '#7d869e' },
+  },
+};
 
 const inter = Inter({
   subsets: ['latin'],
