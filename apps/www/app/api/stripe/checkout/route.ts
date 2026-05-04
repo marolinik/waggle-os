@@ -1,117 +1,282 @@
 import { NextResponse } from 'next/server';
+import { auth, clerkClient } from '@clerk/nextjs/server';
 import Stripe from 'stripe';
 
 /**
- * POST /api/stripe/checkout
+ * /api/stripe/checkout — Stripe Checkout Session creator with Clerk linkage.
  *
- * Internal Stripe Checkout Session creator. Replaces the legacy external
- * call to cloud.waggle-os.ai/api/stripe/create-checkout-session per amendment
- * §3 acceptance criterion #12.
+ * Sesija E §5.3 Phase C: lazy-create Stripe Customer pattern. On first
+ * paid checkout for a user we create the Customer, store its id in
+ * `Clerk.user.publicMetadata.stripeCustomerId`, and reuse it forever after.
+ * Customer.metadata.clerkUserId mirrors the linkage in the other direction
+ * so subscription webhooks can map back to a Clerk user.
  *
- * Behavior per §0.b PM ratification:
- *   - When STRIPE_SECRET_KEY is missing or equals the placeholder value
- *     "sk_test_REPLACE_ME", the route returns 503 with a "configuration
- *     required" message instead of attempting a real Stripe call.
- *   - Real keys are a Marko-side pre-launch action (Monday with finance).
+ * GET ?tier=pro|teams&billing=monthly|annual
+ *   - Canonical entrypoint (per §5.3 brief). Used by Clerk SignUp's
+ *     `forceRedirectUrl` after sign-up completion.
+ *   - Returns 303 redirect to the Stripe Checkout URL on success.
+ *   - Signed-out: 303 to /sign-in with redirect_url back to this endpoint.
  *
- * Body: { tier: "PRO" | "TEAMS", billingPeriod: "monthly" | "annual" }
- * Returns: { url: string } on success, { message: string } on error.
+ * POST { tier, billingPeriod }
+ *   - Backward-compat shim for the existing Pricing.tsx button. §5.4 will
+ *     migrate Pricing.tsx to the GET-based flow and this handler can go away.
+ *   - Returns JSON { url } on success or { message } on error.
+ *   - Signed-out: 401 JSON { message }.
  */
 
-const PLACEHOLDER_KEY = 'sk_test_REPLACE_ME';
+type Tier = 'pro' | 'teams';
+type Billing = 'monthly' | 'annual';
 
-const VALID_TIERS = ['PRO', 'TEAMS'] as const;
-const VALID_BILLING = ['monthly', 'annual'] as const;
+const TIERS: readonly Tier[] = ['pro', 'teams'];
+const BILLINGS: readonly Billing[] = ['monthly', 'annual'];
 
-type Tier = (typeof VALID_TIERS)[number];
-type Billing = (typeof VALID_BILLING)[number];
-
-interface CheckoutBody {
-  readonly tier?: unknown;
-  readonly billingPeriod?: unknown;
+interface ClerkPublicMetadata {
+  readonly stripeCustomerId?: string;
+  readonly subscriptionTier?: Tier;
+  readonly subscriptionStatus?:
+    | 'active'
+    | 'past_due'
+    | 'canceled'
+    | 'trialing'
+    | 'incomplete';
 }
 
-function isPlaceholderOrMissing(key: string | undefined): boolean {
-  return !key || key === PLACEHOLDER_KEY || key.startsWith('pk_test_REPLACE_ME');
+interface CheckoutSuccess {
+  readonly kind: 'success';
+  readonly url: string;
 }
 
-function getPriceId(tier: Tier, billing: Billing): string | undefined {
-  const envKey = `STRIPE_PRICE_${tier}_${billing.toUpperCase()}`;
-  const value = process.env[envKey];
-  return value && !value.startsWith('price_REPLACE_ME') ? value : undefined;
+interface CheckoutAuthRedirect {
+  readonly kind: 'auth_required';
+  readonly signInUrl: string;
 }
 
-export async function POST(req: Request): Promise<NextResponse> {
+interface CheckoutFailure {
+  readonly kind: 'failure';
+  readonly status: number;
+  readonly message: string;
+}
+
+type CheckoutResult = CheckoutSuccess | CheckoutAuthRedirect | CheckoutFailure;
+
+function normalizeTier(value: unknown): Tier | null {
+  if (typeof value !== 'string') return null;
+  const lower = value.toLowerCase();
+  return TIERS.includes(lower as Tier) ? (lower as Tier) : null;
+}
+
+function normalizeBilling(value: unknown): Billing | null {
+  if (typeof value !== 'string') return null;
+  const lower = value.toLowerCase();
+  return BILLINGS.includes(lower as Billing) ? (lower as Billing) : null;
+}
+
+function isValidStripeKey(key: string | undefined): key is string {
+  return (
+    typeof key === 'string' &&
+    (key.startsWith('sk_test_') || key.startsWith('sk_live_'))
+  );
+}
+
+async function ensureStripeCustomer(
+  userId: string,
+  email: string | null,
+  existingId: string | undefined,
+  stripe: Stripe,
+): Promise<string> {
+  if (existingId) return existingId;
+
+  const customer = await stripe.customers.create({
+    email: email ?? undefined,
+    metadata: { clerkUserId: userId },
+  });
+
+  const cc = await clerkClient();
+  await cc.users.updateUserMetadata(userId, {
+    publicMetadata: { stripeCustomerId: customer.id } satisfies ClerkPublicMetadata,
+  });
+
+  return customer.id;
+}
+
+async function resolvePriceId(
+  stripe: Stripe,
+  tier: Tier,
+  billing: Billing,
+): Promise<string | null> {
+  // Prefer env-pinned IDs (zero round-trip). Fall back to lookup_key resolution
+  // so the route still works in environments where price IDs aren't pinned.
+  const envKey = `STRIPE_PRICE_${tier.toUpperCase()}_${billing.toUpperCase()}`;
+  const pinned = process.env[envKey];
+  if (pinned && pinned.startsWith('price_')) return pinned;
+
+  const lookupKey = `${tier}_${billing}`;
+  const list = await stripe.prices.list({
+    lookup_keys: [lookupKey],
+    active: true,
+    limit: 1,
+  });
+  return list.data[0]?.id ?? null;
+}
+
+async function runCheckout(
+  origin: string,
+  tier: Tier,
+  billing: Billing,
+): Promise<CheckoutResult> {
+  const { userId } = await auth();
+  if (!userId) {
+    const target = `/api/stripe/checkout?tier=${tier}&billing=${billing}`;
+    return {
+      kind: 'auth_required',
+      signInUrl: `${origin}/sign-in?redirect_url=${encodeURIComponent(target)}`,
+    };
+  }
+
   const secretKey = process.env.STRIPE_SECRET_KEY;
+  if (!isValidStripeKey(secretKey)) {
+    return {
+      kind: 'failure',
+      status: 503,
+      message:
+        'Stripe checkout configuration required. Set STRIPE_SECRET_KEY in env (sk_test_* or sk_live_*).',
+    };
+  }
 
-  // Placeholder env vars → 503 configuration required (per §0.b).
-  if (isPlaceholderOrMissing(secretKey)) {
+  const stripe = new Stripe(secretKey);
+
+  const cc = await clerkClient();
+  const user = await cc.users.getUser(userId);
+  const publicMetadata = (user.publicMetadata ?? {}) as ClerkPublicMetadata;
+  const email = user.primaryEmailAddress?.emailAddress ?? null;
+
+  const customerId = await ensureStripeCustomer(
+    userId,
+    email,
+    publicMetadata.stripeCustomerId,
+    stripe,
+  );
+
+  const priceId = await resolvePriceId(stripe, tier, billing);
+  if (!priceId) {
+    return {
+      kind: 'failure',
+      status: 503,
+      message: `No active Stripe price found for ${tier}/${billing}. Set STRIPE_PRICE_${tier.toUpperCase()}_${billing.toUpperCase()} or assign lookup_key="${tier}_${billing}".`,
+    };
+  }
+
+  const session = await stripe.checkout.sessions.create({
+    mode: 'subscription',
+    customer: customerId,
+    line_items: [{ price: priceId, quantity: 1 }],
+    success_url: `${origin}/account?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${origin}/pricing?checkout=cancelled`,
+    metadata: { clerkUserId: userId, tier, billing },
+    subscription_data: {
+      metadata: { clerkUserId: userId, tier, billing },
+    },
+  });
+
+  if (!session.url) {
+    return {
+      kind: 'failure',
+      status: 500,
+      message: 'Stripe session created without redirect URL',
+    };
+  }
+
+  return { kind: 'success', url: session.url };
+}
+
+function originOf(req: Request): string {
+  const headerOrigin = req.headers.get('origin');
+  if (headerOrigin) return headerOrigin;
+  return new URL(req.url).origin;
+}
+
+async function safeRunCheckout(
+  origin: string,
+  tier: Tier,
+  billing: Billing,
+): Promise<CheckoutResult> {
+  try {
+    return await runCheckout(origin, tier, billing);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Stripe API error';
+    return { kind: 'failure', status: 500, message };
+  }
+}
+
+export async function GET(req: Request): Promise<Response> {
+  const url = new URL(req.url);
+  const tier = normalizeTier(url.searchParams.get('tier'));
+  const billing = normalizeBilling(url.searchParams.get('billing'));
+  if (!tier || !billing) {
     return NextResponse.json(
       {
         message:
-          'Stripe checkout configuration required. Real keys are a pre-launch action — try again after the Stripe wiring is live.',
-      },
-      { status: 503 },
-    );
-  }
-
-  // Parse + validate body.
-  let body: CheckoutBody;
-  try {
-    body = (await req.json()) as CheckoutBody;
-  } catch {
-    return NextResponse.json({ message: 'Invalid JSON body' }, { status: 400 });
-  }
-
-  const tier = body.tier;
-  const billing = body.billingPeriod;
-  if (
-    typeof tier !== 'string' ||
-    typeof billing !== 'string' ||
-    !VALID_TIERS.includes(tier as Tier) ||
-    !VALID_BILLING.includes(billing as Billing)
-  ) {
-    return NextResponse.json(
-      {
-        message: `Invalid request. tier must be one of ${VALID_TIERS.join('|')}, billingPeriod must be one of ${VALID_BILLING.join('|')}.`,
+          'Invalid query. Expected ?tier=pro|teams&billing=monthly|annual.',
       },
       { status: 400 },
     );
   }
 
-  const priceId = getPriceId(tier as Tier, billing as Billing);
-  if (!priceId) {
+  const result = await safeRunCheckout(originOf(req), tier, billing);
+
+  switch (result.kind) {
+    case 'success':
+      return Response.redirect(result.url, 303);
+    case 'auth_required':
+      return Response.redirect(result.signInUrl, 303);
+    case 'failure':
+      return NextResponse.json(
+        { message: result.message },
+        { status: result.status },
+      );
+  }
+}
+
+export async function POST(req: Request): Promise<NextResponse> {
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ message: 'Invalid JSON body' }, { status: 400 });
+  }
+  if (typeof body !== 'object' || body === null) {
+    return NextResponse.json({ message: 'Invalid body' }, { status: 400 });
+  }
+
+  const obj = body as Record<string, unknown>;
+  const tier = normalizeTier(obj.tier);
+  // Accept legacy field name `billingPeriod` from existing Pricing.tsx
+  // alongside the new canonical `billing`.
+  const billing = normalizeBilling(obj.billingPeriod ?? obj.billing);
+  if (!tier || !billing) {
     return NextResponse.json(
       {
-        message: `Stripe price ID not configured for ${tier}/${billing}. Set STRIPE_PRICE_${tier}_${billing.toUpperCase()} in env.`,
+        message:
+          'Invalid body. Expected { tier: "pro"|"teams", billingPeriod: "monthly"|"annual" }.',
       },
-      { status: 503 },
+      { status: 400 },
     );
   }
 
-  // Create checkout session.
-  const stripe = new Stripe(secretKey as string);
-  const origin = req.headers.get('origin') ?? 'https://waggle-os.ai';
+  const result = await safeRunCheckout(originOf(req), tier, billing);
 
-  try {
-    const session = await stripe.checkout.sessions.create({
-      mode: 'subscription',
-      line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${origin}/pricing?session_id={CHECKOUT_SESSION_ID}&status=success`,
-      cancel_url: `${origin}/pricing?status=cancelled`,
-      metadata: { tier, billingPeriod: billing },
-    });
-
-    if (!session.url) {
+  switch (result.kind) {
+    case 'success':
+      return NextResponse.json({ url: result.url });
+    case 'auth_required':
       return NextResponse.json(
-        { message: 'Stripe session created without redirect URL' },
-        { status: 500 },
+        { message: 'Sign in required', signInUrl: result.signInUrl },
+        { status: 401 },
       );
-    }
-
-    return NextResponse.json({ url: session.url });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Stripe API error';
-    return NextResponse.json({ message }, { status: 500 });
+    case 'failure':
+      return NextResponse.json(
+        { message: result.message },
+        { status: result.status },
+      );
   }
 }
