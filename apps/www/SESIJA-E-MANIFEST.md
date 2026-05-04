@@ -83,7 +83,7 @@ is pasted and the listener is up.
 | 1 | `STRIPE_SECRET_KEY=sk_test_*` (real value, not placeholder) is in `apps/www/.env.local` |
 | 2 | `STRIPE_WEBHOOK_SECRET=whsec_*` (from `stripe listen --print-secret`) is in `apps/www/.env.local` |
 | 3 | All 4 `STRIPE_PRICE_*` IDs in `apps/www/.env.local` (already done in §5.3 Phase A) |
-| 4 | Terminal 1 — `cd D:\Projects\waggle-os && npx next dev -H 0.0.0.0 -p 3001 --workspace=apps/www` is running |
+| 4 | Terminal 1 — Next.js dev server running. Either `cd D:\Projects\waggle-os\apps\www && npx next dev -H 0.0.0.0 -p 3001`, or from repo root `npm run dev -w apps/www -- -H 0.0.0.0 -p 3001` (`-w` is the npm workspace flag; `--` separates npm args from forwarded script args). |
 | 5 | Terminal 2 — `stripe listen --forward-to localhost:3001/api/webhooks/stripe` is running |
 
 **Browser walkthrough:**
