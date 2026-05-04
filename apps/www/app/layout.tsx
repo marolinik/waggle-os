@@ -4,20 +4,32 @@ import { Inter } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
 import { ClerkProvider } from '@clerk/nextjs';
+import { dark } from '@clerk/themes';
 import './globals.css';
 
 /* ──────────────────────────────────────────────────────────────────────────
  * Hive DS appearance applied globally to all Clerk components.
+ *
+ * `baseTheme: dark` flips Clerk's element-level defaults (input borders,
+ * disabled states, focus rings, hardcoded text shades) to dark-friendly
+ * baselines. Without it, the `variables` block below only overrides the
+ * colors that Clerk exposes as variables — anything baked into the
+ * component CSS stays at light-theme defaults, producing the "dark text
+ * on dark background" effect on `/sign-in` and `/sign-up`.
+ *
+ * Variables layered on top of `dark` paint Hive accent colors:
  *  - colorPrimary           → honey-500 (CTA + active states)
  *  - colorBackground        → hive-950  (page + modal backdrop)
  *  - colorText              → hive-100  (primary fg)
  *  - colorInputBackground   → hive-800  (input fields)
  *  - colorTextSecondary     → hive-300  (secondary fg, helper text)
+ *
  * Inherited by <SignIn>, <SignUp>, <UserProfile>, <SignInButton> modal,
  * and <UserButton> popover. Per-component overrides are layered on top
  * via `appearance` prop only when needed.
  * ────────────────────────────────────────────────────────────────────────── */
 const HIVE_CLERK_APPEARANCE = {
+  baseTheme: dark,
   variables: {
     colorPrimary: '#e5a000',
     colorBackground: '#08090c',
