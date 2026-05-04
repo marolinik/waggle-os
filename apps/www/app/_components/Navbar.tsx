@@ -3,6 +3,7 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
 import { Menu, X, Download } from 'lucide-react';
+import { SignInButton, UserButton, Show } from '@clerk/nextjs';
 
 interface NavLink {
   readonly key: string;
@@ -72,9 +73,16 @@ export default function Navbar() {
               {t(`links.${l.key}`)}
             </a>
           ))}
-          <a href="#" style={signInLinkStyle} className="nav-link">
-            {t('ctas.sign_in')}
-          </a>
+          <Show when="signed-out">
+            <SignInButton mode="modal">
+              <button type="button" style={signInButtonStyle} className="nav-link">
+                {t('ctas.sign_in')}
+              </button>
+            </SignInButton>
+          </Show>
+          <Show when="signed-in">
+            <UserButton />
+          </Show>
           <a
             href={RELEASES_URL}
             target="_blank"
@@ -112,6 +120,22 @@ export default function Navbar() {
               {t(`links.${l.key}`)}
             </a>
           ))}
+          <Show when="signed-out">
+            <SignInButton mode="modal">
+              <button
+                type="button"
+                style={mobileSignInButtonStyle}
+                onClick={() => setMobileOpen(false)}
+              >
+                {t('ctas.sign_in')}
+              </button>
+            </SignInButton>
+          </Show>
+          <Show when="signed-in">
+            <div style={mobileUserButtonRowStyle} onClick={() => setMobileOpen(false)}>
+              <UserButton />
+            </div>
+          </Show>
           <a
             href={RELEASES_URL}
             target="_blank"
@@ -186,9 +210,14 @@ const navLinkStyle: CSSProperties = {
   textDecoration: 'none',
   transition: 'color 0.2s',
 };
-const signInLinkStyle: CSSProperties = {
+const signInButtonStyle: CSSProperties = {
   ...navLinkStyle,
   color: 'var(--hive-200, #b0b7cc)',
+  background: 'none',
+  border: 'none',
+  padding: 0,
+  cursor: 'pointer',
+  fontFamily: 'inherit',
 };
 const downloadButtonStyle: CSSProperties = {
   display: 'inline-flex',
@@ -226,6 +255,20 @@ const mobileLinkStyle: CSSProperties = {
   padding: '10px 0',
   color: 'var(--hive-200, #b0b7cc)',
   textDecoration: 'none',
+};
+const mobileSignInButtonStyle: CSSProperties = {
+  ...mobileLinkStyle,
+  background: 'none',
+  border: 'none',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  textAlign: 'left',
+  width: '100%',
+};
+const mobileUserButtonRowStyle: CSSProperties = {
+  padding: '10px 0',
+  display: 'flex',
+  alignItems: 'center',
 };
 const navResponsiveCss = `
   .nav-link:hover { color: var(--honey-500, #e5a000); }

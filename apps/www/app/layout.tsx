@@ -6,6 +6,30 @@ import { getLocale, getMessages } from 'next-intl/server';
 import { ClerkProvider } from '@clerk/nextjs';
 import './globals.css';
 
+/* ──────────────────────────────────────────────────────────────────────────
+ * Hive DS appearance applied globally to all Clerk components.
+ *  - colorPrimary           → honey-500 (CTA + active states)
+ *  - colorBackground        → hive-950  (page + modal backdrop)
+ *  - colorText              → hive-100  (primary fg)
+ *  - colorInputBackground   → hive-800  (input fields)
+ *  - colorTextSecondary     → hive-300  (secondary fg, helper text)
+ * Inherited by <SignIn>, <SignUp>, <UserProfile>, <SignInButton> modal,
+ * and <UserButton> popover. Per-component overrides are layered on top
+ * via `appearance` prop only when needed.
+ * ────────────────────────────────────────────────────────────────────────── */
+const HIVE_CLERK_APPEARANCE = {
+  variables: {
+    colorPrimary: '#e5a000',
+    colorBackground: '#08090c',
+    colorText: '#dce0eb',
+    colorInputBackground: '#171b26',
+    colorInputText: '#dce0eb',
+    colorTextSecondary: '#7d869e',
+    borderRadius: '8px',
+    fontFamily: 'Inter, system-ui, sans-serif',
+  },
+} as const;
+
 const inter = Inter({
   subsets: ['latin'],
   weight: ['300', '400', '500', '600', '700', '800'],
@@ -82,7 +106,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <link rel="icon" href="/brand/waggle-logo.jpeg" />
       </head>
       <body style={{ fontFamily: 'var(--font-inter), Inter, system-ui, sans-serif' }}>
-        <ClerkProvider>
+        <ClerkProvider appearance={HIVE_CLERK_APPEARANCE}>
           <IntlWrapper>{children}</IntlWrapper>
         </ClerkProvider>
       </body>
