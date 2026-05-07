@@ -991,6 +991,7 @@ const ChatApp = ({
           {messages.length === 0 && workspaceId && (
             <WorkspaceBriefing
               workspaceId={workspaceId}
+              personaId={currentPersona}
               onSendMessage={(msg) => {
                 // FR #32: starter prompts auto-send after a 1s confirm delay so
                 // the first turn is a single click. Pre-filling the input first
@@ -1004,6 +1005,21 @@ const ChatApp = ({
                     setInput('');
                   }
                 }, 1000);
+              }}
+              onPrefill={(msg) => {
+                // Phase 4c: skill chips pre-fill ONLY (no auto-send) because
+                // their starter strings end with ": " — the user must finish
+                // the sentence before sending. Cursor lands at end-of-input
+                // so they can type immediately.
+                setInput(msg);
+                inputRef.current?.focus();
+                // Move caret to end so typing appends instead of replacing.
+                requestAnimationFrame(() => {
+                  if (inputRef.current) {
+                    const len = inputRef.current.value.length;
+                    inputRef.current.setSelectionRange(len, len);
+                  }
+                });
               }}
               onSelectSession={onSelectSession}
             />

@@ -4,10 +4,10 @@
  * Fetches from GET /api/workspaces/:id/context.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Brain, Clock, CheckCircle2, AlertTriangle, MessageSquare,
-  Lightbulb, Loader2, ChevronRight, Sparkles, ChevronDown, ChevronUp,
+  Lightbulb, Loader2, ChevronRight, Sparkles, ChevronDown, ChevronUp, Wrench,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
@@ -16,19 +16,40 @@ import {
   readWorkspaceBriefingCollapsed,
   writeWorkspaceBriefingCollapsed,
 } from '@/lib/workspace-briefing-state';
+import { recommendSkills } from '@/lib/skill-recommendations';
+import { formatPersonaName } from '@/lib/persona-display';
 
 interface WorkspaceBriefingProps {
   workspaceId: string;
+  /**
+   * Active workspace's persona id. When set, a "Skills for [Persona]" chip
+   * row is rendered alongside the existing context-aware suggestedPrompts.
+   * Optional — when omitted, the chip row is silently skipped.
+   */
+  personaId?: string;
   onSendMessage?: (msg: string) => void;
+  /**
+   * Pre-fill the input WITHOUT auto-sending. Used by skill chips, where
+   * the starter is a partial sentence ("Brainstorm ideas for: ") that the
+   * user must finish before sending. Different from onSendMessage which
+   * (per ChatApp wiring at line 994) pre-fills and auto-sends after a 1s
+   * confirm delay.
+   */
+  onPrefill?: (msg: string) => void;
   onSelectSession?: (id: string) => void;
 }
 
-const WorkspaceBriefing = ({ workspaceId, onSendMessage, onSelectSession }: WorkspaceBriefingProps) => {
+const WorkspaceBriefing = ({ workspaceId, personaId, onSendMessage, onPrefill, onSelectSession }: WorkspaceBriefingProps) => {
   const [ctx, setCtx] = useState<WorkspaceContext | null>(null);
   const [loading, setLoading] = useState(true);
   // M-23 / ENG-2: collapse state persists per-workspace so it survives
   // reload and stays scoped to the current workspace.
   const [collapsed, setCollapsedState] = useState(() => readWorkspaceBriefingCollapsed(workspaceId));
+
+  // Persona-aware skill chips (Phase 4c). Falls back to universal defaults
+  // when personaId is missing or unknown — the chip row never strands empty.
+  const skillChips = useMemo(() => recommendSkills(personaId), [personaId]);
+  const personaLabel = useMemo(() => formatPersonaName(personaId), [personaId]);
 
   useEffect(() => {
     setLoading(true);
@@ -206,6 +227,30 @@ const WorkspaceBriefing = ({ workspaceId, onSendMessage, onSelectSession }: Work
               <li key={i} className="text-xs text-muted-foreground">{h}</li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {/* Phase 4c: Persona-aware skill chips. Pre-fill, never auto-send —
+          starter templates end with ": " so the user finishes the sentence. */}
+      {personaId && onPrefill && skillChips.length > 0 && (
+        <div className="mt-6" data-testid="briefing-skill-chips">
+          <h3 className="text-xs font-display font-semibold text-muted-foreground mb-2">
+            <Wrench className="w-3 h-3 inline mr-1 text-primary" />
+            {personaLabel ? `Skills for ${personaLabel}` : 'Try a skill'}
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            {skillChips.map(chip => (
+              <button
+                key={chip.id}
+                onClick={() => onPrefill(chip.starter)}
+                className="px-3 py-1.5 text-xs rounded-xl bg-secondary/40 text-foreground hover:bg-secondary/60 hover:text-primary transition-colors border border-border/30"
+                title={chip.starter}
+                data-testid={`briefing-skill-chip-${chip.id}`}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
