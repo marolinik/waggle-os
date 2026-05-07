@@ -372,6 +372,53 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
     return { tier: parsed, capabilities: getCapabilities(parsed), updated: true };
   });
 
+  // POST /api/tier/start-trial — atomic trial start.
+  //
+  // Sets `tier='TRIAL'` + `trialStartedAt=now` in a single write. Idempotent
+  // by design: if `trialStartedAt` is already set, returns 409 with the
+  // current tier state — a user gets exactly one 15-day trial. The previous
+  // path (client-side `adapter.updateSettings({ tier: 'TRIAL', trialStartedAt })`)
+  // was doubly broken: `updateSettings` didn't exist on the adapter, and
+  // `PATCH /api/tier` ignores `trialStartedAt`, so trials silently never
+  // started. See UpgradeModal `onStartTrial` and OnboardingWizard completion.
+  server.post('/api/tier/start-trial', async (_request, reply) => {
+    const configPath = path.join(server.localConfig.dataDir, 'config.json');
+    let raw: Record<string, unknown> = {};
+    try {
+      if (fs.existsSync(configPath)) {
+        raw = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      }
+    } catch { /* fresh */ }
+
+    if (typeof raw.trialStartedAt === 'string' && raw.trialStartedAt.length > 0) {
+      const existingTier = parseTier(String(raw.tier ?? '')) ?? 'FREE';
+      const effective = getEffectiveTier(existingTier, raw.trialStartedAt);
+      return reply.status(409).send({
+        error: 'TRIAL_ALREADY_STARTED',
+        message: 'A trial has already been started for this installation.',
+        tier: effective,
+        rawTier: existingTier,
+        trialStartedAt: raw.trialStartedAt,
+        trialDaysRemaining: trialDaysRemaining(raw.trialStartedAt),
+        trialExpired: existingTier === 'TRIAL' && effective === 'FREE',
+      });
+    }
+
+    const now = new Date().toISOString();
+    raw.tier = 'TRIAL';
+    raw.trialStartedAt = now;
+    fs.writeFileSync(configPath, JSON.stringify(raw, null, 2), 'utf-8');
+
+    return {
+      tier: 'TRIAL' as Tier,
+      rawTier: 'TRIAL' as Tier,
+      trialStartedAt: now,
+      trialDaysRemaining: trialDaysRemaining(now),
+      trialExpired: false,
+      capabilities: getCapabilities('TRIAL'),
+    };
+  });
+
   // ── Cloud Sync ────────────────────────────────────────────────────
 
   server.get('/api/cloud-sync', async () => {
