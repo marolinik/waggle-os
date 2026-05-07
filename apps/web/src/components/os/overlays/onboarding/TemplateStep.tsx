@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles, ChevronRight } from 'lucide-react';
+import { Sparkles, ChevronRight, Layers } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 import { fadeSlide, TEMPLATES } from './constants';
+import { getTemplatesForTier } from '@/lib/onboarding-tier-filter';
 import type { TemplateStepProps } from './types';
 
 const TemplateStep = ({
@@ -10,8 +12,18 @@ const TemplateStep = ({
   workspaceName,
   onSelectTemplate,
   onWorkspaceNameChange,
+  selectedTier,
   goToStep,
-}: TemplateStepProps) => (
+}: TemplateStepProps) => {
+  // Phase 4.1: at simple tier, default to the 3 essentials with a per-session
+  // "Show all" toggle. Other tiers see the full 15 by default — no toggle needed.
+  const [showAll, setShowAll] = useState(false);
+  const isEssentialFiltered = selectedTier === 'simple' && !showAll;
+  const visibleTemplates = isEssentialFiltered
+    ? getTemplatesForTier('simple', TEMPLATES)
+    : TEMPLATES;
+
+  return (
   <motion.div key="step-4" {...fadeSlide}>
     <div className="text-center mb-6">
       <Sparkles className="w-10 h-10 text-primary mx-auto mb-3" />
@@ -35,8 +47,8 @@ const TemplateStep = ({
       </div>
     </div>
 
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 mb-5">
-      {TEMPLATES.map((t) => {
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 mb-3">
+      {visibleTemplates.map((t) => {
         const Icon = t.icon;
         const selected = selectedTemplate === t.id;
         return (
@@ -62,6 +74,17 @@ const TemplateStep = ({
         );
       })}
     </div>
+
+    {/* Phase 4.1: "Show all" reveal at simple tier — soft gate, never blocks. */}
+    {selectedTier === 'simple' && (
+      <button
+        onClick={() => setShowAll(prev => !prev)}
+        className="w-full mb-5 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[11px] text-muted-foreground hover:text-foreground hover:bg-secondary/30 transition-colors font-display"
+      >
+        <Layers className="w-3 h-3" />
+        {showAll ? 'Show essentials only' : `Show all ${TEMPLATES.length} templates`}
+      </button>
+    )}
 
     {selectedTemplate && (
       <div className="mb-5">
@@ -101,6 +124,7 @@ const TemplateStep = ({
       )}
     </div>
   </motion.div>
-);
+  );
+};
 
 export default TemplateStep;

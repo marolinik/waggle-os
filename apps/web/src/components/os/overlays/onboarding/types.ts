@@ -57,6 +57,12 @@ export interface TemplateStepProps extends StepNavigation {
   readonly workspaceName: string;
   readonly onSelectTemplate: (id: string, name: string) => void;
   readonly onWorkspaceNameChange: (name: string) => void;
+  /**
+   * Phase 4.1 (2026-05-07): the user's chosen `UserTier` from step 2 (TierStep).
+   * When `'simple'`, the step renders the 3 essentials by default with a
+   * "Show all 15" toggle. Spec: docs/ux-disclosure-levels.md §"Templates — filter for Essential".
+   */
+  readonly selectedTier: UserTier;
 }
 
 /* ─── PersonaStep ─── */
@@ -72,6 +78,13 @@ export interface PersonaStepProps extends StepNavigation {
   readonly onCustomPersonaDescChange: (desc: string) => void;
   readonly onCreateCustomPersona: () => void;
   readonly creatingPersona: boolean;
+  /**
+   * Phase 4.1 (2026-05-07): the user's chosen `UserTier` from step 2 (TierStep).
+   * When `'simple'`, renders 4 essentials + the recommended persona for the
+   * chosen template (when it's a domain persona) by default; "Show all" reveals
+   * the rest. Spec: docs/ux-disclosure-levels.md §"Personas — filter for Essential".
+   */
+  readonly selectedTier: UserTier;
 }
 
 /* ─── ApiKeyStep ─── */

@@ -524,6 +524,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
                 workspaceName={workspaceName}
                 onSelectTemplate={handleSelectTemplate}
                 onWorkspaceNameChange={setWorkspaceName}
+                selectedTier={selectedTier}
                 goToStep={goToStep}
               />
             )}
@@ -540,6 +541,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
                 onCustomPersonaDescChange={setCustomPersonaDesc}
                 onCreateCustomPersona={handleCreateCustomPersona}
                 creatingPersona={creatingPersona}
+                selectedTier={selectedTier}
                 goToStep={goToStep}
               />
             )}

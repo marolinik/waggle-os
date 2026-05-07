@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Brain, ChevronRight, Loader2, ChevronDown } from 'lucide-react';
+import { Brain, ChevronRight, Loader2, ChevronDown, Layers } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 import { fadeSlide, TEMPLATES, TEMPLATE_PERSONA, getPersonasForTemplate } from './constants';
+import { getPersonasForTier } from '@/lib/onboarding-tier-filter';
 import type { PersonaStepProps } from './types';
 
 const PersonaStep = ({
@@ -17,8 +19,12 @@ const PersonaStep = ({
   onCustomPersonaDescChange,
   onCreateCustomPersona,
   creatingPersona,
+  selectedTier,
   goToStep,
 }: PersonaStepProps) => {
+  // Phase 4.1: at simple tier, default to 4 essentials + recommended-domain
+  // persona; per-session "Show all" toggle reveals the rest.
+  const [showAll, setShowAll] = useState(false);
   const templateName = selectedTemplate
     ? TEMPLATES.find(t => t.id === selectedTemplate)?.name
     : 'Blank';
@@ -51,7 +57,11 @@ const PersonaStep = ({
           subtle gradient + chevron at the bottom when more rows exist below
           the fold, and keep the scrollbar thin for taste. */}
       {(() => {
-        const personas = getPersonasForTemplate(selectedTemplate);
+        const fullList = getPersonasForTemplate(selectedTemplate);
+        const isEssentialFiltered = selectedTier === 'simple' && !showAll;
+        const personas = isEssentialFiltered
+          ? getPersonasForTier('simple', fullList)
+          : fullList;
         const overflowing = personas.length > 8; // 4 cols × 2 rows visible at once
         return (
           <div className="relative mb-4">
@@ -98,6 +108,17 @@ const PersonaStep = ({
           </div>
         );
       })()}
+
+      {/* Phase 4.1: "Show all" reveal at simple tier — soft gate, never blocks. */}
+      {selectedTier === 'simple' && (
+        <button
+          onClick={() => setShowAll(prev => !prev)}
+          className="w-full mb-3 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[11px] text-muted-foreground hover:text-foreground hover:bg-secondary/30 transition-colors font-display"
+        >
+          <Layers className="w-3 h-3" />
+          {showAll ? 'Show essentials only' : 'Show all personas'}
+        </button>
+      )}
 
       {!showCustomPersona ? (
         <button
