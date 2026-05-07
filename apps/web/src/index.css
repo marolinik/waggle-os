@@ -53,10 +53,6 @@
     --glass-border: 40 40% 30% / 0.3;
     --glow: 40 100% 45%;
 
-    /* ── Modal scrim — used behind full-screen overlays (OnboardingWizard, etc.).
-     *   Theme-aware so light mode gets an amber-tinted dim instead of pure black. */
-    --scrim: 0 0% 0% / 0.85;
-
     /* ── Sidebar ──────────────────────────────────────────────────────── */
     --sidebar-background: 222 20% 4%;
     --sidebar-foreground: 228 12% 92%;
@@ -134,22 +130,17 @@
   :root[data-theme="light"] {
     --background: 40 18% 97%;
     --foreground: 36 12% 10%;
-    /* P0 light-mode contrast fix (2026-05-07) — was L=93, only 4% delta vs bg.
-     *   Tightened to L=88 (~9% delta, ~3:1 contrast ratio) so cards are visible.
-     *   Spec: docs/light-mode-audit-2026-05-07.md §"P0 Surface contrast in light mode". */
-    --card: 40 12% 88%;
+    --card: 40 12% 93%;
     --card-foreground: 36 12% 10%;
-    --popover: 40 12% 88%;
+    --popover: 40 12% 93%;
     --popover-foreground: 36 12% 10%;
 
     --primary: 37 100% 39%;
     --primary-foreground: 0 0% 100%;
 
-    /* P0 light-mode contrast fix (2026-05-07) — was L=89, now L=84 for stronger
-     *   separation from background. Drives readable hover/selected states. */
-    --secondary: 40 12% 84%;
+    --secondary: 40 10% 89%;
     --secondary-foreground: 36 12% 10%;
-    --muted: 40 12% 84%;
+    --muted: 40 10% 89%;
     --muted-foreground: 36 8% 40%;
 
     --accent: 270 60% 68%;
@@ -162,14 +153,11 @@
     --input: 40 8% 81%;
     --ring: 37 100% 39%;
 
-    /* Light hive scale — P0 contrast fix (2026-05-07): hive-850 and hive-800
-     *   were L=92 / L=90, only 5-7% deltas vs bg L=97 — the surfaces consumed
-     *   via `var(--hive-850)` (GlobalSearch, ChatApp, FilesApp inline bgs)
-     *   were nearly invisible. Tightened to L=88 / L=82. */
+    /* Light hive scale */
     --hive-950: #fdfcf9;
     --hive-900: #f8f6f0;
-    --hive-850: #e8e2d4;
-    --hive-800: #dcd6c5;
+    --hive-850: #f0ede4;
+    --hive-800: #e8e4d9;
     --hive-700: #d9d4c5;
     --hive-600: #c4bfae;
     --hive-500: #9b9585;
@@ -203,11 +191,6 @@
     --shadow-elevated: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
     --shadow-overlay: 0 8px 32px rgba(0,0,0,0.15);
     --shadow-honey: 0 0 16px rgba(199,133,0,0.08), 0 0 4px rgba(199,133,0,0.04);
-
-    /* Modal scrim — amber-tinted dim instead of pure black so light mode
-     *   doesn't feel "haunted by darkness" when a modal opens. Same 85%
-     *   opacity as dark to preserve the same body-occlusion behavior. */
-    --scrim: 36 30% 15% / 0.85;
   }
 }
 

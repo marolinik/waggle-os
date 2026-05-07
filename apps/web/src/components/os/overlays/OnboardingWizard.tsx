@@ -400,14 +400,9 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
       // scanner entirely so the backdrop is deterministic regardless of any
       // Vite HMR cache state, theme token alpha, or build pipeline quirk.
       // -webkit- prefix carried for Safari/older Tauri WebView2 builds.
-      //
-      // 2026-05-07: scrim is now theme-aware via `--scrim` token (dark = pure
-      // black/0.85, light = amber-tinted/0.85). Closes brownfield-doc P40 ask
-      // for light-mode wizard polish. Token defined in index.css :root and
-      // :root[data-theme="light"] blocks.
       className="fixed inset-0 z-[9999] flex flex-col"
       style={{
-        backgroundColor: 'hsl(var(--scrim))',
+        backgroundColor: 'rgba(0, 0, 0, 0.85)',
         backdropFilter: 'blur(8px)',
         WebkitBackdropFilter: 'blur(8px)',
       }}
