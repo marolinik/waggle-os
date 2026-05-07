@@ -1286,6 +1286,39 @@ class LocalAdapter {
     return res.json();
   }
 
+  /**
+   * Start the 15-day trial atomically. Server writes
+   * `{ tier: 'TRIAL', trialStartedAt: now() }` in a single config.json
+   * mutation. Throws on 409 (trial already started) — call sites can
+   * .catch() and either ignore (idempotent UX, e.g. onboarding-complete) or
+   * surface to the user (e.g. "Start trial" button after expiry).
+   *
+   * Replaces the previous broken path where Desktop.tsx called
+   * `adapter.updateSettings({ tier: 'TRIAL', trialStartedAt: ... } as any)`
+   * — `updateSettings` did not exist on the adapter (silently swallowed by
+   * `.catch(() => {})`), and even if it had, `PATCH /api/tier` ignores
+   * `trialStartedAt`, so the trial never actually started.
+   */
+  async startTrial(): Promise<{
+    tier: string;
+    rawTier: string;
+    trialStartedAt: string;
+    trialDaysRemaining: number;
+    trialExpired: boolean;
+    capabilities: Record<string, unknown>;
+  }> {
+    const res = await this.fetch('/api/tier/start-trial', { method: 'POST' });
+    if (!res.ok) {
+      let detail: string | undefined;
+      try {
+        const body = await res.clone().json();
+        detail = (body?.message as string) ?? (body?.error as string);
+      } catch { /* not JSON */ }
+      throw new Error(`Start trial failed (${res.status}): ${detail ?? res.statusText}`);
+    }
+    return res.json();
+  }
+
   // --- Import ---
   async importPreview(data: unknown, source: string): Promise<{ knowledgeExtracted: unknown[] }> {
     const res = await this.fetch('/api/import/preview', { method: 'POST', body: JSON.stringify({ data, source }) });

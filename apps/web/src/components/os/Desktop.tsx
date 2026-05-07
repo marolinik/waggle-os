@@ -127,16 +127,20 @@ const Desktop = () => {
   const [trialInfo, setTrialInfo] = useState<{ trialDaysRemaining?: number; trialExpired?: boolean }>({});
   const [billingTier, setBillingTier] = useState<'FREE' | 'TRIAL' | 'PRO' | 'TEAMS' | 'ENTERPRISE'>('FREE');
   const [showTrialExpired, setShowTrialExpired] = useState(false);
-  useEffect(() => {
-    adapter.getTier().then(data => {
+  // Extracted so post-action paths (start-trial, post-checkout-redirect)
+  // can re-pull tier/trial state without duplicating the fetch+parse logic.
+  const refreshTier = useCallback(async () => {
+    try {
+      const data = await adapter.getTier();
       setTrialInfo({ trialDaysRemaining: data.trialDaysRemaining, trialExpired: data.trialExpired });
       const t = String(data.tier ?? 'FREE').toUpperCase();
       if (t === 'FREE' || t === 'TRIAL' || t === 'PRO' || t === 'TEAMS' || t === 'ENTERPRISE') {
         setBillingTier(t);
       }
       if (data.trialExpired) setShowTrialExpired(true);
-    }).catch(() => {});
+    } catch { /* offline — keep last known state */ }
   }, []);
+  useEffect(() => { refreshTier(); }, [refreshTier]);
 
   // P4: default autonomy inherited by new chat windows. Fetched once on
   // mount; SettingsApp writes via /api/settings/permissions, so a user who
@@ -220,8 +224,11 @@ const Desktop = () => {
 
   const handleOnboardingComplete = useCallback((_serverBaseUrl: string) => {
     completeOnboarding();
-    adapter.updateSettings({ tier: 'TRIAL', trialStartedAt: new Date().toISOString() } as any).catch(() => {});
-  }, [completeOnboarding]);
+    // Atomic start. 409 (trial already started, e.g. user re-runs onboarding
+    // after deleting localStorage) is fine — refresh state either way so the
+    // StatusBar countdown picks up the existing trial timestamp.
+    adapter.startTrial().then(refreshTier).catch(refreshTier);
+  }, [completeOnboarding, refreshTier]);
   // Bug #4 + #8: open the wizard-created workspace with the name the user
   // typed. The wizard now passes the name directly so we don't have to find
   // it in the workspaces list (the hook's state may not have seen the new
@@ -514,7 +521,10 @@ const Desktop = () => {
 
       <UpgradeModal
         onStartTrial={() => {
-          adapter.updateSettings({ tier: 'TRIAL', trialStartedAt: new Date().toISOString() } as any).catch(() => {});
+          // Refresh on both success AND 409 (already started) so the
+          // StatusBar countdown picks up either the new or existing trial
+          // timestamp without forcing a page reload.
+          adapter.startTrial().then(refreshTier).catch(refreshTier);
         }}
         onUpgrade={(tier) => {
           adapter.createCheckoutSession(tier === 'TEAMS' ? 'TEAMS' : 'PRO').catch(() => {
