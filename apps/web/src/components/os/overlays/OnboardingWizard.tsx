@@ -39,7 +39,11 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
   const autoTimer = useRef<ReturnType<typeof setTimeout>>();
 
   /* ── Step-local state ── */
-  const [selectedTier, setSelectedTier] = useState<UserTier>(state.tier || 'professional');
+  // Phase 4.1 (2026-05-07): default to 'simple' (Essential) per
+  // docs/ux-disclosure-levels.md §"Default": "New user starts at Essential.
+  // The 8-step onboarding wizard's TierStep (step 3) preselects Essential."
+  // Existing users with `state.tier` already saved keep their choice.
+  const [selectedTier, setSelectedTier] = useState<UserTier>(state.tier || 'simple');
   const [selectedTemplate, setSelectedTemplate] = useState(state.templateId || '');
   const [workspaceName, setWorkspaceName] = useState('');
   const [selectedPersona, setSelectedPersona] = useState(state.personaId || '');
