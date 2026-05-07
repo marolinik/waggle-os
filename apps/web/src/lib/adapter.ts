@@ -1287,6 +1287,46 @@ class LocalAdapter {
   }
 
   /**
+   * Schedule a complete erasure of this install's data dir (GDPR Art. 17).
+   *
+   * Per `docs/pilot/data-handling-policy.md` § 4 + the route at
+   * `packages/server/src/local/routes/data-erase.ts`, this is the marker-file
+   * pattern: the route validates + writes `<dataDir>/.erase-pending.json`,
+   * the actual destructive wipe runs at next service startup BEFORE any DB
+   * opens. Caller must surface the receipt + 'quit and relaunch' instruction.
+   *
+   * Confirmation is mandatory:
+   *   - X-Confirm-Erase: yes (header)
+   *   - body { confirmation: 'I UNDERSTAND THIS IS PERMANENT' } (exact phrase)
+   *
+   * Both are case-sensitive — accidental erasure is unrecoverable, so the
+   * gate is intentional friction. Throws on 400 (confirmation missing/wrong)
+   * or 500 (marker write failed) so the calling UI can surface the error
+   * to the user instead of pretending the request succeeded.
+   */
+  async eraseData(confirmationPhrase: string): Promise<{
+    requestedAt: string;
+    markerPath: string;
+    dataDirSnapshot: { fileCount: number; totalBytes: number; topLevelEntries: Array<{ name: string; isDirectory: boolean; bytes: number }> };
+    instruction: string;
+  }> {
+    const res = await this.fetch('/api/data/erase', {
+      method: 'POST',
+      headers: { 'X-Confirm-Erase': 'yes' },
+      body: JSON.stringify({ confirmation: confirmationPhrase }),
+    });
+    if (!res.ok) {
+      let detail: string | undefined;
+      try {
+        const body = await res.clone().json();
+        detail = (body?.message as string) ?? (body?.error as string);
+      } catch { /* not JSON */ }
+      throw new Error(`Erase failed (${res.status}): ${detail ?? res.statusText}`);
+    }
+    return res.json();
+  }
+
+  /**
    * Start the 15-day trial atomically. Server writes
    * `{ tier: 'TRIAL', trialStartedAt: now() }` in a single config.json
    * mutation. Throws on 409 (trial already started) — call sites can

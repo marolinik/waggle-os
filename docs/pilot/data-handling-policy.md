@@ -168,7 +168,7 @@ For the duration of your pilot (defined in your individual pilot agreement / NDA
 ## 7. Roadmap items NOT yet implemented (as of 2026-05-08)
 
 Honest gaps:
-- **Settings → Privacy → Erase all my data button.** The route exists (Phase 3b); the UI button is on the backlog.
+- ~~**Settings → Privacy → Erase all my data button.** The route exists (Phase 3b); the UI button is on the backlog.~~ **CLOSED 2026-05-08** — Settings → General → Erase All Data ships the button + a typed-phrase confirmation dialog (`apps/web/src/components/os/overlays/EraseDataDialog.tsx`). Visible at all tiers since GDPR Art. 17 cannot be tier-gated.
 - **Per-workspace erasure.** Today it's all-or-nothing. Per-workspace erasure is feasible (the .mind files are independent) but the route doesn't expose it yet.
 - **Erasure of cloud-side data.** No automated webhook fan-out — pilot users handle this manually per § 4.2 above.
 - **External audit certification.** ISO 27001 / SOC 2 not started. We're transparent that we're a pre-launch product.

@@ -26,6 +26,7 @@ import {
 } from '@/lib/settings-tier-filter';
 import ModelSelector from '@/components/os/ModelSelector';
 import ModelPilotCard from '@/components/os/ModelPilotCard';
+import EraseDataDialog from '@/components/os/overlays/EraseDataDialog';
 
 type SettingsTab = 'general' | 'models' | 'billing' | 'permissions' | 'team' | 'backup' | 'enterprise' | 'advanced';
 
@@ -119,6 +120,10 @@ const SettingsApp = () => {
 
   // M2-7: Telemetry state
   const [telemetryEnabled, setTelemetryEnabled] = useState(false);
+  // Phase 4.1: GDPR Art. 17 erasure flow. Visible at all tiers — erasure
+  // can't be tier-gated. Dialog handles the typed-phrase confirmation gate
+  // + presents the receipt + relaunch instruction on success.
+  const [showEraseDialog, setShowEraseDialog] = useState(false);
   const [debugLogging, setDebugLogging] = useState(false);
   // M-20 / UX-5: developer mode toggle. Persisted via hook in localStorage.
   const [developerMode, setDeveloperMode] = useDeveloperMode();
@@ -319,6 +324,30 @@ const SettingsApp = () => {
               </div>
             </div>
             )}
+
+            {/* Phase 4.1: Erase All Data — visible at ALL tiers (GDPR Art. 17
+                cannot be tier-gated). Closes the only "roadmap NOT implemented"
+                gap from docs/pilot/data-handling-policy.md § 7. Marker-file
+                pattern means the click writes <dataDir>/.erase-pending.json
+                and the destructive wipe runs at next service startup before
+                any DB opens — see packages/server/src/local/data-erase-helpers.ts. */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-display font-semibold text-foreground flex items-center gap-2">
+                <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                Erase All Data
+              </h3>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Schedule a complete wipe of every memory frame, workspace, session, vault entry, and config file in your data dir. The wipe runs at next launch and is unrecoverable from the app — keep a recent <span className="font-mono">.waggle-backup</span> if you might want to restore. Data already sent to cloud providers or Teams servers is not erased — handle those separately per the data-handling policy.
+              </p>
+              <button
+                onClick={() => setShowEraseDialog(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-destructive/30 text-destructive text-[11px] font-display font-medium hover:bg-destructive/10 transition-colors"
+                data-testid="settings-erase-all-data"
+              >
+                <Trash2 className="w-3 h-3" />
+                Erase all my data…
+              </button>
+            </div>
           </div>
         )}
 
@@ -958,6 +987,10 @@ const SettingsApp = () => {
           </div>
         )}
       </div>
+
+      {/* Phase 4.1 erasure dialog — mounted at root so the modal layer
+          escapes the settings tab content (z-[220] > all other surfaces). */}
+      <EraseDataDialog open={showEraseDialog} onClose={() => setShowEraseDialog(false)} />
     </div>
   );
 };
