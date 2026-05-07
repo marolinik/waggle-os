@@ -20,6 +20,10 @@ import {
   writeLoginBriefingDismissed,
 } from '@/lib/login-briefing';
 import type { UserTier } from '@/lib/dock-tiers';
+import {
+  getSettingsTabsForTier,
+  resolveActiveSettingsTab,
+} from '@/lib/settings-tier-filter';
 import ModelSelector from '@/components/os/ModelSelector';
 import ModelPilotCard from '@/components/os/ModelPilotCard';
 
@@ -66,6 +70,19 @@ const SettingsApp = () => {
 
   // Dock tier
   const { state: onboardingState, update: updateOnboarding, replayTour, reset: resetOnboarding } = useOnboarding();
+  // Phase 4.1: filter tab sidebar by user's chosen UserTier so the Settings
+  // surface area matches the dock disclosure level. Spec: docs/ux-disclosure-levels.md.
+  const userTier: UserTier = (onboardingState.tier ?? 'simple');
+  const visibleTabs = getSettingsTabsForTier(userTier, tabs);
+  // Snap activeTab back to a visible tab if the user's tier changes (e.g. they
+  // drop from Standard to Essential while sitting on the Advanced tab).
+  useEffect(() => {
+    const next = resolveActiveSettingsTab(userTier, activeTab, tabs);
+    if (next && next !== activeTab) {
+      setActiveTab(next as SettingsTab);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userTier]);
   const { toast } = useToast();
   const [showWizardReplayConfirm, setShowWizardReplayConfirm] = useState(false);
 
@@ -172,7 +189,7 @@ const SettingsApp = () => {
     <div className="flex h-full">
       {/* Tab sidebar */}
       <div className="w-36 border-r border-border/50 p-2 space-y-0.5 shrink-0 overflow-auto" role="tablist" aria-label="Settings sections">
-        {tabs.map(tab => {
+        {visibleTabs.map(tab => {
           const locked = LOCKED_TABS[tab.id];
           return (
             <button
