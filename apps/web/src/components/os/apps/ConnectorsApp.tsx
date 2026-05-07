@@ -18,6 +18,15 @@ import { getBrandIdentity } from './connectors/brand-identity';
 
 type ConnTab = 'services' | 'mcp';
 
+interface ConnectorsAppProps {
+  /**
+   * Active workspace's persona id, forwarded to McpCatalog so the
+   * "Recommended for [Persona]" tile shows on the MCP tab. Optional —
+   * when omitted, McpCatalog renders without the recommendation section.
+   */
+  personaId?: string;
+}
+
 interface Connector {
   id: string;
   name: string;
@@ -49,7 +58,7 @@ const SETUP_HINTS: Record<string, { url?: string; placeholder?: string; steps?: 
   discord: { url: 'https://discord.com/developers/applications', placeholder: 'Bot token...', steps: ['Create Application → Bot → Copy Token'] },
 };
 
-const ConnectorsApp = () => {
+const ConnectorsApp = ({ personaId }: ConnectorsAppProps = {}) => {
   const [tab, setTab] = useState<ConnTab>('services');
   const [connectors, setConnectors] = useState<Connector[]>([]);
   const [loading, setLoading] = useState(true);
@@ -304,7 +313,7 @@ const ConnectorsApp = () => {
         )}
 
         {/* ═══ MCP SERVERS ═══ */}
-        {tab === 'mcp' && <McpCatalog />}
+        {tab === 'mcp' && <McpCatalog personaId={personaId} />}
       </div>
     </div>
   );

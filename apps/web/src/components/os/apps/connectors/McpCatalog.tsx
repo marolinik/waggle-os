@@ -10,18 +10,31 @@
  */
 
 import { useMemo, useState } from 'react';
-import { Search, Server, Sparkles, X } from 'lucide-react';
+import { Search, Server, Sparkles, X, Star } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { recommendConnectors } from '@waggle/shared';
 import { MCP_CATALOG } from './mcp-registry';
 import McpServerCard from './McpServerCard';
 import { countWithRealLogos } from './brand-identity';
+import { formatPersonaName } from '@/lib/persona-display';
 
 // Approximate count of third-party integrations reachable through Composio's
 // MCP gateway. Kept as a "+" approximation — update when Composio publishes
 // a new number.
 const COMPOSIO_GATEWAY_COUNT = 250;
 
-const McpCatalog = () => {
+interface McpCatalogProps {
+  /**
+   * Active workspace's persona id (e.g. 'sales-rep'). When provided, a
+   * "Recommended for [Persona]" section is rendered above the search +
+   * category UI showing the 3-5 connectors most relevant to that role.
+   * The full catalog stays browseable below — this section adds
+   * discoverability without removing capability.
+   */
+  personaId?: string;
+}
+
+const McpCatalog = ({ personaId }: McpCatalogProps = {}) => {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
@@ -42,6 +55,22 @@ const McpCatalog = () => {
       realLogoCount: countWithRealLogos(MCP_CATALOG.map((s) => s.id)),
     };
   }, []);
+
+  // Persona-aware recommendation list. When personaId is provided we
+  // resolve recommendConnectors() against MCP_CATALOG so we can render
+  // the same McpServerCard component used everywhere else — keeps the
+  // visual language consistent and avoids a parallel card design.
+  // Unknown ids are skipped silently (the test in @waggle/shared enforces
+  // catalog membership at build time, so this should never trigger in
+  // practice — but skipping rather than throwing keeps the surface alive
+  // if the catalog and recommendations drift between packages).
+  const recommended = useMemo(() => {
+    if (!personaId) return null;
+    const rec = recommendConnectors(personaId);
+    const byId = new Map(MCP_CATALOG.map(s => [s.id, s]));
+    const cards = rec.primary.map(id => byId.get(id)).filter((s): s is NonNullable<typeof s> => s != null);
+    return cards.length > 0 ? { name: formatPersonaName(personaId), cards } : null;
+  }, [personaId]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -109,6 +138,31 @@ const McpCatalog = () => {
           })}
         </div>
       </div>
+
+      {/* ── Persona-aware recommendations (only when personaId is set) ── */}
+      {recommended && (
+        <div
+          className="space-y-2 rounded-2xl border border-primary/15 bg-gradient-to-br from-primary/[0.04] to-transparent p-3"
+          data-testid="mcp-recommended-section"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Star className="h-3.5 w-3.5 text-primary shrink-0" />
+              <h3 className="font-display text-sm font-semibold text-foreground truncate">
+                Recommended for {recommended.name}
+              </h3>
+            </div>
+            <span className="text-[11px] text-muted-foreground shrink-0">
+              All {stats.total} below
+            </span>
+          </div>
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            {recommended.cards.map((server) => (
+              <McpServerCard key={`rec-${server.id}`} server={server} />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Search ───────────────────────────────────────────────────── */}
       <div className="flex items-center gap-2 rounded-xl border border-border/40 bg-muted/30 px-3 py-1.5 transition-colors focus-within:border-primary/40">

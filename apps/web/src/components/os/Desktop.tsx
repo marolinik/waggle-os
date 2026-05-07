@@ -301,7 +301,7 @@ const Desktop = () => {
       case 'settings': return <SettingsApp />;
       case 'vault': return <VaultApp />;
       case 'profile': return <UserProfileApp />;
-      case 'connectors': return <ConnectorsApp />;
+      case 'connectors': return <ConnectorsApp personaId={activeWorkspace?.persona} />;
       case 'memory':
         return (
           <MemoryApp frames={memory.frames} selectedFrame={memory.selectedFrame} onSelectFrame={memory.setSelectedFrame}
