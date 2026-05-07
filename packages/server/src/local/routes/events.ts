@@ -33,7 +33,8 @@ export type AuditEventType =
   | 'approval_denied'
   | 'approval_auto'
   | 'export'
-  | 'cron_trigger';
+  | 'cron_trigger'
+  | 'data_erase_requested';
 
 export interface AuditEvent {
   id?: number;

@@ -8,6 +8,11 @@ import { buildLocalServer } from './index.js';
 import type { LlmHealthStatus } from './index.js';
 import { startLiteLLM, stopLiteLLM, type LiteLLMStatus } from './lifecycle.js';
 import { createLogger } from './logger.js';
+import {
+  readEraseMarker,
+  performWipe,
+  writeWipeReceipt,
+} from './data-erase-helpers.js';
 
 const log = createLogger('service');
 
@@ -108,6 +113,33 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
   // 1. Ensure dataDir exists
   emit({ phase: 'init', message: 'Initializing Waggle service...', progress: 0.05 });
   fs.mkdirSync(dataDir, { recursive: true });
+
+  // 1.5. Honor pending erasure (Phase 4.1 pilot data-handling).
+  //
+  // If the previous session called POST /api/data/erase, a marker file
+  // sits at <dataDir>/.erase-pending.json. We MUST process it BEFORE
+  // any DB opens so SQLite never picks up handles that the wipe is about
+  // to delete underneath it. The wipe is fully scoped to dataDir; see
+  // assertDataDirIsSafeToWipe + the path-relative escape guards in
+  // data-erase-helpers.ts.
+  const pendingMarker = readEraseMarker(dataDir);
+  if (pendingMarker) {
+    emit({ phase: 'init', message: 'Erasing data per prior request...', progress: 0.07 });
+    log.warn(
+      'Pending data erasure detected — wiping data dir before any DB opens',
+      { requestedAt: pendingMarker.requestedAt, snapshot: pendingMarker.snapshot },
+    );
+    const receipt = performWipe(dataDir, pendingMarker);
+    const receiptPath = writeWipeReceipt(dataDir, receipt);
+    log.warn('Data erasure complete', {
+      receiptPath,
+      removed: receipt.filesRemoved.length,
+      skipped: receipt.filesSkipped.length,
+    });
+    // Re-create the dataDir if performWipe collapsed any subdirs the
+    // boot path needs. (mkdirSync is idempotent above.)
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
 
   // 2. Check/run migration
   if (needsMigration(dataDir)) {

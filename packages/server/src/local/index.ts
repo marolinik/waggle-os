@@ -90,6 +90,7 @@ import { workflowRoutes } from './routes/workflows.js';
 import { workspaceTemplateRoutes } from './routes/workspace-templates.js';
 import { evolutionRoutes } from './routes/evolution.js';
 import { exportRoutes } from './routes/export.js';
+import { dataEraseRoutes } from './routes/data-erase.js';
 import { costRoutes } from './routes/cost.js';
 import { backupRoutes } from './routes/backup.js';
 import { offlineRoutes } from './routes/offline.js';
@@ -1938,6 +1939,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(workspaceTemplateRoutes);
   await server.register(evolutionRoutes);
   await server.register(exportRoutes);
+  await server.register(dataEraseRoutes);
   await server.register(costRoutes);
   await server.register(backupRoutes);
   await server.register(offlineRoutes);
