@@ -276,7 +276,10 @@ const SettingsApp = () => {
               </div>
             </div>
 
-            {/* M2-7: Privacy & Telemetry */}
+            {/* M2-7: Privacy & Telemetry — Phase 4.1: hidden at Essential per ux-disclosure-levels.md
+              §"Settings at Essential" (telemetry surfaced only at Standard+, where the user is
+              already opting into more advanced surface area). */}
+            {userTier !== 'simple' && (
             <div className="space-y-3">
               <h3 className="text-xs font-display font-semibold text-foreground flex items-center gap-2">
                 <BarChart3 className="w-3.5 h-3.5 text-muted-foreground" />
@@ -315,6 +318,7 @@ const SettingsApp = () => {
                 </button>
               </div>
             </div>
+            )}
           </div>
         )}
 
