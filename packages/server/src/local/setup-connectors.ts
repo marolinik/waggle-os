@@ -15,7 +15,6 @@ import {
   GmailConnector, GoogleDocsConnector, GoogleDriveConnector, GoogleSheetsConnector,
   MSTeamsConnector, OutlookConnector, OneDriveConnector,
   ComposioConnector,
-  MockSlackConnector, MockTeamsConnector, MockDiscordConnector,
 } from '@waggle/agent';
 import type { VaultStore } from '@waggle/core';
 
@@ -50,11 +49,5 @@ export function registerConnectors(vault: VaultStore): ConnectorRegistry {
   registry.register(new OutlookConnector());
   registry.register(new OneDriveConnector());
   registry.register(new ComposioConnector());
-  // DEMO: Mock connectors for testing/demo mode — remove when real OAuth integrations are ready
-  if (process.env.NODE_ENV !== 'production') {
-    registry.register(new MockSlackConnector());
-    registry.register(new MockTeamsConnector());
-    registry.register(new MockDiscordConnector());
-  }
   return registry;
 }
