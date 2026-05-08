@@ -2335,19 +2335,32 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   // ── Start Teams server if PostgreSQL is configured (TEAMS tier) ──
   // Skip in test environment to avoid port conflicts and addHook-after-listen errors
   if (process.env.DATABASE_URL && !process.env.VITEST && process.env.NODE_ENV !== 'test') {
-    const teamsPort = parseInt(process.env.TEAMS_SERVER_PORT ?? '3101', 10);
-    import('../index.js').then(({ buildServer }) => {
-      buildServer().then(teamsServer => {
-        teamsServer.listen({ port: teamsPort, host: '127.0.0.1' }, (err) => {
-          if (err) {
-            log.info(`[teams-server] Failed to start: ${err.message}`);
-          } else {
-            log.info(`[teams-server] Running at http://127.0.0.1:${teamsPort}`);
-          }
-        });
-        server.addHook('onClose', async () => { await teamsServer.close(); });
-      }).catch(err => log.info(`[teams-server] Build failed: ${(err as Error).message}`));
-    }).catch(() => { /* Teams server optional — non-blocking */ });
+    // DAY0V-03 / F-02: cloud-mode detected (DATABASE_URL set) — require CLERK_SECRET_KEY.
+    // The Teams server registers wsGateway, which itself hard-fails in NODE_ENV=production
+    // when the key is absent (see packages/server/src/ws/gateway.ts DAY0V-01 fix). We surface
+    // the misconfiguration here too so the operator sees a single clear log line instead of
+    // a buildServer rejection further down.
+    if (!process.env.CLERK_SECRET_KEY) {
+      log.error(
+        '[teams-server] CLERK_SECRET_KEY missing while DATABASE_URL is set. Cloud/Teams ' +
+          'deployment requires both. Skipping Teams server startup — set CLERK_SECRET_KEY ' +
+          'and restart, or unset DATABASE_URL to run desktop-only.',
+      );
+    } else {
+      const teamsPort = parseInt(process.env.TEAMS_SERVER_PORT ?? '3101', 10);
+      import('../index.js').then(({ buildServer }) => {
+        buildServer().then(teamsServer => {
+          teamsServer.listen({ port: teamsPort, host: '127.0.0.1' }, (err) => {
+            if (err) {
+              log.info(`[teams-server] Failed to start: ${err.message}`);
+            } else {
+              log.info(`[teams-server] Running at http://127.0.0.1:${teamsPort}`);
+            }
+          });
+          server.addHook('onClose', async () => { await teamsServer.close(); });
+        }).catch(err => log.info(`[teams-server] Build failed: ${(err as Error).message}`));
+      }).catch(() => { /* Teams server optional — non-blocking */ });
+    }
   }
 
   return server;
