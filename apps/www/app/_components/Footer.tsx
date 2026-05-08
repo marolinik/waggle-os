@@ -31,9 +31,10 @@ const COMPANY_LINKS: readonly FooterLink[] = [
 ];
 
 const LEGAL_LINKS: readonly FooterLink[] = [
-  { key: 'terms', href: '/legal/terms' },
-  { key: 'privacy', href: '/legal/privacy' },
-  { key: 'eu_ai_act', href: '/legal/eu-ai-act' },
+  { key: 'terms', href: '/terms' },
+  { key: 'privacy', href: '/privacy' },
+  { key: 'cookies', href: '/cookies' },
+  { key: 'eu_ai_act', href: '/eu-ai-act' },
   { key: 'apache', href: 'https://github.com/marolinik/waggle-os/blob/main/LICENSE', external: true },
 ];
 

@@ -77,6 +77,9 @@ marketplace.db-wal
 .mind/
 .planning/
 
+# External research checkouts (large; not part of waggle-os build)
+external/
+
 # Build artifacts
 *.tsbuildinfo
 
