@@ -1,32 +1,38 @@
-# L-17 · MOCK / TODO / FIXME audit — 2026-04-19 (rev 2026-04-20)
+# L-17 · MOCK / TODO / FIXME audit — 2026-04-19 (rev 2026-05-08)
 
 Scope: `apps/web/src`, `packages/*/src` (excludes test directories and
 HTML `placeholder="..."` attributes).
 
 Grep pattern: `// (MOCK|TODO|FIXME|XXX):` or the `/* … */` equivalent.
 
-Current count: **10** lines across 2 files. Down from 14 on 2026-04-19
-after C2/C3/C4/C5 cleanup this session. Zero new production code may
+Current count: **0** lines. Down from 10 on 2026-04-20 after the
+2026-05-08 DAY0V-01 + DAY0V-02 cleanup pass (Phase 1 of v1.0
+milestone): WS gateway TODO replaced with cryptographic-or-fail logic
+and `mock-channel-connectors.ts` deleted. Zero new production code may
 introduce a marker without updating `tests/placeholder-audit.test.ts`
 and this document in the same commit.
 
-## Category A — Intentional mock code, correctly labelled (9 hits)
+## Category A — RESOLVED 2026-05-08 (was 9 hits, now 0)
 
-**`packages/agent/src/connectors/mock-channel-connectors.ts`** — the file
-name declares itself as mock. `MOCK:` labels on each method are correct
-and load-bearing: they tell reviewers not to mistake the fake behaviour
-for real connector logic.
+**`packages/agent/src/connectors/mock-channel-connectors.ts`** — DELETED
+in DAY0V-02 (2026-05-08). The file's 9 `// MOCK:` markers are gone with
+the file. Real connectors (`slack-connector.ts`, `discord-connector.ts`,
+`ms-teams-connector.ts`) are unaffected — they were never the same
+classes. No tests referenced the mocks (verified via grep), and the
+mocks were already gated behind `NODE_ENV !== 'production'` in
+`setup-connectors.ts`, so no production user ever saw them registered.
 
-**2026-04-20 decision (Marko):** keep as "(Demo)" connectors until real
-OAuth integrations land. That work is parked in *AFTER Benchmarks*
-bucket (real OAuth follows M-29 MS Graph OAuth, which is v2). No action
-pre-launch.
+**2026-04-20 decision was:** keep as "(Demo)" connectors until real
+OAuth integrations land. **2026-05-08 supersedes:** PM master Day-0 ETA
+is 2026-05-08..12, and the mock-vs-real conflation surface is itself a
+launch risk per CONCERNS.md §4. Drop the mocks now; reintroduce only
+when real OAuth ships under different class names.
 
-## Category B — Tracked follow-ups (1 hit)
+## Category B — RESOLVED 2026-05-08 (was 1 hit, now 0)
 
-| File | Line | Note | Follow-up |
+| File | Line | Original note | Resolution |
 |---|---|---|---|
-| `packages/server/src/ws/gateway.ts` | 91 | Replace with full Clerk verification once `CLERK_SECRET_KEY` is always configured | H-36 (Clerk auth integration) — moved to *AFTER Benchmarks* bucket on 2026-04-20 |
+| `packages/server/src/ws/gateway.ts` | 91 | Replace with full Clerk verification once `CLERK_SECRET_KEY` is always configured | DAY0V-01 / commit `8ec8419` (2026-05-08) — replaced unsigned-JWT-decode fallback with hard-fail in production + connection-time reject in dev/desktop. `decodeJwtPayload()` deleted. |
 
 ## Category C — Closed 2026-04-20 (4 hits resolved)
 
