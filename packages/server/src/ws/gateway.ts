@@ -19,23 +19,6 @@ function isJwtStructure(token: string): boolean {
   return parts.every((part) => part.length > 0 && base64urlRegex.test(part));
 }
 
-/**
- * Decode the payload segment of a JWT without verification.
- * Used as a fallback when Clerk secret key is not configured.
- */
-function decodeJwtPayload(token: string): Record<string, unknown> | null {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    // base64url -> base64 -> decode
-    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    const json = Buffer.from(base64, 'base64').toString('utf-8');
-    return JSON.parse(json);
-  } catch {
-    return null;
-  }
-}
-
 // Overridable verifier for testing — allows tests to swap in a mock
 export type WsTokenVerifier = (token: string) => Promise<{ sub: string }>;
 let _wsTokenVerifier: WsTokenVerifier | null = null;
@@ -51,6 +34,26 @@ export async function wsGateway(fastify: FastifyInstance) {
   const clerk = clerkSecretKey
     ? createClerkClient({ secretKey: clerkSecretKey })
     : null;
+
+  // Hard fail in production if no JWT verification path is configured. Without
+  // either a Clerk client or a test override, the gateway would have no way to
+  // cryptographically verify incoming tokens — the previous fallback (unsigned
+  // JWT decode) is forgeable. NODE_ENV !== 'production' (dev / desktop /
+  // testing) is allowed to start without the key, but connections without a
+  // verifier are rejected at request time below.
+  if (!clerk && !_wsTokenVerifier && process.env.NODE_ENV === 'production') {
+    throw new Error(
+      '[ws-gateway] CLERK_SECRET_KEY required in production. WebSocket gateway ' +
+        'refuses to start without cryptographic JWT verification configured. ' +
+        'Set CLERK_SECRET_KEY in environment or settings.json.',
+    );
+  }
+  if (!clerk && !_wsTokenVerifier) {
+    fastify.log.warn(
+      '[ws-gateway] CLERK_SECRET_KEY absent; WebSocket connections will be rejected. ' +
+        'This is dev/desktop mode — set CLERK_SECRET_KEY for cloud/SaaS deployments.',
+    );
+  }
 
   fastify.get('/ws', { websocket: true }, (socket, request) => {
     let userId: string | null = null;
@@ -87,19 +90,17 @@ export async function wsGateway(fastify: FastifyInstance) {
                 const payload = await (clerk as any).verifyToken(token);
                 sub = payload.sub;
               } else {
-                // Fallback: decode JWT payload and extract sub
-                // TODO: Replace with full Clerk verification once CLERK_SECRET_KEY is always configured
-                const payload = decodeJwtPayload(token);
-                if (!payload || typeof payload.sub !== 'string') {
-                  socket.send(
-                    JSON.stringify({
-                      type: 'error',
-                      message: 'Invalid token: missing sub claim',
-                    }),
-                  );
-                  return;
-                }
-                sub = payload.sub;
+                // No verifier available — reject. The startup check above ensures
+                // production cannot reach this branch. Dev/desktop without a key
+                // hits this and is rejected at connection time (no silent decode).
+                socket.send(
+                  JSON.stringify({
+                    type: 'error',
+                    message: 'Authentication unavailable: server has no JWT verifier configured',
+                  }),
+                );
+                socket.close();
+                return;
               }
 
               // Look up internal user by Clerk ID
