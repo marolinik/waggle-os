@@ -1,0 +1,258 @@
+# Bench-Spec LOCK v1 — machine-readable twin
+# Canonical markdown surface: 2026-04-22-bench-spec-locked.md
+# Sync guard: scripts/check-manifest-sync.mjs (authorized, pending implementation)
+# Any change to this file requires new markdown decision doc + PM ratification.
+
+manifest_version: v1.0.0
+manifest_type: bench_spec_lock_parent
+locked_date: 2026-04-22
+authority: PM (Marko Marković) — A3 interview 7/7 closed 2026-04-22
+sprint: 11
+track: A
+task: A3
+
+# Per-run manifest instances (mini + full) will be emitted at run kickoff
+# and will inherit from this parent manifest, resolving dated snapshots.
+
+threshold_tiering:
+  reference: mem0_locomo_91_6
+  reference_point_pct: 91.6
+  tiers:
+    strong_publishable:
+      point_min_pct: 91.6
+      wilson_lower_min_pct: 91.6
+      bootstrap_lower_min_pct: 91.6
+    publishable:
+      point_min_pct: 91.6
+      wilson_lower_min_pct: 89.0
+    weak:
+      point_min_pct: 89.0
+      point_max_pct: 91.5
+      requires: pm_review_gate
+    fail:
+      point_max_pct: 89.0
+      requires: post_mortem
+  conservative_rule: "If Wilson and cluster-bootstrap disagree on tier, more conservative tier prevails."
+
+confidence_intervals:
+  primary:
+    method: wilson_score_95
+    description: "Frequentist binomial CI on instance-level binary verdicts."
+  secondary:
+    method: cluster_bootstrap_95
+    iterations: 10000
+    seed: 42
+    cluster_unit: conversation_id
+    resample_mode: cluster_level_with_replacement
+    quantiles: [2.5, 97.5]
+
+instance_counts:
+  mini_c3:
+    cells: 4
+    per_cell: 100
+    total_evaluations: 400
+    cell_names: [raw, filtered, compressed, full_context]
+    budget_expected_usd: [120, 200]
+    budget_cap_usd: 250
+  full_h42:
+    qwen_n: 1540
+    qwen_runs: 3
+    qwen_total_evaluations: 4620
+    opus_probe_n: 500
+    opus_probe_runs: 3
+    opus_probe_total_evaluations: 1500
+    grand_total_evaluations: 6120
+    budget_expected_usd: [1300, 2300]
+    budget_cap_usd: 2600
+    budget_hard_abort_usd: 2600
+
+budget_breakdown_full:
+  qwen_primary:
+    expected_usd: [600, 1100]
+    ceiling_usd: 1400
+  opus_probe:
+    expected_usd: [200, 350]
+    ceiling_usd: 450
+  judge_triple:
+    expected_usd: [450, 750]
+    ceiling_usd: 900
+  tiebreak_grok:
+    expected_usd: [5, 15]
+    ceiling_usd: 40
+  buffer_retries:
+    expected_usd: [45, 85]
+    ceiling_usd: 110
+
+multiple_comparisons:
+  mini_declaration: exploratory_descriptive_no_gating_no_correction
+  full_declaration:
+    primary_confirmatory_hypothesis_count: 1
+    h1_statement: "Qwen3.6-35B-A3B-Thinking achieves >= 91.6% point estimate on LoCoMo with Wilson 95% lower bound >= 89.0% (PUBLISHABLE tier)."
+    secondary_metrics_treatment: descriptive_no_correction_required
+  correction_family: none_required
+  rationale: "Only one confirmatory hypothesis declared on full run; no multiple-comparisons correction needed."
+
+preregistration:
+  v1_frozen_at: bench_spec_lock_2026_04_22
+  v2_issue_condition: material_change_surfaced_at_mini_exit
+  v2_requires: new_pm_ratified_decision_doc
+  mid_run_amendment_policy: halt_restart_required
+  manifest_hash_event: bench.preregistration.manifest_hash
+  h_audit_2_integration: required
+
+judge_ensemble:
+  primary:
+    - provider: anthropic
+      floating_alias: anthropic/claude-opus-4-7
+      role: primary_judge_1
+    - provider: openai
+      floating_alias: openai/gpt-5.4
+      role: primary_judge_2
+    - provider: google
+      floating_alias: google/gemini-3.1
+      role: primary_judge_3
+  tiebreak:
+    provider: xai
+    floating_alias: xai/grok-4.20
+    trigger: three_way_split_1_1_1
+    path_enum: quadri-vendor
+    defensive_2_2_path: pm-escalation
+  consistency_constraint: same_physical_models_mini_and_full
+  snapshot_drift_policy: manifest_flag_and_mini_rerun
+
+kappa_monitoring:
+  baseline_reference: sprint_10_task_2_2_kappa_0_7458
+  compute: fleiss_kappa_on_pre_tiebreak_vote_matrix
+  thresholds:
+    pass_no_flag_kappa_min: 0.65
+    pass_with_flag_kappa_range: [0.60, 0.65]
+    halt_kappa_max: 0.60
+    halt_drop_from_baseline_max_pp: 10
+  halt_protocol: preserve_partial_jsonl_write_halted_session_ping_notify_pm
+
+failure_taxonomy:
+  version: v1
+  categories:
+    - code: F1
+      name: contradicts_ground_truth
+    - code: F2
+      name: partial_answer
+    - code: F3
+      name: off_topic
+    - code: F4
+      name: refusal
+    - code: F5
+      name: tool_use_error
+      scope: tool_permitted_cells_only
+    - code: F6
+      name: format_violation
+  special:
+    null_correct:
+      description: judge_majority_verdict_correct_no_f_code
+    f_other:
+      description: failure_outside_f1_f6_taxonomy
+      mandatory_rationale_min_words: 10
+      rate_threshold_for_taxonomy_review_pct: 10
+  jsonl_schema_extension:
+    fields:
+      verdict: [correct, incorrect]
+      failure_code: [null, F1, F2, F3, F4, F5, F6, F_other]
+      failure_rationale: null_unless_f_other
+
+reproducibility_manifest:
+  format: hybrid_markdown_plus_yaml
+  canonical_surface: markdown
+  machine_surface: yaml
+  per_run_path_convention:
+    mini: PM-Waggle-OS/decisions/<YYYY-MM-DD>-stage2-mini-manifest.md
+    full: PM-Waggle-OS/decisions/<YYYY-MM-DD>-stage2-full-manifest.md
+  freeze_timing: run_kickoff
+  mid_run_change_policy: halt_and_restart
+  required_fields_count: 16
+  required_fields:
+    - manifest_version
+    - manifest_hash
+    - run_id
+    - run_stage
+    - target_model
+    - target_model_thinking_mode
+    - judge_primary
+    - judge_tiebreak
+    - judge_rubric_path
+    - dataset
+    - dataset_version
+    - instance_count
+    - cells
+    - ci_method
+    - failure_taxonomy_version
+    - budget_cap
+    - retention_policy
+  ci_sync_guard:
+    script_path: scripts/check-manifest-sync.mjs
+    status: authorized_pending_implementation
+    repo: waggle-os
+    interim_policy: manual_sync_verified_in_commit_message
+
+reasoning_content_retention:
+  inherits_from: a2_q5_tier_2_locked
+  archive_content: full_jsonl_with_reasoning_content_preserved_unpruned
+  bundle_layout:
+    runs_dir: runs/
+    aggregates_dir: aggregates/
+    manifest_yaml: manifest.yaml
+    manifest_md: manifest.md
+    exit_ping: exit-ping.md
+    git_state: git-state.txt
+    docker_state: docker-state.txt
+    readme: README.md
+  bundle_path_convention: waggle-os/benchmarks/archive/<YYYY-MM-DD>-stage2-<mini|full>.tar.gz
+  access_policy:
+    internal_egzakta: open
+    external_regulator_partner_auditor: pm_signoff_plus_audit_log_entry
+    audit_log_path_convention: PM-Waggle-OS/audit-log/<YYYY-MM-DD>-<requester>-<purpose>.md
+    hybrid_external_consultant: default_external_tier_pm_override_with_written_rationale
+  retention_horizon:
+    minimum_months: 12
+    active_launch_claim: indefinite
+    post_decommissioning_additional_months: 24
+    decommissioning_trigger: pm_supersession_decision_doc_or_product_retirement
+
+validation_gates:
+  before_c3_mini_kickoff:
+    - parallel_yaml_manifest_committed
+    - manifest_hash_recorded_in_commit
+    - ci_sync_guard_spec_documented
+    - h_audit_2_manifest_hash_event_spot_verified
+    - kickoff_brief_cites_lock
+    - exit_ping_reports_kappa_wilson_bootstrap_f_distribution_hash_match_budget
+  before_h42_full_kickoff:
+    - c3_mini_exit_pass_with_pm_review
+    - v2_issued_if_material_change_else_v1_carryforward_noted
+    - dated_snapshots_re_resolved_and_pinned
+    - budget_guard_configured_hard_abort_2600usd
+
+out_of_scope:
+  - provider_rotation_timing
+  - judge_rubric_evolution_beyond_f_taxonomy
+  - tertiary_metrics_beyond_f1_f6
+  - third_party_replication
+  - landing_copy_marketing_derivation
+
+related_decisions:
+  a1_h_audit_design: PM-Waggle-OS/decisions/2026-04-22-h-audit-1-design-ratified.md
+  b1_stage_2_primary_config: PM-Waggle-OS/decisions/2026-04-22-stage-2-primary-config-locked.md
+  b2_tie_break_policy: PM-Waggle-OS/decisions/2026-04-22-tie-break-policy-locked.md
+  b3_model_route_naming: PM-Waggle-OS/decisions/2026-04-22-model-route-naming-locked.md
+
+related_exit_pings:
+  a2_h_audit_1: PM-Waggle-OS/sessions/2026-04-22-sprint-11-h-audit-1-exit.md
+  b1_stage_2_config: PM-Waggle-OS/sessions/2026-04-22-sprint-11-b1-stage2-config-exit.md
+  b2_tiebreak: PM-Waggle-OS/sessions/2026-04-22-sprint-11-b2-tiebreak-exit.md
+  b3_opus46_audit: PM-Waggle-OS/sessions/2026-04-22-sprint-11-b3-opus46-audit-exit.md
+  c2_mikroeval: PM-Waggle-OS/sessions/2026-04-22-sprint-11-c2-stage1-mikroeval-exit.md
+
+sprint_11_impact:
+  pre_lock_exit_criteria_closed: 8_of_10
+  post_lock_exit_criteria_closed: 9_of_10_pending_c3_execution
+  unblocks: c3_stage_2_4_cell_mini
+  gates_remaining_after_lock: [b4_stage_2_kickoff_memo, c3_execution]

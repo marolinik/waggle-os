@@ -1,0 +1,263 @@
+# C3 Stage 2 Mini Per-Run Manifest v1 — machine-readable twin
+# Canonical markdown surface: 2026-04-23-stage2-mini-manifest.md
+# Parent bench-spec lock: 2026-04-22-bench-spec-locked.manifest.yaml
+# Sync guard: scripts/check-manifest-sync.mjs (authorized, pending implementation)
+# Any change to this file requires new markdown decision doc + PM ratification
+# and a new hash binding (old runs' --manifest-hash binding becomes invalid).
+
+manifest_version: v1.0.0
+manifest_type: per_run_mini
+inherits_from_parent: decisions/2026-04-22-bench-spec-locked.manifest.yaml
+parent_manifest_hash_reference: (computed separately by runner via resolveManifestPath)
+locked_date: 2026-04-23
+authority: "PM (Marko Marković) — v2 brief 2026-04-23 ratification, §2 pre-kick trio CLOSED, §3.5 direct-provider audit CLOSED"
+sprint: 12
+track: A
+task: 2
+run_stage: mini
+
+# ── Field 5/6: target (subject) model ─────────────────────────────────────
+target_model: qwen3.6-35b-a3b-via-openrouter
+target_model_thinking_mode: on
+target_model_max_tokens: 64000
+target_model_routing:
+  litellm_alias: qwen3.6-35b-a3b-via-openrouter
+  upstream_provider: openrouter_bridge
+  upstream_slug: openrouter/qwen/qwen3.5-35b-a3b
+  routing_path: "LiteLLM (localhost:4000) -> OpenRouter -> Alibaba inference"
+  bridge_reason: "DashScope direct blocked 2026-04-21; OpenRouter is only live path for the canonical LOCKED subject-model entry. Stage 2 Day-1 OVERRIDE 2026-04-22 retained thinking=on + max_tokens=64000."
+
+# ── Field 7: primary judge ensemble — DIRECT routing (updated v2 2026-04-23) ─
+# Architecture pivot per brief v2 §3.5: judges use LiteLLM direct upstream APIs,
+# not OpenRouter bridge. Eliminates ~5-15% OpenRouter middleware markup + preserves
+# native token-level telemetry (Gemini reasoning_tokens, etc.) for EU AI Act Art. 14
+# replay integrity.
+judge_primary:
+  - id: claude-opus-4-7
+    litellm_alias: claude-opus-4-7
+    upstream_provider: anthropic_direct
+    upstream_slug: anthropic/claude-opus-4-7
+    routing_path: "LiteLLM -> Anthropic Messages API direct"
+    api_key_env: ANTHROPIC_API_KEY
+    pinning_surface: anthropic_immutable
+    pinning_surface_carve_out_reason: null
+    smoke_verified_at: 2026-04-23T02:34:00Z
+
+  - id: gpt-5.4
+    litellm_alias: gpt-5.4
+    upstream_provider: openai_direct
+    upstream_slug: openai/gpt-5.4
+    routing_path: "LiteLLM -> OpenAI Chat Completions API direct"
+    api_key_env: OPENAI_API_KEY
+    pinning_surface: floating_alias
+    pinning_surface_carve_out_reason: "OpenAI does not expose immutable model snapshots for the gpt-5.x family via OpenAI Chat Completions surface. Floating alias mandated by B3 addendum § 5."
+    smoke_verified_at: 2026-04-23T02:34:30Z
+
+  - id: gemini-3.1-pro
+    litellm_alias: gemini-3.1-pro
+    upstream_provider: google_ai_studio_direct
+    upstream_slug: gemini/gemini-3.1-pro-preview
+    routing_path: "LiteLLM -> Google AI Studio direct (v1beta models endpoint)"
+    api_key_env: GEMINI_API_KEY
+    pinning_surface: floating_alias
+    pinning_surface_carve_out_reason: "Gemini 3.1 Pro canonical release ships as `gemini/gemini-3.1-pro-preview` only — no stable variant as of 2026-04-23 01:47 UTC (verified via OpenRouter /api/v1/models probe AND Google AI Studio direct smoke at 02:35:00Z). Google guarantees `-preview` alias stability within a release window but not across release cycles. Replay-time verification required. Floating alias mandated by B3 addendum § 5."
+    smoke_verified_at: 2026-04-23T02:35:00Z
+    pinning_note_extended: >
+      Direct Google AI Studio routing surfaces native `reasoning_tokens`
+      telemetry under `completion_tokens_details` in the response usage
+      field (observed during §3.5 smoke: 27 reasoning_tokens + 1 text_token
+      for a trivial ping at max_tokens=8). Judge-client default
+      max_tokens=1024 leaves ample headroom for the judge-response JSON
+      even with reasoning mode active.
+
+# ── Field 8: tie-break reserve ────────────────────────────────────────────
+judge_tiebreak:
+  id: grok-4.20
+  litellm_alias: grok-4.20
+  upstream_provider: xai_direct
+  upstream_slug: xai/grok-4.20
+  routing_path: "LiteLLM -> xAI API direct"
+  api_key_env: XAI_API_KEY
+  harness_audit_key: grok-4.20
+  runner_audit_slug: x-ai/grok-4.20
+  pinning_surface: floating_alias
+  pinning_surface_carve_out_reason: "xAI does not expose immutable model snapshots for the grok-4.20 family. Floating alias mandated by B3 addendum § 5."
+  smoke_verified_at: 2026-04-23T02:35:30Z
+  activation_rule: "resolveTieBreak fires on 3-primary 1-1-1 vote split (expected rate ~2-5% → ~8-20 fires across 400 evaluations). 1-1-1-1 four-way → pm-escalation per B2 LOCK § 1."
+
+# ── Field 9: judge rubric ─────────────────────────────────────────────────
+judge_rubric_path: packages/server/src/benchmarks/judge/failure-mode-judge.ts
+judge_rubric_version_in_use: sprint9_5value_F1_to_F5
+a3_rubric_available: true
+a3_rubric_builder: benchmarks/harness/src/failure-taxonomy/rubric.ts::buildJudgeRubricBlock
+a3_rubric_splice_status: deferred_to_task2_phase2
+a3_rubric_effective_on_this_run: false
+
+# ── Field 10: dataset ─────────────────────────────────────────────────────
+dataset: locomo
+dataset_version_hash_source: benchmarks/harness/src/datasets.ts::getDatasetVersion
+dataset_canonical_path: benchmarks/data/locomo/release-bundle.tar.gz
+dataset_instance_count_total: 1531
+
+# ── Field 11: instance count ──────────────────────────────────────────────
+instance_count:
+  per_cell: 100
+  total: 400
+  cells: 4
+
+# ── Field 12: cells ───────────────────────────────────────────────────────
+cells:
+  - name: raw
+    parameters:
+      memory_retrieval: false
+      prompt_evolution: false
+  - name: filtered
+    parameters:
+      memory_retrieval: true
+      prompt_evolution: false
+  - name: compressed
+    parameters:
+      memory_retrieval: false
+      prompt_evolution: true
+  - name: full-context
+    parameters:
+      memory_retrieval: true
+      prompt_evolution: true
+
+# ── Field 13: CI method ───────────────────────────────────────────────────
+ci_method:
+  wilson_95: true
+  cluster_bootstrap_95: true
+  bootstrap_iterations: 10000
+  bootstrap_seed: 42
+  cluster_unit: conversation_id
+
+# ── Field 14: failure taxonomy ────────────────────────────────────────────
+failure_taxonomy_version: F1-F6+other v1
+failure_taxonomy_codes_module: benchmarks/harness/src/failure-taxonomy/codes.ts
+failure_taxonomy_aggregate_module: benchmarks/harness/src/failure-taxonomy/aggregate.ts
+failure_taxonomy_validator_module: benchmarks/harness/src/failure-taxonomy/validator.ts
+failure_taxonomy_f_other_review_threshold: 0.10
+failure_taxonomy_f_other_threshold_semantic: strict_greater_than
+
+# ── Field 15: budget ──────────────────────────────────────────────────────
+budget_target_usd_min: 110
+budget_target_usd_max: 185
+budget_cap_usd: 250
+budget_abort_threshold_usd: 325
+budget_abort_pct_of_cap: 130
+
+# ── Field 16: retention ───────────────────────────────────────────────────
+retention_policy: A2-Q5-tier-2-full-preserved
+retention_horizon_floor_months: 12
+retention_horizon_active_claim: indefinite_plus_24mo_post_decommissioning
+retention_archive_layout_ref: 2026-04-22-bench-spec-locked.md#section-9
+
+# ── Invocation ────────────────────────────────────────────────────────────
+seed: 42
+per_cell_flag: true
+emit_preregistration_event: true
+manifest_hash_cli_flag: --manifest-hash
+runner_version_expected: "34ba083 (at run kickoff; recomputed by runner)"
+
+# ── A3 namespace split live surfaces ──────────────────────────────────────
+a3_failure_code_column: a3_failure_code
+a3_rationale_column: a3_rationale
+a3_namespace_split_commit: 7b7436d
+sprint9_legacy_columns_preserved: true
+sprint9_legacy_columns_populated_on_this_run: true
+sprint9_legacy_columns_populated_justification: "§2.1 commit message explicitly states 'preserving Sprint 9 legacy fields'; transition strategy. Full separation (A3 writes only a3_* columns; Sprint 9 undefined) lands with rubric splice in Task 2 Phase 2."
+
+# ── resolveTieBreak wire live verify ──────────────────────────────────────
+resolve_tie_break_live: true
+resolve_tie_break_wire_commit: 80896f1
+resolve_tie_break_audit_slug_alignment_commit: 89268ae
+resolve_tie_break_fourth_vendor_slug_in_jsonl: x-ai/grok-4.20
+
+# ── Routing policy summary ────────────────────────────────────────────────
+routing_policy:
+  summary: "All three primary judges + tie-break use LiteLLM direct upstream APIs (Anthropic, OpenAI, Google AI Studio, xAI). Subject model retains OpenRouter bridge (no direct alternative). ~5-15% OpenRouter markup eliminated from judge budget."
+  audit_doc: sessions/2026-04-23-litellm-config-audit.md
+  config_change_made_this_session: false
+  config_verified_fit_for_c3_mini: true
+
+# ── Known scope-outs ──────────────────────────────────────────────────────
+known_scope_outs:
+  - name: F6_F_other_live_emission
+    description: "Judge response parser (failure-mode-judge.ts Zod + buildJudgePrompt) still targets Sprint 9 5-value space. failure-taxonomy/rubric.ts buildJudgeRubricBlock() is ready but not spliced into Task 2 runtime prompt."
+    impact: "F6 and F_other counts will be 0 in aggregate.json failure_distribution.counts. Distribution remains valid, exit-criterion +12 grep matches verbatim (null + F1..F5 distribution), review-flag gate stays OFF trivially (0/400 < 10%)."
+    activation: Task 2 Phase 2 rubric splice + Zod enum expansion
+    a3_failure_code_column_still_populated: true (via mapLegacyToA3 1:1 F1..F5 → F1..F5 pass-through)
+    non_blocker_for_c3_mini: true
+
+  - name: models_json_provider_union_incomplete
+    description: "`ModelProvider` union in benchmarks/harness/src/types.ts lacks direct variants (no 'openai', 'google_ai_studio', 'xai' members). models.json `gpt-5.4.provider` + `gemini-3.1-pro.provider` left as `*_via_openrouter` values for TS-compat even though routing pivoted to direct."
+    impact: "Pre-registration payload's judge_models[].provider field shows `*_via_openrouter` while routing is direct. Drift is cosmetic; the litellmModel + pinning_surface_carve_out_reason fields encode the direct-routing arch faithfully."
+    activation: "Types.ts ModelProvider union extension + models.json provider field update — Task 2 Phase 2 or dedicated cleanup commit."
+    non_blocker_for_c3_mini: true
+
+# ── Exit criteria (11 original + 2 added per brief §6) ────────────────────
+exit_criteria_count: 13
+exit_criteria_ref: briefs/2026-04-23-cc-sprint-12-task2-c3-mini-kickoff.md#6-exit-criteria-11-total
+added_criterion_12: "jq '.a3_failure_code' *.jsonl | sort | uniq -c must map to aggregate.json failure_distribution.counts"
+added_criterion_13: "Live resolveTieBreak invocation count in pino log must equal aggregate.json tie_break_activations"
+
+# ── Abort triggers ────────────────────────────────────────────────────────
+abort_triggers:
+  - name: budget_burn_exceeds_130pct
+    threshold_usd: 325
+    mid_run: true
+  - name: fleiss_kappa_drop_below_threshold
+    kappa_min: 0.60
+    kappa_drop_from_sprint10_baseline_pp: 10
+    sprint10_baseline: 0.7458
+    mid_run: true
+    mid_run_cell_threshold: 100
+  - name: litellm_health_flips_unhealthy
+    check: "curl -sf localhost:4000/health/liveliness"
+    mid_run: true
+  - name: network_error_streak_target_model
+    streak_count: 3
+    mid_run: true
+  - name: reasoning_content_shape_unknown_drift
+    threshold: 2
+    mid_run: true
+  - name: manifest_hash_mismatch
+    mid_run: true
+    semantic: "Emitted bench.preregistration.manifest_hash event != committed YAML hash"
+  - name: resolveTieBreak_throws_or_undefined
+    mid_run: true
+    semantic: "B2 LOCK live-verification would fail; forensic preserve JSONL"
+
+# ── Pre-kick commits ledger ───────────────────────────────────────────────
+pre_kick_commits:
+  - sha: 7b7436d
+    scope: "§2.1 A3 failure taxonomy namespace split"
+    files_changed: 5
+    tests_added: 9
+  - sha: 68f26ba
+    scope: "§2.2 OpenRouter slug verification patch"
+    files_changed: 1
+  - sha: 89268ae
+    scope: "§2.3 resolveTieBreak audit-slug alignment (wire pre-existing via 80896f1)"
+    files_changed: 1
+  - sha: 34ba083
+    scope: "§3.5 direct-provider judge routing audit + models.json pre-registration refresh"
+    files_changed: 1
+
+# ── Runtime invocation command template (for reproducibility) ─────────────
+runtime_invocation_template: >
+  node benchmarks/harness/src/runner.ts
+  --model qwen3.6-35b-a3b-via-openrouter
+  --cell raw,filtered,compressed,full-context
+  --dataset locomo
+  --limit 100
+  --per-cell
+  --seed 42
+  --live
+  --budget 250
+  --judge-ensemble claude-opus-4-7,gpt-5.4,gemini-3.1-pro
+  --manifest-hash <SHA256>
+  --emit-preregistration-event
+
+emitted_at: 2026-04-23T02:40:00Z
