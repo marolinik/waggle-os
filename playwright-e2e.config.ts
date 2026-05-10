@@ -6,7 +6,7 @@ export default defineConfig({
   retries: 0,
   reporter: 'list',
   use: {
-    baseURL: 'http://localhost:8080',
+    baseURL: 'http://localhost:3333',
     headless: true,
     screenshot: 'only-on-failure',
     trace: 'off',
