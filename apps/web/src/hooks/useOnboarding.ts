@@ -1,6 +1,11 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { UserTier } from '@/lib/dock-tiers';
 import { adapter } from '@/lib/adapter';
+import {
+  isTauri,
+  isFirstLaunch as tauriIsFirstLaunch,
+  markFirstLaunchComplete as tauriMarkFirstLaunchComplete,
+} from '@/lib/tauri-bindings';
 
 export interface OnboardingState {
   completed: boolean;
@@ -88,6 +93,43 @@ export const useOnboarding = () => {
     return () => window.removeEventListener('waggle:onboarding-sync', handler);
   }, []);
 
+  // CC Sesija A §2.3 A11: Tauri filesystem-flag fast-path for returning users.
+  // Runs in Tauri mode only; if ~/.waggle/first-launch.flag exists the user
+  // has completed onboarding before (even if this WebView profile is fresh).
+  // Auto-completes the wizard in that case. Complementary to the workspaces-
+  // check below — flag is faster + doesn't need sidecar; either trigger is
+  // sufficient.
+  useEffect(() => {
+    if (state.completed) return;
+    if (!isTauri()) return;
+    let cancelled = false;
+    tauriIsFirstLaunch()
+      .then((firstLaunch) => {
+        if (cancelled || firstLaunch) return;
+        console.info(
+          '[useOnboarding] Tauri filesystem flag indicates returning user — auto-completing wizard',
+        );
+        const next: OnboardingState = {
+          ...defaultState,
+          completed: true,
+          step: 7,
+          tier: state.tier || 'power',
+          tooltipsDismissed: true,
+          apiKeySet: true,
+        };
+        saveState(next);
+        setState(next);
+      })
+      .catch(() => {
+        /* command unavailable — fall through to existing returning-user check */
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Run once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Bug #2: auto-complete onboarding for returning users.
   // The localStorage flag is per-webview, so a fresh Tauri webview (or a
   // browser switch) always looks "new" even when the sidecar has existing
@@ -137,6 +179,14 @@ export const useOnboarding = () => {
     setState(prev => {
       const next = { ...prev, ...updates };
       saveState(next);
+      // CC Sesija A §2.3 A11: persist completion to filesystem flag in Tauri
+      // mode so onboarding doesn't re-trigger after a webview profile reset.
+      // Fire-and-forget — failure is non-fatal (localStorage still completed).
+      if (next.completed && !prev.completed && isTauri()) {
+        tauriMarkFirstLaunchComplete().catch((err) => {
+          console.warn('[useOnboarding] markFirstLaunchComplete failed:', err);
+        });
+      }
       return next;
     });
   }, []);

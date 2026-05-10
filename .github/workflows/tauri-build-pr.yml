@@ -1,0 +1,157 @@
+# Waggle — Tauri Build Verification (per-PR + main pushes)
+#
+# CC Sesija A §2.4 Task A13 (PM-reframed scope). Verifies the desktop app
+# builds cleanly on Win + macOS for every PR + main push, so a regression
+# can't sneak in unnoticed between releases. Distinct from release.yml
+# which only triggers on `v*` tags + uploads to GitHub Releases (this
+# workflow only uploads to the workflow run as artifacts for download
+# verification, no release publishing).
+#
+# Exit signal: green CI here means tag-push to release.yml is safe to
+# pull the trigger on. Red CI here = same investigation flow as release.yml
+# (Rust compile / Vite build / sidecar bundle / native dep failure).
+
+name: Tauri Build Verification
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'app/**'
+      - 'apps/web/**'
+      - 'packages/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/tauri-build-pr.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'app/**'
+      - 'apps/web/**'
+      - 'packages/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
+
+jobs:
+  verify-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build packages (shared → core → agent → server)
+        run: npm run build:packages
+
+      - name: Build sidecar
+        run: node scripts/build-sidecar.mjs
+
+      - name: Bundle native dependencies
+        run: node scripts/bundle-native-deps.mjs
+
+      - name: Bundle Node.js runtime
+        run: node scripts/bundle-node.mjs
+
+      - name: Build frontend
+        run: cd apps/web && npx vite build
+
+      - name: Build Tauri (Windows)
+        run: cd app && npx tauri build
+        env:
+          # Skip code signing for PR verification — release.yml handles signing
+          # only on tag push.
+          TAURI_PRIVATE_KEY: ''
+          TAURI_KEY_PASSWORD: ''
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: waggle-windows-${{ github.sha }}
+          path: |
+            app/src-tauri/target/release/bundle/nsis/*.exe
+            app/src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: warn
+          retention-days: 7
+
+  verify-macos:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build packages (shared → core → agent → server)
+        run: npm run build:packages
+
+      - name: Build sidecar
+        run: node scripts/build-sidecar.mjs
+
+      - name: Bundle native dependencies (universal)
+        run: node scripts/bundle-native-deps.mjs
+        env:
+          TARGET_ARCH: universal
+
+      - name: Bundle Node.js runtime (universal)
+        run: node scripts/bundle-node.mjs
+        env:
+          TARGET_ARCH: universal
+
+      - name: Build frontend
+        run: cd apps/web && npx vite build
+
+      - name: Build Tauri (macOS universal)
+        run: cd app && npx tauri build --target universal-apple-darwin
+        env:
+          TAURI_PRIVATE_KEY: ''
+          TAURI_KEY_PASSWORD: ''
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: waggle-macos-${{ github.sha }}
+          path: |
+            app/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            app/src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app
+          if-no-files-found: warn
+          retention-days: 7

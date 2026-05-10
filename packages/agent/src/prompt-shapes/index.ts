@@ -37,6 +37,12 @@ export { qwenNonThinkingShape } from './qwen-non-thinking.js';
 export { gptShape } from './gpt.js';
 export { genericSimpleShape } from './generic-simple.js';
 
+// Faza 1 GEPA-evolved variants (Phase 5 LOCKED scope: only gen1-v1 ships;
+// gen1-v2 variants are kept in-tree for benchmarks but NOT default-registered
+// — Faza 2 OVERFIT exposed in Checkpoint C, see decisions/2026-04-29-gepa-faza1-results.md).
+export { claudeGen1V1Shape } from './gepa-evolved/claude-gen1-v1.js';
+export { qwenThinkingGen1V1Shape } from './gepa-evolved/qwen-thinking-gen1-v1.js';
+
 export {
   selectShape,
   listShapes,

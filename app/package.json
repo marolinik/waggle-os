@@ -9,9 +9,11 @@
     "typecheck": "tsc -b",
     "preview": "vite preview",
     "tauri": "tauri",
-    "tauri:build": "node ../scripts/build-sidecar.mjs && node ../scripts/bundle-native-deps.mjs && node ../scripts/bundle-node.mjs && cd ../apps/web && npx vite build && cd ../../app && tauri build",
-    "tauri:build:local": "node ../scripts/build-sidecar.mjs && node ../scripts/bundle-native-deps.mjs && node ../scripts/bundle-node.mjs && cd ../apps/web && npx vite build && cd ../../app && tauri build --debug",
-    "tauri:dev": "tauri dev"
+    "tauri:build": "node ../scripts/build-sidecar.mjs && node ../scripts/bundle-native-deps.mjs && node ../scripts/bundle-node.mjs && cd ../apps/web && npx vite build && cd ../../app && npx tauri build",
+    "tauri:build:local": "node ../scripts/build-sidecar.mjs && node ../scripts/bundle-native-deps.mjs && node ../scripts/bundle-node.mjs && cd ../apps/web && npx vite build && cd ../../app && npx tauri build --debug",
+    "tauri:build:win": "node ../scripts/build-sidecar.mjs && node ../scripts/bundle-native-deps.mjs && node ../scripts/bundle-node.mjs && cd ../apps/web && npx vite build && cd ../../app && npx tauri build --target x86_64-pc-windows-msvc",
+    "tauri:build:mac": "node ../scripts/build-sidecar.mjs && node ../scripts/bundle-native-deps.mjs && node ../scripts/bundle-node.mjs && cd ../apps/web && npx vite build && cd ../../app && npx tauri build --target universal-apple-darwin",
+    "tauri:dev": "npx tauri dev"
   },
   "dependencies": {
     "@base-ui/react": "^1.3.0",
