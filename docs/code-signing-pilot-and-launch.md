@@ -10,55 +10,35 @@
 
 ### 1.1 Windows self-sign
 
-**One-time cert generation (PowerShell as Administrator):**
+**Automated path (LAUNCH-06).** Three npm scripts wrap the cert generation + config wiring + signtool steps. Run from `app/`:
 
 ```powershell
-$cert = New-SelfSignedCertificate `
-  -Type CodeSigningCert `
-  -Subject "CN=Egzakta Internal Pilot, O=Egzakta Group, C=RS" `
-  -KeyUsage DigitalSignature `
-  -KeySpec Signature `
-  -KeyAlgorithm RSA -KeyLength 2048 `
-  -NotAfter (Get-Date).AddYears(2) `
-  -CertStoreLocation "Cert:\CurrentUser\My" `
-  -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
+# 1. Generate self-signed cert (idempotent — reuses existing cert by subject
+#    if one is still valid). Writes thumbprint to app/src-tauri/.thumbprint.txt
+#    (gitignored). PFX exports to %USERPROFILE%\waggle-pilot-codesign.pfx.
+$env:WAGGLE_PILOT_PFX_PASSWORD = "your-strong-pw"
+npm run tauri:sign:pilot:win:setup
 
-# Export to .pfx for use in CI / signtool
-$pwd = ConvertTo-SecureString -String "REPLACE_WITH_STRONG_PASSWORD" -Force -AsPlainText
-Export-PfxCertificate -Cert $cert -FilePath "$env:USERPROFILE\waggle-pilot-codesign.pfx" -Password $pwd
+# 2. Apply the captured thumbprint to tauri.build-override.conf.json
+#    (touches bundle.windows.{certificateThumbprint,digestAlgorithm,timestampUrl}
+#    only — preserves all other fields).
+npm run tauri:sign:pilot:win:apply
 
-# Capture thumbprint for Tauri config
-$cert.Thumbprint
+# 3. Build — Tauri's MSI/NSIS bundlers pick up the thumbprint from the
+#    override config and sign automatically.
+npm run tauri:build:win
+
+# 4. (Optional, redundant safety) Re-sign the produced MSI explicitly
+#    via signtool. Useful if you want to apply timestamp at a different time
+#    than build.
+npm run tauri:sign:pilot:win:sign -- src-tauri/target/release/bundle/msi/Waggle_*.msi
 ```
 
-**Sign the Tauri output:**
+**What the scripts wrap (reference, in case you need to step outside the npm wrappers):**
 
-```powershell
-# Path to Windows SDK signtool
-$signtool = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\signtool.exe"
-
-# Sign .exe and .msi
-& $signtool sign `
-  /f "$env:USERPROFILE\waggle-pilot-codesign.pfx" `
-  /p "REPLACE_WITH_STRONG_PASSWORD" `
-  /tr "http://timestamp.digicert.com" `
-  /td sha256 /fd sha256 `
-  ".\src-tauri\target\release\bundle\msi\Waggle_*.msi"
-```
-
-**Tauri config (`app/src-tauri/tauri.conf.json`):**
-
-```json
-{
-  "bundle": {
-    "windows": {
-      "certificateThumbprint": "PASTE_THUMBPRINT_FROM_STEP_1",
-      "digestAlgorithm": "sha256",
-      "timestampUrl": "http://timestamp.digicert.com"
-    }
-  }
-}
-```
+- `app/scripts/sign-windows-pilot.ps1` — `-Mode Setup` runs `New-SelfSignedCertificate` with `Subject="CN=Egzakta Internal Pilot, O=Egzakta Group, C=RS"`, 2-year `NotAfter`, `Cert:\CurrentUser\My` store, then `Export-PfxCertificate`. `-Mode Sign -ArtifactPath <path>` wraps `signtool.exe sign /f <pfx> /tr http://timestamp.digicert.com /td sha256 /fd sha256` plus a `signtool verify /pa /v` round-trip.
+- `app/scripts/apply-signing-config.mjs` — pure JSON merge: reads `.thumbprint.txt`, parses + uppercases + validates 40-hex format via the canonical helpers in `signing-config.ts`, writes the three fields back to `tauri.build-override.conf.json`. Idempotent.
+- `app/scripts/signing-config.ts` — pure utility module (parse + merge) with 19-test vitest suite (`signing-config.test.ts`). Authoritative for thumbprint validation rules + idempotency invariants.
 
 **What pilot users see on first install:**
 - Windows SmartScreen: "Windows protected your PC" → "More info" → "Run anyway"
@@ -66,29 +46,21 @@ $signtool = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\signtoo
 
 ### 1.2 macOS self-sign (ad-hoc)
 
-**Build with ad-hoc signing — no cert generation needed:**
+**Already wired (LAUNCH-06).** `app/src-tauri/tauri.build-override.conf.json` ships with `bundle.macOS.signingIdentity = "-"`, so every `npm run tauri:build:mac` produces an ad-hoc-signed `.app` automatically — no operator step required.
+
+**Re-sign + verify wrapper.** For nested helpers (sidecar, native deps) Tauri's bundler may miss, run:
 
 ```bash
-# In Tauri bundle config:
-{
-  "bundle": {
-    "macOS": {
-      "signingIdentity": "-",
-      "providerShortName": null,
-      "entitlements": null
-    }
-  }
-}
+npm run tauri:sign:pilot:mac:adhoc -- /path/to/Waggle.app
+# Wraps: codesign --force --deep --sign -  +  codesign --verify --deep --strict
+# Source: app/scripts/sign-macos-adhoc.sh
 ```
 
-After Tauri build:
+**Distribution:** Wrap `Waggle.app` in `.zip` (NOT `.dmg` — Gatekeeper enforces notarization on disk images more aggressively than zips since macOS 10.15):
 
 ```bash
-codesign --force --deep --sign - /path/to/Waggle.app
-codesign --verify --deep --strict /path/to/Waggle.app  # sanity check
+ditto -c -k --keepParent /path/to/Waggle.app /path/to/Waggle.zip
 ```
-
-**Distribution:** Wrap `Waggle.app` in `.zip` (NOT `.dmg` — Gatekeeper enforces notarization on disk images more aggressively than zips since macOS 10.15).
 
 **What pilot users see on first install:**
 - Gatekeeper: "Waggle.app cannot be opened because Apple cannot check it for malicious software"
@@ -271,7 +243,7 @@ Secrets needed in GH Actions env: `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZU
 | T+ | Date | Action |
 |---|---|---|
 | 0 | 2026-05-07 | Decision locked: self-sign for pilot, real certs for public Day 0 |
-| 5 | 2026-05-12 | Generate self-sign certs (Win + Mac), update `tauri.conf.json`, build pilot binaries |
+| 5 | 2026-05-12 | Generate self-sign certs (Win + Mac), update `tauri.build-override.conf.json` (now scripted via LAUNCH-06 wrappers), build pilot binaries |
 | 9 | 2026-05-16 | **Pilot Wave-1 ship** with self-signed binaries + comms template §1.3 |
 | 14 | 2026-05-21 | **Start cert procurement** — SSL.com EV Authenticode + Apple Developer Program enrollment |
 | 21 | 2026-05-28 | Real certs in hand (assumes 7-day worst case) — replace thumbprints, rebuild, smoke-test |
@@ -294,7 +266,7 @@ Renewals: ~$348/yr ongoing. Tauri auto-updater also expects signed binaries — 
 
 | Failure | Symptom | Fix |
 |---|---|---|
-| Self-sign cert expired during pilot | Users get "certificate has expired" warning | Re-issue from PowerShell; redistribute installer; pilot users re-install |
+| Self-sign cert expired during pilot | Users get "certificate has expired" warning | Re-run `npm run tauri:sign:pilot:win:setup` (script reuses cert if still valid; generates a new one when NotAfter has passed); rerun apply + rebuild; redistribute installer |
 | EV cert vendor demands more verification | Procurement slips past 2026-05-21 | Switch to OV ($179, faster) — accept slower SmartScreen reputation buildup |
 | Notarization fails on a specific binary | Apple rejects with malware-pattern false positive | `xcrun notarytool log` for details; usually a sidecar binary needs `--options runtime` |
 | Apple Developer Program enrollment delayed | Org approval takes 2 weeks | Enroll as individual under Marko's name first, transfer to org post-launch (allowed) |
@@ -312,5 +284,5 @@ Renewals: ~$348/yr ongoing. Tauri auto-updater also expects signed binaries — 
 
 ---
 
-Last updated: 2026-05-07 by Marko + CC during 0507_s2.
+Last updated: 2026-05-10 — LAUNCH-06 self-sign automation landed (Phase 2 Step 4). §1.1 now points to the npm-wrapped scripts (`tauri:sign:pilot:win:setup` / `:apply` / `:sign`) backed by `app/scripts/sign-windows-pilot.ps1`, `apply-signing-config.mjs`, and the tested `signing-config.ts` utility. §1.2 ships the macOS ad-hoc identity in the build-override config by default; `tauri:sign:pilot:mac:adhoc` re-signs nested helpers post-build.
 Owner: Marko Marković (driving via CC); pilot self-sign actionable T+5; real cert procurement actionable T+14.

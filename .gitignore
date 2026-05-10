@@ -22,6 +22,11 @@ dist-ssr
 *.mind
 marketplace.db
 
+# Code signing (LAUNCH-06 pilot self-sign artifacts — never commit private
+# cert material or operator-local thumbprints into the repo)
+*.pfx
+app/src-tauri/.thumbprint.txt
+
 # Preflight gate per-query raw JSONs carry retrieved frame previews that
 # originate from Marko's personal AI exports. The report .md stays commit-
 # eligible (adapter counts, timing, verbatim questions + model answers
