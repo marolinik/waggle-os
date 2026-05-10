@@ -1,0 +1,687 @@
+# Manifest v6 — Task 2.5 Stage 3 N=400 Pre-Registration (Judge Ensemble Swap)
+# Canonical markdown surface: manifest-v6-preregistration.md
+# Supersedes manifest v5 (anchor fc16925) — v6 governs all Stage 3 re-kick forward.
+# SHA-256 of this YAML's bytes recorded in v6 anchor commit message.
+
+manifest_version: v6.0.0-preregistration
+manifest_type: stage_3_n400_preregistration_v6_ensemble_swap
+locked_date: 2026-04-24
+authority: PM (Marko Markovic) — §2.0 + §2.1 Phase 1 authorization 2026-04-24 on closure of full §1.3f-§1.3h-C judge swap validation sequence; inherits §1.1 + §1.2 + §1.3 chain ratifications
+sprint: 12
+task: 2.5
+stage: 3
+phase: 1
+branch: feature/c3-v3-wrapper
+code_freeze_head: 373516c2784807da8536dbc0c194c54f4e4cd4be
+code_freeze_head_short: 373516c
+supersedes: manifest_v5_2026_04_24_anchor_fc16925
+inherits_from: bench_spec_lock_v1_2026_04_22
+
+# ── v6 Delta Log ────────────────────────────────────────────────────────────
+
+v6_delta_log:
+  trigger:
+    event: judge_swap_validation_sequence_closure
+    sub_gates:
+      - id: "1.3f"
+        anchor_commit: 8ad056736f36b4ae
+        verdict: INFEASIBLE
+        observation: "Vertex AI v1beta batch-prediction catalog does not list gemini-3.1-pro-preview; Branch A closed"
+      - id: "1.3g"
+        anchor_commit: 8a2f0e61621f9684
+        verdict: MULTI_PASS_with_methodological_caveat
+        observation: "kappa=1.0 across 4 Chinese flagship candidates on 20 unanimous-biased instances (0/20 splits vs full-set 7% split rate); operational ranking (Zhipu > DeepSeek > MiniMax > Kimi) heuristic only"
+      - id: "1.3h"
+        anchor_commit: ae0d312b4088693e
+        verdict: INCONCLUSIVE_BUT_OPERATIONAL_SIGNAL
+        observation: "7-split stratified re-probe; split-only kappa structurally degenerate (all 7 splits Opus=correct/GPT=incorrect); correctness on oriented splits: MiniMax 86%, Kimi 80%, DeepSeek 40%, Zhipu 0% (GPT-echo)"
+      - id: "1.3h-C"
+        anchor_commit: 005a19a8c6c4146c
+        verdict: truncation_fixable_but_correctness_regressed
+        observation: "DeepSeek max_tokens 1024->2048: parse 5/7 -> 7/7; correctness 40% -> 14% (GPT-alignment escalates with reasoning depth); DeepSeek DQ"
+    root_cause_recap: "Google product policy 25 RPM per-model preview cap + Vertex batch ineligibility for preview models blocks Branch A; empirical judge swap validation sequence produces Chinese flagship roster"
+
+  final_ensemble_selection:
+    primary_judge_1:
+      model: claude-opus-4-7
+      rationale: "inherited from v5 (unchanged)"
+    primary_judge_2:
+      model: gpt-5.4
+      rationale: "inherited from v5 (unchanged)"
+    primary_judge_3:
+      model: minimax-m27-via-openrouter
+      upstream_identifier: openrouter/minimax/minimax-m2.7
+      rationale: "86% correctness on oriented splits (best empirical fit); 100% parse via OR; direct routing failed both api.minimaxi.com + api.minimax.chat v2 despite MINIMAX_GROUP_ID addition (§1.3h)"
+      selection_anchor: ae0d312b4088693e
+    backup_judge:
+      model: kimi-k26-direct
+      upstream_identifier: moonshot/kimi-k2.6 (via api.moonshot.ai/v1 OpenAI-compatible endpoint)
+      rationale: "80% correctness on oriented splits; per-instance failover on primary_judge_3 failure"
+      selection_anchor: ae0d312b4088693e
+      activation_policy: per_instance_failover_on_primary_judge_3_failure
+
+  disqualified_candidates:
+    - model: gemini-3.1-pro-preview
+      dq_reason: "Google per-model 25 RPM preview cap + Vertex batch INFEASIBLE"
+      evidence_anchors:
+        - 66dcd5a1b18b9367
+        - 1d3851d...
+        - 8ad056736f36b4ae
+    - model: zhipu_glm-5.1
+      dq_reason: "100% GPT-echo on oriented splits (p_opus=0%, p_gpt=100%); violates ensemble independence assumption"
+      evidence_anchor: ae0d312b4088693e
+    - model: deepseek_v4-pro
+      dq_reason: "14% correctness on oriented splits at max_tokens=2048 (regressed from 40% at max_tokens=1024); GPT-alignment escalates with reasoning depth"
+      evidence_anchor: 005a19a8c6c4146c
+    - model: grok-4.20
+      dq_reason: "retired from tie-break reserve role in v6; no operational issue, but v6 backup-failover policy replaces reserve-judge mechanism"
+      evidence: "v6 §5.2 policy change (not empirical DQ)"
+
+  changes_from_v5:
+    judge_ensemble_section_5_2:
+      v5: "Opus + GPT + Gemini-3.1-Pro-Preview primary; Grok-4.20 reserve (1/1/1 only)"
+      v6: "Opus + GPT + MiniMax-M2.7 primary; Kimi-K2.6 backup (per-instance failover); Grok retired"
+    tiebreak_policy:
+      v5: "majority_with_grok_reserve_on_1_1_1_split"
+      v6: "primary_3_judge_majority_with_kimi_per_instance_failover_on_minimax_failure; three-way 1/1/1 -> PM escalation (no reserve judge)"
+    rate_limit_metadata:
+      v5: "rpm:20 on gemini-3.1-pro-preview (v5 §5.2 addendum)"
+      v6: "no active rpm:20 in judge path (Gemini alias retained in litellm-config as orphan audit artefact, not routed in v6); MiniMax OR rpm + Kimi Moonshot rpm TBD at §1.3c-v6 probe time"
+    code_freeze_section_11:
+      v5: "HEAD 373516c; single permitted pre-run modification = litellm-config.yaml Gemini rpm:20 addendum"
+      v6: "v5 §11 freeze on litellm-config.yaml superseded by v6 authority; Phase 1 Commit 2 amendment adds minimax-m27-via-openrouter + kimi-k26-direct aliases + retains all v5 entries; v6 §11 pins post-amendment state"
+    budget_envelope:
+      v5: "$30 cap / $28 halt / ~$23 expected"
+      v6: "$60 cap / $55 halt / ~$50 expected (Phase 1 kappa re-cal ~$25 + Phase 2 N=400 ~$25; no preview-model premium)"
+    pm_gates:
+      v5: "Gate P+ (pre-run) + Gate D (post-run)"
+      v6: "Gate P++ (Phase 1 kappa re-cal + config amendment) + Gate P+++ (Phase 2 kick on PM-RATIFY-V6-KAPPA) + Gate D (post-run unchanged)"
+
+  unchanged_from_v5:
+    sections:
+      - "§1 primary hypothesis (Fisher one-sided p<0.10 on retrieval - no-context >= 5pp)"
+      - "§2 secondary endpoints S1-S5"
+      - "§3 sample design (concurrency=1, 5 cells sequential, N=400, seed=42)"
+      - "§4 dataset (LoCoMo 1531 instances, raw SHA 79fa87e9..., canonical SHA 39e415e2...)"
+      - "§5.1 subject route table (Qwen 3.6-35B-A3B-Thinking, DashScope-intl direct primary)"
+      - "§5.3 health-check predicate"
+      - "§6 substrate (HybridSearch conv-scope top-K=20, nomic-embed-text)"
+      - "§7 SYSTEM_AGENTIC verbatim bytes (SHA-256 6facae6d..., 1467 bytes)"
+      - "§8 stopping rules (budget + streak + pre-cell health + deviation)"
+      - "§9 post-hoc exclusion policy NONE"
+      - "§10 deviation policy (halt + restart-required)"
+      - "§12 scope boundaries + SOTA composition reserved for PM"
+      - "Gate D structure (post-run, pre-SOTA-claim)"
+
+  parent_chain:
+    v4: dedd69888e008fb158
+    section_1_1_lock_waiver: 67eb89914a49ec38
+    section_1_2_rca: 274e9871b54599077a3d
+    section_1_3_probe_fail: 66dcd5a1b18b9367
+    section_1_3b_scope_audit: 69a14708f78a74d2
+    v5_emission: fc169250c3c27cd3
+    section_5_2_rpm20_edit: ad324ccf...
+    section_1_3c_throttle_probe_pass: 3a146efc...
+    fold_in_3_5b_sibling_mirror: d0ab680...
+    section_1_3e_rpd_feasibility: 1d3851d...
+    section_1_3f_vertex_batch: 8ad056736f36b4ae
+    section_1_3g_judge_swap_multi_pass: 8a2f0e61621f9684
+    section_1_3h_stratified_reprobe: ae0d312b4088693e
+    section_1_3h_c_deepseek_mt_bump: 005a19a8c6c4146c
+
+# ── Manifest path + lock timestamp ──────────────────────────────────────────
+
+manifest_path: benchmarks/preregistration/manifest-v6-preregistration.yaml
+manifest_locked_at: 2026-04-24T00:00:00Z
+
+# ── Dataset (unchanged from v5) ─────────────────────────────────────────────
+
+dataset:
+  name: locomo
+  source_url: https://raw.githubusercontent.com/snap-research/locomo/main/data/locomo10.json
+  raw_archive_path: benchmarks/data/locomo10.json
+  raw_archive_sha256: 79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4
+  raw_archive_bytes: 2805274
+  canonical_path: benchmarks/data/locomo/locomo-1540.jsonl
+  canonical_sha256: 39e415e2f3a0fa1bd3cb1804a58d0b440b50d3070b2100698437e4ec402a5b24
+  canonical_instance_count: 1531
+  paper_total_claim: 1540
+  paper_reference: "Maharana et al., ACL-2024 — Evaluating Very Long-Term Conversational Memory of LLM Agents"
+  category_distribution:
+    single_hop: 841
+    multi_hop: 281
+    temporal: 320
+    open_ended: 89
+
+# ── Primary hypothesis (unchanged from v5) ──────────────────────────────────
+
+primary_hypothesis:
+  name: memory_lift_retrieval_vs_no_context
+  direction: one_sided_positive
+  statement: "retrieval_judge_accuracy - no-context_judge_accuracy >= 5pp"
+  test: fisher_exact_one_sided
+  alpha_threshold: 0.10
+  effect_size_threshold_pp: 5
+  justification_ex_ante:
+    - gate_b_dry_run_conv_scope_20_of_20_vs_whole_corpus_8_of_20_leak_2026_04_24
+    - gate_c_monotonicity_no_context_0_10_lt_retrieval_0_35_lt_agentic_0_40_lt_oracle_0_55
+
+# ── Secondary endpoints (unchanged from v5) ─────────────────────────────────
+
+secondary_endpoints:
+  S1_monotonicity_no_context_leq_retrieval:
+    direction: one_sided_positive
+    threshold_pp: 0
+    test: fisher_exact_one_sided
+    alpha: 0.20
+  S2_monotonicity_retrieval_leq_agentic:
+    direction: one_sided_positive
+    threshold_pp: 0
+    test: fisher_exact_one_sided
+    alpha: 0.20
+  S3_monotonicity_agentic_leq_oracle_context:
+    direction: one_sided_positive
+    threshold_pp: 0
+    test: fisher_exact_one_sided
+    alpha: 0.20
+  S4_agentic_lift_over_retrieval:
+    direction: descriptive
+    threshold_pp: 0
+    report: [point_estimate, wilson_95_ci]
+  S5_abstain_penalty_oracle_minus_full_context:
+    direction: descriptive_expected_positive
+    report: [point_estimate]
+
+# ── Sample design (unchanged from v5: concurrency=1) ────────────────────────
+
+sample:
+  cells:
+    - no-context
+    - oracle-context
+    - full-context
+    - retrieval
+    - agentic
+  n_per_cell: 400
+  total_evaluations: 2000
+  instance_selection_seed: 42
+  instance_selection_method: "shuffle-then-take-first-N, deterministic given seed"
+  matched_pairs: true
+  concurrency: 1
+  concurrency_rationale: "inherited from v5 §3 (§1.3 Gate P+ empirical finding on 25 RPM Gemini preview cap); concurrency=1 retained in v6 even though Gemini retired, for stable empirical comparability with v5 planning"
+
+# ── Cells semantics (unchanged from v5, frozen at HEAD 373516c) ─────────────
+
+cells_semantics:
+  no_context:
+    system_prompt: SYSTEM_BASELINE
+    user_prompt: "Question: {question}"
+    memory_injection: none
+    added_at: stage_2_retry_1_1_2026_04_24
+  oracle_context:
+    system_prompt: SYSTEM_BASELINE
+    user_prompt: "Context: {instance.context}\\n\\nQuestion: {instance.question}"
+    memory_injection: oracle_fed_by_locomo
+    harness_alias: raw
+  full_context:
+    system_prompt: SYSTEM_EVOLVED
+    memory_injection: oracle_fed_plus_evolved_abstain
+  retrieval:
+    system_prompt: SYSTEM_BASELINE
+    substrate: waggle_core_hybrid_search
+    scope: conversation_scoped_via_gopId
+    top_k_default: 20
+    top_k_upper_clamp: 50
+  agentic:
+    system_prompt: SYSTEM_AGENTIC_softened_stage2_retry
+    system_prompt_sha256: 6facae6decc44a6404290514accb4f7cb364081b32d02847a20f8e871633e328
+    system_prompt_bytes: 1467
+    tool_allowlist:
+      - search_memory
+    tool_binding: "search_memory bound to instance.conversation_id; non-overridable"
+    max_turns: 3
+    timeout_ms: 180000
+    forced_answer_fallback:
+      enabled: true
+      system_prompt: SYSTEM_AGENTIC_FORCED_FALLBACK
+      gate_c_firing_rate: 0
+
+# ── Model stack (CHANGED: §5.2 ensemble swap + backup policy) ───────────────
+
+subject_model: qwen3.6-35b-a3b-via-dashscope-direct
+subject_fallback_1: qwen3.6-35b-a3b-via-openrouter
+subject_fallback_2: NOT_AVAILABLE
+
+subject_route_table:
+  primary:
+    alias: qwen3.6-35b-a3b-via-dashscope-direct
+    litellm_model: qwen3.6-35b-a3b-via-dashscope-direct
+    upstream_route: "LiteLLM local alias -> openai/qwen3.6-35b-a3b @ https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+    provider: alibaba
+    thinking: on
+    max_tokens: 16000
+    price_per_million_input_usd: 0.20
+    price_per_million_output_usd: 0.80
+    context_window: 262144
+    pinning_surface: floating_alias
+  fallback_1:
+    alias: qwen3.6-35b-a3b-via-openrouter
+    litellm_model: qwen3.6-35b-a3b-via-openrouter
+    upstream_route: "LiteLLM -> OpenRouter bridge (openrouter/qwen/qwen3.5-35b-a3b)"
+    thinking: on
+    max_tokens: 64000
+    pinning_surface: floating_alias
+    trigger_condition: fetch_error_on_primary
+  fallback_2:
+    alias: NOT_AVAILABLE
+
+judge_ensemble:
+  primary:
+    - judge_role: primary
+      slot: primary_judge_1
+      model_id: claude-opus-4-7
+      provider: anthropic
+      litellm_model: claude-opus-4-7
+      pinning_surface: anthropic_immutable
+      rate_limit_v6: null
+      price_per_million_input_usd: 15.00
+      price_per_million_output_usd: 75.00
+      unchanged_from_v5: true
+    - judge_role: primary
+      slot: primary_judge_2
+      model_id: gpt-5.4
+      provider: openai_via_openrouter
+      litellm_model: gpt-5.4
+      pinning_surface: floating_alias
+      rate_limit_v6: null
+      price_per_million_input_usd: 10.00
+      price_per_million_output_usd: 30.00
+      unchanged_from_v5: true
+    - judge_role: primary
+      slot: primary_judge_3_v6_swap
+      model_id: minimax-m2.7
+      provider: openrouter_bridge
+      litellm_model: minimax-m27-via-openrouter
+      upstream_identifier: openrouter/minimax/minimax-m2.7
+      pinning_surface: floating_alias
+      rate_limit_v6:
+        rpm: null
+        rationale: "TBD at §1.3c-v6 probe time (OR tier-dependent; default 60 RPM if unspecified by OR)"
+        delivery_mechanism: "LiteLLM litellm_params.rpm on the v6 alias entry in litellm-config.yaml (Phase 1 Commit 2)"
+      price_per_million_input_usd: 0.30
+      price_per_million_output_usd: 1.20
+      context_window: 196608
+      v6_selection_rationale: "86% correctness on oriented splits (§1.3h); 100% parse via OR; direct routing failed despite MINIMAX_GROUP_ID addition"
+      v6_selection_anchor: ae0d312b4088693e
+      unchanged_from_v5: false
+  backup:
+    judge_role: backup
+    slot: backup_judge_v6
+    model_id: kimi-k2.6
+    provider: moonshot_direct
+    litellm_model: kimi-k26-direct
+    upstream_identifier: "moonshot/kimi-k2.6 via api.moonshot.ai/v1 OpenAI-compatible endpoint"
+    pinning_surface: floating_alias
+    rate_limit_v6:
+      rpm: null
+      rationale: "TBD at §1.3c-v6 probe time (Moonshot tier-dependent)"
+    price_per_million_input_usd: 0.60
+    price_per_million_output_usd: 2.40
+    activation_policy: per_instance_failover_on_primary_judge_3_failure
+    activation_triggers:
+      - api_error_non_200_status
+      - parse_failure_verdict_none
+      - timeout_60s
+    both_fail_behavior: "judge_ensemble_fail marker; instance counted as evaluator_loss in denominator per §9"
+    v6_selection_rationale: "80% correctness on oriented splits (§1.3h); direct Moonshot route stable; per-instance failover rather than reserve tie-break judge"
+    v6_selection_anchor: ae0d312b4088693e
+  retired_in_v6:
+    model_id: grok-4.20
+    v5_role: tiebreak_reserve_on_1_1_1
+    v6_status: retired
+    v6_replacement_policy: "three-way 1/1/1 split on primary trio -> PM escalation (no reserve judge in v6; backup-failover policy replaces reserve mechanism — further superseded by §5.2.1 2-of-2 quorum clarification 2026-04-24)"
+  section_5_2_1_clarification_2026_04_24:
+    scope: "v6 §5.2 amendment under v6 authority (canonical anchor 60d061e preserved); NOT v7 re-pre-registration; NOT §10 deviation"
+    pm_adjudication_anchor: pm_adjudicate_v6_phase2_blockers_option_b_accept
+    change_summary: "retract Kimi backup; adopt 2-of-2 quorum on MiniMax failure; evaluator_loss on Opus/GPT split"
+    rationale:
+      - "MiniMax Phase 1 empirical reliability: 100/100 parse + 0 routing errors (expected <1% N=400 failure rate)"
+      - "Kimi cold probe (Phase 2 pre-flight fa7464b): 2/3 parse (67%); §1.3g-h-C consistent 67-71% on challenging samples + p95 >60s timeout"
+      - "Kimi-as-backup = insurance that fails when needed"
+    backup_judge_retraction:
+      retracted_policy: per_instance_failover_on_primary_judge_3_failure
+      retracted_model: kimi-k26-direct
+      retracted_model_status_in_litellm_config: retained_as_orphan_not_invoked_by_runner
+    new_quorum_policy_on_minimax_failure:
+      opus_gpt_agree: majority_verdict_equals_their_consensus_2_of_2_quorum
+      opus_gpt_disagree: evaluator_loss_reason_minimax_failed_opus_gpt_split_exclude_from_h1
+      expected_failure_rate_n400: lt_0_01
+      expected_evaluator_loss_rate_n400: lt_0_01
+    expected_phase2_execution_semantics:
+      primary_judges_parallel: [opus, gpt, minimax]
+      minimax_failure_triggers: [api_error, parse_fail, timeout_gt_60s_after_3_retry]
+      minimax_failure_fallback: 2_of_2_opus_gpt_quorum
+      kimi_involvement: none_retired
+      evaluator_loss_only_when: opus_gpt_disagree_and_minimax_failed
+    audit_chain:
+      parent_commit: fa7464b
+      canonical_v6_anchor: 60d061e
+      phase_2_kick_gate: PM_RATIFY_V6_5_2_CLARIFICATION
+  consistency_constraint:
+    same_physical_judge_models_subset_as_v5_plus_minimax: true
+    single_call_per_judge_per_instance: true
+    no_prompt_batching: true
+    identical_prompt_template: "failure-mode-judge.ts:245-258 verbatim"
+    temperature: 0.0
+    max_tokens_per_judge:
+      claude_opus_4_7: 1024
+      gpt_5_4: 1024
+      minimax_m27: 4096
+      kimi_k26: 4096
+  vote_policy:
+    primary_trio_majority: true
+    backup_activates_on_primary_judge_3_failure: true
+    one_one_one_split: pm_escalation_no_reserve
+    two_two_defensive_tie: pm_escalation
+
+judge_primary:
+  id: claude-opus-4-7
+judge_secondary:
+  id: gpt-5.4
+judge_tertiary_v6:
+  id: minimax-m27-via-openrouter
+judge_backup_v6:
+  id: kimi-k26-direct
+
+# ── κ re-calibration methodology (NEW in v6 §5.4) ───────────────────────────
+
+kappa_recalibration_v6:
+  phase: 1
+  required_before_phase_2_n400: true
+  gate_id: gate_p_plus_plus
+  sample:
+    source: benchmarks/results/locomo-mini-n20-retry-2026-04-24T00-02-12Z.jsonl
+    n_instances: 100
+    rationale: "same authoritative source as v5 kappa baseline + §1.3h split analysis; new trio kappa directly comparable to v5 historical kappa=0.7458"
+  verdicts_reused:
+    claude_opus_4_7: "100 from judge_ensemble field (zero new calls)"
+    gpt_5_4: "100 from judge_ensemble field (zero new calls)"
+  verdicts_new:
+    minimax_m27_via_openrouter: "100 new calls, verbatim prompt failure-mode-judge.ts:245-258, temperature=0.0, max_tokens=4096"
+  total_new_api_calls_phase_1: 100
+  computation:
+    pairwise_cohen_kappa:
+      - "kappa(opus, gpt) — should match v5 baseline ~0.74-0.82"
+      - "kappa(opus, minimax) — new"
+      - "kappa(gpt, minimax) — new"
+    conservative_trio_kappa: "min of three pairwise"
+    also_reported:
+      - raw_agreement_pct_per_pair
+      - confusion_matrix_per_pair
+      - per_cell_breakdown
+  success_criteria:
+    pass_trio_kappa_gte: 0.70
+    borderline_trio_kappa_range: [0.60, 0.70]
+    fail_trio_kappa_lt: 0.60
+    pass_action: halt_with_PM_RATIFY_V6_KAPPA_request_for_phase_2_authorization
+    borderline_action: halt_with_PM_adjudication_request
+    fail_action: halt_with_swap_path_re_evaluation_request
+  operational_hedge:
+    parse_rate_target_per_100: 95
+    parse_rate_halt_threshold_per_100: 90
+    latency_p50_target_seconds: 25
+    openrouter_routing_error_rate_flag_threshold: 0.05
+
+# ── Substrate (unchanged from v5) ───────────────────────────────────────────
+
+substrate:
+  implementation: "@waggle/core::HybridSearch (RRF-fused FTS5 + vec0)"
+  scope_filter:
+    parameter: gopId
+    source_location: packages/core/src/mind/search.ts:14
+    field_name: SearchOptions.gopId
+    benchmark_binding: instance.conversation_id
+  top_k_default: 20
+  top_k_upper_clamp: 50
+  embedder:
+    factory: createOllamaEmbedder
+    base_url: http://localhost:11434
+    model: nomic-embed-text
+    dims: 1024
+    cost: zero_local_inference
+  ingest_batch_size: 200
+
+# ── κ monitoring runtime (during Phase 2 N=400) ─────────────────────────────
+
+kappa_monitoring_runtime:
+  baseline_reference: sprint_10_task_2_2_kappa_0_7458_plus_v6_phase_1_kappa_value
+  compute: fleiss_kappa_on_pre_tiebreak_vote_matrix
+  thresholds:
+    pass_no_flag_kappa_min: 0.65
+    pass_with_flag_kappa_range: [0.60, 0.65]
+    halt_kappa_max: 0.60
+    halt_drop_from_baseline_max_pp: 10
+
+# ── Confidence intervals + failure taxonomy (unchanged from v5) ─────────────
+
+confidence_intervals:
+  primary:
+    method: wilson_score_95
+  secondary:
+    method: cluster_bootstrap_95
+    iterations: 10000
+    seed: 42
+    cluster_unit: conversation_id
+
+failure_taxonomy:
+  version: v1
+  categories:
+    - {code: F1, name: contradicts_ground_truth}
+    - {code: F2, name: partial_answer}
+    - {code: F3, name: off_topic}
+    - {code: F4, name: refusal}
+    - {code: F5, name: tool_use_error}
+    - {code: F6, name: format_violation}
+
+# ── Stopping rules (§7.1 budget updated to v6 envelope) ─────────────────────
+
+stopping_rules:
+  budget_hard_halt_usd: 55.00
+  budget_cap_usd: 60.00
+  streak_halt: "3 consecutive subject fetch failures -> halt (streak-tracker.ts)"
+  pre_cell_health_check: "GET /health/liveliness + POST /v1/chat/completions ping per model including v6 new aliases -> halt on any 5xx/fetch-error"
+  runner_lock: "concurrent_runners: SEQUENTIAL (parallel-concurrency=1); §1.1 cross-process waiver still governs"
+  deviation_from_preregistration: "any change to §1-§9 during run -> immediate halt + PM raise"
+  no_interim_looks: true
+  mid_run_amendment_policy: halt_restart_required
+
+# ── Post-hoc exclusion: NONE (unchanged from v5; judge_ensemble_fail in denominator) ──
+
+post_hoc_exclusion:
+  policy: none
+  evaluator_loss_handling:
+    included_in_denominator: true
+    reported_separately: true
+    denominator_formula: "correct + incorrect + evaluator_loss"
+    evaluator_loss_sources:
+      - "judge parse failure on all active primaries after retries"
+      - "v6 NEW: judge_ensemble_fail when primary_judge_3 (MiniMax) and backup_judge (Kimi) both fail on same instance"
+
+# ── Budget (v6 expanded envelope) ───────────────────────────────────────────
+
+budget:
+  v6_total_cap_usd: 60.00
+  v6_total_hard_halt_usd: 55.00
+  v6_expected_total_burn_usd: 50.00
+  variance_ceiling_usd: 55.00
+  phase_1_cap_usd: 30.00
+  phase_1_halt_usd: 35.00
+  phase_2_cap_usd: 30.00
+  breakdown_expected:
+    phase_1_minimax_kappa_recal_usd: 2.50
+    phase_2_subject_qwen_dashscope_direct_usd: 2.50
+    phase_2_judge_triple_opus_gpt5_minimax_usd: 22.00
+    phase_2_kimi_backup_activations_variable_usd: 1.00
+    embedding_ollama_local_usd: 0.00
+  wall_clock_estimate:
+    phase_1_kappa_recal_minutes: 90
+    phase_2_n400_hours_min: 2
+    phase_2_n400_hours_max: 3
+
+# ── Target sample + CLI invocation (v6-specific) ────────────────────────────
+
+target_N: 400
+target_cells:
+  - no-context
+  - oracle-context
+  - full-context
+  - retrieval
+  - agentic
+target_total_evaluations: 2000
+target_concurrency: 1
+
+cli_invocation_template: >
+  npx tsx scripts/run-mini-locomo.ts
+  --manifest benchmarks/preregistration/manifest-v6-preregistration.yaml
+  --subject qwen3.6-35b-a3b-via-dashscope-direct
+  --subject-fallback-1 qwen3.6-35b-a3b-via-openrouter
+  --judge-ensemble claude-opus-4-7,gpt-5.4,minimax-m27-via-openrouter
+  --backup-judge kimi-k26-direct
+  --v3-cells --N 400 --parallel-concurrency 1 --seed 42
+
+# ── Code freeze — v6 supersession of v5 §11 ─────────────────────────────────
+
+code_freeze:
+  head: 373516c2784807da8536dbc0c194c54f4e4cd4be
+  branch: feature/c3-v3-wrapper
+  v5_section_11_superseded_by: v6_phase_1_commit_2_under_pm_authorization
+  frozen_paths:
+    - benchmarks/harness/src/cells.ts
+    - benchmarks/harness/src/substrate.ts
+    - benchmarks/harness/src/judge-client.ts
+    - benchmarks/harness/src/judge-runner.ts
+    - benchmarks/harness/src/failure-mode-judge.ts
+    - benchmarks/harness/src/health-check.ts
+    - benchmarks/harness/src/streak-tracker.ts
+    - benchmarks/harness/src/runner-lock.ts
+    - benchmarks/harness/src/runner.ts
+    - benchmarks/harness/config/models.json
+    - packages/agent/src/agent-loop.ts
+    - packages/agent/src/tools.ts
+    - packages/core/src/mind/search.ts
+    - packages/core/src/mind/frames.ts
+    - packages/core/src/mind/sessions.ts
+    - packages/core/src/mind/db.ts
+  permitted_delta_during_run:
+    - "new JSONL files emitted to benchmarks/results/ by the N=400 run"
+    - "new artefacts under benchmarks/calibration/v6-kappa-recal/ at Phase 1"
+  permitted_pre_run_delta_v6_single_authorized_amendment:
+    path: litellm-config.yaml
+    scope: "add minimax-m27-via-openrouter + kimi-k26-direct aliases; retain all v5 entries (Gemini with rpm:20 kept as orphan audit artefact); no modifications to other aliases"
+    committed_separately_before_kappa_recal: true
+    justification: "manifest v6 §5.2 ensemble swap + §11 supersession under PM authorization 2026-04-24 post-§1.3h-C closure"
+    v6_phase_1_commit_2_pins_post_amendment_state: true
+
+# ── Deviation policy (unchanged from v5) ────────────────────────────────────
+
+deviation_policy:
+  on_detection:
+    - immediate_halt
+    - pm_raise
+    - re_preregister_new_manifest_v7_if_accepted
+
+# ── PM gates (v6: Gate P++ + Gate P+++ new; Gate D unchanged) ──────────────
+
+pm_gates:
+  gate_p_plus_plus_v6_phase_1:
+    trigger: "v6 emission commit + litellm-config.yaml amendment commit + kappa re-cal analysis commit on feature/c3-v3-wrapper"
+    pre_kick_checks_required:
+      - v6_anchor_commit_sha_recorded
+      - v6_md_sha256_recorded_in_commit_message
+      - v6_yaml_sha256_recorded_in_commit_message
+      - litellm_config_amendment_committed_separately
+      - kappa_conservative_trio_gte_0_70
+      - minimax_parse_rate_gte_95_per_100
+      - minimax_routing_error_rate_lt_0_05
+    action: "CC-1 halts; awaits PM-RATIFY-V6-KAPPA for Phase 2 authorization"
+    success_verdict_bands:
+      PASS: kappa_trio_gte_0_70
+      BORDERLINE: kappa_trio_0_60_to_0_70
+      FAIL: kappa_trio_lt_0_60
+  gate_p_plus_plus_plus_v6_phase_2_kick:
+    trigger: "PM-RATIFY-V6-KAPPA received"
+    action: "CC-1 kicks N=400 execution via v6 CLI invocation template"
+    prerequisites:
+      - pm_ratify_v6_kappa_received
+  gate_d_post_run:
+    trigger: "N=400 run exit (clean or halted per stopping_rules)"
+    action: "CC-1 writes Gate D exit report at PM-Waggle-OS/sessions/2026-04-24-task25-stage3-n400-complete.md; halts"
+    outcomes:
+      - compose_sota_claim_authority_pm
+      - publish_gate
+      - further_scope
+  cc1_self_advance: forbidden_at_all_gates
+
+# ── Scope boundaries (unchanged from v5) ────────────────────────────────────
+
+scope_boundaries:
+  claimable_at_gate_d:
+    - memory_lift_magnitude_and_significance_conv_scope_qwen_harness_head_373516c
+    - per_cell_judge_accuracy_wilson_95
+    - monotonicity_chain_observation_5_cell
+    - conv_scope_fair_comparison_methodology
+    - agentic_discipline_search_rate_turns_unknown_fallback
+  not_claimable_at_gate_d:
+    - direct_comparability_to_mem0_91_6_different_scope_and_memory_layer
+    - multi_model_generalization_stage_3_is_qwen_only
+    - production_waggle_orchestrator_performance
+  reserved_for_pm_at_gate_d:
+    - public_claim_phrasing_venue
+    - matched_scope_mem0_co_run_stage_4
+    - publication_timing
+  cc1_does_not_compose_public_sota_claim: true
+
+# ── Related artefacts ───────────────────────────────────────────────────────
+
+related:
+  v5_predecessor: fc169250c3c27cd3
+  v4_ancestor: dedd69888e008fb158
+  section_1_1_lock_waiver: 67eb89914a49ec38
+  section_1_2_rca: 274e9871b54599077a3d
+  section_1_3_probe_fail: 66dcd5a1b18b9367
+  section_1_3b_scope_audit: 69a14708f78a74d2
+  section_5_2_v5_rpm_20_edit: ad324ccf...
+  section_1_3c_throttle_probe_pass: 3a146efc...
+  fold_in_3_5b_sibling_mirror: d0ab680...
+  section_1_3e_rpd_feasibility: 1d3851d...
+  section_1_3f_vertex_batch_infeasible: 8ad056736f36b4ae
+  section_1_3g_judge_swap_multi_pass: 8a2f0e61621f9684
+  section_1_3h_stratified_reprobe: ae0d312b4088693e
+  section_1_3h_c_deepseek_mt_bump: 005a19a8c6c4146c
+  bench_spec_lock_v1_parent: PM-Waggle-OS/decisions/2026-04-22-bench-spec-locked.manifest.yaml
+  stage_2_retry_gate_c_exit: PM-Waggle-OS/sessions/2026-04-24-task25-stage2-retry-complete.md
+  v6_brief: PM-Waggle-OS/briefs/2026-04-24-cc1-manifest-v6-phase1-kappa-recal-brief.md
+  rollback_tag: checkpoint/pre-self-evolution-2026-04-14
+  canonical_md_surface: benchmarks/preregistration/manifest-v6-preregistration.md
+
+# ── Validation gates ────────────────────────────────────────────────────────
+
+validation_gates:
+  before_phase_2_n400_kickoff_v6:
+    - v6_anchor_commit_sha_recorded
+    - v6_md_sha256_recorded_in_commit_message
+    - v6_yaml_sha256_recorded_in_commit_message
+    - litellm_config_v6_amendment_committed_separately
+    - kappa_recalibration_phase_1_PASS_verdict
+    - kappa_conservative_trio_value_gte_0_70
+    - minimax_parse_rate_gte_95_per_100
+    - pm_ratify_v6_kappa_received
+    - kickoff_mechanism_clean_foreground_non_harness_process_tree
+  at_gate_d_exit_v6:
+    - all_2000_evals_accounted_in_denominators
+    - evaluator_loss_reported_separately
+    - judge_ensemble_fail_count_reported_separately
+    - primary_fisher_one_sided_computed
+    - secondary_endpoints_reported
+    - budget_reconciled
+    - deviation_count_reported
+    - code_freeze_reverified_head_373516c_plus_v6_litellm_amendment

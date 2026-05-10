@@ -6,8 +6,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { MindDB } from '../src/mind/db.js';
-import { FrameStore } from '../src/mind/frames.js';
+import { MindDB } from '@waggle/hive-mind-core';
+import { FrameStore } from '@waggle/hive-mind-core';
 import { FileIndexer, MAX_CONTENT_BYTES } from '../src/file-indexer.js';
 
 describe('FileIndexer', () => {

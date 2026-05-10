@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { MindDB } from '../../src/mind/db.js';
+import { MindDB } from '@waggle/hive-mind-core';
 import { ComplianceTemplateStore, KVARK_TEMPLATE_NAME } from '../../src/compliance/template-store.js';
 import type { ComplianceTemplateSections } from '../../src/compliance/types.js';
 

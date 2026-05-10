@@ -1,16 +1,25 @@
-# L-17 · MOCK / TODO / FIXME audit — 2026-04-19 (rev 2026-05-08)
+# L-17 · MOCK / TODO / FIXME audit — 2026-04-19 (rev 2026-05-10)
 
 Scope: `apps/web/src`, `packages/*/src` (excludes test directories and
 HTML `placeholder="..."` attributes).
 
 Grep pattern: `// (MOCK|TODO|FIXME|XXX):` or the `/* … */` equivalent.
 
-Current count: **0** lines. Down from 10 on 2026-04-20 after the
-2026-05-08 DAY0V-01 + DAY0V-02 cleanup pass (Phase 1 of v1.0
-milestone): WS gateway TODO replaced with cryptographic-or-fail logic
-and `mock-channel-connectors.ts` deleted. Zero new production code may
-introduce a marker without updating `tests/placeholder-audit.test.ts`
-and this document in the same commit.
+Current count: **6** lines (revision history below). All 6 are intentional
+subtree-split STUB markers in the `hive-mind-hooks-*` packages introduced
+by the Phase 2 consolidation merge of `feature/hive-mind-monorepo-migration`
+(2026-05-10). They flag hook implementations awaiting Wave 2/3 work; they
+are load-bearing for both waggle-os main and the public hive-mind repo
+subtree-split. Zero new production code may introduce a marker without
+updating `tests/placeholder-audit.test.ts` and this document in the same
+commit.
+
+**Revision history:**
+- 2026-04-19: 14 → 10 (initial L-17 audit + C2/C3/C4/C5 cleanup)
+- 2026-05-08: 10 → 0 (DAY0V-01 WS gateway hard-fail replaces TODO + DAY0V-02
+  deletes `mock-channel-connectors.ts`)
+- 2026-05-10: 0 → 6 (Phase 2 consolidation merge introduces `hive-mind-hooks-*`
+  subtree-split stubs; see Category D below)
 
 ## Category A — RESOLVED 2026-05-08 (was 9 hits, now 0)
 
@@ -32,7 +41,32 @@ when real OAuth ships under different class names.
 
 | File | Line | Original note | Resolution |
 |---|---|---|---|
-| `packages/server/src/ws/gateway.ts` | 91 | Replace with full Clerk verification once `CLERK_SECRET_KEY` is always configured | DAY0V-01 / commit `8ec8419` (2026-05-08) — replaced unsigned-JWT-decode fallback with hard-fail in production + connection-time reject in dev/desktop. `decodeJwtPayload()` deleted. |
+| `packages/server/src/ws/gateway.ts` | 91 | Replace with full Clerk verification once `CLERK_SECRET_KEY` is always configured | DAY0V-01 / commit `d6971f6` (2026-05-08, rebased from `8ec8419`) — replaced unsigned-JWT-decode fallback with hard-fail in production + connection-time reject in dev/desktop. `decodeJwtPayload()` deleted. |
+
+## Category D — INTENTIONAL STUBS introduced 2026-05-10 (6 hits)
+
+Phase 2 consolidation merge of `feature/hive-mind-monorepo-migration` brought
+in 11 new `hive-mind-*` packages, of which 6 are subtree-split hook stubs
+awaiting Wave 2/3 implementation. The `// TODO: Wave 2/3 implementation`
+markers are load-bearing — they signal to developers (in both waggle-os main
+and the public hive-mind repo) that these hooks aren't implemented yet.
+
+| File | Line | Marker | Status |
+|---|---|---|---|
+| `packages/hive-mind-hooks-claude-desktop/src/index.ts` | 10 | `// TODO: Wave 2/3 implementation` | OPEN — implements Wave 2/3 |
+| `packages/hive-mind-hooks-codex-desktop/src/index.ts` | 10 | `// TODO: Wave 2/3 implementation` | OPEN — implements Wave 2/3 |
+| `packages/hive-mind-hooks-codex/src/index.ts` | 10 | `// TODO: Wave 2/3 implementation` | OPEN — implements Wave 2/3 |
+| `packages/hive-mind-hooks-cursor/src/index.ts` | 10 | `// TODO: Wave 2/3 implementation` | OPEN — implements Wave 2/3 |
+| `packages/hive-mind-hooks-hermes/src/index.ts` | 10 | `// TODO: Wave 2/3 implementation` | OPEN — implements Wave 2/3 |
+| `packages/hive-mind-hooks-openclaw/src/index.ts` | 10 | `// TODO: Wave 2/3 implementation` | OPEN — implements Wave 2/3 |
+
+**Note:** The `hive-mind-hooks-claude-code` package does NOT carry a stub
+marker — it has Wave 1 implementation complete. Wave 2/3 covers the
+remaining 6 client integrations.
+
+**Resolution path:** when each Wave 2/3 hook gets real implementation, drop
+its marker AND bump `EXPECTED_MARKER_COUNT` down by 1 in the same commit.
+Once all 6 are implemented, count returns to 0 and Category D collapses.
 
 ## Category C — Closed 2026-04-20 (4 hits resolved)
 

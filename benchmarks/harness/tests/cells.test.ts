@@ -14,11 +14,25 @@ import { describe, expect, it } from 'vitest';
 import { cells, isCellName } from '../src/cells.js';
 import type { CellName } from '../src/types.js';
 
-const CANONICAL_NAMES: readonly CellName[] = ['raw', 'filtered', 'compressed', 'full-context'];
+// Sprint 12 Task 1 Blocker #2 shipped the first four names. Sprint 12 Task
+// 2.5 Stage 1 (2026-04-23) added `retrieval` + `agentic` — backed by real
+// HybridSearch + agent-loop respectively. Sprint 12 Task 2.5 Stage 2-Retry
+// (2026-04-24) added `no-context` — the true zero-memory baseline used by
+// the Stage 2-Retry memory-lift criterion. All new names are acceptable;
+// legacy pre-Sprint-12 names must still be rejected.
+const CANONICAL_NAMES: readonly CellName[] = [
+  'raw',
+  'filtered',
+  'compressed',
+  'full-context',
+  'retrieval',
+  'agentic',
+  'no-context',
+];
 const LEGACY_NAMES = ['memory-only', 'evolve-only', 'full-stack'] as const;
 
-describe('CellName enum (Sprint 12 Task 1 Blocker #2 rename)', () => {
-  it('exposes exactly the four A3 LOCK cell names as object keys', () => {
+describe('CellName enum (Sprint 12 Task 1 Blocker #2 rename + Task 2.5 Stage 1 + Stage 2-Retry extensions)', () => {
+  it('exposes exactly the seven canonical cell names as object keys', () => {
     const keys = Object.keys(cells).sort();
     expect(keys).toEqual([...CANONICAL_NAMES].sort());
   });

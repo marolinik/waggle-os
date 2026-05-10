@@ -1,0 +1,29 @@
+# Memory Sync Repair — `mind-parity-check` allowlist
+#
+# Lines list test filenames (basename, e.g. `db-hive-mind.test.ts`) whose
+# verbatim hive-mind copy is INTENTIONALLY skipped during the parity check
+# because waggle-os has an adapted version under the natural name (e.g.
+# `db.test.ts`) that handles a legitimate API divergence per
+# `D:\Projects\hive-mind\EXTRACTION.md`.
+#
+# Format: one filename per line. `#` starts a comment. Blank lines ignored.
+#
+# Adding an entry: include a comment line directly above the entry that
+# explains *why* the divergence exists (link to EXTRACTION.md section, PR,
+# or PM-Waggle-OS decisions/ memo).
+#
+# Removing an entry: only when the divergence has been resolved (either
+# hive-mind upstream changed or waggle-os adopted the upstream behavior).
+# Re-running parity check should pass without the allowlist entry before
+# removal lands.
+
+# `db-hive-mind.test.ts` — hive-mind asserts proprietary tables
+# (ai_interactions, execution_traces, evolution_runs, improvement_signals,
+# install_audit) MUST BE ABSENT, which is its OSS-scrub guarantee. Waggle-os
+# legitimately carries those tables per EXTRACTION.md "NOT extracted"
+# section. The waggle-os adaptation lives in committed `db.test.ts` (no
+# suffix) which splits the original into "OSS shared must exist" (verbatim)
+# + "Waggle-specific must exist" (inverted). See:
+#   - PM-Waggle-OS/decisions/2026-04-26-memory-sync-step2-test-port-results.md §2
+#   - hive-mind EXTRACTION.md "NOT Extracted" section
+db-hive-mind.test.ts

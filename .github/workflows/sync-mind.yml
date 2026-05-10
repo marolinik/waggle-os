@@ -1,0 +1,230 @@
+name: sync-mind-to-hive-mind
+
+# DEPRECATED 2026-04-30 — CC Sesija B monorepo migration §2.6 Task B22.
+#
+# This workflow was the bidirectional-sync mechanism between waggle-os and the
+# now-archived `marolinik/hive-mind` repo while substrate code lived in BOTH
+# places (packages/core/src/mind/ + packages/core/src/harvest/ in waggle-os,
+# duplicated in hive-mind/packages/core/src/{mind,harvest}/).
+#
+# After CC Sesija B migration (commits ff5b4aa..b59d188 on
+# feature/hive-mind-monorepo-migration), the substrate lives ONLY in
+# waggle-os/packages/hive-mind-core/. The OSS distribution mechanism is now
+# `git subtree split` from waggle-os monorepo to public mirror — see
+# `scripts/oss-subtree-split.sh` and `packages/hive-mind-core/CONTRIBUTING.md`.
+#
+# This workflow is preserved for AUDIT TRAIL purposes (the historical
+# trigger paths and concurrency settings are referenced in EXTRACTION.md and
+# the .github/sync.md operating manual). It will NOT fire on push because the
+# trigger paths (packages/core/src/mind/** + packages/core/src/harvest/**) no
+# longer exist as tracked content — they were git-mv'd to packages/hive-mind-core/
+# on commit 3b556c0.
+#
+# DO NOT delete this file as part of cleanup — leave it as the deprecation
+# anchor. If the workflow ever needs reactivation, trigger paths must be
+# updated to the new packages/hive-mind-core/ location AND the
+# @hive-mind ↔ @waggle name remapping must be added.
+
+# Memory Sync Repair Step 3.2 — waggle-os → hive-mind direction.
+#
+# Triggered when waggle-os main receives a push that touches shared
+# substrate paths (mind/ or harvest/), this workflow extracts the
+# filtered diff (excluding NOT-extracted files per EXTRACTION.md), opens
+# a PR against marolinik/hive-mind master with the patch applied, and
+# tags the PR with the source SHA.
+#
+# This is the SECONDARY direction empirically — Steps 1+2 found
+# hive-mind is the more active substrate repo (ahead in 2/5 audit
+# dimensions, +14 organic test files). The PRIMARY direction
+# (hive-mind push → auto-PR ka waggle-os) is intentionally NOT
+# implemented in this file because it requires a workflow living in
+# the hive-mind repo, which is out of CC-2 scope. It will be added
+# via a sibling PR to hive-mind once Step 3 here is ratified.
+#
+# See `.github/sync.md` for full design rationale, EXTRACTION.md
+# filter list, and how to extend bidirectional sync.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/core/src/mind/**'
+      - 'packages/core/src/harvest/**'
+
+concurrency:
+  group: sync-mind-${{ github.ref }}
+  # Don't cancel — every main push to mind/ or harvest/ deserves its own
+  # sync attempt (the resulting hive-mind PR is per-commit traceable).
+  cancel-in-progress: false
+
+jobs:
+  open-hive-mind-pr:
+    name: Open auto-sync PR to marolinik/hive-mind
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    # `HIVE_MIND_SYNC_TOKEN` is a fine-grained PAT scoped to
+    # marolinik/hive-mind with `pull_request: write` + `contents: write`.
+    # Configured by Marko via `gh secret set HIVE_MIND_SYNC_TOKEN`.
+    # Without the secret, the job fails fast with a documented error
+    # rather than silently skipping.
+    if: ${{ vars.MIND_SYNC_ENABLED == 'true' }}
+
+    steps:
+      - name: Checkout waggle-os (full history for the diff)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify HIVE_MIND_SYNC_TOKEN is configured
+        run: |
+          if [ -z "${{ secrets.HIVE_MIND_SYNC_TOKEN }}" ]; then
+            echo "::error::HIVE_MIND_SYNC_TOKEN secret is not configured."
+            echo "::error::Run: gh secret set HIVE_MIND_SYNC_TOKEN --repo marolinik/waggle-os"
+            echo "::error::See .github/sync.md for full setup instructions."
+            exit 1
+          fi
+
+      - name: Compute filtered diff (exclude NOT-extracted paths)
+        id: diff
+        run: |
+          set -euo pipefail
+
+          # Files that MUST be excluded from sync per EXTRACTION.md
+          # "NOT Extracted" section. Sync attempts that include these paths
+          # would leak Waggle-specific code (vault, compliance, evolution,
+          # tier system) into the hive-mind Apache-2.0 release artifact.
+          excluded_paths=(
+            'packages/core/src/mind/vault.ts'
+            'packages/core/src/mind/evolution-runs.ts'
+            'packages/core/src/mind/execution-traces.ts'
+            'packages/core/src/mind/improvement-signals.ts'
+            'packages/core/src/compliance'
+          )
+
+          # Build the rev range. `${{ github.event.before }}` is the parent
+          # commit of this push; `${{ github.sha }}` is the new HEAD. For a
+          # branch's first push or a force-push, `before` may be all-zeros;
+          # in that case fall back to the previous merge-base via reflog.
+          before_sha='${{ github.event.before }}'
+          after_sha='${{ github.sha }}'
+          if [ "$before_sha" = "0000000000000000000000000000000000000000" ]; then
+            echo "::warning::push has no `before` SHA — falling back to HEAD~1"
+            before_sha="$(git rev-parse HEAD~1)"
+          fi
+
+          # All shared-substrate files in this push, before exclusion.
+          changed=$(git diff --name-only "$before_sha" "$after_sha" -- \
+            'packages/core/src/mind/**' 'packages/core/src/harvest/**')
+
+          # Apply EXTRACTION.md "NOT extracted" exclusions.
+          filtered_files=()
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            skip=false
+            for excl in "${excluded_paths[@]}"; do
+              case "$f" in
+                "$excl"|"$excl"/*)
+                  skip=true
+                  break
+                  ;;
+              esac
+            done
+            $skip || filtered_files+=("$f")
+          done <<< "$changed"
+
+          if [ ${#filtered_files[@]} -eq 0 ]; then
+            echo "No syncable changes after EXTRACTION.md filtering."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Files to sync:"
+          printf '  %s\n' "${filtered_files[@]}"
+
+          # Generate a patch limited to the filtered files. This patch will
+          # apply to hive-mind because the directory layout matches:
+          # waggle-os `packages/core/src/{mind,harvest}/...` ↔
+          # hive-mind  `packages/core/src/{mind,harvest}/...`.
+          mkdir -p .sync-output
+          git diff "$before_sha" "$after_sha" -- "${filtered_files[@]}" > .sync-output/patch.diff
+
+          # Capture the original commit subjects for the PR description.
+          git log --format='- %h %s' "$before_sha".."$after_sha" -- "${filtered_files[@]}" > .sync-output/commits.txt
+
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "after_sha=$after_sha" >> "$GITHUB_OUTPUT"
+          echo "after_short=$(git rev-parse --short "$after_sha")" >> "$GITHUB_OUTPUT"
+          echo "first_subject=$(git log -1 --format=%s "$after_sha")" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout hive-mind for patch application
+        if: steps.diff.outputs.skip != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: marolinik/hive-mind
+          ref: master
+          token: ${{ secrets.HIVE_MIND_SYNC_TOKEN }}
+          path: hive-mind
+          fetch-depth: 0
+
+      - name: Apply patch to hive-mind branch + push
+        if: steps.diff.outputs.skip != 'true'
+        working-directory: hive-mind
+        env:
+          GH_TOKEN: ${{ secrets.HIVE_MIND_SYNC_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          branch_name="auto-sync/waggle-os-${{ steps.diff.outputs.after_short }}"
+          git config user.name 'waggle-os-sync-bot'
+          git config user.email 'sync-bot@waggle-os.ai'
+          git checkout -b "$branch_name"
+
+          # Apply the filtered patch. The waggle-os layout is identical
+          # under packages/core/src/{mind,harvest}/ so the patch applies
+          # directly without `--directory` rewriting.
+          if ! git apply --3way ../.sync-output/patch.diff; then
+            echo "::error::Patch did not apply cleanly. Manual reconciliation required."
+            echo "::error::Source SHA: ${{ steps.diff.outputs.after_sha }}"
+            exit 1
+          fi
+
+          git add -A
+          git commit -m "chore(sync): auto-sync from waggle-os@${{ steps.diff.outputs.after_short }}
+
+          Source: marolinik/waggle-os main @ ${{ steps.diff.outputs.after_sha }}
+          Subject: ${{ steps.diff.outputs.first_subject }}
+
+          See PR description for the full list of waggle-os commits in this batch."
+
+          git push origin "$branch_name"
+
+      - name: Open PR on hive-mind
+        if: steps.diff.outputs.skip != 'true'
+        working-directory: hive-mind
+        env:
+          GH_TOKEN: ${{ secrets.HIVE_MIND_SYNC_TOKEN }}
+        run: |
+          set -euo pipefail
+          branch_name="auto-sync/waggle-os-${{ steps.diff.outputs.after_short }}"
+          commit_list="$(cat ../.sync-output/commits.txt)"
+
+          gh pr create \
+            --repo marolinik/hive-mind \
+            --base master \
+            --head "$branch_name" \
+            --title "auto-sync from waggle-os@${{ steps.diff.outputs.after_short }}: ${{ steps.diff.outputs.first_subject }}" \
+            --body "$(printf 'Automated cross-repo sync — Memory Sync Repair Step 3.2 (waggle-os → hive-mind direction).\n\n## Source\n- Repo: marolinik/waggle-os\n- Branch: main\n- HEAD: %s\n- Workflow run: %s/%s/actions/runs/%s\n\n## Filtering\nThis patch was filtered to exclude paths listed under "NOT Extracted" in EXTRACTION.md:\n- packages/core/src/mind/vault.ts\n- packages/core/src/mind/evolution-runs.ts\n- packages/core/src/mind/execution-traces.ts\n- packages/core/src/mind/improvement-signals.ts\n- packages/core/src/compliance\n\n## Originating commits in this batch\n\n%s\n\n## Review checklist\n- [ ] Patch applied cleanly to hive-mind master without 3-way conflicts\n- [ ] No NOT-extracted paths sneaked through (sanity-check the diff against EXTRACTION.md)\n- [ ] Test deltas (if any) make sense for the OSS surface; no Waggle-specific test fixtures\n- [ ] mind-parity-check on waggle-os side is GREEN before merging this PR (otherwise the sync would re-introduce a regression)' \
+              "${{ steps.diff.outputs.after_sha }}" \
+              "${{ github.server_url }}" \
+              "${{ github.repository }}" \
+              "${{ github.run_id }}" \
+              "$commit_list")"
+
+      - name: Upload patch as artifact (debug aid)
+        if: always() && steps.diff.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sync-patch-${{ steps.diff.outputs.after_short }}
+          path: .sync-output/
+          retention-days: 30

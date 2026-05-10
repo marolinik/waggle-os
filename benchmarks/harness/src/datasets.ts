@@ -127,12 +127,21 @@ export function loadPreflightSampleLock(lockPath: string): DatasetInstance[] {
       `(expected breakdown: ${expectedStr}; total ${parsed.instances.length}, expected 50)`,
     );
   }
-  return parsed.instances.map(inst => ({
-    instance_id: inst.id,
-    question: inst.question,
-    context: inst.context,
-    expected: [inst.ground_truth_answer],
-  }));
+  return parsed.instances.map(inst => {
+    // Stage 2-Retry §1.2: LoCoMo instance_id format is
+    // `locomo_<conversation-id>_q<index>`. Derive conversation_id from that
+    // pattern so preflight-lock instances (which don't carry the field
+    // directly) still scope correctly. Safe because the preflight builder
+    // already enforces LoCoMo-only rows in the lock file.
+    const convMatch = inst.id.match(/^locomo_(conv-\d+)_q\d+$/);
+    return {
+      instance_id: inst.id,
+      question: inst.question,
+      context: inst.context,
+      expected: [inst.ground_truth_answer],
+      ...(convMatch ? { conversation_id: convMatch[1] } : {}),
+    };
+  });
 }
 
 /**
@@ -187,13 +196,17 @@ export function loadDataset(spec: DatasetSpec, dataRoot: string): DatasetInstanc
     const trimmed = line.trim();
     if (!trimmed) continue;
     try {
-      const parsed = JSON.parse(trimmed) as Partial<DatasetInstance>;
+      const parsed = JSON.parse(trimmed) as Partial<DatasetInstance> & { conversation_id?: string };
       if (parsed.instance_id && parsed.question && parsed.expected) {
         out.push({
           instance_id: parsed.instance_id,
           question: parsed.question,
           context: parsed.context ?? '',
           expected: Array.isArray(parsed.expected) ? parsed.expected : [String(parsed.expected)],
+          // Stage 2-Retry §1.2: preserve conversation_id so retrieval +
+          // agentic cells can scope HybridSearch to the instance's
+          // conversation via the existing `gopId` filter at search.ts:14.
+          ...(parsed.conversation_id ? { conversation_id: parsed.conversation_id } : {}),
         });
       }
     } catch {

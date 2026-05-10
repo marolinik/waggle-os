@@ -7,7 +7,7 @@
  */
 
 import * as crypto from 'node:crypto';
-import type { MindDB } from './mind/db.js';
+import type { MindDB } from '@waggle/hive-mind-core';
 
 // ── Types ──────────────────────────────────────────────────────────────
 

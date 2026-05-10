@@ -19,13 +19,17 @@ import { resolve } from 'node:path';
 const REPO_ROOT = resolve(__dirname, '..');
 
 /**
- * The pinned count from the 2026-04-19 audit, last adjusted 2026-05-08
- * after DAY0V-01 + DAY0V-02 cleanup (-10): WS gateway TODO removed and
- * mock-channel-connectors.ts deleted. Update this when the audit doc
- * is bumped; NEVER bump it without documenting the new hit in
- * docs/plans/L-17-placeholder-audit-2026-04-19.md.
+ * The pinned count from the 2026-04-19 audit. History:
+ * - 2026-05-08: 10 → 0 (DAY0V-01 + DAY0V-02 cleanup; WS gateway TODO removed
+ *   + mock-channel-connectors.ts deleted)
+ * - 2026-05-10: 0 → 6 (Phase 2 consolidation merge of
+ *   feature/hive-mind-monorepo-migration; 6 subtree-split hook packages
+ *   carry intentional `// TODO: Wave 2/3 implementation` STUB markers)
+ *
+ * Update this when the audit doc is bumped; NEVER bump it without documenting
+ * the new hit in docs/plans/L-17-placeholder-audit-2026-04-19.md.
  */
-const EXPECTED_MARKER_COUNT = 0;
+const EXPECTED_MARKER_COUNT = 6;
 
 const MARKER_REGEX = /\/\/\s*(?:MOCK|TODO|FIXME|XXX):|\/\*\s*(?:MOCK|TODO|FIXME|XXX):/g;
 

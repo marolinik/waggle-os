@@ -42,6 +42,22 @@
     "pinning_surface": "floating_alias",
     "pinning_surface_carve_out_reason": "Sprint 12 Task 2 C3 Stage 2 mini (2026-04-23): sibling alias of `qwen3.6-35b-a3b-stage2` that exposes the LiteLLM route name as the models.json key — lets the manifest `target_model: qwen3.6-35b-a3b-via-openrouter` match both the pre-registration audit trail AND the CLI --model arg verbatim. Same routing: LiteLLM -> OpenRouter -> Alibaba bridge (slug `openrouter/qwen/qwen3.5-35b-a3b`). OpenRouter bridge to DashScope does not expose immutable model snapshots; floating alias mandated by B3 addendum § 5."
   },
+  "qwen3.6-35b-a3b-via-dashscope-direct": {
+    "id": "qwen3.6-35b-a3b-via-dashscope-direct",
+    "displayName": "Qwen3.6-35B-A3B (C3 Stage 2 Mini Retry v3 PRIMARY — DashScope-intl direct, TRUE 3.6)",
+    "provider": "alibaba",
+    "litellmModel": "qwen3.6-35b-a3b-via-dashscope-direct",
+    "pricePerMillionInput": 0.20,
+    "pricePerMillionOutput": 0.80,
+    "contextWindow": 262144,
+    "stage2Config": {
+      "thinking": true,
+      "maxTokens": 16000,
+      "reasoningShape": "dashscope-native"
+    },
+    "pinning_surface": "floating_alias",
+    "pinning_surface_carve_out_reason": "Sprint 12 Task 2 C3 Stage 2 Mini Retry v3 (2026-04-23): models.json key for the DashScope-intl direct route (litellm-config.yaml:228 alias `qwen3.6-35b-a3b-via-dashscope-direct` routes to `openai/qwen3.6-35b-a3b` @ https://dashscope-intl.aliyuncs.com/compatible-mode/v1 with DASHSCOPE_API_KEY). Delivers TRUE Qwen 3.6-35B-A3B (not the 3.5 regress of the OpenRouter bridge). thinking=on, max_tokens=16000 per v3 manifest §2.1 (reduced from v2 64000 to avoid tail-latency timeouts). DashScope-intl does not expose immutable model snapshots; floating alias mandated by B3 addendum § 5."
+  },
   "qwen3.6-35b-a3b-local": {
     "id": "qwen3.6-35b-a3b-local",
     "displayName": "Qwen3.6-35B-A3B (local vLLM)",

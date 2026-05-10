@@ -5,7 +5,7 @@
  * Operates on the .mind DB alongside FrameStore and InstallAuditStore.
  */
 
-import type { MindDB } from '../mind/db.js';
+import type { MindDB } from '@waggle/hive-mind-core';
 import type { AIInteraction, RecordInteractionInput, HumanAction, ModelInventoryEntry, OversightLogEntry } from './types.js';
 
 export class InteractionStore {

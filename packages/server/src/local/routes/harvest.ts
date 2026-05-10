@@ -21,6 +21,33 @@ import {
 } from '@waggle/core';
 import { loadProfile, saveProfile, type IdentitySuggestion } from './profile.js';
 
+/** Strict ISO-8601 validator used to gate `item.timestamp` before we
+ *  forward it to `FrameStore.createIFrame` as the `created_at` override.
+ *  Requires `T` separator + timezone suffix so `memory_frames.created_at`
+ *  range queries stay reliable — any "mostly ISO" shape ("2024-03-01",
+ *  "2024/03/01 11:00:00") is rejected and falls back to the schema
+ *  default (`datetime('now')`).
+ *
+ *  Ported from hive-mind 9ec75e6 (Stage 0 root cause: harvest path was
+ *  silently dropping `item.timestamp` and stamping every frame with the
+ *  ingest wall-clock, which made date-scoped retrieval queries return
+ *  ABSTAIN on real Claude.ai exports). */
+function isIsoTimestamp(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})$/.test(value)) {
+    return false;
+  }
+  return Number.isFinite(Date.parse(value));
+}
+
+/** Sprint 9 Task 0.5 (hive-mind 0bbdf7a): preview cap raised 2000 → 10_000.
+ *  Waggle-os had previously set this to 4000 as a partial mitigation, but
+ *  the canonical, production-tested value from the Stage 0 re-harvest is
+ *  10K — captures the session setup + editor-persona context + first
+ *  substantive assistant response on median Marko-side Claude.ai sessions
+ *  (~15K chars opening). Storage impact: ~12 MB on a 646-frame ingest,
+ *  well within SQLite single-file comfort zone. */
+const HARVEST_PREVIEW_CAP_CHARS = 10_000;
+
 /** M-08: where cached input payloads live so we can resume interrupted runs. */
 function getHarvestCacheDir(dataDir: string): string {
   return path.join(dataDir, 'harvest-cache');
@@ -322,13 +349,38 @@ export async function harvestRoutes(fastify: FastifyInstance) {
 
     const frameStore = new FrameStore(personalDb);
     let saved = 0;
+    let timestampFallbacks = 0;
 
     try {
       emitHarvestProgress({ phase: 'saving', current: 0, total: items.length, source });
       for (const item of items) {
         const label = `[Harvest:${item.source}] ${item.title}`;
-        const content = item.content.slice(0, 4000);
-        frameStore.createIFrame('harvest', `${label}\n\n${content}`, 'normal', 'import');
+        const content = item.content.slice(0, HARVEST_PREVIEW_CAP_CHARS);
+        // Preserve original source timestamp on the resulting frame so
+        // downstream date-scoped retrieval has a valid temporal anchor.
+        // Every adapter surfaces `item.timestamp` on UniversalImportItem;
+        // before this fix the harvest path discarded it and the frame's
+        // created_at defaulted to ingest wall-clock, breaking queries
+        // like "what happened in December 2025" against frames harvested
+        // months later. Fallback is explicit, never silent: invalid /
+        // missing timestamp → schema default + warn that names the
+        // adapter source + item id for diagnostic trace.
+        const providedTimestamp = typeof item.timestamp === 'string' ? item.timestamp : undefined;
+        const useProvidedTs = providedTimestamp !== undefined && isIsoTimestamp(providedTimestamp);
+        if (!useProvidedTs) {
+          timestampFallbacks++;
+          request.log.warn(
+            { source: item.source, itemId: item.id, providedTimestamp },
+            '[harvest] missing timestamp — falling back to NOW()',
+          );
+        }
+        frameStore.createIFrame(
+          'harvest',
+          `${label}\n\n${content}`,
+          'normal',
+          'import',
+          useProvidedTs ? providedTimestamp : null,
+        );
         saved++;
         if (saved % 10 === 0 || saved === items.length) {
           emitHarvestProgress({ phase: 'saving', current: saved, total: items.length, source });
@@ -336,6 +388,12 @@ export async function harvestRoutes(fastify: FastifyInstance) {
           // can show "paused at N/M" for an interrupted run.
           runStore.heartbeat(runId, saved);
         }
+      }
+      if (timestampFallbacks > 0) {
+        request.log.warn(
+          { source, timestampFallbacks, total: items.length },
+          '[harvest] timestamp fallback summary — frames stamped with ingest wall-clock',
+        );
       }
 
       // Update harvest source tracking

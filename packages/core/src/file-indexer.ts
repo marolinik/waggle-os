@@ -19,9 +19,9 @@
 
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import type { MindDB } from './mind/db.js';
-import { FrameStore } from './mind/frames.js';
-import { SessionStore } from './mind/sessions.js';
+import type { MindDB } from '@waggle/hive-mind-core';
+import { FrameStore } from '@waggle/hive-mind-core';
+import { SessionStore } from '@waggle/hive-mind-core';
 
 const FILE_INDEX_TABLE_SQL = `
 CREATE TABLE IF NOT EXISTS file_index (

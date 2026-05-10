@@ -1,11 +1,11 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { MindDB } from '../../src/mind/db.js';
-import { IdentityLayer } from '../../src/mind/identity.js';
-import { AwarenessLayer } from '../../src/mind/awareness.js';
-import { FrameStore } from '../../src/mind/frames.js';
-import { SessionStore } from '../../src/mind/sessions.js';
-import { HybridSearch } from '../../src/mind/search.js';
-import { KnowledgeGraph } from '../../src/mind/knowledge.js';
+import { MindDB } from '@waggle/hive-mind-core';
+import { IdentityLayer } from '@waggle/hive-mind-core';
+import { AwarenessLayer } from '@waggle/hive-mind-core';
+import { FrameStore } from '@waggle/hive-mind-core';
+import { SessionStore } from '@waggle/hive-mind-core';
+import { HybridSearch } from '@waggle/hive-mind-core';
+import { KnowledgeGraph } from '@waggle/hive-mind-core';
 import { MemoryWeaver } from '@waggle/weaver';
 import { Orchestrator } from '@waggle/agent';
 import { MockEmbedder } from '../mind/helpers/mock-embedder.js';

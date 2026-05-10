@@ -8,7 +8,7 @@
  * Follows the same pattern as ImprovementSignalStore — operates on the .mind DB.
  */
 
-import type { MindDB } from './mind/db.js';
+import type { MindDB } from '@waggle/hive-mind-core';
 
 // ── Types ──────────────────────────────────────────────────────────────
 

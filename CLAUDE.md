@@ -399,6 +399,20 @@ Target: Two-tier layout — "UNIVERSAL MODES" (8) + "YOUR WORKSPACE SPECIALISTS"
 
 ---
 
+## 7.5. Memory Substrate Sync (waggle-os ↔ hive-mind)
+
+`packages/core/src/mind/` and `packages/core/src/harvest/` are SHARED with the OSS release artifact at
+[`marolinik/hive-mind`](https://github.com/marolinik/hive-mind). Two GitHub Actions workflows enforce parity:
+
+- **`mind-parity-check.yml`** — runs hive-mind's tests against waggle-os on every PR/push touching shared paths. Failure blocks merge unless allowlisted in `.parity-allowlist`.
+- **`sync-mind.yml`** — on push to main touching shared paths, opens a filtered auto-PR on `marolinik/hive-mind` (excludes NOT-extracted files: `vault.ts`, `evolution-runs.ts`, `execution-traces.ts`, `improvement-signals.ts`, `compliance/**`).
+
+**Before modifying `packages/core/src/mind/` or `packages/core/src/harvest/`:** read [`.github/sync.md`](./.github/sync.md) for the full operating manual — when to allowlist, how to handle bidirectional bug fixes, and what the EXTRACTION.md filter list covers.
+
+**If you add a new "stays in waggle-os only" file under those paths,** update BOTH the `excluded_paths` array in `sync-mind.yml` AND the "NOT Extracted" section of [`hive-mind/EXTRACTION.md`](https://github.com/marolinik/hive-mind/blob/master/EXTRACTION.md) in the same PR — otherwise the file leaks on the next sync.
+
+---
+
 ## 8. Already Built — Do Not Recreate
 
 Grep before creating. These exist and are functional:

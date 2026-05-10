@@ -11,7 +11,7 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { createCoreLogger } from './logger.js';
+import { createCoreLogger } from '@waggle/hive-mind-core';
 
 const log = createCoreLogger('vault');
 const ALGORITHM = 'aes-256-gcm';

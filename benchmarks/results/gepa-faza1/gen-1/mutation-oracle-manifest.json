@@ -1,0 +1,99 @@
+{
+  "totalMutationsAttempted": 10,
+  "totalValid": 10,
+  "totalInvalid": 0,
+  "cumulativeCostUsd": 1.4289,
+  "entries": [
+    {
+      "shape": "claude",
+      "mutationIdx": 1,
+      "filename": "D:\\Projects\\waggle-os-faza1-wt\\packages\\agent\\src\\prompt-shapes\\gepa-evolved\\claude-gen1-v1.ts",
+      "costUsd": 0.195675,
+      "latencyMs": 23630,
+      "tsName": "claude-gen1-v1",
+      "validatorVerdict": "valid"
+    },
+    {
+      "shape": "claude",
+      "mutationIdx": 2,
+      "filename": "D:\\Projects\\waggle-os-faza1-wt\\packages\\agent\\src\\prompt-shapes\\gepa-evolved\\claude-gen1-v2.ts",
+      "costUsd": 0.195525,
+      "latencyMs": 25688,
+      "tsName": "claude-gen1-v2",
+      "validatorVerdict": "valid"
+    },
+    {
+      "shape": "qwen-thinking",
+      "mutationIdx": 1,
+      "filename": "D:\\Projects\\waggle-os-faza1-wt\\packages\\agent\\src\\prompt-shapes\\gepa-evolved\\qwen-thinking-gen1-v1.ts",
+      "costUsd": 0.143895,
+      "latencyMs": 17791,
+      "tsName": "qwen-thinking-gen1-v1",
+      "validatorVerdict": "valid"
+    },
+    {
+      "shape": "qwen-thinking",
+      "mutationIdx": 2,
+      "filename": "D:\\Projects\\waggle-os-faza1-wt\\packages\\agent\\src\\prompt-shapes\\gepa-evolved\\qwen-thinking-gen1-v2.ts",
+      "costUsd": 0.129345,
+      "latencyMs": 16665,
+      "tsName": "qwen-thinking-gen1-v2",
+      "validatorVerdict": "valid"
+    },
+    {
+      "shape": "qwen-non-thinking",
+      "mutationIdx": 1,
+      "filename": "D:\\Projects\\waggle-os-faza1-wt\\packages\\agent\\src\\prompt-shapes\\gepa-evolved\\qwen-non-thinking-gen1-v1.ts",
+      "costUsd": 0.13908,
+      "latencyMs": 18373,
+      "tsName": "qwen-non-thinking-gen1-v1",
+      "validatorVerdict": "valid"
+    },
+    {
+      "shape": "qwen-non-thinking",
+      "mutationIdx": 2,
+      "filename": "D:\\Projects\\waggle-os-faza1-wt\\packages\\agent\\src\\prompt-shapes\\gepa-evolved\\qwen-non-thinking-gen1-v2.ts",
+      "costUsd": 0.15318,
+      "latencyMs": 18568,
+      "tsName": "qwen-non-thinking-gen1-v2",
+      "validatorVerdict": "valid"
+    },
+    {
+      "shape": "gpt",
+      "mutationIdx": 1,
+      "filename": "D:\\Projects\\waggle-os-faza1-wt\\packages\\agent\\src\\prompt-shapes\\gepa-evolved\\gpt-gen1-v1.ts",
+      "costUsd": 0.104025,
+      "latencyMs": 11958,
+      "tsName": "gpt-gen1-v1",
+      "validatorVerdict": "valid"
+    },
+    {
+      "shape": "gpt",
+      "mutationIdx": 2,
+      "filename": "D:\\Projects\\waggle-os-faza1-wt\\packages\\agent\\src\\prompt-shapes\\gepa-evolved\\gpt-gen1-v2.ts",
+      "costUsd": 0.116625,
+      "latencyMs": 16921,
+      "tsName": "gpt-gen1-v2",
+      "validatorVerdict": "valid"
+    },
+    {
+      "shape": "generic-simple",
+      "mutationIdx": 1,
+      "filename": "D:\\Projects\\waggle-os-faza1-wt\\packages\\agent\\src\\prompt-shapes\\gepa-evolved\\generic-simple-gen1-v1.ts",
+      "costUsd": 0.115725,
+      "latencyMs": 13762,
+      "tsName": "generic-simple-gen1-v1",
+      "validatorVerdict": "valid"
+    },
+    {
+      "shape": "generic-simple",
+      "mutationIdx": 2,
+      "filename": "D:\\Projects\\waggle-os-faza1-wt\\packages\\agent\\src\\prompt-shapes\\gepa-evolved\\generic-simple-gen1-v2.ts",
+      "costUsd": 0.135825,
+      "latencyMs": 19089,
+      "tsName": "generic-simple-gen1-v2",
+      "validatorVerdict": "valid"
+    }
+  ],
+  "completedAtIso": "2026-04-28T13:12:13.309Z"
+}

@@ -22,7 +22,159 @@ export {
   type ChatResponse,
 } from './providers/openai-compat.js';
 export { Workspace, type WorkspaceConfig } from './workspace.js';
-export { runAgentLoop, type AgentLoopConfig, type AgentResponse, type AgentMessage } from './agent-loop.js';
+export {
+  runAgentLoop,
+  type AgentLoopConfig,
+  type AgentResponse,
+  type AgentMessage,
+  // Phase 2 Commit 2.1 — structured-action retrieval loop (re-exported from agent-loop.ts):
+  runSoloAgent,
+  runRetrievalAgentLoop,
+  type SoloAgentRunConfig,
+  type MultiStepAgentRunConfig,
+  type AgentRunResult,
+  type LlmCallFn,
+  type LlmCallInput,
+  type LlmCallResult,
+  type RetrievalSearchFn,
+  type RetrievalSearchInput,
+  type RetrievalSearchResult,
+  type NormalizationPresetName,
+  type BaseAgentRunConfig,
+  // Phase 3.4 — long-task integration (whole-loop recovery + progress events):
+  runRetrievalAgentLoopWithRecovery,
+  type LoopRecoveryOptions,
+  type AgentRunProgressEvent,
+  type AgentRunProgressEventType,
+  type AgentRunProgressCallback,
+} from './agent-loop.js';
+
+// Phase 1.2 — model-aware prompt shapes (oversight in original Phase 1.2:
+// re-export to public API was missing; surfaced + fixed during Phase 2.3
+// when benchmarks/harness/src/cells.ts started consuming selectShape).
+export {
+  selectShape,
+  listShapes,
+  getShapeMetadata,
+  REGISTRY,
+  registerShape,
+  claudeShape,
+  qwenThinkingShape,
+  qwenNonThinkingShape,
+  gptShape,
+  genericSimpleShape,
+  MULTI_STEP_ACTION_CONTRACT,
+  type PromptShape,
+  type PromptShapeMetadata,
+  type SystemPromptInput,
+  type SoloUserPromptInput,
+  type MultiStepKickoffInput,
+  type RetrievalInjectionInput,
+  type SelectShapeOptions,
+} from './prompt-shapes/index.js';
+
+// Phase 1.1 — output normalization (also missing from Phase 1.1 public API).
+export {
+  normalize,
+  normalizeWithPreset,
+  PRESETS,
+  type NormalizationConfig,
+  type NormalizationAction,
+  type NormalizationResult,
+} from './output-normalize.js';
+
+// Phase 1.3 — run-meta (also missing from Phase 1.3 public API).
+export {
+  RunMetaCapture,
+  RunMetaReader,
+  verifyDeterministicReplay,
+  RUN_META_SCHEMA_VERSION,
+  type RunMeta,
+  type PredictionRecord,
+  type JudgeCallTrace,
+  type AuditSha,
+  type ModelVersion,
+  type ProviderRoute,
+  type ReplayResult,
+  type ReplayMismatch,
+} from './run-meta.js';
+
+// Phase 3.1 — long-task checkpointing (per-step state serialization).
+export {
+  CheckpointStore,
+  CHECKPOINT_SCHEMA_VERSION,
+  makeInitialState,
+  nextStateFrom,
+  type CheckpointStepState,
+  type CheckpointStoreOptions,
+  type Decision as CheckpointDecision,
+  type IntegrityReport as CheckpointIntegrityReport,
+} from './long-task/checkpoint.js';
+
+// Phase 3.2 — long-task recovery (retry + fallback + crash-resume).
+export {
+  RecoveryRunner,
+  type RecoveryRunnerOptions,
+  type RecoveryRunResult,
+  type RecoveryRunOptions,
+  type RecoveryEvent,
+  type RecoveryEventType,
+  type StepFn as RecoveryStepFn,
+  type StepFnInput as RecoveryStepFnInput,
+  type StepFnResult as RecoveryStepFnResult,
+  type ErrorClass as RecoveryErrorClass,
+  type ErrorClassifier as RecoveryErrorClassifier,
+} from './long-task/recovery.js';
+
+// Phase 3.3 — long-task context management (compression / eviction / decision rollup).
+export {
+  ContextManager,
+  type ContextManagerOptions,
+  type CompressionStrategy as ContextCompressionStrategy,
+  type CompressionEvent as ContextCompressionEvent,
+  type ContextCompressionEvent as ContextCompressionEventDetail,
+  type DecisionsCompressionEvent,
+  type CacheEvictionEvent,
+  type ArchivedContextRange,
+  type CompressOptions as ContextCompressOptions,
+} from './long-task/context-manager.js';
+
+// Phase 4.1 — failure classifier (10-category taxonomy + LLM judge fallback).
+export {
+  classifyFailure,
+  classifyFailureBatch,
+  failureDistribution,
+  FAILURE_CATEGORIES,
+  type FailureCategory,
+  type FailureClassification,
+  type ClassifierInput,
+  type ClassifierOptions,
+  type ConfidenceLevel as FailureConfidenceLevel,
+} from './long-task/failure-classify.js';
+
+// Phase 4.2 — reporting (summary.json/md, predictions.jsonl, failures.jsonl, cross-model matrix).
+export {
+  generateReport,
+  writeReportToDisk,
+  fromPilotRecord,
+  type AgentPredictionRecord,
+  type ReportOptions,
+  type CellMetrics,
+  type ModelComparisonMatrix,
+  type RunSummary,
+  type ReportArtifacts,
+  type WrittenReportPaths,
+  type PilotJsonlRecord,
+} from './long-task/report.js';
+
+// Phase 4.6 — messages-array compression integration (closes Phase 3 gate finding).
+export {
+  maybeCompressMessages,
+  shouldCompressMessages,
+  type MessagesContextManagerConfig,
+  type MessagesCompressionEvent,
+  type CompressMessagesResult,
+} from './long-task/messages-compressor.js';
 export { createTeamTools, type TeamToolDeps } from './team-tools.js';
 export { ensureIdentity, type IdentityConfig } from './auto-identity.js';
 export { buildSelfAwareness, type AgentCapabilities } from './self-awareness.js';

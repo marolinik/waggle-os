@@ -7,3 +7,50 @@
 # these files as binary — no auto-conversion regardless of autocrlf.
 benchmarks/data/locomo/locomo-1540.jsonl -text
 benchmarks/data/locomo/locomo-1540.meta.json -text
+
+# Sprint 12 Task 2.5 Stage 3 (2026-04-24):
+# Same byte-exact treatment for pre-registration manifests. The YAML +
+# md SHA-256 recorded in the anchor commit message is computed against
+# these files' on-disk bytes; we need checkout bytes to match across
+# platforms so any auditor can re-verify the hash after `git clone`.
+benchmarks/results/manifest-*.md -text
+benchmarks/results/manifest-*.yaml -text
+benchmarks/results/stage*-gate-*.md -text
+benchmarks/results/stage*-gate-*.jsonl -text
+
+# Sprint 12 Task 2.5 Stage 3 (v5 emission 2026-04-24):
+# Pre-registration manifests relocated to benchmarks/preregistration/ per
+# PM brief §Step 1. Same byte-exact treatment as v4.
+benchmarks/preregistration/manifest-*.md -text
+benchmarks/preregistration/manifest-*.yaml -text
+
+# Sprint 12 Task 2.5 Stage 3 §1.3f (2026-04-24):
+# Vertex Batch eligibility probe artefacts — byte-exact audit.
+benchmarks/probes/**/*.log -text
+benchmarks/probes/**/*.jsonl -text
+benchmarks/probes/**/*.py -text
+benchmarks/probes/**/*.md -text
+
+# Sprint 12 Task 2.5 Stage 3 v6 N=400 final deliverables (2026-04-25):
+# Same byte-exact treatment for the agentic-cell evidence JSONL + Phase C
+# 5-cell summary / Fisher analysis / memo. The agentic JSONL feeds the
+# H1 secondary-endpoint S4 reproducibility chain (see commit message body
+# for the file-level SHA-256 capture).
+benchmarks/results/stage3-n400-v6-*.md -text
+benchmarks/results/agentic-locomo-2026-04-25T*.jsonl -text
+benchmarks/results/agentic-locomo-2026-04-25T*.summary.json -text
+
+# v6 self-judge re-evaluation (2026-04-25): apples-to-apples vs Mem0.
+# Same byte-exact treatment for the 2000-record results JSONL + comparison
+# md + memo. SHA-256 of these files captured in commit message body.
+benchmarks/results/v6-self-judge-rebench/*.jsonl -text
+benchmarks/results/v6-self-judge-rebench/*.md -text
+
+# Agentic knowledge work pilot 2026-04-26 (FAIL verdict). All artefacts
+# byte-exact pinned for audit. SHA-256s captured in commit body.
+benchmarks/results/pilot-2026-04-26/*.jsonl -text
+benchmarks/results/pilot-2026-04-26/*.json -text
+benchmarks/results/pilot-2026-04-26/*.log -text
+benchmarks/results/pilot-2026-04-26/prompts-archive/*.md -text
+benchmarks/results/pilot-2026-04-26/invalidated/*.jsonl -text
+decisions/*.md -text

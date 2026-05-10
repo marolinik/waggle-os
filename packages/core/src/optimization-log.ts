@@ -8,7 +8,7 @@
  * operates on the .mind DB with auto-table creation.
  */
 
-import type { MindDB } from './mind/db.js';
+import type { MindDB } from '@waggle/hive-mind-core';
 
 // ── Types ──────────────────────────────────────────────────────────────
 

@@ -2,8 +2,8 @@ import { describe, it, expect, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { MindDB } from '../src/mind/db.js';
-import { FrameStore } from '../src/mind/frames.js';
+import { MindDB } from '@waggle/hive-mind-core';
+import { FrameStore } from '@waggle/hive-mind-core';
 import { needsMigration, migrateToMultiMind } from '../src/migration.js';
 
 describe('Migration: default.mind → personal.mind', () => {

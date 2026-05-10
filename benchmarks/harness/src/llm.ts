@@ -109,10 +109,66 @@ class DryRunClient implements LlmClient {
 
 // ── LiteLLM proxy ──────────────────────────────────────────────────────────
 
+/**
+ * Sprint 12 Task 2.5 Stage 1.5 §7.1 — fetch-retry on TypeError.
+ *
+ * The v2 full-context cell exhibited 100% `fetch_error_TypeError` at ~1 ms
+ * latency per instance (see sessions/2026-04-23-task25-s0-v2-fullcontext-
+ * forensic.md). Root cause: concurrent runner processes saturating the
+ * OpenRouter bridge / libuv thread pool. A single retry with a 1 s backoff
+ * absorbs transient saturation on normal ops (~1% of rows per PM estimate).
+ *
+ * Retry ONLY on `fetch_error_TypeError`. All other failure modes (`timeout`
+ * via AbortError, `http_5xx`, other error classes) return immediately — those
+ * aren't bridge-saturation patterns and retry can't help.
+ *
+ * Retry count is a module constant (default 1) and backoff is a module const
+ * (default 1000 ms). Tuning is intentional: more retries add per-row worst-
+ * case latency; more aggressive backoff adds wall-clock to the whole run.
+ */
+const FETCH_RETRY_MAX = 1;
+const FETCH_RETRY_BACKOFF_MS = 1000;
+
 class LiteLlmClient implements LlmClient {
   constructor(private url: string, private apiKey: string) {}
 
   async call(input: LlmCallInput): Promise<LlmCallResult> {
+    const overallStarted = Date.now();
+    let lastResult: LlmCallResult | undefined;
+    for (let attempt = 0; attempt <= FETCH_RETRY_MAX; attempt++) {
+      if (attempt > 0) {
+        await new Promise<void>(resolve => setTimeout(resolve, FETCH_RETRY_BACKOFF_MS));
+      }
+      const result = await this.attemptOnce(input);
+      lastResult = result;
+      if (result.failureMode !== 'fetch_error_TypeError') {
+        // Success or non-retryable failure — return with total wall-clock
+        // latency (including any backoff + prior attempts). Retrying a
+        // non-TypeError would both waste budget and invalidate the latency
+        // metric's meaning as "time to first clean signal."
+        if (attempt > 0) {
+          return { ...result, latencyMs: Date.now() - overallStarted };
+        }
+        return result;
+      }
+    }
+    // All retries exhausted. Return last result with total wall-clock.
+    return lastResult
+      ? { ...lastResult, latencyMs: Date.now() - overallStarted }
+      : {
+          text: '',
+          inputTokens: 0,
+          outputTokens: 0,
+          latencyMs: Date.now() - overallStarted,
+          costUsd: 0,
+          failureMode: 'fetch_error_TypeError',
+        };
+  }
+
+  /** One attempt — the pre-Stage-1.5 `call` body unchanged. Returns an
+   *  LlmCallResult (success or failure) rather than throwing so the outer
+   *  retry loop can read `failureMode` to decide whether to retry. */
+  private async attemptOnce(input: LlmCallInput): Promise<LlmCallResult> {
     const started = Date.now();
     const controller = new AbortController();
     // Sprint 11 B1: thinking=on on Stage 2 config pushes avg latency up to

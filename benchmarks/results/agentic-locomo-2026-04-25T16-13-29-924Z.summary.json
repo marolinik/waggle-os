@@ -1,0 +1,43 @@
+{
+  "run": {
+    "kind": "cell",
+    "name": "agentic",
+    "dataset": "locomo",
+    "model": "qwen3.6-35b-a3b-via-dashscope-direct",
+    "seed": 42,
+    "startedAt": "2026-04-25T16:13:29.925Z",
+    "finishedAt": "2026-04-25T18:44:42.396Z"
+  },
+  "counts": {
+    "total": 400,
+    "completed": 395,
+    "failed": 5,
+    "budgetStoppedAt": null
+  },
+  "metrics": {
+    "meanAccuracy": 0.215,
+    "p50LatencyMs": 4952,
+    "p95LatencyMs": 19417,
+    "totalUsd": 0.402527,
+    "meanUsdPerQuery": 0.001006
+  },
+  "failureModes": {
+    "agentic_error_TypeError": 5
+  },
+  "failure_distribution": {
+    "counts": {
+      "null": 168,
+      "F1": 76,
+      "F2": 90,
+      "F3": 30,
+      "F4": 28,
+      "F5": 1,
+      "F6": 0,
+      "F_other": 0
+    },
+    "total": 393,
+    "f_other_rate": 0,
+    "f_other_review_flag": false,
+    "f_other_rationales_sample": []
+  }
+}

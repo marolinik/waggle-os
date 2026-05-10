@@ -46,6 +46,58 @@ benchmarks/data/*
 !benchmarks/data/locomo/locomo-1540.meta.json
 benchmarks/results/*
 !benchmarks/results/.gitkeep
+# Sprint 12 Task 2.5 Stage 3 — per-stage manifest-adjacent audit artefacts:
+# pre-registration anchors, clarification memos, RCA memos, probe logs.
+# These are tamper-evident, NOT run output, so they MUST be tracked.
+# Broadened 2026-04-24 for Stage 3 re-kick (Option A): clarification +
+# RCA memos + Gate P+ probe log all need the same treatment.
+!benchmarks/results/manifest-*.md
+!benchmarks/results/manifest-*.yaml
+!benchmarks/results/stage*-gate-*.md
+!benchmarks/results/stage*-gate-*.jsonl
+# Stage 3 v6 N=400 final deliverables (2026-04-25): cell-by-cell summary,
+# Fisher H1 analysis, ≤300-word memo, and the agentic-cell evidence JSONL.
+# Tracked under PM-RATIFY-V6-N400-COMPLETE; tamper-evident audit chain.
+!benchmarks/results/stage3-n400-v6-*.md
+!benchmarks/results/agentic-locomo-2026-04-25T*.jsonl
+!benchmarks/results/agentic-locomo-2026-04-25T*.summary.json
+# v6 self-judge re-evaluation (2026-04-25): apples-to-apples vs Mem0
+# methodology. 2000 records, side-by-side comparison, ≤300-word memo.
+!benchmarks/results/v6-self-judge-rebench/
+!benchmarks/results/v6-self-judge-rebench/*.jsonl
+!benchmarks/results/v6-self-judge-rebench/*.md
+# Agentic knowledge work pilot 2026-04-26 (FAIL verdict, see
+# decisions/2026-04-26-pilot-verdict-FAIL.md). 12 cell JSONLs + summary +
+# run log + prompts archive + invalidated originals (audit-preserved).
+!benchmarks/results/pilot-2026-04-26/
+!benchmarks/results/pilot-2026-04-26/*.jsonl
+!benchmarks/results/pilot-2026-04-26/*.json
+!benchmarks/results/pilot-2026-04-26/*.log
+!benchmarks/results/pilot-2026-04-26/prompts-archive/
+!benchmarks/results/pilot-2026-04-26/prompts-archive/*.md
+!benchmarks/results/pilot-2026-04-26/invalidated/
+!benchmarks/results/pilot-2026-04-26/invalidated/*.jsonl
+# GEPA Faza 1 corpus + run logs + spot-audit reports + NULL/Gen1/held-out
+# artefacts (per launch decision §G + manifest v7 §gepa). All instances +
+# generation logs + checkpoint reports tracked for audit chain.
+# Exception applies to BOTH the line-47 base pattern AND the line-98
+# `**/benchmarks/results/*` nested-mis-CWD catch (mirrors pilot-2026-04-26).
+!benchmarks/results/gepa-faza1/
+!benchmarks/results/gepa-faza1/**/*.jsonl
+!benchmarks/results/gepa-faza1/**/*.json
+!benchmarks/results/gepa-faza1/**/*.md
+!benchmarks/results/gepa-faza1/**/*.log
+!benchmarks/results/gepa-faza1/**/*.yaml
+!**/benchmarks/results/gepa-faza1
+!**/benchmarks/results/gepa-faza1/
+!**/benchmarks/results/gepa-faza1/**
+# §1.3f Vertex Batch eligibility probe (2026-04-24): standalone probe
+# artefacts outside §11 frozen paths. Logs + JSONL + script + memo all
+# tracked; override the *.log line-3 wildcard for this specific folder.
+!benchmarks/probes/**/*.log
+!benchmarks/probes/**/*.jsonl
+!benchmarks/probes/**/*.py
+!benchmarks/probes/**/*.md
 # Also catch nested mis-CWD writes (e.g. ran from benchmarks/harness/).
 # Use a trailing `*` (not `/`) so the `!` exceptions above still apply.
 **/benchmarks/results/*
@@ -57,6 +109,24 @@ benchmarks/results/*
 !**/benchmarks/data/locomo/locomo-1540.meta.json
 !**/benchmarks/data/.gitkeep
 !**/benchmarks/results/.gitkeep
+!**/benchmarks/results/manifest-*.md
+!**/benchmarks/results/manifest-*.yaml
+!**/benchmarks/results/stage*-gate-*.md
+!**/benchmarks/results/stage*-gate-*.jsonl
+!**/benchmarks/results/stage3-n400-v6-*.md
+!**/benchmarks/results/agentic-locomo-2026-04-25T*.jsonl
+!**/benchmarks/results/agentic-locomo-2026-04-25T*.summary.json
+!**/benchmarks/results/v6-self-judge-rebench/
+!**/benchmarks/results/v6-self-judge-rebench/*.jsonl
+!**/benchmarks/results/v6-self-judge-rebench/*.md
+!**/benchmarks/results/pilot-2026-04-26/
+!**/benchmarks/results/pilot-2026-04-26/*.jsonl
+!**/benchmarks/results/pilot-2026-04-26/*.json
+!**/benchmarks/results/pilot-2026-04-26/*.log
+!**/benchmarks/results/pilot-2026-04-26/prompts-archive/
+!**/benchmarks/results/pilot-2026-04-26/prompts-archive/*.md
+!**/benchmarks/results/pilot-2026-04-26/invalidated/
+!**/benchmarks/results/pilot-2026-04-26/invalidated/*.jsonl
 # Sprint 11 A2 (ratification §Q5 Tier 2): `benchmarks/archive/` holds
 # gzipped JSONL from launch-claim-supporting runs (H-42a/b full-run).
 # Retention: 12 months minimum from commit per ratification §Q5. Files here

@@ -1,0 +1,202 @@
+[2026-04-28T00:33:52.730Z] [generator] mode=dry-run; total cells=50
+[2026-04-28T00:33:52.731Z] [dry-run] validating 50 stratification cells + prompt builds
+[2026-04-28T00:33:52.732Z] [dry-run] cell[0] = h3-F1-p1_founder_ceo-stage_a_series_b_growth_burning-001; prompt = 3113c
+[2026-04-28T00:33:52.732Z] [dry-run] cell[1] = h3-F1-p1_founder_ceo-stage_b_post_profitable_consolidation-001; prompt = 3109c
+[2026-04-28T00:33:52.732Z] [dry-run] cell[2] = h3-F1-p2_cfo-stage_a_series_b_growth_burning-001; prompt = 3076c
+[2026-04-28T00:33:52.732Z] [dry-run] cell[49] = h3-F5-p5_independent_director-stage_b_post_profitable_consolidation-001; prompt = 3176c
+[2026-04-28T00:33:52.734Z] [dry-run] OK — all 50 cells produce valid prompts; no LLM call made
+[2026-04-28T00:33:52.734Z] [dry-run] cost: $0.00
+[2026-04-28T00:38:37.232Z] [generator] mode=probe; total cells=50
+[2026-04-28T00:38:37.233Z] [probe] generating 1 instance(s)
+[2026-04-28T00:38:37.234Z] [h3-F1-p1_founder_ceo-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3113c)
+[2026-04-28T00:40:33.952Z] [generator] mode=probe; total cells=50
+[2026-04-28T00:40:33.953Z] [probe] generating 1 instance(s)
+[2026-04-28T00:40:33.954Z] [h3-F1-p1_founder_ceo-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3113c)
+[2026-04-28T00:41:35.847Z] [h3-F1-p1_founder_ceo-stage_a_series_b_growth_burning-001] validation failed: persona length 714 outside [100, 600] range
+[2026-04-28T00:41:35.847Z] [error] cell h3-F1-p1_founder_ceo-stage_a_series_b_growth_burning-001 skipped due to: validation failed: persona length 714 outside [100, 600] range
+[2026-04-28T00:41:35.848Z] [done] generated 0 instances; total cost $0.0000
+[2026-04-28T00:42:30.603Z] [generator] mode=probe; total cells=50
+[2026-04-28T00:42:30.604Z] [probe] generating 1 instance(s)
+[2026-04-28T00:42:30.605Z] [h3-F1-p1_founder_ceo-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3113c)
+[2026-04-28T00:43:34.812Z] [h3-F1-p1_founder_ceo-stage_a_series_b_growth_burning-001] OK; cost=$0.2716; 7 docs; latency=64205ms
+[2026-04-28T00:43:34.813Z] [cumulative] $0.2716 / $7 halt; 1/50 instances
+[2026-04-28T00:43:34.813Z] [done] generated 1 instances; total cost $0.2716
+[2026-04-28T00:51:46.796Z] [generator] mode=all; total cells=50
+[2026-04-28T00:51:46.797Z] [all] generating 50 instance(s)
+[2026-04-28T00:51:46.797Z] [resume] loaded 1 existing instances; cumulative cost = $0.2716
+[2026-04-28T00:51:46.798Z] [skip] h3-F1-p1_founder_ceo-stage_a_series_b_growth_burning-001 already in JSONL
+[2026-04-28T00:51:46.798Z] [h3-F1-p1_founder_ceo-stage_b_post_profitable_consolidation-001] generating via claude-opus-4-7 (prompt 3109c)
+[2026-04-28T00:53:03.836Z] [h3-F1-p1_founder_ceo-stage_b_post_profitable_consolidation-001] OK; cost=$0.3190; 7 docs; latency=77037ms
+[2026-04-28T00:53:03.836Z] [cumulative] $0.5906 / $15 halt; 2/50 instances
+[2026-04-28T00:53:03.837Z] [h3-F1-p2_cfo-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3076c)
+[2026-04-28T00:54:13.601Z] [h3-F1-p2_cfo-stage_a_series_b_growth_burning-001] OK; cost=$0.3014; 7 docs; latency=69764ms
+[2026-04-28T00:54:13.602Z] [cumulative] $0.8920 / $15 halt; 3/50 instances
+[2026-04-28T00:54:13.602Z] [h3-F1-p2_cfo-stage_b_post_profitable_consolidation-001] generating via claude-opus-4-7 (prompt 3072c)
+[2026-04-28T00:55:21.564Z] [h3-F1-p2_cfo-stage_b_post_profitable_consolidation-001] OK; cost=$0.3038; 7 docs; latency=67962ms
+[2026-04-28T00:55:21.565Z] [cumulative] $1.1958 / $15 halt; 4/50 instances
+[2026-04-28T00:55:21.565Z] [h3-F1-p3_coo-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3083c)
+[2026-04-28T00:56:18.570Z] [h3-F1-p3_coo-stage_a_series_b_growth_burning-001] OK; cost=$0.2572; 7 docs; latency=57005ms
+[2026-04-28T00:56:18.570Z] [cumulative] $1.4530 / $15 halt; 5/50 instances
+[2026-04-28T00:56:18.571Z] [h3-F1-p3_coo-stage_b_post_profitable_consolidation-001] generating via claude-opus-4-7 (prompt 3079c)
+[2026-04-28T00:57:24.228Z] [h3-F1-p3_coo-stage_b_post_profitable_consolidation-001] OK; cost=$0.2931; 7 docs; latency=65657ms
+[2026-04-28T00:57:24.228Z] [cumulative] $1.7461 / $15 halt; 6/50 instances
+[2026-04-28T00:57:24.229Z] [h3-F1-p4_vp_finance-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3107c)
+[2026-04-28T00:58:30.915Z] [h3-F1-p4_vp_finance-stage_a_series_b_growth_burning-001] OK; cost=$0.2990; 7 docs; latency=66686ms
+[2026-04-28T00:58:30.916Z] [cumulative] $2.0451 / $15 halt; 7/50 instances
+[2026-04-28T00:58:30.916Z] [h3-F1-p4_vp_finance-stage_b_post_profitable_consolidation-001] generating via claude-opus-4-7 (prompt 3103c)
+[2026-04-28T00:59:41.413Z] [h3-F1-p4_vp_finance-stage_b_post_profitable_consolidation-001] OK; cost=$0.3059; 7 docs; latency=70497ms
+[2026-04-28T00:59:41.414Z] [cumulative] $2.3510 / $15 halt; 8/50 instances
+[2026-04-28T00:59:41.414Z] [h3-F1-p5_independent_director-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3162c)
+[2026-04-28T01:00:41.891Z] [h3-F1-p5_independent_director-stage_a_series_b_growth_burning-001] OK; cost=$0.2759; 7 docs; latency=60477ms
+[2026-04-28T01:00:41.891Z] [cumulative] $2.6269 / $15 halt; 9/50 instances
+[2026-04-28T01:00:41.891Z] [h3-F1-p5_independent_director-stage_b_post_profitable_consolidation-001] generating via claude-opus-4-7 (prompt 3158c)
+[2026-04-28T01:01:54.398Z] [h3-F1-p5_independent_director-stage_b_post_profitable_consolidation-001] OK; cost=$0.3172; 7 docs; latency=72506ms
+[2026-04-28T01:01:54.398Z] [cumulative] $2.9441 / $15 halt; 10/50 instances
+[2026-04-28T01:01:54.399Z] [h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3125c)
+[2026-04-28T01:02:51.139Z] [h3-F2-p1_founder_ceo-stage_a_series_b_growth_burning-001] OK; cost=$0.2370; 6 docs; latency=56740ms
+[2026-04-28T01:02:51.140Z] [cumulative] $3.1811 / $15 halt; 11/50 instances
+[2026-04-28T01:02:51.140Z] [h3-F2-p1_founder_ceo-stage_b_post_profitable_consolidation-001] generating via claude-opus-4-7 (prompt 3121c)
+[2026-04-28T01:03:43.464Z] [h3-F2-p1_founder_ceo-stage_b_post_profitable_consolidation-001] OK; cost=$0.2340; 6 docs; latency=52324ms
+[2026-04-28T01:03:43.465Z] [cumulative] $3.4151 / $15 halt; 12/50 instances
+[2026-04-28T01:03:43.465Z] [h3-F2-p2_cfo-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3088c)
+[2026-04-28T01:04:42.262Z] [h3-F2-p2_cfo-stage_a_series_b_growth_burning-001] OK; cost=$0.2544; 6 docs; latency=58797ms
+[2026-04-28T01:04:42.262Z] [cumulative] $3.6695 / $15 halt; 13/50 instances
+[2026-04-28T01:04:42.263Z] [h3-F2-p2_cfo-stage_b_post_profitable_consolidation-001] generating via claude-opus-4-7 (prompt 3084c)
+[2026-04-28T01:05:37.025Z] [h3-F2-p2_cfo-stage_b_post_profitable_consolidation-001] OK; cost=$0.2425; 6 docs; latency=54762ms
+[2026-04-28T01:05:37.026Z] [cumulative] $3.9119 / $15 halt; 14/50 instances
+[2026-04-28T01:05:37.026Z] [h3-F2-p3_coo-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3095c)
+[2026-04-28T01:06:34.152Z] [h3-F2-p3_coo-stage_a_series_b_growth_burning-001] OK; cost=$0.2398; 6 docs; latency=57126ms
+[2026-04-28T01:06:34.153Z] [cumulative] $4.1517 / $15 halt; 15/50 instances
+[2026-04-28T01:06:34.153Z] [h3-F2-p3_coo-stage_b_post_profitable_consolidation-001] generating via claude-opus-4-7 (prompt 3091c)
+[2026-04-28T01:07:27.415Z] [h3-F2-p3_coo-stage_b_post_profitable_consolidation-001] OK; cost=$0.2448; 6 docs; latency=53262ms
+[2026-04-28T01:07:27.415Z] [cumulative] $4.3965 / $15 halt; 16/50 instances
+[2026-04-28T01:07:27.416Z] [h3-F2-p4_vp_finance-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3119c)
+[2026-04-28T01:08:19.555Z] [h3-F2-p4_vp_finance-stage_a_series_b_growth_burning-001] OK; cost=$0.2256; 6 docs; latency=52139ms
+[2026-04-28T01:08:19.555Z] [cumulative] $4.6221 / $15 halt; 17/50 instances
+[2026-04-28T01:08:19.555Z] [h3-F2-p4_vp_finance-stage_b_post_profitable_consolidation-001] generating via claude-opus-4-7 (prompt 3115c)
+[2026-04-28T01:09:15.175Z] [h3-F2-p4_vp_finance-stage_b_post_profitable_consolidation-001] OK; cost=$0.2464; 6 docs; latency=55620ms
+[2026-04-28T01:09:15.175Z] [cumulative] $4.8684 / $15 halt; 18/50 instances
+[2026-04-28T01:09:15.176Z] [h3-F2-p5_independent_director-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3174c)
+[2026-04-28T01:10:11.682Z] [h3-F2-p5_independent_director-stage_a_series_b_growth_burning-001] OK; cost=$0.2463; 6 docs; latency=56506ms
+[2026-04-28T01:10:11.683Z] [cumulative] $5.1147 / $15 halt; 19/50 instances
+[2026-04-28T01:10:11.683Z] [h3-F2-p5_independent_director-stage_b_post_profitable_consolidation-001] generating via claude-opus-4-7 (prompt 3170c)
+[2026-04-28T01:11:06.911Z] [h3-F2-p5_independent_director-stage_b_post_profitable_consolidation-001] OK; cost=$0.2477; 6 docs; latency=55228ms
+[2026-04-28T01:11:06.911Z] [cumulative] $5.3624 / $15 halt; 20/50 instances
+[2026-04-28T01:11:06.911Z] [h3-F3-p1_founder_ceo-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3107c)
+[2026-04-28T01:12:02.872Z] [h3-F3-p1_founder_ceo-stage_a_series_b_growth_burning-001] OK; cost=$0.2534; 6 docs; latency=55961ms
+[2026-04-28T01:12:02.873Z] [cumulative] $5.6158 / $15 halt; 21/50 instances
+[2026-04-28T01:12:02.873Z] [h3-F3-p1_founder_ceo-stage_b_post_profitable_consolidation-001] generating via claude-opus-4-7 (prompt 3103c)
+[2026-04-28T01:12:59.618Z] [h3-F3-p1_founder_ceo-stage_b_post_profitable_consolidation-001] OK; cost=$0.2422; 6 docs; latency=56745ms
+[2026-04-28T01:12:59.618Z] [cumulative] $5.8580 / $15 halt; 22/50 instances
+[2026-04-28T01:12:59.618Z] [h3-F3-p2_cfo-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3070c)
+[2026-04-28T01:13:56.928Z] [h3-F3-p2_cfo-stage_a_series_b_growth_burning-001] OK; cost=$0.2347; 6 docs; latency=57309ms
+[2026-04-28T01:13:56.929Z] [cumulative] $6.0927 / $15 halt; 23/50 instances
+[2026-04-28T01:13:56.929Z] [h3-F3-p2_cfo-stage_b_post_profitable_consolidation-001] generating via claude-opus-4-7 (prompt 3066c)
+[2026-04-28T01:14:57.121Z] [h3-F3-p2_cfo-stage_b_post_profitable_consolidation-001] OK; cost=$0.2578; 6 docs; latency=60192ms
+[2026-04-28T01:14:57.122Z] [cumulative] $6.3505 / $15 halt; 24/50 instances
+[2026-04-28T01:14:57.122Z] [h3-F3-p3_coo-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3077c)
+[2026-04-28T01:15:50.919Z] [h3-F3-p3_coo-stage_a_series_b_growth_burning-001] OK; cost=$0.2342; 6 docs; latency=53796ms
+[2026-04-28T01:15:50.919Z] [cumulative] $6.5846 / $15 halt; 25/50 instances
+[2026-04-28T01:15:50.919Z] [h3-F3-p3_coo-stage_b_post_profitable_consolidation-001] generating via claude-opus-4-7 (prompt 3073c)
+[2026-04-28T01:16:46.071Z] [h3-F3-p3_coo-stage_b_post_profitable_consolidation-001] OK; cost=$0.2508; 6 docs; latency=55151ms
+[2026-04-28T01:16:46.072Z] [cumulative] $6.8355 / $15 halt; 26/50 instances
+[2026-04-28T01:16:46.072Z] [h3-F3-p4_vp_finance-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3101c)
+[2026-04-28T01:17:37.523Z] [h3-F3-p4_vp_finance-stage_a_series_b_growth_burning-001] OK; cost=$0.2230; 6 docs; latency=51451ms
+[2026-04-28T01:17:37.524Z] [cumulative] $7.0584 / $15 halt; 27/50 instances
+[2026-04-28T01:17:37.524Z] [h3-F3-p4_vp_finance-stage_b_post_profitable_consolidation-001] generating via claude-opus-4-7 (prompt 3097c)
+[2026-04-28T01:18:39.964Z] [h3-F3-p4_vp_finance-stage_b_post_profitable_consolidation-001] OK; cost=$0.2709; 6 docs; latency=62440ms
+[2026-04-28T01:18:39.965Z] [cumulative] $7.3293 / $15 halt; 28/50 instances
+[2026-04-28T01:18:39.965Z] [h3-F3-p5_independent_director-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3156c)
+[2026-04-28T01:19:35.991Z] [h3-F3-p5_independent_director-stage_a_series_b_growth_burning-001] OK; cost=$0.2655; 6 docs; latency=56026ms
+[2026-04-28T01:19:35.991Z] [cumulative] $7.5948 / $15 halt; 29/50 instances
+[2026-04-28T01:19:35.991Z] [h3-F3-p5_independent_director-stage_b_post_profitable_consolidation-001] generating via claude-opus-4-7 (prompt 3152c)
+[2026-04-28T01:20:36.868Z] [h3-F3-p5_independent_director-stage_b_post_profitable_consolidation-001] OK; cost=$0.2776; 6 docs; latency=60877ms
+[2026-04-28T01:20:36.869Z] [cumulative] $7.8724 / $15 halt; 30/50 instances
+[2026-04-28T01:20:36.869Z] [h3-F4-p1_founder_ceo-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3143c)
+[2026-04-28T01:21:38.597Z] [h3-F4-p1_founder_ceo-stage_a_series_b_growth_burning-001] OK; cost=$0.2593; 6 docs; latency=61728ms
+[2026-04-28T01:21:38.598Z] [cumulative] $8.1317 / $15 halt; 31/50 instances
+[2026-04-28T01:21:38.598Z] [h3-F4-p1_founder_ceo-stage_b_post_profitable_consolidation-001] generating via claude-opus-4-7 (prompt 3139c)
+[2026-04-28T01:22:34.225Z] [h3-F4-p1_founder_ceo-stage_b_post_profitable_consolidation-001] OK; cost=$0.2389; 6 docs; latency=55627ms
+[2026-04-28T01:22:34.225Z] [cumulative] $8.3706 / $15 halt; 32/50 instances
+[2026-04-28T01:22:34.225Z] [h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3106c)
+[2026-04-28T01:23:42.015Z] [h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] parse error: JSON parse failed: Expected ',' or ']' after array element in JSON at position 7821 (line 1 column 7822); raw content first 200c: {"personaText":"Persona: You are the CFO of Lattigo, a Series B B2B SaaS company providing AI-powered procurement analytics to mid-market manufacturers. The company raised a $32M Series B nine months 
+[2026-04-28T01:23:42.015Z] [error] cell h3-F4-p2_cfo-stage_a_series_b_growth_burning-001 skipped due to: JSON parse failed: Expected ',' or ']' after array element in JSON at position 7821 (line 1 column 7822)
+[2026-04-28T01:23:42.015Z] [h3-F4-p2_cfo-stage_b_post_profitable_consolidation-001] generating via claude-opus-4-7 (prompt 3102c)
+[2026-04-28T01:24:51.348Z] [h3-F4-p2_cfo-stage_b_post_profitable_consolidation-001] parse error: JSON parse failed: Expected ',' or '}' after property value in JSON at position 8823 (line 27 column 3); raw content first 200c: {
+  "personaText": "Persona: You are the CFO of Lattice Signal, a B2B SaaS observability platform that crossed $58M ARR last quarter and reached GAAP operating profitability three quarters ago at a 19
+[2026-04-28T01:24:51.348Z] [error] cell h3-F4-p2_cfo-stage_b_post_profitable_consolidation-001 skipped due to: JSON parse failed: Expected ',' or '}' after property value in JSON at position 8823 (line 27 column 3)
+[2026-04-28T01:24:51.348Z] [h3-F4-p3_coo-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3113c)
+[2026-04-28T01:25:51.607Z] [h3-F4-p3_coo-stage_a_series_b_growth_burning-001] OK; cost=$0.2533; 6 docs; latency=60259ms
+[2026-04-28T01:25:51.607Z] [cumulative] $8.6239 / $15 halt; 33/50 instances
+[2026-04-28T01:25:51.607Z] [h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] generating via claude-opus-4-7 (prompt 3109c)
+[2026-04-28T01:26:45.810Z] [h3-F4-p3_coo-stage_b_post_profitable_consolidation-001] OK; cost=$0.2324; 6 docs; latency=54203ms
+[2026-04-28T01:26:45.811Z] [cumulative] $8.8563 / $15 halt; 34/50 instances
+[2026-04-28T01:26:45.812Z] [h3-F4-p4_vp_finance-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3137c)
+[2026-04-28T01:27:42.727Z] [h3-F4-p4_vp_finance-stage_a_series_b_growth_burning-001] OK; cost=$0.2424; 6 docs; latency=56915ms
+[2026-04-28T01:27:42.728Z] [cumulative] $9.0987 / $15 halt; 35/50 instances
+[2026-04-28T01:27:42.728Z] [h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] generating via claude-opus-4-7 (prompt 3133c)
+[2026-04-28T01:28:44.677Z] [h3-F4-p4_vp_finance-stage_b_post_profitable_consolidation-001] OK; cost=$0.2712; 6 docs; latency=61949ms
+[2026-04-28T01:28:44.678Z] [cumulative] $9.3699 / $15 halt; 36/50 instances
+[2026-04-28T01:28:44.678Z] [h3-F4-p5_independent_director-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3192c)
+[2026-04-28T01:29:44.988Z] [h3-F4-p5_independent_director-stage_a_series_b_growth_burning-001] OK; cost=$0.2587; 6 docs; latency=60310ms
+[2026-04-28T01:29:44.988Z] [cumulative] $9.6286 / $15 halt; 37/50 instances
+[2026-04-28T01:29:44.988Z] [h3-F4-p5_independent_director-stage_b_post_profitable_consolidation-001] generating via claude-opus-4-7 (prompt 3188c)
+[2026-04-28T01:30:38.606Z] [h3-F4-p5_independent_director-stage_b_post_profitable_consolidation-001] OK; cost=$0.2329; 6 docs; latency=53618ms
+[2026-04-28T01:30:38.606Z] [cumulative] $9.8616 / $15 halt; 38/50 instances
+[2026-04-28T01:30:38.607Z] [h3-F5-p1_founder_ceo-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3131c)
+[2026-04-28T01:31:40.261Z] [h3-F5-p1_founder_ceo-stage_a_series_b_growth_burning-001] parse error: JSON parse failed: Expected ',' or '}' after property value in JSON at position 7042 (line 31 column 3); raw content first 200c: {
+  "personaText": "Persona: I'm the Founder/CEO of Lattica, a Series B vertical SaaS company selling workflow automation to mid-market insurance carriers. We closed a $32M Series B nine months ago at
+[2026-04-28T01:31:40.262Z] [error] cell h3-F5-p1_founder_ceo-stage_a_series_b_growth_burning-001 skipped due to: JSON parse failed: Expected ',' or '}' after property value in JSON at position 7042 (line 31 column 3)
+[2026-04-28T01:31:40.262Z] [h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] generating via claude-opus-4-7 (prompt 3127c)
+[2026-04-28T01:32:48.102Z] [h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001] OK; cost=$0.2918; 7 docs; latency=67839ms
+[2026-04-28T01:32:48.102Z] [cumulative] $10.1534 / $15 halt; 39/50 instances
+[2026-04-28T01:32:48.102Z] [h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3094c)
+[2026-04-28T01:34:00.556Z] [h3-F5-p2_cfo-stage_a_series_b_growth_burning-001] OK; cost=$0.3016; 7 docs; latency=72453ms
+[2026-04-28T01:34:00.556Z] [cumulative] $10.4550 / $15 halt; 40/50 instances
+[2026-04-28T01:34:00.557Z] [h3-F5-p2_cfo-stage_b_post_profitable_consolidation-001] generating via claude-opus-4-7 (prompt 3090c)
+[2026-04-28T01:35:17.337Z] [h3-F5-p2_cfo-stage_b_post_profitable_consolidation-001] OK; cost=$0.3331; 7 docs; latency=76780ms
+[2026-04-28T01:35:17.337Z] [cumulative] $10.7881 / $15 halt; 41/50 instances
+[2026-04-28T01:35:17.337Z] [h3-F5-p3_coo-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3101c)
+[2026-04-28T01:36:23.402Z] [h3-F5-p3_coo-stage_a_series_b_growth_burning-001] OK; cost=$0.2760; 7 docs; latency=66065ms
+[2026-04-28T01:36:23.402Z] [cumulative] $11.0641 / $15 halt; 42/50 instances
+[2026-04-28T01:36:23.402Z] [h3-F5-p3_coo-stage_b_post_profitable_consolidation-001] generating via claude-opus-4-7 (prompt 3097c)
+[2026-04-28T01:37:31.327Z] [h3-F5-p3_coo-stage_b_post_profitable_consolidation-001] OK; cost=$0.2802; 7 docs; latency=67924ms
+[2026-04-28T01:37:31.328Z] [cumulative] $11.3443 / $15 halt; 43/50 instances
+[2026-04-28T01:37:31.328Z] [h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3125c)
+[2026-04-28T01:38:38.237Z] [h3-F5-p4_vp_finance-stage_a_series_b_growth_burning-001] OK; cost=$0.2896; 7 docs; latency=66908ms
+[2026-04-28T01:38:38.237Z] [cumulative] $11.6339 / $15 halt; 44/50 instances
+[2026-04-28T01:38:38.237Z] [h3-F5-p4_vp_finance-stage_b_post_profitable_consolidation-001] generating via claude-opus-4-7 (prompt 3121c)
+[2026-04-28T01:39:49.754Z] [h3-F5-p4_vp_finance-stage_b_post_profitable_consolidation-001] OK; cost=$0.3351; 7 docs; latency=71517ms
+[2026-04-28T01:39:49.755Z] [cumulative] $11.9690 / $15 halt; 45/50 instances
+[2026-04-28T01:39:49.755Z] [h3-F5-p5_independent_director-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3180c)
+[2026-04-28T01:40:57.861Z] [h3-F5-p5_independent_director-stage_a_series_b_growth_burning-001] OK; cost=$0.2936; 7 docs; latency=68106ms
+[2026-04-28T01:40:57.861Z] [cumulative] $12.2626 / $15 halt; 46/50 instances
+[2026-04-28T01:40:57.861Z] [h3-F5-p5_independent_director-stage_b_post_profitable_consolidation-001] generating via claude-opus-4-7 (prompt 3176c)
+[2026-04-28T01:42:05.379Z] [h3-F5-p5_independent_director-stage_b_post_profitable_consolidation-001] OK; cost=$0.2791; 7 docs; latency=67518ms
+[2026-04-28T01:42:05.379Z] [cumulative] $12.5417 / $15 halt; 47/50 instances
+[2026-04-28T01:42:05.380Z] [done] generated 47 instances; total cost $12.5417
+[2026-04-28T01:42:05.383Z] [pre-a] spot-audit report written to D:\Projects\waggle-os-faza1-wt\benchmarks\results\gepa-faza1\corpus\h3-spot-audit-pre-a-report.md
+[2026-04-28T08:41:15.960Z] [generator] mode=retry-failed; total cells=50
+[2026-04-28T08:41:15.961Z] [retry-failed] generating 3 instance(s)
+[2026-04-28T08:41:15.962Z] [h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3106c) [JSON-mode retry per Amendment 4]
+[2026-04-28T08:41:18.261Z] [h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] LLM error: litellm.BadRequestError: AnthropicException - {"type":"error","error":{"type":"invalid_request_error","message":"`temperature` is deprecated for this model."},"request_id":"req_011CaVsT1m4q8H6juEzB8fj
+[2026-04-28T08:41:18.262Z] [error] cell h3-F4-p2_cfo-stage_a_series_b_growth_burning-001 skipped due to: LLM error: litellm.BadRequestError: AnthropicException - {"type":"error","error":{"type":"invalid_request_error","message":"`temperature` is deprecated for this model."},"request_id":"req_011CaVsT1m4q8H6juEzB8fj
+[2026-04-28T08:41:18.262Z] [h3-F4-p2_cfo-stage_b_post_profitable_consolidation-001] generating via claude-opus-4-7 (prompt 3102c) [JSON-mode retry per Amendment 4]
+[2026-04-28T08:41:20.377Z] [h3-F4-p2_cfo-stage_b_post_profitable_consolidation-001] LLM error: litellm.BadRequestError: AnthropicException - {"type":"error","error":{"type":"invalid_request_error","message":"`temperature` is deprecated for this model."},"request_id":"req_011CaVsTAwDZ6FzbdLWXLXy
+[2026-04-28T08:41:20.377Z] [error] cell h3-F4-p2_cfo-stage_b_post_profitable_consolidation-001 skipped due to: LLM error: litellm.BadRequestError: AnthropicException - {"type":"error","error":{"type":"invalid_request_error","message":"`temperature` is deprecated for this model."},"request_id":"req_011CaVsTAwDZ6FzbdLWXLXy
+[2026-04-28T08:41:20.377Z] [h3-F5-p1_founder_ceo-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3131c) [JSON-mode retry per Amendment 4]
+[2026-04-28T08:41:22.508Z] [h3-F5-p1_founder_ceo-stage_a_series_b_growth_burning-001] LLM error: litellm.BadRequestError: AnthropicException - {"type":"error","error":{"type":"invalid_request_error","message":"`temperature` is deprecated for this model."},"request_id":"req_011CaVsTL2uSf8SK3LAB5zT
+[2026-04-28T08:41:22.509Z] [error] cell h3-F5-p1_founder_ceo-stage_a_series_b_growth_burning-001 skipped due to: LLM error: litellm.BadRequestError: AnthropicException - {"type":"error","error":{"type":"invalid_request_error","message":"`temperature` is deprecated for this model."},"request_id":"req_011CaVsTL2uSf8SK3LAB5zT
+[2026-04-28T08:41:22.509Z] [done] generated 0 instances; total cost $0.0000
+[2026-04-28T08:41:44.272Z] [generator] mode=retry-failed; total cells=50
+[2026-04-28T08:41:44.273Z] [retry-failed] generating 3 instance(s)
+[2026-04-28T08:41:44.274Z] [h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3106c) [JSON-mode retry per Amendment 4]
+[2026-04-28T08:42:48.872Z] [h3-F4-p2_cfo-stage_a_series_b_growth_burning-001] OK; cost=$0.2658; 6 docs; latency=64598ms
+[2026-04-28T08:42:48.873Z] [cumulative] $0.2658 / $15 halt; 1/50 instances
+[2026-04-28T08:42:48.873Z] [h3-F4-p2_cfo-stage_b_post_profitable_consolidation-001] generating via claude-opus-4-7 (prompt 3102c) [JSON-mode retry per Amendment 4]
+[2026-04-28T08:43:50.504Z] [h3-F4-p2_cfo-stage_b_post_profitable_consolidation-001] OK; cost=$0.2499; 6 docs; latency=61630ms
+[2026-04-28T08:43:50.504Z] [cumulative] $0.5156 / $15 halt; 2/50 instances
+[2026-04-28T08:43:50.505Z] [h3-F5-p1_founder_ceo-stage_a_series_b_growth_burning-001] generating via claude-opus-4-7 (prompt 3131c) [JSON-mode retry per Amendment 4]
+[2026-04-28T08:44:58.124Z] [h3-F5-p1_founder_ceo-stage_a_series_b_growth_burning-001] OK; cost=$0.2884; 7 docs; latency=67618ms
+[2026-04-28T08:44:58.124Z] [cumulative] $0.8040 / $15 halt; 3/50 instances
+[2026-04-28T08:44:58.124Z] [done] generated 3 instances; total cost $0.8040

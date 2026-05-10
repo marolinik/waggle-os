@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import type { EmbeddingProviderConfig, EmbeddingProviderType } from './mind/embedding-provider.js';
+import type { EmbeddingProviderConfig, EmbeddingProviderType } from '@waggle/hive-mind-core';
 
 export interface ProviderEntry {
   apiKey: string;

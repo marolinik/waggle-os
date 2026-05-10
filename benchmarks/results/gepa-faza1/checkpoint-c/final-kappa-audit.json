@@ -1,0 +1,44 @@
+{
+  "generated_at": "2026-04-29T01:39:23.970Z",
+  "inputs": {
+    "gen_1_jsonl_records": 120,
+    "checkpoint_c_jsonl_records": 15,
+    "combined_records": 135,
+    "effective_n_after_judge_failures": 135,
+    "dropped_due_to_failed_judge": 0,
+    "threshold": 4
+  },
+  "pairwise_kappa": {
+    "opus_gpt": 0.07912687585266004,
+    "opus_minimax": 0.2857142857142851,
+    "gpt_minimax": 0.07912687585266004
+  },
+  "pairwise_raw_agreement": {
+    "opus_gpt": 0.6666666666666666,
+    "opus_minimax": 0.9111111111111111,
+    "gpt_minimax": 0.6666666666666666,
+    "min": 0.6666666666666666
+  },
+  "per_judge_pass_rates": {
+    "opus": 0.9333333333333333,
+    "gpt": 0.6592592592592592,
+    "minimax": 0.9333333333333333
+  },
+  "canonical_kappa": 0.7877758913412564,
+  "drift_band": {
+    "low": 0.7377758913412563,
+    "high": 0.8377758913412564
+  },
+  "audit": {
+    "kConservativeTrio": 0.07912687585266004,
+    "pairwise": {
+      "kOpusGpt": 0.07912687585266004,
+      "kOpusMinimax": 0.2857142857142851,
+      "kGptMinimax": 0.07912687585266004
+    },
+    "verdict": "DRIFT_LOW_BELOW_BAND",
+    "driftFromCanonical": -0.7086490154885963,
+    "v6PolicyFloorPass": false,
+    "auditLogLine": "κ_conservative_trio=0.0791 | canonical=0.7878 | drift=-0.7086 | verdict=DRIFT_LOW_BELOW_BAND | v6_policy_floor=FAIL"
+  }
+}

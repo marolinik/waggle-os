@@ -23,7 +23,7 @@ export default defineConfig({
       'app/tests/**/*.test.ts',
       'benchmarks/*/tests/**/*.test.ts',
     ],
-    exclude: ['apps/**', 'node_modules/**'],
+    exclude: ['apps/**', 'node_modules/**', '**/__faza1-closed/**'],
     coverage: {
       provider: 'v8',
       include: ['packages/*/src/**/*.ts'],

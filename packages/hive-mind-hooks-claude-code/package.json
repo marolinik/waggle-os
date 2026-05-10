@@ -1,0 +1,66 @@
+{
+  "name": "@waggle/hive-mind-hooks-claude-code",
+  "version": "0.1.0",
+  "description": "Anthropic Claude Code silent capture shim for hive-mind. Adds SessionStart / UserPromptSubmit / Stop / PreCompact hooks that route conversation episodes into hive-mind frames via @waggle/hive-mind-shim-core. Reversible install — additive merge into ~/.claude/settings.json with byte-identical uninstall.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "claude-code-hooks": "dist/bin/claude-code-hooks-cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./hooks/session-start": "./dist/hooks/session-start.js",
+    "./hooks/user-prompt-submit": "./dist/hooks/user-prompt-submit.js",
+    "./hooks/stop": "./dist/hooks/stop.js",
+    "./hooks/pre-compact": "./dist/hooks/pre-compact.js"
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "build:clean": "tsc --build --clean",
+    "typecheck": "tsc --build && tsc --noEmit -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@waggle/hive-mind-shim-core": "*"
+  },
+  "peerDependencies": {
+    "@waggle/hive-mind-cli": "*"
+  },
+  "peerDependenciesMeta": {
+    "@waggle/hive-mind-cli": {
+      "optional": true
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/marolinik/waggle-os.git",
+    "directory": "packages/hive-mind-hooks-claude-code"
+  },
+  "homepage": "https://github.com/marolinik/waggle-os/tree/main/packages/hive-mind-hooks-claude-code#readme",
+  "bugs": {
+    "url": "https://github.com/marolinik/waggle-os/issues"
+  },
+  "author": "Egzakta Group d.o.o. <hello@egzakta.com> (https://egzakta.com)",
+  "keywords": [
+    "claude-code",
+    "anthropic",
+    "hive-mind",
+    "memory",
+    "ai",
+    "mcp",
+    "hook",
+    "silent-capture"
+  ],
+  "types": "dist/index.d.ts"
+}

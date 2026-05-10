@@ -7,7 +7,7 @@
  */
 
 import type { InteractionStore } from './interaction-store.js';
-import type { HarvestSourceStore } from '../harvest/source-store.js';
+import type { HarvestSourceStore } from '@waggle/hive-mind-core';
 import { ComplianceStatusChecker } from './status-checker.js';
 import type { AuditReport, AuditReportRequest, AIActRiskLevel } from './types.js';
 

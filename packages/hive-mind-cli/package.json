@@ -1,0 +1,66 @@
+{
+  "name": "@waggle/hive-mind-cli",
+  "version": "0.1.0",
+  "description": "Command-line tools for hive-mind: recall, save, harvest, compile-wiki, maintenance, doctor. Designed to run from SessionStart/Stop hooks and nightly cron. Includes Windows .cmd shim postinstall fix for Claude Code MCP integration.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "hive-mind-cli": "dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "assets",
+    "docs",
+    "README.md",
+    "LICENSE",
+    "postinstall.cjs"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean",
+    "start": "node dist/index.js",
+    "postinstall": "node postinstall.cjs"
+  },
+  "dependencies": {
+    "@waggle/hive-mind-core": "*",
+    "@waggle/hive-mind-mcp-server": "*",
+    "@waggle/hive-mind-wiki-compiler": "*"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/marolinik/waggle-os.git",
+    "directory": "packages/hive-mind-cli"
+  },
+  "homepage": "https://github.com/marolinik/waggle-os/tree/main/packages/hive-mind-cli#readme",
+  "bugs": {
+    "url": "https://github.com/marolinik/waggle-os/issues"
+  },
+  "author": "Egzakta Group d.o.o. <hello@egzakta.com> (https://egzakta.com)",
+  "keywords": [
+    "cli",
+    "memory",
+    "hive-mind",
+    "harvest",
+    "wiki-compiler",
+    "ai",
+    "claude-code",
+    "mcp",
+    "windows-installer",
+    "doctor"
+  ],
+  "types": "dist/index.d.ts"
+}

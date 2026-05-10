@@ -1,14 +1,31 @@
-export { createCoreLogger } from './logger.js';
-export { scanForInjection, type ScanResult } from './injection-scanner.js';
-export { MindDB } from './mind/db.js';
-export { IdentityLayer, type Identity } from './mind/identity.js';
-export { AwarenessLayer, type AwarenessItem, type AwarenessCategory } from './mind/awareness.js';
-export { FrameStore, type MemoryFrame, type FrameType, type Importance, type FrameSource } from './mind/frames.js';
-export { SessionStore, type Session } from './mind/sessions.js';
-export { HybridSearch, type SearchResult } from './mind/search.js';
-export { KnowledgeGraph, type Entity, type Relation, type ValidationSchema } from './mind/knowledge.js';
-export { SCHEMA_SQL, VEC_TABLE_SQL, SCHEMA_VERSION } from './mind/schema.js';
+// @waggle/core — Waggle-specific orchestration layer.
+//
+// As of CC Sesija B 2026-04-30 (PM Q3 Plan A ratification), the substrate
+// (mind/ + harvest/ + logger + injection-scanner) lives in @waggle/hive-mind-core
+// and is distributed as Apache 2.0 OSS via subtree-split. This barrel re-exports
+// substrate symbols for backward compatibility — existing consumers (packages/agent,
+// apps/web, packages/server, etc.) keep their `import { ... } from '@waggle/core'`
+// imports unchanged.
+//
+// Waggle-specific (non-extracted) modules below the substrate re-exports stay
+// in this package: config, multi-mind, workspace orchestration, vault, telemetry,
+// install-audit, cron-store, skill-hashes, team-sync, file-store, file-indexer,
+// memory-import, optimization-log, compliance/.
+
+// ── Substrate re-exports from @waggle/hive-mind-core (Apache 2.0 OSS) ──
 export {
+  // Logger + injection scanner
+  createCoreLogger,
+  scanForInjection, type ScanResult,
+  // mind/ — memory substrate
+  MindDB,
+  IdentityLayer, type Identity,
+  AwarenessLayer, type AwarenessItem, type AwarenessCategory,
+  FrameStore, type MemoryFrame, type FrameType, type Importance, type FrameSource,
+  SessionStore, type Session,
+  HybridSearch, type SearchResult,
+  KnowledgeGraph, type Entity, type Relation, type ValidationSchema,
+  SCHEMA_SQL, VEC_TABLE_SQL, SCHEMA_VERSION,
   computeRelevance,
   computeTemporalScore,
   computePopularityScore,
@@ -17,39 +34,56 @@ export {
   SCORING_PROFILES,
   type ScoringProfile,
   type ScoringWeights,
-} from './mind/scoring.js';
-export type { Embedder } from './mind/embeddings.js';
-export { createLiteLLMEmbedder, type LiteLLMEmbedderConfig } from './mind/litellm-embedder.js';
-export { createInProcessEmbedder, normalizeDimensions, type InProcessEmbedderConfig } from './mind/inprocess-embedder.js';
-export { createOllamaEmbedder, type OllamaEmbedderConfig } from './mind/ollama-embedder.js';
-export { createApiEmbedder, type ApiEmbedderConfig } from './mind/api-embedder.js';
-export { createEmbeddingProvider, EmbeddingQuotaExceededError, getMinimumTierForProvider, type EmbeddingProviderConfig, type EmbeddingProviderStatus, type EmbeddingProviderType, type EmbeddingProviderInstance, type EmbeddingQuotaStatus } from './mind/embedding-provider.js';
-export { normalizeEntityName, findDuplicates } from './mind/entity-normalizer.js';
-export { Ontology, validateEntity, type EntitySchema, type ValidationResult } from './mind/ontology.js';
-export { WaggleConfig, type ProviderEntry, type TeamServerConfig } from './config.js';
-export { MultiMind, type MultiMindSearchResult, type MindSource, type SearchScope } from './multi-mind.js';
-export { MultiMindCache, type MultiMindCacheConfig } from './multi-mind-cache.js';
-export { WorkspaceManager, type WorkspaceConfig, type CreateWorkspaceOptions } from './workspace-config.js';
-export { needsMigration, migrateToMultiMind } from './migration.js';
-export { TeamSync, frameToEntity, entityToSyncedFrame, type TeamSyncConfig, type SyncedFrame } from './team-sync.js';
-export {
+  type Embedder,
+  createLiteLLMEmbedder, type LiteLLMEmbedderConfig,
+  createInProcessEmbedder, normalizeDimensions, type InProcessEmbedderConfig,
+  createOllamaEmbedder, type OllamaEmbedderConfig,
+  createApiEmbedder, type ApiEmbedderConfig,
+  createEmbeddingProvider, EmbeddingQuotaExceededError, getMinimumTierForProvider,
+  type EmbeddingProviderConfig, type EmbeddingProviderStatus, type EmbeddingProviderType,
+  type EmbeddingProviderInstance, type EmbeddingQuotaStatus,
+  normalizeEntityName, findDuplicates,
+  Ontology, validateEntity, type EntitySchema, type ValidationResult,
   ImprovementSignalStore,
-  type ImprovementSignal,
-  type ActionableSignal,
-  type SignalCategory,
-  type ActionableThresholds,
-} from './mind/improvement-signals.js';
-export {
+  type ImprovementSignal, type ActionableSignal, type SignalCategory, type ActionableThresholds,
   ExecutionTraceStore, EXECUTION_TRACES_TABLE_SQL,
   type ExecutionTrace, type ParsedExecutionTrace, type TraceOutcome,
   type TracePayload, type TraceToolCall, type TraceReasoningStep,
   type StartTraceInput, type FinalizeTraceInput, type TraceQueryFilter,
-} from './mind/execution-traces.js';
-export {
   EvolutionRunStore, EVOLUTION_RUNS_TABLE_SQL,
   type EvolutionRun, type EvolutionRunStatus, type EvolutionRunTarget,
   type CreateEvolutionRunInput, type EvolutionRunFilter,
-} from './mind/evolution-runs.js';
+  reconcileIndexes, reconcileFtsIndex, reconcileVecIndex, cleanOrphanVectors, cleanOrphanFts,
+  type ReconcileResult,
+  ConceptTracker, CONCEPT_MASTERY_TABLE_SQL,
+  type ConceptEntry, type ConceptUpdate,
+  // harvest/ — universal memory ingestion pipeline
+  HarvestSourceStore,
+  HarvestRunStore, type HarvestRun, type HarvestRunStatus,
+  ChatGPTAdapter,
+  ClaudeAdapter,
+  ClaudeCodeAdapter,
+  GeminiAdapter,
+  UniversalAdapter,
+  MarkdownAdapter,
+  PlaintextAdapter,
+  UrlAdapter,
+  PdfAdapter,
+  HarvestPipeline, type LLMCallFn, type PipelineOptions,
+  dedup,
+  type ImportSourceType, type ImportItemType, type UniversalImportItem, type DistilledKnowledge,
+  type HarvestPipelineResult, type HarvestSource, type SourceAdapter, type FilesystemAdapter,
+  type ClassifiedItem, type ExtractedContent, type KnowledgeProvenance,
+  // Plan A AMENDMENT 2026-04-30 — multi-workspace orchestration
+  MultiMind, type MultiMindSearchResult, type MindSource, type SearchScope,
+  MultiMindCache, type MultiMindCacheConfig,
+  WorkspaceManager, type WorkspaceConfig, type CreateWorkspaceOptions,
+} from '@waggle/hive-mind-core';
+
+// ── Waggle-specific orchestration (stays in @waggle/core) ──
+export { WaggleConfig, type ProviderEntry, type TeamServerConfig } from './config.js';
+export { needsMigration, migrateToMultiMind } from './migration.js';
+export { TeamSync, frameToEntity, entityToSyncedFrame, type TeamSyncConfig, type SyncedFrame } from './team-sync.js';
 export {
   InstallAuditStore, INSTALL_AUDIT_TABLE_SQL,
   type InstallAuditEntry, type RecordAuditInput,
@@ -66,11 +100,6 @@ export {
   SkillHashStore, computeSkillHash, SKILL_HASHES_TABLE_SQL,
   type SkillHash,
 } from './skill-hashes.js';
-export { reconcileIndexes, reconcileFtsIndex, reconcileVecIndex, cleanOrphanVectors, cleanOrphanFts, type ReconcileResult } from './mind/reconcile.js';
-export {
-  ConceptTracker, CONCEPT_MASTERY_TABLE_SQL,
-  type ConceptEntry, type ConceptUpdate,
-} from './mind/concept-tracker.js';
 export { processImport, parseChatGPTExport, parseClaudeExport, extractKnowledge } from './memory-import.js';
 export { createFileStore, LocalFileStore, LinkedDirStore, S3FileStore, type FileStore, type FileEntry, type StorageInfo, type S3Config } from './file-store.js';
 export { FileIndexer, MAX_CONTENT_BYTES, type FileIndexRow, type FileIndexResult } from './file-indexer.js';
@@ -80,27 +109,7 @@ export {
   type OptimizationLogEntry, type CreateOptimizationLogInput,
 } from './optimization-log.js';
 
-// ── Harvest (Memory Harvest) ──
-export { HarvestSourceStore } from './harvest/source-store.js';
-export { HarvestRunStore, type HarvestRun, type HarvestRunStatus } from './harvest/run-store.js';
-export { ChatGPTAdapter } from './harvest/chatgpt-adapter.js';
-export { ClaudeAdapter } from './harvest/claude-adapter.js';
-export { ClaudeCodeAdapter } from './harvest/claude-code-adapter.js';
-export { GeminiAdapter } from './harvest/gemini-adapter.js';
-export { UniversalAdapter } from './harvest/universal-adapter.js';
-export { MarkdownAdapter } from './harvest/markdown-adapter.js';
-export { PlaintextAdapter } from './harvest/plaintext-adapter.js';
-export { UrlAdapter } from './harvest/url-adapter.js';
-export { PdfAdapter } from './harvest/pdf-adapter.js';
-export { HarvestPipeline, type LLMCallFn, type PipelineOptions } from './harvest/pipeline.js';
-export { dedup } from './harvest/dedup.js';
-export type {
-  ImportSourceType, ImportItemType, UniversalImportItem, DistilledKnowledge,
-  HarvestPipelineResult, HarvestSource, SourceAdapter, FilesystemAdapter,
-  ClassifiedItem, ExtractedContent, KnowledgeProvenance,
-} from './harvest/types.js';
-
-// ── Compliance (AI Act) ──
+// ── Compliance (AI Act) — stays in @waggle/core (NOT extracted per .github/sync.md) ──
 export { InteractionStore } from './compliance/interaction-store.js';
 export { ComplianceStatusChecker } from './compliance/status-checker.js';
 export { ReportGenerator, type ReportGeneratorDeps } from './compliance/report-generator.js';

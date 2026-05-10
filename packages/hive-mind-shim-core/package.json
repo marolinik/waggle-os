@@ -1,0 +1,46 @@
+{
+  "name": "@waggle/hive-mind-shim-core",
+  "version": "0.1.0",
+  "description": "Foundation utilities for hive-mind cross-IDE silent capture shims: frame encoding, workspace resolution, hive-mind-cli mcp call bridge, hook event types, importance classifier, deterministic prompt summarizer, retry-with-jitter, structured logger.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "build:clean": "tsc --build --clean",
+    "typecheck": "tsc --build && tsc --noEmit -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/marolinik/waggle-os.git",
+    "directory": "packages/hive-mind-shim-core"
+  },
+  "homepage": "https://github.com/marolinik/waggle-os/tree/main/packages/hive-mind-shim-core#readme",
+  "bugs": {
+    "url": "https://github.com/marolinik/waggle-os/issues"
+  },
+  "author": "Egzakta Group d.o.o. <hello@egzakta.com> (https://egzakta.com)",
+  "keywords": [
+    "hive-mind",
+    "memory",
+    "ai",
+    "mcp",
+    "shim",
+    "foundation"
+  ],
+  "types": "dist/index.d.ts"
+}

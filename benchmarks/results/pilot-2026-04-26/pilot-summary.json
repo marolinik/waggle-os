@@ -1,0 +1,54 @@
+{
+  "pilot_id": "agentic-knowledge-work-pilot-2026-04-26",
+  "manifest_anchor": "pilot-2026-04-26-v1",
+  "execution_window_utc": "2026-04-26T00:46:15.285Z to 2026-04-26T02:03:47.740Z",
+  "total_cost_usd": 5.580591,
+  "total_judge_calls": 36,
+  "total_candidate_calls": 12,
+  "n_cells": 12,
+  "results_per_task": {
+    "task-1": {
+      "cell_A_trio_mean": 4.611111111111111,
+      "cell_B_trio_mean": 4.944444444444444,
+      "cell_C_trio_mean": 4.583333333333333,
+      "cell_D_trio_mean": 4.388888888888889,
+      "h2_delta_opus": 0.3333,
+      "h3_delta_qwen": -0.1944,
+      "h4_delta_sovereignty": -0.2222,
+      "h2_directional_pass": true,
+      "h3_directional_pass": false,
+      "h4_directional_pass": false
+    },
+    "task-2": {
+      "cell_A_trio_mean": 4.944444444444444,
+      "cell_B_trio_mean": 5,
+      "cell_C_trio_mean": 4.666666666666667,
+      "cell_D_trio_mean": 3.9444444444444446,
+      "h2_delta_opus": 0.0556,
+      "h3_delta_qwen": -0.7222,
+      "h4_delta_sovereignty": -1.0,
+      "h2_directional_pass": false,
+      "h3_directional_pass": false,
+      "h4_directional_pass": false
+    },
+    "task-3": {
+      "cell_A_trio_mean": 4.944444444444444,
+      "cell_B_trio_mean": 4.888888888888888,
+      "cell_C_trio_mean": 4.888888888888888,
+      "cell_D_trio_mean": 4.5555555555555545,
+      "h2_delta_opus": -0.0556,
+      "h3_delta_qwen": -0.3333,
+      "h4_delta_sovereignty": -0.3889,
+      "h2_directional_pass": false,
+      "h3_directional_pass": false,
+      "h4_directional_pass": false
+    }
+  },
+  "aggregate": {
+    "h2_pass_count": 1,
+    "h3_pass_count": 0,
+    "h4_pass_count": 0,
+    "critical_failures": 0,
+    "pilot_verdict": "FAIL"
+  }
+}

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { MindDB } from '../src/mind/db.js';
-import { AwarenessLayer } from '../src/mind/awareness.js';
+import { MindDB } from '@waggle/hive-mind-core';
+import { AwarenessLayer } from '@waggle/hive-mind-core';
 
 describe('Structured Task Model', () => {
   let db: MindDB;

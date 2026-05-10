@@ -6,6 +6,14 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+// Phase 5 canary — pin to 0 (canary OFF) for tests. Production code-default
+// post-kick-off (2026-04-30) is 10; tests need explicit OFF so shape-selection
+// assertions stay deterministic across runs. CI / dev env can still override.
+// Audit: gepa-phase-5/manifest.yaml § canary_toggle.
+if (!process.env.WAGGLE_PHASE5_CANARY_PCT) {
+  process.env.WAGGLE_PHASE5_CANARY_PCT = '0';
+}
+
 try {
   const content = readFileSync(resolve(process.cwd(), '.env'), 'utf-8');
   for (const line of content.split('\n')) {
