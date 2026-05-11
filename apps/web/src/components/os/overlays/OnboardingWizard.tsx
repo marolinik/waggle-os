@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { UserTier } from '@/lib/dock-tiers';
 import { adapter } from '@/lib/adapter';
+import { captureOnboardingComplete } from '@/lib/posthog';
 import type { OnboardingState } from '@/hooks/useOnboarding';
 import { TEMPLATES, TEMPLATE_PERSONA } from './onboarding/constants';
 import { SKIP_SETUP_DEFAULTS } from '@/lib/onboarding-skip';
@@ -336,6 +337,12 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
         personaId: selectedPersona,
       });
       trackTelemetry(serverBaseUrl, 'onboarding_complete', {
+        templateId: selectedTemplate || null,
+        personaId: selectedPersona || null,
+        model: selectedModel ?? null,
+      });
+      // DAY0-04: also capture to PostHog cloud alongside local SQLite telemetry
+      captureOnboardingComplete({
         templateId: selectedTemplate || null,
         personaId: selectedPersona || null,
         model: selectedModel ?? null,
