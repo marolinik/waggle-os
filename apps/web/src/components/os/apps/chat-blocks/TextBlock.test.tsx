@@ -6,7 +6,7 @@
  * test the parser surface area directly. Playwright covers full render.
  */
 import { describe, it, expect } from 'vitest';
-import { segmentText } from './TextBlock';
+import { segmentText } from './capability-request-parser';
 
 describe('TextBlock.segmentText — capability request parser', () => {
   it('returns a single text segment when no marker is present', () => {
