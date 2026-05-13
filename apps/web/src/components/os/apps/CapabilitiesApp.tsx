@@ -18,7 +18,22 @@ const AuditTab = ({ log, onLoad }: { log: AuditEntry[]; onLoad: (entries: AuditE
   useEffect(() => {
     if (log.length > 0) return;
     adapter.fetch('/api/audit/installs').then(r => r.json())
-      .then(data => { onLoad(Array.isArray(data) ? data : data.installs ?? []); setLoading(false); })
+      .then(data => {
+        // Server emits { entries: [{ id, timestamp, capabilityName, source, action, ... }] }.
+        // The older /audit/installs shape returned data.installs — keep both for resilience.
+        const rows = Array.isArray(data)
+          ? data
+          : (data.entries ?? data.installs ?? []);
+        const normalized: AuditEntry[] = rows.map((e: Record<string, unknown>) => ({
+          id: Number(e.id ?? 0),
+          name: String(e.name ?? e.capabilityName ?? 'unknown'),
+          source: String(e.source ?? 'unknown'),
+          outcome: String(e.outcome ?? e.action ?? 'unknown'),
+          timestamp: String(e.timestamp ?? new Date().toISOString()),
+        }));
+        onLoad(normalized);
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   }, []);
 
@@ -129,11 +144,30 @@ const CapabilitiesApp = () => {
       .finally(() => setLoading(false));
   }, []);
 
+  // Shared 403→UpgradeModal routing. Other errors fall through to the caller
+  // so they can show a toast or inline state without duplicating tier logic.
+  const handleInstallError = (err: unknown, packName: string): boolean => {
+    const e = err as { status?: number; message?: string; body?: { required?: string; actual?: string } };
+    if (e.status === 403) {
+      window.dispatchEvent(new CustomEvent('waggle:tier-insufficient', {
+        detail: {
+          required: e.body?.required ?? 'PRO',
+          actual: e.body?.actual ?? 'FREE',
+          message: `Installing "${packName}" needs a Pro plan or active trial.`,
+        },
+      }));
+      return true;
+    }
+    return false;
+  };
+
   const handleInstall = async (packId: string) => {
     setInstalling(packId);
     try {
       await adapter.installPack(packId);
       setPacks(prev => prev.map(p => (p.id || p.name) === packId ? { ...p, installed: true } : p));
+    } catch (err) {
+      handleInstallError(err, packId);
     } finally { setInstalling(null); }
   };
 
@@ -142,6 +176,8 @@ const CapabilitiesApp = () => {
     try {
       await adapter.installMarketplacePack(packId);
       setMarketplacePacks(prev => prev.map(p => p.id === packId ? { ...p, installed: true } : p));
+    } catch (err) {
+      handleInstallError(err, packId);
     } finally { setInstalling(null); }
   };
 

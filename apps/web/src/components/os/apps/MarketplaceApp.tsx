@@ -83,10 +83,27 @@ const MarketplaceApp = () => {
         toast({ title: 'Installed', description: `${pkg.name} installed successfully` });
         setResults(prev => prev.map(p => p.id === pkg.id ? { ...p, installed: true } : p));
         loadInstalled();
-      } else {
-        const err = await res.json().catch(() => ({ error: 'Install failed' }));
-        toast({ title: 'Install failed', description: err.error ?? 'Unknown error', variant: 'destructive' });
+        return;
       }
+      // 403 from requireTier preHandler → route through UpgradeModal so the
+      // user sees a feature-comparison + Start Trial CTA instead of a raw
+      // "Install failed" toast. Other failures still toast normally.
+      if (res.status === 403) {
+        const err = await res.json().catch(() => ({} as Record<string, unknown>));
+        window.dispatchEvent(new CustomEvent('waggle:tier-insufficient', {
+          detail: {
+            required: (err as { required?: string }).required ?? 'PRO',
+            actual: (err as { actual?: string }).actual ?? 'FREE',
+            message: `Installing "${pkg.name}" needs a Pro plan or active trial.`,
+          },
+        }));
+        return;
+      }
+      const err = await res.json().catch(() => ({ error: 'Install failed' }));
+      const blockedMsg = err.blocked
+        ? `Security scan blocked install (severity: ${err.severity}). ${err.message ?? ''}`
+        : (err.error ?? err.message ?? 'Unknown error');
+      toast({ title: 'Install failed', description: blockedMsg, variant: 'destructive' });
     } catch {
       toast({ title: 'Install failed', description: 'Server unreachable', variant: 'destructive' });
     }

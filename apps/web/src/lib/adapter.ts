@@ -626,16 +626,45 @@ class LocalAdapter {
 
   async getStarterPacks(): Promise<SkillPack[]> {
     const res = await this.fetch('/api/skills/starter-pack/catalog');
-    return unwrapArray(await res.json());
+    // Server emits { skills: [{ id, name, description, family, familyLabel, state, isWorkflow }], families }.
+    // SkillPack contract uses { category, trust, installed } — map server shape so
+    // CapabilitiesApp renders category badges + trust icons correctly.
+    const items = unwrapArray<Record<string, unknown>>(await res.json());
+    return items.map((s) => ({
+      id: String(s.id ?? s.name ?? ''),
+      name: String(s.name ?? s.id ?? ''),
+      description: String(s.description ?? ''),
+      category: String(s.family ?? s.category ?? 'other'),
+      trust: 'verified',
+      installed: s.state === 'active' || s.state === 'installed',
+      skills: Array.isArray(s.skills) ? (s.skills as string[]) : [],
+    }));
   }
 
   async getCapabilityPacks(): Promise<SkillPack[]> {
     const res = await this.fetch('/api/skills/capability-packs/catalog');
-    return unwrapArray(await res.json());
+    // Server emits { packs: [{ id, name, description, skills:[ids], skillStates, packState, installedCount, totalCount }] }.
+    const items = unwrapArray<Record<string, unknown>>(await res.json());
+    return items.map((p) => ({
+      id: String(p.id ?? p.name ?? ''),
+      name: String(p.name ?? p.id ?? ''),
+      description: String(p.description ?? ''),
+      category: String(p.category ?? 'pack'),
+      trust: 'verified',
+      installed: p.packState === 'complete',
+      skills: Array.isArray(p.skills) ? (p.skills as string[]) : [],
+    }));
   }
 
   async installPack(skillId: string): Promise<void> {
-    await this.fetch(`/api/skills/starter-pack/${skillId}`, { method: 'POST', body: '{}' });
+    const res = await this.fetch(`/api/skills/starter-pack/${skillId}`, { method: 'POST', body: '{}' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({} as Record<string, unknown>));
+      const err = new Error((body as { error?: string }).error ?? `Install failed (${res.status})`) as Error & { status?: number; body?: unknown };
+      err.status = res.status;
+      err.body = body;
+      throw err;
+    }
   }
 
   async getCapabilitiesStatus(): Promise<unknown> {
@@ -650,11 +679,32 @@ class LocalAdapter {
   }
 
   async installMarketplacePack(packId: string): Promise<void> {
-    await this.fetch('/api/marketplace/install', { method: 'POST', body: JSON.stringify({ packageId: packId }) });
+    const res = await this.fetch('/api/marketplace/install', {
+      method: 'POST',
+      body: JSON.stringify({ packageId: packId }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({} as Record<string, unknown>));
+      const err = new Error(
+        (body as { error?: string; message?: string }).error
+          ?? (body as { message?: string }).message
+          ?? `Install failed (${res.status})`,
+      ) as Error & { status?: number; body?: unknown };
+      err.status = res.status;
+      err.body = body;
+      throw err;
+    }
   }
 
   async uninstallMarketplacePack(packId: string): Promise<void> {
-    await this.fetch('/api/marketplace/uninstall', { method: 'POST', body: JSON.stringify({ packageId: packId }) });
+    const res = await this.fetch('/api/marketplace/uninstall', {
+      method: 'POST',
+      body: JSON.stringify({ packageId: packId }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({} as Record<string, unknown>));
+      throw new Error((body as { error?: string }).error ?? `Uninstall failed (${res.status})`);
+    }
   }
 
   // --- Fleet ---
