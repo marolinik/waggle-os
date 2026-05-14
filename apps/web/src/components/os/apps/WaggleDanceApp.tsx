@@ -1,32 +1,12 @@
 import { useMemo, useState } from 'react';
-import { Zap, Eye, ArrowRightLeft, Lightbulb, AlertTriangle, Radio, RefreshCw, Check, Send } from 'lucide-react';
+import { Zap, RefreshCw, Check, Send } from 'lucide-react';
 import { useWaggleDance } from '@/hooks/useWaggleDance';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { WaggleSignal } from '@/lib/types';
 import { sortSignalsForDisplay } from '@/lib/waggle-signals';
-
-type TypeConfigEntry = { icon: React.ElementType; color: string; label: string };
-
-const typeConfig: Record<WaggleSignal['type'], TypeConfigEntry> = {
-  discovery: { icon: Eye, color: 'text-amber-400', label: 'Discovery' },
-  handoff: { icon: ArrowRightLeft, color: 'text-sky-400', label: 'Handoff' },
-  insight: { icon: Lightbulb, color: 'text-emerald-400', label: 'Insight' },
-  alert: { icon: AlertTriangle, color: 'text-rose-400', label: 'Alert' },
-  coordination: { icon: Radio, color: 'text-violet-400', label: 'Coordination' },
-};
-
-const FALLBACK_TYPE_CONFIG: TypeConfigEntry = {
-  icon: Zap,
-  color: 'text-muted-foreground',
-  label: 'Activity',
-};
-
-function getTypeConfig(type: string): TypeConfigEntry {
-  const known = (typeConfig as Record<string, TypeConfigEntry>)[type];
-  return known ?? { ...FALLBACK_TYPE_CONFIG, label: type };
-}
+import { WAGGLE_TYPE_CONFIG, getTypeConfig } from '@/lib/waggle-signal-types';
 
 const filterTypes: (WaggleSignal['type'] | 'all')[] = ['all', 'discovery', 'handoff', 'insight', 'alert', 'coordination'];
 
@@ -59,7 +39,7 @@ const WaggleDanceApp = () => {
       {/* Filter tabs */}
       <div className="flex gap-1 px-3 py-1.5 border-b border-border/30 overflow-x-auto">
         {filterTypes.map(t => {
-          const cfg = t === 'all' ? null : typeConfig[t];
+          const cfg = t === 'all' ? null : WAGGLE_TYPE_CONFIG[t];
           const Icon = cfg?.icon;
           return (
             <button
