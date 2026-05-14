@@ -1,15 +1,13 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
-  Search, MessageSquare, Brain, Clock, Settings, Loader2,
-  LayoutDashboard, Bot, FolderOpen, Activity, Package, Plug,
-  Store, Mic, Sparkles, Shield, Users, FileText, Globe,
-  Radio, Zap, Lock, UserCircle,
+  Search, MessageSquare, Loader2, Sparkles, Globe,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
 import { motion, AnimatePresence } from 'framer-motion';
 import { fuzzyMatch } from '@/lib/fuzzy-match';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
+import { APP_CATALOG } from '@/lib/app-catalog';
 
 /* ── Types ── */
 type SearchCategory = 'command' | 'workspace' | 'memory' | 'session' | 'skill';
@@ -30,38 +28,18 @@ interface GlobalSearchProps {
   onNavigate: (type: string, id: string) => void;
 }
 
-/* ── Commands (static) ──
- * NOTE: keep aligned with `appConfig` in Desktop.tsx — every app id with a
- * dock/window entry should be discoverable here. Drift between the two is the
- * cause of FR #13. Long-term fix: hoist appConfig into a shared catalog
- * module and derive both lists from it. Minimal fix for now: keep both lists
- * in sync by hand and review on every new app.
+/* ── Commands — auto-derived from APP_CATALOG ──
+ * Adding a new app to APP_CATALOG makes it discoverable here automatically.
+ * This was the structural fix for FR #13 (two hand-maintained registries drifting).
  */
-const COMMANDS: SearchResult[] = [
-  { category: 'command', id: 'dashboard', title: 'Dashboard', subtitle: 'Home overview', icon: LayoutDashboard, score: 0 },
-  { category: 'command', id: 'chat', title: 'Chat', subtitle: 'Open conversation', icon: MessageSquare, score: 0 },
-  { category: 'command', id: 'agents', title: 'Personas', subtitle: 'Manage personas & groups', icon: Bot, score: 0 },
-  { category: 'command', id: 'files', title: 'Files', subtitle: 'Workspace documents', icon: FolderOpen, score: 0 },
-  { category: 'command', id: 'memory', title: 'Memory', subtitle: 'Knowledge frames', icon: Brain, score: 0 },
-  { category: 'command', id: 'cockpit', title: 'Cockpit', subtitle: 'System health & ops', icon: Activity, score: 0 },
-  { category: 'command', id: 'mission-control', title: 'Mission Control', subtitle: 'Multi-agent overview', icon: Radio, score: 0 },
-  { category: 'command', id: 'capabilities', title: 'Skills & Apps', subtitle: 'Installed capabilities', icon: Package, score: 0 },
-  { category: 'command', id: 'waggle-dance', title: 'Waggle Dance', subtitle: 'Cross-workspace signals', icon: Zap, score: 0 },
-  { category: 'command', id: 'connectors', title: 'Connectors', subtitle: 'Service integrations', icon: Plug, score: 0 },
-  { category: 'command', id: 'scheduled-jobs', title: 'Scheduled Jobs', subtitle: 'Recurring tasks', icon: Clock, score: 0 },
-  { category: 'command', id: 'marketplace', title: 'Marketplace', subtitle: 'Browse extensions', icon: Store, score: 0 },
-  { category: 'command', id: 'voice', title: 'Voice', subtitle: 'Voice interface', icon: Mic, score: 0 },
-  { category: 'command', id: 'room', title: 'Room', subtitle: 'Sub-agent canvas', icon: Users, score: 0 },
-  { category: 'command', id: 'approvals', title: 'Approvals', subtitle: 'Pending approvals', icon: Shield, score: 0 },
-  { category: 'command', id: 'timeline', title: 'Timeline', subtitle: 'Workspace activity history', icon: Clock, score: 0 },
-  { category: 'command', id: 'events', title: 'Events', subtitle: 'System events stream', icon: Activity, score: 0 },
-  { category: 'command', id: 'vault', title: 'Vault', subtitle: 'Encrypted secrets & API keys', icon: Lock, score: 0 },
-  { category: 'command', id: 'profile', title: 'My Profile', subtitle: 'User profile, identity & preferences', icon: UserCircle, score: 0 },
-  { category: 'command', id: 'backup', title: 'Backup & Restore', subtitle: 'Mind backups', icon: Activity, score: 0 },
-  { category: 'command', id: 'telemetry', title: 'Usage & Telemetry', subtitle: 'Token + cost analytics', icon: Activity, score: 0 },
-  { category: 'command', id: 'governance', title: 'Team Governance', subtitle: 'Roles & permissions', icon: Shield, score: 0 },
-  { category: 'command', id: 'settings', title: 'Settings', subtitle: 'Configuration', icon: Settings, score: 0 },
-];
+const COMMANDS: SearchResult[] = Object.entries(APP_CATALOG).map(([id, entry]) => ({
+  category: 'command' as const,
+  id,
+  title: entry!.title,
+  subtitle: entry!.subtitle,
+  icon: entry!.iconType,
+  score: 0,
+}));
 
 /* ── Category display config ── */
 const CATEGORY_LABELS: Record<SearchCategory, string> = {

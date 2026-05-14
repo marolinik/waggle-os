@@ -1,12 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import {
-  MessageSquare, LayoutDashboard, Settings, Brain,
-  Activity, Package, Radio, Zap, FolderOpen, Bot, Lock, UserCircle, Plug,
-  Clock, Store, Mic, Users, Shield,
-} from "lucide-react";
 import type { UserTier } from "@/lib/dock-tiers";
 import type { AppId } from "@/lib/dock-tiers";
+import { APP_CATALOG } from "@/lib/app-catalog";
 import wallpaperDark from "@/assets/wallpaper.jpg";
 import wallpaperLight from "@/assets/wallpaper-light.jpg";
 import waggleLogoDark from "@/assets/waggle-logo.jpeg";
@@ -72,32 +68,6 @@ import { useWaggleDance } from "@/hooks/useWaggleDance";
 import { useWindowManager, type WindowState } from "@/hooks/useWindowManager";
 import { useOverlayState } from "@/hooks/useOverlayState";
 
-/* ── App config: position, size, title, icon per AppId ── */
-const appConfig: Record<string, { title: string; icon: React.ReactNode; pos: { x: number; y: number }; size: { w: string; h: string } }> = {
-  "chat": { title: "Waggle Chat", icon: <MessageSquare className="w-3.5 h-3.5 text-primary" />, pos: { x: 180, y: 40 }, size: { w: "520px", h: "520px" } },
-  "dashboard": { title: "Dashboard", icon: <LayoutDashboard className="w-3.5 h-3.5 text-sky-400" />, pos: { x: 100, y: 60 }, size: { w: "560px", h: "440px" } },
-  "settings": { title: "Settings", icon: <Settings className="w-3.5 h-3.5 text-muted-foreground" />, pos: { x: 250, y: 80 }, size: { w: "560px", h: "460px" } },
-  "memory": { title: "Memory", icon: <Brain className="w-3.5 h-3.5 text-amber-300" />, pos: { x: 120, y: 50 }, size: { w: "640px", h: "460px" } },
-  "events": { title: "Events", icon: <Activity className="w-3.5 h-3.5 text-cyan-400" />, pos: { x: 200, y: 70 }, size: { w: "580px", h: "420px" } },
-  "cockpit": { title: "Cockpit", icon: <Activity className="w-3.5 h-3.5 text-emerald-400" />, pos: { x: 300, y: 60 }, size: { w: "520px", h: "520px" } },
-  "mission-control": { title: "Mission Control", icon: <Radio className="w-3.5 h-3.5 text-rose-400" />, pos: { x: 220, y: 90 }, size: { w: "520px", h: "440px" } },
-  "capabilities": { title: "Skills & Apps", icon: <Package className="w-3.5 h-3.5 text-violet-400" />, pos: { x: 150, y: 80 }, size: { w: "560px", h: "480px" } },
-  "waggle-dance": { title: "Waggle Dance", icon: <Zap className="w-3.5 h-3.5 text-amber-400" />, pos: { x: 160, y: 50 }, size: { w: "580px", h: "460px" } },
-  "files": { title: "Files", icon: <FolderOpen className="w-3.5 h-3.5 text-amber-300" />, pos: { x: 140, y: 55 }, size: { w: "620px", h: "440px" } },
-  "agents": { title: "Personas", icon: <Bot className="w-3.5 h-3.5 text-orange-400" />, pos: { x: 170, y: 65 }, size: { w: "640px", h: "480px" } },
-  "vault": { title: "Vault", icon: <Lock className="w-3.5 h-3.5 text-amber-400" />, pos: { x: 240, y: 70 }, size: { w: "560px", h: "480px" } },
-  "profile": { title: "My Profile", icon: <UserCircle className="w-3.5 h-3.5 text-sky-400" />, pos: { x: 200, y: 60 }, size: { w: "560px", h: "520px" } },
-  "connectors": { title: "Connectors", icon: <Plug className="w-3.5 h-3.5 text-emerald-400" />, pos: { x: 220, y: 80 }, size: { w: "580px", h: "500px" } },
-  "scheduled-jobs": { title: "Scheduled Jobs", icon: <Clock className="w-3.5 h-3.5 text-amber-400" />, pos: { x: 200, y: 70 }, size: { w: "600px", h: "460px" } },
-  "marketplace": { title: "Marketplace", icon: <Store className="w-3.5 h-3.5 text-orange-400" />, pos: { x: 250, y: 80 }, size: { w: "640px", h: "500px" } },
-  "voice": { title: "Voice", icon: <Mic className="w-3.5 h-3.5 text-rose-400" />, pos: { x: 300, y: 90 }, size: { w: "480px", h: "400px" } },
-  "room": { title: "Room", icon: <Users className="w-3.5 h-3.5 text-violet-400" />, pos: { x: 260, y: 75 }, size: { w: "640px", h: "520px" } },
-  "approvals": { title: "Approvals", icon: <Shield className="w-3.5 h-3.5 text-amber-400" />, pos: { x: 280, y: 85 }, size: { w: "520px", h: "560px" } },
-  "timeline": { title: "Timeline", icon: <Clock className="w-3.5 h-3.5 text-cyan-400" />, pos: { x: 240, y: 70 }, size: { w: "520px", h: "560px" } },
-  "backup": { title: "Backup & Restore", icon: <Activity className="w-3.5 h-3.5 text-emerald-400" />, pos: { x: 200, y: 80 }, size: { w: "520px", h: "480px" } },
-  "telemetry": { title: "Usage & Telemetry", icon: <Activity className="w-3.5 h-3.5 text-sky-400" />, pos: { x: 220, y: 60 }, size: { w: "560px", h: "500px" } },
-  "governance": { title: "Team Governance", icon: <Shield className="w-3.5 h-3.5 text-violet-400" />, pos: { x: 260, y: 90 }, size: { w: "480px", h: "520px" } },
-};
 
 const Desktop = () => {
   // Domain hooks
@@ -407,7 +377,7 @@ const Desktop = () => {
         focusedWindowLabel={(() => {
           const fw = wm.windows.find(w => w.instanceId === wm.focusedInstanceId);
           if (!fw) return null;
-          const config = appConfig[fw.appId];
+          const config = APP_CATALOG[fw.appId as AppId];
           if (!config) return null;
           return buildStatusBarFocus({
             focused: { appId: fw.appId, title: wm.getWindowTitle(fw, config.title), minimized: fw.minimized },
@@ -422,7 +392,7 @@ const Desktop = () => {
 
       <AnimatePresence>
         {wm.windows.map((win) => {
-          const config = appConfig[win.appId];
+          const config = APP_CATALOG[win.appId as AppId];
           if (!config) return null;
           const saved = win.appId !== 'chat' ? getSavedPosition(win.appId) : null;
           // FR #8: every unsaved window cascades from a single viewport-centered
@@ -439,8 +409,9 @@ const Desktop = () => {
                 },
               });
           const size = saved ? { w: `${saved.width}px`, h: `${saved.height}px` } : config.size;
+          const iconNode = <config.iconType className={`w-3.5 h-3.5 ${config.iconColorClass}`} />;
           return (
-            <AppWindow key={win.instanceId} appId={win.appId} title={wm.getWindowTitle(win, config.title)} icon={config.icon}
+            <AppWindow key={win.instanceId} appId={win.appId} title={wm.getWindowTitle(win, config.title)} icon={iconNode}
               onClose={() => wm.closeApp(win.instanceId)} onMinimize={() => wm.minimizeApp(win.instanceId)}
               isMinimized={win.minimized} isFocused={win.instanceId === wm.focusedInstanceId}
               defaultPosition={pos} defaultSize={size} zIndex={win.zIndex} onFocus={() => wm.focusWindow(win.instanceId)}>
