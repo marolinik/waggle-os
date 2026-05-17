@@ -153,9 +153,19 @@ class LocalAdapter {
 
   private async fetch(path: string, init?: RequestInit): Promise<Response> {
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
       ...(init?.headers as Record<string, string>),
     };
+    // P1-003: only declare a JSON content-type when we actually send a body.
+    // A bodyless POST (e.g. /api/harvest/scan-claude-code, fired on boot)
+    // carrying Content-Type: application/json makes Fastify's JSON parser
+    // 400 the empty body before the route handler runs. Any caller-supplied
+    // Content-Type (any casing) is preserved as-is.
+    const hasContentType = Object.keys(headers).some(
+      h => h.toLowerCase() === 'content-type',
+    );
+    if (init?.body != null && !hasContentType) {
+      headers['Content-Type'] = 'application/json';
+    }
     if (this.authToken) {
       headers['Authorization'] = `Bearer ${this.authToken}`;
     }
