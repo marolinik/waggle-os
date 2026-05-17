@@ -28,7 +28,12 @@
  *   captureOnboardingComplete({ templateId, personaId, model });
  */
 
-import posthog from 'posthog-js';
+// no-external build: never lazy-loads remote chunks (config.js, recorder,
+// surveys) from us-assets.i.posthog.com. Combined with advanced_disable_decide
+// this keeps script-src 'self' intact — no third-party script executes in the
+// desktop webview, preserving Waggle/KVARK's data-sovereignty posture. Only
+// the capture endpoint (us.i.posthog.com) is ever contacted.
+import posthog from 'posthog-js/dist/module.no-external';
 
 /** PostHog project API key — baked into bundle at Vite build time. */
 const PH_KEY: string | undefined = import.meta.env['VITE_POSTHOG_KEY'] as string | undefined;
@@ -77,6 +82,11 @@ export async function initPostHog(): Promise<void> {
       persistence: 'localStorage',
       // Opt-in to telemetry is explicit (this init path only runs when opted-in).
       opt_out_capturing_by_default: false,
+      // No /decide, /flags, or remote-config fetch — capture endpoint only.
+      // (Belt-and-suspenders with the no-external build above; keeps CSP at
+      // script-src 'self' and connect-src limited to the ingest host.)
+      advanced_disable_decide: true,
+      disable_session_recording: true,
     });
     initialized = true;
   } catch {

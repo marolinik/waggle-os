@@ -22,7 +22,9 @@ const mockInit = vi.fn();
 const mockOptOut = vi.fn();
 const mockOptIn = vi.fn();
 
-vi.mock('posthog-js', () => ({
+// posthog.ts imports the no-external build (no remote script — sovereignty
+// posture); the mock specifier must match that exact import.
+vi.mock('posthog-js/dist/module.no-external', () => ({
   default: {
     init: mockInit,
     capture: mockCapture,

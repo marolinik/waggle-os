@@ -38,7 +38,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data: https:"
+      "csp": "default-src 'self'; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https://us.i.posthog.com; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data: https:"
     },
     "trayIcon": {
       "iconPath": "icons/icon.png",

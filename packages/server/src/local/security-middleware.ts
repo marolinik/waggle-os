@@ -27,7 +27,10 @@ const SECURITY_HEADERS: Record<string, string> = {
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: blob:",
-    "connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* https://api.anthropic.com https://generativelanguage.googleapis.com",
+    // https://us.i.posthog.com = PostHog event ingest ONLY (capture endpoint).
+    // NOT added to script-src: posthog.ts uses the no-external build +
+    // advanced_disable_decide, so no remote PostHog script or config.js loads.
+    "connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* https://api.anthropic.com https://generativelanguage.googleapis.com https://us.i.posthog.com",
     "frame-ancestors 'none'",
   ].join('; '),
 };

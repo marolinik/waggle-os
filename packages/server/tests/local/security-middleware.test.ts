@@ -91,6 +91,11 @@ describe('Security Headers', () => {
     expect(csp).toContain("frame-ancestors 'none'");
     expect(csp).toContain("connect-src 'self'");
     expect(csp).toContain('https://api.anthropic.com');
+    // P1-002: PostHog capture host allowed in connect-src ONLY (ingest), never
+    // script-src — the no-external posthog build keeps script-src locked.
+    expect(csp).toContain('connect-src');
+    expect(csp).toMatch(/connect-src[^;]*https:\/\/us\.i\.posthog\.com/);
+    expect(csp).not.toMatch(/script-src[^;]*posthog/);
     expect(csp).toContain("img-src 'self' data: blob:");
     expect(csp).toContain('https://fonts.googleapis.com');
   });
