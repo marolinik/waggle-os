@@ -120,13 +120,17 @@ CREATE TABLE IF NOT EXISTS install_audit (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   timestamp TEXT NOT NULL DEFAULT (datetime('now')),
   capability_name TEXT NOT NULL,
-  capability_type TEXT NOT NULL CHECK (capability_type IN ('native', 'skill', 'plugin', 'mcp')),
+  -- CHECK lists MUST stay in sync with AuditCapabilityType / AuditApprovalClass
+  -- / AuditAction in packages/core/src/install-audit.ts. They drifted once
+  -- (connector/marketplace/blocked missing) and crashed acquire_capability the
+  -- moment marketplace search started returning candidates — see runMigrations().
+  capability_type TEXT NOT NULL CHECK (capability_type IN ('native', 'skill', 'plugin', 'mcp', 'connector', 'marketplace')),
   source TEXT NOT NULL,
   version TEXT,
   risk_level TEXT NOT NULL CHECK (risk_level IN ('low', 'medium', 'high')),
   trust_source TEXT NOT NULL,
-  approval_class TEXT NOT NULL CHECK (approval_class IN ('standard', 'elevated', 'critical')),
-  action TEXT NOT NULL CHECK (action IN ('proposed', 'approved', 'installed', 'rejected', 'failed')),
+  approval_class TEXT NOT NULL CHECK (approval_class IN ('standard', 'elevated', 'critical', 'blocked')),
+  action TEXT NOT NULL CHECK (action IN ('proposed', 'approved', 'installed', 'rejected', 'failed', 'blocked')),
   initiator TEXT NOT NULL CHECK (initiator IN ('agent', 'user', 'system')),
   detail TEXT NOT NULL DEFAULT ''
 );

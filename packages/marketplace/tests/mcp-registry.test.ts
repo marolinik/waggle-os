@@ -384,3 +384,72 @@ describe('seedMcpServers', () => {
     expect(results.facets.types.mcp).toBe(MCP_SERVERS.length);
   });
 });
+
+// ── FTS5 query relaxation (P0: acquire_capability verbose-need regression) ──
+//
+// Root cause: db.search() passed the raw caller string straight into FTS5
+// `MATCH @query`. FTS5 implicit-ANDs every term, so a verbose natural-language
+// `need` (always the case when acquire_capability calls searchMarketplace)
+// matches zero packages, and special chars (':' '\\' '"') in paths like
+// `D:\Projects\X` raise an FTS5 syntax error that searchMarketplace swallows
+// to []. Net: the inline capability-install feature never surfaces a
+// candidate for real agent queries. These tests reproduce that and lock the
+// relaxation behaviour in.
+
+describe('db.search — FTS5 query relaxation', () => {
+  let ftsDbPath: string;
+  let ftsDb: MarketplaceDB;
+
+  beforeEach(() => {
+    ftsDbPath = createTempDb();
+    ftsDb = new MarketplaceDB(ftsDbPath);
+    seedMcpServers(ftsDb); // seeds the 'filesystem' MCP server
+    // The bare test schema declares packages_fts as external-content FTS5
+    // with no sync triggers (production ships them in the seed DB). Rebuild
+    // the index from the content table so search() exercises real FTS —
+    // these tests target query *relaxation*, not FTS population. (Uses the
+    // better-sqlite3 statement API, not child_process.)
+    (ftsDb as unknown as { db: import('better-sqlite3').Database }).db
+      .prepare("INSERT INTO packages_fts(packages_fts) VALUES('rebuild')")
+      .run();
+  });
+
+  afterEach(() => {
+    try { ftsDb.close(); } catch { /* ignore */ }
+    try { fs.unlinkSync(ftsDbPath); } catch { /* ignore */ }
+    try { fs.unlinkSync(ftsDbPath + '-wal'); } catch { /* ignore */ }
+    try { fs.unlinkSync(ftsDbPath + '-shm'); } catch { /* ignore */ }
+  });
+
+  const hasFilesystem = (r: { packages: Array<{ name: string; description: string }> }) =>
+    r.packages.some(p => p.name === 'filesystem' || /filesystem/i.test(p.description));
+
+  it('baseline: a single tight keyword finds the filesystem MCP server', () => {
+    const r = ftsDb.search({ query: 'filesystem', limit: 10 });
+    expect(r.total).toBeGreaterThan(0);
+    expect(hasFilesystem(r)).toBe(true);
+  });
+
+  it('REGRESSION: a verbose natural-language need still surfaces the filesystem server', () => {
+    // Exact shape acquire_capability feeds into searchMarketplace(need).
+    const need =
+      'Access and read files from an external local filesystem path outside my managed workspace directory looking for an MCP filesystem connector or similar capability';
+    const r = ftsDb.search({ query: need, limit: 10 });
+    expect(r.total).toBeGreaterThan(0);
+    expect(hasFilesystem(r)).toBe(true);
+  });
+
+  it('ROBUSTNESS: a need with FTS-special chars (path with : and \\ and quotes) does not throw and still matches', () => {
+    const need =
+      'read files at D:\\Projects\\PM-Waggle-OS — need a "filesystem" connector, not workspace-only access';
+    expect(() => ftsDb.search({ query: need, limit: 10 })).not.toThrow();
+    const r = ftsDb.search({ query: need, limit: 10 });
+    expect(r.total).toBeGreaterThan(0);
+    expect(hasFilesystem(r)).toBe(true);
+  });
+
+  it('EMPTY/garbage query degrades gracefully (no throw, no crash)', () => {
+    expect(() => ftsDb.search({ query: '   ', limit: 10 })).not.toThrow();
+    expect(() => ftsDb.search({ query: '!!! "" \\ : * ^', limit: 10 })).not.toThrow();
+  });
+});

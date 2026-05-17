@@ -76,15 +76,22 @@ export class MarketplaceDB {
     const conditions: string[] = [];
     const params: Record<string, unknown> = {};
 
-    // Full-text search via FTS5
+    // Full-text search via FTS5. The raw caller string is NEVER passed
+    // straight into MATCH — it may be a verbose natural-language `need`
+    // (from the agent's acquire_capability path) or contain FTS5 operators
+    // / paths like `D:\X` that implicit-AND to zero matches or raise a
+    // syntax error. toFtsMatchQuery() relaxes it into a safe OR-of-prefix
+    // expression; null means "no usable terms" → fall back to an
+    // unfiltered listing instead of throwing.
     let baseQuery: string;
-    if (query) {
+    const ftsExpr = query ? this.toFtsMatchQuery(query) : null;
+    if (ftsExpr) {
       baseQuery = `
         SELECT p.* FROM packages p
         INNER JOIN packages_fts fts ON p.id = fts.rowid
         WHERE packages_fts MATCH @query
       `;
-      params.query = query;
+      params.query = ftsExpr;
     } else {
       baseQuery = `SELECT p.* FROM packages p WHERE 1=1`;
     }
@@ -123,7 +130,9 @@ export class MarketplaceDB {
     const total = (this.db.prepare(countQuery).get(params) as { total: number }).total;
 
     // Determine sort order
-    const orderClause = this.buildOrderClause(sort, !!query);
+    // Order by FTS rank only when we actually took the FTS branch — `rank`
+    // is an FTS5-only column and is absent on the unfiltered fallback.
+    const orderClause = this.buildOrderClause(sort, !!ftsExpr);
 
     // Get packages
     const fullQuery = baseQuery + whereClause + ` ${orderClause} LIMIT @limit OFFSET @offset`;
@@ -435,6 +444,26 @@ export class MarketplaceDB {
         ? JSON.parse(pkg.packs)
         : pkg.packs || [],
     };
+  }
+
+  /**
+   * Relax arbitrary caller text into a safe FTS5 MATCH expression.
+   *
+   * Extracts alphanumeric tokens, drops <2-char noise, dedupes, caps the
+   * term count, then OR-joins as prefix terms (`token*`). OR (not the FTS5
+   * implicit AND) so a verbose `need` still matches on any salient word,
+   * with BM25 `rank` floating the best package up. Returns null when no
+   * usable token remains so the caller degrades to an unfiltered listing
+   * instead of throwing an FTS5 syntax error.
+   */
+  private toFtsMatchQuery(raw: string): string | null {
+    const tokens = raw
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(t => t.length >= 2);
+    if (tokens.length === 0) return null;
+    const unique = [...new Set(tokens)].slice(0, 24); // cap term explosion
+    return unique.map(t => `${t}*`).join(' OR ');
   }
 
   private buildOrderClause(sort?: SearchSort, hasQuery?: boolean): string {

@@ -76,7 +76,42 @@ export class MindDB {
     // evolution_runs, harvest_sources, procedures, improvement_signals, install_audit).
     // SCHEMA_SQL uses CREATE TABLE/INDEX IF NOT EXISTS throughout, so re-running it
     // is safe and idempotent — it only creates what's missing.
+    //
+    // FIX-3 (2026-05-17): install_audit's capability_type / approval_class /
+    // action CHECK lists drifted behind their TS type unions
+    // (connector/marketplace/blocked). Because the CREATE below is
+    // IF NOT EXISTS, an existing install_audit keeps its stale CHECK and
+    // auditStore.record() crashes the moment acquire_capability proposes a
+    // marketplace/connector capability. Rename the stale table aside so the
+    // corrected SCHEMA_SQL DDL (single source of truth) recreates it; rows
+    // are copied back below. Idempotent: keyed on whether the stored DDL
+    // already lists 'marketplace'. A leftover __mig_old from a crashed prior
+    // run is handled too (rename is skipped, copy/drop still completes).
+    const auditTableSql = (this.db.prepare(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='install_audit'"
+    ).get() as { sql: string } | undefined)?.sql;
+    const auditNeedsRebuild = auditTableSql !== undefined && !auditTableSql.includes("'marketplace'");
+    if (auditNeedsRebuild) {
+      this.db.prepare('DROP TABLE IF EXISTS install_audit__mig_old').run();
+      this.db.prepare('ALTER TABLE install_audit RENAME TO install_audit__mig_old').run();
+      this.db.prepare('DROP INDEX IF EXISTS idx_audit_capability').run();
+      this.db.prepare('DROP INDEX IF EXISTS idx_audit_timestamp').run();
+    }
     this.db.exec(SCHEMA_SQL);
+
+    // FIX-3 cont.: SCHEMA_SQL above just recreated install_audit with the
+    // widened CHECK. Copy the legacy rows back and drop the stale table.
+    if (auditNeedsRebuild) {
+      this.db.prepare(
+        `INSERT INTO install_audit
+           (id, timestamp, capability_name, capability_type, source, version,
+            risk_level, trust_source, approval_class, action, initiator, detail)
+         SELECT id, timestamp, capability_name, capability_type, source, version,
+                risk_level, trust_source, approval_class, action, initiator, detail
+         FROM install_audit__mig_old`
+      ).run();
+      this.db.prepare('DROP TABLE install_audit__mig_old').run();
+    }
 
     // W2.1: Add 'source' column to memory_frames (provenance tracking)
     const hasSourceCol = this.db.prepare(
