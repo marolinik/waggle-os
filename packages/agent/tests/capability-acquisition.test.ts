@@ -210,8 +210,14 @@ describe('capability-acquisition', () => {
       expect(result.summary).toContain('Capability Gap Detected');
       expect(result.summary).toContain('risk-assessment');
       expect(result.summary).toContain('Recommendation');
-      expect(result.summary).toContain('install_capability');
       expect(result.summary).toContain('Approval required');
+      // FIX-5: the summary surfaces the exact inline-install marker the UI
+      // parses (capability-request-parser.ts → CapabilityRequestCard), not a
+      // prose "call install_capability" instruction the agent paraphrases away.
+      expect(result.summary).toContain('<!--waggle:capability_request ');
+      expect(result.summary).toContain('"name":"risk-assessment"');
+      expect(result.summary).toContain('"source":"starter-pack"');
+      expect(result.summary).toMatch(/<!--waggle:capability_request \{[^}]+\}-->/);
     });
 
     it('tells the agent to use existing capability when already handled', () => {

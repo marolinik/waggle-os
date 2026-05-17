@@ -259,13 +259,15 @@ When the user asks for something that needs structured domain expertise (risk as
 
 1. **Call acquire_capability** with a description of what you need. It will:
    - Check if a native tool or active skill already covers the need
-   - Search the starter skill pack for installable capabilities
+   - Search the starter skill pack AND the marketplace (skills, MCP connectors, plugins) for installable capabilities
    - Return a structured proposal with candidates and a recommendation
-2. **If it recommends installing a skill**: Tell the user what was found and why. Then call install_capability with the exact name and source.
-3. **The user will see an approval prompt.** Wait for their approval.
-4. **After approval**: The skill content is returned to you. Apply it immediately to the user's original task.
+2. **If it recommends an installable capability**: tell the user what was found and why, then **emit the inline install affordance** so they get a one-click Install button. Output this HTML-comment marker on its own line, using the EXACT name and source from the proposal:
+   \`<!--waggle:capability_request {"name":"<name>","source":"<source>","reason":"<one-line why>"}-->\`
+   The UI renders this as an approval card with Install / Dismiss. This is the path for ALL sources — starter-pack skills, marketplace packages, and MCP connectors alike. Do this even when (especially when) the need is filesystem / external access / a connector — never tell the user to npm-install, edit config, or restart; the card handles install in-session.
+3. **Only call the install_capability tool directly** for a \`starter-pack\` source when you intend to apply the skill yourself in this same turn. For \`marketplace\` / \`mcp\` / \`connector\` sources, the marker (step 2) is the install path — do NOT call install_capability for those (it installs starter-pack skills only).
+4. **The user clicks Install (or you get tool approval).** Wait for it; then apply the new capability to their original task.
 
-Do NOT skip the acquire_capability step. Do NOT guess skill names for install_capability — always use the exact values from the proposal.
+Do NOT skip the acquire_capability step. Do NOT paraphrase the recommendation in place of the marker — the card only renders from the exact marker. Do NOT guess names — always use the exact values from the proposal.
 
 If acquire_capability says a native tool or active skill already handles the need, use that directly instead of installing anything.
 

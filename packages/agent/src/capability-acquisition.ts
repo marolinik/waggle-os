@@ -375,6 +375,18 @@ function buildProposalSummary(
       ? `- **Risk level**: ${capitalize(recommendation.trust.riskLevel)} (${recommendation.trust.assessmentMode})\n` +
         `- **Trust**: ${recommendation.trust.explanation}\n`
       : '';
+    // Emit the exact inline-install marker the UI parses (capability-request-
+    // parser.ts → CapabilityRequestCard). The agent is instructed (behavioral
+    // spec) to reproduce this verbatim so the user gets a one-click Install
+    // card for ANY source — starter-pack skill, marketplace pkg, or MCP
+    // connector. reason is sanitized so it can't break the comment/JSON.
+    const capReason = String(recommendation.description || recommendation.matchReason || 'fills the requested capability gap')
+      .replace(/[{}<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 140);
+    const marker = `<!--waggle:capability_request ${JSON.stringify({
+      name: recommendation.name,
+      source: recommendation.source,
+      reason: capReason,
+    })}-->`;
     sections.push(
       `### Recommendation\n\n` +
       `Install **${recommendation.name}** from the ${recommendation.source}.\n` +
@@ -382,7 +394,8 @@ function buildProposalSummary(
       `- **What it does**: ${recommendation.description}\n` +
       trustBlock +
       `- **Approval required**: Yes — user must approve before installation.\n\n` +
-      `To install, call: \`install_capability\` with name "${recommendation.name}" and source "${recommendation.source}".`,
+      `Surface this to the user by outputting the following marker on its own ` +
+      `line, verbatim (it renders as a one-click Install card):\n\n${marker}`,
     );
   } else if (recommendation && recommendation.availability === 'active') {
     sections.push(
