@@ -92,4 +92,13 @@ describe('premium harness contract (R3 — verification before completion)', () 
     const spec = buildActiveBehavioralSpec();
     expect(spec.coreLoop).toContain('VERIFICATION BEFORE COMPLETION');
   });
+
+  it('R1 — carries the Skill Distillation closed-learning-loop rule', () => {
+    const spec = buildActiveBehavioralSpec();
+    const txt = `${spec.rules}\n${spec.behavioralRules ?? ''}`;
+    expect(txt).toContain('Skill Distillation');
+    expect(txt).toContain('create_skill');
+    // Must be gated against distilling failed/refusal turns (R2 principle).
+    expect(txt).toMatch(/Only distill from SUCCESSFUL work|Never distill a failed attempt/);
+  });
 });
