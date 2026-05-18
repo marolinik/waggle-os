@@ -14,6 +14,7 @@ import {
   type Embedder,
 } from '@waggle/core';
 import { createMindTools, type ToolDefinition } from './tools.js';
+import { isSelfIncapacityAssertion } from './memory-sign-gate.js';
 import { buildSelfAwareness, type AgentCapabilities } from './self-awareness.js';
 import { buildAwarenessSummary, markSummarySurfaced, type AwarenessSummary } from './improvement-detector.js';
 import { CognifyPipeline } from './cognify.js';
@@ -747,6 +748,18 @@ export class Orchestrator {
     // hydrate it by id) so review #9's teamSync correctness fix can push what we just wrote.
     // Serial embed: 3-5 items per exchange, batching would add complexity for negligible gain
     const save = async (content: string, importance: Importance, target: 'workspace' | 'personal' = 'workspace'): Promise<MemoryFrame | null> => {
+      // R2 sign gate (DEFECT-2 structural fix): the agent's own
+      // self-incapacity / refusal assertions must never become authoritative
+      // recall. Persist them at `temporary` importance — the recall path
+      // already excludes `temporary` (see getRecentFrames) — so they remain
+      // visible for audit / offline evolution but can't re-enter the prompt
+      // as instruction-grade truth and train the loop to keep failing.
+      if (importance !== 'temporary' && isSelfIncapacityAssertion(content)) {
+        logger.debug('autoSave sign-gate: self-incapacity frame downgraded to temporary', {
+          preview: content.slice(0, DEDUP_SLICE_LENGTH),
+        });
+        importance = 'temporary';
+      }
       const useWorkspace = target === 'workspace' && this.workspaceLayers;
       const frames = useWorkspace ? this.workspaceLayers!.frames : this.frames;
       const sessions = useWorkspace ? this.workspaceLayers!.sessions : this.sessions;
