@@ -72,3 +72,24 @@ describe('buildActiveBehavioralSpec', () => {
     expect(spec.rules).toBe('A\n\nB\n\nC\n\nD\n\nE');
   });
 });
+
+describe('premium harness contract (R3 — verification before completion)', () => {
+  it('coreLoop carries the Verification Before Completion CRITICAL block', () => {
+    const cl = BEHAVIORAL_SPEC.coreLoop;
+    expect(cl).toContain('=== CRITICAL: VERIFICATION BEFORE COMPLETION ===');
+    expect(cl).toContain('A task is not done until verification passes');
+    // Premium discipline: claimed-but-unrun checks are confabulation.
+    expect(cl).toMatch(/never say "it compiles"|without having run it/);
+    expect(cl).toContain('label the result UNVERIFIED');
+    // Block is well-formed (opens and closes).
+    const opens = (cl.match(/=== CRITICAL/g) ?? []).length;
+    const closes = (cl.match(/=== END CRITICAL ===/g) ?? []).length;
+    expect(opens).toBe(closes);
+    expect(opens).toBeGreaterThanOrEqual(2); // memory-conflict + verification
+  });
+
+  it('the contract flows through buildActiveBehavioralSpec()', () => {
+    const spec = buildActiveBehavioralSpec();
+    expect(spec.coreLoop).toContain('VERIFICATION BEFORE COMPLETION');
+  });
+});
