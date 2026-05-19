@@ -40,6 +40,34 @@ To actually measure the speed claim the experiment needs amendment (documented, 
 
 No option is taken without an explicit pre-registered amendment + (for B) a cost-cap decision.
 
+## Pilot 3 — Amendment 3 (forcing corpus, qwen-thinking)
+
+**Verdict: `INCONCLUSIVE-STOPPED`** · spend $0.0244 (cum **$0.0385 / $5**) · ~2m15s.
+
+| Family | task_a tools | distill grader | R1 trigger | create_skill called? | Pair |
+|---|---|---|---|---|---|
+| F1 ingest→export | **5** | **PASS** | **would-fire** | **no** | not formed |
+| F2 audit→ingest | **5** | **PASS** | **would-fire** | **no** | not formed |
+| F3 export→audit | **5** | **PASS** | **would-fire** | **no** | not formed |
+
+**Amendment 3 succeeded at its purpose.** The forcing corpus reliably produced genuine ≥5-tool, grader-correct successes where the real `planSkillDistillation` **would fire** (in-data, 3/3). The task-difficulty bottleneck (Pilots 1–2) is solved.
+
+## Decisive cross-pilot finding (half i of the Hermes claim)
+
+The blocker is now isolated and **model-behavioral**: given a real qualifying success **and** the shipped behavioral distillation rule in context, the **30B model does not call `create_skill`**. Replicated across both variants and the forcing corpus: **6/6 qualifying opportunities → 0 autonomous distillations** (Pilot 1 instruct F3 @6 tools; Pilot 3 thinking @5 tools ×3).
+
+This is a real, citable result, not a null. The Hermes claim has two halves:
+- **(i) the loop autonomously distils on success** — **empirically negative on a 30B model.** The trigger is correctly wired (R5b) and *would* fire; the model simply does not act on the in-context directive. Confirms the R5b open concern verbatim: the seam emits a `step`/directive but authoring still depends on the model *acting*.
+- **(ii) reuse of a distilled skill → ~40% faster** — **still unmeasured**, blocked behind (i): no skill is ever authored, so no treatment arm forms.
+
+**Rubric impact:** D1 stays 2. New durable datum: a robust closed loop cannot depend on model goodwill to call `create_skill` — premium D1=3 likely requires the seam to *deterministically* distil (or compel it), not merely emit a directive. Directly informs a future R5b hardening.
+
+## Decision after Pilot 3 (user-decided; no autonomous re-run)
+
+- **B. Stronger model** — a frontier agentic model likely complies with `create_skill`; tests whether *both* halves hold. Real $ + bigger build.
+- **C. Deterministic distillation arm** — harness mechanically distils a skill from task_a's PASS trace (no reliance on model volunteering), measures half (ii) directly, and separately reports half (i) = the strong negative above. Cheapest path to an actual speed number; also a prototype of the more robust production seam. *(Recommended.)*
+- **D. Stop** — record as-is: half (i) empirically negative on 30B (valuable, honest), half (ii) undetermined; D1=2.
+
 ## Pilot 2 — Amendment 2 (qwen-thinking, user-directed)
 
 **Verdict: `INCONCLUSIVE-STOPPED`** · spend $0.0093 (cumulative **$0.0141 / $5**) · ~56s · `qwen/qwen3-30b-a3b-thinking-2507`.
