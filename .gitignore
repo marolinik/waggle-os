@@ -189,6 +189,12 @@ s*.png
 screen*.png
 tmp_bench_results.json
 tmp_bench_results-v5.json
+# R6/LPV eval run dumps — transient; verdicts live in docs/plans/*-RESULTS-*.md
+tmp_hermes-skill-reuse.json
+tmp_hermes-pilot*.json
+tmp_hermes-pilot*.log
+tmp_lpv*.log
+tmp_lpv*.json
 
 # Bee regen backup folders — rollback artifacts, not committed
 apps/www/public/brand/_backup-*/
