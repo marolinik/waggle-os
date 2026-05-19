@@ -70,6 +70,30 @@ This is a real, citable result, not a null. The Hermes claim has two halves:
 - **C. Deterministic distillation arm** — harness mechanically distils a skill from task_a's PASS trace (no reliance on model volunteering), measures half (ii) directly, and separately reports half (i) = the strong negative above. Cheapest path to an actual speed number; also a prototype of the more robust production seam. *(Recommended.)*
 - **D. Stop** — record as-is: half (i) empirically negative on 30B (valuable, honest), half (ii) undetermined; D1=2.
 
+## Pilot 4 — Amendment 4 (fixed two-phase harness + sonnet-4.6) — VALID RESULT, R6 CONCLUDES
+
+**Verdict: `INCONCLUSIVE-STOPPED`** (pre-registered gate §9.1) · spend $0.4597 (cum **~$0.50 / $5**) · ~4m45s · `anthropic/claude-sonnet-4.6`.
+
+**The harness fix worked — this result is valid, not an artifact.** All **3/3 families formed PASS–PASS pairs**: the model traced task_a, authored a skill on the faithful post-task distill turn (production-mirroring Phase 2), and both baseline_b and treatment_b passed the grader.
+
+| Family | tcBase | tcTreat | reduction |
+|---|---|---|---|
+| F1 ingest→export | 7 | 8 | **−14%** (skill *added* a lookup call) |
+| F2 audit→ingest | 7 | 7 | **0%** |
+| F3 export→audit | 7 | 7 | **0%** |
+
+**median reduction = 0%**, sign-test p = 1. Gate: passFamilies ✓, cost ✓, **median ✗ (0 < 0.40)** → no escalation. The gate correctly **halted before the $40 powered run** rather than spend it confirming a null.
+
+### Conclusion (R6, valid, final under the locked manifest)
+
+The Hermes "~40% faster" speed claim is **NOT reproduced** in this controlled setting: with a fixed harness and a frontier agentic model, a self-distilled skill yielded **~0% median tool-call reduction** (range −14%…0%). This is a real measured negative.
+
+**Why — and the actual finding about when the closed loop pays off:** the forcing corpus is a clean linear chain whose *optimal* path is short (~7 grounded calls). A strong model already walks it near-optimally **without** the skill, so there is no wasted exploration for a distilled recipe to eliminate (it can even cost one extra `skill_lookup`). Self-distilled skills accelerate tasks where the **baseline floundered** (dead-ends, re-derivation); they cannot speed up a task that is already a short deterministic traversal for a capable model. Hermes's ~40% presumably comes from workloads with genuine exploratory waste — not from clean, well-specified lookups.
+
+**Rubric:** D1 **stays 2** — and is now *better characterized*: the R1 loop is wired + unit/integration-proven (R5b) and, with the fixed harness, the model **does** autonomously distil on a qualifying success (the Pilot 1–3 negative was retracted as a harness bug). The remaining gap to a premium D1=3 is not "does the loop work" but "does reuse pay off" — which is **workload-dependent**, ~0% on already-optimal tasks. Citing a flat "~40% faster" would be unsupported by this evidence.
+
+**Cost discipline outcome:** total R6 spend ≈ $0.50 of the $5 pilot budget; the $40 powered budget was **correctly never spent** — the T3 pilot→gate design prevented a $40 confirmation of a null. R6 concludes here under the pre-registered no-revisit rule; any "tasks-with-genuine-floundering" follow-up is a *new* pre-registered experiment, user-initiated, not an autonomous re-run.
+
 ## Pilot 2 — Amendment 2 (qwen-thinking, user-directed)
 
 **Verdict: `INCONCLUSIVE-STOPPED`** · spend $0.0093 (cumulative **$0.0141 / $5**) · ~56s · `qwen/qwen3-30b-a3b-thinking-2507`.
