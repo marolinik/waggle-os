@@ -22,7 +22,9 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 // ── Pinned config (manifest §4, §8) ──────────────────────────────────
-const MODEL = 'qwen/qwen3-30b-a3b-instruct-2507';
+// Amendment 2 (user-directed, post-Pilot-1): thinking variant — the instruct
+// model did not act on the create_skill directive even when R1 would fire.
+const MODEL = 'qwen/qwen3-30b-a3b-thinking-2507';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1';
 const MAX_TURNS = 25;
 const MAX_TOKEN_BUDGET_PER_RUN = 60_000;

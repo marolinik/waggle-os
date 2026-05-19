@@ -70,3 +70,11 @@ Else **STOP** → emit `INCONCLUSIVE-STOPPED` with pilot numbers + cost projecti
 ## 11. Anti-p-hacking
 
 Single confirmatory analysis (§3). No optional stopping beyond the one pre-registered gate (§9). No post-hoc family/metric selection. Nondeterminism is handled by the sign test + explicit small-N pilot caveat; the pilot is explicitly underpowered and cannot itself say "proven" (§10). Results doc reports the verdict verbatim against this file.
+
+## Amendment 2 (2026-05-19 PM, post-pilot, user-directed)
+
+**Change:** pinned model §4 `qwen/qwen3-30b-a3b-instruct-2507` → **`qwen/qwen3-30b-a3b-thinking-2507`** (the project's `QWEN_THINKING_MODEL`).
+
+**Rationale (documented per §11, no silent revisit):** Pilot 1 (`39e2f49`) returned INCONCLUSIVE-STOPPED with a precisely-located cause: the *instruct* (non-reasoning) variant did not act on the `create_skill` distillation directive even when the real R1 gate would fire (F3, 6 tools). The instruct variant also under-planned multi-tool work (F1/F2 resolved in <5 tools). A reasoning variant deliberates over the in-context behavioral rule before acting and plans deeper tool use — directly targeting cause #2 and improving the odds of cause #1. Decided by the user (instruction priority); this is the manifest §10 "amendment ask" being answered, not a goalpost move.
+
+**Unchanged (no p-hacking):** metric (§2), success threshold + sign test (§3), N + caps + gate (§§8–9), arms + isolation + grader (§§5–6), task families + pool (§7), outcomes (§10). Only the model identity changes. Pilot 1's verbatim INCONCLUSIVE result stands in the record (`HERMES-40-RESULTS-2026-05-19.md`); the thinking-variant run is reported as **Pilot 2** under the same locked design. Spend continues against the same $5 pilot / $45 combined caps (Pilot 1 spent $0.0048).
