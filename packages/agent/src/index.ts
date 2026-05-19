@@ -380,6 +380,9 @@ export {
   type SkillDistillationPlan,
 } from './skill-distillation.js';
 export {
+  assertsUnverifiedCompletion, VERIFICATION_GATE_DIRECTIVE,
+} from './verification-gate.js';
+export {
   loadSkillUsage, saveSkillUsage, recordSkillUsage, forgetSkillUsage, getSkillUsagePath,
   type SkillUsageEntry, type SkillUsageIndex,
 } from './skill-usage.js';

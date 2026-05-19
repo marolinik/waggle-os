@@ -1,5 +1,6 @@
 import type { ToolDefinition } from './tools.js';
 import { LoopGuard } from './loop-guard.js';
+import { assertsUnverifiedCompletion, VERIFICATION_GATE_DIRECTIVE } from './verification-gate.js';
 import { scanForInjection } from './injection-scanner.js';
 import type { HookRegistry } from './hooks.js';
 import type { CapabilityRouter } from './capability-router.js';
@@ -78,6 +79,14 @@ export interface AgentLoopConfig {
    * across all agent stages from a single correlation key.
    */
   turnId?: string;
+  /**
+   * D3 verification-before-completion gate. When a final turn asserts the
+   * work is verified/passing/working but ran no verification-class tool,
+   * the loop injects ONE corrective directive instead of accepting
+   * completion (one-shot; maxTurns/loop-guard still bound the loop).
+   * Default on — it is the premium contract. Set false to opt out.
+   */
+  verificationGate?: boolean;
 }
 
 // Phase 2 Commit 2.1: re-export structured-action retrieval loop alongside
@@ -124,6 +133,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     pluginTools: pluginToolProvider,
     traceRecording,
     turnId,
+    verificationGate = true,
   } = config;
 
   logTurnEvent(turnId, {
@@ -212,6 +222,9 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
   let rateLimitRetries = 0;
   let serverErrorRetries = 0;
   const MAX_RETRIES = 3;
+  // D3: one-shot — the verification gate forces at most ONE corrective
+  // turn, so a model that re-asserts unverified success cannot loop here.
+  let verificationCorrectionUsed = false;
 
   for (let turn = 0; turn < maxTurns; turn++) {
     // Check for abort between turns
@@ -403,6 +416,25 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       // Use this turn's content, or fall back to all accumulated streamed content
       const content = (assistantMessage.content ?? '') || allStreamedContent;
       allStreamedContent = ''; // Release accumulated tokens once consumed
+
+      // D3 — verification-before-completion gate (structural). If this
+      // final turn asserts verified/passing/working completion but ran
+      // no verification-class tool, do NOT accept it: inject one
+      // corrective directive and continue. One-shot — a re-asserted
+      // unverified claim on the corrective turn is then accepted (the
+      // honest outcome is the model's; loop-guard/maxTurns also bound).
+      if (
+        verificationGate &&
+        !verificationCorrectionUsed &&
+        assertsUnverifiedCompletion(content, toolsUsed)
+      ) {
+        verificationCorrectionUsed = true;
+        messages.push({ role: 'assistant', content });
+        messages.push({ role: 'user', content: VERIFICATION_GATE_DIRECTIVE });
+        logTurnEvent(turnId, { stage: 'agent-loop.verification-gate.fired', contentChars: content.length });
+        continue;
+      }
+
       // In non-streaming mode, emit the full content as a single token
       if (!stream && onToken && content) {
         onToken(content);
