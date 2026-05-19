@@ -52,7 +52,9 @@ No option is taken without an explicit pre-registered amendment + (for B) a cost
 
 **Amendment 3 succeeded at its purpose.** The forcing corpus reliably produced genuine ≥5-tool, grader-correct successes where the real `planSkillDistillation` **would fire** (in-data, 3/3). The task-difficulty bottleneck (Pilots 1–2) is solved.
 
-## Decisive cross-pilot finding (half i of the Hermes claim)
+> **⚠ RETRACTED 2026-05-19 PM (Amendment 4).** The "decisive" finding below is **WITHDRAWN**. It was a **harness artifact**: the distill phase was a single `runAgentLoop` turn that ended at the model's answer (no tool_calls → loop exits), so the model was **never given the post-task turn** where production R1 actually distils (`chat.ts` seam fires `planSkillDistillation` *after* the turn → directive surfaced into a *subsequent* turn). The model never declined `create_skill` — it was never asked where it could act. qwen demonstrably *can* call tools (every distill run passed the grader, which requires tool calls). Pilots 1–3 measured an incomplete harness, not model self-distillation propensity. Fixed via two-phase distill + re-run (Amendment 4). The section is kept for history only.
+
+## Decisive cross-pilot finding (half i of the Hermes claim) — RETRACTED, see banner above
 
 The blocker is now isolated and **model-behavioral**: given a real qualifying success **and** the shipped behavioral distillation rule in context, the **30B model does not call `create_skill`**. Replicated across both variants and the forcing corpus: **6/6 qualifying opportunities → 0 autonomous distillations** (Pilot 1 instruct F3 @6 tools; Pilot 3 thinking @5 tools ×3).
 

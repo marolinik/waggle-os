@@ -22,23 +22,27 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 // ── Pinned config (manifest §4, §8) ──────────────────────────────────
-// Amendment 2 (user-directed, post-Pilot-1): thinking variant — the instruct
-// model did not act on the create_skill directive even when R1 would fire.
-const MODEL = 'qwen/qwen3-30b-a3b-thinking-2507';
+// Amendment 4 (user-directed, post-Pilot-3): (a) faithful two-phase
+// distill — Pilots 1-3's "no skill authored" was a HARNESS artifact
+// (single-turn loop ended at the answer; the model never got the
+// post-task distill turn that production R1 surfaces). (b) per user's
+// option B, a frontier agentic model. Prior "30B won't self-distil"
+// finding RETRACTED — it measured the harness bug, not the model.
+const MODEL = 'anthropic/claude-sonnet-4.6';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1';
 const MAX_TURNS = 25;
 const MAX_TOKEN_BUDGET_PER_RUN = 60_000;
 const PILOT_N = 3;
 const POWERED_N = 20;
 const PILOT_CAP_USD = 5;
-const COMBINED_CAP_USD = 45;
+const COMBINED_CAP_USD = 40;          // Amendment 4: user B cap ≤$40
 const SUCCESS_REDUCTION = 0.40;       // manifest §3
 const ESCALATE_MEDIAN_MIN = 0.40;     // manifest §9.1
 const ESCALATE_MIN_PASS_FAMILIES = 2; // manifest §9.2 (of 3 pilot)
 const COST_SAFETY = 1.3;              // manifest §9.3
-// Generous (high) qwen ceiling so the hard cap is conservative but the
-// pilot still has headroom; recorded in results.
-const QWEN_PRICING = { [MODEL]: { inputPer1k: 0.0004, outputPer1k: 0.0016 } };
+// True OpenRouter price for anthropic/claude-sonnet-4.6 ($3/$15 per M);
+// the $5 pilot / $40 hard cap are enforced against this.
+const MODEL_PRICING = { [MODEL]: { inputPer1k: 0.003, outputPer1k: 0.015 } };
 
 const WAGGLE_DATA_DIR = process.env.WAGGLE_DATA_DIR || path.join(os.homedir(), '.waggle');
 
@@ -224,6 +228,38 @@ async function runTask(
   return { toolCalls: counter.n, inTok: resp.usage.inputTokens, outTok: resp.usage.outputTokens, answer, pass };
 }
 
+/**
+ * Faithful production R1: chat.ts computes planSkillDistillation AFTER
+ * the task turn completes and surfaces .directive into a SUBSEQUENT
+ * turn. We replay that — continue the same conversation (task → answer →
+ * the real directive) with create_skill available. This is the turn
+ * Pilots 1-3 never gave the model (single-turn loop ended at the answer).
+ */
+async function runDistillTurn(
+  taskPrompt: string, priorAnswer: string, directive: string,
+  skillDir: string, cost: CostTracker, key: string,
+): Promise<void> {
+  cost.checkBudget();
+  const counter = { n: 0 };
+  const resp = await runAgentLoop({
+    litellmUrl: OPENROUTER_URL,
+    litellmApiKey: key,
+    model: MODEL,
+    systemPrompt: BASE_SYSTEM + DISTILL_RULE,
+    tools: makeTools(skillDir, true, counter),
+    messages: [
+      { role: 'user', content: taskPrompt },
+      { role: 'assistant', content: priorAnswer },
+      { role: 'user', content: directive },
+    ],
+    maxTurns: MAX_TURNS,
+    maxTokenBudget: MAX_TOKEN_BUDGET_PER_RUN,
+    onToolResult: () => { cost.checkBudget(); },
+  });
+  cost.addUsage(MODEL, resp.usage.inputTokens, resp.usage.outputTokens);
+  cost.checkBudget();
+}
+
 // Exact one-sided binomial: P(X >= k | n, 0.5), H1: treatment<baseline more often.
 function signTestP(wins: number, losses: number): number {
   const n = wins + losses;
@@ -257,13 +293,20 @@ async function runPair(fam: Family, idx: number, cost: CostTracker, key: string)
   fs.mkdirSync(famSkillDir, { recursive: true });
   fs.mkdirSync(emptyDir, { recursive: true });
 
-  // Distill-source run (manifest §5 A0≡D: first task, may author skill_i).
-  const distill = await runTask(fam.a, famSkillDir, true, cost, key);
-  const skillFiles = fs.readdirSync(famSkillDir).filter(f => f.endsWith('.md'));
-  // Tie to the shipped artifact: would the real R1 seam have fired here?
+  // Phase 1 — clean task_a measurement (NO distill rule in-turn; the
+  // model just does the task and answers, exactly as in production).
+  const distill = await runTask(fam.a, famSkillDir, false, cost, key);
+  // The REAL shipped artifact decides if this turn earned a skill.
   const r1 = planSkillDistillation(Array(distill.toolCalls).fill('repo_grep'), distill.answer);
-  if (!distill.pass) return { family: fam.id, counted: false, reason: `distill task_a grader-FAIL (tools=${distill.toolCalls}, r1=${r1 ? 'would-fire' : 'gated-off'})` };
-  if (!skillFiles.length) return { family: fam.id, counted: false, reason: `no skill authored despite ${r1 ? 'R1 would-fire' : 'R1 gated-off'} (tools=${distill.toolCalls})` };
+  if (!distill.pass) return { family: fam.id, counted: false, reason: `task_a grader-FAIL (tools=${distill.toolCalls}, r1=${r1 ? 'would-fire' : 'gated-off'})` };
+  if (!r1) return { family: fam.id, counted: false, reason: `R1 correctly gated-off — task_a only ${distill.toolCalls} tools (<5); not a distill-worthy success` };
+  // Phase 2 — faithful to production R1: the post-turn seam (chat.ts)
+  // surfaces planSkillDistillation().directive into a SUBSEQUENT turn;
+  // the model authors the skill there (NOT mid-task). Pilots 1-3's "no
+  // skill authored" was this turn being absent — a harness artifact.
+  await runDistillTurn(fam.a.prompt, distill.answer, r1.directive, famSkillDir, cost, key);
+  const skillFiles = fs.readdirSync(famSkillDir).filter(f => f.endsWith('.md'));
+  if (!skillFiles.length) return { family: fam.id, counted: false, reason: `model declined create_skill on the post-task distill turn (task_a ${distill.toolCalls} tools, R1 fired) — genuine model-behavior datum` };
 
   // Skill isolation assertion (manifest §5).
   if (fs.readdirSync(emptyDir).length) throw new Error('isolation violation: baseline dir not empty');
@@ -301,7 +344,7 @@ async function main() {
   const escalate = process.env.HERMES_EVAL_ESCALATED === '1';
   const N = process.env.HERMES_EVAL_N ? Number(process.env.HERMES_EVAL_N) : (escalate ? POWERED_N : PILOT_N);
   const cap = escalate ? COMBINED_CAP_USD : PILOT_CAP_USD;
-  const cost = new CostTracker(QWEN_PRICING);
+  const cost = new CostTracker(MODEL_PRICING);
   cost.setBudget(cap, 'hard');
 
   const families = escalate ? pooledPairs(N) : FAMILIES.slice(0, N);
@@ -345,7 +388,7 @@ async function main() {
   const result = {
     manifest: 'docs/plans/HERMES-40-PREREG-2026-05-19.md @ a7b844a',
     startedAt, finishedAt: new Date().toISOString(), model: MODEL, escalatedRun: escalate,
-    N, cap, abortedBudget, spendUsd: Number(dailyTotal.toFixed(4)), pricingAssumption: QWEN_PRICING,
+    N, cap, abortedBudget, spendUsd: Number(dailyTotal.toFixed(4)), pricingAssumption: MODEL_PRICING,
     counted: counted.length, totalPairs: outcomes.length, passFamilies,
     medianReduction: Number((med || 0).toFixed(4)), wins, losses, signTestP: Number(p.toFixed(5)),
     gate, escalateDecision, verdict, outcomes,
