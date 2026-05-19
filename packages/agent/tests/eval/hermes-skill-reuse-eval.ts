@@ -35,7 +35,12 @@ const MAX_TOKEN_BUDGET_PER_RUN = 60_000;
 const PILOT_N = 3;
 const POWERED_N = 20;
 const PILOT_CAP_USD = 5;
-const COMBINED_CAP_USD = 40;          // Amendment 4: user B cap ≤$40
+// Amendment 4: user B ceiling is ≤$40 COMBINED (pilots + powered). The
+// harness uses a fresh CostTracker per invocation, so the powered run's
+// hard cap is set conservatively to $38 — cumulative pilot spend to date
+// is ≪$1 (qwen pilots $0.0385; sonnet validation pilot ≪$1), so
+// $38 powered + <$2 pilots is provably ≤ the $40 the user authorized.
+const COMBINED_CAP_USD = 38;
 const SUCCESS_REDUCTION = 0.40;       // manifest §3
 const ESCALATE_MEDIAN_MIN = 0.40;     // manifest §9.1
 const ESCALATE_MIN_PASS_FAMILIES = 2; // manifest §9.2 (of 3 pilot)
