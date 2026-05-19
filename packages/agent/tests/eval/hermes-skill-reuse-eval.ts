@@ -123,10 +123,72 @@ const FAMILIES: Family[] = [
   { id: 'F3-trace-export→audit',  a: traceTask('export'), b: traceTask('audit')  },
 ];
 
+// ── LPV-B floundering corpus (LIVE-PREMIUM-VALIDATION-PREREG §4) ──────
+// Engineered so a FRESH agent must flounder: registry hides the entry
+// behind loader.ts; loader lists many [DECOY]/[deprecated] look-alikes
+// + exactly one [ACTIVE]; the ACTIVE chain's 'next:' refs also carry
+// dead "see also:" decoys. Naive grep lands in decoys → wasted reads.
+// A distilled skill encoding "loader [ACTIVE] only; ignore see-also;
+// follow next: on the ACTIVE chain" lets the second task skip it all.
+const FLOUNDER = process.env.LPV_FLOUNDER === '1';
+const FPIPES = ['alpha', 'bravo', 'charlie'] as const;
+const FLOUNDER_CORPUS: Record<string, string> = {
+  'registry.ts':
+    'Floruxa registry. Pipeline file names are NOT listed here and most on disk are '
+    + 'deprecated decoys. Pipelines are resolved ONLY via loader.ts (read it).',
+};
+for (const p of FPIPES) {
+  FLOUNDER_CORPUS['loader.ts'] = (FLOUNDER_CORPUS['loader.ts'] ?? 'Floruxa loader — exactly one [ACTIVE] entry per pipeline; all others are [DECOY].\n')
+    + `${p}: stage_${p}_legacy_a.ts [DECOY], stage_${p}_v1_a.ts [DECOY], `
+    + `stage_${p}_a.ts [ACTIVE], stage_${p}_old_a.ts [DECOY], stage_${p}_tmp_a.ts [DECOY]\n`;
+  // Decoys: plausible, circular, terminal-dead.
+  for (const d of ['legacy', 'v1', 'old', 'tmp']) {
+    FLOUNDER_CORPUS[`stage_${p}_${d}_a.ts`] =
+      `Floruxa ${p} ${d} stage. DEPRECATED decoy. see also: stage_${p}_${d}_b.ts (also deprecated). not active.`;
+    FLOUNDER_CORPUS[`stage_${p}_${d}_b.ts`] =
+      `Floruxa ${p} ${d} stage. DEPRECATED decoy. dead end — not part of the active pipeline.`;
+  }
+  // The real ACTIVE chain (each step carries a dead "see also:" decoy).
+  FLOUNDER_CORPUS[`stage_${p}_a.ts`] = `Floruxa ${p} stage 'PARSE' [ACTIVE]. next: stage_${p}_b.ts. see also: stage_${p}_legacy_a.ts (ignore — decoy).`;
+  FLOUNDER_CORPUS[`stage_${p}_b.ts`] = `Floruxa ${p} stage 'NORMALIZE' [ACTIVE]. next: stage_${p}_c.ts. gate before next: gate_${p}_bc.ts. see also: stage_${p}_v1_b.ts (decoy).`;
+  FLOUNDER_CORPUS[`gate_${p}_bc.ts`] = `Floruxa gate 'BC-${p.toUpperCase()}': blocks the B->C handoff.`;
+  FLOUNDER_CORPUS[`stage_${p}_c.ts`] = `Floruxa ${p} stage 'ENRICH' [ACTIVE]. next: stage_${p}_d.ts. disabled by env FLUX_SKIP_${p.toUpperCase()} (see config_${p}.md). see also: stage_${p}_old_c.ts (decoy).`;
+  FLOUNDER_CORPUS[`config_${p}.md`] = `FLUX_SKIP_${p.toUpperCase()}=1 disables ${p} stage ENRICH (stage_${p}_c.ts).`;
+  FLOUNDER_CORPUS[`stage_${p}_d.ts`] = `Floruxa ${p} stage 'COMMIT' [ACTIVE]. terminal. emits flux.${p}.done`;
+}
+
+function flounderTask(pipe: typeof FPIPES[number]): TaskSpec {
+  return {
+    prompt:
+      `Trace the Floruxa "${pipe}" pipeline end to end. Names are project-specific and `
+      + `MOST files on disk are deprecated decoys — you MUST read the files to tell ACTIVE `
+      + `from DECOY (do not guess). In your final answer: (1) list, IN ORDER, every ACTIVE `
+      + `stage_${pipe}_*.ts file; (2) name the B→C gate file; (3) give the env var that `
+      + `disables stage C.`,
+    requiredFacts: [
+      new RegExp(`stage_${pipe}_a\\.ts`, 'i'),
+      new RegExp(`stage_${pipe}_b\\.ts`, 'i'),
+      new RegExp(`gate_${pipe}_bc\\.ts|BC-${pipe.toUpperCase()}`, 'i'),
+      new RegExp(`stage_${pipe}_c\\.ts`, 'i'),
+      new RegExp(`FLUX_SKIP_${pipe.toUpperCase()}`, 'i'),
+      new RegExp(`stage_${pipe}_d\\.ts`, 'i'),
+    ],
+  };
+}
+
+const FLOUNDER_FAMILIES: Family[] = [
+  { id: 'L1-flounder-alpha→bravo',   a: flounderTask('alpha'),   b: flounderTask('bravo')   },
+  { id: 'L2-flounder-charlie→alpha', a: flounderTask('charlie'), b: flounderTask('alpha')   },
+  { id: 'L3-flounder-bravo→charlie', a: flounderTask('bravo'),   b: flounderTask('charlie') },
+];
+
+const ACTIVE_CORPUS = FLOUNDER ? FLOUNDER_CORPUS : CORPUS;
+const ACTIVE_FAMILIES = FLOUNDER ? FLOUNDER_FAMILIES : FAMILIES;
+
 // Powered pool (manifest §7): the 3 families repeated to N=20 (fixed order).
 function pooledPairs(n: number): Family[] {
   const out: Family[] = [];
-  for (let i = 0; i < n; i++) out.push(FAMILIES[i % FAMILIES.length]);
+  for (let i = 0; i < n; i++) out.push(ACTIVE_FAMILIES[i % ACTIVE_FAMILIES.length]);
   return out;
 }
 
@@ -141,7 +203,7 @@ function makeTools(skillDir: string, withCreateSkill: boolean, counter: { n: num
       let re: RegExp;
       try { re = new RegExp(String(args.pattern), 'i'); } catch { return 'Invalid regex.'; }
       const hits: string[] = [];
-      for (const [p, body] of Object.entries(CORPUS)) {
+      for (const [p, body] of Object.entries(ACTIVE_CORPUS)) {
         body.split('\n').forEach((line, i) => { if (re.test(line)) hits.push(`${p}:${i + 1}: ${line.trim()}`); });
       }
       return hits.length ? hits.slice(0, 25).join('\n') : 'No matches.';
@@ -154,7 +216,7 @@ function makeTools(skillDir: string, withCreateSkill: boolean, counter: { n: num
     execute: async (args) => {
       counter.n++;
       const p = String(args.path);
-      return CORPUS[p] ?? `Not found: ${p}. Known paths: ${Object.keys(CORPUS).join(', ')}`;
+      return ACTIVE_CORPUS[p] ?? `Not found: ${p}. Known paths: ${Object.keys(ACTIVE_CORPUS).join(', ')}`;
     },
   };
   const skillLookup: ToolDefinition = {
@@ -352,7 +414,7 @@ async function main() {
   const cost = new CostTracker(MODEL_PRICING);
   cost.setBudget(cap, 'hard');
 
-  const families = escalate ? pooledPairs(N) : FAMILIES.slice(0, N);
+  const families = escalate ? pooledPairs(N) : ACTIVE_FAMILIES.slice(0, N);
   const outcomes: PairOutcome[] = [];
   let abortedBudget = false;
   for (let i = 0; i < families.length; i++) {
@@ -391,7 +453,9 @@ async function main() {
   }
 
   const result = {
-    manifest: 'docs/plans/HERMES-40-PREREG-2026-05-19.md @ a7b844a',
+    manifest: FLOUNDER
+      ? 'docs/plans/LIVE-PREMIUM-VALIDATION-PREREG-2026-05-19.md @ d628120 (LPV-B floundering)'
+      : 'docs/plans/HERMES-40-PREREG-2026-05-19.md @ a7b844a',
     startedAt, finishedAt: new Date().toISOString(), model: MODEL, escalatedRun: escalate,
     N, cap, abortedBudget, spendUsd: Number(dailyTotal.toFixed(4)), pricingAssumption: MODEL_PRICING,
     counted: counted.length, totalPairs: outcomes.length, passFamilies,
