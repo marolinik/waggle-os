@@ -5,7 +5,7 @@ import path from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
-import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, TraceRecorder, generateTurnId, logTurnEvent, type TraceHandle } from '@waggle/agent';
+import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, planSkillDistillation, TraceRecorder, generateTurnId, logTurnEvent, type TraceHandle } from '@waggle/agent';
 import type { AgentLoopConfig, AgentResponse, Orchestrator, AutonomyLevel } from '@waggle/agent';
 import type { WorkspaceSession } from '../workspace-sessions.js';
 import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
@@ -1361,6 +1361,31 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               }
             } catch {
               // Non-blocking
+            }
+          }
+        }
+
+        // ── R1 closed learning loop: deterministic skill distillation ──
+        // Hermes parity (premium-harness D1). The runtime — not just the
+        // behavioral-spec prose — detects a successful ≥5-tool turn and
+        // surfaces the distillation directive, so the agent reliably authors
+        // a reusable skill via its own create_skill tool. R2-gated end to
+        // end: a refusal / self-incapacity turn yields no plan. The signal
+        // is recorded idempotently (skill_promotion) so recurring workflows
+        // bubble up through the existing actionable-signal substrate.
+        if (!hasCustomRunner) {
+          const distillPlan = planSkillDistillation(result.toolsUsed ?? [], result.content ?? '');
+          if (distillPlan) {
+            sendEvent('step', { content: distillPlan.directive });
+            try {
+              sessionOrch.getImprovementSignals().record(
+                'skill_promotion',
+                distillPlan.patternKey,
+                distillPlan.directive,
+                { sessionId, toolCalls: (result.toolsUsed ?? []).length },
+              );
+            } catch {
+              // Signal recording is best-effort — never fail the response.
             }
           }
         }

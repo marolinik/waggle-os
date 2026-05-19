@@ -376,6 +376,10 @@ export {
 } from './skill-autoextract.js';
 export { getSkillDirForScope } from './skill-tools.js';
 export {
+  shouldDistillSkill, planSkillDistillation, SKILL_DISTILL_MIN_TOOL_CALLS,
+  type SkillDistillationPlan,
+} from './skill-distillation.js';
+export {
   loadSkillUsage, saveSkillUsage, recordSkillUsage, forgetSkillUsage, getSkillUsagePath,
   type SkillUsageEntry, type SkillUsageIndex,
 } from './skill-usage.js';
