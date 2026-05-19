@@ -6,7 +6,7 @@ import {
   KnowledgeGraph,
   HybridSearch,
 } from '@waggle/core';
-import { MockEmbedder } from '../../core/tests/mind/helpers/mock-embedder.js';
+import { MockEmbedder } from '../../hive-mind-core/tests/mind/helpers/mock-embedder.js';
 import { CognifyPipeline } from '../src/cognify.js';
 
 describe('CognifyPipeline', () => {

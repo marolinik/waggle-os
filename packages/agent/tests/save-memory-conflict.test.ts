@@ -23,7 +23,7 @@ import {
 } from '@waggle/core';
 import { createMindTools } from '../src/tools.js';
 import type { ToolDefinition } from '../src/tools.js';
-import { MockEmbedder } from '../../core/tests/mind/helpers/mock-embedder.js';
+import { MockEmbedder } from '../../hive-mind-core/tests/mind/helpers/mock-embedder.js';
 
 describe('save_memory — gap K (write-path conflict detection)', () => {
   let db: MindDB;
