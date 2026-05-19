@@ -648,6 +648,21 @@ export class Orchestrator {
           : [];
       }
 
+      // R2 sign-gate closure (DEFECT-2): the autoSave `save()` chokepoint
+      // coerces self-incapacity / refusal frames to `temporary` so they cannot
+      // re-enter the prompt as authoritative recall. That contract was only
+      // honored by the `fetchRecentFrames` SQL path (catch-up / recent); the
+      // semantic path here (HybridSearch) applies importance as a *score*, not
+      // an *exclusion*, so a sign-gated frame still surfaced. Enforce the same
+      // `!= 'temporary' AND != 'deprecated'` authoritative-recall rule the SQL
+      // path uses (orchestrator.ts:262), uniformly across both stores/branches.
+      const isAuthoritativeForRecall = (r: { frame: { importance?: string } }): boolean => {
+        const imp = r.frame.importance ?? 'normal';
+        return imp !== 'temporary' && imp !== 'deprecated';
+      };
+      personalResults = personalResults.filter(isAuthoritativeForRecall);
+      workspaceResults = workspaceResults.filter(isAuthoritativeForRecall);
+
       // Apply optional score floor (PromptAssembler opt-in; byte-identical when absent).
       if (scoreFloor !== undefined) {
         const passes = (r: { finalScore?: number; score?: number }): boolean =>
