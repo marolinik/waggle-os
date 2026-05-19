@@ -39,3 +39,21 @@ To actually measure the speed claim the experiment needs amendment (documented, 
 - **D. Stop here** — record as honestly unproven (rubric already states this); spend nothing further.
 
 No option is taken without an explicit pre-registered amendment + (for B) a cost-cap decision.
+
+## Pilot 2 — Amendment 2 (qwen-thinking, user-directed)
+
+**Verdict: `INCONCLUSIVE-STOPPED`** · spend $0.0093 (cumulative **$0.0141 / $5**) · ~56s · `qwen/qwen3-30b-a3b-thinking-2507`.
+
+| Family | task_a tools | distill grader | R1 trigger | Pair |
+|---|---|---|---|---|
+| F1 | 2 | PASS | gated-off (<5, correct) | not formed |
+| F2 | 1 | **FAIL** | gated-off | not formed |
+| F3 | 2 | **FAIL** | gated-off | not formed |
+
+Pattern *inverted* vs Pilot 1 (instruct: 4/2/6 tools, all distill-PASS, no skill authored): the thinking variant used **fewer** tool calls and failed 2/3 graders. Not a measurement bug — F1 passed the grader, so the `content` field is read correctly for the thinking model; F2/F3 were genuinely under-grounded.
+
+## Cross-pilot conclusion (binding)
+
+**Two pilots, two models, identical structural verdict.** The limiting factor is **experiment construction, model-invariant**: the synthetic corpus is small enough that a 30B model (reasoning or not) resolves these tasks in ≤6 tool calls — below the ≥5 distillation threshold. The real `planSkillDistillation` correctly gated-off on every family (shipped R1 working as designed; the test never reaches it). The Hermes "~40% faster" claim is **neither supported nor refuted**. **D1 stays 2.** Total spend $0.0141 of $5 — the T3 tier did its job: ~1.4 cents bought a decisive structural finding instead of $40 on a doomed powered run.
+
+To measure the effect at all, the *task environment* must force ≥5–10 grounded tool calls (amendment A-class). That is a design change with cost implications and is a **user decision** — autonomous re-engineering + re-run would be the goalpost-moving the cost-discipline rule bans. Decision options surfaced to the user; no further spend without an explicit Amendment 3.
