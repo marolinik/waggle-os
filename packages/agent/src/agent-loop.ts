@@ -1,6 +1,7 @@
 import type { ToolDefinition } from './tools.js';
 import { LoopGuard } from './loop-guard.js';
 import { assertsUnverifiedCompletion, VERIFICATION_GATE_DIRECTIVE } from './verification-gate.js';
+import { planSkillDistillation } from './skill-distillation.js';
 import { scanForInjection } from './injection-scanner.js';
 import type { HookRegistry } from './hooks.js';
 import type { CapabilityRouter } from './capability-router.js';
@@ -87,6 +88,14 @@ export interface AgentLoopConfig {
    * Default on — it is the premium contract. Set false to opt out.
    */
   verificationGate?: boolean;
+  /**
+   * D1 Hermes-parity closed learning loop. On a qualifying ≥5-tool,
+   * R2-gated successful turn the loop deterministically injects the real
+   * planSkillDistillation directive into the conversation and continues
+   * (one-shot) — mechanical closure, not a soft out-of-band event the
+   * model may ignore. Default on. Set false to opt out.
+   */
+  skillDistillationGate?: boolean;
 }
 
 // Phase 2 Commit 2.1: re-export structured-action retrieval loop alongside
@@ -134,6 +143,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     traceRecording,
     turnId,
     verificationGate = true,
+    skillDistillationGate = true,
   } = config;
 
   logTurnEvent(turnId, {
@@ -225,6 +235,9 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
   // D3: one-shot — the verification gate forces at most ONE corrective
   // turn, so a model that re-asserts unverified success cannot loop here.
   let verificationCorrectionUsed = false;
+  // D1: one-shot — the loop drives at most ONE deterministic distillation
+  // turn per run (mechanical closure; maxTurns/loop-guard also bound it).
+  let skillDistillationUsed = false;
 
   for (let turn = 0; turn < maxTurns; turn++) {
     // Check for abort between turns
@@ -433,6 +446,22 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         messages.push({ role: 'user', content: VERIFICATION_GATE_DIRECTIVE });
         logTurnEvent(turnId, { stage: 'agent-loop.verification-gate.fired', contentChars: content.length });
         continue;
+      }
+
+      // D1 — Hermes-parity closed learning loop (mechanical closure).
+      // On a qualifying ≥5-tool, R2-gated successful turn, the loop
+      // itself drives the distillation (one corrective turn carrying the
+      // real planSkillDistillation directive) rather than relying on a
+      // soft out-of-band event the model may ignore (R5b → R6).
+      if (skillDistillationGate && !skillDistillationUsed) {
+        const distillPlan = planSkillDistillation(toolsUsed, content);
+        if (distillPlan) {
+          skillDistillationUsed = true;
+          messages.push({ role: 'assistant', content });
+          messages.push({ role: 'user', content: distillPlan.directive });
+          logTurnEvent(turnId, { stage: 'agent-loop.skill-distillation.fired', toolCalls: toolsUsed.length });
+          continue;
+        }
       }
 
       // In non-streaming mode, emit the full content as a single token
