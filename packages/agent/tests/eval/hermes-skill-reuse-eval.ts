@@ -42,101 +42,76 @@ const QWEN_PRICING = { [MODEL]: { inputPer1k: 0.0004, outputPer1k: 0.0016 } };
 
 const WAGGLE_DATA_DIR = process.env.WAGGLE_DATA_DIR || path.join(os.homedir(), '.waggle');
 
-// ── Fixed corpus (manifest §7; faithful slices of repo @ c87e5b7) ────
-// Small on purpose: deterministic, low-token, ≥5-tool to assemble facts.
+// ── Forcing corpus (manifest §7 + Amendment 3) ───────────────────────
+// Fictional, project-specific "Floruxa" subsystem. Facts are scattered
+// 1-per-file and chained via 'next:' refs, so a correct pipeline trace
+// REQUIRES ≥8 grounded tool calls (registry → a → b → gate → c → config
+// → d). Names are non-guessable → the model cannot answer from priors;
+// it must actually read along the chain. Same traversal method across
+// all 3 pipelines, so a distilled recipe genuinely transfers.
 const CORPUS: Record<string, string> = {
-  'packages/agent/src/orchestrator.ts': [
-    'async recallMemory(query, limit=10, opts) {',
-    '  // normal branch -> this.search.search() (HybridSearch)',
-    '  // R2 sign-gate closure (DEFECT-2): enforce authoritative-recall rule',
-    "  const isAuthoritativeForRecall = (r) => { const imp = r.frame.importance ?? 'normal';",
-    "    return imp !== 'temporary' && imp !== 'deprecated'; };",
-    '  personalResults = personalResults.filter(isAuthoritativeForRecall);',
-    '  workspaceResults = workspaceResults.filter(isAuthoritativeForRecall);',
-    '}',
-    'const save = async (content, importance) => {',
-    "  if (importance !== 'temporary' && isSelfIncapacityAssertion(content)) {",
-    "    importance = 'temporary'; // line ~757: sign-gate coercion at the save() chokepoint",
-    '  } ... }',
-    'private fetchRecentFrames(db, limit, opts) {',
-    "  // WHERE importance != 'deprecated' AND importance != 'temporary' (line ~262)",
-    '}',
-  ].join('\n'),
-  'packages/agent/src/memory-sign-gate.ts': [
-    '// R2 / DEFECT-2 structural fix.',
-    'export function isSelfIncapacityAssertion(content: string): boolean {',
-    '  // flags agent self-incapacity / refusal so autoSaveFromExchange',
-    "  // persists them 'temporary' (recall-excluded). Pure + unit-tested.",
-    '}',
-  ].join('\n'),
-  'packages/agent/src/skill-distillation.ts': [
-    '// R1 Hermes-parity closed learning loop.',
-    'export function shouldDistillSkill(toolCallCount, assistantMsg) { /* >=5 & not refusal */ }',
-    'export function planSkillDistillation(toolsUsed, assistantMsg) {',
-    '  // returns { directive, patternKey } | null; R2-gated end to end',
-    '}',
-  ].join('\n'),
-  'packages/server/src/local/routes/chat.ts': [
-    '// turn-completion seam: planSkillDistillation(result.toolsUsed, result.content)',
-    "// on fire: sendEvent('step', directive) + improvementSignals.record('skill_promotion', ...)",
-  ].join('\n'),
-  'docs/INJECTION-SITES.md': [
-    'scanForInjection() is called at these sites:',
-    '- packages/agent/src/orchestrator.ts (recalled memory, before prompt)',
-    '- packages/agent/src/agent-loop.ts (tool results)',
-    '- packages/core/src/harvest/pipeline.ts (harvested frames)',
-    '- packages/agent/src/connectors/* (external connector input)',
-  ].join('\n'),
-  'docs/SUBSYSTEMS.md': [
-    'Evolution stack: evolution-orchestrator.ts, iterative-optimizer.ts,',
-    '  eval-dataset.ts, judge.ts, evolution-gates.ts, compose-evolution.ts.',
-    'Harvest stack: harvest/pipeline.ts, harvest/dedup.ts, adapters for',
-    '  chatgpt, claude, claude-code, gemini, perplexity, pdf, url.',
-  ].join('\n'),
+  'registry.ts':
+    'Floruxa pipeline registry. ingest -> stage_ingest_a.ts. export -> stage_export_a.ts. ' +
+    'audit -> stage_audit_a.ts. (legacy -> stage_legacy_x.ts, DEPRECATED — not active.)',
+  'notes.md':
+    'Floruxa internal. Stage/file/env names are project-specific; do NOT assume them — ' +
+    'follow each file\'s "next:" reference.',
+  // ingest chain
+  'stage_ingest_a.ts': "Floruxa stage 'PARSE'. next: stage_ingest_b.ts. gotcha: rejects empty payloads.",
+  'stage_ingest_b.ts': "Floruxa stage 'NORMALIZE'. next: stage_ingest_c.ts. gate before next: gate_ingest_bc.ts",
+  'gate_ingest_bc.ts': "Floruxa gate 'BC-QUORUM': blocks the B->C handoff until 2 replicas ack.",
+  'stage_ingest_c.ts': "Floruxa stage 'ENRICH'. next: stage_ingest_d.ts. disabled by env FLUX_SKIP_ENRICH (see config_ingest.md).",
+  'config_ingest.md': 'FLUX_SKIP_ENRICH=1 disables ingest stage ENRICH (stage_ingest_c.ts).',
+  'stage_ingest_d.ts': "Floruxa stage 'COMMIT'. terminal. emits flux.ingest.done",
+  // export chain
+  'stage_export_a.ts': "Floruxa stage 'COLLECT'. next: stage_export_b.ts. gotcha: requires a snapshot lock.",
+  'stage_export_b.ts': "Floruxa stage 'SERIALIZE'. next: stage_export_c.ts. gate before next: gate_export_bc.ts",
+  'gate_export_bc.ts': "Floruxa gate 'BC-SCHEMA': blocks the B->C handoff until schema v3 validates.",
+  'stage_export_c.ts': "Floruxa stage 'REDACT'. next: stage_export_d.ts. disabled by env FLUX_SKIP_REDACT (see config_export.md).",
+  'config_export.md': 'FLUX_SKIP_REDACT=1 disables export stage REDACT (stage_export_c.ts).',
+  'stage_export_d.ts': "Floruxa stage 'SHIP'. terminal. emits flux.export.done",
+  // audit chain
+  'stage_audit_a.ts': "Floruxa stage 'SCAN'. next: stage_audit_b.ts. gotcha: skips if no diff.",
+  'stage_audit_b.ts': "Floruxa stage 'MATCH'. next: stage_audit_c.ts. gate before next: gate_audit_bc.ts",
+  'gate_audit_bc.ts': "Floruxa gate 'BC-ATTEST': blocks the B->C handoff until an attestor signs.",
+  'stage_audit_c.ts': "Floruxa stage 'SIGN'. next: stage_audit_d.ts. disabled by env FLUX_SKIP_SIGN (see config_audit.md).",
+  'config_audit.md': 'FLUX_SKIP_SIGN=1 disables audit stage SIGN (stage_audit_c.ts).',
+  'stage_audit_d.ts': "Floruxa stage 'SEAL'. terminal. emits flux.audit.done",
+  // distractor
+  'stage_legacy_x.ts': 'Floruxa legacy stage. DEPRECATED. not part of any active pipeline. ignore.',
 };
 
 // ── Task families (manifest §7) ──────────────────────────────────────
 interface TaskSpec { prompt: string; requiredFacts: RegExp[]; }
 interface Family { id: string; a: TaskSpec; b: TaskSpec; }
 
+// Same traversal METHOD for every pipeline (registry → follow 'next:' →
+// gate → config → terminal). A skill distilled from task_a transfers to
+// task_b's different pipeline. 6 scattered required facts ⇒ a correct
+// answer needs ≥8 grounded tool calls (well over the ≥5 R1 trigger).
+function traceTask(pipe: 'ingest' | 'export' | 'audit'): TaskSpec {
+  return {
+    prompt:
+      `Trace the Floruxa "${pipe}" pipeline end to end. Start by reading registry.ts, then ` +
+      `follow each stage file's "next:" reference until the terminal stage. The names are ` +
+      `project-specific — you MUST repo_read each file (do not guess). In your final answer: ` +
+      `(1) list, IN ORDER, every stage_${pipe}_*.ts file; (2) name the gate file on the B→C ` +
+      `handoff; (3) give the env var that disables stage C.`,
+    requiredFacts: [
+      new RegExp(`stage_${pipe}_a\\.ts`, 'i'),
+      new RegExp(`stage_${pipe}_b\\.ts`, 'i'),
+      new RegExp(`gate_${pipe}_bc\\.ts|BC-(QUORUM|SCHEMA|ATTEST)`, 'i'),
+      new RegExp(`stage_${pipe}_c\\.ts`, 'i'),
+      new RegExp(`FLUX_SKIP_(ENRICH|REDACT|SIGN)`, 'i'),
+      new RegExp(`stage_${pipe}_d\\.ts`, 'i'),
+    ],
+  };
+}
+
 const FAMILIES: Family[] = [
-  {
-    id: 'F1-trace-wired-behavior',
-    a: {
-      prompt:
-        'Using only repo_grep and repo_read over this codebase, explain HOW recallMemory ' +
-        'avoids returning sign-gated frames. Name the file and the exact importance values excluded.',
-      requiredFacts: [/orchestrator\.ts/i, /recallMemory/i, /temporary/i, /deprecated/i],
-    },
-    b: {
-      prompt:
-        'Using only the tools, explain HOW a self-incapacity assertion gets coerced so it ' +
-        'is not recalled. Name the classifier file and the importance it is coerced to.',
-      requiredFacts: [/memory-sign-gate\.ts|isSelfIncapacityAssertion/i, /orchestrator\.ts/i, /temporary/i],
-    },
-  },
-  {
-    id: 'F2-audit-pattern',
-    a: {
-      prompt: 'List every place the authoritative-recall importance filter is applied. Name the file(s).',
-      requiredFacts: [/orchestrator\.ts/i, /temporary/i, /deprecated/i],
-    },
-    b: {
-      prompt: 'List every call site of scanForInjection(). Name each file/path.',
-      requiredFacts: [/orchestrator\.ts/i, /agent-loop\.ts/i, /harvest\/pipeline\.ts/i, /connectors/i],
-    },
-  },
-  {
-    id: 'F3-summarize-subsystem',
-    a: {
-      prompt: 'Summarize the Evolution stack. Name at least three of its modules.',
-      requiredFacts: [/evolution-orchestrator/i, /iterative-optimizer/i, /judge\.ts/i],
-    },
-    b: {
-      prompt: 'Summarize the Harvest stack. Name at least three of its modules/adapters.',
-      requiredFacts: [/pipeline\.ts/i, /dedup\.ts/i, /chatgpt|claude-code|gemini|perplexity/i],
-    },
-  },
+  { id: 'F1-trace-ingest→export', a: traceTask('ingest'), b: traceTask('export') },
+  { id: 'F2-trace-audit→ingest',  a: traceTask('audit'),  b: traceTask('ingest') },
+  { id: 'F3-trace-export→audit',  a: traceTask('export'), b: traceTask('audit')  },
 ];
 
 // Powered pool (manifest §7): the 3 families repeated to N=20 (fixed order).
@@ -214,10 +189,13 @@ const DISTILL_RULE =
   'worked) — strip specifics. Only distill successful work, never a failure.';
 
 const BASE_SYSTEM =
-  'You are a precise codebase investigation agent. Use the provided tools to gather ' +
-  'evidence, then give a final answer that explicitly names the files and facts asked ' +
-  'for. If you have learned skills, call skill_lookup FIRST and follow the recipe. ' +
-  'Be efficient: do not make redundant tool calls. End with your final answer (no tool call).';
+  'You are a precise codebase investigation agent for the fictional, project-specific ' +
+  '"Floruxa" subsystem. You CANNOT know its file, stage, gate, or env names from prior ' +
+  'knowledge — they exist only in this repo. You MUST repo_read each file and follow its ' +
+  '"next:" reference along the chain; never answer from assumption. If you have learned ' +
+  'skills, call skill_lookup FIRST and follow the recipe to avoid re-discovering the ' +
+  'structure. Cite the exact file paths you read. Only after reading the full chain, end ' +
+  'with a final answer (no tool call) that explicitly states every required fact.';
 
 interface RunResult { toolCalls: number; inTok: number; outTok: number; answer: string; pass: boolean; }
 
