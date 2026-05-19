@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { MindDB } from '@waggle/core';
 import { Orchestrator } from '../src/orchestrator.js';
-import { MockEmbedder } from '../../core/tests/mind/helpers/mock-embedder.js';
+import { MockEmbedder } from '../../hive-mind-core/tests/mind/helpers/mock-embedder.js';
 
 describe('Agent Loop with Custom Tools', () => {
   let db: MindDB;

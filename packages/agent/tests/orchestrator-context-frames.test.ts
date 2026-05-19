@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { MindDB } from '@waggle/core';
 import { Orchestrator, type ContextFrames } from '../src/orchestrator.js';
-import { MockEmbedder } from '../../core/tests/mind/helpers/mock-embedder.js';
+import { MockEmbedder } from '../../hive-mind-core/tests/mind/helpers/mock-embedder.js';
 
 /**
  * Tests the PromptAssembler wiring points added to Orchestrator:
