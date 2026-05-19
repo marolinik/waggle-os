@@ -182,8 +182,38 @@ const FLOUNDER_FAMILIES: Family[] = [
   { id: 'L3-flounder-bravo→charlie', a: flounderTask('bravo'),   b: flounderTask('charlie') },
 ];
 
-const ACTIVE_CORPUS = FLOUNDER ? FLOUNDER_CORPUS : CORPUS;
-const ACTIVE_FAMILIES = FLOUNDER ? FLOUNDER_FAMILIES : FAMILIES;
+// ── LPV-2 calibrated corpus (LPV2-PREREG §1) ─────────────────────────
+// The single calibrated change vs LPV-B: 2 decoys/pipeline (not 4), NO
+// circular dead-end traps (LPV-B's maze = unsolvable), loader.ts
+// discovery-floundering RETAINED, ACTIVE chain clean once found →
+// baseline solvable (PASS) after recoverable wasted exploration a
+// distilled "loader[ACTIVE]-only, ignore see-also" skill front-loads.
+const LPV2 = process.env.LPV2 === '1';
+const LPV2_CORPUS: Record<string, string> = {
+  'registry.ts':
+    'Floruxa registry. Pipeline file names are NOT here; many on disk are deprecated '
+    + 'decoys. Pipelines resolve ONLY via loader.ts (read it).',
+  'loader.ts':
+    'Floruxa loader — exactly one [ACTIVE] entry per pipeline; others are [DECOY].\n'
+    + FPIPES.map(p =>
+        `${p}: stage_${p}_old_a.ts [DECOY], stage_${p}_a.ts [ACTIVE], stage_${p}_v1_a.ts [DECOY]`,
+      ).join('\n'),
+};
+for (const p of FPIPES) {
+  // Two single-hop inert decoys (no chains, no traps → solvable).
+  LPV2_CORPUS[`stage_${p}_old_a.ts`] = `Floruxa ${p} OLD stage. DEPRECATED decoy — not active. (no further refs.)`;
+  LPV2_CORPUS[`stage_${p}_v1_a.ts`]  = `Floruxa ${p} v1 stage. DEPRECATED decoy — not active. (no further refs.)`;
+  // Clean ACTIVE chain (one inert see-also each — noise, not a trap).
+  LPV2_CORPUS[`stage_${p}_a.ts`] = `Floruxa ${p} stage 'PARSE' [ACTIVE]. next: stage_${p}_b.ts. see also: stage_${p}_old_a.ts (decoy — ignore).`;
+  LPV2_CORPUS[`stage_${p}_b.ts`] = `Floruxa ${p} stage 'NORMALIZE' [ACTIVE]. next: stage_${p}_c.ts. gate before next: gate_${p}_bc.ts.`;
+  LPV2_CORPUS[`gate_${p}_bc.ts`] = `Floruxa gate 'BC-${p.toUpperCase()}': blocks the B->C handoff.`;
+  LPV2_CORPUS[`stage_${p}_c.ts`] = `Floruxa ${p} stage 'ENRICH' [ACTIVE]. next: stage_${p}_d.ts. disabled by env FLUX_SKIP_${p.toUpperCase()} (see config_${p}.md).`;
+  LPV2_CORPUS[`config_${p}.md`]  = `FLUX_SKIP_${p.toUpperCase()}=1 disables ${p} stage ENRICH (stage_${p}_c.ts).`;
+  LPV2_CORPUS[`stage_${p}_d.ts`] = `Floruxa ${p} stage 'COMMIT' [ACTIVE]. terminal. emits flux.${p}.done`;
+}
+
+const ACTIVE_CORPUS = LPV2 ? LPV2_CORPUS : FLOUNDER ? FLOUNDER_CORPUS : CORPUS;
+const ACTIVE_FAMILIES = (LPV2 || FLOUNDER) ? FLOUNDER_FAMILIES : FAMILIES;
 
 // Powered pool (manifest §7): the 3 families repeated to N=20 (fixed order).
 function pooledPairs(n: number): Family[] {
@@ -453,9 +483,11 @@ async function main() {
   }
 
   const result = {
-    manifest: FLOUNDER
-      ? 'docs/plans/LIVE-PREMIUM-VALIDATION-PREREG-2026-05-19.md @ d628120 (LPV-B floundering)'
-      : 'docs/plans/HERMES-40-PREREG-2026-05-19.md @ a7b844a',
+    manifest: LPV2
+      ? 'docs/plans/LPV2-PREREG-2026-05-19.md @ a0585a2 (LPV-2 calibrated)'
+      : FLOUNDER
+        ? 'docs/plans/LIVE-PREMIUM-VALIDATION-PREREG-2026-05-19.md @ d628120 (LPV-B floundering)'
+        : 'docs/plans/HERMES-40-PREREG-2026-05-19.md @ a7b844a',
     startedAt, finishedAt: new Date().toISOString(), model: MODEL, escalatedRun: escalate,
     N, cap, abortedBudget, spendUsd: Number(dailyTotal.toFixed(4)), pricingAssumption: MODEL_PRICING,
     counted: counted.length, totalPairs: outcomes.length, passFamilies,
