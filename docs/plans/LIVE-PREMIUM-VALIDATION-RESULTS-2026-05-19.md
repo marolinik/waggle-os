@@ -47,3 +47,41 @@ Not separately exercised this run (task_a failed before the distill turn).
 Standing evidence: R6 Pilot-4 = sonnet authors skills live when the distill turn
 is reached (D1-fires-live, partial). A full LPV-A (live D3 gate-diff + clean-run
 false-positive rate) remains a deferred, user-scoped increment.
+
+## LPV-2 (calibrated) — `INCONCLUSIVE-STOPPED` — TERMINAL (binding stop clause)
+
+Pilot (sonnet-4.6, calibrated corpus, harness `a6655e4`, manifest `a0585a2`):
+spend **$0.1796**, 0/3 pairs, all `task_a grader-FAIL` (tools 9-12 — the
+intended floundering WAS induced; the baseline could not reliably extract all
+6 strict required facts through the decoy noise).
+
+### Binding triple-bracket conclusion (3 pre-registered attempts)
+
+| Attempt | Corpus | Failure mode |
+|---|---|---|
+| R6 | clean linear | no waste → ~0% measurable |
+| LPV-B | over-hard maze | unsolvable → no baseline PASS |
+| LPV-2 | calibrated | waste induced, baseline still fails the strict all-6 grader |
+
+The Hermes "~40% faster" payoff is **not reproducible by synthetic-corpus
+calibration** — established now by three independent pre-registered experiments
+failing for three distinct, well-understood reasons. Per LPV-2 §3's binding
+stop clause this is **terminal**: no further autonomous recalibration (loosening
+the grader post-data to force a pair would be the exact goalpost-moving the
+cost-discipline forbids). A credible demonstration requires a **real
+engineering-task corpus** with naturally-recoverable waste and a task-intrinsic
+success criterion (not a strict synthetic regex grader) — a substantial,
+separate, **user-scoped** study.
+
+Total live spend across R6 + LPV-B + LPV-2 ≈ **$0.40**; the $40 powered budgets
+were **correctly never spent** — the T3 pilot→gate prevented spending on an
+unmeasurable run every single time.
+
+### Rubric — UNCHANGED, honest
+
+D1 = **3 on the mechanism** (deterministically closed, regression-locked, fires
+live per R6 Pilot-4). The ~40% *speedup* remains explicitly **not claimed**, now
+**triple-bracketed** as not-synthetically-reproducible. No score moves. Three
+rigorous experiments produced an honest, bounded, terminal answer — the
+disciplined definition of "fully tested": not a number chased, the truth
+established and its limits proven.
