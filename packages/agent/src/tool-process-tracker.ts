@@ -39,6 +39,18 @@ export interface ToolProcessTrackerDeps {
   isAlive?: (pid: number) => boolean;
   /** Clock override for deterministic startedAt in tests. */
   now?: () => Date;
+  /**
+   * Signal sender. Production sends real OS signals via process.kill.
+   * Returns true if the signal was delivered, false on ESRCH/EPERM.
+   * Tests inject a mock to assert signal payloads without killing the
+   * test runner.
+   */
+  sendSignal?: (pid: number, signal: NodeJS.Signals | number) => boolean;
+  /**
+   * Bounded wait helper for the kill flow's SIGTERM-then-SIGKILL
+   * escalation. Production = setTimeout-backed Promise.
+   */
+  delay?: (ms: number) => Promise<void>;
 }
 
 function defaultIsAlive(pid: number): boolean {
@@ -54,14 +66,31 @@ function defaultIsAlive(pid: number): boolean {
   }
 }
 
+function defaultSendSignal(pid: number, signal: NodeJS.Signals | number): boolean {
+  try {
+    process.kill(pid, signal);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function defaultDelay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export class ToolProcessTracker {
   private processes: Map<number, TrackedProcess> = new Map();
   private readonly isAlive: (pid: number) => boolean;
   private readonly now: () => Date;
+  private readonly sendSignal: (pid: number, signal: NodeJS.Signals | number) => boolean;
+  private readonly delay: (ms: number) => Promise<void>;
 
   constructor(deps: ToolProcessTrackerDeps = {}) {
     this.isAlive = deps.isAlive ?? defaultIsAlive;
     this.now = deps.now ?? (() => new Date());
+    this.sendSignal = deps.sendSignal ?? defaultSendSignal;
+    this.delay = deps.delay ?? defaultDelay;
   }
 
   /**
@@ -99,6 +128,59 @@ export class ToolProcessTracker {
   /** Drop a pid (e.g. after a successful explicit stop). */
   forget(pid: number): boolean {
     return this.processes.delete(pid);
+  }
+
+  /**
+   * Attempt to stop a tracked process gracefully (SIGTERM), escalating
+   * to SIGKILL after `gracefulTimeoutMs` if it's still alive. Returns
+   * a structured result documenting which signal succeeded so the
+   * route layer can surface honest UX.
+   *
+   * Refuses to kill a pid we don't track — this guards against the
+   * UI accidentally sending an arbitrary OS pid (e.g. from URL
+   * tampering) and nuking the user's editor.
+   */
+  async kill(
+    pid: number,
+    gracefulTimeoutMs: number = 3000,
+  ): Promise<{
+    ok: boolean;
+    pid: number;
+    reason:
+      | 'not-tracked'
+      | 'already-dead'
+      | 'sigterm-ok'
+      | 'sigkill-ok'
+      | 'sigterm-failed-sigkill-failed';
+  }> {
+    if (!this.processes.has(pid)) {
+      return { ok: false, pid, reason: 'not-tracked' };
+    }
+    if (!this.isAlive(pid)) {
+      // Already gone — GC the entry and report success.
+      this.processes.delete(pid);
+      return { ok: true, pid, reason: 'already-dead' };
+    }
+    // Best effort: SIGTERM first so the child can clean up.
+    const termSent = this.sendSignal(pid, 'SIGTERM');
+    if (termSent) {
+      await this.delay(gracefulTimeoutMs);
+      if (!this.isAlive(pid)) {
+        this.processes.delete(pid);
+        return { ok: true, pid, reason: 'sigterm-ok' };
+      }
+    }
+    // Escalate to SIGKILL.
+    const killSent = this.sendSignal(pid, 'SIGKILL');
+    if (killSent && !this.isAlive(pid)) {
+      this.processes.delete(pid);
+      return { ok: true, pid, reason: 'sigkill-ok' };
+    }
+    return {
+      ok: false,
+      pid,
+      reason: 'sigterm-failed-sigkill-failed',
+    };
   }
 
   /** Total processes currently tracked (alive or not — call list() to GC). */

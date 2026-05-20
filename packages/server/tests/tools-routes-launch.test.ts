@@ -222,6 +222,80 @@ describe('GET /api/tools/processes', () => {
   });
 });
 
+describe('POST /api/tools/kill', () => {
+  let server: FastifyInstance;
+  let tmpDir: string;
+
+  beforeAll(async () => {
+    tmpDir = createTmpDir('kill');
+    const personalPath = path.join(tmpDir, 'personal.mind');
+    const mind = new MindDB(personalPath);
+    const sessions = new SessionStore(mind);
+    const frames = new FrameStore(mind);
+    const s = sessions.create('kill-test');
+    frames.createIFrame(s.gop_id, 'kill-test seed', 'normal');
+    mind.close();
+    server = await buildLocalServer({ dataDir: tmpDir });
+    await server.ready();
+  });
+
+  afterAll(async () => {
+    if (server) await server.close();
+    if (tmpDir) cleanupDir(tmpDir);
+  });
+
+  it('rejects a pid we never tracked with 404 not-tracked', async () => {
+    server.toolProcessTracker?.clear();
+    const res = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/tools/kill',
+      headers: { 'content-type': 'application/json' },
+      payload: { pid: 99999 },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().reason).toBe('not-tracked');
+  });
+
+  it('rejects malformed body (non-positive pid)', async () => {
+    const res = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/tools/kill',
+      headers: { 'content-type': 'application/json' },
+      payload: { pid: -1 },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('rejects missing pid', async () => {
+    const res = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/tools/kill',
+      headers: { 'content-type': 'application/json' },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('returns 200 + reason=already-dead when the tracked pid is already gone', async () => {
+    // Use this test runner's pid + an injected isAlive=false would
+    // require swapping the tracker entirely. Simpler: register a
+    // synthetic pid that the default isAlive (process.kill 0) will
+    // immediately fail on, so the route surfaces 'already-dead'.
+    server.toolProcessTracker?.clear();
+    const SYNTHETIC_DEAD_PID = 2147483646; // near max int32, very unlikely to be alive
+    server.toolProcessTracker?.register(SYNTHETIC_DEAD_PID, 'claude-code');
+    const res = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/tools/kill',
+      headers: { 'content-type': 'application/json' },
+      payload: { pid: SYNTHETIC_DEAD_PID },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().reason).toBe('already-dead');
+    expect(server.toolProcessTracker?.list().find((p) => p.pid === SYNTHETIC_DEAD_PID)).toBeUndefined();
+  });
+});
+
 describe('POST /api/tools/hooks', () => {
   let server: FastifyInstance;
   let tmpDir: string;

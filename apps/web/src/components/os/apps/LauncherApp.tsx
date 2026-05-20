@@ -20,7 +20,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Rocket, RefreshCw, CheckCircle2, XCircle, AlertTriangle,
-  Play, Download, ShieldCheck, Trash2, Loader2, MessageSquare,
+  Play, Download, ShieldCheck, Trash2, Loader2, MessageSquare, Square,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -110,6 +110,12 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
    * badge. Polled every 5s while LauncherApp is mounted.
    */
   const [runningTools, setRunningTools] = useState<Set<string>>(new Set());
+  /**
+   * E-1 — map of tool id → list of PIDs currently running. The Stop
+   * button uses this to know which pid to kill. Populated alongside
+   * runningTools by the same 5s poll.
+   */
+  const [pidsByTool, setPidsByTool] = useState<Map<string, number[]>>(new Map());
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -136,12 +142,21 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
 
   // Phase 4 polish — poll the process tracker so the 'Running' badge
   // reflects live state. 5s cadence balances freshness against load.
+  // E-1 — also build the per-tool pid map so the Stop button knows
+  // which pid to kill on click.
   useEffect(() => {
     let cancelled = false;
     const pollOnce = async () => {
       const result = await adapter.getToolProcesses();
       if (cancelled) return;
       setRunningTools(new Set(result.processes.map((p) => p.toolId)));
+      const next = new Map<string, number[]>();
+      for (const p of result.processes) {
+        const arr = next.get(p.toolId) ?? [];
+        arr.push(p.pid);
+        next.set(p.toolId, arr);
+      }
+      setPidsByTool(next);
     };
     pollOnce();
     const interval = setInterval(pollOnce, 5000);
@@ -150,6 +165,53 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
       clearInterval(interval);
     };
   }, []);
+
+  /**
+   * E-1 — Stop the first running pid for a given tool. The pid list
+   * for the tool is taken from the latest poll; if multiple pids are
+   * running for the same tool the user can click Stop multiple times.
+   */
+  const stopTool = useCallback(
+    async (tool: DetectedTool) => {
+      const pids = pidsByTool.get(tool.id) ?? [];
+      const pid = pids[0];
+      if (!pid) return;
+      setActiveAction({ toolId: tool.id, action: 'launch' }); // reuse launch spinner slot
+      setLastResult(null);
+      try {
+        const r = await adapter.killTool(pid);
+        setLastResult({
+          toolId: tool.id,
+          action: 'launch',
+          ok: r.ok,
+          message: r.ok
+            ? `Stopped ${tool.displayName} (pid ${r.pid}, ${r.reason})`
+            : `Stop failed (${r.reason}${r.error ? `: ${r.error}` : ''})`,
+        });
+        // Re-poll immediately so the badge clears without waiting
+        // for the 5-second timer.
+        const result = await adapter.getToolProcesses();
+        setRunningTools(new Set(result.processes.map((p) => p.toolId)));
+        const next = new Map<string, number[]>();
+        for (const p of result.processes) {
+          const arr = next.get(p.toolId) ?? [];
+          arr.push(p.pid);
+          next.set(p.toolId, arr);
+        }
+        setPidsByTool(next);
+      } catch (err) {
+        setLastResult({
+          toolId: tool.id,
+          action: 'launch',
+          ok: false,
+          message: err instanceof Error ? err.message : 'Stop failed',
+        });
+      } finally {
+        setActiveAction(null);
+      }
+    },
+    [pidsByTool],
+  );
 
   const doAction = useCallback(
     async (tool: DetectedTool, action: ToolAction) => {
@@ -359,6 +421,19 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
                       )}
                       Launch
                     </Button>
+                    {runningTools.has(tool.id) && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-[11px] text-rose-400"
+                        onClick={() => stopTool(tool)}
+                        disabled={isActive}
+                        title="Send SIGTERM (escalates to SIGKILL after 3s if needed)"
+                      >
+                        <Square className="w-3 h-3 mr-1" />
+                        Stop
+                      </Button>
+                    )}
                     {!tool.hooksInstalled && (
                       <Button
                         size="sm"

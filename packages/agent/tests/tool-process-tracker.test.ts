@@ -84,3 +84,86 @@ describe('ToolProcessTracker', () => {
     expect(tracker.list()).toHaveLength(1);
   });
 });
+
+// ── kill() — E-1 ────────────────────────────────────────────────────
+
+describe('ToolProcessTracker.kill', () => {
+  it('refuses to kill a pid we do not track (UX guard)', async () => {
+    const tracker = new ToolProcessTracker({
+      isAlive: () => true,
+      sendSignal: () => true,
+    });
+    const result = await tracker.kill(99999);
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('not-tracked');
+  });
+
+  it('reports already-dead and GCs the entry when pid is gone', async () => {
+    const tracker = new ToolProcessTracker({
+      isAlive: () => false, // already dead
+      sendSignal: () => true,
+    });
+    tracker.register(123, 'claude-code');
+    const result = await tracker.kill(123);
+    expect(result.ok).toBe(true);
+    expect(result.reason).toBe('already-dead');
+    expect(tracker.size).toBe(0);
+  });
+
+  it('SIGTERM happy path — sends term, process dies within grace, GC entry', async () => {
+    const signals: Array<{ pid: number; signal: NodeJS.Signals | number }> = [];
+    let alive = true;
+    const tracker = new ToolProcessTracker({
+      isAlive: () => alive,
+      sendSignal: (pid, signal) => {
+        signals.push({ pid, signal });
+        if (signal === 'SIGTERM') alive = false; // simulate graceful exit
+        return true;
+      },
+      delay: async () => {
+        /* skip the wait in tests */
+      },
+    });
+    tracker.register(456, 'cursor');
+    const result = await tracker.kill(456, 1000);
+    expect(result.ok).toBe(true);
+    expect(result.reason).toBe('sigterm-ok');
+    expect(signals).toEqual([{ pid: 456, signal: 'SIGTERM' }]);
+    expect(tracker.size).toBe(0);
+  });
+
+  it('escalates to SIGKILL when SIGTERM is ignored', async () => {
+    const signals: Array<NodeJS.Signals | number> = [];
+    let alive = true;
+    const tracker = new ToolProcessTracker({
+      isAlive: () => alive,
+      sendSignal: (_pid, signal) => {
+        signals.push(signal);
+        // SIGTERM ignored; SIGKILL succeeds.
+        if (signal === 'SIGKILL') alive = false;
+        return true;
+      },
+      delay: async () => undefined,
+    });
+    tracker.register(789, 'claude-desktop');
+    const result = await tracker.kill(789);
+    expect(result.ok).toBe(true);
+    expect(result.reason).toBe('sigkill-ok');
+    expect(signals).toEqual(['SIGTERM', 'SIGKILL']);
+    expect(tracker.size).toBe(0);
+  });
+
+  it('reports both-failed when neither signal lands', async () => {
+    const tracker = new ToolProcessTracker({
+      isAlive: () => true,
+      sendSignal: () => false, // both signals refused (e.g. EPERM)
+      delay: async () => undefined,
+    });
+    tracker.register(111, 'claude-code');
+    const result = await tracker.kill(111);
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('sigterm-failed-sigkill-failed');
+    // Entry retained so the UI can surface the failure + retry.
+    expect(tracker.size).toBe(1);
+  });
+});

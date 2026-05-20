@@ -1426,6 +1426,25 @@ class LocalAdapter {
     }
   }
 
+  async killTool(pid: number): Promise<{
+    ok: boolean;
+    pid: number;
+    reason: string;
+    error?: string;
+  }> {
+    const res = await this.fetch('/api/tools/kill', {
+      method: 'POST',
+      body: JSON.stringify({ pid }),
+    });
+    const body = await res.json().catch(() => ({}));
+    return {
+      ok: res.ok && body.ok === true,
+      pid: body.pid ?? pid,
+      reason: body.reason ?? 'unknown',
+      error: body.error ?? (res.ok ? undefined : `HTTP ${res.status}`),
+    };
+  }
+
   async manageHooks(payload: {
     id: string;
     action: 'install' | 'verify' | 'uninstall';

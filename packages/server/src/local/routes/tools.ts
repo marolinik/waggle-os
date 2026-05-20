@@ -61,6 +61,10 @@ const hooksBodySchema = z.object({
   cliPath: z.string().min(1).max(1024).optional(),
 });
 
+const killBodySchema = z.object({
+  pid: z.number().int().positive(),
+});
+
 const toolsRoutesImpl: FastifyPluginAsync = async (server) => {
   // Lazy-init the tracker on first registration. fastify-plugin
   // wrapping (below) propagates the decoration to the parent
@@ -115,6 +119,27 @@ const toolsRoutesImpl: FastifyPluginAsync = async (server) => {
   server.get('/api/tools/processes', async (_request, reply) => {
     const processes = tracker.list();
     return reply.code(200).send({ processes, total: processes.length });
+  });
+
+  // ── POST /api/tools/kill (E-1) ───────────────────────────────────
+  // Only kills processes we've previously tracked via /launch — guards
+  // against the UI accidentally sending an arbitrary OS pid and nuking
+  // the user's editor. SIGTERM first (graceful), SIGKILL escalation
+  // after a 3-second grace period.
+  server.post('/api/tools/kill', async (request, reply) => {
+    const parsed = killBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ error: 'Validation failed', details: parsed.error.flatten() });
+    }
+    const result = await tracker.kill(parsed.data.pid);
+    if (!result.ok) {
+      // not-tracked is a 404, sigterm-failed-sigkill-failed is a 500.
+      const status = result.reason === 'not-tracked' ? 404 : 500;
+      return reply.code(status).send(result);
+    }
+    return reply.code(200).send(result);
   });
 
   // ── POST /api/tools/hooks (Phase 2A) ─────────────────────────────
