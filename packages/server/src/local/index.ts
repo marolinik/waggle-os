@@ -75,6 +75,7 @@ import { anthropicProxyRoutes } from './routes/anthropic-proxy.js';
 import { teamRoutes } from './routes/team.js';
 import { taskRoutes } from './routes/tasks.js';
 import { capabilitiesRoutes } from './routes/capabilities.js';
+import { toolsRoutes } from './routes/tools.js';
 import { commandRoutes } from './routes/commands.js';
 import { cronRoutes } from './routes/cron.js';
 import { notificationRoutes, emitNotification, emitSubagentStatus } from './routes/notifications.js';
@@ -1927,6 +1928,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(teamRoutes);
   await server.register(taskRoutes);
   await server.register(capabilitiesRoutes);
+  await server.register(toolsRoutes);
   await server.register(commandRoutes);
   await server.register(cronRoutes);
   await server.register(notificationRoutes);

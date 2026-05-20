@@ -439,3 +439,7 @@ export {
   buildAwarenessSummary, formatAwarenessPrompt, markSummarySurfaced,
   type AwarenessSummary, type CapabilityGapSignal, type CorrectionSignal, type WorkflowPatternSignal,
 } from './improvement-detector.js';
+export {
+  detectInstalledTools,
+  type ToolDetectionDeps,
+} from './tool-detection.js';
