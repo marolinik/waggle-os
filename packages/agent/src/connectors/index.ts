@@ -27,3 +27,4 @@ export { ComposioConnector } from './composio-connector.js';
 export { MSTeamsConnector } from './ms-teams-connector.js';
 export { OutlookConnector } from './outlook-connector.js';
 export { OneDriveConnector } from './onedrive-connector.js';
+export { OneNoteConnector } from './onenote-connector.js';

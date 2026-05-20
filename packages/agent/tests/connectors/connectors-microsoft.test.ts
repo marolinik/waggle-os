@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MSTeamsConnector } from '../../src/connectors/ms-teams-connector.js';
 import { OutlookConnector } from '../../src/connectors/outlook-connector.js';
 import { OneDriveConnector } from '../../src/connectors/onedrive-connector.js';
+import { OneNoteConnector } from '../../src/connectors/onenote-connector.js';
 import type { VaultStore } from '@waggle/core';
 
 function createMockVault(
@@ -486,5 +487,225 @@ describe('OneDriveConnector', () => {
     expect(def.tools).toContain('connector_onedrive_upload_file');
     expect(def.tools).toHaveLength(5);
     expect(def.actions).toHaveLength(5);
+  });
+});
+
+// ── OneNote Connector (E-6) ────────────────────────────────────────────
+
+describe('OneNoteConnector', () => {
+  let connector: OneNoteConnector;
+  let originalFetch: typeof globalThis.fetch;
+
+  beforeEach(() => {
+    connector = new OneNoteConnector();
+    originalFetch = globalThis.fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it('has correct id, name, service, and authType', () => {
+    expect(connector.id).toBe('onenote');
+    expect(connector.name).toBe('Microsoft OneNote');
+    expect(connector.service).toBe('onenote.com');
+    expect(connector.authType).toBe('bearer');
+    expect(connector.substrate).toBe('waggle');
+    expect(connector.category).toBe('productivity');
+  });
+
+  it('exposes the harvest-focused action surface', () => {
+    expect(connector.actions).toHaveLength(5);
+    expect(connector.actions.map((a) => a.name)).toEqual([
+      'list_notebooks',
+      'list_sections',
+      'list_pages',
+      'get_page',
+      'search_pages',
+    ]);
+  });
+
+  it('every action is low risk (read-only surface)', () => {
+    for (const action of connector.actions) {
+      expect(action.riskLevel).toBe('low');
+    }
+  });
+
+  it('list_sections requires notebook_id', () => {
+    const action = connector.actions.find((a) => a.name === 'list_sections')!;
+    expect(action.inputSchema.required).toContain('notebook_id');
+  });
+
+  it('get_page requires page_id', () => {
+    const action = connector.actions.find((a) => a.name === 'get_page')!;
+    expect(action.inputSchema.required).toContain('page_id');
+  });
+
+  it('search_pages requires query', () => {
+    const action = connector.actions.find((a) => a.name === 'search_pages')!;
+    expect(action.inputSchema.required).toContain('query');
+  });
+
+  it('execute returns error when not connected', async () => {
+    const result = await connector.execute('list_notebooks', {});
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Not connected');
+    expect(result.error).toContain('Notes.Read');
+  });
+
+  it('healthCheck returns disconnected without token', async () => {
+    const health = await connector.healthCheck();
+    expect(health.status).toBe('disconnected');
+    expect(health.id).toBe('onenote');
+  });
+
+  it('connect() retrieves token from vault', async () => {
+    const vault = createMockVault('onenote', { value: 'graph-token-onenote', isExpired: false });
+    await connector.connect(vault);
+    expect(vault.getConnectorCredential).toHaveBeenCalledWith('onenote');
+  });
+
+  it('healthCheck() probes /me/onenote/notebooks to exercise the Notes.Read scope', async () => {
+    const vault = createMockVault('onenote', { value: 'graph-token', isExpired: false });
+    await connector.connect(vault);
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ value: [] }),
+    });
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+    const health = await connector.healthCheck();
+    expect(health.status).toBe('connected');
+    const calledUrl = String(fetchMock.mock.calls[0][0]);
+    expect(calledUrl).toContain('/me/onenote/notebooks');
+    expect(calledUrl).toContain('$top=1');
+  });
+
+  it('execute(list_notebooks) calls Graph API with OData params', async () => {
+    const vault = createMockVault('onenote', { value: 'graph-token', isExpired: false });
+    await connector.connect(vault);
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ value: [{ id: 'n1', displayName: 'Marko Notebook' }] }),
+    });
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+    const result = await connector.execute('list_notebooks', { $top: 10, $orderby: 'displayName' });
+    expect(result.success).toBe(true);
+    const calledUrl = String(fetchMock.mock.calls[0][0]);
+    expect(calledUrl).toContain('/me/onenote/notebooks');
+    expect(calledUrl).toContain('%24top=10');
+    expect(calledUrl).toContain('%24orderby=displayName');
+  });
+
+  it('execute(list_sections) binds notebook_id into the URL path (not query)', async () => {
+    const vault = createMockVault('onenote', { value: 'graph-token', isExpired: false });
+    await connector.connect(vault);
+
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ value: [] }) });
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+    await connector.execute('list_sections', { notebook_id: 'nb-1' });
+    const calledUrl = String(fetchMock.mock.calls[0][0]);
+    expect(calledUrl).toContain('/me/onenote/notebooks/nb-1/sections');
+    // notebook_id must NOT appear in the query string.
+    expect(calledUrl).not.toContain('notebook_id=');
+  });
+
+  it('execute(list_sections) errors when notebook_id is missing', async () => {
+    const vault = createMockVault('onenote', { value: 'graph-token', isExpired: false });
+    await connector.connect(vault);
+    const result = await connector.execute('list_sections', {});
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('notebook_id');
+  });
+
+  it('execute(list_pages) without section_id lists user-wide pages', async () => {
+    const vault = createMockVault('onenote', { value: 'graph-token', isExpired: false });
+    await connector.connect(vault);
+
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ value: [] }) });
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+    await connector.execute('list_pages', { $top: 5 });
+    const calledUrl = String(fetchMock.mock.calls[0][0]);
+    expect(calledUrl).toContain('/me/onenote/pages');
+    // section-scoped URL must NOT appear.
+    expect(calledUrl).not.toContain('/sections/');
+  });
+
+  it('execute(list_pages) with section_id binds it into the URL path', async () => {
+    const vault = createMockVault('onenote', { value: 'graph-token', isExpired: false });
+    await connector.connect(vault);
+
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ value: [] }) });
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+    await connector.execute('list_pages', { section_id: 's-7' });
+    const calledUrl = String(fetchMock.mock.calls[0][0]);
+    expect(calledUrl).toContain('/me/onenote/sections/s-7/pages');
+    expect(calledUrl).not.toContain('section_id=');
+  });
+
+  it('execute(get_page) returns HTML body for harvest ingestion', async () => {
+    const vault = createMockVault('onenote', { value: 'graph-token', isExpired: false });
+    await connector.connect(vault);
+
+    const fakeHtml = '<html><body><h1>Note</h1><p>Body</p></body></html>';
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () => fakeHtml,
+      headers: { get: (k: string) => (k === 'content-type' ? 'text/html' : null) },
+    });
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+    const result = await connector.execute('get_page', { page_id: 'p-1' });
+    expect(result.success).toBe(true);
+    const data = result.data as { html: string; contentType: string | null };
+    expect(data.html).toBe(fakeHtml);
+    expect(data.contentType).toBe('text/html');
+    const calledUrl = String(fetchMock.mock.calls[0][0]);
+    expect(calledUrl).toContain('/me/onenote/pages/p-1/content');
+  });
+
+  it('execute(get_page) appends includeIDs=true when requested', async () => {
+    const vault = createMockVault('onenote', { value: 'graph-token', isExpired: false });
+    await connector.connect(vault);
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () => '',
+      headers: { get: () => null },
+    });
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+    await connector.execute('get_page', { page_id: 'p-1', includeIDs: true });
+    const calledUrl = String(fetchMock.mock.calls[0][0]);
+    expect(calledUrl).toContain('includeIDs=true');
+  });
+
+  it('execute(search_pages) wraps query in quotes for phrase search', async () => {
+    const vault = createMockVault('onenote', { value: 'graph-token', isExpired: false });
+    await connector.connect(vault);
+
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ value: [] }) });
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+    await connector.execute('search_pages', { query: 'kvark roadmap', $top: 10 });
+    const calledUrl = String(fetchMock.mock.calls[0][0]);
+    expect(calledUrl).toContain('/me/onenote/pages');
+    // $search="kvark roadmap" — URL-encoded as %22kvark+roadmap%22 or %22kvark%20roadmap%22.
+    expect(calledUrl).toMatch(/%24search=%22kvark[+%20]roadmap%22/);
+    expect(calledUrl).toContain('%24top=10');
+  });
+
+  it('rejects unknown actions', async () => {
+    const vault = createMockVault('onenote', { value: 'graph-token', isExpired: false });
+    await connector.connect(vault);
+    const result = await connector.execute('made-up-action', {});
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Unknown action');
   });
 });

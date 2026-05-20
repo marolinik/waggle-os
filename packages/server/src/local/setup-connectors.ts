@@ -13,7 +13,7 @@ import {
   AirtableConnector, GitLabConnector, BitbucketConnector,
   DropboxConnector, PostgresConnector,
   GmailConnector, GoogleDocsConnector, GoogleDriveConnector, GoogleSheetsConnector,
-  MSTeamsConnector, OutlookConnector, OneDriveConnector,
+  MSTeamsConnector, OutlookConnector, OneDriveConnector, OneNoteConnector,
   ComposioConnector,
 } from '@waggle/agent';
 import type { VaultStore } from '@waggle/core';
@@ -48,6 +48,7 @@ export function registerConnectors(vault: VaultStore): ConnectorRegistry {
   registry.register(new MSTeamsConnector());
   registry.register(new OutlookConnector());
   registry.register(new OneDriveConnector());
+  registry.register(new OneNoteConnector());
   registry.register(new ComposioConnector());
   return registry;
 }

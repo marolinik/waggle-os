@@ -408,7 +408,7 @@ export {
   NotionConnector, ConfluenceConnector, ObsidianConnector, HubSpotConnector, SalesforceConnector,
   PipedriveConnector, AirtableConnector, GitLabConnector, BitbucketConnector, DropboxConnector,
   PostgresConnector, GmailConnector, GoogleDocsConnector, GoogleDriveConnector, GoogleSheetsConnector,
-  ComposioConnector, MSTeamsConnector, OutlookConnector, OneDriveConnector,
+  ComposioConnector, MSTeamsConnector, OutlookConnector, OneDriveConnector, OneNoteConnector,
 } from './connectors/index.js';
 export { IterationBudget, type IterationBudgetConfig } from './iteration-budget.js';
 export { captureInteraction, getRecentLogs, isWithinBudget, type CaptureInteractionInput } from './optimization-capture.js';
