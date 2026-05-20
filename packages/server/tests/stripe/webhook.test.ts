@@ -59,10 +59,29 @@ describe('Stripe Webhook — tier update logic', () => {
   });
 
   describe('tierFromPriceId', () => {
-    it('returns null when no env vars are set', () => {
-      delete process.env['STRIPE_PRICE_BASIC'];
-      delete process.env['STRIPE_PRICE_TEAMS'];
+    // All Stripe price env vars we touch. Cleared before/after each test so
+    // tests are order-independent and don't leak into one another.
+    const PRICE_ENV_KEYS = [
+      'STRIPE_PRICE_BASIC',
+      'STRIPE_PRICE_PRO',
+      'STRIPE_PRICE_PRO_MONTHLY',
+      'STRIPE_PRICE_PRO_ANNUAL',
+      'STRIPE_PRICE_TEAMS',
+      'STRIPE_PRICE_TEAMS_MONTHLY',
+      'STRIPE_PRICE_TEAMS_ANNUAL',
+    ] as const;
 
+    beforeEach(() => {
+      for (const k of PRICE_ENV_KEYS) delete process.env[k];
+    });
+
+    afterEach(() => {
+      for (const k of PRICE_ENV_KEYS) delete process.env[k];
+    });
+
+    // ── Legacy single-var contract (back-compat) ────────────────────────
+
+    it('returns null when no env vars are set', () => {
       expect(tierFromPriceId('price_abc123')).toBeNull();
     });
 
@@ -71,29 +90,84 @@ describe('Stripe Webhook — tier update logic', () => {
       // alias that now resolves to the PRO tier (see stripe/index.ts).
       process.env['STRIPE_PRICE_BASIC'] = 'price_basic_test';
       expect(tierFromPriceId('price_basic_test')).toBe('PRO');
-      delete process.env['STRIPE_PRICE_BASIC'];
     });
 
-    it('maps PRO price ID correctly', () => {
+    it('maps legacy STRIPE_PRICE_PRO to PRO tier', () => {
       process.env['STRIPE_PRICE_PRO'] = 'price_pro_test';
       expect(tierFromPriceId('price_pro_test')).toBe('PRO');
-      delete process.env['STRIPE_PRICE_PRO'];
     });
 
-    it('maps TEAMS price ID correctly', () => {
+    it('maps legacy STRIPE_PRICE_TEAMS to TEAMS tier', () => {
       process.env['STRIPE_PRICE_TEAMS'] = 'price_teams_test';
       expect(tierFromPriceId('price_teams_test')).toBe('TEAMS');
-      delete process.env['STRIPE_PRICE_TEAMS'];
     });
 
-    it('returns null for unknown price ID', () => {
+    it('returns null for unknown price ID with legacy contract', () => {
       process.env['STRIPE_PRICE_BASIC'] = 'price_basic_test';
       process.env['STRIPE_PRICE_TEAMS'] = 'price_teams_test';
+      expect(tierFromPriceId('price_unknown')).toBeNull();
+    });
+
+    // ── New 4-var contract (apps/www Next.js port) ──────────────────────
+
+    it('maps STRIPE_PRICE_PRO_MONTHLY to PRO tier', () => {
+      process.env['STRIPE_PRICE_PRO_MONTHLY'] = 'price_pro_monthly_test';
+      expect(tierFromPriceId('price_pro_monthly_test')).toBe('PRO');
+    });
+
+    it('maps STRIPE_PRICE_PRO_ANNUAL to PRO tier', () => {
+      process.env['STRIPE_PRICE_PRO_ANNUAL'] = 'price_pro_annual_test';
+      expect(tierFromPriceId('price_pro_annual_test')).toBe('PRO');
+    });
+
+    it('maps STRIPE_PRICE_TEAMS_MONTHLY to TEAMS tier', () => {
+      process.env['STRIPE_PRICE_TEAMS_MONTHLY'] = 'price_teams_monthly_test';
+      expect(tierFromPriceId('price_teams_monthly_test')).toBe('TEAMS');
+    });
+
+    it('maps STRIPE_PRICE_TEAMS_ANNUAL to TEAMS tier', () => {
+      process.env['STRIPE_PRICE_TEAMS_ANNUAL'] = 'price_teams_annual_test';
+      expect(tierFromPriceId('price_teams_annual_test')).toBe('TEAMS');
+    });
+
+    // ── Coexistence: both contracts active simultaneously ───────────────
+
+    it('resolves correctly when both new + legacy contracts are set with different IDs', () => {
+      // apps/www landing config + sidecar legacy config on the same env.
+      process.env['STRIPE_PRICE_PRO_MONTHLY'] = 'price_landing_pro_m';
+      process.env['STRIPE_PRICE_PRO_ANNUAL']  = 'price_landing_pro_y';
+      process.env['STRIPE_PRICE_PRO']         = 'price_sidecar_pro';
+      process.env['STRIPE_PRICE_TEAMS_MONTHLY'] = 'price_landing_teams_m';
+      process.env['STRIPE_PRICE_TEAMS_ANNUAL']  = 'price_landing_teams_y';
+      process.env['STRIPE_PRICE_TEAMS']         = 'price_sidecar_teams';
+
+      // Every configured Pro price → PRO, every configured Teams price → TEAMS.
+      expect(tierFromPriceId('price_landing_pro_m')).toBe('PRO');
+      expect(tierFromPriceId('price_landing_pro_y')).toBe('PRO');
+      expect(tierFromPriceId('price_sidecar_pro')).toBe('PRO');
+      expect(tierFromPriceId('price_landing_teams_m')).toBe('TEAMS');
+      expect(tierFromPriceId('price_landing_teams_y')).toBe('TEAMS');
+      expect(tierFromPriceId('price_sidecar_teams')).toBe('TEAMS');
+    });
+
+    it('does not cross-pollute tiers (Teams price does not resolve to PRO)', () => {
+      process.env['STRIPE_PRICE_PRO_MONTHLY'] = 'price_pro_m';
+      process.env['STRIPE_PRICE_TEAMS_MONTHLY'] = 'price_teams_m';
+
+      expect(tierFromPriceId('price_pro_m')).toBe('PRO');
+      expect(tierFromPriceId('price_teams_m')).toBe('TEAMS');
+      // And the negative case explicitly:
+      expect(tierFromPriceId('price_teams_m')).not.toBe('PRO');
+      expect(tierFromPriceId('price_pro_m')).not.toBe('TEAMS');
+    });
+
+    it('returns null for unknown price ID when only the 4-var contract is set', () => {
+      process.env['STRIPE_PRICE_PRO_MONTHLY'] = 'price_pro_m';
+      process.env['STRIPE_PRICE_PRO_ANNUAL']  = 'price_pro_y';
+      process.env['STRIPE_PRICE_TEAMS_MONTHLY'] = 'price_teams_m';
+      process.env['STRIPE_PRICE_TEAMS_ANNUAL']  = 'price_teams_y';
 
       expect(tierFromPriceId('price_unknown')).toBeNull();
-
-      delete process.env['STRIPE_PRICE_BASIC'];
-      delete process.env['STRIPE_PRICE_TEAMS'];
     });
   });
 

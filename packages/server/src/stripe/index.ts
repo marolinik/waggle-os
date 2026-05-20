@@ -44,17 +44,45 @@ export function getStripe(): import('stripe').default | null {
 
 // ── Tier ↔ Price ID mapping ──────────────────────────────────────────
 
+/** Collect non-empty env values for the given keys, preserving order. */
+function readPriceEnvs(...keys: string[]): string[] {
+  const out: string[] = [];
+  for (const k of keys) {
+    const v = process.env[k];
+    if (v) out.push(v);
+  }
+  return out;
+}
+
 /**
  * Map a Stripe price ID back to a canonical Tier.
- * Reads STRIPE_PRICE_PRO and STRIPE_PRICE_TEAMS from env.
- * Also checks legacy STRIPE_PRICE_BASIC for backward compatibility.
+ *
+ * Supports two env-var contracts that can coexist:
+ *   - **New 4-var contract** (matches `apps/www` Next.js port):
+ *       STRIPE_PRICE_PRO_MONTHLY    / STRIPE_PRICE_PRO_ANNUAL
+ *       STRIPE_PRICE_TEAMS_MONTHLY  / STRIPE_PRICE_TEAMS_ANNUAL
+ *   - **Legacy single-var contract** (older desktop sidecar env):
+ *       STRIPE_PRICE_PRO            / STRIPE_PRICE_TEAMS
+ *       STRIPE_PRICE_BASIC          (oldest alias, resolves to PRO)
+ *
+ * New contract is checked first; legacy vars act as additional fallbacks.
+ * Resolution is synchronous and offline-safe — no Stripe API round-trip.
  */
 export function tierFromPriceId(priceId: string): Tier | null {
-  const proPrice = process.env['STRIPE_PRICE_PRO'] ?? process.env['STRIPE_PRICE_BASIC'];
-  const teamsPrice = process.env['STRIPE_PRICE_TEAMS'];
+  const proPrices = readPriceEnvs(
+    'STRIPE_PRICE_PRO_MONTHLY',
+    'STRIPE_PRICE_PRO_ANNUAL',
+    'STRIPE_PRICE_PRO',
+    'STRIPE_PRICE_BASIC',
+  );
+  const teamsPrices = readPriceEnvs(
+    'STRIPE_PRICE_TEAMS_MONTHLY',
+    'STRIPE_PRICE_TEAMS_ANNUAL',
+    'STRIPE_PRICE_TEAMS',
+  );
 
-  if (proPrice && priceId === proPrice) return 'PRO';
-  if (teamsPrice && priceId === teamsPrice) return 'TEAMS';
+  if (proPrices.includes(priceId)) return 'PRO';
+  if (teamsPrices.includes(priceId)) return 'TEAMS';
   return null;
 }
 

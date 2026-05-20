@@ -493,10 +493,9 @@ End-to-end: detect → install hooks (reversible) → launch with `WAGGLE_WORKSP
 ### Open Work
 | # | File | What |
 |---|---|---|
-| 1 | Stripe webhooks / server side | Wire Stripe to tier enforcement — blocked on Marko creating Stripe products (M7 in consolidated backlog). |
-| 2 | Spawn Agent + Dock wiring | P36 already wired in `Dock.tsx`+`Desktop.tsx`; P35 third-tier fallback (LiteLLM → runtime model → provider catalogs) landed `14942be`. Residual: runtime verification on a clean install. |
-| 3 | Light mode finish | P40/P41 + CR-2 — semantic-token migration is done (no hive-950 references except a comment); remaining issues are render-time fine-tuning (BootScreen visual polish + a few header-styling judgments) that need a binary build to validate. |
-| 4 | Wave 2/3 hook implementations | 6 hive-mind-hooks-* packages remain Wave 2/3 stubs (`export {}`): cursor / claude-desktop / codex / codex-desktop / hermes / openclaw. Per-package effort: SessionStart + UserPromptSubmit + Stop + PreCompact handlers + install/uninstall/verify CLI. Defer until claude-code-only ship gets real usage feedback. |
+| 1 | Spawn Agent + Dock wiring | P36 already wired in `Dock.tsx`+`Desktop.tsx`; P35 third-tier fallback (LiteLLM → runtime model → provider catalogs) landed `14942be`. Residual: runtime verification on a clean install. |
+| 2 | Light mode finish | P40/P41 + CR-2 — semantic-token migration is done (no hive-950 references except a comment); remaining issues are render-time fine-tuning (BootScreen visual polish + a few header-styling judgments) that need a binary build to validate. |
+| 3 | Wave 2/3 hook implementations | 6 hive-mind-hooks-* packages remain Wave 2/3 stubs (`export {}`): cursor / claude-desktop / codex / codex-desktop / hermes / openclaw. Per-package effort: SessionStart + UserPromptSubmit + Stop + PreCompact handlers + install/uninstall/verify CLI. Defer until claude-code-only ship gets real usage feedback. |
 
 **Closed during May 2026 backlog sweep:**
 - ✅ OW-6 PersonaSwitcher two-tier — shipped via M-01 (`PersonaSwitcher.tsx` + `lib/persona-tier.ts` + `lib/persona-tooltip.ts`); 26/26 tests passing
@@ -504,6 +503,8 @@ End-to-end: detect → install hooks (reversible) → launch with `WAGGLE_WORKSP
 - ✅ P35 Spawn Agent "no models available" (`14942be`)
 - ✅ QW-1..QW-5 quick wins (all already shipped per `grep` verification)
 - ✅ CR-2 hive-950 → semantic tokens (only comment-level refs remain)
+- ✅ M7 Stripe products — both test (`acct_1SzHlbC0mmjh4oEM`) and live (`CNCrMQy1f7`) accounts hold the full 2 products × 2 prices (monthly + annual) with `pro_monthly` / `pro_annual` / `teams_monthly` / `teams_annual` lookup keys. Verified via `stripe products list` + `stripe prices list`. Live price IDs documented in `docs/launch/drafts/2026-05-12-apps-www-deployment-readiness.md`.
+- ✅ E-10 Stripe tier-enforcement wiring — webhook handler was already complete (signature + idempotency + 3 event handlers in `packages/server/src/stripe/webhook.ts`); session closed the residual gap by extending `tierFromPriceId()` in `packages/server/src/stripe/index.ts` to resolve the full 4-var contract (`STRIPE_PRICE_PRO_MONTHLY` / `_ANNUAL` / `STRIPE_PRICE_TEAMS_MONTHLY` / `_ANNUAL`) alongside legacy single-vars + `STRIPE_PRICE_BASIC`. 17/17 webhook tests green; annual subscriptions now resolve through the webhook.
 
 For the full polish+launch backlog see `docs/plans/BACKLOG-CONSOLIDATED-2026-04-17.md` (~145 items; ~50% are stale-but-done per the May 2026 verification sweep) and the AI-OS arc in `docs/plans/AI-OS-EXPLORATION-2026-05-19.md`.
 

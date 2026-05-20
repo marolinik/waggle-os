@@ -70,12 +70,12 @@ These are the actual launch blockers. None of them are engineering work.
 | **M4** | Export Perplexity threads | 5 min | Phase 1 harvest |
 | **M5** | Top up API credits (Anthropic / OpenAI / Google) | 15 min | Phase 4+5 eval judging |
 | **M6** | Confirm judge models (Opus 4.6, GPT-5.4, Gemini 2.5 Pro, Haiku 4.5) | Decision | Phase 5 |
-| **M7** | Create Stripe products (Pro $19/mo, Teams $49/mo/seat) | 1 hr | Phase 7 launch + tier enforcement (E-10 below) |
+| ✅ **M7** | ~~Create Stripe products (Pro $19/mo, Teams $49/mo/seat)~~ | — | **Done.** Both products + all 4 prices already exist in test mode (`acct_1SzHlbC0mmjh4oEM`) with `pro_monthly` / `pro_annual` / `teams_monthly` / `teams_annual` lookup keys; live-mode price IDs documented in `docs/launch/drafts/2026-05-12-apps-www-deployment-readiness.md` (acct `CNCrMQy1f7`). See §9. |
 | **M8** | Buy Windows EV code-signing cert (~$300-500/yr) | 1-3 days lead | Launch |
 | **M9** | Contact ML peer reviewer for papers | 1 day | Phase 6 papers |
 | **M10** | Greenlight launch date | Decision | Everything downstream |
 
-**Total active time: ~25 min (M1-M4) + 1 hr (M7) + decisions.** Lead time on M8 is the longest single blocker — start it whenever.
+**Total active time: ~25 min (M1-M4) + decisions.** Lead time on M8 is the longest single blocker — start it whenever.
 
 ---
 
@@ -85,7 +85,7 @@ These need the M-action to fire first, then real engineering happens.
 
 | # | Item | Depends on | Notes |
 |---|---|---|---|
-| E-10 | **Stripe webhooks → tier enforcement** | M7 | Wire `/api/billing/webhook` to update user.tier on `customer.subscription.*`. Spec exists; code awaiting real Stripe products. |
+| ✅ E-10 | ~~**Stripe webhooks → tier enforcement**~~ | ~~M7~~ | **Done.** Webhook handler (`packages/server/src/stripe/webhook.ts`) was already complete: signature validation + idempotency + checkout.session.completed / customer.subscription.updated / customer.subscription.deleted handlers + `config.json` tier write. This session closed the residual wiring gap: `tierFromPriceId()` now resolves the full 4-var contract (`STRIPE_PRICE_PRO_MONTHLY` / `_ANNUAL` / `STRIPE_PRICE_TEAMS_MONTHLY` / `_ANNUAL`) alongside legacy `STRIPE_PRICE_PRO` / `STRIPE_PRICE_BASIC` / `STRIPE_PRICE_TEAMS`. 17/17 webhook tests green. See §9. |
 | E-11 | **Phase 1 Harvest** (~3 days) | M1-M4 | Import + cognify + identity auto-populate + wiki compile from real data. 🟢 gates on 10K-50K frames + dedup + KG populated. |
 | E-12 | **Cursor adapter** (0.5-1 day) | — | Build the harvest adapter that doesn't exist yet (Marko uses Cursor). Independent of M1-M4. |
 | E-13 | **Mac notarization** | M8 (cert) + Marko-side | Signs the macOS bundle. ⏳ Marko per backlog. |
@@ -158,6 +158,8 @@ For audit trail. Don't re-schedule any of these.
 | ✅ | **CR-2 hive-950 → semantic tokens** | Only one comment-level reference remains; no styling drift |
 | ✅ | **P36 dock spawn-agent wiring** | `Dock.tsx:152` → `Desktop.tsx:461` `onSpawnAgent` |
 | ✅ | **3 test regressions** | dock-app-title parity (Phase 2B), Tauri identifier (stale), capability-acquisition (modernized) |
+| ✅ | **M7 Stripe products** | Test mode (`acct_1SzHlbC0mmjh4oEM`): Pro `prod_UMIG4B7V0Ke6zQ` + Teams `prod_UMIGZ99xtazCAs`, each with `*_monthly` + `*_annual` lookup keys. Live mode (`CNCrMQy1f7`): all 4 price IDs documented in `docs/launch/drafts/2026-05-12-apps-www-deployment-readiness.md` + live webhook secret already provisioned. Confirmed via `stripe products list` + `stripe prices list`. |
+| ✅ | **E-10 Stripe tier-enforcement wiring** | Webhook code in `packages/server/src/stripe/webhook.ts` was already complete (signature validation + idempotency + 3 event handlers). This session: extended `tierFromPriceId()` in `packages/server/src/stripe/index.ts` to read the full 4-var contract (`STRIPE_PRICE_{PRO,TEAMS}_{MONTHLY,ANNUAL}`) alongside legacy single-vars + `STRIPE_PRICE_BASIC` alias. 17/17 webhook tests green. Annual subscriptions now resolve correctly through the webhook; new + legacy env contracts can coexist on the same env. |
 
 **~50% of "🟢 pending" items in `BACKLOG-CONSOLIDATED-2026-04-17.md` are stale-but-done.** Future sessions should `grep` before scheduling effort against any backlog item.
 
@@ -167,13 +169,13 @@ For audit trail. Don't re-schedule any of these.
 
 If you have 25 minutes: **M1-M4** (export your AI convos). Unblocks the entire eval campaign chain.
 
-If you have 1 hour: **M7** (create Stripe products). Unblocks E-10 (tier enforcement) and launches the Marko-gated chain.
+If you have a half-day: **M8** (buy Windows EV code-signing cert) has 1-3 day shipping lead time — start the order so the cert is in hand before launch decisions. After M1-M4 + M8 are in flight, the only remaining Marko-side launch blocker is **M10** (greenlight date).
 
-If you have a half-day for engineering: **E-1** (`POST /api/tools/kill` + Stop button) is the cleanest small win, or **E-9** (Tauri binary build + smoke) gives you V-1/V-2/V-3 validation in one go.
+If you have a half-day for engineering: **E-9** (Tauri binary build + smoke) gives you V-1/V-2/V-3 runtime validation in one pass.
 
-If you have 1 day: **E-4** (hive-mind OSS source extraction) is the highest-leverage; it's a known scaffold + copy task and unlocks the OSS-launch arc.
+If you have 1 day for engineering: **E-12** (Cursor harvest adapter) is the only Marko-independent engineering work left on the critical path — and you use Cursor.
 
-If you have 2+ days: **E-6** (MS Graph OAuth connector) is the biggest single connector value-add and the only major one missing from the 30-connector roster.
+If you have 2+ days for engineering: **E-4** (hive-mind OSS source extraction) is the highest-leverage; it's a known scaffold + copy task and unlocks the OSS-launch arc.
 
 ---
 
