@@ -33,13 +33,22 @@ export const SUPPORTED_TOOLS = [
 export type ToolId = typeof SUPPORTED_TOOLS[number];
 
 /**
- * Phase 1 launch cohort — the three tools the launcher dock and
- * activity-bus wire to first. The rest follow in Phase 4.
+ * Tools the launcher dock + hook installer support end-to-end.
+ *
+ * Phase 1 shipped with 3 entries (Claude Code, Cursor, Claude
+ * Desktop — D3). Phase 4 extends to all 7 because (a) each tool
+ * already has a published hook-installer package
+ * (@waggle/hive-mind-hooks-<id>), and (b) the marginal cost per
+ * additional detector is one PATH lookup or candidate-path entry.
  */
 export const LAUNCH_COHORT: readonly ToolId[] = [
   'claude-code',
   'cursor',
   'claude-desktop',
+  'codex',
+  'codex-desktop',
+  'hermes',
+  'openclaw',
 ] as const;
 
 /**

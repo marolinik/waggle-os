@@ -118,15 +118,18 @@ describe('launchTool', () => {
     expect(result.error).toBe('ENOENT');
   });
 
-  it('rejects tools outside the launch cohort', () => {
+  it.each<ToolId>([
+    'claude-code', 'cursor', 'claude-desktop',
+    'codex', 'codex-desktop', 'hermes', 'openclaw',
+  ])('accepts every cohort tool (%s) after Phase 4 expansion', (id) => {
     const { spawnDetached } = captureSpawn();
     const result = launchTool({
-      id: 'codex' as ToolId,
-      installedPath: '/somewhere/codex',
+      id,
+      installedPath: `/somewhere/${id}`,
       deps: { spawnDetached },
     });
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain('launch cohort');
+    expect(result.ok).toBe(true);
+    expect(result.pid).toBe(12345);
   });
 
   it('rejects empty installedPath', () => {
@@ -259,16 +262,22 @@ describe('runHookCommand', () => {
     expect(result.error).toContain('exec failed');
   });
 
-  it('rejects out-of-cohort tools', async () => {
-    const execCapture = vi.fn();
+  it.each<ToolId>([
+    'claude-code', 'cursor', 'claude-desktop',
+    'codex', 'codex-desktop', 'hermes', 'openclaw',
+  ])('runs hook command for every cohort tool (%s) after Phase 4', async (id) => {
+    const { calls, execCapture } = captureExec();
     const result = await runHookCommand({
-      id: 'hermes' as ToolId,
+      id,
       action: 'install',
       deps: { execCapture },
     });
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain('cohort');
-    expect(execCapture).not.toHaveBeenCalled();
+    expect(result.ok).toBe(true);
+    expect(calls[0].args).toEqual([
+      '--yes',
+      `@waggle/hive-mind-hooks-${id}`,
+      'install',
+    ]);
   });
 });
 

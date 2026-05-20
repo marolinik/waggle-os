@@ -246,12 +246,11 @@ describe('claude-desktop detector', () => {
   });
 });
 
-describe('deferred-cohort detectors (codex / codex-desktop / hermes / openclaw)', () => {
-  // These detectors are stubs in Phase 0 — they always report not-installed.
-  // The contract is that they still appear in the envelope so the UI can
-  // render them as "not detected" without special-casing missing entries.
+describe('extended-cohort detectors (codex / codex-desktop / hermes / openclaw — Phase 4)', () => {
+  // Default makeDeps reports nothing installed — the envelope is still
+  // present per the stable-shape contract.
   it.each<ToolId>(['codex', 'codex-desktop', 'hermes', 'openclaw'])(
-    'reports %s as not installed with no diagnostic on a clean machine',
+    'reports %s as not installed on a clean machine',
     async (id) => {
       const result = await detectInstalledTools(makeDeps());
       const t = result.tools.find((x) => x.id === id)!;
@@ -259,6 +258,85 @@ describe('deferred-cohort detectors (codex / codex-desktop / hermes / openclaw)'
       expect(t.installedPath).toBeNull();
     },
   );
+
+  it('detects codex CLI when present on PATH', async () => {
+    const installed = '/usr/local/bin/codex';
+    const result = await detectInstalledTools(
+      makeDeps({
+        platform: 'darwin',
+        home: '/Users/test',
+        exists: async (p) => p === installed,
+        pathFromEnv: (name) => (name === 'codex' ? installed : null),
+        execVersion: async (binary) => (binary === installed ? 'codex 0.5.0' : null),
+      }),
+    );
+    const t = result.tools.find((x) => x.id === 'codex')!;
+    expect(t.installed).toBe(true);
+    expect(t.installedPath).toBe(installed);
+    expect(t.version).toBe('codex 0.5.0');
+  });
+
+  it('detects hermes CLI when present on PATH', async () => {
+    const installed = '/usr/local/bin/hermes';
+    const result = await detectInstalledTools(
+      makeDeps({
+        platform: 'darwin',
+        home: '/Users/test',
+        exists: async (p) => p === installed,
+        pathFromEnv: (name) => (name === 'hermes' ? installed : null),
+        execVersion: async () => '0.2.1',
+      }),
+    );
+    const t = result.tools.find((x) => x.id === 'hermes')!;
+    expect(t.installed).toBe(true);
+    expect(t.version).toBe('0.2.1');
+  });
+
+  it('detects openclaw CLI when present on PATH', async () => {
+    const installed = '/usr/local/bin/openclaw';
+    const result = await detectInstalledTools(
+      makeDeps({
+        platform: 'linux',
+        home: '/home/test',
+        exists: async (p) => p === installed,
+        pathFromEnv: (name) => (name === 'openclaw' ? installed : null),
+      }),
+    );
+    const t = result.tools.find((x) => x.id === 'openclaw')!;
+    expect(t.installed).toBe(true);
+    expect(t.installedPath).toBe(installed);
+    // execVersion default returns null → diagnostic set.
+    expect(t.diagnostic).toMatch(/version/i);
+  });
+
+  it('detects codex-desktop at the macOS install path', async () => {
+    const installed = '/Applications/Codex.app/Contents/MacOS/Codex';
+    const result = await detectInstalledTools(
+      makeDeps({
+        platform: 'darwin',
+        home: '/Users/test',
+        exists: async (p) => p === installed,
+      }),
+    );
+    const t = result.tools.find((x) => x.id === 'codex-desktop')!;
+    expect(t.installed).toBe(true);
+    expect(t.installedPath).toBe(installed);
+  });
+
+  it('detects codex-desktop at the Windows install path', async () => {
+    const installed =
+      'C:\\Users\\test\\AppData\\Local\\OpenAI\\Codex.exe';
+    const result = await detectInstalledTools(
+      makeDeps({
+        platform: 'win32',
+        home: 'C:\\Users\\test',
+        exists: async (p) => p === installed,
+      }),
+    );
+    const t = result.tools.find((x) => x.id === 'codex-desktop')!;
+    expect(t.installed).toBe(true);
+    expect(t.installedPath).toBe(installed);
+  });
 });
 
 describe('hermetic safety', () => {

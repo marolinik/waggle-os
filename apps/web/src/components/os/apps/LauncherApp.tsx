@@ -27,7 +27,18 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { adapter } from '@/lib/adapter';
 
-const LAUNCH_COHORT = ['claude-code', 'cursor', 'claude-desktop'];
+// Phase 4 — full 7-tool cohort. Mirrors @waggle/shared LAUNCH_COHORT.
+// Kept local (rather than imported) to avoid a runtime dependency on
+// the shared module's named export for one constant.
+const LAUNCH_COHORT = [
+  'claude-code',
+  'cursor',
+  'claude-desktop',
+  'codex',
+  'codex-desktop',
+  'hermes',
+  'openclaw',
+];
 
 interface DetectedTool {
   id: string;

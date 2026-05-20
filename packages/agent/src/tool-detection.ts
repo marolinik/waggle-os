@@ -265,25 +265,61 @@ async function detectClaudeDesktop(deps: ResolvedDeps): Promise<DetectedTool> {
 }
 
 /**
- * Phase 0 stub for tools outside the launch cohort. Always reports
- * not-installed but still goes through `probeHooks` so an existing
- * hive-mind install of a deferred-cohort tool is still surfaced —
- * we don't *hide* it just because we haven't written its binary
- * detector yet.
+ * Generic PATH-lookup detector for CLI-shaped tools. Mirrors the
+ * claude-code detector but parameterised by binary name. Used by
+ * codex, hermes, and openclaw — they all ship as CLIs reachable
+ * via PATH (PATH installer or symlink).
+ *
+ * If --version exec fails the tool is still reported `installed`
+ * with `diagnostic` set (some CLIs don't accept --version).
  */
-async function detectDeferredCohort(
+async function detectByPath(
   id: ToolId,
+  binaryName: string,
   deps: ResolvedDeps,
 ): Promise<DetectedTool> {
-  const hookProbe = await probeHooks(id, deps);
-  return {
+  const base: DetectedTool = {
     id,
     displayName: TOOL_DISPLAY_NAMES[id],
     installed: false,
     installedPath: null,
     version: null,
+    hooksInstalled: false,
+    hookPointerPath: null,
+  };
+  const resolved = await deps.pathFromEnv(binaryName);
+  if (!resolved) return { ...base, ...(await probeHooks(id, deps)) };
+  if (!(await deps.exists(resolved))) {
+    return { ...base, ...(await probeHooks(id, deps)) };
+  }
+  const versionRaw = await deps.execVersion(resolved, ['--version']);
+  const hookProbe = await probeHooks(id, deps);
+  return {
+    ...base,
+    installed: true,
+    installedPath: resolved,
+    version: versionRaw,
+    diagnostic: versionRaw ? undefined : '--version exec failed',
     ...hookProbe,
   };
+}
+
+async function detectCodex(deps: ResolvedDeps): Promise<DetectedTool> {
+  return detectByPath('codex', 'codex', deps);
+}
+
+async function detectHermes(deps: ResolvedDeps): Promise<DetectedTool> {
+  return detectByPath('hermes', 'hermes', deps);
+}
+
+async function detectOpenClaw(deps: ResolvedDeps): Promise<DetectedTool> {
+  return detectByPath('openclaw', 'openclaw', deps);
+}
+
+async function detectCodexDesktop(deps: ResolvedDeps): Promise<DetectedTool> {
+  const id: ToolId = 'codex-desktop';
+  const candidates = codexDesktopCandidatePaths(deps);
+  return await detectByCandidates(id, candidates, deps, /* withVersion */ false);
 }
 
 // ── Candidate-path helpers (per platform) ───────────────────────────
@@ -322,6 +358,26 @@ function claudeDesktopCandidatePaths(deps: ResolvedDeps): string[] {
   return [
     joinForPlatform(deps.platform, deps.home, '.local', 'share', 'claude-desktop', 'claude'),
     '/usr/bin/claude-desktop',
+  ];
+}
+
+function codexDesktopCandidatePaths(deps: ResolvedDeps): string[] {
+  // OpenAI Codex Desktop is unreleased at time of writing (May 2026)
+  // but the hook package already targets it. Use the conventional
+  // per-platform vendor paths so a future official install is
+  // detected automatically.
+  if (deps.platform === 'win32') {
+    return [
+      joinForPlatform(deps.platform, deps.home, 'AppData', 'Local', 'OpenAI', 'Codex.exe'),
+      'C:\\Program Files\\OpenAI\\Codex.exe',
+    ];
+  }
+  if (deps.platform === 'darwin') {
+    return ['/Applications/Codex.app/Contents/MacOS/Codex'];
+  }
+  return [
+    joinForPlatform(deps.platform, deps.home, '.local', 'share', 'codex-desktop', 'codex'),
+    '/usr/bin/codex-desktop',
   ];
 }
 
@@ -379,10 +435,10 @@ export async function detectInstalledTools(
     'claude-code': () => detectClaudeCode(deps),
     'cursor': () => detectCursor(deps),
     'claude-desktop': () => detectClaudeDesktop(deps),
-    'codex': () => detectDeferredCohort('codex', deps),
-    'codex-desktop': () => detectDeferredCohort('codex-desktop', deps),
-    'hermes': () => detectDeferredCohort('hermes', deps),
-    'openclaw': () => detectDeferredCohort('openclaw', deps),
+    'codex': () => detectCodex(deps),
+    'codex-desktop': () => detectCodexDesktop(deps),
+    'hermes': () => detectHermes(deps),
+    'openclaw': () => detectOpenClaw(deps),
   };
   // Preserve SUPPORTED_TOOLS order in the output envelope.
   const tools = await Promise.all(
