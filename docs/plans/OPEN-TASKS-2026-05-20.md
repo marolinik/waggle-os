@@ -10,17 +10,21 @@ Consolidated single source of truth after the May 2026 backlog sweep. Items are 
 
 These are real remaining engineering items with no external dependency. Pick freely.
 
-| # | Item | File / scope | Effort | Notes |
+**Update 2026-05-20 PM:** Sweep through the original §1 closed 3 more items. ✅ markers below are post-sweep closures.
+
+| # | Item | File / scope | Effort | Status |
 |---|---|---|---|---|
-| E-1 | `POST /api/tools/kill` + Stop button | `packages/server/src/local/routes/tools.ts` + `LauncherApp.tsx` | 0.5 day | Deliberately deferred during AI-OS Phase 4. Reach for it when an accidental-launch case actually hits. |
-| E-2 | Cross-tool prompt-arg shapes | `apps/web/src/components/os/apps/LauncherApp.tsx` (`promptArgsForTool`) | <1 day per tool | Today only `claude-code` is wired (`--print "<prompt>"`). Add cases for cursor / codex / hermes once their CLI prompt conventions are verified against real binaries. |
-| E-3 | Accessibility items A11Y-1..A11Y-9 | Multiple components | 1 day total | Boot screen aria-live, dock 44×44 touch targets, role=switch on toggles, focus trap on dropdowns. Post-launch OK per backlog. |
+| ✅ E-1 | `POST /api/tools/kill` + Stop button | `tool-process-tracker.ts` + `tools.ts` + `LauncherApp.tsx` | 0.5 day | **Shipped `176509c`**. SIGTERM→SIGKILL escalation, 'not-tracked' guard against pid tampering, Stop button on running tools. 19 route tests + 12 tracker tests. |
+| E-2 | Cross-tool prompt-arg shapes | `LauncherApp.tsx` (`promptArgsForTool`) | <1 day per tool | Today only `claude-code` (`--print "<prompt>"`). Add cases for cursor / codex / hermes once their CLI prompt conventions are verified against real binaries. |
+| ✅ E-3 | Accessibility A11Y-1..A11Y-9 | Multiple components | — | **All 9 shipped** per grep verification: boot aria-live ✓, dock 44×44 ✓, window-titlebar icons ✓, PersonaSwitcher aria-disabled ✓, Settings role=switch ✓, dashboard healthShape ✓, chat feedback arrow-keys ✓, Global Search role=dialog ✓, memory importance aria-label ✓. Stale-but-done. |
 | E-4 | hive-mind OSS source extraction (CR-6) | scaffold exists in `hive-mind-*` packages | 2-3 days | Scaffold done; "code copy TODO" per the backlog. The OSS-release artifact at `marolinik/hive-mind`. |
-| E-5 | KG Viewer top-5 demo gaps (CR-3) | `KnowledgeGraphViewer.tsx` | 4-6 hr | Loading state, error state, export-PNG, touch-friendly interactions. |
+| ✅ E-5 | KG Viewer top-5 demo gaps (CR-3) | `KnowledgeGraphViewer.tsx` + `kg-export.ts` | 4-6 hr | **PNG export shipped `00db7cc`** (2× retina, 8 new tests). Loading + error + retry + SVG export were already shipped. |
 | E-6 | MS Graph OAuth connector (CR-1) | `packages/agent/src/connectors/` | 2-3 days | Harvest email, calendar, files. Joins the existing 30-connector roster. |
 | E-7 | Demo video script (CR-4) | content | 1 day | 90-second harvest→wiki→insight + 5-min deep dive. |
 | E-8 | LinkedIn launch posts (CR-5) | content | 0.5-1 day | 3-post sequence over 10 days. |
 | E-9 | Tauri binary build verification (CR-8) | binary + smoke | 1 day | "Haven't built since mega code changes" — sanity build + manual smoke on a clean Windows VM. |
+
+**Genuinely actionable now: E-2, E-4, E-6, E-7, E-8, E-9.** (E-1, E-3, E-5 closed.) E-7/E-8 are content, not code. E-9 needs binary build. So the in-session engineering left is **E-2 (small per-tool), E-4 (substantial), E-6 (substantial)**.
 
 ---
 
