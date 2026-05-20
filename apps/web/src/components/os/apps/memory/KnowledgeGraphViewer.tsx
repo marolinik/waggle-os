@@ -11,11 +11,11 @@ import {
   forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide,
   type SimulationNodeDatum, type SimulationLinkDatum,
 } from 'd3-force';
-import { Network, ZoomIn, ZoomOut, Maximize2, Minimize2, RotateCcw, Search, Globe, Download, AlertTriangle, Loader2 } from 'lucide-react';
+import { Network, ZoomIn, ZoomOut, Maximize2, Minimize2, RotateCcw, Search, Globe, Download, Image as ImageIcon, AlertTriangle, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 import type { KGNode, KGEdge } from '@/lib/types';
-import { downloadKgSvg } from '@/lib/kg-export';
+import { downloadKgSvg, downloadKgPng } from '@/lib/kg-export';
 
 // ── Type colors from waggle-theme.css KG tokens ──
 
@@ -379,6 +379,16 @@ const KnowledgeGraphViewer = ({
     }
   }, []);
 
+  // E-5 — PNG export. Rasterizes the SVG via canvas at 2× scale for
+  // retina. Falls back to a noop on failure (canvas blocked,
+  // dimensions missing) — same best-effort posture as SVG export.
+  const exportPng = useCallback(() => {
+    if (!svgRef.current) return;
+    downloadKgPng(svgRef.current).catch(() => {
+      /* best-effort */
+    });
+  }, []);
+
   // ── Error state ──
   // Error wins over loading (the parent told us the fetch failed — don't
   // display a skeleton that implies work is still in-flight).
@@ -532,6 +542,16 @@ const KnowledgeGraphViewer = ({
                 data-testid="kg-export-svg"
               >
                 <Download className="w-3.5 h-3.5" />
+              </button>
+            </HintTooltip>
+            <HintTooltip content="Export as PNG (2× retina)">
+              <button
+                onClick={exportPng}
+                className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Export graph as PNG"
+                data-testid="kg-export-png"
+              >
+                <ImageIcon className="w-3.5 h-3.5" />
               </button>
             </HintTooltip>
             <HintTooltip content="Toggle fullscreen">

@@ -102,3 +102,88 @@ export function downloadKgSvg(
   URL.revokeObjectURL(url);
   return filename;
 }
+
+/**
+ * E-5 — PNG export. Rasterizes the serialized SVG via a canvas at the
+ * given scale factor (default 2× for retina) and triggers a download.
+ *
+ * Resolves with the filename on success or rejects on rasterization
+ * failure (image load error, canvas blob failure, dimensions missing).
+ * Caller can decide whether to fall back to SVG export or surface a toast.
+ */
+export function buildKgPngFilename(now: Date = new Date()): string {
+  const iso = now.toISOString().slice(0, 10);
+  return `waggle-knowledge-graph-${iso}.png`;
+}
+
+export async function downloadKgPng(
+  svg: SVGSVGElement,
+  filename: string = buildKgPngFilename(),
+  scale: number = 2,
+): Promise<string> {
+  // Read dimensions from viewBox first (responsive SVGs often lack
+  // explicit width/height attrs), then fall back to width/height,
+  // then to getBoundingClientRect.
+  let width = 0;
+  let height = 0;
+  const viewBox = svg.getAttribute('viewBox');
+  if (viewBox) {
+    const parts = viewBox.split(/[\s,]+/).map(Number);
+    if (parts.length === 4 && parts.every((n) => Number.isFinite(n))) {
+      width = parts[2];
+      height = parts[3];
+    }
+  }
+  if (!width || !height) {
+    const w = svg.getAttribute('width');
+    const h = svg.getAttribute('height');
+    width = w ? parseFloat(w) : 0;
+    height = h ? parseFloat(h) : 0;
+  }
+  if (!width || !height) {
+    const rect = svg.getBoundingClientRect();
+    width = rect.width;
+    height = rect.height;
+  }
+  if (!width || !height) {
+    throw new Error('Cannot rasterize SVG — no dimensions available');
+  }
+
+  const xml = serializeKgSvg(svg);
+  const svgBlob = new Blob([xml], { type: 'image/svg+xml;charset=utf-8' });
+  const svgUrl = URL.createObjectURL(svgBlob);
+
+  try {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error('Failed to load SVG into Image'));
+      img.src = svgUrl;
+    });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(width * scale);
+    canvas.height = Math.round(height * scale);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas 2D context unavailable');
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    const pngBlob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (b) => (b ? resolve(b) : reject(new Error('Canvas toBlob returned null'))),
+        'image/png',
+      );
+    });
+
+    const pngUrl = URL.createObjectURL(pngBlob);
+    const a = document.createElement('a');
+    a.href = pngUrl;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(pngUrl);
+    return filename;
+  } finally {
+    URL.revokeObjectURL(svgUrl);
+  }
+}
