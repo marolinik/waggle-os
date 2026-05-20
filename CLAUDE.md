@@ -493,13 +493,19 @@ End-to-end: detect → install hooks (reversible) → launch with `WAGGLE_WORKSP
 ### Open Work
 | # | File | What |
 |---|---|---|
-| 1 | `apps/web/src/components/os/overlays/PersonaSwitcher.tsx` | **Two-tier redesign** — UNIVERSAL MODES (8) + WORKSPACE SPECIALISTS (template-scoped), hover tooltip with tagline/bestFor/wontDo. Maps to backlog OW-6 / polish-sprint Phase C. |
-| 2 | Stripe webhooks / server side | Wire Stripe to tier enforcement — blocked on Marko creating Stripe products (M7 in consolidated backlog). |
-| 3 | Spawn Agent + Dock wiring | P35/P36 core bugs from PDF triage — "no models available" in SpawnAgentPanel + dock spawn-agent icon click. |
-| 4 | Light mode finish | P40/P41 + CR-2 — BootScreen logo/animation in light mode, header text styling, remaining hive-950 → semantic tokens. |
-| 5 | Wave 2/3 hook implementations | 6 hive-mind-hooks-* packages remain Wave 2/3 stubs (`export {}`): cursor / claude-desktop / codex / codex-desktop / hermes / openclaw. Per-package effort: SessionStart + UserPromptSubmit + Stop + PreCompact handlers + install/uninstall/verify CLI. Defer until claude-code-only ship gets real usage feedback. |
+| 1 | Stripe webhooks / server side | Wire Stripe to tier enforcement — blocked on Marko creating Stripe products (M7 in consolidated backlog). |
+| 2 | Spawn Agent + Dock wiring | P36 already wired in `Dock.tsx`+`Desktop.tsx`; P35 third-tier fallback (LiteLLM → runtime model → provider catalogs) landed `14942be`. Residual: runtime verification on a clean install. |
+| 3 | Light mode finish | P40/P41 + CR-2 — semantic-token migration is done (no hive-950 references except a comment); remaining issues are render-time fine-tuning (BootScreen visual polish + a few header-styling judgments) that need a binary build to validate. |
+| 4 | Wave 2/3 hook implementations | 6 hive-mind-hooks-* packages remain Wave 2/3 stubs (`export {}`): cursor / claude-desktop / codex / codex-desktop / hermes / openclaw. Per-package effort: SessionStart + UserPromptSubmit + Stop + PreCompact handlers + install/uninstall/verify CLI. Defer until claude-code-only ship gets real usage feedback. |
 
-For the full polish+launch backlog see `docs/plans/BACKLOG-CONSOLIDATED-2026-04-17.md` (~145 items) and the AI-OS arc in `docs/plans/AI-OS-EXPLORATION-2026-05-19.md`.
+**Closed during May 2026 backlog sweep:**
+- ✅ OW-6 PersonaSwitcher two-tier — shipped via M-01 (`PersonaSwitcher.tsx` + `lib/persona-tier.ts` + `lib/persona-tooltip.ts`); 26/26 tests passing
+- ✅ CR-7 CLAUDE.md §10 update (this entry)
+- ✅ P35 Spawn Agent "no models available" (`14942be`)
+- ✅ QW-1..QW-5 quick wins (all already shipped per `grep` verification)
+- ✅ CR-2 hive-950 → semantic tokens (only comment-level refs remain)
+
+For the full polish+launch backlog see `docs/plans/BACKLOG-CONSOLIDATED-2026-04-17.md` (~145 items; ~50% are stale-but-done per the May 2026 verification sweep) and the AI-OS arc in `docs/plans/AI-OS-EXPLORATION-2026-05-19.md`.
 
 ---
 
