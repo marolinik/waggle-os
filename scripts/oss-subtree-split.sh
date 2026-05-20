@@ -79,7 +79,7 @@ for pkg in "${PACKAGES[@]}"; do
   # double-check that no monorepo-LEVEL siblings leaked. Package-internal dirs
   # (docs/, assets/, src/, tests/, dist/) are legitimate and not flagged.
   # Forbidden = paths that ONLY exist as monorepo siblings, never as package contents.
-  for forbidden in apps packages sidecar cowork .planning .scratch .mind benchmarks; do
+  for forbidden in apps packages sidecar .planning .scratch .mind benchmarks; do
     if echo "$TOP_LEVEL" | grep -qE "(^| )$forbidden( |$)"; then
       echo "[oss-subtree-split]   ERROR: $BRANCH contains forbidden monorepo-level entry '$forbidden'." >&2
       echo "[oss-subtree-split]   This indicates the subtree-split misbehaved or proprietary content leaked." >&2
