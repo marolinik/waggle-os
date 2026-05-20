@@ -74,9 +74,12 @@ describe('Capability Acquisition — Integration', () => {
     const acquireTool = getTool('acquire_capability');
     const proposal = await acquireTool.execute({ need: 'risk assessment for my project' });
 
-    // Proposal should identify the gap and recommend installation
+    // Proposal should identify the gap and recommend installation.
+    // The summary uses an inline-install marker (parsed by
+    // CapabilityRequestCard in the UI) as the modern action-of-record
+    // instead of naming the tool 'install_capability' inline.
     expect(proposal).toContain('risk-assessment');
-    expect(proposal).toContain('install_capability');
+    expect(proposal).toContain('<!--waggle:capability_request');
     expect(proposal).toContain('starter-pack');
 
     // Step 2: Verify the skill is NOT yet installed

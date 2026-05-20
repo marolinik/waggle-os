@@ -16,7 +16,10 @@ describe('Tauri Production Configuration', () => {
     const conf = JSON.parse(fs.readFileSync(path.join(TAURI_DIR, 'tauri.conf.json'), 'utf-8'));
     expect(conf.productName).toBe('Waggle');
     expect(conf.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(conf.identifier).toBe('com.waggle.app');
+    // Canonical bundle identifier — Egzakta-branded for code signing
+    // + App Store / Mac notarization. Set in tauri.conf.json. Don't
+    // change without coordinating with the signing cert subject.
+    expect(conf.identifier).toBe('com.egzakta.waggle');
   });
 
   it('tauri.conf.json has bundle targets configured', () => {

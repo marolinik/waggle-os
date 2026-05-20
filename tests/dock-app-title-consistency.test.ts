@@ -74,6 +74,12 @@ describe('dock label ↔ Desktop appConfig title parity', () => {
           ['Command Center', 'Cockpit', 'friendly nav label; legacy window title'],
           ['Usage & Cost', 'Usage & Telemetry', 'dock emphasises cost; title emphasises telemetry scope'],
           ['Events & Logs', 'Events', 'dock bundles logs + events; window lives as Events only'],
+          // AI-OS Phase 2B: dock surfaces "AI Tools" as the user-facing
+          // entry point (matches Cursor/Codex/Claude Code branding the
+          // user already recognises); the window title says "Tool
+          // Launcher" because that's what the app *does* (launches +
+          // hook-manages external tools), not what its content is.
+          ['AI Tools', 'Tool Launcher', 'dock: user-facing category; title: functional description'],
         ];
         const isAllowed = allowed.some(([l, t]) => l === label && t === title);
         if (label !== title && !isAllowed) {
