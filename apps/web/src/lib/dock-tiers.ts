@@ -1,7 +1,7 @@
 import type { ElementType } from 'react';
 import {
   LayoutDashboard, MessageSquare, FolderOpen, Settings, Bot, Brain,
-  Zap, Activity, Radio, Clock, Package, Plug, Store, Lock, Users, Shield,
+  Zap, Activity, Radio, Clock, Package, Plug, Store, Lock, Users, Shield, Rocket,
 } from 'lucide-react';
 
 export type AppId =
@@ -10,7 +10,7 @@ export type AppId =
   | 'settings' | 'vault' | 'profile' | 'terminal' | 'calculator'
   | 'notes' | 'waggle-dance' | 'files' | 'agents'
   | 'scheduled-jobs' | 'marketplace' | 'voice' | 'room' | 'approvals' | 'timeline'
-  | 'backup' | 'telemetry' | 'governance';
+  | 'backup' | 'telemetry' | 'governance' | 'launcher';
 
 export type UserTier = 'simple' | 'professional' | 'power' | 'admin';
 
@@ -63,6 +63,7 @@ const POWER_CONFIG: DockEntry[] = [
     children: [
       { type: 'app', key: 'skills', appId: 'capabilities', icon: Package, label: 'Skills & Apps', color: 'text-violet-400' },
       { type: 'app', key: 'connect', appId: 'connectors', icon: Plug, label: 'Connectors', color: 'text-emerald-400' },
+      { type: 'app', key: 'launcher', appId: 'launcher', icon: Rocket, label: 'AI Tools', color: 'text-amber-400' },
       // P31: Marketplace already a tab inside Skills & Apps — no separate dock entry
       // P32: Team Governance is Teams-tier only
       { type: 'app', key: 'governance', appId: 'governance', icon: Shield, label: 'Team Governance', color: 'text-violet-400', minBillingTier: 'TEAMS' },

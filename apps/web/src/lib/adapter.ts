@@ -1357,6 +1357,79 @@ class LocalAdapter {
     await this.fetch(`/api/waggle/signals/${id}/ack`, { method: 'PATCH' });
   }
 
+  // --- AI-OS launcher (Phase 2B) ---
+  // detectTools/launchTool/manageHooks each surface the matching
+  // sidecar route. All are loopback-only and report only the user's
+  // own machine — no remote calls.
+
+  async detectTools(): Promise<{
+    platform: string;
+    detectedAt: string;
+    tools: Array<{
+      id: string;
+      displayName: string;
+      installed: boolean;
+      installedPath: string | null;
+      version: string | null;
+      hooksInstalled: boolean;
+      hookPointerPath: string | null;
+      diagnostic?: string;
+    }>;
+  } | null> {
+    try {
+      const res = await this.fetch('/api/tools/detect');
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (err) {
+      console.error('[adapter] detectTools failed:', err);
+      return null;
+    }
+  }
+
+  async launchTool(payload: {
+    id: string;
+    installedPath: string;
+    workspaceId?: string;
+  }): Promise<{ ok: boolean; pid: number | null; error?: string }> {
+    const res = await this.fetch('/api/tools/launch', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    const body = await res.json().catch(() => ({}));
+    return {
+      ok: res.ok && body.ok === true,
+      pid: body.pid ?? null,
+      error: body.error ?? (res.ok ? undefined : `HTTP ${res.status}`),
+    };
+  }
+
+  async manageHooks(payload: {
+    id: string;
+    action: 'install' | 'verify' | 'uninstall';
+    cliPath?: string;
+  }): Promise<{
+    ok: boolean;
+    action: string;
+    stdout: string;
+    stderr: string;
+    code: number;
+    error?: string;
+  }> {
+    const res = await this.fetch('/api/tools/hooks', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    const body = await res.json().catch(() => ({}));
+    return {
+      ok: res.ok && body.ok === true,
+      action: body.action ?? payload.action,
+      stdout: body.stdout ?? '',
+      stderr: body.stderr ?? '',
+      code: body.code ?? -1,
+      error: body.error ?? (res.ok ? undefined : `HTTP ${res.status}`),
+    };
+  }
+
   subscribeWaggleDance(onSignal: (signal: WaggleSignal) => void): () => void {
     if (!this._connected) return () => {};
     return this.subscribeSSE('/api/waggle/stream', (data) => onSignal(data as WaggleSignal));

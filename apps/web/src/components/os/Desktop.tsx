@@ -33,6 +33,7 @@ import AgentsApp from "./apps/AgentsApp";
 import FilesAppTabs from "./apps/FilesAppTabs";
 import ScheduledJobsApp from "./apps/ScheduledJobsApp";
 import MarketplaceApp from "./apps/MarketplaceApp";
+import LauncherApp from "./apps/LauncherApp";
 import VoiceApp from "./apps/VoiceApp";
 import RoomApp from "./apps/RoomApp";
 import ApprovalsApp from "./apps/ApprovalsApp";
@@ -97,6 +98,7 @@ const appConfig: Record<string, { title: string; icon: React.ReactNode; pos: { x
   "backup": { title: "Backup & Restore", icon: <Activity className="w-3.5 h-3.5 text-emerald-400" />, pos: { x: 200, y: 80 }, size: { w: "520px", h: "480px" } },
   "telemetry": { title: "Usage & Telemetry", icon: <Activity className="w-3.5 h-3.5 text-sky-400" />, pos: { x: 220, y: 60 }, size: { w: "560px", h: "500px" } },
   "governance": { title: "Team Governance", icon: <Shield className="w-3.5 h-3.5 text-violet-400" />, pos: { x: 260, y: 90 }, size: { w: "480px", h: "520px" } },
+  "launcher": { title: "Tool Launcher", icon: <Activity className="w-3.5 h-3.5 text-amber-400" />, pos: { x: 280, y: 80 }, size: { w: "560px", h: "520px" } },
 };
 
 const Desktop = () => {
@@ -343,6 +345,7 @@ const Desktop = () => {
       }
       case 'scheduled-jobs': return <ScheduledJobsApp />;
       case 'marketplace': return <MarketplaceApp />;
+      case 'launcher': return <LauncherApp activeWorkspaceId={activeWorkspaceId ?? undefined} />;
       case 'voice': return <VoiceApp />;
       case 'room': {
         // Phase A.3: build a workspace name lookup for the Room tiles.
