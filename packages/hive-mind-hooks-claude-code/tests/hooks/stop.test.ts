@@ -76,3 +76,184 @@ describe('stop handler', () => {
     expect(cap.exits).toEqual([0]);
   });
 });
+
+// ── AI-OS Phase 1E — opt-in v2 signal emission ─────────────────────
+
+describe('stop handler — WAGGLE_SIGNAL_EMIT (Phase 1E)', () => {
+  // Capture the global fetch so we can assert on the emitter call.
+  // maybeEmitDiscovery uses globalThis.fetch when no fetchImpl is
+  // passed — the production hook does not pass one.
+  function withCapturedFetch<T>(
+    fetchImpl: typeof globalThis.fetch,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    const original = globalThis.fetch;
+    globalThis.fetch = fetchImpl;
+    return fn().finally(() => {
+      globalThis.fetch = original;
+    });
+  }
+
+  function makeOkFetch(): typeof globalThis.fetch & {
+    calls: Array<{ url: string; body: unknown }>;
+  } {
+    const calls: Array<{ url: string; body: unknown }> = [];
+    const impl = (async (url: string | URL | Request, init?: RequestInit) => {
+      const body = init?.body ? JSON.parse(String(init.body)) : null;
+      calls.push({ url: String(url), body });
+      return new Response(
+        JSON.stringify({
+          dispatched: true,
+          message: {
+            id: 'srv-1',
+            teamId: 'personal::claude-code-hook',
+            senderId: 'claude-code-hook',
+            type: 'broadcast',
+            subtype: 'discovery',
+            content: body?.content ?? {},
+            referenceId: null,
+            routing: null,
+            createdAt: new Date().toISOString(),
+          },
+        }),
+        { status: 201, headers: { 'content-type': 'application/json' } },
+      );
+    }) as typeof globalThis.fetch & { calls: typeof calls };
+    impl.calls = calls;
+    return impl;
+  }
+
+  function withEnv<T>(
+    key: string,
+    value: string | undefined,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    const prev = process.env[key];
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+    return fn().finally(() => {
+      if (prev === undefined) delete process.env[key];
+      else process.env[key] = prev;
+    });
+  }
+
+  it('does not emit when WAGGLE_SIGNAL_EMIT is unset', async () => {
+    const bridge = makeMockBridge();
+    const cap = makeHookCaptures();
+    const f = makeOkFetch();
+    await withEnv('WAGGLE_SIGNAL_EMIT', undefined, () =>
+      withCapturedFetch(f, () =>
+        runStop({
+          readStdin: async () => JSON.stringify({
+            response: 'never commit secrets to the public repo.',
+            cwd: '/proj',
+          }),
+          writeStdout: cap.writeStdout,
+          exit: cap.exit,
+          bridge,
+        }),
+      ),
+    );
+    expect(f.calls).toHaveLength(0);
+  });
+
+  it('does not emit when WAGGLE_SIGNAL_EMIT=0', async () => {
+    const bridge = makeMockBridge();
+    const cap = makeHookCaptures();
+    const f = makeOkFetch();
+    await withEnv('WAGGLE_SIGNAL_EMIT', '0', () =>
+      withCapturedFetch(f, () =>
+        runStop({
+          readStdin: async () => JSON.stringify({
+            response: 'never commit secrets to the public repo.',
+            cwd: '/proj',
+          }),
+          writeStdout: cap.writeStdout,
+          exit: cap.exit,
+          bridge,
+        }),
+      ),
+    );
+    expect(f.calls).toHaveLength(0);
+  });
+
+  it('emits on critical importance when WAGGLE_SIGNAL_EMIT=1', async () => {
+    const bridge = makeMockBridge();
+    const cap = makeHookCaptures();
+    const f = makeOkFetch();
+    await withEnv('WAGGLE_SIGNAL_EMIT', '1', () =>
+      withCapturedFetch(f, () =>
+        runStop({
+          readStdin: async () => JSON.stringify({
+            response: 'never commit secrets to the public repo.',
+            cwd: '/proj',
+            session_id: 'sess-cc',
+          }),
+          writeStdout: cap.writeStdout,
+          exit: cap.exit,
+          bridge,
+        }),
+      ),
+    );
+    expect(f.calls).toHaveLength(1);
+    expect(f.calls[0].url).toContain('/api/waggle-dance/signal');
+    const body = f.calls[0].body as Record<string, unknown>;
+    expect(body.type).toBe('broadcast');
+    expect(body.subtype).toBe('discovery');
+    expect(body.senderId).toBe('claude-code-hook');
+    const content = body.content as Record<string, unknown>;
+    expect(content.tool).toBe('claude-code');
+    expect(content.eventType).toBe('stop');
+    // Critical "never" sentence → critical importance → high-or-critical
+    // emission per the Importance→emit mapping (critical → critical).
+    expect(content.importance).toBe('critical');
+    expect(content.sessionId).toBe('sess-cc');
+  });
+
+  it('does not emit on a normal-importance turn (emission policy floor)', async () => {
+    const bridge = makeMockBridge();
+    const cap = makeHookCaptures();
+    const f = makeOkFetch();
+    // A short benign response → classifyImportance returns 'normal',
+    // which our mapping bumps to 'normal' (not high/critical) → the
+    // maybeEmitDiscovery policy skips emission.
+    await withEnv('WAGGLE_SIGNAL_EMIT', '1', () =>
+      withCapturedFetch(f, () =>
+        runStop({
+          readStdin: async () => JSON.stringify({
+            response: 'Hello.',
+            cwd: '/proj',
+          }),
+          writeStdout: cap.writeStdout,
+          exit: cap.exit,
+          bridge,
+        }),
+      ),
+    );
+    expect(f.calls).toHaveLength(0);
+  });
+
+  it('saves frame even when the signal endpoint is unreachable (fail-open)', async () => {
+    const bridge = makeMockBridge();
+    const cap = makeHookCaptures();
+    const unreachable = (async () => {
+      throw new Error('ECONNREFUSED');
+    }) as typeof globalThis.fetch;
+    await withEnv('WAGGLE_SIGNAL_EMIT', 'true', () =>
+      withCapturedFetch(unreachable, () =>
+        runStop({
+          readStdin: async () => JSON.stringify({
+            response: 'never commit secrets to the public repo.',
+            cwd: '/proj',
+          }),
+          writeStdout: cap.writeStdout,
+          exit: cap.exit,
+          bridge,
+        }),
+      ),
+    );
+    // Frame save still happened — emitter failure does not block.
+    expect(bridge.saveMemory).toHaveBeenCalledTimes(1);
+    expect(cap.exits).toEqual([0]);
+  });
+});

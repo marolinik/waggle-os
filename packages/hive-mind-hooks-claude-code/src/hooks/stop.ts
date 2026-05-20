@@ -7,6 +7,7 @@
 import {
   classifyImportance,
   encodeFrame,
+  maybeEmitDiscovery,
   summarizeTurn,
   type HookEvent,
 } from '@waggle/hive-mind-shim-core';
@@ -48,9 +49,8 @@ export const stopHandler: HookHandler<StopPayload, undefined> = {
       return undefined;
     }
     const summary = summarizeTurn(payload.response, { maxChars: SUMMARY_BUDGET_CHARS });
-    const importance = classifyImportance(summary, { eventType: 'stop' }) === 'critical'
-      ? 'critical'
-      : 'important';
+    const rawImportance = classifyImportance(summary, { eventType: 'stop' });
+    const importance = rawImportance === 'critical' ? 'critical' : 'important';
 
     const event: HookEvent = {
       eventType: 'stop',
@@ -71,6 +71,39 @@ export const stopHandler: HookHandler<StopPayload, undefined> = {
       importance: frame.importance,
       bytes: summary.length,
     });
+
+    // AI-OS Phase 1E — opt-in v2 signal emission. Off by default so
+    // OSS consumers see no behavior change; flip WAGGLE_SIGNAL_EMIT=1
+    // (or any truthy value) to broadcast high/critical-importance
+    // stops to the local Waggle sidecar. Fails open (sidecar offline
+    // → null returned + stderr warning); never throws.
+    const emitFlag = process.env.WAGGLE_SIGNAL_EMIT;
+    if (emitFlag && emitFlag !== '0' && emitFlag.toLowerCase() !== 'false') {
+      // Map shim-core's Importance to maybeEmitDiscovery's emission
+      // scale. 'important' is the shim-core label for the
+      // emission-worthy threshold; the policy helper only fires on
+      // 'high' / 'critical'. 'temporary' / 'normal' do not emit.
+      const emitImportance =
+        rawImportance === 'critical' ? 'critical'
+        : rawImportance === 'important' ? 'high'
+        : rawImportance === 'normal' ? 'normal'
+        : 'low';
+      const emitted = await maybeEmitDiscovery(
+        'stop',
+        emitImportance,
+        {
+          tool: 'claude-code',
+          sessionId: payload.sessionId,
+          topic: summary.slice(0, 160),
+          cwd: payload.cwd,
+        },
+        { senderId: 'claude-code-hook' },
+      );
+      if (emitted) {
+        logger.debug('stop signal emitted', { id: emitted.id });
+      }
+    }
+
     return undefined;
   },
 };
