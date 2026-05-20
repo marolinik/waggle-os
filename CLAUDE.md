@@ -459,32 +459,47 @@ Do not recreate or expose outside gating.
 
 ---
 
-## 10. Sprint Status (April 2026)
+## 10. Sprint Status (May 2026)
 
 ### What Landed
+**April 2026 baseline:**
 - `tiers.ts` shipped with 5-tier system (TRIAL/FREE/PRO/TEAMS/ENTERPRISE).
 - `feature-flags.ts` shipped.
 - Persona data/logic split (`persona-data.ts` ↔ `personas.ts`).
 - **All 4 new personas shipped** (general-purpose, planner, verifier, coordinator) — `persona-data.ts` verified.
 - **AgentPersona interface extended** with disallowedTools / failurePatterns / isReadOnly / tagline / bestFor / wontDo — verified in `personas.ts`.
-- **`behavioral-spec.ts` split** into named sections with `=== CRITICAL ===` markers; `COMPACTION_PROMPT` exported (34+ section markers, 2 COMPACTION_PROMPT references).
-- **Orchestrator section caching** shipped in `buildSystemPrompt()` — `sectionCache` verified.
-- **OnboardingWizard TEMPLATES expanded to 15** — `sales-pipeline` through `blank`, all wired to `PERSONAS`.
+- **`behavioral-spec.ts` split** into named sections with `=== CRITICAL ===` markers; `COMPACTION_PROMPT` exported.
+- **Orchestrator section caching** shipped in `buildSystemPrompt()`.
+- **OnboardingWizard TEMPLATES expanded to 15**, all wired to `PERSONAS`.
 - Stripe installed (`stripe@^21.0.1`) in root deps.
 - Evolution subsystem fully present (10+ files, closed loop end-to-end).
-- Docker/render.yaml production infra exists.
-- LiteLLM routing config exists.
-- **PromptAssembler v5 PoC complete** — H1 replicates under 4-judge no-Claude ensemble; ship recommendation: PA enabled for Claude, optional for Gemma, experimental for Qwen-thinking (analytical-only). See `docs/plans/POLISH-SPRINT-2026-04-18.md`.
+- **PromptAssembler v5 PoC complete** — see `docs/plans/POLISH-SPRINT-2026-04-18.md`.
+- **Premium harness reached HONEST 21/21** (May 2026 S1) — every pillar regression-locked + composing. Full agent suite 2657/2657. See `memory/project_session_handoff_0519_s1.md`.
+
+**AI-OS arc (May 2026 S1/S2, 14 commits on origin):**
+- Phase 0 — Tool detection PoC (`packages/agent/src/tool-detection.ts`) for all 7 supported AI tools, hermetic + cross-platform.
+- Phase 1A — WaggleDance v2 dispatcher branches wired (discovery/routed_share/model_recipe/knowledge_match/task_claim/model_recommendation).
+- Phase 1B — Local sidecar surface (`/api/waggle-dance/signal` + `/signals`), SignalBus ring buffer, personal-tier-eligible.
+- Phase 1C — Bridge: v2 bus → existing `/api/waggle/signals` UI stream (zero frontend changes).
+- Phase 1D — Shim-core signal emitter library (`@waggle/hive-mind-shim-core` `maybeEmitDiscovery`).
+- Phase 1E — claude-code Stop hook wired to `maybeEmitDiscovery` (opt-in via `WAGGLE_SIGNAL_EMIT`).
+- Phase 2A — Launcher backend (`/api/tools/launch`, `/api/tools/hooks`).
+- Phase 2B — LauncherApp dock surface (`apps/web/src/components/os/apps/LauncherApp.tsx`).
+- Phase 3 — Skill diffusion (D1 fire → `skill_share` broadcast via `onSkillDistillationFire` callback).
+- Phase 4 — Full 7-tool launch cohort + Mission Control inventory tile + Memory provenance badge + launch-with-prompt textarea + process tracker / 'Running' badge.
+
+End-to-end: detect → install hooks (reversible) → launch with `WAGGLE_WORKSPACE_ID` env → hook captures → shim emitter → bus → bridge → UI. Rollback tag: `checkpoint/pre-ai-os-2026-05-20`. AI-OS exploration doc: `docs/plans/AI-OS-EXPLORATION-2026-05-19.md`.
 
 ### Open Work
 | # | File | What |
 |---|---|---|
 | 1 | `apps/web/src/components/os/overlays/PersonaSwitcher.tsx` | **Two-tier redesign** — UNIVERSAL MODES (8) + WORKSPACE SPECIALISTS (template-scoped), hover tooltip with tagline/bestFor/wontDo. Maps to backlog OW-6 / polish-sprint Phase C. |
 | 2 | Stripe webhooks / server side | Wire Stripe to tier enforcement — blocked on Marko creating Stripe products (M7 in consolidated backlog). |
-| 3 | Spawn Agent + Dock wiring | P35/P36 core bugs from PDF triage — "no models available" in SpawnAgentPanel + dock spawn-agent icon click. Polish-sprint Phase B. |
-| 4 | Light mode finish | P40/P41 + CR-2 — BootScreen logo/animation in light mode, header text styling, remaining hive-950 → semantic tokens. Polish-sprint Phase B. |
+| 3 | Spawn Agent + Dock wiring | P35/P36 core bugs from PDF triage — "no models available" in SpawnAgentPanel + dock spawn-agent icon click. |
+| 4 | Light mode finish | P40/P41 + CR-2 — BootScreen logo/animation in light mode, header text styling, remaining hive-950 → semantic tokens. |
+| 5 | Wave 2/3 hook implementations | 6 hive-mind-hooks-* packages remain Wave 2/3 stubs (`export {}`): cursor / claude-desktop / codex / codex-desktop / hermes / openclaw. Per-package effort: SessionStart + UserPromptSubmit + Stop + PreCompact handlers + install/uninstall/verify CLI. Defer until claude-code-only ship gets real usage feedback. |
 
-For the full polish+launch backlog see `docs/plans/BACKLOG-CONSOLIDATED-2026-04-17.md` (~145 items) and current sprint sequencing in `docs/plans/POLISH-SPRINT-2026-04-18.md`.
+For the full polish+launch backlog see `docs/plans/BACKLOG-CONSOLIDATED-2026-04-17.md` (~145 items) and the AI-OS arc in `docs/plans/AI-OS-EXPLORATION-2026-05-19.md`.
 
 ---
 
