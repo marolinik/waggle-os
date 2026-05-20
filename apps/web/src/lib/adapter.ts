@@ -1390,6 +1390,10 @@ class LocalAdapter {
     id: string;
     installedPath: string;
     workspaceId?: string;
+    /** Phase 4 — optional CLI args (e.g. ['--print', 'prompt text']). */
+    args?: string[];
+    /** Optional cwd override; defaults to the binary's directory. */
+    cwd?: string;
   }): Promise<{ ok: boolean; pid: number | null; error?: string }> {
     const res = await this.fetch('/api/tools/launch', {
       method: 'POST',

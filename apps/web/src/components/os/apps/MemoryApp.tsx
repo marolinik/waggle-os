@@ -22,6 +22,23 @@ const FRAME_TYPES = ['fact', 'event', 'insight', 'decision', 'task', 'entity'];
 
 const importanceColors = ['text-muted-foreground', 'text-muted-foreground', 'text-foreground', 'text-primary', 'text-amber-400', 'text-destructive'];
 
+/**
+ * AI-OS Phase 4 polish — read the cross-tool provenance off a frame's
+ * metadata. The waggle-dance-bridge sets `metadata.tool` when re-emitting
+ * v2 signals through emitWaggleSignal; harvest adapters may also populate
+ * `metadata.source` / `metadata.sourceTool`. Returns null when neither
+ * exists so callers can skip rendering the badge entirely.
+ */
+function readFrameProvenanceTool(frame: { metadata?: Record<string, unknown> }): string | null {
+  const md = frame.metadata;
+  if (!md || typeof md !== 'object') return null;
+  const candidates = [md.tool, md.sourceTool, md.source];
+  for (const c of candidates) {
+    if (typeof c === 'string' && c.length > 0 && c.length < 60) return c;
+  }
+  return null;
+}
+
 // QW-2: labeled tab bar for Memory app. Replaces the cramped icon-only
 // toggles in the sidebar. Each tab is icon + short label + tooltip for the
 // longer description.
@@ -181,6 +198,17 @@ const MemoryApp = ({
                   role="img"
                 > {'●'.repeat(Math.min(f.importance, 5))}</span>
                 <span className="flex items-center gap-0.5"><Clock className="w-2.5 h-2.5" />{new Date(f.timestamp).toLocaleDateString()}</span>
+                {(() => {
+                  const provenance = readFrameProvenanceTool(f);
+                  return provenance ? (
+                    <span
+                      className="px-1.5 rounded bg-amber-950/30 text-amber-300 text-[10px]"
+                      title={`Captured from ${provenance}`}
+                    >
+                      {provenance}
+                    </span>
+                  ) : null;
+                })()}
               </div>
             </button>
           ))}

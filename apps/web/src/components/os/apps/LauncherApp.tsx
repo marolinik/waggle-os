@@ -20,12 +20,33 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Rocket, RefreshCw, CheckCircle2, XCircle, AlertTriangle,
-  Play, Download, ShieldCheck, Trash2, Loader2,
+  Play, Download, ShieldCheck, Trash2, Loader2, MessageSquare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { adapter } from '@/lib/adapter';
+
+/**
+ * AI-OS Phase 4 polish — launch-with-prompt CLI argument shape per tool.
+ * Returns the args array to pass to /api/tools/launch given a prompt.
+ * Returns null when the tool doesn't accept an inline prompt (desktop
+ * apps with no CLI surface).
+ *
+ * Today only claude-code is wired (`claude --print "<prompt>"`).
+ * Codex / Hermes / OpenClaw will be added when their CLI prompt
+ * conventions stabilize.
+ */
+function promptArgsForTool(toolId: string, prompt: string): string[] | null {
+  const p = prompt.trim();
+  if (!p) return null;
+  switch (toolId) {
+    case 'claude-code':
+      return ['--print', p];
+    default:
+      return null; // Cursor / Claude Desktop / others — no inline-prompt CLI
+  }
+}
 
 // Phase 4 — full 7-tool cohort. Mirrors @waggle/shared LAUNCH_COHORT.
 // Kept local (rather than imported) to avoid a runtime dependency on
@@ -82,6 +103,7 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
   const [error, setError] = useState<string | null>(null);
   const [activeAction, setActiveAction] = useState<ActionState | null>(null);
   const [lastResult, setLastResult] = useState<ActionResult | null>(null);
+  const [prompt, setPrompt] = useState('');
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -121,19 +143,29 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
             });
             return;
           }
+          // If a prompt is set AND the tool has a known prompt-arg
+          // shape, pass it through as CLI args. Otherwise launch
+          // bare and the prompt textarea is silently ignored for
+          // that tool.
+          const args = promptArgsForTool(tool.id, prompt) ?? undefined;
           const r = await adapter.launchTool({
             id: tool.id,
             installedPath: tool.installedPath,
             workspaceId: activeWorkspaceId,
+            ...(args ? { args } : {}),
           });
+          const promptNote = args ? ' with prompt' : '';
           setLastResult({
             toolId: tool.id,
             action,
             ok: r.ok,
             message: r.ok
-              ? `Launched ${tool.displayName} (pid ${r.pid})`
+              ? `Launched ${tool.displayName}${promptNote} (pid ${r.pid})`
               : (r.error ?? 'Launch failed'),
           });
+          // Clear the prompt after a successful launch — avoid sending
+          // the same text twice by accident.
+          if (r.ok && args) setPrompt('');
         } else {
           const r = await adapter.manageHooks({ id: tool.id, action });
           setLastResult({
@@ -205,6 +237,25 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
           {lastResult.message}
         </div>
       )}
+
+      {/* Phase 4 — optional prompt to launch with. Only tools whose
+          promptArgsForTool() returns non-null actually use it; others
+          launch bare and silently ignore the prompt. */}
+      <div className="px-3 pt-3">
+        <div className="rounded-lg border border-border/40 bg-card/30 p-2.5">
+          <div className="flex items-center gap-1.5 mb-1.5 text-[11px] text-muted-foreground">
+            <MessageSquare className="w-3 h-3" />
+            <span>Optional prompt — passed to tools that accept inline prompts (Claude Code today)</span>
+          </div>
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="Paste a task or question. Leave blank to launch the tool bare."
+            rows={2}
+            className="w-full text-xs bg-background border border-border/40 rounded p-2 resize-y min-h-[44px] max-h-[200px]"
+          />
+        </div>
+      </div>
 
       {/* Tools list */}
       <ScrollArea className="flex-1 min-h-0">

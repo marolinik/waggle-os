@@ -8,25 +8,54 @@ interface MissionControlAppProps {
   onSpawnOpen?: () => void;
 }
 
+/**
+ * AI-OS Phase 4 polish — compact inventory of installed AI tools at
+ * the top of Mission Control. One line: detected · installed ·
+ * hook-wired counts, with an "Open Launcher" button to jump to the
+ * dedicated dock app.
+ */
+interface ToolInventoryCounts {
+  detected: number;
+  installed: number;
+  hooked: number;
+}
+
 const MissionControlApp = ({ onSpawnOpen }: MissionControlAppProps) => {
   const [sessions, setSessions] = useState<FleetSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [teamMembers, setTeamMembers] = useState<{ id: string; name: string; status: string }[]>([]);
   const [activity, setActivity] = useState<{ id: string; user: string; action: string; timestamp: string }[]>([]);
   const [tab, setTab] = useState<'fleet' | 'team' | 'activity'>('fleet');
+  const [toolCounts, setToolCounts] = useState<ToolInventoryCounts | null>(null);
 
   const refresh = async () => {
     try {
-      const [fleet, members, act] = await Promise.allSettled([
+      const [fleet, members, act, tools] = await Promise.allSettled([
         adapter.getFleet(),
         adapter.getTeamMembers(),
         adapter.getTeamActivity(),
+        adapter.detectTools(),
       ]);
       if (fleet.status === 'fulfilled') setSessions(fleet.value);
       if (members.status === 'fulfilled') setTeamMembers(members.value);
       if (act.status === 'fulfilled') setActivity(act.value);
+      if (tools.status === 'fulfilled' && tools.value) {
+        const ts = tools.value.tools;
+        setToolCounts({
+          detected: ts.length,
+          installed: ts.filter((t) => t.installed).length,
+          hooked: ts.filter((t) => t.hooksInstalled).length,
+        });
+      }
     } catch { /* ignore */ }
     finally { setLoading(false); }
+  };
+
+  const openLauncher = () => {
+    // Dispatch the standard OS event the dock listens for.
+    window.dispatchEvent(
+      new CustomEvent('waggle:open-app', { detail: { appId: 'launcher' } }),
+    );
   };
 
   useEffect(() => {
@@ -66,6 +95,27 @@ const MissionControlApp = ({ onSpawnOpen }: MissionControlAppProps) => {
           </button>
         </div>
       </div>
+
+      {/* AI Tools inventory (Phase 4 polish) */}
+      {toolCounts && (
+        <div className="flex items-center gap-3 mb-4 p-2.5 rounded-lg bg-secondary/30 border border-border/40 text-xs">
+          <Rocket className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+          <span className="text-muted-foreground">
+            <span className="text-foreground font-medium">{toolCounts.detected}</span> tools known ·{' '}
+            <span className="text-emerald-400 font-medium">{toolCounts.installed}</span> installed ·{' '}
+            <span className="text-amber-300 font-medium">{toolCounts.hooked}</span> hook-wired
+          </span>
+          <div className="flex-1" />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={openLauncher}
+            className="h-7 text-[11px] gap-1"
+          >
+            Open Launcher
+          </Button>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 mb-4 p-0.5 rounded-lg bg-muted/50 w-fit">
