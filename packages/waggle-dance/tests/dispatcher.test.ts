@@ -14,6 +14,21 @@ function makeDeps(overrides?: Partial<DispatchDeps>): DispatchDeps {
   };
 }
 
+/**
+ * Build deps that include the v2 emit/response/recommend callbacks.
+ * Most v2 tests want to assert that the right callback was invoked
+ * with the right message — use this helper to get spies.
+ */
+function makeV2Deps(overrides?: Partial<DispatchDeps>): DispatchDeps {
+  return {
+    ...makeDeps(),
+    emitSignal: vi.fn(async () => undefined),
+    recordResponse: vi.fn(async () => undefined),
+    recommendModel: vi.fn(async () => 'claude-haiku-4-5'),
+    ...overrides,
+  };
+}
+
 function makeMessage(overrides?: Partial<WaggleMessage>): WaggleMessage {
   return {
     id: 'msg-1',
@@ -293,17 +308,201 @@ describe('WaggleDanceDispatcher', () => {
       expect(result.error).toBe('Invalid message: broadcast/task_delegation');
     });
 
-    it('returns not handled for unhandled subtypes', async () => {
+    it('rejects unknown subtypes (runtime defense against malformed messages)', async () => {
+      // TypeScript prevents this in-process, but network messages may
+      // arrive with garbage subtypes. The dispatcher's switch must have
+      // a default branch that fails gracefully.
       const deps = makeDeps();
+      const dispatcher = new WaggleDanceDispatcher(deps);
+      const result = await dispatcher.dispatch({
+        ...makeMessage(),
+        type: 'broadcast',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        subtype: 'nonexistent_subtype' as any,
+        content: {},
+      });
+      expect(result.handled).toBe(false);
+      expect(result.error).toMatch(/Invalid message|Unhandled subtype/);
+    });
+  });
+
+  // ── v2 — cross-tool activity bus ──────────────────────────────────
+
+  describe('discovery (v2 broadcast)', () => {
+    it('forwards to emitSignal and reports handled=true', async () => {
+      const deps = makeV2Deps();
+      const dispatcher = new WaggleDanceDispatcher(deps);
+      const message = makeMessage({
+        type: 'broadcast',
+        subtype: 'discovery',
+        content: { topic: 'webhook secret rotation', tool: 'claude-code', importance: 'normal' },
+      });
+      const result = await dispatcher.dispatch(message);
+      expect(result.handled).toBe(true);
+      expect(deps.emitSignal).toHaveBeenCalledWith(message);
+    });
+
+    it('handles missing emitSignal gracefully (Phase 1A behavior)', async () => {
+      // emitSignal is optional. When absent, the dispatcher still
+      // reports handled=true so callers can persist the message
+      // without an emitter wired.
+      const deps = makeDeps(); // no emitSignal
       const dispatcher = new WaggleDanceDispatcher(deps);
       const result = await dispatcher.dispatch(makeMessage({
         type: 'broadcast',
         subtype: 'discovery',
+        content: { topic: 'whatever' },
+      }));
+      expect(result.handled).toBe(true);
+    });
+
+    it('propagates emitSignal errors', async () => {
+      const deps = makeV2Deps({
+        emitSignal: vi.fn(async () => { throw new Error('SSE pipe broken'); }),
+      });
+      const dispatcher = new WaggleDanceDispatcher(deps);
+      const result = await dispatcher.dispatch(makeMessage({
+        type: 'broadcast',
+        subtype: 'discovery',
+        content: { topic: 'x' },
+      }));
+      expect(result.handled).toBe(false);
+      expect(result.error).toMatch(/Signal emit failed/);
+    });
+  });
+
+  describe('routed_share (v2 broadcast)', () => {
+    it('forwards to emitSignal preserving the routing field', async () => {
+      const deps = makeV2Deps();
+      const dispatcher = new WaggleDanceDispatcher(deps);
+      const message = makeMessage({
+        type: 'broadcast',
+        subtype: 'routed_share',
+        content: { payload: { docId: 'doc-42' } },
+        routing: [
+          { userId: 'user-1', reason: 'subscribed to doc-42' },
+          { userId: 'user-3', reason: 'reviewer' },
+        ],
+      });
+      const result = await dispatcher.dispatch(message);
+      expect(result.handled).toBe(true);
+      expect(deps.emitSignal).toHaveBeenCalled();
+      const call = (deps.emitSignal as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(call.routing).toHaveLength(2);
+    });
+  });
+
+  describe('model_recipe (v2 broadcast)', () => {
+    it('forwards a shared model config via emitSignal', async () => {
+      const deps = makeV2Deps();
+      const dispatcher = new WaggleDanceDispatcher(deps);
+      const result = await dispatcher.dispatch(makeMessage({
+        type: 'broadcast',
+        subtype: 'model_recipe',
+        content: {
+          name: 'reasoning-bias-low',
+          model: 'claude-opus-4-7',
+          temperature: 0.2,
+          system: 'You are concise.',
+        },
+      }));
+      expect(result.handled).toBe(true);
+      expect(deps.emitSignal).toHaveBeenCalled();
+    });
+  });
+
+  describe('knowledge_match (v2 response)', () => {
+    it('forwards to recordResponse', async () => {
+      const deps = makeV2Deps();
+      const dispatcher = new WaggleDanceDispatcher(deps);
+      const message = makeMessage({
+        type: 'response',
+        subtype: 'knowledge_match',
+        content: { matchedEntities: ['ent-1', 'ent-2'], confidence: 0.91 },
+        referenceId: 'request-msg-id-7',
+      });
+      const result = await dispatcher.dispatch(message);
+      expect(result.handled).toBe(true);
+      expect(deps.recordResponse).toHaveBeenCalledWith(message);
+    });
+
+    it('is handled even without recordResponse wired', async () => {
+      const deps = makeDeps(); // no recordResponse
+      const dispatcher = new WaggleDanceDispatcher(deps);
+      const result = await dispatcher.dispatch(makeMessage({
+        type: 'response',
+        subtype: 'knowledge_match',
+        content: {},
+        referenceId: 'r-1',
+      }));
+      expect(result.handled).toBe(true);
+    });
+  });
+
+  describe('task_claim (v2 response)', () => {
+    it('forwards to recordResponse', async () => {
+      const deps = makeV2Deps();
+      const dispatcher = new WaggleDanceDispatcher(deps);
+      const message = makeMessage({
+        type: 'response',
+        subtype: 'task_claim',
+        content: { claimedBy: 'agent-9', eta: '10m' },
+        referenceId: 'task-delegation-msg-3',
+      });
+      const result = await dispatcher.dispatch(message);
+      expect(result.handled).toBe(true);
+      expect(deps.recordResponse).toHaveBeenCalledWith(message);
+    });
+  });
+
+  describe('model_recommendation (v2 request)', () => {
+    it('queries recommendModel and returns the recommendation', async () => {
+      const deps = makeV2Deps();
+      const dispatcher = new WaggleDanceDispatcher(deps);
+      const result = await dispatcher.dispatch(makeMessage({
+        type: 'request',
+        subtype: 'model_recommendation',
+        content: { query: 'fast classifier' },
+      }));
+      expect(result.handled).toBe(true);
+      expect(result.response).toContain('claude-haiku-4-5');
+      expect(deps.recommendModel).toHaveBeenCalledWith('fast classifier', expect.any(Object));
+    });
+
+    it('passes additional context fields to recommendModel', async () => {
+      const deps = makeV2Deps();
+      const dispatcher = new WaggleDanceDispatcher(deps);
+      await dispatcher.dispatch(makeMessage({
+        type: 'request',
+        subtype: 'model_recommendation',
+        content: { query: 'reason about a contract', maxLatencyMs: 4000, budget: 'normal' },
+      }));
+      const call = (deps.recommendModel as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(call[1]).toMatchObject({ maxLatencyMs: 4000, budget: 'normal' });
+    });
+
+    it('handles missing recommendModel gracefully', async () => {
+      const deps = makeDeps(); // no recommendModel
+      const dispatcher = new WaggleDanceDispatcher(deps);
+      const result = await dispatcher.dispatch(makeMessage({
+        type: 'request',
+        subtype: 'model_recommendation',
+        content: { query: 'anything' },
+      }));
+      expect(result.handled).toBe(true);
+      expect(result.response).toMatch(/no model recommender/i);
+    });
+
+    it('fails when query is missing', async () => {
+      const deps = makeV2Deps();
+      const dispatcher = new WaggleDanceDispatcher(deps);
+      const result = await dispatcher.dispatch(makeMessage({
+        type: 'request',
+        subtype: 'model_recommendation',
         content: {},
       }));
-
       expect(result.handled).toBe(false);
-      expect(result.error).toBe('Unhandled subtype: discovery');
+      expect(result.error).toMatch(/model_recommendation requires content.query/);
     });
   });
 });
