@@ -26,27 +26,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { adapter } from '@/lib/adapter';
-
-/**
- * AI-OS Phase 4 polish — launch-with-prompt CLI argument shape per tool.
- * Returns the args array to pass to /api/tools/launch given a prompt.
- * Returns null when the tool doesn't accept an inline prompt (desktop
- * apps with no CLI surface).
- *
- * Today only claude-code is wired (`claude --print "<prompt>"`).
- * Codex / Hermes / OpenClaw will be added when their CLI prompt
- * conventions stabilize.
- */
-function promptArgsForTool(toolId: string, prompt: string): string[] | null {
-  const p = prompt.trim();
-  if (!p) return null;
-  switch (toolId) {
-    case 'claude-code':
-      return ['--print', p];
-    default:
-      return null; // Cursor / Claude Desktop / others — no inline-prompt CLI
-  }
-}
+import {
+  promptArgsForTool,
+  toolAcceptsInlinePrompt,
+} from '@/lib/launcher-prompt-args';
 
 // Phase 4 — full 7-tool cohort. Mirrors @waggle/shared LAUNCH_COHORT.
 // Kept local (rather than imported) to avoid a runtime dependency on
@@ -323,14 +306,16 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
         </div>
       )}
 
-      {/* Phase 4 — optional prompt to launch with. Only tools whose
-          promptArgsForTool() returns non-null actually use it; others
-          launch bare and silently ignore the prompt. */}
+      {/* Phase 4 + E-2 — optional prompt to launch with. Only tools
+          whose promptArgsForTool() returns non-null actually use it;
+          others launch bare and silently ignore the prompt. The
+          footer surfaces the per-tool acceptance state so users know
+          which tools will receive the prompt. */}
       <div className="px-3 pt-3">
         <div className="rounded-lg border border-border/40 bg-card/30 p-2.5">
           <div className="flex items-center gap-1.5 mb-1.5 text-[11px] text-muted-foreground">
             <MessageSquare className="w-3 h-3" />
-            <span>Optional prompt — passed to tools that accept inline prompts (Claude Code today)</span>
+            <span>Optional prompt — passed to tools that accept inline prompts</span>
           </div>
           <textarea
             value={prompt}
@@ -339,6 +324,31 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
             rows={2}
             className="w-full text-xs bg-background border border-border/40 rounded p-2 resize-y min-h-[44px] max-h-[200px]"
           />
+          {prompt.trim().length > 0 && (
+            <div className="mt-1.5 text-[10px] text-muted-foreground/80 leading-snug">
+              {(() => {
+                const accepting = tools
+                  .filter((t) => toolAcceptsInlinePrompt(t.id))
+                  .map((t) => t.displayName);
+                const ignoring = tools
+                  .filter((t) => !toolAcceptsInlinePrompt(t.id))
+                  .map((t) => t.displayName);
+                return (
+                  <>
+                    <span className="text-emerald-400/80">Sent to:</span>{' '}
+                    {accepting.join(', ') || 'none'}
+                    {ignoring.length > 0 && (
+                      <>
+                        {' · '}
+                        <span className="text-muted-foreground/60">Ignored by:</span>{' '}
+                        {ignoring.join(', ')}
+                      </>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          )}
         </div>
       </div>
 
