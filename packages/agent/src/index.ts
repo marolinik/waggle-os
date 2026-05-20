@@ -454,3 +454,8 @@ export {
   type HookCommandOptions,
   type HookCommandResult,
 } from './tool-launcher.js';
+export {
+  ToolProcessTracker,
+  type TrackedProcess,
+  type ToolProcessTrackerDeps,
+} from './tool-process-tracker.js';

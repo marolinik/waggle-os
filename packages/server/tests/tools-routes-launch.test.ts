@@ -142,6 +142,84 @@ describe('POST /api/tools/launch', () => {
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toBe('outside cohort');
   });
+
+  it('registers the spawned pid in the process tracker', async () => {
+    // Use this test runner's pid as the spawned-pid stub — it is
+    // guaranteed alive so the tracker's default liveness probe
+    // (process.kill 0) doesn't GC the entry before we read it.
+    const fakePid = process.pid;
+    vi.mocked(launchTool).mockReturnValueOnce({
+      ok: true,
+      pid: fakePid,
+      executed: { binary: '/somewhere', args: [] },
+    });
+    server.toolProcessTracker?.clear();
+    const res = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/tools/launch',
+      headers: { 'content-type': 'application/json' },
+      payload: {
+        id: 'claude-code',
+        installedPath: '/usr/local/bin/claude',
+        workspaceId: 'ws-track',
+      },
+    });
+    expect(res.statusCode).toBe(202);
+    const tracked = server.toolProcessTracker?.list() ?? [];
+    const match = tracked.find((p) => p.pid === fakePid);
+    expect(match).toBeDefined();
+    expect(match?.toolId).toBe('claude-code');
+    expect(match?.workspaceId).toBe('ws-track');
+  });
+});
+
+describe('GET /api/tools/processes', () => {
+  let server: FastifyInstance;
+  let tmpDir: string;
+
+  beforeAll(async () => {
+    tmpDir = createTmpDir('processes');
+    const personalPath = path.join(tmpDir, 'personal.mind');
+    const mind = new MindDB(personalPath);
+    const sessions = new SessionStore(mind);
+    const frames = new FrameStore(mind);
+    const s = sessions.create('processes-test');
+    frames.createIFrame(s.gop_id, 'processes-test seed', 'normal');
+    mind.close();
+    server = await buildLocalServer({ dataDir: tmpDir });
+    await server.ready();
+  });
+
+  afterAll(async () => {
+    if (server) await server.close();
+    if (tmpDir) cleanupDir(tmpDir);
+  });
+
+  it('returns the tracked-and-alive process list', async () => {
+    server.toolProcessTracker?.clear();
+    // Use process.pid (this test runner) as a known-alive pid so the
+    // tracker's default liveness probe doesn't GC the entry.
+    server.toolProcessTracker?.register(process.pid, 'claude-code', 'ws-A');
+    const res = await injectWithAuth(server, {
+      method: 'GET',
+      url: '/api/tools/processes',
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.total).toBe(1);
+    expect(body.processes[0].pid).toBe(process.pid);
+    expect(body.processes[0].toolId).toBe('claude-code');
+  });
+
+  it('returns an empty list when nothing is tracked', async () => {
+    server.toolProcessTracker?.clear();
+    const res = await injectWithAuth(server, {
+      method: 'GET',
+      url: '/api/tools/processes',
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ processes: [], total: 0 });
+  });
 });
 
 describe('POST /api/tools/hooks', () => {

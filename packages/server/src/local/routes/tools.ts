@@ -1,12 +1,21 @@
 import type { FastifyPluginAsync } from 'fastify';
+import fp from 'fastify-plugin';
 import { z } from 'zod';
 import {
   detectInstalledTools,
   launchTool,
   runHookCommand,
+  ToolProcessTracker,
   type HookAction,
 } from '@waggle/agent';
 import { SUPPORTED_TOOLS, type ToolId } from '@waggle/shared';
+
+declare module 'fastify' {
+  interface FastifyInstance {
+    /** AI-OS Phase 4 — in-memory tracker of processes spawned via /api/tools/launch. */
+    toolProcessTracker?: ToolProcessTracker;
+  }
+}
 
 /**
  * AI-OS — tool-detection + launcher + hook-management routes.
@@ -52,7 +61,15 @@ const hooksBodySchema = z.object({
   cliPath: z.string().min(1).max(1024).optional(),
 });
 
-export const toolsRoutes: FastifyPluginAsync = async (server) => {
+const toolsRoutesImpl: FastifyPluginAsync = async (server) => {
+  // Lazy-init the tracker on first registration. fastify-plugin
+  // wrapping (below) propagates the decoration to the parent
+  // FastifyInstance so other plugins + tests can access it.
+  if (!server.toolProcessTracker) {
+    server.decorate('toolProcessTracker', new ToolProcessTracker());
+  }
+  const tracker = server.toolProcessTracker!;
+
   // ── GET /api/tools/detect (Phase 0) ──────────────────────────────
   server.get('/api/tools/detect', async (_request, reply) => {
     try {
@@ -86,7 +103,18 @@ export const toolsRoutes: FastifyPluginAsync = async (server) => {
     if (!result.ok) {
       return reply.code(400).send(result);
     }
+    // AI-OS Phase 4 polish — register the spawned pid for the
+    // 'Running' badge surface (GET /api/tools/processes).
+    if (result.pid != null) {
+      tracker.register(result.pid, body.id, body.workspaceId);
+    }
     return reply.code(202).send(result);
+  });
+
+  // ── GET /api/tools/processes (Phase 4 polish) ────────────────────
+  server.get('/api/tools/processes', async (_request, reply) => {
+    const processes = tracker.list();
+    return reply.code(200).send({ processes, total: processes.length });
   });
 
   // ── POST /api/tools/hooks (Phase 2A) ─────────────────────────────
@@ -117,3 +145,13 @@ export const toolsRoutes: FastifyPluginAsync = async (server) => {
     }
   });
 };
+
+/**
+ * Plugin wrapped with fastify-plugin so the `toolProcessTracker`
+ * decoration propagates to the parent FastifyInstance — without it,
+ * decoration is scoped to this plugin and tests can't read it.
+ * Mirrors the pattern in waggle-dance routes (Phase 1B).
+ */
+export const toolsRoutes: FastifyPluginAsync = fp(toolsRoutesImpl, {
+  name: 'tools-routes',
+});

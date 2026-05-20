@@ -104,6 +104,12 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
   const [activeAction, setActiveAction] = useState<ActionState | null>(null);
   const [lastResult, setLastResult] = useState<ActionResult | null>(null);
   const [prompt, setPrompt] = useState('');
+  /**
+   * AI-OS Phase 4 polish — set of tool ids currently running (at
+   * least one tracked + alive pid). Used to render the 'Running'
+   * badge. Polled every 5s while LauncherApp is mounted.
+   */
+  const [runningTools, setRunningTools] = useState<Set<string>>(new Set());
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -127,6 +133,23 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // Phase 4 polish — poll the process tracker so the 'Running' badge
+  // reflects live state. 5s cadence balances freshness against load.
+  useEffect(() => {
+    let cancelled = false;
+    const pollOnce = async () => {
+      const result = await adapter.getToolProcesses();
+      if (cancelled) return;
+      setRunningTools(new Set(result.processes.map((p) => p.toolId)));
+    };
+    pollOnce();
+    const interval = setInterval(pollOnce, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
 
   const doAction = useCallback(
     async (tool: DetectedTool, action: ToolAction) => {
@@ -291,6 +314,12 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
                       {tool.hooksInstalled && (
                         <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-amber-950/40 text-amber-300">
                           Hooks active
+                        </Badge>
+                      )}
+                      {runningTools.has(tool.id) && (
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-sky-950/40 text-sky-300">
+                          <span className="w-1.5 h-1.5 rounded-full bg-sky-400 inline-block mr-1 animate-pulse" />
+                          Running
                         </Badge>
                       )}
                       {!inCohort && (

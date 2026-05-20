@@ -1407,6 +1407,25 @@ class LocalAdapter {
     };
   }
 
+  async getToolProcesses(): Promise<{
+    processes: Array<{
+      pid: number;
+      toolId: string;
+      startedAt: string;
+      workspaceId?: string;
+    }>;
+    total: number;
+  }> {
+    try {
+      const res = await this.fetch('/api/tools/processes');
+      if (!res.ok) return { processes: [], total: 0 };
+      return await res.json();
+    } catch (err) {
+      console.error('[adapter] getToolProcesses failed:', err);
+      return { processes: [], total: 0 };
+    }
+  }
+
   async manageHooks(payload: {
     id: string;
     action: 'install' | 'verify' | 'uninstall';
