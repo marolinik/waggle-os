@@ -73,6 +73,19 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
           console.error('[SpawnAgentDialog] runtime-model fallback failed:', err);
         }
       }
+      // P35 fix — third-tier fallback: when LiteLLM is unreachable AND
+      // no runtime model is set, but the user has providers configured
+      // (vault keys present), synthesize the model list from those
+      // providers' declared model catalogs. Eliminates the "no models
+      // available" empty state when 13 providers are configured.
+      if (modelList.length === 0 && providers.providers.length > 0) {
+        const fromProviders = providers.providers
+          .filter((p) => p.hasKey)
+          .flatMap((p) => (p.models ?? []).map((mm) => mm.id))
+          .filter((id): id is string => typeof id === 'string' && id.length > 0);
+        const deduped = Array.from(new Set(fromProviders));
+        if (deduped.length > 0) modelList = deduped;
+      }
       setModels(modelList);
       setPricing(p);
       setProvidersWithKeys(countProvidersWithKeys(providers.providers));
