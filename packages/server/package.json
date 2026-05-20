@@ -22,6 +22,7 @@
     "@fastify/websocket": "^11.0.0",
     "@waggle/agent": "*",
     "@waggle/core": "*",
+    "@waggle/hive-mind-shim-core": "*",
     "@waggle/shared": "*",
     "@waggle/waggle-dance": "*",
     "@waggle/wiki-compiler": "*",
