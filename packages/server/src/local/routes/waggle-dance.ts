@@ -9,6 +9,7 @@ import {
 } from '@waggle/waggle-dance';
 import type { WaggleMessage, MessageType, MessageSubtype } from '@waggle/shared';
 import { SignalBus } from '../signal-bus.js';
+import { installWaggleDanceBridge } from '../waggle-dance-bridge.js';
 
 /**
  * AI-OS Phase 1B — local-sidecar surface for the WaggleDance v2
@@ -91,6 +92,10 @@ const waggleDanceRoutesImpl: FastifyPluginAsync = async (server) => {
   // on the parent FastifyInstance, not just inside this plugin.
   if (!server.signalBus) {
     server.decorate('signalBus', new SignalBus());
+    // Bridge the v2 bus into the legacy /api/waggle/signals stream so
+    // the existing UI surfaces cross-tool activity with zero frontend
+    // changes. Phase 1C wiring.
+    installWaggleDanceBridge(server.signalBus!);
   }
   const bus = server.signalBus!;
 
