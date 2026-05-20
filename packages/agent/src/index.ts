@@ -443,3 +443,14 @@ export {
   detectInstalledTools,
   type ToolDetectionDeps,
 } from './tool-detection.js';
+export {
+  launchTool,
+  runHookCommand,
+  hookPackageFor,
+  type ToolLauncherDeps,
+  type LaunchOptions,
+  type LaunchResult,
+  type HookAction,
+  type HookCommandOptions,
+  type HookCommandResult,
+} from './tool-launcher.js';
