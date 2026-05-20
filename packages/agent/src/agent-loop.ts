@@ -96,6 +96,21 @@ export interface AgentLoopConfig {
    * model may ignore. Default on. Set false to opt out.
    */
   skillDistillationGate?: boolean;
+  /**
+   * AI-OS Phase 3 — skill diffusion hook. Invoked the moment D1 fires
+   * (right before the distillation directive is injected). The route
+   * layer typically wires this to record a `skill_share` broadcast on
+   * the WaggleDance v2 bus so MCP-consuming external tools can adopt
+   * the soon-to-be-authored skill.
+   *
+   * Failures here are swallowed — skill diffusion is observability,
+   * not a precondition for the distillation loop to run.
+   */
+  onSkillDistillationFire?: (info: {
+    patternKey: string;
+    toolsUsed: readonly string[];
+    directive: string;
+  }) => void | Promise<void>;
 }
 
 // Phase 2 Commit 2.1: re-export structured-action retrieval loop alongside
@@ -144,6 +159,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     turnId,
     verificationGate = true,
     skillDistillationGate = true,
+    onSkillDistillationFire,
   } = config;
 
   logTurnEvent(turnId, {
@@ -460,6 +476,21 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
           messages.push({ role: 'assistant', content });
           messages.push({ role: 'user', content: distillPlan.directive });
           logTurnEvent(turnId, { stage: 'agent-loop.skill-distillation.fired', toolCalls: toolsUsed.length });
+          // AI-OS Phase 3 — skill diffusion observer. Swallow any
+          // error so the distillation loop is never blocked by a
+          // diffusion-side failure (the broadcast is best-effort
+          // observability, not a precondition).
+          if (onSkillDistillationFire) {
+            try {
+              await onSkillDistillationFire({
+                patternKey: distillPlan.patternKey,
+                toolsUsed: [...toolsUsed],
+                directive: distillPlan.directive,
+              });
+            } catch {
+              /* observer failures must never block the loop */
+            }
+          }
           continue;
         }
       }

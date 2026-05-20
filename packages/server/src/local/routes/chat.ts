@@ -1255,6 +1255,36 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           ...(traceRecorder && traceHandle
             ? { traceRecording: { recorder: traceRecorder, handle: traceHandle } }
             : {}),
+          // AI-OS Phase 3 — skill diffusion. When the D1 closed
+          // learning loop fires, broadcast a skill_share signal on
+          // the v2 bus so MCP-consuming external tools can adopt
+          // the soon-to-be-authored skill. Failures are swallowed
+          // upstream (agent-loop wraps in try/catch).
+          onSkillDistillationFire: server.signalBus
+            ? async ({ patternKey, toolsUsed, directive }) => {
+                const signalBus = server.signalBus;
+                if (!signalBus) return;
+                const now = new Date();
+                signalBus.record({
+                  id: `skill-share-${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`,
+                  teamId: `personal::${effectiveWorkspace ?? 'default'}`,
+                  senderId: `agent-loop:${activePersonaId ?? 'agent'}`,
+                  type: 'broadcast',
+                  subtype: 'skill_share',
+                  content: {
+                    tool: 'waggle-agent',
+                    patternKey,
+                    toolsUsed: [...toolsUsed],
+                    directive,
+                    sessionId,
+                    workspaceId: effectiveWorkspace ?? null,
+                  },
+                  referenceId: null,
+                  routing: null,
+                  createdAt: now,
+                });
+              }
+            : undefined,
         };
 
         // ── Run agent with credential pool + fallback chain ──
