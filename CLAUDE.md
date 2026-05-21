@@ -509,6 +509,16 @@ End-to-end: detect → install hooks (reversible) → launch with `WAGGLE_WORKSP
 - ✅ M3 Gemini export — `takeout-20260416T224803Z-3-001.zip` (437 MB) on Desktop\MEMORIES\Google\, dated 2026-04-17. Ready for E-11 ingestion.
 - ⏭️ M1 ChatGPT export — skipped by Marko 2026-05-21 (export emails never arrived after multiple requests).
 - ⏭️ M4 Perplexity export — skipped by Marko 2026-05-21 (research-burst usage; marginal corpus contribution).
+- ✅ M6 judge roster — Opus 4.7 / GPT-5.4 / Gemini 2.5 Pro / Haiku 4.5 locked 2026-05-21.
+- ✅ C-1 LOCOMO v5 Memory Proof — substantively done 2026-05-11: 73.1% Opus 4.7 / 73.4% Qwen3.6, N=320 stratified, +4.6pp over Mem0 paper. Trio-strict ensemble re-judge (~$30, ~2h) is the only remaining step. See `D:/Projects/hive-mind-test/scripts/locomo/data/reports/RESULT-v5-2026-05-11.md`.
+- ✅ C-2 Substrate Claim — done 2026-04-25: Stage 3 v6 N=400, Fisher one-sided p = 8.07 × 10⁻¹⁸, +19.25pp retrieval-vs-no-context lift. "GEPA Full-System canary" expansion explicitly DROPPED 2026-04-30 per PM strategic reset. See `D:/Projects/waggle-os-gaia2-wt/benchmarks/results/stage3-n400-v6-final-analysis.md`.
+
+### New open work surfaced 2026-05-21
+
+| # | Item | What |
+|---|---|---|
+| E-14 | `hive-mind` v0.3.0 promotion finish | Per `PROMOTE-TO-UPSTREAM-2026-05-12.md`: claude-code-hooks + enrichment + plugin manifest already merged into `D:/Projects/hive-mind`; still missing wiki-web (source at `hive-mind-test/packages/wiki-web/`), `benchmarks/locomo/` scripts + RESULTS.md, README "Claude Code plugin" section + benchmark badge, CHANGELOG entry, version bumps + v0.3.0 tag. 1-2 days. Launch-critical — without this the substrate-claim evidence isn't visible in the public repo. |
+| C-3 (reframed) | Full GAIA 2 Phase 4 benchmark | Phase 3 closed in HALT 2026-04-30 (commit `104aa5a` in `waggle-os-gaia2-wt`). Probe showed $4.09/invocation (9-31× over original estimate), narrow-proxy adapter approach economically non-viable. Phase 4 needs Docker + ARE proper agentic execution environment + new adapter strategy. Real engineering arc — scope + budget recalibrate pending Phase 4 design. |
 
 For the full polish+launch backlog see `docs/plans/BACKLOG-CONSOLIDATED-2026-04-17.md` (~145 items; ~50% are stale-but-done per the May 2026 verification sweep) and the AI-OS arc in `docs/plans/AI-OS-EXPLORATION-2026-05-19.md`.
 

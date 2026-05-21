@@ -24,7 +24,24 @@ These are real remaining engineering items with no external dependency. Pick fre
 | E-8 | LinkedIn launch posts (CR-5) | content | 0.5-1 day | 3-post sequence over 10 days. |
 | E-9 | Tauri binary build verification (CR-8) | binary + smoke | 1 day | "Haven't built since mega code changes" — sanity build + manual smoke on a clean Windows VM. |
 
-**Genuinely actionable now: E-2, E-4, E-6, E-7, E-8, E-9.** (E-1, E-3, E-5 closed.) E-7/E-8 are content, not code. E-9 needs binary build. So the in-session engineering left is **E-2 (small per-tool), E-4 (substantial), E-6 (substantial)**.
+**Genuinely actionable now: E-2, E-4, E-6, E-7, E-8, E-9, E-14.** (E-1, E-3, E-5 closed.) E-7/E-8 are content, not code. E-9 needs binary build. So the in-session engineering left is **E-2 (small per-tool), E-4 (substantial), E-6 (substantial), E-14 (substantial, see below)**.
+
+### E-14 — `hive-mind` v0.3.0 promotion (finish in full)
+
+Per `D:/Projects/hive-mind-test/PROMOTE-TO-UPSTREAM-2026-05-12.md`, the v0.3.0 promotion is **PARTIAL** as of 2026-05-21. Verified state of `D:/Projects/hive-mind` (last commit `20bce16` "bump to v0.2.0", no v0.2.0 or v0.3.0 tag):
+
+| Item | State |
+|---|---|
+| `packages/claude-code-hooks/` | ✅ merged |
+| `packages/enrichment/` | ✅ merged |
+| `.claude-plugin/{plugin,marketplace}.json` | ✅ present (one-line install ready) |
+| `packages/wiki-web/` (local port-3717 UI) | ❌ **NOT merged** — source at `D:/Projects/hive-mind-test/packages/wiki-web/` |
+| `benchmarks/locomo/` scripts + RESULTS.md | ❌ **NOT merged** — no `benchmarks/` dir at all in upstream |
+| `v0.3.0` release commit + tag | ❌ Last commit is "bump v0.2.0" but no v0.2.0 tag either |
+| README "Claude Code plugin" section + benchmark badge | ❌ Not added |
+| CHANGELOG v0.3.0 entry | ❌ Not added |
+
+**Effort:** 1-2 days. Order: (1) port `wiki-web` package, (2) move `scripts/locomo/` → `benchmarks/locomo/` + commit `RESULT-v5-2026-05-11.md` as `RESULTS.md` + supporting methodology docs (`MEM0-METHODOLOGY.md`, `COMPARE-vs-prior.md`), (3) README + CHANGELOG, (4) bump versions + tag `v0.3.0`. Launch-critical because the public repo currently has no benchmark evidence — the substrate claim (Fisher p=8e-18) isn't visible to anyone reading the README.
 
 ---
 
@@ -68,8 +85,8 @@ These are the actual launch blockers. None of them are engineering work.
 | ✅ **M2** | ~~Export Claude conversations~~ | — | **Done (2026-04-17).** `data-ffbb9f0b-…batch-0000.zip` (30 MB) at `C:\Users\MarkoMarkovic\OneDrive - Egzakta d.o.o\Desktop\MEMORIES\Claude\`. ~1 month stale at time of writing — fresh delta export advisable on launch week. |
 | ✅ **M3** | ~~Export Gemini (Google Takeout)~~ | — | **Done (2026-04-17).** `takeout-20260416T224803Z-3-001.zip` (437 MB) at `C:\Users\MarkoMarkovic\OneDrive - Egzakta d.o.o\Desktop\MEMORIES\Google\`. Takeout contains more than just Gemini — adapter consumes chats, ignores the rest. |
 | ⏭️ **M4** | ~~Export Perplexity threads~~ | — | **Skipped by Marko (2026-05-21).** Perplexity usage is research-burst rather than daily; corpus contribution would be marginal. |
-| **M5** | Top up API credits (Anthropic / OpenAI / Google) | 15 min | Phase 4+5 eval judging |
-| **M6** | Confirm judge models (Opus 4.6, GPT-5.4, Gemini 2.5 Pro, Haiku 4.5) | Decision | Phase 5 |
+| **M5** | Top up API credits (Anthropic / OpenAI / Google + OpenRouter for GAIA 2 routing) | 15 min | C-1 trio re-judge (~$30) + C-3 GAIA 2 Phase 4 (probe-extrapolated **9-31× over original estimate** — recalibrate based on Phase 4 adapter strategy) |
+| ✅ **M6** | ~~Confirm judge models~~ | — | **Confirmed (2026-05-21):** Opus 4.7 / GPT-5.4 / Gemini 2.5 Pro / Haiku 4.5 — locked roster for trio-strict ensemble re-judge + future evals. |
 | ✅ **M7** | ~~Create Stripe products (Pro $19/mo, Teams $49/mo/seat)~~ | — | **Done.** Both products + all 4 prices already exist in test mode (`acct_1SzHlbC0mmjh4oEM`) with `pro_monthly` / `pro_annual` / `teams_monthly` / `teams_annual` lookup keys; live-mode price IDs documented in `docs/launch/drafts/2026-05-12-apps-www-deployment-readiness.md` (acct `CNCrMQy1f7`). See §9. |
 | **M8** | Buy Windows EV code-signing cert (~$300-500/yr) | 1-3 days lead | Launch |
 | **M9** | Contact ML peer reviewer for papers | 1 day | Phase 6 papers |
@@ -92,20 +109,20 @@ These need the M-action to fire first, then real engineering happens.
 
 ---
 
-## 6. Multi-week campaigns (sequential, M-gated)
+## 6. Multi-week campaigns — **reconciled 2026-05-21**
 
-These are the real-money eval campaigns that produce the launch-paper claims.
+The original framing in this section was significantly stale. Reality from disk (verified by reading result files in `D:/Projects/hive-mind-test`, `D:/Projects/waggle-os-gaia2-wt`, and `D:/Projects/hive-mind`):
 
-| # | Campaign | Days | Budget | Depends on |
+| # | Campaign | Days | Budget | Status (2026-05-21) |
 |---|---|---|---|---|
-| C-1 | **Phase 4 Memory Proof** | 10 | $300-500 | E-11 harvest done |
-| C-2 | **Phase 5 GEPA Full-System Proof** ★ critical path | 18 | $1,500-2,500 | M5 credits |
-| C-3 | **Phase 5b Combined Effect Proof** | 6 | $500 | C-1 + C-2 |
-| C-4 | **Phase 6 Write Papers** | 5 + Marko peer review | — | C-1, C-2, C-3 done |
-| C-5 | **Phase 7 Launch Prep** | 5 | — | M7, M8, papers done |
-| C-6 | **Phase 7b Launch Day** | 1 | — | All above |
+| ✅ C-1 | **Phase 4 Memory Proof** (LOCOMO v5) | ~~10~~ | ~~$300-500~~ → **~$30** | **Substantively done.** LOCOMO v5 = 73.1% Opus 4.7 / 73.4% Qwen3.6, +4.6pp over Mem0 paper, N=320 stratified. See `D:/Projects/hive-mind-test/scripts/locomo/data/reports/RESULT-v5-2026-05-11.md`. **Only open step:** trio-strict ensemble re-judge (~$30, ~2h) using locked judges (Opus 4.7 / GPT-5.4 / Gemini 2.5 Pro / Haiku 4.5) to convert single-judge to publishable claim. |
+| ✅ C-2 | **Phase 5 Substrate Claim** (was: "GEPA Full-System") | ~~18~~ | ~~$1.5-2.5K~~ | **Done; statistically robust.** Stage 3 v6 N=400: retrieval 22.25% vs no-context 3.00%, **Δ +19.25pp, Fisher one-sided p = 8.07 × 10⁻¹⁸**. See `D:/Projects/waggle-os-gaia2-wt/benchmarks/results/stage3-n400-v6-final-analysis.md`. The "GEPA Full-System canary" expansion beyond this was explicitly DROPPED 2026-04-30 per PM strategic reset. Substrate-claim framing is the actual deliverable. |
+| 🔴 C-3 | **Phase 5b GAIA 2 Benchmark** (reframed) | TBD | TBD — recalibrate | **Phase 3 closed in HALT 2026-04-30** (commit `104aa5a`). Narrow-proxy adapter approach economically non-viable — probe-actual $4.09/invocation (9-31× over estimate), hard cap breached. Phase 4 needs **Docker + ARE proper agentic execution environment**; new adapter strategy (not `flattenAppStateToCorpus`). See `D:/Projects/waggle-os-gaia2-wt/benchmarks/gaia2/dry-run-results-memo.md`. **Real remaining engineering arc** — scope + budget pending Phase 4 design. |
+| 🟡 C-4 | **Phase 6 Write Papers** | 5 + peer review | — | Concept doc exists: `docs/research/PAPER-2-CONCEPT_gepa-evolution.md`. Papers not written. Gates on C-1 trio re-judge + C-3 GAIA 2 results landing. |
+| 🟡 C-5 | **Phase 7 Launch Prep** | 5 | — | Gates on hive-mind v0.3.0 promotion completion (see §1 E-14) + papers (C-4). |
+| 🟡 C-6 | **Phase 7b Launch Day** | 1 | — | All above. M10 greenlight. |
 
-**Calendar from M-actions to launch: ~7-8 weeks with parallelism** (per BACKLOG-CONSOLIDATED critical path).
+**Calendar:** The "7-8 weeks with parallelism" estimate from `BACKLOG-CONSOLIDATED-2026-04-17.md` is heavily outdated — most of the foundational eval work is done. **Remaining critical path:** C-1 trio re-judge (~2h + $30) → C-3 GAIA 2 Phase 4 design + run (real cost TBD) → C-4 papers (5 days) → C-5/C-6 launch.
 
 ---
 
@@ -164,6 +181,9 @@ For audit trail. Don't re-schedule any of these.
 | ✅ | **M3 Gemini export (Google Takeout)** | `takeout-20260416T224803Z-3-001.zip` (437 MB) at `C:\Users\MarkoMarkovic\OneDrive - Egzakta d.o.o\Desktop\MEMORIES\Google\`, downloaded 2026-04-17. Adapter consumes Gemini chats; rest of Takeout payload ignored. Ready for E-11. |
 | ⏭️ | **M1 ChatGPT export** | **Skipped (2026-05-21).** Multiple requests; export email never arrived. Corpus proceeds without ChatGPT — cross-source breadth claims lose one source. |
 | ⏭️ | **M4 Perplexity export** | **Skipped (2026-05-21).** Research-burst usage rather than daily; corpus contribution would be marginal. |
+| ✅ | **M6 4-judge roster confirmed** | **(2026-05-21)** Opus 4.7 / GPT-5.4 / Gemini 2.5 Pro / Haiku 4.5 — locked for trio-strict ensemble re-judge of LOCOMO v5 + future evals. |
+| ✅ | **C-1 LOCOMO v5 Memory Proof** | **Substantively done (2026-05-11).** 73.1% Opus 4.7 / 73.4% Qwen3.6, N=320 stratified, +4.6pp over Mem0 paper. Trio-strict ensemble re-judge (~$30, ~2h) is the only remaining step. See `D:/Projects/hive-mind-test/scripts/locomo/data/reports/RESULT-v5-2026-05-11.md`. |
+| ✅ | **C-2 Substrate Claim** (was "Phase 5 GEPA Full-System") | **Done (2026-04-25).** Stage 3 v6 N=400 Fisher one-sided p = 8.07 × 10⁻¹⁸; +19.25pp memory lift retrieval vs no-context. The "GEPA Full-System canary" expansion beyond this was explicitly DROPPED 2026-04-30 per PM strategic reset. See `D:/Projects/waggle-os-gaia2-wt/benchmarks/results/stage3-n400-v6-final-analysis.md`. |
 
 **~50% of "🟢 pending" items in `BACKLOG-CONSOLIDATED-2026-04-17.md` are stale-but-done.** Future sessions should `grep` before scheduling effort against any backlog item.
 
@@ -175,11 +195,15 @@ If you have 30 minutes: **M5** (top up API credits) + **M6** (confirm judge mode
 
 If you have a half-day: **M8** (buy Windows EV code-signing cert) has 1-3 day shipping lead time — start the order so the cert is in hand before launch decisions. After M5 + M6 + M8 are in flight, the only remaining Marko-side launch blockers are **M9** (peer reviewer) and **M10** (greenlight date).
 
-If you have 1-3 days for engineering: **E-11** (Phase 1 Harvest ingestion). All inputs are in hand. The two exports at `C:\Users\MarkoMarkovic\OneDrive - Egzakta d.o.o\Desktop\MEMORIES\` go in, the production `personal.mind` comes out populated, identity auto-populates, wiki compiles from real data. Unblocks the entire eval campaign chain (C-1, C-3) and the Phase 6 papers.
+If you have 1-2 days for engineering: **E-14** (`hive-mind` v0.3.0 promotion finish) is the highest-leverage. Port `wiki-web`, copy `benchmarks/locomo/` + RESULTS.md, README + CHANGELOG + tag. Without this, the substrate-claim evidence (Fisher p=8e-18) is invisible to anyone reading the public repo.
 
-If you have a half-day for non-harvest engineering: **E-9** (Tauri binary build + smoke) gives V-1/V-2/V-3 runtime validation in one pass; **E-12** (Cursor harvest adapter) is the only other Marko-independent arc remaining.
+If you have 1-3 days for engineering: **E-11** (Phase 1 Harvest ingestion). All inputs in hand. Two exports at `C:\Users\MarkoMarkovic\OneDrive - Egzakta d.o.o\Desktop\MEMORIES\` go in, production `personal.mind` comes out populated, identity auto-populates, wiki compiles from real data.
 
-If you have 2+ days for engineering: **E-4** (hive-mind OSS source extraction) is the highest-leverage; it's a known scaffold + copy task and unlocks the OSS-launch arc.
+If you have a half-day for non-critical engineering: **E-9** (Tauri binary build + smoke) or **E-12** (Cursor harvest adapter).
+
+If you have 2+ days for the real arc: **C-3 GAIA 2 Phase 4** — Docker + ARE setup + adapter redesign + run. Real budget pending Phase 4 design. This is the only remaining campaign work after C-1 trio re-judge lands.
+
+If you have 2 hours + ~$30: **C-1 trio-strict re-judge** — closes the LOCOMO Memory Proof to publishable status using the locked judge roster.
 
 ---
 
