@@ -14,7 +14,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { MindDB } from '@waggle/core';
 import { Orchestrator } from '@waggle/agent';
-import { MockEmbedder } from '../../core/tests/mind/helpers/mock-embedder.js';
+import { MockEmbedder } from '../../hive-mind-core/tests/mind/helpers/mock-embedder.js';
 
 const MIND_PATH = path.join(os.tmpdir(), `waggle-hard-memory-${Date.now()}.mind`);
 let lastDb: MindDB | null = null;

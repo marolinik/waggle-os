@@ -294,6 +294,9 @@ describe('MarketplaceSync — Source Audit', () => {
       'official_marketplace', 'community_repo', 'commercial_marketplace',
       'aggregator', 'tool', 'specification', 'marketplace', 'registry',
       'github_org', 'curated_list',
+      // Added 2026-05-21 — npm registry adapters landed as a new source_type
+      // when the npm-mcp-servers / npm-mcp-protocol sources were seeded.
+      'npm_registry',
     ];
     for (const source of sources) {
       expect(validTypes).toContain(source.source_type);
@@ -311,11 +314,13 @@ describe('MarketplaceSync — Source Audit', () => {
   });
 
   it('GitHub-based sources have github.com in their URL', () => {
+    // Filter by URL — name-based heuristics produced false positives
+    // (e.g. `awesome-skills-app` is named "awesome" but hosted at awesome-skills.app, not GitHub).
+    // The "is this a GitHub source" question is best answered by the URL itself.
     const githubSources = sources.filter(s =>
-      s.name.includes('github') ||
+      (s.url && s.url.includes('github.com')) ||
       s.name.includes('anthropics') ||
-      s.name.includes('awesome') ||
-      (s.url && s.url.includes('github.com')),
+      s.name.startsWith('github-'),
     );
     for (const source of githubSources) {
       if (source.url && source.url.startsWith('http')) {

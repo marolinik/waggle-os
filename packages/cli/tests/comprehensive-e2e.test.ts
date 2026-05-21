@@ -21,7 +21,7 @@ import {
   filterToolsForContext,
   needsConfirmation,
 } from '@waggle/agent';
-import { MockEmbedder } from '../../core/tests/mind/helpers/mock-embedder.js';
+import { MockEmbedder } from '../../hive-mind-core/tests/mind/helpers/mock-embedder.js';
 
 // Helper: create a file-backed .mind DB in temp dir
 function createTmpMind(): { path: string; db: MindDB } {
