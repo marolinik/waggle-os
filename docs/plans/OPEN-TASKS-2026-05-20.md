@@ -24,24 +24,24 @@ These are real remaining engineering items with no external dependency. Pick fre
 | E-8 | LinkedIn launch posts (CR-5) | content | 0.5-1 day | 3-post sequence over 10 days. |
 | E-9 | Tauri binary build verification (CR-8) | binary + smoke | 1 day | "Haven't built since mega code changes" — sanity build + manual smoke on a clean Windows VM. |
 
-**Genuinely actionable now: E-2, E-4, E-6, E-7, E-8, E-9, E-14.** (E-1, E-3, E-5 closed.) E-7/E-8 are content, not code. E-9 needs binary build. So the in-session engineering left is **E-2 (small per-tool), E-4 (substantial), E-6 (substantial), E-14 (substantial, see below)**.
+**Genuinely actionable now: E-2, E-4, E-6, E-7, E-8, E-9.** (E-1, E-3, E-5, **E-14** closed.) E-7/E-8 are content, not code. E-9 needs binary build. So the in-session engineering left is **E-2 (small per-tool), E-4 (substantial), E-6 (substantial)**.
 
-### E-14 — `hive-mind` v0.3.0 promotion (finish in full)
+### ✅ E-14 — `hive-mind` v0.3.0 promotion (SHIPPED 2026-05-21)
 
 Per `D:/Projects/hive-mind-test/PROMOTE-TO-UPSTREAM-2026-05-12.md`, the v0.3.0 promotion is **PARTIAL** as of 2026-05-21. Verified state of `D:/Projects/hive-mind` (last commit `20bce16` "bump to v0.2.0", no v0.2.0 or v0.3.0 tag):
 
-| Item | State |
-|---|---|
-| `packages/claude-code-hooks/` | ✅ merged |
-| `packages/enrichment/` | ✅ merged |
-| `.claude-plugin/{plugin,marketplace}.json` | ✅ present (one-line install ready) |
-| `packages/wiki-web/` (local port-3717 UI) | ❌ **NOT merged** — source at `D:/Projects/hive-mind-test/packages/wiki-web/` |
-| `benchmarks/locomo/` scripts + RESULTS.md | ❌ **NOT merged** — no `benchmarks/` dir at all in upstream |
-| `v0.3.0` release commit + tag | ❌ Last commit is "bump v0.2.0" but no v0.2.0 tag either |
-| README "Claude Code plugin" section + benchmark badge | ❌ Not added |
-| CHANGELOG v0.3.0 entry | ❌ Not added |
+Shipped 2026-05-21 in 3 commits + 1 tag on `marolinik/hive-mind`:
 
-**Effort:** 1-2 days. Order: (1) port `wiki-web` package, (2) move `scripts/locomo/` → `benchmarks/locomo/` + commit `RESULT-v5-2026-05-11.md` as `RESULTS.md` + supporting methodology docs (`MEM0-METHODOLOGY.md`, `COMPARE-vs-prior.md`), (3) README + CHANGELOG, (4) bump versions + tag `v0.3.0`. Launch-critical because the public repo currently has no benchmark evidence — the substrate claim (Fisher p=8e-18) isn't visible to anyone reading the README.
+| Commit / artifact | Description |
+|---|---|
+| `b5c1e8f` | `feat(wiki-web): port local wiki UI from hive-mind-test (v0.3.0)` — package rename `@hive-mind-test/*` → `@hive-mind/*`, server.js import fixed, version bumped, deduped enrichment workspace dep verified |
+| `842f390` | `feat(benchmarks): LoCoMo benchmark suite + RESULTS.md + methodology (v0.3.0)` — 36 numbered scripts, RESULTS.md (73.1% Opus 4.7 headline), README (reproduction guide), 3 methodology docs (LOCOMO-PLAN, MEM0-METHODOLOGY, COMPARE-vs-prior) |
+| `507e0cf` | `chore(release): v0.3.0` — also surfaced that `claude-code-hooks/`, `enrichment/`, `.claude-plugin/` were on disk but never tracked under `20bce16`; this commit actually landed them. README badge + plugin install + 3 new package rows + project structure. CHANGELOG v0.3.0 + backfilled v0.2.0 + Known Issues note for 4 pre-existing dispatch.test.ts failures. All 9 versions at 0.3.0. |
+| tag `v0.3.0` | Annotated, pointing at `507e0cf`; visible on GitHub releases. |
+
+**Verified:** `npm install --workspaces` resolves 7 packages clean (deduped deps); `npm run build` 0 errors; vitest 308/312 (4 pre-existing failures documented as v0.3.x followup — same failures present on baseline `20bce16` v0.2.0 commit, not session-induced).
+
+**Substrate-claim evidence now publicly visible** on `marolinik/hive-mind` README + `benchmarks/locomo/`. Unblocks S-1 strategic decision (OSS launch timing — "before Waggle" is now the default option).
 
 ---
 
