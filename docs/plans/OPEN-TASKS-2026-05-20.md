@@ -64,10 +64,10 @@ These are the actual launch blockers. None of them are engineering work.
 
 | # | Action | Time | Unblocks |
 |---|---|---|---|
-| **M1** | Export ChatGPT conversations (claude.ai download) | 5 min | Phase 1 harvest |
-| **M2** | Export Claude conversations (claude.ai download) | 5 min | Phase 1 harvest |
-| **M3** | Export Gemini (Google Takeout) | 10 min | Phase 1 harvest |
-| **M4** | Export Perplexity threads | 5 min | Phase 1 harvest |
+| ⏭️ **M1** | ~~Export ChatGPT conversations~~ | — | **Skipped by Marko (2026-05-21).** ChatGPT export emails never arrived after multiple requests; corpus proceeds without ChatGPT. Eval claims about cross-source breadth lose one source. |
+| ✅ **M2** | ~~Export Claude conversations~~ | — | **Done (2026-04-17).** `data-ffbb9f0b-…batch-0000.zip` (30 MB) at `C:\Users\MarkoMarkovic\OneDrive - Egzakta d.o.o\Desktop\MEMORIES\Claude\`. ~1 month stale at time of writing — fresh delta export advisable on launch week. |
+| ✅ **M3** | ~~Export Gemini (Google Takeout)~~ | — | **Done (2026-04-17).** `takeout-20260416T224803Z-3-001.zip` (437 MB) at `C:\Users\MarkoMarkovic\OneDrive - Egzakta d.o.o\Desktop\MEMORIES\Google\`. Takeout contains more than just Gemini — adapter consumes chats, ignores the rest. |
+| ⏭️ **M4** | ~~Export Perplexity threads~~ | — | **Skipped by Marko (2026-05-21).** Perplexity usage is research-burst rather than daily; corpus contribution would be marginal. |
 | **M5** | Top up API credits (Anthropic / OpenAI / Google) | 15 min | Phase 4+5 eval judging |
 | **M6** | Confirm judge models (Opus 4.6, GPT-5.4, Gemini 2.5 Pro, Haiku 4.5) | Decision | Phase 5 |
 | ✅ **M7** | ~~Create Stripe products (Pro $19/mo, Teams $49/mo/seat)~~ | — | **Done.** Both products + all 4 prices already exist in test mode (`acct_1SzHlbC0mmjh4oEM`) with `pro_monthly` / `pro_annual` / `teams_monthly` / `teams_annual` lookup keys; live-mode price IDs documented in `docs/launch/drafts/2026-05-12-apps-www-deployment-readiness.md` (acct `CNCrMQy1f7`). See §9. |
@@ -75,7 +75,7 @@ These are the actual launch blockers. None of them are engineering work.
 | **M9** | Contact ML peer reviewer for papers | 1 day | Phase 6 papers |
 | **M10** | Greenlight launch date | Decision | Everything downstream |
 
-**Total active time: ~25 min (M1-M4) + decisions.** Lead time on M8 is the longest single blocker — start it whenever.
+**Total active time: decisions only (M5, M6, M9, M10) + 1-3 day M8 shipping lead.** Lead time on M8 is the longest single blocker — start it whenever.
 
 ---
 
@@ -86,7 +86,7 @@ These need the M-action to fire first, then real engineering happens.
 | # | Item | Depends on | Notes |
 |---|---|---|---|
 | ✅ E-10 | ~~**Stripe webhooks → tier enforcement**~~ | ~~M7~~ | **Done.** Webhook handler (`packages/server/src/stripe/webhook.ts`) was already complete: signature validation + idempotency + checkout.session.completed / customer.subscription.updated / customer.subscription.deleted handlers + `config.json` tier write. This session closed the residual wiring gap: `tierFromPriceId()` now resolves the full 4-var contract (`STRIPE_PRICE_PRO_MONTHLY` / `_ANNUAL` / `STRIPE_PRICE_TEAMS_MONTHLY` / `_ANNUAL`) alongside legacy `STRIPE_PRICE_PRO` / `STRIPE_PRICE_BASIC` / `STRIPE_PRICE_TEAMS`. 17/17 webhook tests green. See §9. |
-| E-11 | **Phase 1 Harvest** (~3 days) | M1-M4 | Import + cognify + identity auto-populate + wiki compile from real data. 🟢 gates on 10K-50K frames + dedup + KG populated. |
+| E-11 | **Phase 1 Harvest** (~3 days) | **Unblocked** (M2 + M3 in hand; M1 + M4 skipped) | Ingest the two existing exports (`Claude\data-ffbb9f0b-…batch-0000.zip` 30 MB + `Google\takeout-20260416T224803Z-3-001.zip` 437 MB) at `C:\Users\MarkoMarkovic\OneDrive - Egzakta d.o.o\Desktop\MEMORIES\` into production `personal.mind`. Then cognify + identity auto-populate + wiki compile. 🟢 gates on 10K-50K frames + dedup + KG populated. Fresh delta-exports recommended for launch week. |
 | E-12 | **Cursor adapter** (0.5-1 day) | — | Build the harvest adapter that doesn't exist yet (Marko uses Cursor). Independent of M1-M4. |
 | E-13 | **Mac notarization** | M8 (cert) + Marko-side | Signs the macOS bundle. ⏳ Marko per backlog. |
 
@@ -160,6 +160,10 @@ For audit trail. Don't re-schedule any of these.
 | ✅ | **3 test regressions** | dock-app-title parity (Phase 2B), Tauri identifier (stale), capability-acquisition (modernized) |
 | ✅ | **M7 Stripe products** | Test mode (`acct_1SzHlbC0mmjh4oEM`): Pro `prod_UMIG4B7V0Ke6zQ` + Teams `prod_UMIGZ99xtazCAs`, each with `*_monthly` + `*_annual` lookup keys. Live mode (`CNCrMQy1f7`): all 4 price IDs documented in `docs/launch/drafts/2026-05-12-apps-www-deployment-readiness.md` + live webhook secret already provisioned. Confirmed via `stripe products list` + `stripe prices list`. |
 | ✅ | **E-10 Stripe tier-enforcement wiring** | Webhook code in `packages/server/src/stripe/webhook.ts` was already complete (signature validation + idempotency + 3 event handlers). This session: extended `tierFromPriceId()` in `packages/server/src/stripe/index.ts` to read the full 4-var contract (`STRIPE_PRICE_{PRO,TEAMS}_{MONTHLY,ANNUAL}`) alongside legacy single-vars + `STRIPE_PRICE_BASIC` alias. 17/17 webhook tests green. Annual subscriptions now resolve correctly through the webhook; new + legacy env contracts can coexist on the same env. |
+| ✅ | **M2 Claude conversation export** | `data-ffbb9f0b-…batch-0000.zip` (30 MB) at `C:\Users\MarkoMarkovic\OneDrive - Egzakta d.o.o\Desktop\MEMORIES\Claude\`, downloaded 2026-04-17. Ready for E-11 ingestion. |
+| ✅ | **M3 Gemini export (Google Takeout)** | `takeout-20260416T224803Z-3-001.zip` (437 MB) at `C:\Users\MarkoMarkovic\OneDrive - Egzakta d.o.o\Desktop\MEMORIES\Google\`, downloaded 2026-04-17. Adapter consumes Gemini chats; rest of Takeout payload ignored. Ready for E-11. |
+| ⏭️ | **M1 ChatGPT export** | **Skipped (2026-05-21).** Multiple requests; export email never arrived. Corpus proceeds without ChatGPT — cross-source breadth claims lose one source. |
+| ⏭️ | **M4 Perplexity export** | **Skipped (2026-05-21).** Research-burst usage rather than daily; corpus contribution would be marginal. |
 
 **~50% of "🟢 pending" items in `BACKLOG-CONSOLIDATED-2026-04-17.md` are stale-but-done.** Future sessions should `grep` before scheduling effort against any backlog item.
 
@@ -167,13 +171,13 @@ For audit trail. Don't re-schedule any of these.
 
 ## 10. Recommended next moves (PM-grade pick list)
 
-If you have 25 minutes: **M1-M4** (export your AI convos). Unblocks the entire eval campaign chain.
+If you have 30 minutes: **M5** (top up API credits) + **M6** (confirm judge model list). Both gate the eval campaign chain after E-11 ingestion lands.
 
-If you have a half-day: **M8** (buy Windows EV code-signing cert) has 1-3 day shipping lead time — start the order so the cert is in hand before launch decisions. After M1-M4 + M8 are in flight, the only remaining Marko-side launch blocker is **M10** (greenlight date).
+If you have a half-day: **M8** (buy Windows EV code-signing cert) has 1-3 day shipping lead time — start the order so the cert is in hand before launch decisions. After M5 + M6 + M8 are in flight, the only remaining Marko-side launch blockers are **M9** (peer reviewer) and **M10** (greenlight date).
 
-If you have a half-day for engineering: **E-9** (Tauri binary build + smoke) gives you V-1/V-2/V-3 runtime validation in one pass.
+If you have 1-3 days for engineering: **E-11** (Phase 1 Harvest ingestion). All inputs are in hand. The two exports at `C:\Users\MarkoMarkovic\OneDrive - Egzakta d.o.o\Desktop\MEMORIES\` go in, the production `personal.mind` comes out populated, identity auto-populates, wiki compiles from real data. Unblocks the entire eval campaign chain (C-1, C-3) and the Phase 6 papers.
 
-If you have 1 day for engineering: **E-12** (Cursor harvest adapter) is the only Marko-independent engineering work left on the critical path — and you use Cursor.
+If you have a half-day for non-harvest engineering: **E-9** (Tauri binary build + smoke) gives V-1/V-2/V-3 runtime validation in one pass; **E-12** (Cursor harvest adapter) is the only other Marko-independent arc remaining.
 
 If you have 2+ days for engineering: **E-4** (hive-mind OSS source extraction) is the highest-leverage; it's a known scaffold + copy task and unlocks the OSS-launch arc.
 

@@ -505,6 +505,10 @@ End-to-end: detect → install hooks (reversible) → launch with `WAGGLE_WORKSP
 - ✅ CR-2 hive-950 → semantic tokens (only comment-level refs remain)
 - ✅ M7 Stripe products — both test (`acct_1SzHlbC0mmjh4oEM`) and live (`CNCrMQy1f7`) accounts hold the full 2 products × 2 prices (monthly + annual) with `pro_monthly` / `pro_annual` / `teams_monthly` / `teams_annual` lookup keys. Verified via `stripe products list` + `stripe prices list`. Live price IDs documented in `docs/launch/drafts/2026-05-12-apps-www-deployment-readiness.md`.
 - ✅ E-10 Stripe tier-enforcement wiring — webhook handler was already complete (signature + idempotency + 3 event handlers in `packages/server/src/stripe/webhook.ts`); session closed the residual gap by extending `tierFromPriceId()` in `packages/server/src/stripe/index.ts` to resolve the full 4-var contract (`STRIPE_PRICE_PRO_MONTHLY` / `_ANNUAL` / `STRIPE_PRICE_TEAMS_MONTHLY` / `_ANNUAL`) alongside legacy single-vars + `STRIPE_PRICE_BASIC`. 17/17 webhook tests green; annual subscriptions now resolve through the webhook.
+- ✅ M2 Claude export — `data-ffbb9f0b-…batch-0000.zip` (30 MB) on Desktop\MEMORIES\Claude\, dated 2026-04-17. Ready for E-11 ingestion.
+- ✅ M3 Gemini export — `takeout-20260416T224803Z-3-001.zip` (437 MB) on Desktop\MEMORIES\Google\, dated 2026-04-17. Ready for E-11 ingestion.
+- ⏭️ M1 ChatGPT export — skipped by Marko 2026-05-21 (export emails never arrived after multiple requests).
+- ⏭️ M4 Perplexity export — skipped by Marko 2026-05-21 (research-burst usage; marginal corpus contribution).
 
 For the full polish+launch backlog see `docs/plans/BACKLOG-CONSOLIDATED-2026-04-17.md` (~145 items; ~50% are stale-but-done per the May 2026 verification sweep) and the AI-OS arc in `docs/plans/AI-OS-EXPLORATION-2026-05-19.md`.
 
