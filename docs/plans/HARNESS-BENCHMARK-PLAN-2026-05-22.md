@@ -58,8 +58,21 @@ is trivial logging). This is the afternoon-eater flagged earlier; it is **solvab
   real stack unmodified.
 
 **Recommend Path A** — the loop genuinely doesn't need the DB; a slim worker is faster to build, smaller to
-ship, and avoids per-arch native-dep maintenance. Spike step 1 = confirm a deep-import / vendored build of
-`runAgentLoop` runs in a bare Linux Node container with a stub terminal tool + fake task.
+ship, and avoids per-arch native-dep maintenance.
+
+**✅ PATH A PROVEN (2026-05-22).** Spike step 1 done. The agent loop's *entire* runtime closure from
+`@waggle/core` is exactly **2 symbols** — `createCoreLogger` + `scanForInjection` — both in DB-free modules
+(`logger.ts`, `injection-scanner.ts`, zero sqlite imports). A 2-symbol stub re-exporting them from
+hive-mind-core's deep `dist/` paths bypasses the `db.js` barrel (which eagerly loads `better-sqlite3` at
+line 14 of the hive-mind-core index). Verified in an isolated dir **outside the monorepo with `better-sqlite3`
+not resolvable**: `{ import_ok: true, runAgentLoop: "function", better_sqlite3: "not-resolvable (clean)" }`.
+Artifacts: `waggle-os-gaia2-wt/benchmarks/gaia2/spike-waggle-worker/`.
+
+**→ `gaia2-waggle` container collapses to:** `node:20-slim` + agent `dist/` + the 2-symbol stub +
+`hive-mind-core/dist/{logger.js,injection-scanner.js}`. No native rebuild, no sqlite. The remaining build
+is mechanical: (1) Node `waggle_worker` (socket protocol: ready/message/response); (2) single `terminal`
+tool whose executor shells to `gaia2-exec`; (3) Dockerfile modeled on `gaia2-hermes`; (4) low-N probe
+Waggle vs Hermes vs OpenClaw, same model+judge+scenarios.
 
 ### TWO-PILLAR plan (Marko 2026-05-22: both proofs co-equal)
 
