@@ -40,6 +40,16 @@ The full pipeline already exists and is directly adaptable:
 - **Qwen 3.6 35B thinking** (LOCAL) — the sovereign number ([[project-pillar1-qwen-local-followup]]).
   The `34-cell-retrieval-v4-qwen` + `35-judge-*-qwen` scripts prove the local-Qwen path already works.
 
+## Dataset VERIFIED (2026-05-22)
+`longmemeval_s_cleaned.json` — 264 MB, **SHA256 `d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442`**, at `D:/Projects/hive-mind-test/scripts/longmemeval/data/`. **500 questions.**
+
+Schema per question: `question_id, question_type, question, question_date, answer, answer_session_ids, haystack_dates, haystack_session_ids, haystack_sessions`.
+- `haystack_sessions` = list of sessions; each session = list of turns `{role, content}` (standard chat).
+- **~53 sessions / question, ~127K tokens** of haystack (relevant + distractors). `answer_session_ids` marks the relevant session(s) → the retrieval target.
+- **question_type dist (the 5 abilities):** multi-session 133 · temporal-reasoning 133 · knowledge-update 78 · single-session-user 70 · single-session-assistant 56 · single-session-preference 30. (Abstention is a separate `_abs` subset, not in these 500.)
+
+**Ingestion scale:** N=50 probe ≈ 50×53 ≈ 2,650 session ingests; full 500 ≈ 26,500. Per-question isolated workspaces. This is the main cost (time, not $) — chunk it.
+
 ## Execution steps
 1. **Fetch + SHA-pin LongMemEval** (adapt `00-fetch`). Confirm exact HF/GitHub source + schema.
 2. Build sample (start small — N=50 across the 5 abilities — for a probe before the full 500).
