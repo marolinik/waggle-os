@@ -70,6 +70,22 @@ In the artifact-write block, every `write_text` / `json.dumps` must use UTF-8:
             )
 ```
 
+## Patch 4 — UTF-8 in the trace HTML viewer (`trace_viewer.py`) — DISCOVERED 2026-05-22, NOT YET APPLIED
+
+The N=160 finish run surfaced a 4th cp1252 gap: `trace_viewer.py` fails to write the per-scenario
+trace HTML when the agent output contains `▸` (U+25B8) and similar:
+
+```
+[WARNING] gaia2_runner.trace_viewer: Failed to generate trace for search\scenario_universe_30_uuowj8:
+'charmap' codec can't encode character '▸' in position 22339: character maps to <undefined>
+```
+
+**Impact:** cosmetic only — affects the per-scenario trace HTML viewer, NOT `result.json` grading
+data (Patch 3 already covers the grading artifacts). The N=160 result is unaffected.
+
+**Fix:** find the `write_text(...)` / `open(..., "w")` call(s) in `trace_viewer.py` and add
+`encoding="utf-8"`. Bundle with Patches 1–3 in the upstream PR.
+
 ---
 
 ## Verification after reapply
