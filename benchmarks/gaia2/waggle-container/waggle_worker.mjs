@@ -54,6 +54,14 @@ function readAgentsMd() {
   catch (e) { log("WARN: could not read", AGENTS_MD, e.message); return "You are a helpful agent. Use the terminal tool to complete the task."; }
 }
 
+// Fairness with Hermes: Hermes has NO skill-distillation / verification-gate, so for
+// "harness is the only variable" to hold, Waggle runs with the same task contract —
+// these meta-features OFF. (They also hijacked the final user answer with a skill
+// summary in the n1 smoke — a real Waggle bug to fix separately.) Env-overridable so
+// an as-shipped (gates ON) variant can be measured later without a rebuild.
+const SKILL_GATE = process.env.WAGGLE_SKILL_DISTILLATION_GATE === "1";
+const VERIFY_GATE = process.env.WAGGLE_VERIFICATION_GATE === "1";
+
 async function runOnce(text) {
   const res = await runAgentLoop({
     litellmUrl: LITELLM_URL,
@@ -65,6 +73,8 @@ async function runOnce(text) {
     maxTurns: MAX_TURNS,
     maxTokenBudget: MAX_TOKENS,
     stream: true,
+    skillDistillationGate: SKILL_GATE,
+    verificationGate: VERIFY_GATE,
   });
   // AgentResponse — final assistant text. Fall back across likely field names.
   return res?.content ?? res?.message ?? res?.finalResponse ?? res?.text ?? "";

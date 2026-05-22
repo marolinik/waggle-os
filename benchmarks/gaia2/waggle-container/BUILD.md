@@ -26,10 +26,12 @@ echo '{"type":"module"}' > $WC/payload/package.json
 # which the waggle Dockerfile overrides):
 cp containers/hermes/gaia2-init-entrypoint.sh $WC/gaia2-init-entrypoint.sh
 
-# 2. @waggle/agent dist (built)
+# 2. @waggle/agent dist (built). NOTE: do NOT copy the source package.json — its
+#    exports map ({".":"./src/index.ts"}) blocks the /dist/ subpath import
+#    (ERR_PACKAGE_PATH_NOT_EXPORTED). Write a minimal one with no exports field.
 mkdir -p $WC/payload/node_modules/@waggle/agent
 cp -r D:/Projects/waggle-os/packages/agent/dist $WC/payload/node_modules/@waggle/agent/dist
-cp D:/Projects/waggle-os/packages/agent/package.json $WC/payload/node_modules/@waggle/agent/package.json
+echo '{"name":"@waggle/agent","version":"0.0.0","type":"module"}' > $WC/payload/node_modules/@waggle/agent/package.json
 
 # 3. @waggle/core stub
 cp -r <thisdir>/stub-core $WC/payload/node_modules/@waggle/core
@@ -43,8 +45,11 @@ cp D:/Projects/waggle-os/packages/hive-mind-core/dist/logger.js \
 echo '{"name":"@waggle/hive-mind-core","version":"0.0.0","type":"module"}' \
    > $WC/payload/node_modules/@waggle/hive-mind-core/package.json
 
-# 5. build
-docker build -f $WC/Dockerfile -t localhost/gaia2-waggle:latest .
+# 5. build — NOTE: local base image is `localhost/gaia2-cli:local` (tag "local", not latest).
+#    Use the LEGACY builder (DOCKER_BUILDKIT=0): BuildKit treats `localhost/` as a remote
+#    registry and times out; the legacy builder reads the local image store directly.
+DOCKER_BUILDKIT=0 docker build --build-arg GAIA2_CLI_VERSION=local \
+  -f $WC/Dockerfile -t localhost/gaia2-waggle:latest .
 ```
 
 ## Run (low-N probe — fair vs hermes)
