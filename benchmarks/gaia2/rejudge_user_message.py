@@ -121,8 +121,15 @@ def main():
     ap.add_argument("--probe", action="store_true", help="validate engines + extraction only")
     ap.add_argument("--run", action="store_true", help="full re-judge")
     ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--run-dir", default=None, help="override RUN (the <output>/search dir to re-judge)")
+    ap.add_argument("--out", default=None, help="override OUT jsonl path")
     args = ap.parse_args()
     _load_env()
+    global RUN, OUT
+    if args.run_dir:
+        RUN = args.run_dir
+    if args.out:
+        OUT = args.out
 
     dirs = sorted(d for d in glob.glob(os.path.join(RUN, "*")) if os.path.isdir(d))
     rows = [extract(d) for d in dirs]
