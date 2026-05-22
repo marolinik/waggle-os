@@ -23,9 +23,14 @@ Waggle OS is the **local-first OS that orchestrates** every one of these harness
 
 ---
 
-## 1. Objective (one sentence)
+## 1. Objective — TWO co-equal product pillars (Marko, 2026-05-22)
 
-Produce **defensible, dual-tier (peer-review + hero-page) statements about agent-harness quality, measured head-to-head in a safe, local-first environment** — positioning Waggle OS as the place knowledge workers and sovereign-AI buyers run agentic work without their data leaving the perimeter, and as the on-ramp to KVARK.
+Waggle-the-product = **agent harness + memory substrate**, so the capability story needs **both proofs, co-equal** (not one headline + one footnote):
+
+- **Pillar 1 — Agent-harness SOTA.** Waggle's OWN harness (`runAgentLoop`) benchmarked head-to-head vs reference harnesses (Hermes/OpenClaw, Oracle ceiling) in the local-first GAIA 2 rig, same model + judge + scenarios → prove Waggle's loop is at/near SOTA. (NOTE: the existing 83.8% used third-party Hermes, NOT Waggle — see plan doc DIRECTION UPDATE.)
+- **Pillar 2 — Memory SOTA.** Waggle's hive-mind substrate on memory benchmarks (LoCoMo done in C-1 → **LongMemEval** near-term → **BEAM** flagship) → prove the memory substrate is at/near SOTA, ideally beating frontier long-context (the one axis where Waggle *wins*, not just matches).
+
+Both feed **defensible, dual-tier (peer-review + hero-page) statements**, positioning Waggle OS as where knowledge workers and sovereign-AI buyers run agentic work without data leaving the perimeter, and as the on-ramp to KVARK. The sovereignty triple (local-first / zero-egress / auditable) wraps both pillars.
 
 ## 2. Subject under test + comparison set
 
