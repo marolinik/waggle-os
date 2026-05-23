@@ -52,7 +52,7 @@ function cfg(fetch: ReturnType<typeof mockFetch>, over: Partial<AgentLoopConfig>
 }
 
 describe('D1 — mechanically-closed learning loop (deterministic, locked)', () => {
-  it('on a ≥5-tool success the loop INJECTS the real distillation directive and continues', async () => {
+  it('on a ≥5-tool success the loop INJECTS the real distillation directive and returns the pre-distillation answer (issue #4)', async () => {
     const success = 'Done — traced the full pipeline end to end.';
     const fetch = mockFetch([
       { content: null, tool_calls: fiveCalls },   // 5 tool calls → toolsUsed length 5
@@ -68,18 +68,54 @@ describe('D1 — mechanically-closed learning loop (deterministic, locked)', () 
     const injected = (body3.messages as Array<{ role: string; content: string }>)
       .find(m => m.role === 'user' && m.content === expected.directive);
     expect(injected, 'the real planSkillDistillation directive must be injected into the conversation').toBeDefined();
-    expect(result.content).toBe('Created the reusable skill.');
+    // Issue #4 — the returned content is the answer to the user's question,
+    // NOT the distillation turn's skill summary. Distillation runs as a
+    // side-effect (skill authored via create_skill); the answer survives.
+    expect(result.content).toBe(success);
   });
 
-  it('is ONE-SHOT — does not re-fire after the distillation turn', async () => {
+  it('issue #4 regression — even if the distillation turn returns garbage, the user answer survives', async () => {
+    const realAnswer = 'The average age is 45.';
     const fetch = mockFetch([
       { content: null, tool_calls: fiveCalls },
-      { content: 'Traced it fully.' },
-      { content: 'Traced it fully again.' }, // even if still "success", one-shot → accepted
+      { content: realAnswer },
+      { content: 'The skill has been saved to /home/agent/skills/contact-average/SKILL.md.' },
     ]);
     const result = await runAgentLoop(cfg(fetch));
     expect(fetch).toHaveBeenCalledTimes(3);
-    expect(result.content).toBe('Traced it fully again.');
+    // The distillation summary MUST NOT replace the answer (the GAIA 2
+    // failure mode documented in issue #4).
+    expect(result.content).not.toContain('skill');
+    expect(result.content).toBe(realAnswer);
+  });
+
+  it('issue #4 regression — pre-distillation answer survives even at maxTurns exit', async () => {
+    const realAnswer = 'Answer is 42.';
+    // After D1 fires, the distillation turn itself makes a tool call,
+    // and then we hit maxTurns before another text turn — the answer
+    // must STILL be the returned content.
+    const fetch = mockFetch([
+      { content: null, tool_calls: fiveCalls },              // turn 1: 5 tool calls
+      { content: realAnswer },                                // turn 2: success → D1 fires
+      { content: null, tool_calls: [{ id: 'cs', function: { name: 'probe', arguments: '{}' } }] }, // turn 3: distill-side tool call
+      // No more turns scheduled — but maxTurns=3 forces exit here.
+    ]);
+    const result = await runAgentLoop(cfg(fetch, { maxTurns: 3 }));
+    expect(result.content).toBe(realAnswer);
+  });
+
+  it('is ONE-SHOT — D1 does not re-fire after the distillation turn (and the preserved answer is returned, issue #4)', async () => {
+    const fetch = mockFetch([
+      { content: null, tool_calls: fiveCalls },
+      { content: 'Traced it fully.' },
+      { content: 'Traced it fully again.' }, // even if still "success", D1 does NOT re-fire
+    ]);
+    const result = await runAgentLoop(cfg(fetch));
+    // ONE-SHOT semantics: exactly 3 fetches — no second directive injection.
+    expect(fetch).toHaveBeenCalledTimes(3);
+    // Issue #4: the answer that triggered D1 is the one delivered to the
+    // caller — the distillation turn's text never overwrites it.
+    expect(result.content).toBe('Traced it fully.');
   });
 
   it('does NOT fire below the ≥5-tool threshold (no spurious distill turn)', async () => {

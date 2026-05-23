@@ -77,7 +77,10 @@ describe('premium contract — D3 + D1 compose at the completion boundary (stand
     // D3 directive must NOT reappear in turn 4 (one-shot, not re-fired).
     expect(body4.filter(m => m.content === VERIFICATION_GATE_DIRECTIVE).length).toBe(1);
 
-    expect(result.content).toBe('Distilled the reusable skill.');
+    // Issue #4 — the D3-corrected honest answer is what the caller gets;
+    // D1's distillation runs as a side-effect that does NOT overwrite the
+    // delivered answer with the skill summary.
+    expect(result.content).toBe(honest);
     expect(result.toolsUsed.length).toBe(5);
   });
 

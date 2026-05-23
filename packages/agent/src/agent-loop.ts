@@ -254,6 +254,13 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
   // D1: one-shot — the loop drives at most ONE deterministic distillation
   // turn per run (mechanical closure; maxTurns/loop-guard also bound it).
   let skillDistillationUsed = false;
+  // Issue #4 — the answer the agent already produced for the user, captured
+  // at D1 fire time. The distillation turn that follows is a side-effect
+  // (author the skill via create_skill); its own output is the skill
+  // summary, NOT the user's answer. Any return path reached after D1 fires
+  // MUST surface this preserved value instead of the distillation turn's
+  // content — otherwise "I saved a skill…" overwrites the real answer.
+  let preservedAnswerForDistillation: string | null = null;
 
   for (let turn = 0; turn < maxTurns; turn++) {
     // Check for abort between turns
@@ -433,8 +440,11 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     // Check token budget
     if (config.maxTokenBudget && (totalInputTokens + totalOutputTokens) > config.maxTokenBudget) {
       const used = totalInputTokens + totalOutputTokens;
+      // Issue #4 — if D1 has already fired, the user's answer is the deliverable;
+      // surface it rather than swallowing it under a budget message.
       return {
-        content: `Token budget exceeded (used ${used} tokens, limit ${config.maxTokenBudget}).`,
+        content: preservedAnswerForDistillation
+          ?? `Token budget exceeded (used ${used} tokens, limit ${config.maxTokenBudget}).`,
         toolsUsed,
         usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
       };
@@ -473,6 +483,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         const distillPlan = planSkillDistillation(toolsUsed, content);
         if (distillPlan) {
           skillDistillationUsed = true;
+          preservedAnswerForDistillation = content;
           messages.push({ role: 'assistant', content });
           messages.push({ role: 'user', content: distillPlan.directive });
           logTurnEvent(turnId, { stage: 'agent-loop.skill-distillation.fired', toolCalls: toolsUsed.length });
@@ -499,15 +510,19 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       if (!stream && onToken && content) {
         onToken(content);
       }
+      // Issue #4 — once D1 has fired, the user's answer was captured before
+      // the distillation turn ran; the current `content` is the skill
+      // summary, NOT the answer. Surface the preserved answer instead.
+      const finalContent = preservedAnswerForDistillation ?? content;
       logTurnEvent(turnId, {
         stage: 'agent-loop.exit',
-        contentChars: content.length,
+        contentChars: finalContent.length,
         toolsUsed,
         inputTokens: totalInputTokens,
         outputTokens: totalOutputTokens,
       });
       return {
-        content,
+        content: finalContent,
         toolsUsed,
         usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
       };
@@ -654,9 +669,12 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     }
   }
 
-  // maxTurns reached — return any accumulated content rather than generic message
+  // maxTurns reached — return any accumulated content rather than generic message.
+  // Issue #4 — if D1 has already fired, prefer the user's captured answer
+  // over the generic "max tool turns" fallback (the answer is the deliverable).
   return {
-    content: allStreamedContent || `Max tool turns reached (${maxTurns} turns, ${toolsUsed.length} tools used).`,
+    content: preservedAnswerForDistillation
+      ?? (allStreamedContent || `Max tool turns reached (${maxTurns} turns, ${toolsUsed.length} tools used).`),
     toolsUsed,
     usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
   };
