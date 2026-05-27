@@ -76,11 +76,26 @@ export class LocalScheduler {
     return this.timer !== null;
   }
 
-  /** W5.11: Execute a specific schedule's job immediately (for manual trigger via API). */
+  /**
+   * W5.11: Execute a specific schedule's job immediately (for manual
+   * trigger via API). Mirrors tick()'s callback semantics so manual
+   * runs notify + route to output channels the same way auto-runs do
+   * (otherwise the Telegram digest hook never fires on a "Run now"
+   * click, which broke testability and surprised users).
+   */
   async executeJob(schedule: CronSchedule): Promise<void> {
-    await this.executor(schedule);
-    this.store.markRun(schedule.id);
-    this.failCounts.delete(schedule.id);
+    try {
+      await this.executor(schedule);
+      this.store.markRun(schedule.id);
+      this.failCounts.delete(schedule.id);
+      this.onJobComplete?.(schedule, { success: true });
+    } catch (err) {
+      this.onJobComplete?.(schedule, {
+        success: false,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      throw err;
+    }
   }
 
   /**

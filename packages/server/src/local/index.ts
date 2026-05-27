@@ -104,7 +104,7 @@ import { documentRoutes } from './routes/documents.js';
 import { fileRoutes } from './routes/files.js';
 import { browseRoutes } from './routes/browse.js';
 import { browserExtRoutes } from './routes/browser-ext.js';
-import { telegramRoutes } from './routes/telegram.js';
+import { telegramRoutes, pushTelegramMessage } from './routes/telegram.js';
 import { oauthRoutes } from './routes/oauth.js';
 import { waggleSignalRoutes } from './routes/waggle-signals.js';
 import { providerRoutes } from './routes/providers.js';
@@ -1823,6 +1823,28 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
         category: 'cron',
         actionUrl: '/cockpit',
       });
+    }
+
+    // FR-2 §runtime · 2026-05-28 addictiveness audit. When the user
+    // sets `outputChannel: 'telegram'` in a schedule's job_config,
+    // push a one-line digest line to their Telegram so the cron
+    // becomes a daily-driver hook for personas P6/P8/P10. Fire-and-
+    // forget — the catch ensures a Telegram outage never crashes
+    // the scheduler tick.
+    try {
+      const cfg = JSON.parse(schedule.job_config || '{}') as { outputChannel?: string };
+      if (cfg.outputChannel === 'telegram') {
+        const name = schedule.name || 'Scheduled task';
+        const expr = schedule.cron_expr ? ` (${schedule.cron_expr})` : '';
+        const text = result.success
+          ? `✓ Waggle: ${name}${expr} ran successfully.`
+          : `✗ Waggle: ${name}${expr} failed — ${result.error ?? 'unknown error'}`;
+        pushTelegramMessage(server, text)
+          .then(r => { if (!r.ok) log.warn(`[cron→telegram] skipped: ${r.reason}`); })
+          .catch(err => log.warn(`[cron→telegram] push failed: ${err}`));
+      }
+    } catch (err) {
+      log.warn(`[cron→telegram] config parse failed: ${err}`);
     }
   });
   scheduler.start();

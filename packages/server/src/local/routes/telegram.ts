@@ -81,6 +81,29 @@ async function sendToTelegram(
   return (await r.json()) as TelegramSendResponse;
 }
 
+/**
+ * Push a message from anywhere in the sidecar — used by the cron-job
+ * completion callback when a schedule's jobConfig sets outputChannel:
+ * 'telegram'. Returns a result describing what happened so callers can
+ * log it without throwing — cron callbacks must not crash the scheduler.
+ */
+export async function pushTelegramMessage(
+  server: FastifyInstance,
+  text: string,
+): Promise<{ ok: boolean; reason?: string; messageId?: number }> {
+  if (!text) return { ok: false, reason: 'empty text' };
+  const { token, chatId } = getStoredCreds(server);
+  if (!token || !chatId) return { ok: false, reason: 'telegram not configured' };
+  const capped = text.length > TELEGRAM_MAX_TEXT ? `${text.slice(0, TELEGRAM_MAX_TEXT - 3)}...` : text;
+  try {
+    const res = await sendToTelegram(token, chatId, capped);
+    if (!res.ok) return { ok: false, reason: res.description ?? 'telegram api rejected' };
+    return { ok: true, messageId: res.result?.message_id };
+  } catch (err) {
+    return { ok: false, reason: String(err) };
+  }
+}
+
 export async function telegramRoutes(server: FastifyInstance) {
   // ── Status ──────────────────────────────────────────────────────
   server.get('/api/telegram/status', async () => {

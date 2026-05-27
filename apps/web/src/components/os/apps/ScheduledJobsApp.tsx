@@ -25,6 +25,11 @@ const ScheduledJobsApp = () => {
   const [presetId, setPresetId] = useState<string>(DEFAULT_CRON_PRESET_ID);
   const [customCronExpr, setCustomCronExpr] = useState('');
   const [newJobType, setNewJobType] = useState<CronJobType>(DEFAULT_CRON_JOB_TYPE);
+  // FR-2 §runtime — when 'telegram' is selected, the cron callback in
+  // packages/server/src/local/index.ts pushes a one-line digest to the
+  // user's Telegram (requires Settings → Advanced → Telegram digest
+  // to be configured first).
+  const [outputChannel, setOutputChannel] = useState<'log' | 'telegram'>('log');
   const [triggering, setTriggering] = useState<string | null>(null);
 
   // Resolve the effective cron expression — preset unless user picked
@@ -63,12 +68,17 @@ const ScheduledJobsApp = () => {
         cronExpr: newCronExpr,
         jobType: newJobType,
         enabled: true,
+        // Only attach jobConfig.outputChannel when the user picked a
+        // non-default channel — keeps the persisted config tidy and
+        // round-trip-stable with jobs created via other paths.
+        ...(outputChannel !== 'log' ? { jobConfig: { outputChannel } } : {}),
       });
       setJobs(prev => [...prev, job]);
       setNewName('');
       setPresetId(DEFAULT_CRON_PRESET_ID);
       setCustomCronExpr('');
       setNewJobType(DEFAULT_CRON_JOB_TYPE);
+      setOutputChannel('log');
       setCreating(false);
       toast({ title: 'Job created', description: newName });
     } catch (err) {
@@ -209,6 +219,25 @@ const ScheduledJobsApp = () => {
                 data-testid="scheduled-job-schedule-summary"
               >
                 {scheduleSummary}
+              </p>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] font-display uppercase tracking-wide text-muted-foreground">Where the result goes</label>
+              <select
+                value={outputChannel}
+                onChange={e => setOutputChannel(e.target.value as 'log' | 'telegram')}
+                data-testid="scheduled-job-output-channel"
+                className="w-full bg-muted/30 text-xs py-1.5 px-2 rounded-md border border-border/40 text-foreground"
+              >
+                <option value="log">Notification + cockpit log</option>
+                <option value="telegram">Telegram (requires Settings → Advanced → Telegram digest)</option>
+              </select>
+              <p className="text-[10px] text-muted-foreground flex items-start gap-1 mt-0.5">
+                <Info className="w-2.5 h-2.5 mt-0.5 shrink-0" />
+                {outputChannel === 'telegram'
+                  ? 'You\'ll get a one-line digest in Telegram each time this runs.'
+                  : 'In-app notification + cockpit history. Always on.'}
               </p>
             </div>
 
