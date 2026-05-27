@@ -27,6 +27,7 @@ import {
 import ModelSelector from '@/components/os/ModelSelector';
 import ModelPilotCard from '@/components/os/ModelPilotCard';
 import EraseDataDialog from '@/components/os/overlays/EraseDataDialog';
+import TelegramDigestCard from '@/components/os/settings/TelegramDigestCard';
 import { AVAILABLE_SHAPES, useSelectedShape, type PromptShape } from '@/lib/shape-selection';
 
 type SettingsTab = 'general' | 'models' | 'billing' | 'permissions' | 'team' | 'backup' | 'enterprise' | 'advanced';
@@ -879,6 +880,7 @@ const SettingsApp = () => {
                 </div>
                 <p className="text-[11px] text-muted-foreground">Off: labels auto-hide after 20 sessions or 7 days. On: always visible.</p>
               </div>
+              <TelegramDigestCard />
               <div className="p-3 rounded-xl bg-secondary/30 border border-border/30" data-testid="developer-mode-setting">
                 <div className="flex items-center justify-between mb-1">
                   <p className="text-xs font-display font-medium text-foreground">Developer Mode</p>
