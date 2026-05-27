@@ -1,8 +1,8 @@
 import type { ToolDefinition } from './tools.js';
 import { LoopGuard } from './loop-guard.js';
-import { scanForInjection } from './injection-scanner.js';
 import { parseChatCompletionStream } from './sse-parser.js';
 import { maybeFireCompletionGate, initialGateState } from './loop-gates.js';
+import { executeToolCall } from './tool-executor.js';
 import type { HookRegistry } from './hooks.js';
 import type { CapabilityRouter } from './capability-router.js';
 import type { TraceRecorder, TraceHandle } from './trace-recorder.js';
@@ -419,136 +419,21 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       tool_calls: assistantMessage.tool_calls,
     });
 
+    // Execute each tool call through the explicit middleware chain in
+    // `./tool-executor.ts`. Review C2 hook-ordering is preserved there.
     for (const toolCall of assistantMessage.tool_calls) {
-      const fnName = toolCall.function.name;
-
-      // Safely parse tool arguments — malformed JSON shouldn't crash the loop
-      let fnArgs: Record<string, unknown>;
-      try {
-        fnArgs = JSON.parse(toolCall.function.arguments || '{}');
-      } catch {
-        const result = `Error: Invalid arguments for ${fnName}. The arguments were not valid JSON.`;
-        messages.push({ role: 'tool', content: result, tool_call_id: toolCall.id });
-        continue;
-      }
-
-      if (onToolUse) {
-        onToolUse(fnName, fnArgs);
-      }
-
-      // Governance enforcement — check team policies before tool execution
-      if (config.governancePolicies?.blockedTools?.includes(fnName)) {
-        const policyMsg = `Tool "${fnName}" is blocked by your team's governance policy. Contact your team admin to request access, or use the request_team_capability tool to submit a request.`;
-        messages.push({
-          role: 'tool',
-          content: policyMsg,
-          tool_call_id: toolCall.id,
-        });
-        if (onToolResult) onToolResult(fnName, fnArgs, policyMsg);
-        continue; // Skip execution, process next tool call
-      }
-
-      // Fire pre:tool hook — may cancel execution.
-      // Review H3: initialize to a safe empty-string sentinel. Every branch below does
-      // assign `result`, so TypeScript's definite-assignment analysis accepts it without
-      // the init — but adding one defends against future refactors that slip in an
-      // early continue and produce a runtime `undefined` string.
-      let result: string = '';
-      if (hooks) {
-        const hookResult = await hooks.fire('pre:tool', { toolName: fnName, args: fnArgs });
-        if (hookResult.cancelled) {
-          result = `[BLOCKED] ${hookResult.reason ?? 'No reason given'}`;
-
-          messages.push({
-            role: 'tool',
-            content: result,
-            tool_call_id: toolCall.id,
-          });
-          continue;
-        }
-      }
-
-      // Fire pre:memory-write hook for save_memory tool
-      if (hooks && fnName === 'save_memory') {
-        const memoryHookResult = await hooks.fire('pre:memory-write', {
-          toolName: fnName,
-          args: fnArgs,
-          memoryContent: fnArgs.content as string | undefined,
-          memoryType: fnArgs.type as string | undefined,
-        });
-        if (memoryHookResult.cancelled) {
-          result = `[BLOCKED] Memory write blocked: ${memoryHookResult.reason ?? 'No reason given'}`;
-          messages.push({
-            role: 'tool',
-            content: result,
-            tool_call_id: toolCall.id,
-          });
-          continue;
-        }
-      }
-
-      const tool = toolMap.get(fnName);
-      if (!guard.check(fnName, fnArgs)) {
-        result = `Error: Loop detected — called ${fnName} with identical arguments too many times. Try a different approach.`;
-      } else if (tool) {
-        logTurnEvent(turnId, { stage: 'agent-loop.tool.enter', toolName: fnName, argsKeys: Object.keys(fnArgs) });
-        try {
-          result = await tool.execute(fnArgs);
-          logTurnEvent(turnId, { stage: 'agent-loop.tool.exit', toolName: fnName, resultChars: result.length, error: false });
-        } catch (err) {
-          result = `Error executing ${fnName}: ${(err as Error).message}`;
-          logTurnEvent(turnId, { stage: 'agent-loop.tool.exit', toolName: fnName, error: true, errorMessage: (err as Error).message });
-        }
-        toolsUsed.push(fnName);
-      } else if (config.capabilityRouter) {
-        const routes = config.capabilityRouter.resolve(fnName);
-        const routeInfo = routes.map(r => `- [${r.source}] ${r.name}: ${r.description} (${r.available ? 'available' : 'not wired yet'})`).join('\n');
-        const ACQUIRE_TOOL = 'acquire_capability';
-        const hasMissing = routes.some(r => r.source === 'missing');
-        const acquireHint = hasMissing && toolMap.has(ACQUIRE_TOOL)
-          ? `\n\nTip: Use ${ACQUIRE_TOOL} to search for installable skills that might help.`
-          : '';
-        result = `Tool "${fnName}" not found. Here are alternatives:\n${routeInfo}${acquireHint}\n\nAvailable tools: ${Array.from(toolMap.keys()).join(', ')}`;
-      } else {
-        result = `Error: Unknown tool "${fnName}". Available tools: ${Array.from(toolMap.keys()).join(', ')}`;
-      }
-
-      // Review C2: sanitize BEFORE post-hooks + onToolResult callback.
-      // Old order let audit sinks, telemetry hooks, team-sync, and UI callbacks all
-      // see raw injection-flagged content. The scanner output is what flows into
-      // model context on the next turn; it's also what should flow into every
-      // downstream observer.
-      const scanResult = scanForInjection(result, 'tool_output');
-      if (!scanResult.safe) {
-        result = `[SECURITY] Tool output flagged (${scanResult.flags.join(', ')}). Content sanitized.`;
-      }
-
-      // Notify on tool completion (now receives sanitized content)
-      if (onToolResult) {
-        onToolResult(fnName, fnArgs, result);
-      }
-
-      // Fire post:memory-write hook for save_memory tool (sanitized result)
-      if (hooks && fnName === 'save_memory') {
-        await hooks.fire('post:memory-write', {
-          toolName: fnName,
-          args: fnArgs,
-          result,
-          memoryContent: fnArgs.content as string | undefined,
-          memoryType: fnArgs.type as string | undefined,
-        });
-      }
-
-      // Fire post:tool hook (sanitized result)
-      if (hooks) {
-        await hooks.fire('post:tool', { toolName: fnName, args: fnArgs, result });
-      }
-
-      messages.push({
-        role: 'tool',
-        content: result,
-        tool_call_id: toolCall.id,
+      const r = await executeToolCall(toolCall, {
+        toolMap,
+        guard,
+        hooks,
+        capabilityRouter: config.capabilityRouter,
+        blockedTools: config.governancePolicies?.blockedTools,
+        onToolUse,
+        onToolResult,
+        turnId,
       });
+      if (r.countedAsUsed) toolsUsed.push(r.toolName);
+      messages.push({ role: 'tool', content: r.content, tool_call_id: r.toolCallId });
     }
   }
 
