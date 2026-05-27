@@ -18,6 +18,16 @@ import { buildAwarenessSummary, markSummarySurfaced, type AwarenessSummary } fro
 import { CognifyPipeline } from './cognify.js';
 import { scanForInjection } from './injection-scanner.js';
 import { runPatternWriteBack } from './pattern-write-back.js';
+import {
+  fetchRecentFrames,
+  loadRecentContext as loadRecentContextImpl,
+  loadRecentContextFrames as loadRecentContextFramesImpl,
+  type ContextFrames as ContextFramesImpl,
+} from './context-loader.js';
+
+// Re-export ContextFrames for back-compat — tests + apps import this type
+// from `./orchestrator` per the pre-PR-F surface.
+export type ContextFrames = ContextFramesImpl;
 // H-AUDIT-1 contract: turnId is a per-turn trace ID (UUID v4) generated at
 // chat-route turn entry and propagated EXPLICITLY through every downstream
 // stage (agent-loop → orchestrator → retrieval → prompt-assembler → cognify
@@ -53,24 +63,6 @@ export interface OrchestratorConfig {
   mode?: 'local' | 'team';
   version?: string;
   skills?: string[];
-}
-
-/**
- * Typed context snapshot consumed by PromptAssembler. Keeps the legacy
- * `loadRecentContext()` string-output path untouched for backwards compat.
- *
- * `stateFrames`: I-frames (identity/state snapshots).
- * `recentChanges`: P-frames (deltas) + B-frames (background notes).
- * `activeWork`: structured awareness items (tasks, actions, pending, flags).
- * `keyEntities`: most-connected KG entities (workspace when active).
- * `personalPreferences`: cross-workspace preference/correction frames.
- */
-export interface ContextFrames {
-  stateFrames: MemoryFrame[];
-  recentChanges: MemoryFrame[];
-  activeWork: Array<{ category: string; content: string; priority: number }>;
-  keyEntities: Array<{ name: string; type: string }>;
-  personalPreferences: string[];
 }
 
 /**
@@ -240,199 +232,29 @@ export class Orchestrator {
   }
 
   /**
-   * M17: shared helper — fetches recent frames ordered by importance then recency.
-   * Used by both loadRecentContext and recallMemory's catch-up branch.
-   */
-  private fetchRecentFrames(
-    db: MindDB,
-    limit: number,
-    opts?: { excludeTemporary?: boolean },
-  ): Array<{ id: number; content: string; frame_type: string; importance: string; created_at: string }> {
-    const raw = db.getDatabase();
-    const excludeTemp = opts?.excludeTemporary ?? false;
-    const whereClause = excludeTemp
-      ? `WHERE importance != 'deprecated' AND importance != 'temporary'`
-      : `WHERE importance != 'deprecated'`;
-    return raw.prepare(
-      `SELECT id, content, frame_type, importance, created_at
-       FROM memory_frames
-       ${whereClause}
-       ORDER BY
-         CASE importance
-           WHEN 'critical' THEN 0
-           WHEN 'important' THEN 1
-           WHEN 'normal' THEN 2
-           ELSE 3
-         END,
-         id DESC
-       LIMIT ?`
-    ).all(limit) as Array<{ id: number; content: string; frame_type: string; importance: string; created_at: string }>;
-  }
-
-  /**
-   * Load recent context from memory for session preloading.
-   * Loads from workspace mind when available, falls back to personal.
+   * Load recent context from memory for session preloading. Delegates to
+   * `loadRecentContextImpl` — see `./context-loader.ts`.
    */
   loadRecentContext(limit = 5): string {
-    // Use workspace mind for recent context when available (it's more relevant)
-    const primaryDb = this.workspaceLayers?.db ?? this.db;
-    const raw = primaryDb.getDatabase();
-
-    // Recent memories — prioritize by importance, then recency (A3 fix)
-    const recentFrames = this.fetchRecentFrames(primaryDb, limit);
-
-    // Active tasks (from personal awareness — always available)
-    const awarenessCtx = this.awareness.toContext();
-
-    // Top knowledge entities (from workspace if available).
-    // Review #4: `OR` in JOIN condition defeats both relation indexes
-    // (idx_relations_source, idx_relations_target). UNION ALL over two
-    // index-friendly joins keeps both indexes live at 1M+ relations.
-    const topEntities = raw.prepare(
-      `SELECT ke.name, ke.entity_type, COUNT(rc.entity_id) as rel_count
-       FROM knowledge_entities ke
-       LEFT JOIN (
-         SELECT source_id AS entity_id FROM knowledge_relations
-         UNION ALL
-         SELECT target_id AS entity_id FROM knowledge_relations
-       ) rc ON rc.entity_id = ke.id
-       GROUP BY ke.id ORDER BY rel_count DESC LIMIT 10`
-    ).all() as Array<{ name: string; entity_type: string; rel_count: number }>;
-
-    const parts: string[] = [];
-
-    if (recentFrames.length > 0) {
-      const source = this.workspaceLayers ? 'Workspace' : 'Personal';
-      parts.push(`## Recent ${source} Memory`);
-      for (const f of recentFrames) {
-        parts.push(`- [${f.importance}] ${f.content.slice(0, CONTEXT_PREVIEW_LENGTH)}`);
-      }
-    }
-
-    if (awarenessCtx !== 'No active awareness items.') {
-      parts.push('\n## Active Tasks & State');
-      parts.push(awarenessCtx);
-    }
-
-    if (topEntities.length > 0) {
-      parts.push('\n## Key Knowledge');
-      parts.push(topEntities.map(e => `${e.entity_type}: ${e.name}`).join(', '));
-    }
-
-    // E4: Always include personal preferences in context (cross-workspace continuity)
-    // Query personal mind for preferences regardless of workspace state
-    {
-      const prefDb = this.db.getDatabase();
-      const personalPrefs = prefDb.prepare(
-        `SELECT content FROM memory_frames
-         WHERE importance != 'deprecated'
-           AND (content LIKE 'User preference:%' OR content LIKE 'Correction from user:%'
-                OR content LIKE 'Style note:%' OR content LIKE 'Workspace topic:%')
-         ORDER BY id DESC LIMIT 5`
-      ).all() as Array<{ content: string }>;
-      if (personalPrefs.length > 0) {
-        const label = this.workspaceLayers
-          ? 'Personal Preferences (across all workspaces)'
-          : 'Personal Preferences';
-        parts.push(`\n## ${label}`);
-        for (const p of personalPrefs) {
-          parts.push(`- ${p.content.slice(0, CONTEXT_PREVIEW_LENGTH)}`);
-        }
-      }
-    }
-
-    // Review #1: scan preloaded context for injection before it enters the system prompt.
-    // Harvested personal preferences and workspace frames can carry poisoned instructions.
-    const joined = parts.join('\n');
-    const scan = scanForInjection(joined, 'tool_output');
-    if (!scan.safe) {
-      logger.warn('preloaded context injection detected — dropping', {
-        score: scan.score,
-        flags: scan.flags,
-      });
-      return '';
-    }
-    return joined;
+    return loadRecentContextImpl(this.contextLoaderDeps(), limit);
   }
 
   /**
-   * Typed counterpart to `loadRecentContext()`. Returns structured data for
-   * the PromptAssembler layer to compose into a model-tier-aware prompt.
-   *
-   * Sources (workspace when active, personal otherwise for frame queries;
-   * personal mind always for preferences):
-   * - stateFrames: I-frames (identity/state snapshots)
-   * - recentChanges: P-frames + B-frames (deltas, background notes)
-   * - activeWork: AwarenessLayer items (structured, not parsed from string)
-   * - keyEntities: KG entities ordered by relation count
-   * - personalPreferences: preference/correction/style-note frames
-   *
-   * Pure data — injection scanning is the caller's responsibility (PromptAssembler).
+   * Typed counterpart for `PromptAssembler`. Delegates to
+   * `loadRecentContextFramesImpl` — see `./context-loader.ts`. Pure data;
+   * injection scanning is the assembler's responsibility (it has tier
+   * context needed to decide drop vs sanitize).
    */
   loadRecentContextFrames(limit = 10): ContextFrames {
-    const primaryDb = this.workspaceLayers?.db ?? this.db;
-    const raw = primaryDb.getDatabase();
+    return loadRecentContextFramesImpl(this.contextLoaderDeps(), limit);
+  }
 
-    const frameRows = raw.prepare(
-      `SELECT id, frame_type, gop_id, t, base_frame_id, content, importance, source,
-              access_count, created_at, last_accessed
-       FROM memory_frames
-       WHERE importance != 'deprecated'
-       ORDER BY
-         CASE importance
-           WHEN 'critical' THEN 0
-           WHEN 'important' THEN 1
-           WHEN 'normal' THEN 2
-           ELSE 3
-         END,
-         id DESC
-       LIMIT ?`
-    ).all(limit) as MemoryFrame[];
-
-    const stateFrames: MemoryFrame[] = [];
-    const recentChanges: MemoryFrame[] = [];
-    for (const f of frameRows) {
-      if (f.frame_type === 'I') stateFrames.push(f);
-      else recentChanges.push(f);
-    }
-
-    const awarenessItems = this.awareness.getAll();
-    const activeWork = awarenessItems.map(item => ({
-      category: item.category,
-      content: item.content,
-      priority: item.priority,
-    }));
-
-    const topEntities = raw.prepare(
-      `SELECT ke.name, ke.entity_type, COUNT(rc.entity_id) as rel_count
-       FROM knowledge_entities ke
-       LEFT JOIN (
-         SELECT source_id AS entity_id FROM knowledge_relations
-         UNION ALL
-         SELECT target_id AS entity_id FROM knowledge_relations
-       ) rc ON rc.entity_id = ke.id
-       GROUP BY ke.id ORDER BY rel_count DESC LIMIT 10`
-    ).all() as Array<{ name: string; entity_type: string; rel_count: number }>;
-
-    const keyEntities = topEntities.map(e => ({ name: e.name, type: e.entity_type }));
-
-    const prefDb = this.db.getDatabase();
-    const prefRows = prefDb.prepare(
-      `SELECT content FROM memory_frames
-       WHERE importance != 'deprecated'
-         AND (content LIKE 'User preference:%' OR content LIKE 'Correction from user:%'
-              OR content LIKE 'Style note:%' OR content LIKE 'Workspace topic:%')
-       ORDER BY id DESC LIMIT 5`
-    ).all() as Array<{ content: string }>;
-
-    const personalPreferences = prefRows.map(p => p.content);
-
+  /** Assemble ContextLoaderDeps from this orchestrator's current layers. */
+  private contextLoaderDeps() {
     return {
-      stateFrames,
-      recentChanges,
-      activeWork,
-      keyEntities,
-      personalPreferences,
+      personalDb: this.db,
+      workspaceDb: this.workspaceLayers?.db ?? null,
+      awareness: this.awareness,
     };
   }
 
@@ -612,8 +434,8 @@ export class Orchestrator {
            LIMIT ?`
         ).all(limit) as CatchUpRow[];
 
-        // Also get the most recent frames for recency context (M17: shared helper)
-        const recentFrames = this.fetchRecentFrames(
+        // Also get the most recent frames for recency context (shared helper)
+        const recentFrames = fetchRecentFrames(
           this.workspaceLayers!.db, Math.min(limit, 3), { excludeTemporary: true },
         ) as CatchUpRow[];
 
