@@ -103,6 +103,7 @@ import { pinRoutes } from './routes/pins.js';
 import { documentRoutes } from './routes/documents.js';
 import { fileRoutes } from './routes/files.js';
 import { browseRoutes } from './routes/browse.js';
+import { browserExtRoutes } from './routes/browser-ext.js';
 import { oauthRoutes } from './routes/oauth.js';
 import { waggleSignalRoutes } from './routes/waggle-signals.js';
 import { providerRoutes } from './routes/providers.js';
@@ -1960,6 +1961,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(profileRoutes);
   await server.register(oauthRoutes);
   await server.register(browseRoutes);
+  await server.register(browserExtRoutes);
   await server.register(telemetryRoutes);
   await server.register(agentGroupRoutes);
   await server.register(stripeRoutes);

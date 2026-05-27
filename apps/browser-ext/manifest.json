@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Waggle Companion",
+  "version": "0.1.0",
+  "description": "Save pages, selections, and questions to your Waggle workspace memory — Waggle gets smarter the more you use it.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "contextMenus"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:3333/*",
+    "http://localhost:3333/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Waggle Companion"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

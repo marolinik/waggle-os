@@ -3,7 +3,7 @@
  * Used by both the Fastify CORS plugin and SSE endpoints that bypass it via reply.hijack().
  */
 
-export const ALLOWED_ORIGINS = [
+const BASE_ORIGINS = [
   'http://localhost:1420',
   'http://127.0.0.1:1420',
   'tauri://localhost',
@@ -17,6 +17,36 @@ export const ALLOWED_ORIGINS = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
 ];
+
+// FR-1 · Browser Companion (apps/browser-ext) — chrome-extension origins.
+//
+// Security model: the previous iteration added a bare `'chrome-extension://'`
+// prefix that, combined with the startsWith check in the CORS callback,
+// would have let ANY installed Chromium extension hit the sidecar (flagged
+// HIGH by the 2026-05-28 automated security review). The correct pattern:
+//
+//   - Production: empty by default. Add specific extension IDs once we
+//     have a published store ID via WAGGLE_BROWSER_EXT_IDS (comma-list).
+//   - Dev: explicit env-flag escape hatch (WAGGLE_DEV_ALLOW_ANY_EXTENSION=1)
+//     while loading unpacked dev builds whose IDs aren't pinned yet.
+//
+// In dev-escape mode we still keep the `chrome-extension://` prefix entry,
+// but it's now ONLY added when the developer explicitly opts in, so a
+// production build with no env vars set rejects every extension origin.
+const extensionOrigins: string[] = [];
+const extIds = (process.env.WAGGLE_BROWSER_EXT_IDS || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+for (const id of extIds) {
+  // Exact-string origin, no path. Belt-and-braces vs startsWith abuse.
+  extensionOrigins.push(`chrome-extension://${id}`);
+}
+if (process.env.WAGGLE_DEV_ALLOW_ANY_EXTENSION === '1') {
+  extensionOrigins.push('chrome-extension://');
+}
+
+export const ALLOWED_ORIGINS = [...BASE_ORIGINS, ...extensionOrigins];
 
 /**
  * Validate and return the origin for SSE responses.

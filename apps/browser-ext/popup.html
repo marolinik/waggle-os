@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Waggle Companion</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #08090c;
+      --fg: #f4f4f5;
+      --muted: #71717a;
+      --primary: #e5a000;
+      --primary-hover: #d18f00;
+      --border: #27272a;
+      --success: #10b981;
+      --danger: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      width: 320px;
+      background: var(--bg);
+      color: var(--fg);
+      font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      padding: 12px;
+    }
+    header {
+      display: flex; align-items: center; gap: 8px;
+      padding-bottom: 10px; border-bottom: 1px solid var(--border); margin-bottom: 10px;
+    }
+    .logo { width: 18px; height: 18px; background: var(--primary); border-radius: 4px; display: grid; place-items: center; font-weight: 700; color: var(--bg); font-size: 12px; }
+    h1 { font-size: 13px; font-weight: 600; margin: 0; flex: 1; }
+    .status {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 11px; color: var(--muted);
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+    .dot.connected { background: var(--success); }
+    .dot.disconnected { background: var(--danger); }
+    .workspace { font-size: 11px; color: var(--muted); margin-bottom: 10px; }
+    .workspace strong { color: var(--fg); }
+    button {
+      width: 100%; padding: 8px 10px; margin-bottom: 6px;
+      background: #1a1a1f; color: var(--fg); border: 1px solid var(--border);
+      border-radius: 8px; font: inherit; cursor: pointer; text-align: left;
+      display: flex; align-items: center; gap: 8px;
+      transition: background 120ms, border-color 120ms;
+    }
+    button:hover:not(:disabled) { background: #25252b; border-color: var(--primary); }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    button.primary { background: var(--primary); color: var(--bg); border-color: var(--primary); font-weight: 600; }
+    button.primary:hover:not(:disabled) { background: var(--primary-hover); border-color: var(--primary-hover); }
+    .icon { font-size: 14px; line-height: 1; }
+    #toast {
+      margin-top: 8px; padding: 6px 8px; border-radius: 6px; font-size: 11px;
+      background: #1a1a1f; border: 1px solid var(--border); color: var(--muted);
+      min-height: 16px;
+    }
+    #toast.ok { color: var(--success); border-color: var(--success); }
+    #toast.err { color: var(--danger); border-color: var(--danger); }
+    footer { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 10px; color: var(--muted); text-align: center; }
+    a { color: var(--primary); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="logo">W</span>
+    <h1>Waggle Companion</h1>
+    <span class="status"><span class="dot" id="dot"></span><span id="status-text">…</span></span>
+  </header>
+
+  <div class="workspace">Saving to: <strong id="workspace-name">—</strong></div>
+
+  <button class="primary" id="save-selection" disabled>
+    <span class="icon">💾</span><span>Save selection to memory</span>
+  </button>
+  <button id="save-page">
+    <span class="icon">📄</span><span>Save whole page</span>
+  </button>
+  <button id="open-waggle">
+    <span class="icon">🐝</span><span>Open Waggle desktop</span>
+  </button>
+
+  <div id="toast"></div>
+
+  <footer>v0.1.0 · Requires Waggle running on 127.0.0.1:3333</footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>
