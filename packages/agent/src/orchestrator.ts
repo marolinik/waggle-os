@@ -1,6 +1,5 @@
 import {
   type MindDB,
-  type Importance,
   type MemoryFrame,
   type ScoringProfile,
   IdentityLayer,
@@ -14,11 +13,11 @@ import {
   type Embedder,
 } from '@waggle/core';
 import { createMindTools, type ToolDefinition } from './tools.js';
-import { isSelfIncapacityAssertion } from './memory-sign-gate.js';
 import { buildSelfAwareness, type AgentCapabilities } from './self-awareness.js';
 import { buildAwarenessSummary, markSummarySurfaced, type AwarenessSummary } from './improvement-detector.js';
 import { CognifyPipeline } from './cognify.js';
 import { scanForInjection } from './injection-scanner.js';
+import { runPatternWriteBack } from './pattern-write-back.js';
 // H-AUDIT-1 contract: turnId is a per-turn trace ID (UUID v4) generated at
 // chat-route turn entry and propagated EXPLICITLY through every downstream
 // stage (agent-loop → orchestrator → retrieval → prompt-assembler → cognify
@@ -37,21 +36,14 @@ import {
 
 const logger = createCoreLogger('orchestrator');
 
-// ── Content-length constants (M16: replace scattered magic numbers) ──
-/** Minimum user message length to be worth memorizing */
-const MIN_CONTENT_LENGTH = 30;
-/** Saved-content preview length (autoSave dedup display) */
-const DEDUP_SLICE_LENGTH = 80;
-/** Recalled-content snippet length for UI display */
-const RECALLED_SNIPPET_LENGTH = 120;
-/** Preloaded-context content preview length */
-const CONTEXT_PREVIEW_LENGTH = 200;
-/** Recall line / decision / save content truncation */
-const RECALL_LINE_LENGTH = 300;
-/** Research findings / key-points truncation */
-const FINDINGS_SLICE_LENGTH = 400;
-/** Assistant response length threshold for structured extraction */
-const STRUCTURED_EXTRACT_THRESHOLD = 500;
+// Content-length constants now live in `./content-constants.ts` (single
+// source of truth shared with the pattern-write-back extractor). Imports
+// below pull only the ones this file still references.
+import {
+  CONTEXT_PREVIEW_LENGTH,
+  RECALL_LINE_LENGTH,
+  RECALLED_SNIPPET_LENGTH,
+} from './content-constants.js';
 
 export interface OrchestratorConfig {
   db: MindDB;
@@ -745,287 +737,27 @@ export class Orchestrator {
   }
 
   /**
-   * Post-response heuristic write-back.
-   * Scans the user message + assistant response for save-worthy signals
-   * and auto-saves distilled memories. Returns descriptions of what was saved.
-   * Saves to workspace mind when available, personal for preference-type content.
+   * Post-response heuristic write-back. Delegates to `runPatternWriteBack` —
+   * the regex pattern set + extractor logic live in `./pattern-write-back.ts`.
+   * Routes preferences/corrections/style to personal mind; decisions and
+   * work-output to workspace (or personal when no workspace is active).
    */
   async autoSaveFromExchange(userMsg: string, assistantMsg: string): Promise<string[]> {
-    const saved: string[] = [];
-    const userLower = userMsg.toLowerCase();
-
-    // Target: workspace when available, personal otherwise
-    const targetFrames = this.workspaceLayers?.frames ?? this.frames;
-    const targetSessions = this.workspaceLayers?.sessions ?? this.sessions;
-    const targetCognify = this.workspaceLayers?.cognify ?? null;
-
-    // Helper to save a memory entry. Returns the created frame (or null if cognify couldn't
-    // hydrate it by id) so review #9's teamSync correctness fix can push what we just wrote.
-    // Serial embed: 3-5 items per exchange, batching would add complexity for negligible gain
-    const save = async (content: string, importance: Importance, target: 'workspace' | 'personal' = 'workspace'): Promise<MemoryFrame | null> => {
-      // R2 sign gate (DEFECT-2 structural fix): the agent's own
-      // self-incapacity / refusal assertions must never become authoritative
-      // recall. Persist them at `temporary` importance — the recall path
-      // already excludes `temporary` (see getRecentFrames) — so they remain
-      // visible for audit / offline evolution but can't re-enter the prompt
-      // as instruction-grade truth and train the loop to keep failing.
-      if (importance !== 'temporary' && isSelfIncapacityAssertion(content)) {
-        logger.debug('autoSave sign-gate: self-incapacity frame downgraded to temporary', {
-          preview: content.slice(0, DEDUP_SLICE_LENGTH),
-        });
-        importance = 'temporary';
-      }
-      const useWorkspace = target === 'workspace' && this.workspaceLayers;
-      const frames = useWorkspace ? this.workspaceLayers!.frames : this.frames;
-      const sessions = useWorkspace ? this.workspaceLayers!.sessions : this.sessions;
-      const cognify = useWorkspace ? this.workspaceLayers!.cognify : null;
-
-      let createdFrame: MemoryFrame | null = null;
-
-      if (cognify) {
-        const result = await cognify.cognify(content, importance);
-        createdFrame = frames.getById(result.frameId) ?? null;
-      } else {
-        // Review #7: ensureActive is transaction-wrapped, so concurrent saves on a fresh
-        // mind don't race into twin sessions with frames split across them.
-        const session = sessions.ensureActive();
-        const gopId = session.gop_id;
-        const latestI = frames.getLatestIFrame(gopId);
-        createdFrame = latestI
-          ? frames.createPFrame(gopId, content, latestI.id, importance)
-          : frames.createIFrame(gopId, content, importance);
-      }
-      saved.push(content.slice(0, DEDUP_SLICE_LENGTH));
-
-      // Review #9: push the frame we just created, not whatever is "latest" at read time.
-      // Between the write above and a re-read here, another save() could have fired and
-      // the old code would push the wrong frame to the team server.
-      if (this.teamSync && useWorkspace && createdFrame) {
-        this.teamSync.pushFrame(createdFrame).catch(() => { /* non-blocking */ });
-      }
-
-      return createdFrame;
-    };
-
-    // Skip trivial exchanges — very short messages are rarely worth memorizing.
-    // Review #12: short acceptance messages ("ok, go ahead") DO carry a decision when
-    // paired with an assistant suggestion, so we let those through to reach the
-    // bilateral-decision logic below.
-    const userTrimmedEarly = userMsg.trim();
-    const looksLikeAcceptance = /^(?:ok(?:ay)?|yes|yeah|yep|sure|go|go ahead|do it|let'?s (?:do (?:it|that)|proceed|go)|sounds good|perfect|great|that works|go with (?:it|that))\b/i.test(userTrimmedEarly);
-    if (userMsg.length < MIN_CONTENT_LENGTH && !assistantMsg.includes('```') && !looksLikeAcceptance) {
-      logger.debug('autoSave: skipping short exchange', { len: userMsg.length });
-      return saved;
-    }
-
-    // Skip casual patterns that produce false-positive memory saves.
-    // Review #20: old "^(ok|okay|sure|yep|yes|no|…)\b" was too greedy — it matched any
-    // user message starting with "ok" (including "ok, go ahead with Postgres"), bailing
-    // before decision detection could fire. Split into greetings + bare-ack-only patterns.
-    const CASUAL_PATTERNS = [
-      /\b(lunch|dinner|breakfast|coffee|pizza|food|snack|drink)\b/i,
-      /\b(weather|weekend|holiday|vacation|birthday|party)\b/i,
-      /^(hi|hey|hello|thanks|thank you|bye|goodbye)\b/i,
-      // Bare acks — only when the entire user message is just that word (optional punctuation)
-      /^(ok|okay|sure|yep|nope|yes|no)[.!?\s]*$/i,
-    ];
-    if (CASUAL_PATTERNS.some(p => p.test(userMsg))) return saved;
-
-    // ── Pattern: User stated a preference (C4: broadened patterns) ──
-    const prefPatterns = [
-      /\bi (?:prefer|like|want|need|always|never)\b/i,
-      /\bcall me\b/i,
-      /\bmy (?:name|style|preference)\b/i,
-      /\bdon'?t (?:ever|always)\b/i,
-      /\bi(?:'d| would) rather\b/i,
-      /\bkeep (?:it|things) (?:short|brief|concise|detailed)\b/i,
-      /\buse (?:bullet|numbered|markdown|plain)\b/i,
-      /\bstop (?:doing|saying|adding)\b/i,
-      /\bfrom now on\b/i,
-      /\bplease (?:always|never|don'?t)\b/i,
-    ];
-    for (const pat of prefPatterns) {
-      if (pat.test(userMsg)) {
-        const sentences = userMsg.split(/[.!?\n]+/).filter(s => pat.test(s));
-        if (sentences.length > 0) {
-          await save(`User preference: ${sentences[0].trim()}`, 'normal', 'personal');
-        }
-        break;
-      }
-    }
-
-    // ── E4: Implicit style detection (infer from behavior, not just explicit statements) ──
-    // Only trigger if we haven't already saved a preference this exchange
-    if (saved.length === 0 && userMsg.length > MIN_CONTENT_LENGTH) {
-      // Detect format preferences from how user asks
-      const styleSignals: Array<{ pattern: RegExp; note: string }> = [
-        { pattern: /\b(?:bullet|bullets|bullet.?points?|list form)\b/i, note: 'Style note: User prefers bullet-point format' },
-        { pattern: /\b(?:keep it (?:short|brief)|tl;?dr|tldr|short version|in brief)\b/i, note: 'Style note: User prefers concise responses' },
-        { pattern: /\b(?:explain|detail|elaborate|go deeper|more detail|thorough)\b/i, note: 'Style note: User prefers detailed explanations' },
-        { pattern: /\b(?:table|tabular|spreadsheet|columns)\b/i, note: 'Style note: User prefers tabular data presentation' },
-        { pattern: /\b(?:code first|show me the code|just the code)\b/i, note: 'Style note: User prefers code examples over prose' },
-        { pattern: /\b(?:plain english|simple terms|eli5|layman|non.?technical)\b/i, note: 'Style note: User prefers non-technical language' },
-      ];
-
-      for (const { pattern, note } of styleSignals) {
-        if (pattern.test(userMsg)) {
-          // Check if we already have this note in personal mind to avoid duplicates
-          const personalRaw = this.db.getDatabase();
-          const existing = personalRaw.prepare(
-            `SELECT id FROM memory_frames WHERE content = ? LIMIT 1`
-          ).get(note) as { id: number } | undefined;
-          if (!existing) {
-            await save(note, 'normal', 'personal');
-          }
-          break;
-        }
-      }
-    }
-
-    // ── Pattern: Decision was made — REQUIRES BILATERAL AGREEMENT ──
-    // Review C2: previous logic tested a `userMsg + '\n' + assistantMsg` combined source,
-    // so when the assistant *suggested* "Let's go with option A" and the user had not yet
-    // responded — or had declined — we still saved `Decision: …` as `important`. Important
-    // frames outlive compaction windows and bubble to the top of catch-up recall, so this
-    // false-positive polluted long-term memory durably over weeks of use.
-    //
-    // Now: save only if (a) the user states the decision explicitly, or (b) the assistant
-    // states it AND the user explicitly accepts it.
-    const decisionPatterns = [
-      /\b(?:let'?s go with|we(?:'ll| will) (?:use|go with|do)|decided to|decision:|agreed to)\b/i,
-      /\bthe plan is\b/i,
-      /\bok(?:ay)?,?\s+(?:option|choice|approach)\s*(?:[a-z]|\d)/i,
-      /\blet'?s (?:proceed|move forward|do that|go ahead)\b/i,
-      /\bwe(?:'re| are) going (?:with|to)\b/i,
-      /\bfinal(?:ly|ized)?\s+(?:decision|choice|answer)\b/i,
-      /\bi(?:'ll| will) go (?:with|ahead)\b/i,
-    ];
-
-    const userHasDecision = decisionPatterns.some(p => p.test(userMsg));
-    const assistantHasDecision = decisionPatterns.some(p => p.test(assistantMsg));
-
-    // User explicitly accepts assistant's suggestion. Anchored start, length-gated to avoid
-    // matching long hedged replies that happen to begin with "yes but …".
-    const userTrimmed = userMsg.trim();
-    const userAcceptsAssistant = userTrimmed.length < 60 &&
-      /^(?:ok(?:ay)?|yes|yeah|yep|sure|go|go ahead|do it|let'?s (?:do (?:it|that)|proceed|go)|sounds good|perfect|great|that works|go with (?:it|that))\b/i.test(userTrimmed);
-
-    let decisionText: string | null = null;
-    if (userHasDecision) {
-      for (const pat of decisionPatterns) {
-        const sentences = userMsg.split(/[.!?\n]+/).filter(s => pat.test(s));
-        if (sentences.length > 0) {
-          decisionText = sentences[0].trim().slice(0, RECALL_LINE_LENGTH);
-          break;
-        }
-      }
-    } else if (assistantHasDecision && userAcceptsAssistant) {
-      for (const pat of decisionPatterns) {
-        const sentences = assistantMsg.split(/[.!?\n]+/).filter(s => pat.test(s));
-        if (sentences.length > 0) {
-          decisionText = sentences[0].trim().slice(0, RECALL_LINE_LENGTH);
-          break;
-        }
-      }
-    }
-    // (assistantHasDecision && !userAcceptsAssistant): skip — the bug this fix closes.
-
-    if (decisionText) {
-      await save(`Decision: ${decisionText}`, 'important');
-    }
-
-    // ── Pattern: User correction ──
-    const correctionPatterns = [
-      /\b(?:no,? (?:actually|that'?s wrong|it'?s)|wrong|incorrect|not (?:right|correct|true)|you'?re mistaken)\b/i,
-    ];
-    if (correctionPatterns.some(p => p.test(userMsg))) {
-      await save(`Correction from user: ${userMsg.slice(0, CONTEXT_PREVIEW_LENGTH)}`, 'important', 'personal');
-    }
-
-    // ── Pattern: Research output with external sources (B2 fix) ──
-    const hasUrls = /https?:\/\/[^\s)]+/.test(assistantMsg);
-    const hasStructuredFindings = assistantMsg.length > 600 && (
-      (assistantMsg.includes('\n## ') && hasUrls) ||
-      (assistantMsg.match(/^\d+\./gm)?.length ?? 0) >= 3
+    return runPatternWriteBack(
+      {
+        personal: { db: this.db, frames: this.frames, sessions: this.sessions },
+        workspace: this.workspaceLayers
+          ? {
+              frames: this.workspaceLayers.frames,
+              sessions: this.workspaceLayers.sessions,
+              cognify: this.workspaceLayers.cognify,
+            }
+          : null,
+        teamSync: this.teamSync,
+      },
+      userMsg,
+      assistantMsg,
     );
-    if (hasStructuredFindings) {
-      // Extract key findings: headings + first sentences
-      const headings = assistantMsg.match(/^##?\s+.+$/gm)?.slice(0, 3) ?? [];
-      const urls = assistantMsg.match(/https?:\/\/[^\s)]+/g)?.slice(0, 3) ?? [];
-      const findingSummary = [
-        ...headings.map(h => h.replace(/^#+\s+/, '')),
-        ...(urls.length > 0 ? [`Sources: ${urls.join(', ')}`] : []),
-      ].join('. ');
-      if (findingSummary.length > 20) {
-        await save(`Research findings: ${findingSummary.slice(0, FINDINGS_SLICE_LENGTH)}`, 'important');
-      }
-    }
-
-    // ── F29: Structured extraction from substantial work output ──
-    // Instead of saving one opaque "Work completed:" blob, extract structured elements.
-    if (assistantMsg.length > 200) {
-      const lines = assistantMsg.split('\n').filter(l => l.trim().length > 5);
-      let savedStructured = false;
-
-      // F29a: Extract inline decisions from assistant response (different patterns than the explicit decision block above)
-      const inlineDecisionPatterns = [
-        /\b(?:recommended|recommend|suggestion is|best approach|should use|going with)\b/i,
-        /\b(?:conclusion|concluded|summary|in summary)\b/i,
-      ];
-      for (const pat of inlineDecisionPatterns) {
-        const decisionLines = lines.filter(l => pat.test(l));
-        if (decisionLines.length > 0 && saved.length < 5) {
-          const decisionText = decisionLines[0].replace(/^[-*\d.#]+\s*/, '').trim();
-          if (decisionText.length > 20) {
-            await save(`Recommendation: ${decisionText.slice(0, RECALL_LINE_LENGTH)}`, 'important');
-            savedStructured = true;
-            break;
-          }
-        }
-      }
-
-      // F29b: Save user's original question/statement as a frame (if substantive)
-      if (userMsg.length >= MIN_CONTENT_LENGTH && userMsg.length <= STRUCTURED_EXTRACT_THRESHOLD && saved.length < 5) {
-        // Only if not already captured by other patterns (preferences, corrections, decisions)
-        const alreadyCapturedUser = saved.some(s =>
-          s.startsWith('User preference:') || s.startsWith('Correction from user:') || s.startsWith('Decision:')
-        );
-        if (!alreadyCapturedUser) {
-          await save(`User asked: ${userMsg.slice(0, RECALL_LINE_LENGTH)}`, 'temporary');
-          savedStructured = true;
-        }
-      }
-
-      // F29c: Extract key facts from bullet points or numbered lists
-      if (assistantMsg.length > STRUCTURED_EXTRACT_THRESHOLD) {
-        const bullets = lines
-          .filter(l => l.match(/^[-*]\s/) || l.match(/^\d+\.\s/))
-          .map(l => l.replace(/^[-*\d.]+\s+/, '').trim())
-          .filter(l => l.length > 15 && l.length < 300);
-
-        if (bullets.length >= 2 && saved.length < 5) {
-          // Save top 3 key points as one concise frame
-          const keyPoints = bullets.slice(0, 3).join('; ');
-          const heading = lines.find(l => l.startsWith('#'))?.replace(/^#+\s+/, '') ?? '';
-          const prefix = heading ? `${heading}: ` : 'Key points: ';
-          await save(`${prefix}${keyPoints.slice(0, FINDINGS_SLICE_LENGTH)}`, 'normal');
-          savedStructured = true;
-        }
-      }
-
-      // F29d: Fallback — if nothing structured was extracted and response is substantial,
-      // save a compact summary (not the full blob)
-      if (!savedStructured && assistantMsg.length > STRUCTURED_EXTRACT_THRESHOLD && saved.length === 0) {
-        const heading = lines.find(l => l.startsWith('#'))?.replace(/^#+\s+/, '') ?? '';
-        const firstMeaningful = lines.find(l => !l.startsWith('#') && l.length > 20)?.trim() ?? '';
-        const summary = heading
-          ? `${heading}${firstMeaningful ? ': ' + firstMeaningful : ''}`
-          : firstMeaningful || 'Work output produced';
-        await save(`Work completed: ${summary.slice(0, RECALL_LINE_LENGTH)}`, 'normal');
-      }
-    }
-
-    return saved;
   }
 
   getTools(): ToolDefinition[] {
