@@ -73,12 +73,26 @@ const TEST_WORKSPACE_PATTERNS: ReadonlyArray<RegExp> = [
 const isTestWorkspace = (name: string): boolean =>
   TEST_WORKSPACE_PATTERNS.some(p => p.test(name));
 
+interface SampleBundleMeta {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  frameCount: number;
+}
+
 const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
   const [summaries, setSummaries] = useState<WorkspaceSummary[]>([]);
   const [highlights, setHighlights] = useState<MemoryHighlight[]>([]);
   const [brag, setBrag] = useState<BragSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [greeting, setGreeting] = useState('');
+  // FR-5 — sample workspace bundles for the day-0 hook. Replaces the
+  // labelled-example demo cards from iter-1 F1 with one-click loads
+  // that produce a REAL workspace + real memory the user can recall
+  // against. Fetched lazily; null until /api/sample-workspaces resolves.
+  const [sampleBundles, setSampleBundles] = useState<SampleBundleMeta[] | null>(null);
+  const [loadingSampleId, setLoadingSampleId] = useState<string | null>(null);
 
   useEffect(() => {
     const hour = new Date().getHours();
@@ -93,8 +107,41 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
       })
       .catch(() => { /* no identity yet — leave greeting time-only */ });
 
+    // FR-5 — best-effort sample-bundle list fetch. Renders only in the
+    // day-0 empty branch, but we fetch eagerly so the buttons are warm
+    // when that branch decides to render.
+    fetch('/api/sample-workspaces')
+      .then(r => (r.ok ? r.json() : []))
+      .then((list: SampleBundleMeta[]) => setSampleBundles(Array.isArray(list) ? list : []))
+      .catch(() => setSampleBundles([]));
+
     loadBriefing();
   }, []);
+
+  // FR-5 — load a sample workspace into the user's store + open it.
+  // POST /api/sample-workspaces/load returns { workspaceId } whether
+  // it was freshly seeded or already existed (idempotent server-side).
+  const loadSample = async (sampleId: string) => {
+    if (loadingSampleId) return;
+    setLoadingSampleId(sampleId);
+    try {
+      const r = await fetch('/api/sample-workspaces/load', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sampleId }),
+      });
+      const data = await r.json();
+      if (r.ok && data?.workspaceId) {
+        onOpenWorkspace(data.workspaceId);
+        onDismiss(false);
+      }
+    } catch {
+      // Silent — the user can retry; we don't want a toast firing inside
+      // a modal that's about to dismiss.
+    } finally {
+      setLoadingSampleId(null);
+    }
+  };
 
   const loadBriefing = async () => {
     try {
@@ -208,37 +255,51 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
               <Loader2 className="w-5 h-5 animate-spin text-primary" />
             </div>
           ) : highlights.length === 0 && summaries.length === 0 ? (
-            // F1: day-0 user — no workspaces AND no memory yet. The bare
-            // "no workspaces" line failed every persona's dim 3 (first-
-            // session hook in <60s) in the 2026-05-28 addictiveness audit.
-            // Replace it with three demo "what I'll remember for you"
-            // bubbles that teach the value prop concretely. Examples are
-            // explicitly labelled so this isn't deceptive copy.
+            // FR-5 · day-0 hook. Replaces the iter-1 labelled-demo cards
+            // with one-click loads of REAL sample workspaces (writer /
+            // analyst / marketer). Each click seeds 6-8 frames + opens
+            // the workspace, so the user experiences live memory recall
+            // within seconds instead of being told what it would look like.
             <div className="py-2 space-y-3" data-testid="login-briefing-empty-hook">
               <div className="space-y-1.5">
                 <p className="text-[11px] font-display font-semibold text-primary/80 uppercase tracking-wider flex items-center gap-1.5">
-                  <Lightbulb className="w-3 h-3" /> Here's what I'll remember for you
+                  <Lightbulb className="w-3 h-3" /> Try a sample workspace
                 </p>
-                {[
-                  '"Last week we decided to prioritise compliance over speed for the launch."',
-                  '"Sarah\'s feedback on the deck — slide 4 needs the regional breakdown."',
-                  '"Voice for the Wednesday newsletter — punchy, contrarian, second-person."',
-                ].map((demo, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.2 + i * 0.12 }}
-                    className="flex items-start gap-2 px-3 py-1.5 rounded-lg bg-primary/5 border border-primary/10 border-dashed"
-                  >
-                    <Sparkles className="w-3 h-3 text-primary/60 mt-0.5 shrink-0" />
-                    <p className="text-[12px] text-foreground/70 italic leading-relaxed">{demo}</p>
-                  </motion.div>
-                ))}
+                <p className="text-[10px] text-muted-foreground px-1">
+                  One click loads a curated workspace with real memory you can recall against. Erase any time from Settings.
+                </p>
+                {sampleBundles === null ? (
+                  <div className="flex items-center justify-center py-3">
+                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                  </div>
+                ) : sampleBundles.length === 0 ? (
+                  <p className="text-[11px] text-muted-foreground italic px-1">
+                    Sample workspaces unavailable. Pick a dock app to start fresh, or import an existing ChatGPT/Claude export from the Memory app.
+                  </p>
+                ) : (
+                  sampleBundles.map((bundle, i) => (
+                    <motion.button
+                      key={bundle.id}
+                      onClick={() => loadSample(bundle.id)}
+                      disabled={loadingSampleId !== null}
+                      data-testid={`sample-workspace-${bundle.id}`}
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.2 + i * 0.12 }}
+                      className="w-full flex items-start gap-2 px-3 py-2 rounded-lg bg-primary/5 border border-primary/10 hover:bg-primary/10 hover:border-primary/30 transition-all text-left disabled:opacity-50 disabled:cursor-wait"
+                    >
+                      <span className="text-base leading-none mt-0.5 shrink-0" aria-hidden="true">{bundle.icon}</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[12px] font-display font-medium text-foreground">{bundle.name}</p>
+                        <p className="text-[11px] text-muted-foreground leading-relaxed">{bundle.description}</p>
+                        <p className="text-[10px] text-primary/70 mt-0.5">
+                          {loadingSampleId === bundle.id ? 'Loading…' : `${bundle.frameCount} pre-seeded memories · click to load`}
+                        </p>
+                      </div>
+                    </motion.button>
+                  ))
+                )}
               </div>
-              <p className="text-[10px] text-muted-foreground italic px-1">
-                Examples. Your real memory populates as you chat — or import an existing ChatGPT/Claude export from the Memory app.
-              </p>
             </div>
           ) : (
             <>
