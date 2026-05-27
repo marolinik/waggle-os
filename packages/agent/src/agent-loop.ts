@@ -315,15 +315,22 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         tool_calls: parsed.toolCalls,
       };
     } else {
-      // Non-streaming path (unchanged)
-      const data: any = await response.json();
+      // Non-streaming path: parse the single chat completion response.
+      const data = await response.json() as {
+        choices?: Array<{
+          message: {
+            content: string | null;
+            tool_calls?: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }>;
+          };
+        }>;
+        usage?: { prompt_tokens?: number; completion_tokens?: number };
+      };
       if (!data.choices || data.choices.length === 0) {
         throw new Error(
           `LiteLLM returned no choices: ${JSON.stringify(data).slice(0, 200)}`
         );
       }
-      const choice = data.choices[0];
-      assistantMessage = choice.message;
+      assistantMessage = data.choices[0].message;
       turnInputTokens = data.usage?.prompt_tokens ?? 0;
       turnOutputTokens = data.usage?.completion_tokens ?? 0;
     }

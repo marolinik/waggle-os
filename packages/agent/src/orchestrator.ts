@@ -205,13 +205,11 @@ export class Orchestrator {
   }
 
   getMemoryStats(): { frameCount: number; sessionCount: number; entityCount: number } {
-    // Review #3 revisited: an earlier revision TTL-cached this (5s). Removed because
-    // callers and tests write to the underlying tables via ancillary paths (direct
-    // KnowledgeGraph.createEntity, FrameStore.createIFrame) that the cache cannot
-    // observe. buildSystemPrompt runs once per user turn, not once per LLM iteration,
-    // so the "6× COUNT(*)" cost the original finding flagged is paid once per turn —
-    // negligible below ~100k frames. If a large-scale user ever proves this matters,
-    // the correct fix is a write-counter in MindDB, not a time-based cache.
+    // Intentionally not cached: ancillary write paths (direct
+    // KnowledgeGraph.createEntity / FrameStore.createIFrame) would skip
+    // cache invalidation. Cost is 6× COUNT(*) per user turn — negligible
+    // below ~100k frames. If scale ever bites, fix via a write-counter
+    // in MindDB, not a time-based cache.
     const raw = this.db.getDatabase();
     const frameCount = (raw.prepare('SELECT COUNT(*) as cnt FROM memory_frames').get() as { cnt: number }).cnt;
     const sessionCount = (raw.prepare('SELECT COUNT(*) as cnt FROM sessions').get() as { cnt: number }).cnt;
@@ -280,9 +278,9 @@ export class Orchestrator {
 
   buildSystemPrompt(): string {
     // ── IDENTITY (always personal, stable within a session) ──
-    // Review #11: cache key must reflect identity content, not just "exists"/"empty".
-    // updated_at alone is not reliable — SQLite datetime('now') has second precision, so
-    // rapid successive edits (or fresh-mind tests) share a timestamp. Hash the full row.
+    // Cache key must hash the full identity content — updated_at alone
+    // has only second precision in SQLite, so rapid successive edits
+    // (and fresh-mind tests) collide on the timestamp.
     const identitySection = this.cachedSection(
       'identity',
       this.identity.exists() ? JSON.stringify(this.identity.get()) : 'empty',
@@ -292,7 +290,7 @@ export class Orchestrator {
     // ── SELF-AWARENESS (runtime context, changes every call) ──
     const awarenessSection = this.uncachedSection('self_awareness', () => {
       const awareness = buildAwarenessSummary(this.improvementSignals);
-      // M8: defer marking until commitSurfacedSignals() — called after model call succeeds
+      // Defer marking until commitSurfacedSignals() fires post-model-call.
       if (awareness.totalActionable > 0) {
         this._pendingSurfacedAwareness = awareness;
       }
@@ -417,9 +415,8 @@ export class Orchestrator {
 
       if (isCatchUp && this.workspaceLayers) {
         // For catch-up queries: fetch important frames by importance + recency, not semantic search.
-        // Review #6: dedup by frame id, not content prefix. Two distinct frames sharing a 100-char
-        // prefix ("Decision: use Postgres …" vs "Decision: use Postgres (revised): …") previously
-        // collapsed and one was dropped. Frame id is the only safe equality key.
+        // Dedup MUST be by frame id, not content prefix — two frames sharing a 100-char prefix
+        // ("Decision: use Postgres" vs "Decision: use Postgres (revised)") otherwise collapse.
         const wsRaw = this.workspaceLayers.db.getDatabase();
         type CatchUpRow = { id: number; content: string; frame_type: string; importance: string; created_at: string };
         const importantFrames = wsRaw.prepare(
@@ -462,14 +459,10 @@ export class Orchestrator {
           : [];
       }
 
-      // R2 sign-gate closure (DEFECT-2): the autoSave `save()` chokepoint
-      // coerces self-incapacity / refusal frames to `temporary` so they cannot
-      // re-enter the prompt as authoritative recall. That contract was only
-      // honored by the `fetchRecentFrames` SQL path (catch-up / recent); the
-      // semantic path here (HybridSearch) applies importance as a *score*, not
-      // an *exclusion*, so a sign-gated frame still surfaced. Enforce the same
-      // `!= 'temporary' AND != 'deprecated'` authoritative-recall rule the SQL
-      // path uses (orchestrator.ts:262), uniformly across both stores/branches.
+      // R2 sign-gate: self-incapacity frames are persisted at 'temporary'
+      // importance so they don't re-enter the prompt as authoritative recall.
+      // HybridSearch treats importance as a SCORE, not an EXCLUSION — apply
+      // the SQL path's `!= 'temporary' AND != 'deprecated'` filter here too.
       const isAuthoritativeForRecall = (r: { frame: { importance?: string } }): boolean => {
         const imp = r.frame.importance ?? 'normal';
         return imp !== 'temporary' && imp !== 'deprecated';
@@ -518,9 +511,9 @@ export class Orchestrator {
         recalled.push(r.frame.content.slice(0, RECALLED_SNIPPET_LENGTH));
       }
 
-      // Review #1: scan recalled memory for injection before it enters the system prompt.
-      // A poisoned harvest frame (ChatGPT export with embedded "ignore previous instructions",
-      // malicious shared workspace content, etc.) must not silently flow into model context.
+      // Scan recalled memory for injection — a poisoned harvest frame
+      // (e.g. ChatGPT export with embedded "ignore previous instructions")
+      // must never silently flow into model context.
       const joinedLines = allLines.join('\n');
       const scan = scanForInjection(joinedLines, 'tool_output');
       if (!scan.safe) {
@@ -548,7 +541,8 @@ export class Orchestrator {
       });
       return { text, count: totalCount, recalled };
     } catch (err) {
-      // M5: surface failures visibly — silent empty results cause "I don't remember" hallucinations
+      // Surface failures visibly — silent empty results train the model
+      // to confabulate "I don't remember" instead of recalling real memory.
       logger.error('recallMemory failed', err);
       return {
         text: '[Memory recall temporarily unavailable. Proceed without prior context.]',
