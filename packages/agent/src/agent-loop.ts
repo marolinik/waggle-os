@@ -1,9 +1,8 @@
 import type { ToolDefinition } from './tools.js';
 import { LoopGuard } from './loop-guard.js';
-import { assertsUnverifiedCompletion, VERIFICATION_GATE_DIRECTIVE } from './verification-gate.js';
-import { planSkillDistillation } from './skill-distillation.js';
 import { scanForInjection } from './injection-scanner.js';
 import { parseChatCompletionStream } from './sse-parser.js';
+import { maybeFireCompletionGate, initialGateState } from './loop-gates.js';
 import type { HookRegistry } from './hooks.js';
 import type { CapabilityRouter } from './capability-router.js';
 import type { TraceRecorder, TraceHandle } from './trace-recorder.js';
@@ -249,19 +248,9 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
   let rateLimitRetries = 0;
   let serverErrorRetries = 0;
   const MAX_RETRIES = 3;
-  // D3: one-shot — the verification gate forces at most ONE corrective
-  // turn, so a model that re-asserts unverified success cannot loop here.
-  let verificationCorrectionUsed = false;
-  // D1: one-shot — the loop drives at most ONE deterministic distillation
-  // turn per run (mechanical closure; maxTurns/loop-guard also bound it).
-  let skillDistillationUsed = false;
-  // Issue #4 — the answer the agent already produced for the user, captured
-  // at D1 fire time. The distillation turn that follows is a side-effect
-  // (author the skill via create_skill); its own output is the skill
-  // summary, NOT the user's answer. Any return path reached after D1 fires
-  // MUST surface this preserved value instead of the distillation turn's
-  // content — otherwise "I saved a skill…" overwrites the real answer.
-  let preservedAnswerForDistillation: string | null = null;
+  // One-shot completion gates (D3 verification, D1 skill distillation) +
+  // preserved-answer slot for issue #4. See `./loop-gates.ts` for details.
+  let gateState = initialGateState();
 
   for (let turn = 0; turn < maxTurns; turn++) {
     // Check for abort between turns
@@ -371,7 +360,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       // Issue #4 — if D1 has already fired, the user's answer is the deliverable;
       // surface it rather than swallowing it under a budget message.
       return {
-        content: preservedAnswerForDistillation
+        content: gateState.preservedAnswerForDistillation
           ?? `Token budget exceeded (used ${used} tokens, limit ${config.maxTokenBudget}).`,
         toolsUsed,
         usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
@@ -384,55 +373,21 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       const content = (assistantMessage.content ?? '') || allStreamedContent;
       allStreamedContent = ''; // Release accumulated tokens once consumed
 
-      // D3 — verification-before-completion gate (structural). If this
-      // final turn asserts verified/passing/working completion but ran
-      // no verification-class tool, do NOT accept it: inject one
-      // corrective directive and continue. One-shot — a re-asserted
-      // unverified claim on the corrective turn is then accepted (the
-      // honest outcome is the model's; loop-guard/maxTurns also bound).
-      if (
-        verificationGate &&
-        !verificationCorrectionUsed &&
-        assertsUnverifiedCompletion(content, toolsUsed)
-      ) {
-        verificationCorrectionUsed = true;
-        messages.push({ role: 'assistant', content });
-        messages.push({ role: 'user', content: VERIFICATION_GATE_DIRECTIVE });
-        logTurnEvent(turnId, { stage: 'agent-loop.verification-gate.fired', contentChars: content.length });
-        continue;
-      }
-
-      // D1 — Hermes-parity closed learning loop (mechanical closure).
-      // On a qualifying ≥5-tool, R2-gated successful turn, the loop
-      // itself drives the distillation (one corrective turn carrying the
-      // real planSkillDistillation directive) rather than relying on a
-      // soft out-of-band event the model may ignore (R5b → R6).
-      if (skillDistillationGate && !skillDistillationUsed) {
-        const distillPlan = planSkillDistillation(toolsUsed, content);
-        if (distillPlan) {
-          skillDistillationUsed = true;
-          preservedAnswerForDistillation = content;
-          messages.push({ role: 'assistant', content });
-          messages.push({ role: 'user', content: distillPlan.directive });
-          logTurnEvent(turnId, { stage: 'agent-loop.skill-distillation.fired', toolCalls: toolsUsed.length });
-          // AI-OS Phase 3 — skill diffusion observer. Swallow any
-          // error so the distillation loop is never blocked by a
-          // diffusion-side failure (the broadcast is best-effort
-          // observability, not a precondition).
-          if (onSkillDistillationFire) {
-            try {
-              await onSkillDistillationFire({
-                patternKey: distillPlan.patternKey,
-                toolsUsed: [...toolsUsed],
-                directive: distillPlan.directive,
-              });
-            } catch {
-              /* observer failures must never block the loop */
-            }
-          }
-          continue;
-        }
-      }
+      // Completion-time gates: D3 (verification) + D1 (skill distillation).
+      // See ./loop-gates.ts. If a gate fires, it pushes the corrective
+      // directive into `messages` and returns fired=true → continue loop.
+      const gate = await maybeFireCompletionGate({
+        content,
+        toolsUsed,
+        messages,
+        state: gateState,
+        enableVerification: verificationGate,
+        enableSkillDistillation: skillDistillationGate,
+        onSkillDistillationFire,
+        turnId,
+      });
+      gateState = gate.state;
+      if (gate.fired) continue;
 
       // In non-streaming mode, emit the full content as a single token
       if (!stream && onToken && content) {
@@ -441,7 +396,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       // Issue #4 — once D1 has fired, the user's answer was captured before
       // the distillation turn ran; the current `content` is the skill
       // summary, NOT the answer. Surface the preserved answer instead.
-      const finalContent = preservedAnswerForDistillation ?? content;
+      const finalContent = gateState.preservedAnswerForDistillation ?? content;
       logTurnEvent(turnId, {
         stage: 'agent-loop.exit',
         contentChars: finalContent.length,
@@ -601,7 +556,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
   // Issue #4 — if D1 has already fired, prefer the user's captured answer
   // over the generic "max tool turns" fallback (the answer is the deliverable).
   return {
-    content: preservedAnswerForDistillation
+    content: gateState.preservedAnswerForDistillation
       ?? (allStreamedContent || `Max tool turns reached (${maxTurns} turns, ${toolsUsed.length} tools used).`),
     toolsUsed,
     usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
