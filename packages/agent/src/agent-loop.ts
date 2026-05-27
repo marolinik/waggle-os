@@ -3,6 +3,7 @@ import { LoopGuard } from './loop-guard.js';
 import { assertsUnverifiedCompletion, VERIFICATION_GATE_DIRECTIVE } from './verification-gate.js';
 import { planSkillDistillation } from './skill-distillation.js';
 import { scanForInjection } from './injection-scanner.js';
+import { parseChatCompletionStream } from './sse-parser.js';
 import type { HookRegistry } from './hooks.js';
 import type { CapabilityRouter } from './capability-router.js';
 import type { TraceRecorder, TraceHandle } from './trace-recorder.js';
@@ -331,92 +332,19 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     let turnOutputTokens = 0;
 
     if (stream) {
-      // Parse SSE stream
-      let accumulatedContent = '';
-      const accumulatedToolCalls = new Map<
-        number,
-        { id: string; type: 'function'; function: { name: string; arguments: string } }
-      >();
-
-      const reader = response.body!.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-
-        // Process complete SSE events (separated by double newlines)
-        const parts = buffer.split('\n\n');
-        // Last part may be incomplete — keep it in the buffer
-        buffer = parts.pop() ?? '';
-
-        for (const part of parts) {
-          for (const line of part.split('\n')) {
-            if (!line.startsWith('data: ')) continue;
-            const payload = line.slice(6).trim();
-            if (payload === '[DONE]') continue;
-
-            let chunk: any;
-            try {
-              chunk = JSON.parse(payload);
-            } catch {
-              continue;
-            }
-
-            // Extract usage from any chunk that has it
-            if (chunk.usage) {
-              turnInputTokens = chunk.usage.prompt_tokens ?? turnInputTokens;
-              turnOutputTokens = chunk.usage.completion_tokens ?? turnOutputTokens;
-            }
-
-            const delta = chunk.choices?.[0]?.delta;
-            if (!delta) continue;
-
-            // Accumulate content tokens (both per-turn and across all turns)
-            if (delta.content) {
-              accumulatedContent += delta.content;
-              allStreamedContent += delta.content;
-              if (onToken) {
-                onToken(delta.content);
-              }
-            }
-
-            // Accumulate tool calls
-            if (delta.tool_calls) {
-              for (const tc of delta.tool_calls) {
-                const idx = tc.index ?? 0;
-                if (!accumulatedToolCalls.has(idx)) {
-                  accumulatedToolCalls.set(idx, {
-                    id: tc.id ?? '',
-                    type: 'function' as const,
-                    function: { name: tc.function?.name ?? '', arguments: '' },
-                  });
-                }
-                const existing = accumulatedToolCalls.get(idx)!;
-                if (tc.id) existing.id = tc.id;
-                if (tc.function?.name) existing.function.name = tc.function.name;
-                if (tc.function?.arguments) {
-                  existing.function.arguments += tc.function.arguments;
-                }
-              }
-            }
-          }
-        }
-      }
-
-      const toolCallsArray =
-        accumulatedToolCalls.size > 0
-          ? Array.from(accumulatedToolCalls.values())
-          : undefined;
-
+      const parsed = await parseChatCompletionStream(response.body!, {
+        onToken: (token) => {
+          allStreamedContent += token;
+          if (onToken) onToken(token);
+        },
+      });
+      turnInputTokens = parsed.usage.inputTokens;
+      turnOutputTokens = parsed.usage.outputTokens;
+      // Use empty string (not null) when there are tool_calls — some LLM
+      // proxies (LiteLLM→Anthropic) mishandle null content alongside tool_use.
       assistantMessage = {
-        // Use empty string (not null) when there are tool_calls — some LLM proxies
-        // (LiteLLM→Anthropic) mishandle null content alongside tool_use blocks
-        content: accumulatedContent || (toolCallsArray ? '' : null),
-        tool_calls: toolCallsArray,
+        content: parsed.content || (parsed.toolCalls ? '' : null),
+        tool_calls: parsed.toolCalls,
       };
     } else {
       // Non-streaming path (unchanged)
