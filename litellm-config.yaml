@@ -225,13 +225,24 @@ model_list:
 
   # Sprint 12 Task 2 C3 Stage 2 Mini Retry v3 (2026-04-23): -direct suffix
   # alias expected by the v3 brief §0.2 alias roster. Same route as the
-  # `qwen3.6-35b-a3b-via-dashscope` sibling above (pure naming change for
-  # operator scripts that want the "-direct" suffix semantic clarity).
+  # `qwen3.6-35b-a3b-via-dashscope` sibling above, but with the Stage 2
+  # LOCKED config materialized as explicit LiteLLM params:
+  #   - extra_body.enable_thinking: true   (per models.json `stage2Config`)
+  #   - max_tokens: 16000                  (Mini Retry v3 §2.1 — reduced
+  #     from v2 64000 to avoid DashScope tail-latency timeouts)
+  # 2026-05-26 fix: 0/15 fail rate at N=160 vs 86.5% Sonnet baseline was
+  # caused by thinking NOT actually defaulting on through this route —
+  # verbose-but-imprecise output failed user_message_checker. Forcing
+  # thinking on at the LiteLLM layer is the durable fix and matches the
+  # stage2Config metadata that always claimed this behavior.
   - model_name: qwen3.6-35b-a3b-via-dashscope-direct
     litellm_params:
       model: openai/qwen3.6-35b-a3b
       api_base: https://dashscope-intl.aliyuncs.com/compatible-mode/v1
       api_key: os.environ/DASHSCOPE_API_KEY
+      max_tokens: 16000
+      extra_body:
+        enable_thinking: true
 
   # OpenRouter bridge — failover when DashScope rate-limits or is
   # unavailable. Note: OpenRouter's Qwen catalog does NOT have the exact
