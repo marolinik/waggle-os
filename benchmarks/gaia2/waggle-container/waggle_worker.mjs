@@ -15,6 +15,10 @@ import fs from "node:fs";
 import os from "node:os";
 import { spawn } from "node:child_process";
 import { runAgentLoop } from "@waggle/agent/dist/agent-loop.js";
+// F2 (2026-05-27): opt-in persona overlay via composePersonaPrompt. Bare-Waggle behavior
+// (matching the 2026-05-22 N=40 on-par-with-Hermes baseline) preserved when
+// WAGGLE_PERSONA_ID is unset / empty.
+import { getPersona, composePersonaPrompt } from "@waggle/agent/dist/personas.js";
 
 const WORKER_SOCK = process.env.WAGGLE_WORKER_SOCK || process.env.HERMES_WORKER_SOCK || "/tmp/waggle-worker.sock";
 const AGENTS_MD = `${os.homedir()}/AGENTS.md`;
@@ -62,12 +66,40 @@ function readAgentsMd() {
 const SKILL_GATE = process.env.WAGGLE_SKILL_DISTILLATION_GATE === "1";
 const VERIFY_GATE = process.env.WAGGLE_VERIFICATION_GATE === "1";
 
+// F2 (2026-05-27): when WAGGLE_PERSONA_ID is set (e.g. "executive-assistant"), the
+// worker composes AGENTS.md (the GAIA 2 tool / app context — REQUIRED) with the
+// persona's `systemPrompt` via composePersonaPrompt(). Resolved once at startup so
+// every scenario in a run sees the same prompt shape. If the ID is unrecognized we
+// log a WARN and fall back to bare AGENTS.md so a typo never silently changes the
+// measurement.
+const PERSONA_ID = (process.env.WAGGLE_PERSONA_ID || "").trim();
+let resolvedPersona = null;
+if (PERSONA_ID) {
+  try {
+    resolvedPersona = getPersona(PERSONA_ID) ?? null;
+    if (resolvedPersona) {
+      log(`F2: persona overlay ON — id=${PERSONA_ID} (${resolvedPersona.name})`);
+    } else {
+      log(`F2: WARN — WAGGLE_PERSONA_ID="${PERSONA_ID}" did not resolve to a known persona; falling back to bare AGENTS.md`);
+    }
+  } catch (e) {
+    log(`F2: WARN — getPersona threw (${e?.message || e}); falling back to bare AGENTS.md`);
+    resolvedPersona = null;
+  }
+}
+
+function buildSystemPrompt() {
+  const core = readAgentsMd();
+  if (!resolvedPersona) return core;
+  return composePersonaPrompt(core, resolvedPersona);
+}
+
 async function runOnce(text) {
   const res = await runAgentLoop({
     litellmUrl: LITELLM_URL,
     litellmApiKey: API_KEY,
     model: MODEL,
-    systemPrompt: readAgentsMd(),
+    systemPrompt: buildSystemPrompt(),
     tools: [terminalTool],
     messages: [{ role: "user", content: text }],
     maxTurns: MAX_TURNS,
