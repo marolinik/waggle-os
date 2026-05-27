@@ -207,6 +207,39 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-5 h-5 animate-spin text-primary" />
             </div>
+          ) : highlights.length === 0 && summaries.length === 0 ? (
+            // F1: day-0 user — no workspaces AND no memory yet. The bare
+            // "no workspaces" line failed every persona's dim 3 (first-
+            // session hook in <60s) in the 2026-05-28 addictiveness audit.
+            // Replace it with three demo "what I'll remember for you"
+            // bubbles that teach the value prop concretely. Examples are
+            // explicitly labelled so this isn't deceptive copy.
+            <div className="py-2 space-y-3" data-testid="login-briefing-empty-hook">
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-display font-semibold text-primary/80 uppercase tracking-wider flex items-center gap-1.5">
+                  <Lightbulb className="w-3 h-3" /> Here's what I'll remember for you
+                </p>
+                {[
+                  '"Last week we decided to prioritise compliance over speed for the launch."',
+                  '"Sarah\'s feedback on the deck — slide 4 needs the regional breakdown."',
+                  '"Voice for the Wednesday newsletter — punchy, contrarian, second-person."',
+                ].map((demo, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.2 + i * 0.12 }}
+                    className="flex items-start gap-2 px-3 py-1.5 rounded-lg bg-primary/5 border border-primary/10 border-dashed"
+                  >
+                    <Sparkles className="w-3 h-3 text-primary/60 mt-0.5 shrink-0" />
+                    <p className="text-[12px] text-foreground/70 italic leading-relaxed">{demo}</p>
+                  </motion.div>
+                ))}
+              </div>
+              <p className="text-[10px] text-muted-foreground italic px-1">
+                Examples. Your real memory populates as you chat — or import an existing ChatGPT/Claude export from the Memory app.
+              </p>
+            </div>
           ) : (
             <>
               {/* Memory highlights — "I remember..." */}

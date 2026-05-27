@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
-import { WifiOff, Search, Bell } from "lucide-react";
+import { WifiOff, Search, Bell, Brain } from "lucide-react";
 import waggleLogoDark from "@/assets/waggle-logo.jpeg";
 import waggleLogoLight from "@/assets/waggle-logo.png";
 import { useIsLightTheme } from "@/hooks/useIsLightTheme";
 import { HintTooltip } from "@/components/ui/hint-tooltip";
 import { useDeveloperMode } from "@/hooks/useDeveloperMode";
+import { adapter } from "@/lib/adapter";
 
 interface StatusBarProps {
   workspaceName?: string;
@@ -28,6 +29,30 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
   // M-20 / UX-5: token + cost are developer-facing signal. Hidden by
   // default; Settings → Advanced → Developer mode flips them on.
   const [developerMode] = useDeveloperMode();
+  // F2 from the 2026-05-28 addictiveness audit — surface accumulated
+  // memory count as a visible "trophy" so users see their investment
+  // compounding (rubric dim 8). Hidden when the count is zero (a
+  // brand-new user is better served by the LoginBriefing demo hook).
+  const [memoryFrameCount, setMemoryFrameCount] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => {
+      adapter.getMemoryStats()
+        .then(stats => {
+          if (cancelled) return;
+          // adapter.getMemoryStats normalises to { personal, workspace,
+          // total } with `frames` on each bucket — same shape that powers
+          // the LoginBriefing brag line.
+          const n = stats?.total?.frames ?? 0;
+          setMemoryFrameCount(n > 0 ? n : null);
+        })
+        .catch(() => { /* silent — leave count hidden */ });
+    };
+    load();
+    // Refresh every 60s so the trophy ticks up during active use.
+    const id = setInterval(load, 60_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => setTime(new Date()), 1000);
@@ -70,6 +95,20 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
           <>
             <span className="text-muted-foreground text-[11px] hidden md:inline">·</span>
             <span className="text-[11px] text-primary/80 font-display hidden md:inline">{model}</span>
+          </>
+        )}
+        {memoryFrameCount !== null && (
+          <>
+            <span className="text-muted-foreground text-[11px] hidden md:inline">·</span>
+            <HintTooltip content={`${memoryFrameCount.toLocaleString()} memory frames across your workspaces. This grows every time you chat — it's why Waggle gets better the more you use it.`}>
+              <span
+                className="text-[11px] text-primary/80 font-display hidden md:inline-flex items-center gap-1 cursor-help"
+                data-testid="statusbar-memory-count"
+              >
+                <Brain className="w-3 h-3" aria-hidden="true" />
+                {memoryFrameCount.toLocaleString()}
+              </span>
+            </HintTooltip>
           </>
         )}
         {developerMode && tokensUsed !== undefined && tokensUsed > 0 && (
