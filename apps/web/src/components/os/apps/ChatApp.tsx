@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ChevronUp, ThumbsUp, ThumbsDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Upload, Code, FileText, Users, X, Bot, Cpu, Layers, Pin, PinOff, Shield, Zap, MoreHorizontal } from 'lucide-react';
+import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ChevronUp, ThumbsUp, ThumbsDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Upload, Code, FileText, Users, X, Bot, Brain, Cpu, Layers, Pin, PinOff, Shield, Zap, MoreHorizontal } from 'lucide-react';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
@@ -441,7 +441,11 @@ const ChatApp = ({
   const [showSlash, setShowSlash] = useState(false);
   const [slashFilter, setSlashFilter] = useState('');
   const [slashIndex, setSlashIndex] = useState(0);
-  const [showSessions, setShowSessions] = useState(false);
+  // Default the session sidebar open when the user already has chats — the
+  // collapsed state hides "New Session" + history (w-0 container), which made
+  // P2/P3/P5 unable to start a fresh chat without finding the unlabelled
+  // chevron toggle. Empty-state stays collapsed (nothing to show).
+  const [showSessions, setShowSessions] = useState(() => Boolean(sessions && sessions.length > 0));
   const [dragging, setDragging] = useState(false);
   const [showAgentProfile, setShowAgentProfile] = useState(false);
   const [showPersonaPicker, setShowPersonaPicker] = useState(false);
@@ -711,7 +715,13 @@ const ChatApp = ({
           data-compact={isHeaderCompact ? 'true' : 'false'}
         >
           {sessions && (
-            <button onClick={() => setShowSessions(p => !p)} className="text-muted-foreground hover:text-foreground transition-colors">
+            <button
+              onClick={() => setShowSessions(p => !p)}
+              aria-label={showSessions ? 'Hide chat history' : 'Show chat history'}
+              aria-expanded={showSessions}
+              title={showSessions ? 'Hide chat history' : `Show chat history${sessions.length > 0 ? ` (${sessions.length})` : ''}`}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
               <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showSessions ? 'rotate-0' : '-rotate-90'}`} />
             </button>
           )}
@@ -761,6 +771,21 @@ const ChatApp = ({
               </div>
             )}
           </div>
+
+          {/* Memory-active trust signal — always visible (not gated by
+              isHeaderCompact). Signals that the workspace memory layer is
+              feeding context into this chat, which addresses the "where do
+              recall answers come from?" question that surfaced in the 5-
+              persona UX audit (dim 9 — Trust signals). */}
+          <HintTooltip content="This chat uses your workspace memory — past sessions, entities, and decisions inform every reply. Click the Memory app in the dock to browse.">
+            <span
+              data-testid="chat-header-memory-active"
+              className="text-[10px] px-1.5 py-0.5 rounded font-display bg-primary/10 text-primary border border-primary/30 inline-flex items-center gap-1 cursor-help"
+            >
+              <Brain className="w-2.5 h-2.5" aria-hidden="true" />
+              Memory
+            </span>
+          </HintTooltip>
 
           {/* M-21 / UX-6: storage + team presence render inline at full
               width, or behind a ⋯ overflow menu when the header is
@@ -1148,7 +1173,12 @@ const ChatApp = ({
             </div>
           )}
           <div className="flex items-end gap-2 bg-muted/50 rounded-xl px-3 py-2 border border-border/30">
-            <button onClick={handleFileSelect} className="text-muted-foreground hover:text-foreground transition-colors pb-0.5">
+            <button
+              onClick={handleFileSelect}
+              aria-label="Attach file"
+              title="Attach file (CSV, PDF, image, …)"
+              className="text-muted-foreground hover:text-foreground transition-colors pb-0.5"
+            >
               <Paperclip className="w-4 h-4" />
             </button>
             <textarea

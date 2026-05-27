@@ -12,8 +12,22 @@ interface WorkspaceSwitcherProps {
   onSelect: (id: string) => void;
 }
 
+// Mirrors the LoginBriefing filter — workspace names matching these patterns
+// are E2E/test artefacts that leaked into the real store. Filtered defensively
+// at the UI surface so they don't pollute the switcher.
+const TEST_WORKSPACE_PATTERNS: ReadonlyArray<RegExp> = [
+  /^E2E-Audit-\d+$/,
+  /^test-/i,
+  /^smoke-/i,
+  /^audit-/i,
+];
+
 const WorkspaceSwitcher = ({ open, onClose, workspaces, activeWorkspaceId, onSelect }: WorkspaceSwitcherProps) => {
   if (!open) return null;
+
+  const visibleWorkspaces = workspaces.filter(
+    ws => ws.id === activeWorkspaceId || !TEST_WORKSPACE_PATTERNS.some(p => p.test(ws.name)),
+  );
 
   return (
     <AnimatePresence>
@@ -34,7 +48,7 @@ const WorkspaceSwitcher = ({ open, onClose, workspaces, activeWorkspaceId, onSel
         >
           <h2 className="text-sm font-display font-semibold text-foreground mb-3">Switch Workspace</h2>
           <div className="space-y-1 max-h-64 overflow-auto">
-            {workspaces.map(ws => {
+            {visibleWorkspaces.map(ws => {
               const persona = ws.persona ? getPersonaById(ws.persona) : null;
               const isActive = ws.id === activeWorkspaceId;
               return (
@@ -65,7 +79,7 @@ const WorkspaceSwitcher = ({ open, onClose, workspaces, activeWorkspaceId, onSel
                 </button>
               );
             })}
-            {workspaces.length === 0 && (
+            {visibleWorkspaces.length === 0 && (
               <p className="text-xs text-muted-foreground text-center py-4">No workspaces</p>
             )}
           </div>

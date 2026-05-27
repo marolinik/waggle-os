@@ -59,6 +59,20 @@ function truncateHighlight(content: string): string {
   return firstLine.length > 120 ? firstLine.slice(0, 117) + '...' : firstLine;
 }
 
+// Workspace names matching these patterns are E2E/test artefacts that leaked
+// into the user's real workspace store and should not surface in the
+// briefing's workspace summary list. Filtered at the UI layer (defensive),
+// not deleted from the data store.
+const TEST_WORKSPACE_PATTERNS: ReadonlyArray<RegExp> = [
+  /^E2E-Audit-\d+$/,
+  /^test-/i,
+  /^smoke-/i,
+  /^audit-/i,
+];
+
+const isTestWorkspace = (name: string): boolean =>
+  TEST_WORKSPACE_PATTERNS.some(p => p.test(name));
+
 const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
   const [summaries, setSummaries] = useState<WorkspaceSummary[]>([]);
   const [highlights, setHighlights] = useState<MemoryHighlight[]>([]);
@@ -68,9 +82,16 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
 
   useEffect(() => {
     const hour = new Date().getHours();
-    if (hour < 12) setGreeting('Good morning');
-    else if (hour < 18) setGreeting('Good afternoon');
-    else setGreeting('Good evening');
+    const timeGreeting =
+      hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+    setGreeting(timeGreeting);
+    // Best-effort identity fetch — appends the user's name to the greeting
+    // when configured. Silent on failure so the briefing never blocks on it.
+    adapter.getIdentity()
+      .then(id => {
+        if (id?.name) setGreeting(`${timeGreeting}, ${id.name}`);
+      })
+      .catch(() => { /* no identity yet — leave greeting time-only */ });
 
     loadBriefing();
   }, []);
@@ -98,8 +119,12 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
       }));
       setHighlights(topFrames);
 
-      // Workspace summaries — show all, not just ones with content
-      const sorted = workspaces.slice(0, 5);
+      // Workspace summaries — show all, not just ones with content.
+      // Drop E2E/test workspaces that leaked into the real store (see
+      // TEST_WORKSPACE_PATTERNS) so the briefing surfaces only user work.
+      const sorted = workspaces
+        .filter((ws: Workspace) => !isTestWorkspace(ws.name))
+        .slice(0, 5);
 
       const contextPromises = sorted.map(async (ws: Workspace) => {
         try {
