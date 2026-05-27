@@ -88,10 +88,43 @@ if (PERSONA_ID) {
   }
 }
 
+// F3 (2026-05-27): opt-in output-discipline appendix targeting Qwen-thinking failure
+// modes seen in the bare N=160 (Cat 1 verbose multi-paragraph answers + Cat 3
+// thinking-mode bleed). Activated by WAGGLE_GAIA2_QWEN_SHAPE=1. Applied as the
+// FINAL section of the system prompt so it overrides any persona-introduced framing.
+// Composes cleanly with or without the F2 persona overlay (compose-then-append).
+const APPLY_QWEN_SHAPE = process.env.WAGGLE_GAIA2_QWEN_SHAPE === "1";
+const QWEN_SHAPE_APPENDIX = `
+
+---
+
+## Final Answer Discipline (CRITICAL — read before every send_message_to_user)
+
+Your final \`send_message_to_user\` MUST be the ANSWER, not an analysis. Hard rules:
+
+1. **One short line.** No multi-paragraph response. No headers. No bullet lists. No bold formatting.
+2. **No preamble.** Do NOT begin with "Based on my analysis", "Let me", "Now let me", "Here is", "I found", "After analyzing", or "Looking at the data". Just give the value.
+3. **No restatement of the question.** The user knows what they asked.
+4. **No appended reasoning.** Do NOT include "because…", "since…", "due to…" clauses unless the question explicitly asked for justification.
+5. **No "Answer:" / "**Answer:**" prefix.** Just the value itself.
+
+Shape by question type:
+- "Which city…?" → \`Stockholm\` (one word, the city name)
+- "What is the average…?" → \`45\` (the number, rounded as the question specified)
+- "Who is the contact…?" → \`Astrid Lindqvist\` (the name)
+- "How many…?" → \`12\` (the count)
+- "What time…?" → \`14:30\` (the time)
+- Listy "What are the…?" → \`Stockholm, Oslo, Copenhagen\` (comma-separated, no bullets)
+
+Your reasoning ALREADY happened in your \`<think>\` blocks and tool calls. The send_message_to_user is a result delivery, not a reasoning rendition. If you find yourself writing more than ~15 words in send_message_to_user, you are wrong — rewrite shorter.
+
+`;
+
 function buildSystemPrompt() {
   const core = readAgentsMd();
-  if (!resolvedPersona) return core;
-  return composePersonaPrompt(core, resolvedPersona);
+  let prompt = resolvedPersona ? composePersonaPrompt(core, resolvedPersona) : core;
+  if (APPLY_QWEN_SHAPE) prompt += QWEN_SHAPE_APPENDIX;
+  return prompt;
 }
 
 async function runOnce(text) {
