@@ -78,13 +78,23 @@ waggle-os/
 └── package.json (workspaces: apps/*, packages/*)
 ```
 
-### Packages (`packages/`, 16 workspaces)
+### Packages (`packages/`, 27 workspaces — verified 2026-05-28)
 ```
+Core (15):
 admin-web       cli             launcher        marketplace
 agent           core            memory-mcp      optimizer
-sdk             server          shared          ui
-waggle-dance    weaver          wiki-compiler   worker
+sdk             server          shared          waggle-dance
+weaver          wiki-compiler   worker
+
+hive-mind OSS split (12 — synced to marolinik/hive-mind, see §7.5):
+hive-mind-core   hive-mind-cli   hive-mind-shim-core   hive-mind-mcp-server
+hive-mind-wiki-compiler
+hive-mind-hooks-{claude-code, claude-desktop, codex, codex-desktop,
+                 cursor, hermes, openclaw}
 ```
+> Note: the prior list said "16" and included `ui`, which has no `package.json`
+> (not a workspace). Real count is 27. The 12 `hive-mind-*` packages were added
+> since the April verification.
 
 ### `packages/agent/src/` — MOST ACTIVE (94 .ts files + 4 subdirs)
 
@@ -201,10 +211,15 @@ npm run test:all        # Full Playwright
 ### Verification Commands (run these, don't claim "it compiles")
 ```bash
 npx tsc --noEmit --project packages/agent/tsconfig.json
+npx tsc --noEmit --project packages/server/tsconfig.json   # sidecar — runs via tsx (transpile-only), so NOT typechecked by `npm run build`
 npx tsc --noEmit --project app/tsconfig.json
 npm run test -- --run
 npm run lint
 ```
+> `npm run build` typechecks **only `apps/web`**. The Fastify sidecar runs via
+> `tsx` (transpile-only) — server-route type errors ship undetected unless you
+> run the `packages/server` tsc above. (A real type error slipped through this
+> way on 2026-05-28; see `docs/addictiveness-audit-2026-05-28/REDUNDANCY-AUDIT.md`.)
 
 ---
 
