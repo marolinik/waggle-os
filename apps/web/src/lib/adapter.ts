@@ -103,11 +103,14 @@ class LocalAdapter {
   }
 
   // --- Auth ---
-  async connect(): Promise<{ wsToken: string }> {
+  async connect(): Promise<SystemHealth> {
     this._connectAttempted = true;
     try {
       const data = await this.healthProbe();
-      this.authToken = data.wsToken;
+      // R1-001: the bearer token is no longer harvested from /health — an
+      // unauthenticated endpoint must not serve it. Localhost clients are
+      // trusted by the sidecar, so the desktop product needs no token; the
+      // authToken field stays null and the Authorization header is omitted.
       this._connected = true;
       return data;
     } catch (e) {

@@ -31,6 +31,9 @@ services:
       - WAGGLE_LICENSE_KEY=${WAGGLE_LICENSE_KEY:-}
       - WAGGLE_MAX_USERS=${WAGGLE_MAX_USERS:-0}
       - WAGGLE_SKIP_LITELLM=1
+      # Container must accept traffic from outside the container; the sidecar
+      # now defaults to loopback (desktop-safe), so cloud/server deploys opt in.
+      - WAGGLE_HOST=0.0.0.0
       - NODE_ENV=production
       - MINIO_ENDPOINT=minio:9000
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-waggle}

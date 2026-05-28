@@ -8,6 +8,7 @@ import { buildLocalServer } from './index.js';
 import type { LlmHealthStatus } from './index.js';
 import { startLiteLLM, stopLiteLLM, type LiteLLMStatus } from './lifecycle.js';
 import { createLogger } from './logger.js';
+import { resolveBindHost } from './net-config.js';
 import {
   readEraseMarker,
   performWipe,
@@ -199,7 +200,7 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
     try { fs.unlinkSync(path.join(dataDir, 'server.pid')); } catch { /* ok */ }
   });
 
-  await server.listen({ port, host: process.env.WAGGLE_HOST ?? '0.0.0.0' });
+  await server.listen({ port, host: resolveBindHost() });
 
   // Write PID file for stale-process detection
   try {

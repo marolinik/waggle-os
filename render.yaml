@@ -21,6 +21,10 @@ services:
         value: production
       - key: WAGGLE_SKIP_LITELLM
         value: '1'
+      # Sidecar defaults to loopback (desktop-safe); a hosted web service must
+      # bind all interfaces, so opt in explicitly.
+      - key: WAGGLE_HOST
+        value: 0.0.0.0
       - key: WAGGLE_FRONTEND_DIR
         value: ./app/dist
       - key: WAGGLE_DATA_DIR

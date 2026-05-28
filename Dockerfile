@@ -97,6 +97,9 @@ RUN mkdir -p /data \
 ENV NODE_ENV=production
 ENV WAGGLE_FRONTEND_DIR=/app/dist
 ENV WAGGLE_DATA_DIR=/data
+# The sidecar defaults to loopback (desktop-safe). A container must accept
+# traffic from outside, so opt into binding all interfaces here.
+ENV WAGGLE_HOST=0.0.0.0
 
 # Expose server port
 EXPOSE 3333

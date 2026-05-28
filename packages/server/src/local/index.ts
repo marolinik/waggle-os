@@ -11,7 +11,9 @@ import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
 import { MindDB, MultiMind, MultiMindCache, WorkspaceManager, WaggleConfig, createEmbeddingProvider, type EmbeddingProviderConfig, type EmbeddingProviderInstance, FrameStore, SessionStore, InstallAuditStore, CronStore, AwarenessLayer, VaultStore, SkillHashStore, OptimizationLogStore, ImprovementSignalStore, HarvestSourceStore, ClaudeCodeAdapter, reconcileIndexes, TeamSync, TelemetryStore, TELEMETRY_EVENTS, ExecutionTraceStore, EvolutionRunStore, ComplianceTemplateStore } from '@waggle/core';
-import { ALLOWED_ORIGINS } from './cors-config.js';
+import { corsOriginAllowed } from './cors-config.js';
+import { resolveBindHost } from './net-config.js';
+import { isLocalRequest } from './origin-guard.js';
 import { MemoryWeaver } from '@waggle/weaver';
 import {
   Orchestrator,
@@ -275,7 +277,7 @@ declare module 'fastify' {
 export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   const fullConfig: LocalConfig = {
     port: parseInt(process.env.WAGGLE_PORT ?? '3333'),
-    host: process.env.WAGGLE_HOST ?? '0.0.0.0',
+    host: resolveBindHost(),
     dataDir: config.dataDir ?? process.env.WAGGLE_DATA_DIR ?? '',
     litellmUrl: config.litellmUrl ?? 'http://localhost:4000',
     ...config,
@@ -1901,7 +1903,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   // CORS restricted to known Tauri/dev origins — prevents cross-origin attacks from arbitrary websites
   await server.register(cors, {
     origin: (origin, cb) => {
-      if (!origin || ALLOWED_ORIGINS.some(o => origin.startsWith(o))) {
+      if (corsOriginAllowed(origin)) {
         cb(null, true);
       } else {
         cb(new Error('CORS: origin not allowed'), false);
@@ -1917,7 +1919,13 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
 
   // P5 (PDF 2026-04-17): minimal debug-log viewer for support attachments.
   // Returns health + last 500 audit events + recent cost entries as JSON.
-  server.get('/api/debug/logs', async (_request, reply) => {
+  server.get('/api/debug/logs', async (request, reply) => {
+    // R2-006: same-origin gate — this endpoint exposes audit history and is
+    // recon material; never serve it cross-origin (defense in depth behind
+    // the loopback bind).
+    if (!isLocalRequest(request)) {
+      return reply.code(403).send({ error: 'Forbidden: external origin' });
+    }
     const payload: Record<string, unknown> = {
       timestamp: new Date().toISOString(),
       version: '0.2.0',
@@ -1930,7 +1938,8 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
         payload.auditRecent = raw.prepare('SELECT * FROM install_audit ORDER BY timestamp DESC LIMIT 500').all();
       }
     } catch { /* non-blocking */ }
-    try { payload.providerKeys = server.vault?.list().map(e => ({ name: e.name, updatedAt: e.updatedAt })) ?? []; } catch { /* non-blocking */ }
+    // R2-006: vault key NAMES dropped — even names are recon material and the
+    // support bundle does not need them.
     reply.header('Content-Type', 'application/json; charset=utf-8');
     reply.header('Content-Disposition', `attachment; filename="waggle-logs-${Date.now()}.json"`);
     return payload;
@@ -2326,7 +2335,9 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
       serviceHealth,
       defaultModel: server.agentState.currentModel,
       offline: offlineManager.state,
-      wsToken: server.agentState.wsSessionToken,
+      // R1-001: wsToken intentionally NOT returned — /health is unauthenticated
+      // and the token authenticates every other route. Localhost clients are
+      // trusted by security-middleware and never needed it.
     };
   });
 
