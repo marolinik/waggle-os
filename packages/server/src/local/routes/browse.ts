@@ -16,6 +16,7 @@ import {
   shouldListDrives,
   type BrowseEntry,
 } from './browse-helpers.js';
+import { isLocalRequest } from '../origin-guard.js';
 
 export async function browseRoutes(server: FastifyInstance) {
 
@@ -23,6 +24,10 @@ export async function browseRoutes(server: FastifyInstance) {
   server.get<{ Querystring: { path?: string } }>(
     '/api/browse/local',
     async (request, reply) => {
+      // R6-005: enumerates the host filesystem — local app only.
+      if (!isLocalRequest(request)) {
+        return reply.status(403).send({ error: 'Forbidden: external origin' });
+      }
       const dirPath = request.query.path || '/';
 
       // P14: on Windows the abstract root '/' collapses to whichever
@@ -76,6 +81,10 @@ export async function browseRoutes(server: FastifyInstance) {
   server.post<{ Body: { path: string } }>(
     '/api/browse/local/mkdir',
     async (request, reply) => {
+      // R6-005: creates a directory anywhere on the host — local app only.
+      if (!isLocalRequest(request)) {
+        return reply.status(403).send({ error: 'Forbidden: external origin' });
+      }
       const { path: dirPath } = request.body ?? {};
 
       if (!dirPath) {

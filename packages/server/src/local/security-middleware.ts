@@ -13,6 +13,7 @@
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import fp from 'fastify-plugin';
+import { isLoopbackBind } from './net-config.js';
 
 // ── Security Headers ────────────────────────────────────────────────────
 
@@ -250,6 +251,17 @@ async function securityMiddlewarePlugin(
   const limiter = new RateLimiter(opts.rateLimiter);
   const sessionToken = opts.sessionToken ?? null;
 
+  // R2-004: when bound to loopback, reject requests whose Host header is not a
+  // known-local name. This defeats DNS-rebinding, which would otherwise let a
+  // malicious page resolve its domain to 127.0.0.1 and satisfy the IP-based
+  // localhost-trust exemption below. Skipped when bound to 0.0.0.0 (a cloud
+  // deploy sits behind its own host/proxy and sets its own Host).
+  const enforceHostAllowlist = isLoopbackBind();
+  const HOST_ALLOWLIST = new Set([
+    '127.0.0.1', 'localhost', '::1',
+    ...(process.env.WAGGLE_ALLOWED_HOSTS ?? '').split(',').map(s => s.trim()).filter(Boolean),
+  ]);
+
   // Expose the rate limiter on the fastify instance for test access (e.g., reset between tests)
   fastify.decorate('rateLimiter', limiter);
 
@@ -271,6 +283,14 @@ async function securityMiddlewarePlugin(
     }
 
     const requestPath = request.url.split('?')[0]; // Strip query string
+
+    // ── Host-header allowlist (R2-004, anti DNS-rebind) ──
+    if (enforceHostAllowlist) {
+      const hostHeader = (request.headers.host ?? '').split(':')[0];
+      if (hostHeader && !HOST_ALLOWLIST.has(hostHeader)) {
+        return reply.code(403).send({ error: 'Forbidden', code: 'BAD_HOST' });
+      }
+    }
 
     // ── Bearer token authentication (SEC-011) ──
     // Local desktop app: localhost requests are trusted (Waggle is a desktop app, not a public server).
