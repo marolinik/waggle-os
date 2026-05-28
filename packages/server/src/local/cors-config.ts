@@ -49,6 +49,16 @@ if (process.env.WAGGLE_DEV_ALLOW_ANY_EXTENSION === '1') {
 export const ALLOWED_ORIGINS = [...BASE_ORIGINS, ...extensionOrigins];
 
 /**
+ * Exact-match CORS origin check for the Fastify CORS plugin.
+ * A missing origin (same-origin request or non-browser client) is allowed.
+ * Exact match (not startsWith) so an attacker host like
+ * `http://localhost:1420.evil.com` cannot pass by prefixing an allowed origin.
+ */
+export function corsOriginAllowed(origin: string | undefined): boolean {
+  return !origin || ALLOWED_ORIGINS.includes(origin);
+}
+
+/**
  * Validate and return the origin for SSE responses.
  * Returns the origin if allowed, otherwise returns the first allowed origin.
  * SSE endpoints that use reply.hijack() bypass Fastify's CORS plugin,
