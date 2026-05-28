@@ -8,8 +8,8 @@
 | Feature | Iter | Pre-existing equivalent | Verdict | Action |
 |---|---|---|---|---|
 | **FR-3 registry** (route + JSON + HTML) | 8 | `MarketplaceApp` + `/api/marketplace/*` — richer (install/uninstall, security scan, live-synced DB from ~25 sources) | **REDUNDANT** | ✅ Reverted (this turn) |
-| **FR-5 backend** (`sample-workspaces.ts` + `/load`) | 6 | `workspace-templates.ts` 14 `BUILT_IN_TEMPLATES` + `starterMemory[]` + M2-5 seed in `POST /api/workspaces` | **REDUNDANT** (mechanism) | ⏳ Recommend revert + rewire — awaiting decision |
-| **FR-5 frontend** (day-0 LoginBriefing buttons) | 6 | `OnboardingWizard` TemplateStep already calls `createWorkspace({templateId})` → seeds starterMemory | **PARTIAL** | Keep, rewire to existing templates |
+| **FR-5 backend** (`sample-workspaces.ts` + `/load`) | 6 | `workspace-templates.ts` 14 `BUILT_IN_TEMPLATES` + `starterMemory[]` + M2-5 seed in `POST /api/workspaces` | **REDUNDANT** (mechanism) | ✅ Reverted (2026-05-28, commit after 5f54193) — route deleted, de-registered |
+| **FR-5 frontend** (day-0 LoginBriefing buttons) | 6 | `OnboardingWizard` TemplateStep already calls `createWorkspace({templateId})` → seeds starterMemory | **PARTIAL** | ✅ Reverted to iter-1 F1 demo cards. Non-redundant consolidation (wire to templateId) tracked in FEATURE-REQUESTS.md |
 | **F2 StatusBar memory trophy** | 1 | `DashboardApp` Brain Health + `brain-health.ts` + LoginBriefing brag line | **PARTIAL** (3rd surface for same data) | Keep — always-on placement is genuinely unique; low concern |
 | **F1 day-0 demo cards** | 1 | bare empty-state existed | enhancement, superseded by FR-5 | n/a |
 | **F4 coverage compass** | 7 | none | **NEW but low-value** (static marketing card) | Keep or trim — your call |

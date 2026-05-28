@@ -43,7 +43,7 @@ Prioritised by: cells_closed_across_rubric ÷ implementation_cost.
 - **What was genuinely new:** the day-0 *LoginBriefing* trigger (load a starter when empty, on every launch — not just the first-run wizard).
 - **Correct consolidation:** (a) enrich existing `BUILT_IN_TEMPLATES.starterMemory` (currently ~3 thin entries each; my bundles had 8 richer frames) and add a `writer` template; (b) rewire the day-0 LoginBriefing hook to `POST /api/workspaces` with the chosen `templateId`; (c) drop `sample-workspaces.ts`.
 - **Cells (value is real, mechanism should consolidate):** dim 3 for P1/P2/P3/P5/P7 (+5); dim 7 for P1/P2 (+2).
-- **Decision pending:** revert `sample-workspaces.ts` + rewire, or leave as-is and accept the parallel mechanism.
+- **Status (2026-05-28): REVERTED.** `sample-workspaces.ts` deleted + de-registered; LoginBriefing day-0 hook restored to the iter-1 F1 demo cards. The non-redundant rebuild = enrich `BUILT_IN_TEMPLATES.starterMemory` + add a `writer` template + wire the F1 day-0 cards to call `POST /api/workspaces` with the chosen `templateId` (so a click creates a real seeded workspace via the EXISTING mechanism). Open as a future task — no parallel route.
 
 ### FR-6 · Native xlsx editor (or deep Excel integration) [MEDIUM]
 - **Concrete trigger:** P6 (Daniel) lives in Excel daily. No real "BI / finance ops" persona will pick Waggle without it.
