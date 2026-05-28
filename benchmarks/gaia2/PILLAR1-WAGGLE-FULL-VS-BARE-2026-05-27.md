@@ -2,7 +2,20 @@
 
 **Question.** The 2026-05-26 N=160 ran with **bare** Waggle (gates OFF, no persona, no prompt-shape) — fairness-with-Hermes design but disclaiming the "as-shipped" product surface. Result: **67.9% trio-strict** on Qwen vs 87.2% on Hermes+Sonnet → 19.3pp gap. Marko's correction: *test the **real** Waggle harness* — turn on Waggle's actual product-distinctive orchestration. This memo measures four cells at N=20 to attribute the gap and pick the lever.
 
-## Headline result
+---
+
+> ## ⚠️ CORRECTION (2026-05-28) — the N=20 ladder below is a FALSE POSITIVE
+>
+> **The F3 prompt-shape result did NOT survive stratified scale-up. See §F4 at the bottom for the authoritative numbers.**
+>
+> - **F4 Waggle+Qwen+F3 at full N=157: 65.6% trio-strict** (95% CI 57.9-72.6%) — statistically **FLAT** vs bare 67.9% (bare inside the CI), net **−3.2pp** on matched-pair (16 recover / 21 regress).
+> - The N=20 "+10.5pp" was **prefix-sampling bias** (GAIA scenarios are ordered by universe 21→30; `limit=20` drew 17/20 from universe_21) compounded with **run-to-run nondeterminism** (Qwen-thinking at temperature). On the *full* universe_21 set, F3 scores 70.6% vs bare 82.4% — it HURTS the very universe the probe claimed it helped.
+> - **F4 Sonnet+F3 N=40 = 97.5% is UNCONFIRMED** — it ran on the same biased universe-21-23 prefix. Needs a stratified N≥120 to trust.
+> - **Methodology lesson:** an N=20 gate on a non-stratified prefix is not a valid scale-up signal. The GAIA split must be stratified-sampled or run in full.
+>
+> The four-cell table immediately below is preserved as the (misleading) evidence that motivated F4, NOT as a result.
+
+## Headline result (N=20 PROBE — SUPERSEDED, see correction above)
 
 | Cell | What's on | trio-strict N=20 | matched ∆ vs bare-same-19 |
 |---|---|---:|---:|
@@ -101,3 +114,56 @@ After F2+F3 stacked N=20:
 - "F1 catastrophic regression" — based on 10% in-container rate; corrected after trio-rejudge showed 70% net-zero
 - "F2 persona introduces email-framing bias" — based on N=1 smoke; corrected after N=20 showed +5.3pp lift
 - Both retractions surfaced same-session before propagating into the final memo. Documentation discipline: in-container is plumbing, not signal.
+
+---
+
+# §F4 — Authoritative full-scale result (2026-05-28)
+
+Option B was selected from the N=20 ladder: F3-alone (the apparent winner) scaled to Qwen N=160 + a matched Sonnet N=40 re-baseline, both with `WAGGLE_GAIA2_QWEN_SHAPE=1`, all trio-rejudged.
+
+## The numbers
+
+| Cell | N | trio-strict | matched ∆ | judge unanimity |
+|---|---:|---:|---|---|
+| Bare Waggle+Qwen (2026-05-26) | 156 | 67.9% | baseline | — |
+| **F4 Waggle+Qwen+F3** | 157 | **65.6%** (CI 57.9-72.6) | **−3.2pp** vs bare (16 recover / 21 regress) | 155/157 unanimous |
+| Hermes+Sonnet (frontier) | 148 | 87.2% | — | — |
+| bare Waggle+Sonnet (2026-05-22) | 39 | 84.6% | — | — |
+| F4 Waggle+Sonnet+F3 ⚠️ | 40 | 97.5% | +12.8pp vs bare / +10.5pp vs Hermes (0 regress) | 39/40 unanimous |
+
+## What F4 establishes
+
+1. **F3 prompt-shape is a NULL result on Qwen at scale.** 65.6% vs 67.9% bare is statistically indistinguishable (bare sits inside the F4 95% CI). The shape helps simple factoid scenarios and hurts complex multi-step ones — net wash.
+
+2. **The N=20 probe gate was invalid.** Two compounding errors:
+   - *Prefix-sampling bias.* `limit=N` reads scenarios in dataset order, which is grouped by universe (21→30). N=20 drew 17/20 from universe_21; the Sonnet N=40 drew universes 21-23 only. The full N=160 spans 21-30 with later universes harder. Per-universe proof: bare-Qwen scores 82.4% on universe_21 but 68.0% on universes 23-30.
+   - *Run-to-run nondeterminism.* Qwen-thinking at temperature produces different outputs per execution. Scenarios F3 "recovered" in the N=20 run regressed in the independent N=160 run. The matched-pair lift was partly a coin-flip the rerun didn't reproduce.
+
+3. **The F3 failure modes at scale** (from the 21 regressions): over-compression (`3`, `Thailand`, `1` — terse but WRONG, the shape truncated correct reasoning into a wrong final token) on complex scenarios, AND non-adherence (2030-char answers still starting "Now I have all the data") where the shape didn't take hold at all. The shape neither reliably compresses nor reliably preserves correctness.
+
+4. **F4 Sonnet+F3 97.5% is UNCONFIRMED, not a result.** It ran on the same biased universe-21-23 prefix (N=40). The Pareto pattern (5 recover / 0 regress, 39/40 unanimous) is striking and *might* be real — Sonnet's self-discipline could compose better with the shape than Qwen-thinking does — but it cannot be claimed without a stratified N≥120 Sonnet+F3 run. **Do not cite 97.5% as a Pillar 1 number.**
+
+## Authoritative Pillar 1 Qwen number — UNCHANGED
+
+The honest sovereign-Qwen harness number remains **67.9% trio-strict (bare Waggle+Qwen 3.6 35B-A3B, N=156)**, ~19-21pp below the Hermes+Sonnet 87.2% frontier. None of F1/F2/F3 moved it at scale:
+- F1 (gates): net 0 at N=20, never scaled
+- F2 (persona): +5.3pp at N=20, never scaled (and N=20 now known unreliable)
+- F3 (shape): +10.5pp at N=20 → **−3.2pp at N=160 (FALSE POSITIVE)**
+
+The Qwen gap to the Sonnet frontier is **model-bound, not harness-bound** — at least, not closeable by any of the three harness levers tried here. The bare-Waggle-on-par-with-Hermes claim (Sonnet, 86.5% vs 89.2%, N=40, 2026-05-22) stands; the sovereign-Qwen lane sits ~20pp lower and the harness levers don't recover it.
+
+## Required follow-up before ANY F3/persona claim
+
+- **Stratified N≥120 probes**, not prefix `limit=N`. Either shuffle the scenario order or sample evenly across universes 21-30. The runner needs a `--shuffle-seed` or stratified-sampling flag (it currently reads in dataset order).
+- **pass@k or 3-run majority** to control Qwen-thinking nondeterminism before trusting any matched-pair delta < ~10pp.
+- If pursuing the Sonnet+F3 signal: stratified Sonnet+F3 N≥120 vs the same-scenario bare-Sonnet. Only then is 97.5% (or whatever it regresses to) citable.
+
+## F4 provenance
+
+- F4 Qwen: `runs/waggle-qwen36-f4-shape-n160/` + `runs/rejudge-waggle-qwen36-f4-shape-n160.jsonl` (103/157; 3 scenario errors incl. 1 DashScope 429 rate-limit under 4-container parallel load)
+- F4 Sonnet: `runs/waggle-sonnet-f4-shape-n40/` + `runs/rejudge-waggle-sonnet-f4-n40.jsonl` (39/40)
+- Both ran `WAGGLE_GAIA2_QWEN_SHAPE=1`, image `34801a117af7`, in parallel (Qwen→DashScope-intl, Sonnet→OpenRouter)
+
+## Third in-session retraction (the big one)
+
+- **"F3 closes +10.5pp of the Qwen gap" — RETRACTED.** Held at N=20, failed at N=160 (−3.2pp). Root cause: prefix-sampling bias + run nondeterminism. The earlier two retractions (F1 "regression", F2 "bias") were corrections that turned out *better* than feared; this one is a correction that turned out *worse*. The discipline that matters: the N=20 → scale-up gate was structurally unsound, and the scale-up is what caught it. Always scale-up-to-confirm before claiming a sub-10pp lever.
