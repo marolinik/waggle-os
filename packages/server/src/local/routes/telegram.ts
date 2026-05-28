@@ -35,11 +35,11 @@ const VAULT_CHAT_ID_KEY = 'telegram_chat_id';
 
 // Telegram bot token format: <numeric-id>:<35-char-secret>. Pattern match
 // before any network call so a malformed token surfaces a 400, not an
-// upstream HTTPS error the operator has to parse.
-const BOT_TOKEN_PATTERN = /^\d{6,12}:[A-Za-z0-9_-]{30,}$/;
+// upstream HTTPS error the operator has to parse. Exported for unit tests.
+export const BOT_TOKEN_PATTERN = /^\d{6,12}:[A-Za-z0-9_-]{30,}$/;
 // chat_id: a signed integer string (negative for groups). Sanity-check
-// before storage so a typo doesn't get saved permanently.
-const CHAT_ID_PATTERN = /^-?\d{4,18}$/;
+// before storage so a typo doesn't get saved permanently. Exported for tests.
+export const CHAT_ID_PATTERN = /^-?\d{4,18}$/;
 
 interface TelegramSendResponse {
   ok: boolean;
@@ -126,7 +126,7 @@ export async function telegramRoutes(server: FastifyInstance) {
             error: 'botToken must look like "<id>:<secret>" from @BotFather',
           });
         }
-        server.vault.set(VAULT_TOKEN_KEY, botToken, { credentialType: 'api_key' } as never);
+        server.vault.set(VAULT_TOKEN_KEY, botToken, { credentialType: 'api_key' });
       }
       if (chatId !== undefined) {
         if (!CHAT_ID_PATTERN.test(chatId)) {
@@ -134,7 +134,7 @@ export async function telegramRoutes(server: FastifyInstance) {
             error: 'chatId must be a signed integer string (e.g. 123456789 or -1001234567890)',
           });
         }
-        server.vault.set(VAULT_CHAT_ID_KEY, chatId, { credentialType: 'api_key' } as never);
+        server.vault.set(VAULT_CHAT_ID_KEY, chatId, { credentialType: 'api_key' });
       }
       return { ok: true };
     },
