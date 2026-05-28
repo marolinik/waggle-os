@@ -143,6 +143,104 @@ const SAMPLE_BUNDLES: SampleBundle[] = [
     ],
   },
   {
+    id: 'consultant',
+    name: 'Consultant demo — Imran',
+    icon: '🧭',
+    personaId: 'consultant',
+    description: 'Imran, an independent strategy consultant running 4 client engagements. See framework recall + client decision history + deck patterns.',
+    frames: [
+      {
+        content: 'I am Imran, independent strategy consultant. I work in Apple Notes + Calendly + Gmail + Keynote. Currently 4 active engagements: Acme Co, Beta Corp, Gamma Inc, Delta LLC.',
+        importance: 'critical',
+        source: 'user_stated',
+      },
+      {
+        content: 'My default framework toolkit: 2x2 matrix for stakeholder mapping (80% of problems), Porter\'s Five Forces for market analysis, SWOT for opportunity sizing, value-stream maps for ops.',
+        importance: 'important',
+        source: 'user_stated',
+      },
+      {
+        content: 'Acme Co Q3 engagement: applied Porter\'s Five Forces and identified buyer power as the structural weakness. Recommended supplier diversification + downstream integration. Slide deck delivered 2026-04-22.',
+        importance: 'critical',
+        source: 'tool_verified',
+      },
+      {
+        content: 'Decision 2026-03: standardised on 2x2 matrix as the default first-pass framework for new engagements. Faster than full Porter\'s — gets to a shareable artefact in 90 minutes.',
+        importance: 'important',
+        source: 'user_stated',
+      },
+      {
+        content: 'Beta Corp deck is pending — synthesise last 3 calls (2026-05-08, 05-15, 05-22) into a 1-page exec summary plus 6 slides. Need to land before their board meeting on 2026-06-04.',
+        importance: 'critical',
+        source: 'user_stated',
+      },
+      {
+        content: 'Slide-titling rule: titles are full sentences carrying the insight ("Margin compression is structural, not cyclical"); body bullets are evidence. Never use category labels like "Strategy Overview".',
+        importance: 'important',
+        source: 'user_stated',
+      },
+      {
+        content: 'Framework selection rubric I keep refining: stakeholder problem → 2x2; market problem → Porter or SWOT; operations problem → value-stream map; org-design → RACI or org chart.',
+        importance: 'normal',
+        source: 'user_stated',
+      },
+      {
+        content: 'Gamma Inc paused engagement on 2026-04-30 pending their CEO transition. Resume estimated August. All deliverables archived; relationship intact.',
+        importance: 'normal',
+        source: 'user_stated',
+      },
+    ],
+  },
+  {
+    id: 'engineer',
+    name: 'Engineer demo — Priya',
+    icon: '🛠',
+    personaId: 'project-manager',
+    description: 'Priya, a senior product engineer using Claude Code for coding. See the non-coding half of her week — ADRs, RFCs, meeting synthesis — come alive.',
+    frames: [
+      {
+        content: 'I am Priya, senior product engineer. I use Claude Code daily for the actual code. I want Waggle for the OTHER half of my week — architecture decisions, RFCs, planning, team comms — everything that isn\'t typing into an editor.',
+        importance: 'critical',
+        source: 'user_stated',
+      },
+      {
+        content: 'Source of truth: code in GitHub, tickets in Linear, docs in /docs/. ADRs live at /docs/adr/<number>-<slug>.md. Numbering is sequential, never reused. Status field is REQUIRED (proposed / accepted / superseded).',
+        importance: 'important',
+        source: 'user_stated',
+      },
+      {
+        content: 'ADR-0042 (2026-04-18): chose Postgres over SQLite for the audit log table. Reason: needed JSONB queries + concurrent writes from multiple workers. SQLite WAL didn\'t scale past 200 writes/sec in the load test.',
+        importance: 'critical',
+        source: 'tool_verified',
+      },
+      {
+        content: 'Wednesday architecture meeting cadence — 90 minutes, 4 engineers, 1 PM. I synthesise into a Linear-friendly summary + post to #eng-leads channel by Thursday EOD. Template lives in /docs/templates/arch-sync.md.',
+        importance: 'important',
+        source: 'user_stated',
+      },
+      {
+        content: 'RFC for the multi-tenant migration is pending. Kickoff Monday 2026-06-02. Scope: schema isolation strategy, billing-row attribution, soft-delete semantics, and the cutover plan.',
+        importance: 'critical',
+        source: 'user_stated',
+      },
+      {
+        content: 'ADR template I always reuse: Context (the constraint) → Decision (what we chose) → Consequences (positive + negative + neutral) → Alternatives Considered (with rejection rationale). No more than 1 page.',
+        importance: 'important',
+        source: 'user_stated',
+      },
+      {
+        content: 'RFC writing rule: lead with the problem statement, not the proposed solution. The reader should feel the pain before the cure — otherwise they push back on the cure without understanding what they\'re defending.',
+        importance: 'normal',
+        source: 'user_stated',
+      },
+      {
+        content: 'Tooling preference: I read Linear in the morning, Slack on demand, GitHub all day. Email goes to a folder I check Friday afternoons. Don\'t @ me in email for anything urgent.',
+        importance: 'normal',
+        source: 'user_stated',
+      },
+    ],
+  },
+  {
     id: 'marketer',
     name: 'Marketer demo — Sarah',
     icon: '🎯',

@@ -28,6 +28,7 @@ import ModelSelector from '@/components/os/ModelSelector';
 import ModelPilotCard from '@/components/os/ModelPilotCard';
 import EraseDataDialog from '@/components/os/overlays/EraseDataDialog';
 import TelegramDigestCard from '@/components/os/settings/TelegramDigestCard';
+import CoverageCompassCard from '@/components/os/settings/CoverageCompassCard';
 import { AVAILABLE_SHAPES, useSelectedShape, type PromptShape } from '@/lib/shape-selection';
 
 type SettingsTab = 'general' | 'models' | 'billing' | 'permissions' | 'team' | 'backup' | 'enterprise' | 'advanced';
@@ -479,6 +480,12 @@ const SettingsApp = () => {
         {activeTab === 'billing' && (
           <div className="space-y-5">
             <h3 className="text-sm font-display font-semibold text-foreground">Billing & Subscription</h3>
+
+            {/* F4 from the 2026-05-28 addictiveness audit — visible
+                value-prop framing so users see they're replacing 7-ish
+                subscription tools, not adding an 8th. Renders above the
+                tier card so it's the first thing they read in Billing. */}
+            <CoverageCompassCard />
 
             {/* Current tier badge */}
             <div className="p-4 rounded-xl bg-secondary/30 border border-border/30">
