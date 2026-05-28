@@ -18,10 +18,12 @@
  */
 
 import type { FastifyInstance } from 'fastify';
-import { FrameStore, SessionStore } from '@waggle/core';
-
-type Importance = 'critical' | 'important' | 'normal' | 'low';
-type FrameSource = 'user_stated' | 'tool_verified' | 'agent_inferred' | 'import' | 'system';
+// Import the canonical Importance + FrameSource types rather than
+// re-declaring local aliases — a local `Importance` that included 'low'
+// (not a valid core value) shipped a type error through the loop's
+// web-only build (the server runs via tsx, transpile-only). See
+// docs/addictiveness-audit-2026-05-28/REDUNDANCY-AUDIT.md.
+import { FrameStore, SessionStore, type Importance, type FrameSource } from '@waggle/core';
 
 interface SampleFrame {
   content: string;

@@ -106,7 +106,6 @@ import { browseRoutes } from './routes/browse.js';
 import { browserExtRoutes } from './routes/browser-ext.js';
 import { telegramRoutes, pushTelegramMessage } from './routes/telegram.js';
 import { sampleWorkspacesRoutes } from './routes/sample-workspaces.js';
-import { registryRoutes } from './routes/registry.js';
 import { oauthRoutes } from './routes/oauth.js';
 import { waggleSignalRoutes } from './routes/waggle-signals.js';
 import { providerRoutes } from './routes/providers.js';
@@ -1989,7 +1988,6 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(browserExtRoutes);
   await server.register(telegramRoutes);
   await server.register(sampleWorkspacesRoutes);
-  await server.register(registryRoutes);
   await server.register(telemetryRoutes);
   await server.register(agentGroupRoutes);
   await server.register(stripeRoutes);

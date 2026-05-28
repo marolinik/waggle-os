@@ -23,12 +23,13 @@ Prioritised by: cells_closed_across_rubric ÷ implementation_cost.
 - **Benchmark gap closed:** Hermes' cron-push-to-Telegram is the SINGLE addictive feature that makes Hermes a "daily driver" for the agent-builder segment.
 - **Effort estimate:** 1 sprint for Telegram bot integration (single connector) + ScheduledJobs UI for output channel selection.
 
-### FR-3 · Public skill registry web ("agentskills.waggle.ai") [HIGH]
-- **Concrete triggers:** P10 (Tomás) currently picks Hermes for the OSS skill economy; P9 (Priya) is Claude Code's marketplace-savvy user; P4 (Imran) and P8 (Marko) would import frameworks from peers.
-- **Surface:** Public web property listing all marketplace skills with one-click "Open in Waggle" deep-link. Reuses the MCP catalog work already done.
-- **Cells closed:** dim 5 (tribe) for P4, P8, P9, P10 (+4). dim 10 for P9, P10 (+2). **~6 cells.**
-- **Benchmark gap closed:** OpenClaw's 13k-skill ClawHub, Claude Code's 9k-plugin marketplace. Waggle has 148 entries in the curated catalog — public registry would expose + grow that.
-- **Effort estimate:** 2 sprints — Next.js site reading from existing `@waggle/shared` mcp-catalog + a "publish my skill" submission flow.
+### FR-3 · Publicly host the EXISTING Marketplace [HIGH] — REFRAMED 2026-05-28
+> ⚠️ **Reframed after redundancy audit.** The original framing ("build a public skill registry reading from MCP_CATALOG") was implemented in iter-8, then **reverted** (commit d47c7f5 reverted) — it duplicated the existing in-app `MarketplaceApp`, and worse, read the inferior *static* 148-entry catalog instead of the live-synced marketplace DB. See `REDUNDANCY-AUDIT.md`.
+- **Concrete triggers:** P10 (Tomás) picks Hermes for the OSS skill economy; P9 (Priya) is Claude Code marketplace-savvy; P4/P8 would import frameworks from peers.
+- **Correct surface:** Take the EXISTING marketplace (live-synced DB, install/scan-capable, `/api/marketplace/search`) and expose a **public, hosted, link-shareable web view** at e.g. `registry.waggle-os.ai`. The addictive part (dim 5 tribe) is *peers linking to a skill across the internet*, which a local `127.0.0.1` page can never deliver.
+- **This is an OPS/DEPLOY decision, not new code:** pick a host (Vercel / Cloudflare Pages / waggle-os.ai subdomain), point a thin read-only frontend at the marketplace search API, add a deep-link/protocol handler (`waggle://`) so a peer's link launches their desktop.
+- **Cells closed (when hosted):** dim 5 for P4, P8, P9, P10 (+4); dim 10 for P9, P10 (+2). **~6 cells.**
+- **Do NOT:** build another static-catalog page. That's what got reverted.
 
 ### FR-4 · "Memory growth trophy" in StatusBar — visible compounding signal [MEDIUM]
 - **Concrete triggers:** P1, P2 (novices) need a SEEN reason to come back tomorrow; P3, P5, P7 (mid-tech) need the dopamine of growth; the rubric's dim 8 says investment surfaces must be VISIBLE, not just stored.
@@ -36,11 +37,13 @@ Prioritised by: cells_closed_across_rubric ÷ implementation_cost.
 - **Cells closed:** dim 8 reframing for P1, P2, P3, P5, P10 (+5). **~5 cells.**
 - **Effort estimate:** 0.5 sprint — StatusBar.tsx + adapter call + Desktop.tsx prop threading.
 
-### FR-5 · New-user demo workspace import [MEDIUM]
-- **Concrete triggers:** P1, P2, P3 land with empty memory → no hook; current onboarding wizard doesn't pre-load ANY memory. Iteration-1 F1 shows DEMO bubbles but they're labelled examples. A real "Try Waggle with my sample workspace" path beats demo labels.
-- **Surface:** Onboarding wizard step "Try Waggle with a sample workspace" → loads a small curated demo (marketer persona, writer persona, analyst persona — user picks one) with 5-10 pre-seeded memories, 1 wiki page, sample skills installed. After 10 min, they can erase + start clean.
-- **Cells closed:** dim 3 (first-session hook) for P1, P2, P3, P5, P7 (+5). dim 7 (reward of self) for P1, P2 (+2). **~7 cells.**
-- **Effort estimate:** 1 sprint — bundle sample workspace JSON + import path + onboarding wizard step.
+### FR-5 · New-user demo workspace import [MEDIUM] — PARTIALLY REDUNDANT (flagged 2026-05-28)
+> ⚠️ **Redundancy found.** Shipped in iter-6 as a parallel `sample-workspaces.ts` route, but `workspace-templates.ts` ALREADY seeds `starterMemory[]` on workspace creation (M2-5 in `POST /api/workspaces`), and `OnboardingWizard` already drives it. 4 of my 5 bundles duplicate existing templates by persona. See `REDUNDANCY-AUDIT.md`.
+- **Original concrete triggers** (still valid): P1/P2/P3 land empty → no hook.
+- **What was genuinely new:** the day-0 *LoginBriefing* trigger (load a starter when empty, on every launch — not just the first-run wizard).
+- **Correct consolidation:** (a) enrich existing `BUILT_IN_TEMPLATES.starterMemory` (currently ~3 thin entries each; my bundles had 8 richer frames) and add a `writer` template; (b) rewire the day-0 LoginBriefing hook to `POST /api/workspaces` with the chosen `templateId`; (c) drop `sample-workspaces.ts`.
+- **Cells (value is real, mechanism should consolidate):** dim 3 for P1/P2/P3/P5/P7 (+5); dim 7 for P1/P2 (+2).
+- **Decision pending:** revert `sample-workspaces.ts` + rewire, or leave as-is and accept the parallel mechanism.
 
 ### FR-6 · Native xlsx editor (or deep Excel integration) [MEDIUM]
 - **Concrete trigger:** P6 (Daniel) lives in Excel daily. No real "BI / finance ops" persona will pick Waggle without it.
