@@ -236,6 +236,17 @@ export class SessionTimeoutTracker {
 /** Routes exempt from bearer token authentication */
 const AUTH_EXEMPT_PATHS = ['/health'];
 
+/**
+ * AV-1 / R2-004: a Host header is allowed only if present AND (after stripping the
+ * port) in the allowlist. An absent/empty Host MUST fail closed — the prior
+ * `if (host && !allow.has(host))` form skipped the check entirely on empty Host,
+ * letting a non-browser client bypass the anti-DNS-rebind guard.
+ */
+export function hostHeaderAllowed(rawHost: string | undefined, allowlist: Set<string>): boolean {
+  const host = (rawHost ?? '').split(':')[0];
+  return host.length > 0 && allowlist.has(host);
+}
+
 // ── Fastify Plugin Registration ─────────────────────────────────────────
 
 export interface SecurityMiddlewareOpts {
@@ -285,11 +296,10 @@ async function securityMiddlewarePlugin(
     const requestPath = request.url.split('?')[0]; // Strip query string
 
     // ── Host-header allowlist (R2-004, anti DNS-rebind) ──
-    if (enforceHostAllowlist) {
-      const hostHeader = (request.headers.host ?? '').split(':')[0];
-      if (hostHeader && !HOST_ALLOWLIST.has(hostHeader)) {
-        return reply.code(403).send({ error: 'Forbidden', code: 'BAD_HOST' });
-      }
+    // ── Host-header allowlist (R2-004 + AV-1, anti DNS-rebind) ──
+    // Fails closed on an absent/empty Host (see hostHeaderAllowed).
+    if (enforceHostAllowlist && !hostHeaderAllowed(request.headers.host, HOST_ALLOWLIST)) {
+      return reply.code(403).send({ error: 'Forbidden', code: 'BAD_HOST' });
     }
 
     // ── Bearer token authentication (SEC-011) ──

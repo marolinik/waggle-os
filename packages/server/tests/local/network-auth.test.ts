@@ -9,10 +9,10 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import Fastify from 'fastify';
 import { isLocalOrigin, isLocalRequest } from '../../src/local/origin-guard.js';
-import { resolveBindHost } from '../../src/local/net-config.js';
+import { resolveBindHost, isLoopbackBind } from '../../src/local/net-config.js';
 import { corsOriginAllowed } from '../../src/local/cors-config.js';
 import { browseRoutes } from '../../src/local/routes/browse.js';
-import { securityMiddleware } from '../../src/local/security-middleware.js';
+import { securityMiddleware, hostHeaderAllowed } from '../../src/local/security-middleware.js';
 
 // ── R2-006 / R6-005 — shared same-origin guard ──────────────────────────
 
@@ -55,6 +55,17 @@ describe('resolveBindHost', () => {
   it('defaults to loopback', () => expect(resolveBindHost({})).toBe('127.0.0.1'));
   it('honors WAGGLE_HOST', () => expect(resolveBindHost({ WAGGLE_HOST: '0.0.0.0' })).toBe('0.0.0.0'));
   it('ignores blank WAGGLE_HOST', () => expect(resolveBindHost({ WAGGLE_HOST: '  ' })).toBe('127.0.0.1'));
+});
+
+// ── AV-5 — loopback recognised for all loopback host forms ──────────────
+// Regression: isLoopbackBind() compared only to '127.0.0.1', so localhost / ::1
+// disabled the Host allowlist while still binding locally.
+describe('isLoopbackBind (AV-5)', () => {
+  it('true for the loopback default', () => expect(isLoopbackBind({})).toBe(true));
+  it('true for WAGGLE_HOST=localhost', () => expect(isLoopbackBind({ WAGGLE_HOST: 'localhost' })).toBe(true));
+  it('true for WAGGLE_HOST=::1 (IPv6 loopback)', () => expect(isLoopbackBind({ WAGGLE_HOST: '::1' })).toBe(true));
+  it('true for WAGGLE_HOST=::ffff:127.0.0.1', () => expect(isLoopbackBind({ WAGGLE_HOST: '::ffff:127.0.0.1' })).toBe(true));
+  it('false for a public 0.0.0.0 bind', () => expect(isLoopbackBind({ WAGGLE_HOST: '0.0.0.0' })).toBe(false));
 });
 
 // ── R2-003 — CORS exact-origin match ────────────────────────────────────
@@ -132,4 +143,15 @@ describe('Host-header allowlist (R2-004)', () => {
     const res = await server.inject({ method: 'GET', url: '/api/test', headers: { host: '127.0.0.1:3333' } });
     expect(res.statusCode).toBe(200);
   });
+});
+
+// ── AV-1 — Host allowlist fails closed on absent/empty Host ──────────────
+// fastify.inject() always supplies a default authority, so the truly-absent-Host
+// case is verified at the unit level on the extracted pure policy function.
+describe('hostHeaderAllowed (AV-1)', () => {
+  const allow = new Set(['127.0.0.1', 'localhost', '::1']);
+  it('rejects an absent Host', () => expect(hostHeaderAllowed(undefined, allow)).toBe(false));
+  it('rejects an empty Host', () => expect(hostHeaderAllowed('', allow)).toBe(false));
+  it('strips the port and allows a known host', () => expect(hostHeaderAllowed('127.0.0.1:3333', allow)).toBe(true));
+  it('rejects an unknown host', () => expect(hostHeaderAllowed('evil.example.com', allow)).toBe(false));
 });
