@@ -16,6 +16,27 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { CronSchedule, CronJobType } from '@waggle/core';
 import { emitNotification } from './notifications.js';
 
+/**
+ * Parse a stored job_config string, degrading gracefully on corrupt/legacy rows.
+ *
+ * R1-008: GET /api/cron maps every row through toResponse(). A single row with
+ * invalid JSON in job_config must not throw and 500 the entire list — that would
+ * lock the user out of ALL their schedules. On parse failure we fall back to an
+ * empty object and log a warning (never silently swallowed).
+ */
+function parseJobConfig(scheduleId: number, raw: string): Record<string, unknown> {
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch (err) {
+    console.warn(
+      `[waggle:cron] corrupt job_config for schedule ${scheduleId}; falling back to {}: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+    return {};
+  }
+}
+
 /** Convert DB snake_case CronSchedule to API camelCase response. */
 function toResponse(s: CronSchedule) {
   return {
@@ -23,7 +44,7 @@ function toResponse(s: CronSchedule) {
     name: s.name,
     cronExpr: s.cron_expr,
     jobType: s.job_type,
-    jobConfig: JSON.parse(s.job_config),
+    jobConfig: parseJobConfig(s.id, s.job_config),
     workspaceId: s.workspace_id,
     enabled: s.enabled === 1,
     lastRunAt: s.last_run_at,

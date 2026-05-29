@@ -18,9 +18,25 @@ export async function connectorRoutes(fastify: FastifyInstance) {
     const registry = (fastify as any).connectorRegistry;
 
     if (registry) {
-      const health = await registry.healthCheck(id);
-      if (!health) return reply.code(404).send({ error: 'Connector not found' });
-      return health;
+      try {
+        const health = await registry.healthCheck(id);
+        if (!health) return reply.code(404).send({ error: 'Connector not found' });
+        return health;
+      } catch (err) {
+        // A throwing connector probe must degrade gracefully — never an
+        // unhandled 500 that echoes the raw error (which can leak secrets,
+        // internal hostnames, or stack traces). Log the detail server-side
+        // and return a sanitized structured degraded status.
+        fastify.log.error({ err, connectorId: id }, 'Connector health probe threw');
+        const degraded: ConnectorHealth = {
+          id,
+          name: id,
+          status: 'error',
+          lastChecked: new Date().toISOString(),
+          error: 'Health check failed',
+        };
+        return reply.code(502).send(degraded);
+      }
     }
 
     // Fallback: basic health without registry

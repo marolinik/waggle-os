@@ -35,12 +35,36 @@ import {
 registerShape('claude-gen1-v1', claudeGen1V1Shape);
 registerShape('qwen-thinking-gen1-v1', qwenThinkingGen1V1Shape);
 
+// Module-load defaults are LAST-RESORT only. The live values come from server
+// state at REQUEST time (see resolveLlmEndpoint): when LiteLLM is unavailable,
+// service.ts falls back to the built-in Anthropic proxy and writes the real
+// URL/key into server.localConfig.litellmUrl + server.agentState.litellmApiKey
+// at runtime. Reading the snapshot here would route /api/agent/run at the dead
+// LiteLLM default — broken for the common no-LiteLLM (Anthropic-only) case.
 const DEFAULT_LITELLM_URL = process.env.WAGGLE_LITELLM_URL ?? 'http://localhost:4000';
 const LITELLM_KEY =
   process.env.LITELLM_API_KEY ?? process.env.LITELLM_MASTER_KEY ?? 'sk-waggle-dev';
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
 const DEFAULT_PERSONA = 'general-purpose';
 const DEFAULT_MAX_STEPS = 5;
+
+/**
+ * Resolve the LiteLLM endpoint URL + API key from LIVE server state at request
+ * time. service.ts mutates these at runtime when it falls back from LiteLLM to
+ * the built-in Anthropic proxy (server.localConfig.litellmUrl = self-proxy URL,
+ * server.agentState.litellmApiKey = wsSessionToken), so a module-load snapshot
+ * would miss the fallback. Falls back to the module defaults only when state is
+ * absent (e.g. very early boot) so callers never get an empty endpoint.
+ */
+export function resolveLlmEndpoint(server: {
+  localConfig?: { litellmUrl?: string };
+  agentState?: { litellmApiKey?: string };
+}): { url: string; apiKey: string } {
+  return {
+    url: server.localConfig?.litellmUrl ?? DEFAULT_LITELLM_URL,
+    apiKey: server.agentState?.litellmApiKey ?? LITELLM_KEY,
+  };
+}
 
 interface AgentRunBody {
   question: string;
@@ -82,11 +106,14 @@ export const agentRunRoutes: FastifyPluginAsync = async (server) => {
       }
 
       try {
-        const resp = await fetch(`${DEFAULT_LITELLM_URL}/chat/completions`, {
+        // Read URL/key from LIVE server state per request — picks up the
+        // runtime Anthropic-proxy fallback installed by service.ts.
+        const { url: litellmUrl, apiKey: litellmKey } = resolveLlmEndpoint(server);
+        const resp = await fetch(`${litellmUrl}/chat/completions`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${LITELLM_KEY}`,
+            Authorization: `Bearer ${litellmKey}`,
           },
           body: JSON.stringify(payload),
         });

@@ -114,9 +114,16 @@ export async function fileRoutes(server: FastifyInstance) {
             return reply.status(400).send({ error: 'Missing multipart boundary' });
           }
 
-          const rawBody = await getRawBody(request);
-          if (rawBody.length > MAX_UPLOAD_SIZE) {
-            return reply.status(413).send({ error: `File exceeds ${MAX_UPLOAD_SIZE / 1024 / 1024}MB limit` });
+          let rawBody: Buffer;
+          try {
+            // Enforce the size limit WHILE reading so an oversized upload can
+            // never buffer into memory before the guard runs.
+            rawBody = await getRawBody(request, MAX_UPLOAD_SIZE);
+          } catch (err: any) {
+            if (err?.code === MAX_BODY_BYTES_EXCEEDED) {
+              return reply.status(413).send({ error: `File exceeds ${MAX_UPLOAD_SIZE / 1024 / 1024}MB limit` });
+            }
+            throw err;
           }
 
           const { filename, targetDir, fileData } = parseMultipart(rawBody, boundaryMatch[1]);
@@ -308,13 +315,69 @@ export async function fileRoutes(server: FastifyInstance) {
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-/** Read raw request body as Buffer */
-function getRawBody(request: FastifyRequest): Promise<Buffer> {
+/** Error code attached to the rejection when the body exceeds maxBytes. */
+export const MAX_BODY_BYTES_EXCEEDED = 'MAX_BODY_BYTES_EXCEEDED';
+
+/**
+ * Read raw request body as Buffer, enforcing `maxBytes` WHILE reading.
+ *
+ * Guards in two places so a multi-GB upload can never buffer into memory:
+ *   1. Content-Length header (when present) is rejected up front.
+ *   2. The streamed byte count is tracked and the stream is destroyed the
+ *      moment accumulated bytes exceed the limit.
+ *
+ * Rejects with an Error carrying `code === MAX_BODY_BYTES_EXCEEDED` when the
+ * limit is breached, so the caller can map it to 413 Payload Too Large.
+ */
+export function getRawBody(request: FastifyRequest, maxBytes: number): Promise<Buffer> {
   return new Promise((resolve, reject) => {
+    const tooLarge = () => {
+      const err = new Error(`Request body exceeds ${maxBytes} bytes`) as Error & { code?: string };
+      err.code = MAX_BODY_BYTES_EXCEEDED;
+      return err;
+    };
+
+    // 1. Up-front Content-Length guard — reject before reading any body.
+    const declared = Number(request.headers['content-length']);
+    if (Number.isFinite(declared) && declared > maxBytes) {
+      reject(tooLarge());
+      return;
+    }
+
     const chunks: Buffer[] = [];
-    request.raw.on('data', (chunk: Buffer) => chunks.push(chunk));
-    request.raw.on('end', () => resolve(Buffer.concat(chunks)));
-    request.raw.on('error', reject);
+    let received = 0;
+    let settled = false;
+
+    const onData = (chunk: Buffer) => {
+      if (settled) return;
+      received += chunk.length;
+      // 2. Streamed-byte guard — abort the stream instead of buffering more.
+      if (received > maxBytes) {
+        settled = true;
+        request.raw.off('data', onData);
+        request.raw.off('end', onEnd);
+        request.raw.off('error', onError);
+        // Tear down the socket so the client stops sending the oversized body.
+        if (typeof request.raw.destroy === 'function') request.raw.destroy();
+        reject(tooLarge());
+        return;
+      }
+      chunks.push(chunk);
+    };
+    const onEnd = () => {
+      if (settled) return;
+      settled = true;
+      resolve(Buffer.concat(chunks));
+    };
+    const onError = (err: unknown) => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    };
+
+    request.raw.on('data', onData);
+    request.raw.on('end', onEnd);
+    request.raw.on('error', onError);
   });
 }
 
