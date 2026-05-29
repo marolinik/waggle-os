@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { MindDB } from '@waggle/core';
+import { assertSafeSegment } from './validate.js';
 import { extractProgressItems, type ProgressItem } from './sessions.js';
 import {
   buildWorkspaceState,
@@ -196,6 +197,11 @@ export function buildWorkspaceNowBlock(opts: {
   cronSchedules?: CronScheduleLike[];
 }): WorkspaceNowBlock | null {
   const { dataDir, workspaceId, wsManager, activateWorkspaceMind } = opts;
+
+  // Path-traversal guard: workspaceId becomes a path segment below
+  // (getMindPath + dataDir/workspaces/<workspaceId>/sessions). Reject any
+  // value containing illegal characters before it touches the filesystem.
+  assertSafeSegment(workspaceId, 'workspaceId');
 
   const ws = wsManager.get(workspaceId);
   if (!ws) return null;

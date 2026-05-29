@@ -21,6 +21,7 @@ import { createRequire } from 'node:module';
 import { Readable } from 'node:stream';
 import zlib from 'node:zlib';
 import type { FastifyPluginAsync } from 'fastify';
+import { assertSafeSegment } from './validate.js';
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -393,6 +394,10 @@ export const ingestRoutes: FastifyPluginAsync = async (server) => {
     bodyLimit: 15 * 1024 * 1024, // 15 MB to allow base64 overhead
   }, async (request, reply) => {
     const { files, workspaceId } = request.body ?? {};
+
+    // Guard against path traversal: workspaceId is used to build a filesystem
+    // path in addToFileRegistry. Validate before it touches any fs path.
+    if (workspaceId) assertSafeSegment(workspaceId, 'workspaceId');
 
     if (!files || !Array.isArray(files) || files.length === 0) {
       return reply.status(400).send({ error: 'files array is required' });

@@ -367,34 +367,36 @@ export const backupRoutes: FastifyPluginAsync = async (server) => {
     const conflicts: string[] = [];
     const errors: string[] = [];
 
+    const root = path.resolve(dataDir);
+
     for (const file of manifest.files) {
       // Skip marketplace.db — it re-syncs on startup
       if (file.relativePath === 'marketplace.db') continue;
 
-      const targetPath = path.join(dataDir, file.relativePath);
-
-      // Prevent path traversal
+      // Prevent path traversal. The boundary check must be separator-aware:
+      // a bare startsWith(root) would let a sibling dir sharing the root prefix
+      // (e.g. root '/data', resolved '/data-evil/x') pass and escape.
       const resolved = path.resolve(dataDir, file.relativePath);
-      if (!resolved.startsWith(path.resolve(dataDir))) {
+      if (!(resolved === root || resolved.startsWith(root + path.sep))) {
         errors.push(`Skipped ${file.relativePath}: path traversal detected`);
         continue;
       }
 
-      // Track conflicts
-      if (fs.existsSync(targetPath)) {
+      // Track conflicts — use the confirmed in-root path, never a raw join.
+      if (fs.existsSync(resolved)) {
         conflicts.push(file.relativePath);
       }
 
       try {
         // Ensure parent directory exists
-        const parentDir = path.dirname(targetPath);
+        const parentDir = path.dirname(resolved);
         if (!fs.existsSync(parentDir)) {
           fs.mkdirSync(parentDir, { recursive: true });
         }
 
         // Write file
         const content = Buffer.from(file.content, 'base64');
-        fs.writeFileSync(targetPath, content);
+        fs.writeFileSync(resolved, content);
         filesRestored++;
       } catch (err) {
         errors.push(`Failed to restore ${file.relativePath}: ${err instanceof Error ? err.message : 'unknown error'}`);

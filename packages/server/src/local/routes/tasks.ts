@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { emitNotification } from './notifications.js';
+import { assertSafeSegment } from './validate.js';
 
 export interface TeamTask {
   id: string;
@@ -90,6 +91,7 @@ export const taskRoutes: FastifyPluginAsync = async (fastify) => {
     Querystring: { status?: string };
   }>('/api/workspaces/:id/tasks', async (request, reply) => {
     const { id } = request.params;
+    assertSafeSegment(id, 'id');
     let tasks = readTasks(dataDir, id);
 
     if (request.query.status) {
@@ -114,6 +116,7 @@ export const taskRoutes: FastifyPluginAsync = async (fastify) => {
     };
   }>('/api/workspaces/:id/tasks', async (request, reply) => {
     const { id } = request.params;
+    assertSafeSegment(id, 'id');
     const { title, assigneeId, assigneeName, creatorId, creatorName } = request.body;
 
     if (!title || typeof title !== 'string' || !title.trim()) {
@@ -160,6 +163,7 @@ export const taskRoutes: FastifyPluginAsync = async (fastify) => {
     };
   }>('/api/workspaces/:id/tasks/:taskId', async (request, reply) => {
     const { id, taskId } = request.params;
+    assertSafeSegment(id, 'id');
     const tasks = readTasks(dataDir, id);
     const idx = tasks.findIndex(t => t.id === taskId);
 
@@ -186,6 +190,7 @@ export const taskRoutes: FastifyPluginAsync = async (fastify) => {
     Params: { id: string; taskId: string };
   }>('/api/workspaces/:id/tasks/:taskId', async (request, reply) => {
     const { id, taskId } = request.params;
+    assertSafeSegment(id, 'id');
     const tasks = readTasks(dataDir, id);
     const filtered = tasks.filter(t => t.id !== taskId);
 

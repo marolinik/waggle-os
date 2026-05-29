@@ -14,6 +14,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { assertSafeSegment } from './validate.js';
 
 export interface DocumentVersion {
   version: number;
@@ -66,6 +67,7 @@ export const documentRoutes: FastifyPluginAsync = async (server) => {
     Params: { id: string };
   }>('/api/workspaces/:id/documents', async (request) => {
     const { id } = request.params;
+    assertSafeSegment(id, 'id');
     const registry = readRegistry(id);
     return {
       documents: registry.documents.map(doc => ({
@@ -86,11 +88,13 @@ export const documentRoutes: FastifyPluginAsync = async (server) => {
     };
   }>('/api/workspaces/:id/documents', async (request, reply) => {
     const { id } = request.params;
+    assertSafeSegment(id, 'id');
     const { name, path: docPath, sizeBytes } = request.body ?? {};
 
     if (!name || !docPath) {
       return reply.status(400).send({ error: 'name and path are required' });
     }
+    assertSafeSegment(name, 'name');
 
     const registry = readRegistry(id);
     let doc = registry.documents.find(d => d.name === name);
@@ -122,6 +126,8 @@ export const documentRoutes: FastifyPluginAsync = async (server) => {
     Params: { id: string; name: string };
   }>('/api/workspaces/:id/documents/:name/versions', async (request, reply) => {
     const { id, name } = request.params;
+    assertSafeSegment(id, 'id');
+    assertSafeSegment(name, 'name');
     const registry = readRegistry(id);
     const doc = registry.documents.find(d => d.name === name);
 

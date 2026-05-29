@@ -39,6 +39,7 @@ import { isRegulatedContent, isRetryableError, isAmbiguousMessage, shouldSuggest
 import { persistMessage, loadSessionMessages } from './chat-persistence.js';
 import { MAX_CONTEXT_MESSAGES, applyContextWindow, buildSkillPromptSection } from './chat-context.js';
 import { getGovernancePermissions } from './chat-governance.js';
+import { assertSafeSegment } from './validate.js';
 
 // ── Re-exports for backwards compatibility ─────────────────────────────
 // These were originally exported from chat.ts and are consumed by tests and other packages.
@@ -401,6 +402,16 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     if (message.length > MAX_MESSAGE_LENGTH) {
       return reply.status(400).send({ error: `Message too long (${message.length} chars, max ${MAX_MESSAGE_LENGTH})`, code: 'MESSAGE_TOO_LONG' });
     }
+
+    // R6-001: path-traversal guard on the session-persistence path segments.
+    // `workspace` and `session` come straight from the request body and are
+    // joined into dataDir/workspaces/<workspace>/sessions/<session>.jsonl by
+    // chat-persistence (persistMessage / loadSessionMessages). A crafted
+    // "../evil" segment would escape the sessions dir on both write and read.
+    // Reuse the shared guard; runs BEFORE reply.hijack() so the thrown
+    // {statusCode:400} is converted to a 400 by Fastify's default error handler.
+    if (workspace) assertSafeSegment(workspace, 'workspace');
+    if (session) assertSafeSegment(session, 'session');
 
     // Security: scan for prompt injection patterns
     const injectionResult = scanForInjection(message, 'user_input');
