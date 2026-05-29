@@ -60,6 +60,7 @@ export const ENDPOINT_RATE_LIMITS: Record<string, number> = {
   '/api/vault/*/reveal': 5,     // decrypts secrets (matched via routeOptions.url pattern)
   '/api/backup': 2,             // reads entire data dir
   '/api/restore': 2,            // writes entire data dir
+  '/api/browse/local/mkdir': 10, // R6-005: tight cap on filesystem mkdir (same-origin gated; not path-confined — it IS the file browser)
 };
 
 export class RateLimiter {

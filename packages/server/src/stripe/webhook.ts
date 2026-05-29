@@ -29,6 +29,22 @@ function atomicWriteJson(filePath: string, data: unknown): void {
 }
 
 /**
+ * R1-011: serialize the webhook critical section. atomicWriteJson prevents torn
+ * files, but two concurrent deliveries of the SAME event (a real Stripe retry
+ * scenario) could both read .stripe-processed-events.json before either wrote,
+ * both pass the idempotency check, and both run updateUserTier — a TOCTOU race
+ * that can write contradictory tiers. This module-scoped promise queue makes the
+ * read-check-process-write sequence mutually exclusive; one failure never wedges
+ * the queue (the tail swallows rejections).
+ */
+let __webhookTail: Promise<void> = Promise.resolve();
+function serializeWebhook<T>(fn: () => Promise<T>): Promise<T> {
+  const result = __webhookTail.then(() => fn());
+  __webhookTail = result.then(() => undefined, () => undefined);
+  return result;
+}
+
+/**
  * Update the user's tier (and optionally Stripe customer ID) in config.json.
  * This is the same storage used by readTierFromRequest() in the tier middleware
  * and by the portal route to read stripe_customer_id.
@@ -83,60 +99,66 @@ export const webhookRoutes: FastifyPluginAsync = async (server) => {
       return reply.code(500).send({ error: 'SERVER_MISCONFIGURED' });
     }
 
-    // Idempotency: skip already-processed events
+    // R1-011: run idempotency-check + processing + processed-write as ONE
+    // serialized critical section so concurrent retries of the same event cannot
+    // both slip past the dedup check and double-process a tier change.
     const processedPath = path.join(dataDir, '.stripe-processed-events.json');
-    let processedIds: string[] = [];
-    try { processedIds = JSON.parse(fs.readFileSync(processedPath, 'utf-8')); } catch { /* first run */ }
-    if (processedIds.includes(event.id)) {
-      server.log.info({ event: 'webhook_duplicate_skipped', eventId: event.id });
-      return reply.send({ received: true, duplicate: true });
-    }
+    const outcome = await serializeWebhook<'duplicate' | 'processed'>(async () => {
+      let processedIds: string[] = [];
+      try { processedIds = JSON.parse(fs.readFileSync(processedPath, 'utf-8')); } catch { /* first run */ }
+      if (processedIds.includes(event.id)) {
+        server.log.info({ event: 'webhook_duplicate_skipped', eventId: event.id });
+        return 'duplicate';
+      }
 
-    switch (event.type) {
-      case 'checkout.session.completed': {
-        const session = event.data.object as { metadata?: Record<string, string>; customer?: string };
-        const tierRaw = session.metadata?.tier;
-        if (tierRaw) {
-          const parsed = parseTier(tierRaw);
-          if (parsed) {
-            const customerId = typeof session.customer === 'string' ? session.customer : undefined;
-            updateUserTier(dataDir, parsed, customerId);
-            server.log.info({ event: 'checkout_completed', tier: parsed, customerId });
+      switch (event.type) {
+        case 'checkout.session.completed': {
+          const session = event.data.object as { metadata?: Record<string, string>; customer?: string };
+          const tierRaw = session.metadata?.tier;
+          if (tierRaw) {
+            const parsed = parseTier(tierRaw);
+            if (parsed) {
+              const customerId = typeof session.customer === 'string' ? session.customer : undefined;
+              updateUserTier(dataDir, parsed, customerId);
+              server.log.info({ event: 'checkout_completed', tier: parsed, customerId });
+            }
           }
+          break;
         }
-        break;
-      }
 
-      case 'customer.subscription.updated': {
-        const subscription = event.data.object as { customer?: string; items?: { data?: Array<{ price?: { id?: string } }> } };
-        const priceId = subscription.items?.data?.[0]?.price?.id;
-        if (priceId) {
-          const newTier = tierFromPriceId(priceId);
-          if (newTier) {
-            const customerId = typeof subscription.customer === 'string' ? subscription.customer : undefined;
-            updateUserTier(dataDir, newTier, customerId);
-            server.log.info({ event: 'subscription_updated', tier: newTier, customerId });
+        case 'customer.subscription.updated': {
+          const subscription = event.data.object as { customer?: string; items?: { data?: Array<{ price?: { id?: string } }> } };
+          const priceId = subscription.items?.data?.[0]?.price?.id;
+          if (priceId) {
+            const newTier = tierFromPriceId(priceId);
+            if (newTier) {
+              const customerId = typeof subscription.customer === 'string' ? subscription.customer : undefined;
+              updateUserTier(dataDir, newTier, customerId);
+              server.log.info({ event: 'subscription_updated', tier: newTier, customerId });
+            }
           }
+          break;
         }
-        break;
+
+        case 'customer.subscription.deleted': {
+          updateUserTier(dataDir, 'FREE');
+          server.log.info({ event: 'subscription_cancelled' });
+          break;
+        }
+
+        default:
+          // Unknown event types are silently acknowledged
+          break;
       }
 
-      case 'customer.subscription.deleted': {
-        updateUserTier(dataDir, 'FREE');
-        server.log.info({ event: 'subscription_cancelled' });
-        break;
-      }
+      // Mark event as processed (keep last 500 IDs to avoid unbounded growth)
+      processedIds.push(event.id);
+      if (processedIds.length > 500) processedIds.splice(0, processedIds.length - 500);
+      try { atomicWriteJson(processedPath, processedIds); } catch { /* best effort */ }
+      return 'processed';
+    });
 
-      default:
-        // Unknown event types are silently acknowledged
-        break;
-    }
-
-    // Mark event as processed (keep last 500 IDs to avoid unbounded growth)
-    processedIds.push(event.id);
-    if (processedIds.length > 500) processedIds.splice(0, processedIds.length - 500);
-    try { atomicWriteJson(processedPath, processedIds); } catch { /* best effort */ }
-
+    if (outcome === 'duplicate') return reply.send({ received: true, duplicate: true });
     return { received: true };
   });
 };
