@@ -202,7 +202,7 @@ const MemoryApp = ({
                   const provenance = readFrameProvenanceTool(f);
                   return provenance ? (
                     <span
-                      className="px-1.5 rounded bg-amber-950/30 text-amber-300 text-[10px]"
+                      className="px-1.5 rounded bg-amber-500/10 text-amber-400 text-[10px]"
                       title={`Captured from ${provenance}`}
                     >
                       {provenance}
