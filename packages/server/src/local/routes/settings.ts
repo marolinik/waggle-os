@@ -352,6 +352,14 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
   server.patch<{
     Body: { tier: string };
   }>('/api/tier', async (request, reply) => {
+    // AV-3: this dev/test-only override must NOT be a production privilege-escalation
+    // path. Under the loopback-trust model any local page/extension could PATCH a paid
+    // tier for free (no payment, no auth). Fail closed — disabled unless explicitly
+    // enabled for dev/testing. Legit tier changes flow through Stripe (sync/webhook)
+    // and POST /api/tier/start-trial.
+    if (process.env.WAGGLE_ALLOW_TIER_OVERRIDE !== '1') {
+      return reply.status(403).send({ error: 'Tier override disabled', code: 'TIER_OVERRIDE_DISABLED' });
+    }
     const { tier: tierRaw } = request.body ?? {};
     const parsed = parseTier(String(tierRaw ?? ''));
     if (!parsed) {
