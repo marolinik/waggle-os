@@ -71,6 +71,25 @@ describe('Knowledge Graph (Layer 3)', () => {
       const results = kg.searchEntities('Alice');
       expect(results).toHaveLength(2);
     });
+
+    it('treats LIKE metacharacters as literals', () => {
+      kg.createEntity('document', '50% complete', {});
+      kg.createEntity('document', 'snake_case name', {});
+      kg.createEntity('document', 'plain doc', {});
+
+      // '%' must match the literal percent sign, not act as a wildcard.
+      const pct = kg.searchEntities('50%');
+      expect(pct).toHaveLength(1);
+      expect(pct[0].name).toBe('50% complete');
+
+      // '_' must match the literal underscore, not any single char.
+      const underscore = kg.searchEntities('snake_case');
+      expect(underscore).toHaveLength(1);
+      expect(underscore[0].name).toBe('snake_case name');
+
+      // A bare wildcard term must not match every row.
+      expect(kg.searchEntities('%').length).toBe(1);
+    });
   });
 
   describe('Relation CRUD', () => {

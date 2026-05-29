@@ -73,6 +73,15 @@ describe('Hybrid Search (FTS5 + sqlite-vec + RRF + Relevance)', () => {
       const results = await search.keywordSearch('quantum computing spacetime', 10);
       expect(results).toHaveLength(0);
     });
+
+    it('falls back to LIKE when an FTS5-special query would parse-error', async () => {
+      await seedFrames();
+      // A lone unbalanced double-quote is passed through verbatim by the
+      // sanitizer and triggers an FTS5 MATCH parse error. The LIKE fallback
+      // should still find frames whose content contains the literal substring.
+      const results = await search.keywordSearch('"Machine learning', 10);
+      expect(results.length).toBeGreaterThanOrEqual(1);
+    });
   });
 
   describe('Vector search via sqlite-vec', () => {

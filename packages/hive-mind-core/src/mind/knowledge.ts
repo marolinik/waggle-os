@@ -29,6 +29,16 @@ export interface EntityTypeSchema {
 
 export type ValidationSchema = Record<string, EntityTypeSchema>;
 
+/**
+ * Escape LIKE metacharacters (`%`, `_`) and the escape char itself (`\`) so a
+ * user term is matched literally rather than as a wildcard pattern. Pair with an
+ * `ESCAPE '\'` clause on the LIKE. Without this, `%` / `_` in a search term act
+ * as wildcards and a literal `%` / `_` becomes unfindable.
+ */
+function escapeLikeTerm(term: string): string {
+  return term.replace(/[\\%_]/g, ch => `\\${ch}`);
+}
+
 export class KnowledgeGraph {
   private db: MindDB;
   private schema: ValidationSchema | null = null;
@@ -130,8 +140,8 @@ export class KnowledgeGraph {
 
   searchEntities(query: string, limit = 100): Entity[] {
     return this.db.getDatabase().prepare(
-      'SELECT * FROM knowledge_entities WHERE name LIKE ? AND valid_to IS NULL ORDER BY name LIMIT ?'
-    ).all(`%${query}%`, limit) as Entity[];
+      "SELECT * FROM knowledge_entities WHERE name LIKE ? ESCAPE '\\' AND valid_to IS NULL ORDER BY name LIMIT ?"
+    ).all(`%${escapeLikeTerm(query)}%`, limit) as Entity[];
   }
 
   getEntitiesValidAt(isoTime: string, limit = 500): Entity[] {

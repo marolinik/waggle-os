@@ -33,6 +33,14 @@ function f32ToBlob(f32: Float32Array): Uint8Array {
   return new Uint8Array(f32.buffer, f32.byteOffset, f32.byteLength);
 }
 
+/**
+ * Escape LIKE metacharacters (`%`, `_`) and the escape char itself (`\`) so the
+ * keyword-fallback term is matched literally. Pair with `ESCAPE '\'` on the LIKE.
+ */
+function escapeLikeTerm(term: string): string {
+  return term.replace(/[\\%_]/g, ch => `\\${ch}`);
+}
+
 export class HybridSearch {
   private db: MindDB;
   private embedder: Embedder;
@@ -173,7 +181,51 @@ export class HybridSearch {
       const rows = raw.prepare(sql).all(...params) as { id: number }[];
       return rows.map(r => r.id);
     } catch {
-      // FTS5 parse error — return empty and let LIKE fallback handle it
+      // FTS5 parse error (e.g. user query with FTS5-special chars that survived
+      // sanitization) — fall back to a LIKE keyword scan over the same column so
+      // we return best-effort matches instead of a false "no memory found".
+      return this.likeFallbackSearch(query, limit, gopId);
+    }
+  }
+
+  /**
+   * LIKE-based keyword fallback over memory_frames.content. Used when the FTS5
+   * MATCH query throws a parse error (e.g. an unbalanced quote or other FTS5
+   * operator the user typed literally). The raw query is split into word tokens
+   * — stripping the punctuation that caused the FTS5 error, mirroring the
+   * primary sanitizer — and matched with OR-ed LIKE clauses for best-effort
+   * recall. Bound parameters only (the term is never interpolated) and LIKE
+   * metachars (`%`, `_`, `\`) are escaped with an ESCAPE clause so each token
+   * matches literally. If no usable token survives, a single literal LIKE over
+   * the whole escaped query is used.
+   */
+  private likeFallbackSearch(query: string, limit: number, gopId?: string): number[] {
+    const raw = this.db.getDatabase();
+
+    const tokens = query
+      .split(/\s+/)
+      .map(w => w.replace(/[^\w]/g, '')) // strip punctuation (incl. FTS5 operators)
+      .filter(w => w.length > 0);
+    const terms = (tokens.length > 0 ? tokens : [query]).map(t => `%${escapeLikeTerm(t)}%`);
+
+    const likeClause = terms.map(() => `content LIKE ? ESCAPE '\\'`).join(' OR ');
+
+    try {
+      if (gopId) {
+        const rows = raw.prepare(
+          `SELECT id FROM memory_frames
+           WHERE (${likeClause}) AND gop_id = ?
+           ORDER BY created_at DESC LIMIT ?`
+        ).all(...terms, gopId, limit) as { id: number }[];
+        return rows.map(r => r.id);
+      }
+      const rows = raw.prepare(
+        `SELECT id FROM memory_frames
+         WHERE (${likeClause})
+         ORDER BY created_at DESC LIMIT ?`
+      ).all(...terms, limit) as { id: number }[];
+      return rows.map(r => r.id);
+    } catch {
       return [];
     }
   }
