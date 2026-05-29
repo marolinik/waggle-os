@@ -175,12 +175,13 @@ index.ts         Barrel
 
 ### `app/` (Tauri desktop shell)
 ```
-app/src/
-  └── components/cockpit/     # Only UI that ships with Tauri shell
 app/src-tauri/                # Rust shell + capabilities/ + tauri.conf.json
+app/scripts/                  # build/installer/signing TS tooling (tauri-tsc gate target)
 ```
 
-**Note:** `app/src/` is minimal. Almost all UI code lives in `apps/web/src/`.
+**Note:** `app/` is now the Tauri Rust shell only — there is no `app/src/`. The
+React cockpit UI moved to `apps/web` long ago; the desktop binary loads the
+`apps/web` dist. All React UI lives in `apps/web/src/`.
 
 ### `apps/web/src/` (MAIN UI)
 ```

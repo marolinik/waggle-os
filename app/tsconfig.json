@@ -27,5 +27,8 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src"]
+  // app/ is now the Tauri Rust shell (app/src-tauri/); the React UI lives in
+  // apps/web. The only TypeScript that remains under app/ is the build/installer/
+  // signing tooling in scripts/, so the tauri-tsc gate typechecks that.
+  "include": ["scripts"]
 }
