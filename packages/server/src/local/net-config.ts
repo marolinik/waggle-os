@@ -12,13 +12,21 @@
 
 const LOOPBACK = '127.0.0.1';
 
+/**
+ * All host strings that mean "the loopback interface". AV-5: isLoopbackBind()
+ * previously compared only to '127.0.0.1', so WAGGLE_HOST=localhost or ::1 — both
+ * normal loopback choices — made it return false and silently DISABLED the
+ * anti-DNS-rebind Host allowlist while the server was still bound locally.
+ */
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '::ffff:127.0.0.1']);
+
 /** Resolve the host the sidecar binds to. Loopback unless WAGGLE_HOST is set. */
 export function resolveBindHost(env: NodeJS.ProcessEnv = process.env): string {
   const h = env.WAGGLE_HOST?.trim();
   return h && h.length > 0 ? h : LOOPBACK;
 }
 
-/** True when the sidecar is bound to the loopback interface (the safe default). */
+/** True when the sidecar is bound to a loopback interface (the safe default). */
 export function isLoopbackBind(env: NodeJS.ProcessEnv = process.env): boolean {
-  return resolveBindHost(env) === LOOPBACK;
+  return LOOPBACK_HOSTS.has(resolveBindHost(env));
 }

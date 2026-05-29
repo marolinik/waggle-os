@@ -13,6 +13,7 @@
 
 import type { FastifyPluginAsync } from 'fastify';
 import { EventEmitter } from 'node:events';
+import { corsOriginAllowed } from '../cors-config.js';
 
 interface WaggleSignal {
   id: string;
@@ -82,12 +83,19 @@ export const waggleSignalRoutes: FastifyPluginAsync = async (fastify) => {
 
   // GET /api/waggle/stream — SSE stream of new signals
   fastify.get('/api/waggle/stream', async (request, reply) => {
-    reply.raw.writeHead(200, {
+    // AV-2: never reflect an arbitrary Origin. Only echo it back when it passes
+    // the same exact-match allowlist the CORS plugin uses; otherwise omit the
+    // header so a cross-origin page (e.g. evil.com) cannot read the signal stream.
+    const headers: Record<string, string> = {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
-    });
+    };
+    const origin = request.headers.origin;
+    if (origin && corsOriginAllowed(origin)) {
+      headers['Access-Control-Allow-Origin'] = origin;
+    }
+    reply.raw.writeHead(200, headers);
     reply.raw.write('event: connected\ndata: {}\n\n');
 
     const handler = (signal: WaggleSignal) => {
