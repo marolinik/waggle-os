@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   Cpu, Shield, Palette, Save, Loader2, Users, Database,
   Download, Upload, Link2, Building, Wrench, DollarSign, Key, Lock, BarChart3, Trash2,
-  RotateCcw, GraduationCap,
+  RotateCcw, GraduationCap, HelpCircle,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useFeatureGate } from '@/hooks/useFeatureGate';
@@ -391,7 +391,9 @@ const SettingsApp = () => {
                 Prompt Shape
                 <HintTooltip
                   content="Faza 1 GEPA-evolved prompt variant. Threaded into chat requests; sidecar honors it once the A3.1 server patch lands."
-                />
+                >
+                  <HelpCircle className="w-3 h-3 inline ml-1 text-muted-foreground" />
+                </HintTooltip>
               </label>
               <select
                 value={selectedShape}

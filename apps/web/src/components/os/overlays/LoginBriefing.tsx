@@ -173,7 +173,7 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-8"
-        onClick={onDismiss}
+        onClick={() => onDismiss()}
       >
         <motion.div
           initial={{ opacity: 0, y: 20, scale: 0.95 }}
@@ -198,7 +198,7 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
                 )}
               </p>
             </div>
-            <button onClick={onDismiss} className="p-1 rounded-lg hover:bg-muted/50 transition-colors shrink-0">
+            <button onClick={() => onDismiss()} className="p-1 rounded-lg hover:bg-muted/50 transition-colors shrink-0">
               <X className="w-4 h-4 text-muted-foreground" />
             </button>
           </div>

@@ -154,7 +154,7 @@ const GlobalSearch = ({ open, onClose, onNavigate }: GlobalSearchProps) => {
           title: typeof f.content === 'string'
             ? f.content.split('\n')[0].slice(0, 80)
             : (f.title ?? 'Memory frame'),
-          subtitle: f.importance ?? f.type ?? undefined,
+          subtitle: f.importance != null ? String(f.importance) : (f.type ?? undefined),
           icon: Brain,
           score: 50,
           badge: (f as any).workspaceName ?? undefined,

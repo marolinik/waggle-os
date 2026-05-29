@@ -91,7 +91,7 @@ const VaultApp = () => {
   // Reveal state
   const [revealedSecret, setRevealedSecret] = useState<string | null>(null);
   const [revealedValue, setRevealedValue] = useState('');
-  const revealTimer = useRef<ReturnType<typeof setTimeout>>();
+  const revealTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Connector setup
   const [expandedConnector, setExpandedConnector] = useState<string | null>(null);

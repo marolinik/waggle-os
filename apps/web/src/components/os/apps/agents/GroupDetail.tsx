@@ -55,7 +55,7 @@ const GroupDetail = ({ group, agents, onRun, onEdit, onDuplicate }: GroupDetailP
         setExecState(prev => {
           if (!prev) return prev;
           const updated = { ...prev };
-          if (res.status) updated.status = res.status;
+          if (res.status) updated.status = res.status as GroupExecState['status'];
           if (res.completedAt) updated.completedAt = new Date(res.completedAt).getTime();
           if (res.output) updated.output = res.output as Record<string, unknown>;
           if (res.status === 'running') {

@@ -40,7 +40,7 @@ describe('LocalAdapter permissions methods (P4)', () => {
       const result = await adapter.getPermissions();
 
       expect(fetchSpy).toHaveBeenCalledTimes(1);
-      const [url, init] = fetchSpy.mock.calls[0];
+      const [url, init] = fetchSpy.mock.calls[0] as [RequestInfo | URL, RequestInit | undefined];
       expect(String(url)).toContain('/api/settings/permissions');
       // GET — no explicit method or body. The adapter may still send default
       // request options (e.g. auth headers), so just assert the semantic opts.
@@ -71,7 +71,7 @@ describe('LocalAdapter permissions methods (P4)', () => {
       await adapter.savePermissions({ defaultAutonomy: 'yolo' });
 
       expect(fetchSpy).toHaveBeenCalledTimes(1);
-      const [url, init] = fetchSpy.mock.calls[0];
+      const [url, init] = fetchSpy.mock.calls[0] as [RequestInfo | URL, RequestInit | undefined];
       expect(String(url)).toContain('/api/settings/permissions');
       expect(init?.method).toBe('PUT');
       const body = JSON.parse(String(init?.body ?? '{}'));
@@ -83,7 +83,7 @@ describe('LocalAdapter permissions methods (P4)', () => {
       const adapter = new LocalAdapter('http://test:1');
       await adapter.savePermissions({ externalGates: ['rm -rf'] });
 
-      const body = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body ?? '{}'));
+      const body = JSON.parse(String((fetchSpy.mock.calls[0][1] as RequestInit | undefined)?.body ?? '{}'));
       expect(body).toEqual({ externalGates: ['rm -rf'] });
       expect(body).not.toHaveProperty('defaultAutonomy');
     });
@@ -96,7 +96,7 @@ describe('LocalAdapter permissions methods (P4)', () => {
         externalGates: ['x'],
         workspaceOverrides: { w: ['y'] },
       });
-      const body = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body ?? '{}'));
+      const body = JSON.parse(String((fetchSpy.mock.calls[0][1] as RequestInit | undefined)?.body ?? '{}'));
       expect(body.defaultAutonomy).toBe('trusted');
       expect(body.externalGates).toEqual(['x']);
       expect(body.workspaceOverrides).toEqual({ w: ['y'] });

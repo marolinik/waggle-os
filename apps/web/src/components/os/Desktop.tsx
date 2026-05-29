@@ -531,7 +531,7 @@ const Desktop = () => {
         }}
         onUpgrade={(tier) => {
           adapter.createCheckoutSession(tier === 'TEAMS' ? 'TEAMS' : 'PRO').catch(() => {
-            wm.open('settings');
+            wm.openApp('settings');
           });
         }}
       />
@@ -541,7 +541,7 @@ const Desktop = () => {
         onDismiss={() => setShowTrialExpired(false)}
         onUpgrade={(tier) => {
           setShowTrialExpired(false);
-          adapter.createCheckoutSession(tier).catch(() => { wm.open('settings'); });
+          adapter.createCheckoutSession(tier).catch(() => { wm.openApp('settings'); });
         }}
       />
     </div>

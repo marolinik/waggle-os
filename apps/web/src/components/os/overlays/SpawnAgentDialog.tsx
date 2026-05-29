@@ -56,7 +56,7 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
       const [m, p, providers] = await Promise.all([
         adapter.getModels(),
         adapter.getModelPricing().catch(() => [] as ModelPricing[]),
-        adapter.getProviders().catch(() => ({ providers: [] as Array<{ hasKey: boolean }> })),
+        adapter.getProviders().catch(() => ({ providers: [], search: [], activeSearch: '' } as Awaited<ReturnType<typeof adapter.getProviders>>)),
       ]);
       // /api/litellm/models is empty when LiteLLM is unreachable. Chat handles
       // this with a hardcoded FALLBACK_MODELS list, but those identifiers

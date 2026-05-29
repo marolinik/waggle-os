@@ -45,8 +45,9 @@ const UserProfileApp = () => {
   interface UserProfile {
     name?: string; role?: string; company?: string; industry?: string; bio?: string;
     communicationStyle?: string; language?: string; interests?: string[];
+    questionnaireCompleted?: boolean;
     brand?: { primaryColor?: string; secondaryColor?: string; accentColor?: string; fontHeading?: string; fontBody?: string; description?: string };
-    writingStyle?: { tone?: string; vocabulary?: string; structurePreference?: string; examples?: string[] };
+    writingStyle?: { tone?: string; vocabulary?: string; structurePreference?: string; examples?: string[]; analyzed?: boolean; sentenceLength?: string; structure?: string };
     identitySuggestions?: IdentitySuggestion[];
   }
   const [profile, setProfile] = useState<UserProfile | null>(null);

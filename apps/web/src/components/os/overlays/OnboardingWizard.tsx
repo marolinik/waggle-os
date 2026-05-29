@@ -37,7 +37,7 @@ const STEP_NAMES = ['welcome', 'why-waggle', 'tier', 'memory-import', 'template'
 /* ─── Main Component (shell) ─── */
 const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismiss, onFinish }: OnboardingWizardProps) => {
   const [step, setStep] = useState(state.step);
-  const autoTimer = useRef<ReturnType<typeof setTimeout>>();
+  const autoTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   /* ── Step-local state ── */
   // Phase 4.1 (2026-05-07): default to 'simple' (Essential) per

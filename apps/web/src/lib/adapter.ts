@@ -16,6 +16,7 @@ import type {
   Notification, AgentStatus, Persona, SystemHealth,
   Connector, Settings, StreamEvent, KGNode, KGEdge,
   ModelPricing, WaggleSignal, FileEntry, WorkspaceTemplate,
+  TimelineEvent,
 } from './types';
 
 /**
@@ -154,7 +155,7 @@ class LocalAdapter {
     }
   }
 
-  private async fetch(path: string, init?: RequestInit): Promise<Response> {
+  async fetch(path: string, init?: RequestInit): Promise<Response> {
     const headers: Record<string, string> = {
       ...(init?.headers as Record<string, string>),
     };
@@ -647,7 +648,7 @@ class LocalAdapter {
       id: String(s.id ?? s.name ?? ''),
       name: String(s.name ?? s.id ?? ''),
       description: String(s.description ?? ''),
-      category: String(s.family ?? s.category ?? 'other'),
+      category: String(s.family ?? s.category ?? 'other') as SkillPack['category'],
       trust: 'verified',
       installed: s.state === 'active' || s.state === 'installed',
       skills: Array.isArray(s.skills) ? (s.skills as string[]) : [],
@@ -662,7 +663,7 @@ class LocalAdapter {
       id: String(p.id ?? p.name ?? ''),
       name: String(p.name ?? p.id ?? ''),
       description: String(p.description ?? ''),
-      category: String(p.category ?? 'pack'),
+      category: String(p.category ?? 'pack') as SkillPack['category'],
       trust: 'verified',
       installed: p.packState === 'complete',
       skills: Array.isArray(p.skills) ? (p.skills as string[]) : [],
