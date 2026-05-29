@@ -1,7 +1,7 @@
 use std::process::{Child, Command};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 pub struct ServiceState {
     pub process: Mutex<Option<Child>>,
@@ -227,7 +227,24 @@ pub fn start_watchdog(app: AppHandle, port: u16) {
 
                         let _ = app.emit("waggle://service-status",
                             serde_json::json!({ "status": "restarting" }));
-                        eprintln!("[waggle] Watchdog: server unresponsive, restart needed (attempt {})", restart_count + 1);
+                        eprintln!("[waggle] Watchdog: server unresponsive, respawning (attempt {})", restart_count + 1);
+
+                        // R7-003: self-heal — reap the dead child (so spawn_service_sync's
+                        // is_some() early-return clears) then respawn the sidecar in place.
+                        if let Some(state) = app.try_state::<ServiceState>() {
+                            {
+                                if let Ok(mut proc) = state.process.lock() {
+                                    if let Some(mut child) = proc.take() {
+                                        let _ = child.kill();
+                                        let _ = child.wait();
+                                    }
+                                }
+                            }
+                            match spawn_service_sync(port, &state.process) {
+                                Ok(()) => eprintln!("[waggle] Watchdog: sidecar respawned"),
+                                Err(e) => eprintln!("[waggle] Watchdog: respawn failed: {}", e),
+                            }
+                        }
                         let _ = app.emit("waggle://service-restart-needed", ());
 
                         restart_count += 1;

@@ -133,15 +133,15 @@ jobs:
             "pub_date": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'",
             "platforms": {
               "windows-x86_64": {
-                "url": "https://github.com/marolinik/waggle/releases/download/${{ github.ref_name }}/Waggle_${{ github.ref_name }}_x64-setup.nsis.zip",
+                "url": "https://github.com/marolinik/waggle-os/releases/download/${{ github.ref_name }}/Waggle_${{ github.ref_name }}_x64-setup.nsis.zip",
                 "signature": ""
               },
               "darwin-aarch64": {
-                "url": "https://github.com/marolinik/waggle/releases/download/${{ github.ref_name }}/Waggle_${{ github.ref_name }}_aarch64.app.tar.gz",
+                "url": "https://github.com/marolinik/waggle-os/releases/download/${{ github.ref_name }}/Waggle_${{ github.ref_name }}_aarch64.app.tar.gz",
                 "signature": ""
               },
               "darwin-x86_64": {
-                "url": "https://github.com/marolinik/waggle/releases/download/${{ github.ref_name }}/Waggle_${{ github.ref_name }}_x64.app.tar.gz",
+                "url": "https://github.com/marolinik/waggle-os/releases/download/${{ github.ref_name }}/Waggle_${{ github.ref_name }}_x64.app.tar.gz",
                 "signature": ""
               }
             }

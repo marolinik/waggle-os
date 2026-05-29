@@ -80,7 +80,10 @@ pub fn run() {
             )?;
 
             let shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyW);
-            app.global_shortcut().register(shortcut)?;
+            // R7-005: a hotkey collision must not crash setup — log and continue.
+            if let Err(e) = app.global_shortcut().register(shortcut) {
+                eprintln!("[waggle] Failed to register Ctrl+Shift+W global shortcut: {}", e);
+            }
 
             // Auto-start the sidecar service before the webview loads so the
             // React app finds it already healthy on localhost:3333.
@@ -136,6 +139,19 @@ pub fn run() {
                 let _ = window.hide();
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            // R7-002: kill the sidecar on app exit so it doesn't orphan and hold port 3333.
+            if let tauri::RunEvent::Exit = event {
+                if let Some(state) = app_handle.try_state::<ServiceState>() {
+                    if let Ok(mut proc) = state.process.lock() {
+                        if let Some(mut child) = proc.take() {
+                            let _ = child.kill();
+                            let _ = child.wait();
+                        }
+                    }
+                }
+            }
+        });
 }
