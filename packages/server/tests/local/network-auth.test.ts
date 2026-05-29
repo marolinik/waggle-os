@@ -140,7 +140,8 @@ describe('Host-header allowlist (R2-004)', () => {
 
   it('allows a localhost Host header', async () => {
     server = await mk();
-    const res = await server.inject({ method: 'GET', url: '/api/test', headers: { host: '127.0.0.1:3333' } });
+    // D1: localhost now requires a token, so present it to isolate the Host check.
+    const res = await server.inject({ method: 'GET', url: '/api/test', headers: { host: '127.0.0.1:3333', authorization: 'Bearer tok' } });
     expect(res.statusCode).toBe(200);
   });
 });

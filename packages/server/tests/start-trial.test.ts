@@ -174,3 +174,41 @@ describe('PATCH /api/tier override gate (AV-3)', () => {
     expect(readConfig(tmpDir).tier).toBe('PRO');
   });
 });
+
+// ── D1 — loopback now requires a token; the webview bootstraps it ──────────
+describe('D1 loopback auth + session-token bootstrap', () => {
+  let server: FastifyInstance;
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-d1-'));
+    server = await buildLocalServer({ dataDir: tmpDir });
+  });
+  afterEach(async () => {
+    await server.close();
+    await new Promise(r => setTimeout(r, 100));
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* EBUSY on win32 */ }
+  });
+
+  it('serves the session token from the auth-exempt, same-origin bootstrap', async () => {
+    const res = await server.inject({ method: 'GET', url: '/api/auth/session-token' });
+    expect(res.statusCode).toBe(200);
+    const token = res.json().token as string;
+    expect(typeof token).toBe('string');
+    expect(token.length).toBeGreaterThan(0);
+  });
+
+  it('requires a bearer token on a normal route (loopback no longer trusted)', async () => {
+    const res = await server.inject({ method: 'GET', url: '/api/tier' });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('accepts a normal route when the bootstrapped token is presented', async () => {
+    const token = (await server.inject({ method: 'GET', url: '/api/auth/session-token' })).json().token as string;
+    const res = await server.inject({
+      method: 'GET', url: '/api/tier',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+});
