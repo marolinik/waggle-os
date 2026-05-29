@@ -6,7 +6,7 @@
  */
 
 import type { FastifyPluginAsync } from 'fastify';
-import type { Tier } from '@waggle/shared';
+import { type Tier, TIER_CAPABILITIES } from '@waggle/shared';
 
 export { checkoutRoutes } from './checkout.js';
 export { webhookRoutes } from './webhook.js';
@@ -84,6 +84,19 @@ export function tierFromPriceId(priceId: string): Tier | null {
   if (proPrices.includes(priceId)) return 'PRO';
   if (teamsPrices.includes(priceId)) return 'TEAMS';
   return null;
+}
+
+/** Resolve the Stripe price ID for a (tier, billingPeriod). Prefers the 4-var
+ *  period-specific contract, falls back to legacy single-var, then TIER_CAPABILITIES. */
+export function priceIdForTier(tier: Tier, billingPeriod: 'monthly' | 'annual' = 'monthly'): string | null {
+  const period = billingPeriod === 'annual' ? 'ANNUAL' : 'MONTHLY';
+  const candidates = tier === 'PRO'
+    ? [process.env[`STRIPE_PRICE_PRO_${period}`], process.env.STRIPE_PRICE_PRO, process.env.STRIPE_PRICE_BASIC]
+    : tier === 'TEAMS'
+      ? [process.env[`STRIPE_PRICE_TEAMS_${period}`], process.env.STRIPE_PRICE_TEAMS]
+      : [];
+  for (const c of candidates) if (c) return c;
+  return TIER_CAPABILITIES[tier]?.stripePriceId ?? null;
 }
 
 // ── Combined route registration ──────────────────────────────────────

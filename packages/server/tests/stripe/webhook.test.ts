@@ -1,10 +1,27 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import Fastify from 'fastify';
 import { updateUserTier } from '../../src/stripe/webhook.js';
 import { tierFromPriceId } from '../../src/stripe/index.js';
 import { parseTier } from '@waggle/shared';
+
+// Mock only getStripe; keep the real tierFromPriceId so the 17 existing tests
+// (which import the genuine env-driven resolver) stay green.
+vi.mock('../../src/stripe/index.js', async (importActual) => {
+  const actual = await importActual<typeof import('../../src/stripe/index.js')>();
+  return { ...actual, getStripe: () => fakeStripe };
+});
+
+// Fake Stripe whose webhooks.constructEvent returns whatever event the test
+// queued. The webhook handler never inspects the signature beyond calling this.
+let nextEvent: unknown = null;
+const fakeStripe = {
+  webhooks: {
+    constructEvent: () => nextEvent,
+  },
+} as unknown as import('stripe').default;
 
 describe('Stripe Webhook — tier update logic', () => {
   let tmpDir: string;
@@ -178,6 +195,108 @@ describe('Stripe Webhook — tier update logic', () => {
       const raw = JSON.parse(fs.readFileSync(path.join(tmpDir, 'config.json'), 'utf-8'));
       const parsed = parseTier(String(raw.tier));
       expect(parsed).toBe('PRO');
+    });
+  });
+
+  // ── Webhook handler: atomic write + idempotency (R1-011) ────────────
+  // Drives the full POST /api/stripe/webhook handler via fastify.inject,
+  // with getStripe mocked (above) and STRIPE_WEBHOOK_SECRET set.
+  describe('webhook handler — atomic write + idempotency', () => {
+    afterEach(() => {
+      nextEvent = null;
+      delete process.env['STRIPE_WEBHOOK_SECRET'];
+    });
+
+    async function buildServer() {
+      const { webhookRoutes } = await import('../../src/stripe/webhook.js');
+      const app = Fastify();
+      app.decorate('localConfig', { dataDir: tmpDir });
+      await app.register(webhookRoutes);
+      await app.ready();
+      return app;
+    }
+
+    function postEvent(app: ReturnType<typeof Fastify>) {
+      return app.inject({
+        method: 'POST',
+        url: '/api/stripe/webhook',
+        headers: { 'stripe-signature': 't=1,v1=fake', 'content-type': 'application/json' },
+        payload: Buffer.from('{}'),
+      });
+    }
+
+    it('writes valid config.json with no leftover *.tmp file after checkout.session.completed', async () => {
+      process.env['STRIPE_WEBHOOK_SECRET'] = 'whsec_test';
+      nextEvent = {
+        id: 'evt_atomic_1',
+        type: 'checkout.session.completed',
+        data: { object: { metadata: { tier: 'PRO' }, customer: 'cus_123' } },
+      };
+
+      const app = await buildServer();
+      try {
+        const res = await postEvent(app);
+        expect(res.statusCode).toBe(200);
+        expect(res.json()).toEqual({ received: true });
+      } finally {
+        await app.close();
+      }
+
+      // config.json exists and is valid JSON with the expected tier
+      const configPath = path.join(tmpDir, 'config.json');
+      expect(fs.existsSync(configPath)).toBe(true);
+      const raw = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      expect(raw.tier).toBe('PRO');
+      expect(raw.stripe_customer_id).toBe('cus_123');
+
+      // No torn/leftover temp file remains in dataDir
+      const leftovers = fs.readdirSync(tmpDir).filter((f) => f.endsWith('.tmp'));
+      expect(leftovers).toEqual([]);
+    });
+
+    it('is idempotent — replaying the same event.id returns duplicate:true and does not change config', async () => {
+      process.env['STRIPE_WEBHOOK_SECRET'] = 'whsec_test';
+      nextEvent = {
+        id: 'evt_dup_1',
+        type: 'checkout.session.completed',
+        data: { object: { metadata: { tier: 'PRO' }, customer: 'cus_abc' } },
+      };
+
+      const configPath = path.join(tmpDir, 'config.json');
+
+      // First delivery: applies the tier, returns plain received.
+      const app1 = await buildServer();
+      try {
+        const res1 = await postEvent(app1);
+        expect(res1.statusCode).toBe(200);
+        expect(res1.json()).toEqual({ received: true });
+      } finally {
+        await app1.close();
+      }
+      const afterFirst = fs.readFileSync(configPath, 'utf-8');
+      expect(JSON.parse(afterFirst).tier).toBe('PRO');
+
+      // Tamper with the config object the second event WOULD have produced,
+      // so any non-idempotent re-processing would be observable.
+      nextEvent = {
+        id: 'evt_dup_1', // same id
+        type: 'checkout.session.completed',
+        data: { object: { metadata: { tier: 'TEAMS' }, customer: 'cus_xyz' } },
+      };
+
+      const app2 = await buildServer();
+      try {
+        const res2 = await postEvent(app2);
+        expect(res2.statusCode).toBe(200);
+        expect(res2.json()).toEqual({ received: true, duplicate: true });
+      } finally {
+        await app2.close();
+      }
+
+      // Config must be byte-identical to the first write (TEAMS was NOT applied)
+      const afterSecond = fs.readFileSync(configPath, 'utf-8');
+      expect(afterSecond).toBe(afterFirst);
+      expect(JSON.parse(afterSecond).tier).toBe('PRO');
     });
   });
 });

@@ -39,6 +39,15 @@ export const syncRoutes: FastifyPluginAsync = async (server) => {
         expand: ['subscription'],
       });
 
+      // Payment gate: never grant a paid tier from an unpaid session.
+      // metadata.tier is set at session creation (before payment), so an
+      // unpaid sessionId would otherwise grant free PRO/TEAMS. 'no_payment_required'
+      // covers 100%-off promo codes enabled via allow_promotion_codes.
+      const paid = session.payment_status === 'paid' || session.payment_status === 'no_payment_required';
+      if (session.status !== 'complete' || !paid) {
+        return reply.code(402).send({ error: 'PAYMENT_NOT_COMPLETED', message: 'Checkout session is not paid yet.' });
+      }
+
       const customerId = typeof session.customer === 'string'
         ? session.customer
         : undefined;

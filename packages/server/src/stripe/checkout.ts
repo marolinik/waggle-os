@@ -7,8 +7,8 @@
  */
 
 import type { FastifyPluginAsync } from 'fastify';
-import { type Tier, TIER_CAPABILITIES } from '@waggle/shared';
-import { getStripe } from './index.js';
+import type { Tier } from '@waggle/shared';
+import { getStripe, priceIdForTier } from './index.js';
 
 export const checkoutRoutes: FastifyPluginAsync = async (server) => {
   server.post<{
@@ -26,10 +26,9 @@ export const checkoutRoutes: FastifyPluginAsync = async (server) => {
       return reply.code(400).send({ error: 'INVALID_TIER', message: 'Only PRO and TEAMS tiers support Stripe checkout.' });
     }
 
-    const capabilities = TIER_CAPABILITIES[tier as Tier];
-    const priceId = capabilities.stripePriceId;
+    const priceId = priceIdForTier(tier as Tier, billingPeriod);
     if (!priceId) {
-      return reply.code(400).send({ error: 'NO_PRICE_CONFIGURED', message: `No Stripe price ID configured for ${tier}. Set STRIPE_PRICE_${tier} env var.` });
+      return reply.code(400).send({ error: 'NO_PRICE_CONFIGURED', message: `No Stripe price configured for ${tier} (${billingPeriod ?? 'monthly'}).` });
     }
 
     try {

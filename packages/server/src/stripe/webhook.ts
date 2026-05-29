@@ -15,6 +15,20 @@ import { type Tier, parseTier, getCapabilities } from '@waggle/shared';
 import { getStripe, tierFromPriceId } from './index.js';
 
 /**
+ * Atomically write JSON to disk: write to a unique temp file in the same
+ * directory, then rename over the target. rename(2) is atomic on the same
+ * volume, so a crash mid-write leaves the previous complete file intact
+ * instead of a torn/partial one. A module-scoped counter (not a timestamp)
+ * keeps the temp name unique even within the same millisecond.
+ */
+let __tmpSeq = 0;
+function atomicWriteJson(filePath: string, data: unknown): void {
+  const tmp = `${filePath}.${process.pid}.${__tmpSeq++}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf-8');
+  fs.renameSync(tmp, filePath);
+}
+
+/**
  * Update the user's tier (and optionally Stripe customer ID) in config.json.
  * This is the same storage used by readTierFromRequest() in the tier middleware
  * and by the portal route to read stripe_customer_id.
@@ -28,7 +42,7 @@ function updateUserTier(dataDir: string, tier: Tier, customerId?: string): void 
     }
   } catch { /* fresh config */ }
   const updated = { ...raw, tier, ...(customerId ? { stripe_customer_id: customerId } : {}) };
-  fs.writeFileSync(configPath, JSON.stringify(updated, null, 2), 'utf-8');
+  atomicWriteJson(configPath, updated);
 }
 
 export const webhookRoutes: FastifyPluginAsync = async (server) => {
@@ -121,7 +135,7 @@ export const webhookRoutes: FastifyPluginAsync = async (server) => {
     // Mark event as processed (keep last 500 IDs to avoid unbounded growth)
     processedIds.push(event.id);
     if (processedIds.length > 500) processedIds.splice(0, processedIds.length - 500);
-    try { fs.writeFileSync(processedPath, JSON.stringify(processedIds)); } catch { /* best effort */ }
+    try { atomicWriteJson(processedPath, processedIds); } catch { /* best effort */ }
 
     return { received: true };
   });
