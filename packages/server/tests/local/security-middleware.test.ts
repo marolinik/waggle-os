@@ -350,6 +350,12 @@ describe('Per-Endpoint Rate Limits', () => {
 describe('Bearer Token Authentication', () => {
   const TEST_TOKEN = 'test-session-token-12345';
 
+  // The global test setup defaults to WAGGLE_TRUST_LOCALHOST=1 so the broad suite
+  // (raw inject, no tokens) keeps working. This describe exercises the SECURE D1
+  // default, so force trust OFF here and restore the suite default afterward.
+  beforeEach(() => { process.env.WAGGLE_TRUST_LOCALHOST = '0'; });
+  afterEach(() => { process.env.WAGGLE_TRUST_LOCALHOST = '1'; });
+
   it('D1: requires a token on localhost (no desktop trust by default)', async () => {
     const server = await createTestServer({ sessionToken: TEST_TOKEN });
     try {

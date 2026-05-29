@@ -181,11 +181,14 @@ describe('D1 loopback auth + session-token bootstrap', () => {
   let tmpDir: string;
 
   beforeEach(async () => {
+    // Exercise the SECURE D1 default (the suite setup defaults trust ON).
+    process.env.WAGGLE_TRUST_LOCALHOST = '0';
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-d1-'));
     server = await buildLocalServer({ dataDir: tmpDir });
   });
   afterEach(async () => {
     await server.close();
+    process.env.WAGGLE_TRUST_LOCALHOST = '1';
     await new Promise(r => setTimeout(r, 100));
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* EBUSY on win32 */ }
   });

@@ -14,6 +14,15 @@ if (!process.env.WAGGLE_PHASE5_CANARY_PCT) {
   process.env.WAGGLE_PHASE5_CANARY_PCT = '0';
 }
 
+// D1: the local sidecar now requires a bearer token even on loopback in production
+// (no localhost-trust). The broad server suite predates this and uses raw inject()
+// without tokens, so default tests to localhost-trust mode. Production keeps the
+// SECURE default (no env). The dedicated D1 auth tests set WAGGLE_TRUST_LOCALHOST='0'
+// to exercise the real secure path. CI/dev can override.
+if (!process.env.WAGGLE_TRUST_LOCALHOST) {
+  process.env.WAGGLE_TRUST_LOCALHOST = '1';
+}
+
 try {
   const content = readFileSync(resolve(process.cwd(), '.env'), 'utf-8');
   for (const line of content.split('\n')) {
