@@ -44,6 +44,14 @@ const LAUNCH_COHORT = [
   'openclaw',
 ];
 
+// Hook install/verify/uninstall is restricted to tools whose hive-mind
+// hook package actually ships a bin. Today that is only claude-code;
+// the other tools' hook packages are Wave 2/3 `export {}` stubs with
+// no bin, so `npx @waggle/hive-mind-hooks-<id>` would always fail.
+// Hook buttons gate on THIS cohort; launching stays on LAUNCH_COHORT.
+// Mirrors @waggle/shared HOOKS_COHORT (kept local for the same reason).
+const HOOKS_COHORT = ['claude-code'];
+
 interface DetectedTool {
   id: string;
   displayName: string;
@@ -363,6 +371,7 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
           )}
           {tools.map((tool) => {
             const inCohort = LAUNCH_COHORT.includes(tool.id);
+            const hooksSupported = HOOKS_COHORT.includes(tool.id);
             const isActive = activeAction?.toolId === tool.id;
             return (
               <div
@@ -444,7 +453,7 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
                         Stop
                       </Button>
                     )}
-                    {!tool.hooksInstalled && (
+                    {hooksSupported && !tool.hooksInstalled && (
                       <Button
                         size="sm"
                         variant="secondary"
@@ -460,21 +469,23 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
                         Install hooks
                       </Button>
                     )}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 text-[11px]"
-                      onClick={() => doAction(tool, 'verify')}
-                      disabled={isActive}
-                    >
-                      {isActive && activeAction?.action === 'verify' ? (
-                        <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                      ) : (
-                        <ShieldCheck className="w-3 h-3 mr-1" />
-                      )}
-                      Verify
-                    </Button>
-                    {tool.hooksInstalled && (
+                    {hooksSupported && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-[11px]"
+                        onClick={() => doAction(tool, 'verify')}
+                        disabled={isActive}
+                      >
+                        {isActive && activeAction?.action === 'verify' ? (
+                          <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                        ) : (
+                          <ShieldCheck className="w-3 h-3 mr-1" />
+                        )}
+                        Verify
+                      </Button>
+                    )}
+                    {hooksSupported && tool.hooksInstalled && (
                       <Button
                         size="sm"
                         variant="ghost"

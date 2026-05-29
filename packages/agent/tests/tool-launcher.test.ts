@@ -194,13 +194,13 @@ describe('runHookCommand', () => {
   it('routes the verify action', async () => {
     const { calls, execCapture } = captureExec();
     await runHookCommand({
-      id: 'cursor',
+      id: 'claude-code',
       action: 'verify',
       deps: { execCapture },
     });
     expect(calls[0].args).toEqual([
       '--yes',
-      '@waggle/hive-mind-hooks-cursor',
+      '@waggle/hive-mind-hooks-claude-code',
       'verify',
     ]);
   });
@@ -208,13 +208,13 @@ describe('runHookCommand', () => {
   it('routes the uninstall action', async () => {
     const { calls, execCapture } = captureExec();
     await runHookCommand({
-      id: 'claude-desktop',
+      id: 'claude-code',
       action: 'uninstall',
       deps: { execCapture },
     });
     expect(calls[0].args).toEqual([
       '--yes',
-      '@waggle/hive-mind-hooks-claude-desktop',
+      '@waggle/hive-mind-hooks-claude-code',
       'uninstall',
     ]);
   });
@@ -262,22 +262,28 @@ describe('runHookCommand', () => {
     expect(result.error).toContain('exec failed');
   });
 
+  // R8-001: hook management is gated on HOOKS_COHORT (claude-code only) — the
+  // cursor/claude-desktop/codex/... hook packages are still binless Wave-2/3
+  // stubs, so routing npx at them always failed for the user. claude-code routes;
+  // every stub tool must REFUSE without invoking npx.
+  it.each<ToolId>(['claude-code'])(
+    'routes the hook command for HOOKS_COHORT tool (%s)',
+    async (id) => {
+      const { calls, execCapture } = captureExec();
+      const result = await runHookCommand({ id, action: 'install', deps: { execCapture } });
+      expect(result.ok).toBe(true);
+      expect(calls[0].args).toEqual(['--yes', `@waggle/hive-mind-hooks-${id}`, 'install']);
+    },
+  );
+
   it.each<ToolId>([
-    'claude-code', 'cursor', 'claude-desktop',
-    'codex', 'codex-desktop', 'hermes', 'openclaw',
-  ])('runs hook command for every cohort tool (%s) after Phase 4', async (id) => {
+    'cursor', 'claude-desktop', 'codex', 'codex-desktop', 'hermes', 'openclaw',
+  ])('refuses hook command for non-HOOKS_COHORT stub tool (%s) without calling npx', async (id) => {
     const { calls, execCapture } = captureExec();
-    const result = await runHookCommand({
-      id,
-      action: 'install',
-      deps: { execCapture },
-    });
-    expect(result.ok).toBe(true);
-    expect(calls[0].args).toEqual([
-      '--yes',
-      `@waggle/hive-mind-hooks-${id}`,
-      'install',
-    ]);
+    const result = await runHookCommand({ id, action: 'install', deps: { execCapture } });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('not supported');
+    expect(calls).toHaveLength(0);
   });
 });
 

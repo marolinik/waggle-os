@@ -401,23 +401,38 @@ export async function harvestRoutes(fastify: FastifyInstance) {
       harvestStore.upsert(source, adapter.displayName ?? source);
       harvestStore.recordSync(source, items.length, saved);
 
-      // Post-harvest cognify: extract entities + relations from imported frames
+      // Post-harvest cognify: extract entities + relations from imported frames.
+      //
+      // Embedder policy (mirrors the wiki-compile block below): use the
+      // server's REAL embeddingProvider (created at startup from Vault + env
+      // keys), never a hard-coded mock. The previous `createEmbeddingProvider({
+      // provider: 'mock' })` indexed every harvested frame with a meaningless
+      // placeholder vector — they looked indexed but were silently
+      // unretrievable by semantic search (memory-moat regression). If the
+      // active provider is 'mock' / unavailable, SKIP vector indexing entirely
+      // rather than writing bogus vectors; the frames are already stored above
+      // and can be re-indexed when a real provider activates.
       let cognifyStats = { processed: 0, entities: 0, relations: 0 };
+      let cognifySkippedReason: string | null = null;
       try {
-        const { KnowledgeGraph, HybridSearch, createEmbeddingProvider } = await import('@waggle/core');
-        const { CognifyPipeline } = await import('@waggle/agent');
-        const embedder = await createEmbeddingProvider({ provider: 'mock' });
-        const cognify = new CognifyPipeline({
-          frames: frameStore,
-          sessions: sessionStore,
-          knowledge: new KnowledgeGraph(personalDb),
-          search: new HybridSearch(personalDb, embedder),
-        });
-        const recentFrames = frameStore.getRecent(saved);
-        const frameIds = recentFrames.map(f => f.id);
-        emitHarvestProgress({ phase: 'cognifying', current: 0, total: frameIds.length, source });
-        cognifyStats = await cognify.cognifyBatch(frameIds);
-        emitHarvestProgress({ phase: 'cognifying', current: frameIds.length, total: frameIds.length, source });
+        const embedder = fastify.embeddingProvider;
+        if (!embedder || embedder.getActiveProvider() === 'mock') {
+          cognifySkippedReason = 'no_real_embedder';
+        } else {
+          const { KnowledgeGraph, HybridSearch } = await import('@waggle/core');
+          const { CognifyPipeline } = await import('@waggle/agent');
+          const cognify = new CognifyPipeline({
+            frames: frameStore,
+            sessions: sessionStore,
+            knowledge: new KnowledgeGraph(personalDb),
+            search: new HybridSearch(personalDb, embedder),
+          });
+          const recentFrames = frameStore.getRecent(saved);
+          const frameIds = recentFrames.map(f => f.id);
+          emitHarvestProgress({ phase: 'cognifying', current: 0, total: frameIds.length, source });
+          cognifyStats = await cognify.cognifyBatch(frameIds);
+          emitHarvestProgress({ phase: 'cognifying', current: frameIds.length, total: frameIds.length, source });
+        }
       } catch {
         // Cognify failure is non-fatal — frames are already saved
       }
@@ -475,6 +490,7 @@ export async function harvestRoutes(fastify: FastifyInstance) {
         itemCount: items.length,
         saved,
         cognified: cognifyStats.processed,
+        cognifySkippedReason,
         entitiesExtracted: cognifyStats.entities,
         relationsCreated: cognifyStats.relations,
         wikiCompiled: wikiStats,

@@ -151,20 +151,21 @@ export class SubagentOrchestrator extends EventEmitter {
 
       // Safety: if no progress was made, we have a circular dependency — break
       if (!progressed) {
-        const remaining = steps.filter(s => !completed.has(s.name)).map(s => s.name);
-        for (const name of remaining) {
-          const id = this.makeWorkerId(name);
+        const remaining = steps.filter(s => !completed.has(s.name));
+        for (const step of remaining) {
+          const name = step.name;
+          // Reuse the pre-created pending worker id — minting a new id here
+          // would orphan the pending entry as a permanent ghost.
+          const id = stepWorkerIds.get(name) ?? this.makeWorkerId(name);
+          const existing = this.workers.get(id);
           const failedState: WorkerState = {
+            ...(existing ?? { name, role: step.role, task: step.task, toolsUsed: [], usage: { inputTokens: 0, outputTokens: 0 } }),
             id,
-            name,
-            role: 'unknown',
             status: 'failed',
-            task: '',
             error: `Circular dependency detected — unresolvable deps for: ${name}`,
-            toolsUsed: [],
-            usage: { inputTokens: 0, outputTokens: 0 },
           };
           this.workers.set(id, failedState);
+          this.emit('worker:status', { workerId: id, status: 'failed', workerState: failedState });
           completed.add(name);
         }
         break;

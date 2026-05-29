@@ -33,9 +33,14 @@
  *
  * Phase 2A scope:
  *   - Backend module + sidecar routes only. Frontend dock in 2B.
- *   - Cohort: claude-code + cursor + claude-desktop. Deferred-cohort
- *     tools (codex / hermes / openclaw) get a clear "not supported
- *     yet" response.
+ *   - LAUNCH cohort: all 7 supported tools may be *launched*.
+ *   - HOOK install/verify/uninstall is restricted to claude-code:
+ *     it is the only tool with a published hook package that ships a
+ *     bin (`@waggle/hive-mind-hooks-claude-code`). The other tools'
+ *     hook packages are Wave 2/3 `export {}` stubs with no bin, so
+ *     `npx @waggle/hive-mind-hooks-<id>` would always fail for the
+ *     user. Hook actions therefore route through HOOKS_COHORT, NOT
+ *     LAUNCH_COHORT.
  */
 
 import { spawn, execFile } from 'node:child_process';
@@ -44,6 +49,17 @@ import type { ToolId } from '@waggle/shared';
 import { LAUNCH_COHORT } from '@waggle/shared';
 
 const execFileAsync = promisify(execFile);
+
+/**
+ * Tools whose hive-mind hook package is real (ships a `bin`) and can
+ * therefore be installed/verified/uninstalled via npx. Today only
+ * claude-code qualifies; cursor / claude-desktop / codex /
+ * codex-desktop / hermes / openclaw hook packages are binless
+ * `export {}` stubs (Wave 2/3). Hook code paths gate on THIS cohort,
+ * not LAUNCH_COHORT, so the UI never offers a hook action that npx
+ * cannot fulfil.
+ */
+export const HOOKS_COHORT: readonly ToolId[] = ['claude-code'] as const;
 
 // ── Injectable deps ─────────────────────────────────────────────────
 
@@ -272,7 +288,7 @@ export function hookPackageFor(id: ToolId): string {
 export async function runHookCommand(
   opts: HookCommandOptions,
 ): Promise<HookCommandResult> {
-  if (!LAUNCH_COHORT.includes(opts.id)) {
+  if (!HOOKS_COHORT.includes(opts.id)) {
     return {
       ok: false,
       action: opts.action,
@@ -280,7 +296,7 @@ export async function runHookCommand(
       stdout: '',
       stderr: '',
       code: -1,
-      error: `Hook management for '${opts.id}' is outside the Phase 2 cohort.`,
+      error: `Hook management for '${opts.id}' is not supported yet — only claude-code ships a functional hook package today.`,
     };
   }
   const deps = resolveDeps(opts.deps ?? {});

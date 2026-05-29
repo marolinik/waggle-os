@@ -47,6 +47,32 @@ export type RetryAction =
     };
 
 /**
+ * Resolve the Retry-After header to a sane number of seconds.
+ *
+ * RFC 7231 §7.1.3 allows two forms: delta-seconds ("120") OR an HTTP-date
+ * ("Wed, 21 Oct 2025 07:28:00 GMT"). `parseInt` on the date form yields NaN,
+ * which would propagate through `NaN * 1000` → `Math.min(NaN, cap)` → NaN and
+ * make the loop retry immediately (setTimeout(NaN) fires on the next tick),
+ * hammering the endpoint. Guard against that:
+ *   - delta-seconds → the parsed value (clamped to non-negative)
+ *   - HTTP-date     → seconds until that date (clamped to non-negative)
+ *   - anything else → the default backoff
+ */
+function parseRetryAfterSeconds(headerValue: string | null): number {
+  if (headerValue === null) return RATE_LIMIT_RETRY_AFTER_DEFAULT_SECONDS;
+
+  const asSeconds = parseInt(headerValue, 10);
+  if (Number.isFinite(asSeconds)) return Math.max(0, asSeconds);
+
+  const asDateMs = Date.parse(headerValue);
+  if (Number.isFinite(asDateMs)) {
+    return Math.max(0, Math.round((asDateMs - Date.now()) / 1000));
+  }
+
+  return RATE_LIMIT_RETRY_AFTER_DEFAULT_SECONDS;
+}
+
+/**
  * Decide what to do with a non-OK LLM response.
  *
  * 429 (rate limit): honour Retry-After header (default 5s), cap at 60s.
@@ -69,10 +95,7 @@ export async function handleNonOkResponse(
         ),
       };
     }
-    const retryAfterSec = parseInt(
-      response.headers.get('retry-after') ?? String(RATE_LIMIT_RETRY_AFTER_DEFAULT_SECONDS),
-      10,
-    );
+    const retryAfterSec = parseRetryAfterSeconds(response.headers.get('retry-after'));
     const waitMs = Math.min(retryAfterSec * 1000, MAX_RATE_LIMIT_WAIT_MS);
     return {
       kind: 'retry',
