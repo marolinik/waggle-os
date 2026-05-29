@@ -11,6 +11,7 @@
 
 import crypto from 'node:crypto';
 import type { FastifyPluginAsync } from 'fastify';
+import { escapeXml } from './harvest.js';
 
 // ── OAuth provider configuration ─────────────────────────────────────
 
@@ -189,7 +190,7 @@ export const oauthRoutes: FastifyPluginAsync = async (server) => {
     // Handle OAuth error response
     if (oauthError) {
       return reply.type('text/html').send(
-        `<html><body><h2>OAuth Error</h2><p>${oauthError}: ${error_description ?? 'Unknown error'}</p>` +
+        `<html><body><h2>OAuth Error</h2><p>${escapeXml(oauthError)}: ${escapeXml(error_description ?? 'Unknown error')}</p>` +
         `<p><a href="http://127.0.0.1:${(server.server.address() as any)?.port ?? 3333}">Return to Waggle</a></p></body></html>`
       );
     }
@@ -269,7 +270,7 @@ export const oauthRoutes: FastifyPluginAsync = async (server) => {
         const errBody = await tokenRes.text();
         return reply.type('text/html').send(
           `<html><body><h2>Token Exchange Failed</h2><p>Status: ${tokenRes.status}</p>` +
-          `<pre>${errBody}</pre>` +
+          `<pre>${escapeXml(errBody)}</pre>` +
           `<p><a href="http://127.0.0.1:${port}">Return to Waggle</a></p></body></html>`
         );
       }
@@ -281,7 +282,7 @@ export const oauthRoutes: FastifyPluginAsync = async (server) => {
       if (!accessToken) {
         return reply.type('text/html').send(
           `<html><body><h2>No Access Token</h2><p>The provider did not return an access token.</p>` +
-          `<pre>${JSON.stringify(tokenData, null, 2)}</pre>` +
+          `<pre>${escapeXml(JSON.stringify(tokenData, null, 2))}</pre>` +
           `<p><a href="http://127.0.0.1:${port}">Return to Waggle</a></p></body></html>`
         );
       }
@@ -310,7 +311,7 @@ export const oauthRoutes: FastifyPluginAsync = async (server) => {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       return reply.type('text/html').send(
-        `<html><body><h2>OAuth Error</h2><p>${message}</p>` +
+        `<html><body><h2>OAuth Error</h2><p>${escapeXml(message)}</p>` +
         `<p><a href="http://127.0.0.1:${port}">Return to Waggle</a></p></body></html>`
       );
     }

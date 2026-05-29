@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Crown, Users, Check, X, ArrowRight } from 'lucide-react';
 
@@ -24,6 +25,19 @@ const LOSE_FEATURES = [
 ];
 
 export default function TrialExpiredModal({ open, onDismiss, onUpgrade }: TrialExpiredModalProps) {
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+
+  // A11y audit (WCAG 2.1.1): Escape closes the modal — #1 keyboard expectation for modal UIs.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onDismiss();
+    };
+    window.addEventListener('keydown', onKey);
+    dialogRef.current?.focus();
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onDismiss]);
+
   return (
     <AnimatePresence>
       {open && (
@@ -33,13 +47,18 @@ export default function TrialExpiredModal({ open, onDismiss, onUpgrade }: TrialE
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-[210] flex items-center justify-center"
         >
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" aria-hidden="true" />
           <motion.div
+            ref={dialogRef}
             initial={{ opacity: 0, scale: 0.95, y: 16 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 16 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="relative w-full max-w-lg glass-strong rounded-2xl shadow-2xl overflow-hidden"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="trial-expired-title"
+            tabIndex={-1}
+            className="relative w-full max-w-lg glass-strong rounded-2xl shadow-2xl overflow-hidden focus:outline-none"
             onClick={e => e.stopPropagation()}
           >
             <button
@@ -53,7 +72,7 @@ export default function TrialExpiredModal({ open, onDismiss, onUpgrade }: TrialE
               <div className="inline-flex p-3 rounded-2xl bg-primary/10 mb-4">
                 <Crown className="w-8 h-8 text-primary" />
               </div>
-              <h2 className="text-xl font-display font-bold text-foreground">
+              <h2 id="trial-expired-title" className="text-xl font-display font-bold text-foreground">
                 Your 15-day trial has ended
               </h2>
               <p className="text-sm text-muted-foreground mt-2">

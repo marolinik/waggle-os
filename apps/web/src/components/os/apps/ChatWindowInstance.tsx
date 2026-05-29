@@ -194,10 +194,11 @@ const ChatWindowInstance = ({
     const fetchTeam = async () => {
       try {
         const members = await adapter.getTeamMembers();
+        if (cancelled) return;
         setTeamPresence(members.filter(m => m.status === 'online'));
       } catch (err) {
         console.error('[ChatWindowInstance] fetch team failed:', err);
-        setTeamPresence([]);
+        if (!cancelled) setTeamPresence([]);
       }
     };
     fetchTeam();

@@ -294,7 +294,7 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
 
       {/* Status bar */}
       {error && (
-        <div className="flex items-center gap-2 px-3 py-2 bg-rose-950/40 border-b border-rose-900/30 text-[12px] text-rose-300">
+        <div className="flex items-center gap-2 px-3 py-2 bg-destructive/10 border-b border-destructive/30 text-[12px] text-destructive">
           <AlertTriangle className="w-3.5 h-3.5" />
           {error}
         </div>
@@ -302,7 +302,7 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
       {lastResult && (
         <div
           className={`flex items-center gap-2 px-3 py-2 border-b border-border/30 text-[12px] ${
-            lastResult.ok ? 'bg-emerald-950/30 text-emerald-300' : 'bg-rose-950/30 text-rose-300'
+            lastResult.ok ? 'bg-emerald-500/10 text-emerald-400' : 'bg-destructive/10 text-destructive'
           }`}
         >
           {lastResult.ok ? (
@@ -384,7 +384,7 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium">{tool.displayName}</span>
                       {tool.installed ? (
-                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-emerald-950/40 text-emerald-300">
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-emerald-500/10 text-emerald-400">
                           Installed
                         </Badge>
                       ) : (
@@ -393,12 +393,12 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
                         </Badge>
                       )}
                       {tool.hooksInstalled && (
-                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-amber-950/40 text-amber-300">
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-amber-500/10 text-amber-400">
                           Hooks active
                         </Badge>
                       )}
                       {runningTools.has(tool.id) && (
-                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-sky-950/40 text-sky-300">
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-sky-500/10 text-sky-400">
                           <span className="w-1.5 h-1.5 rounded-full bg-sky-400 inline-block mr-1 animate-pulse" />
                           Running
                         </Badge>

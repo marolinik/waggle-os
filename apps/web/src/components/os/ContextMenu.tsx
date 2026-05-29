@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
+import { isActionItem, actionIndexForRenderItem } from '../../lib/context-menu-index';
 
 export interface ContextMenuItem {
   label: string;
@@ -29,7 +30,7 @@ const ContextMenu = ({ items, position, onClose }: ContextMenuProps) => {
   }, [onClose]);
 
   useEffect(() => {
-    const actionItems = items.filter(i => !i.separator && !i.disabled);
+    const actionItems = items.filter(isActionItem);
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { onClose(); return; }
       if (e.key === 'ArrowDown') {
@@ -56,8 +57,6 @@ const ContextMenu = ({ items, position, onClose }: ContextMenuProps) => {
     zIndex: 9999,
   };
 
-  let actionIndex = 0;
-
   return (
     <motion.div
       ref={ref}
@@ -70,7 +69,7 @@ const ContextMenu = ({ items, position, onClose }: ContextMenuProps) => {
     >
       {items.map((item, i) => {
         if (item.separator) return <div key={i} className="my-1 h-px bg-border/30" />;
-        const currentActionIndex = actionIndex++;
+        const currentActionIndex = actionIndexForRenderItem(items, i);
         return (
           <button
             key={i}

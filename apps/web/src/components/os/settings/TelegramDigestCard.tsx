@@ -133,7 +133,7 @@ const TelegramDigestCard = () => {
       <div className="space-y-2">
         <div>
           <label className="text-[10px] font-display text-muted-foreground block mb-1">
-            Bot token {status?.hasToken && <span className="text-emerald-400">(saved)</span>}
+            Bot token {status?.hasToken && <span className="text-status-healthy">(saved)</span>}
           </label>
           <div className="relative">
             <Input
@@ -157,7 +157,7 @@ const TelegramDigestCard = () => {
 
         <div>
           <label className="text-[10px] font-display text-muted-foreground block mb-1">
-            Chat ID {status?.hasChatId && <span className="text-emerald-400">(saved)</span>}
+            Chat ID {status?.hasChatId && <span className="text-status-healthy">(saved)</span>}
           </label>
           <Input
             type="text"

@@ -48,6 +48,12 @@ export async function parseChatCompletionStream(
   let inputTokens = 0;
   let outputTokens = 0;
   const toolCalls = new Map<number, StreamedToolCall>();
+  // Synthetic slot assignment for providers that omit `tc.index` on parallel
+  // tool-call deltas: each distinct `tc.id` gets its own stable slot so their
+  // argument fragments don't all collapse into index 0 and corrupt each other.
+  const idToSyntheticIndex = new Map<string, number>();
+  let nextSyntheticIndex = 0;
+  let lastSlot = 0;
 
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -106,7 +112,23 @@ export async function parseChatCompletionStream(
 
         if (delta.tool_calls) {
           for (const tc of delta.tool_calls) {
-            const idx = tc.index ?? 0;
+            let idx: number;
+            if (tc.index !== undefined) {
+              idx = tc.index;
+            } else if (tc.id) {
+              // No index but a distinct id — assign (or reuse) a synthetic slot keyed by id.
+              const known = idToSyntheticIndex.get(tc.id);
+              if (known !== undefined) {
+                idx = known;
+              } else {
+                idx = nextSyntheticIndex++;
+                idToSyntheticIndex.set(tc.id, idx);
+              }
+            } else {
+              // No index and no id — argument-only continuation of the most-recent slot.
+              idx = lastSlot;
+            }
+            lastSlot = idx;
             if (!toolCalls.has(idx)) {
               toolCalls.set(idx, {
                 id: tc.id ?? '',

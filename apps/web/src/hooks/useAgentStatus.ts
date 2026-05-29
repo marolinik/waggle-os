@@ -13,13 +13,16 @@ export const useAgentStatus = () => {
   const failCount = useRef(0);
 
   useEffect(() => {
+    let cancelled = false;
     const poll = async () => {
       try {
         const data = await adapter.getAgentStatus();
+        if (cancelled) return;
         setStatus(data);
         setOffline(false);
         failCount.current = 0;
       } catch (err) {
+        if (cancelled) return;
         console.error('[useAgentStatus] poll failed:', err);
         failCount.current++;
         setOffline(true);
@@ -32,11 +35,14 @@ export const useAgentStatus = () => {
     const schedule = () => {
       timer = setTimeout(async () => {
         await poll();
-        schedule();
+        if (!cancelled) schedule();
       }, getInterval());
     };
     schedule();
-    return () => clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, []);
 
   return { ...status, offline };

@@ -20,7 +20,7 @@
  * and relaunch" copy so the user knows they aren't done yet.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, X, Trash2, CheckCircle2, Loader2 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
@@ -78,6 +78,17 @@ export default function EraseDataDialog({ open, onClose }: EraseDataDialogProps)
     onClose();
   };
 
+  // A11y audit (WCAG 2.1.1): Escape closes the modal — #1 keyboard expectation
+  // for modal UIs. Mirrors the backdrop-click guard: don't close mid-erase.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !submitting) handleClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, submitting]);
+
   return (
     <AnimatePresence>
       {open && (
@@ -88,12 +99,15 @@ export default function EraseDataDialog({ open, onClose }: EraseDataDialogProps)
           className="fixed inset-0 z-[220] flex items-center justify-center"
           onClick={!submitting ? handleClose : undefined}
         >
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" aria-hidden="true" />
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 16 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 16 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={receipt ? 'erase-data-success-title' : 'erase-data-title'}
             className="relative w-full max-w-lg glass-strong rounded-2xl shadow-2xl overflow-hidden"
             onClick={e => e.stopPropagation()}
             data-testid="erase-data-dialog"
@@ -115,7 +129,7 @@ export default function EraseDataDialog({ open, onClose }: EraseDataDialogProps)
                   <div className="p-2 rounded-xl bg-primary/10">
                     <CheckCircle2 className="w-5 h-5 text-primary" />
                   </div>
-                  <h2 className="text-lg font-display font-bold text-foreground">
+                  <h2 id="erase-data-success-title" className="text-lg font-display font-bold text-foreground">
                     Erasure scheduled
                   </h2>
                 </div>
@@ -159,7 +173,7 @@ export default function EraseDataDialog({ open, onClose }: EraseDataDialogProps)
                   <div className="p-2 rounded-xl bg-destructive/10">
                     <AlertTriangle className="w-5 h-5 text-destructive" />
                   </div>
-                  <h2 className="text-lg font-display font-bold text-foreground">
+                  <h2 id="erase-data-title" className="text-lg font-display font-bold text-foreground">
                     Erase all my data
                   </h2>
                 </div>

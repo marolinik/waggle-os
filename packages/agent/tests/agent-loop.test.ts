@@ -443,6 +443,67 @@ describe('runAgentLoop', () => {
     const result = await runAgentLoop(makeConfig({ fetch }));
     expect(result.content).toBe('Normal response.');
   });
+
+  // R3-008: the abort signal must be forwarded into the in-flight request so an
+  // aborted run tears down the connection instead of consuming the stream to
+  // completion.
+  it('forwards the abort signal to the underlying fetch', async () => {
+    const abortController = new AbortController();
+    const fetch = mockFetch([{ content: 'Hello.' }]);
+
+    await runAgentLoop(makeConfig({ fetch, signal: abortController.signal }));
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const init = fetch.mock.calls[0][1];
+    expect(init.signal).toBe(abortController.signal);
+  });
+
+  // R3-008: an abort that fires while the in-flight response is being read must
+  // short-circuit the turn before tool calls run or a second request is issued.
+  it('returns promptly when aborted during the in-flight request', async () => {
+    const abortController = new AbortController();
+    const tool: ToolDefinition = {
+      name: 'should_not_run',
+      description: 'Must never execute once aborted mid-request',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => 'tool-result'),
+    };
+
+    // Fetch resolves only after the signal has aborted, simulating a client
+    // disconnect during the in-flight read.
+    const fetch = vi.fn(async (_url: string, _init?: RequestInit) => {
+      abortController.abort();
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant' as const,
+                content: null,
+                tool_calls: [
+                  { id: 'call_1', type: 'function', function: { name: 'should_not_run', arguments: '{}' } },
+                ],
+              },
+              finish_reason: 'tool_calls',
+            },
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 5 },
+        }),
+      } as unknown as Response;
+    });
+
+    const result = await runAgentLoop(
+      makeConfig({ fetch, tools: [tool], signal: abortController.signal })
+    );
+
+    expect(result.content).toBe('Agent loop aborted (client disconnected).');
+    expect(result.toolsUsed).toEqual([]);
+    expect(tool.execute).not.toHaveBeenCalled();
+    // Only one fetch call — the loop exited before making a second LLM request
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('Agent error paths (PRQ-045)', () => {

@@ -280,6 +280,10 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         Authorization: `Bearer ${litellmApiKey}`,
       },
       body: JSON.stringify(body),
+      // R3-008: forward the abort signal into the in-flight request so an
+      // aborted run tears down the connection (and, on the streaming path,
+      // the body reader rejects) instead of consuming the stream to completion.
+      signal: config.signal,
     });
 
     if (!response.ok) {
@@ -333,6 +337,19 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       assistantMessage = data.choices[0].message;
       turnInputTokens = data.usage?.prompt_tokens ?? 0;
       turnOutputTokens = data.usage?.completion_tokens ?? 0;
+    }
+
+    // R3-008: if the run was aborted while the in-flight response was being
+    // read, return promptly rather than executing tool calls or issuing
+    // another request. (The forwarded fetch signal tears down the connection;
+    // this guard short-circuits the post-read work that survives that tear-down
+    // on mocked/non-signal-honoring fetches.)
+    if (config.signal?.aborted) {
+      return {
+        content: 'Agent loop aborted (client disconnected).',
+        toolsUsed,
+        usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
+      };
     }
 
     totalInputTokens += turnInputTokens;

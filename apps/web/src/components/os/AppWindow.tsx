@@ -1,4 +1,5 @@
 import { motion, useDragControls, PanInfo } from "framer-motion";
+import { Minus, Square } from "lucide-react";
 import { useState, useCallback, useRef, useEffect } from "react";
 import { savePosition } from "@/lib/window-positions";
 import { HintTooltip } from "@/components/ui/hint-tooltip";
@@ -286,7 +287,7 @@ const AppWindow = ({
                 className="w-6 h-6 flex items-center justify-center"
                 aria-label="Minimize window"
               >
-                <span className="w-3 h-3 rounded-full bg-primary/40 hover:bg-primary/60 transition-colors" />
+                <Minus className="w-3 h-3 text-primary/60 hover:text-primary transition-colors" aria-hidden="true" />
               </button>
             </HintTooltip>
             <HintTooltip content="Maximize">
@@ -295,7 +296,7 @@ const AppWindow = ({
                 className="w-6 h-6 flex items-center justify-center"
                 aria-label="Toggle fullscreen"
               >
-                <span className="w-3 h-3 rounded-full bg-primary/40 hover:bg-primary/60 transition-colors" />
+                <Square className="w-2.5 h-2.5 text-primary/60 hover:text-primary transition-colors" aria-hidden="true" />
               </button>
             </HintTooltip>
             <HintTooltip content="Close">

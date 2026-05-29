@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Zap, X, Check, Crown, Users } from 'lucide-react';
 import { TIER_CAPABILITIES } from '@waggle/shared';
@@ -42,6 +42,7 @@ interface UpgradeModalProps {
 
 export default function UpgradeModal({ onStartTrial, onUpgrade }: UpgradeModalProps) {
   const [event, setEvent] = useState<TierEvent | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
 
   const handleTierInsufficient = useCallback((e: Event) => {
     setEvent((e as CustomEvent<TierEvent>).detail);
@@ -53,6 +54,17 @@ export default function UpgradeModal({ onStartTrial, onUpgrade }: UpgradeModalPr
   }, [handleTierInsufficient]);
 
   const close = () => setEvent(null);
+
+  // A11y audit (WCAG 2.1.1): Escape closes the modal — #1 keyboard expectation for modal UIs.
+  useEffect(() => {
+    if (!event) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close();
+    };
+    window.addEventListener('keydown', onKey);
+    dialogRef.current?.focus();
+    return () => window.removeEventListener('keydown', onKey);
+  }, [event]);
 
   const free = TIER_CAPABILITIES.FREE;
   const pro = TIER_CAPABILITIES.PRO;
@@ -68,12 +80,17 @@ export default function UpgradeModal({ onStartTrial, onUpgrade }: UpgradeModalPr
           className="fixed inset-0 z-[200] flex items-center justify-center"
           onClick={close}
         >
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" aria-hidden="true" />
           <motion.div
+            ref={dialogRef}
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            className="relative w-full max-w-2xl glass-strong rounded-2xl shadow-2xl overflow-hidden"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="upgrade-modal-title"
+            tabIndex={-1}
+            className="relative w-full max-w-2xl glass-strong rounded-2xl shadow-2xl overflow-hidden focus:outline-none"
             onClick={e => e.stopPropagation()}
           >
             <button onClick={close} className="absolute top-4 right-4 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors">
@@ -85,7 +102,7 @@ export default function UpgradeModal({ onStartTrial, onUpgrade }: UpgradeModalPr
                 <div className="p-2 rounded-xl bg-primary/10">
                   <Zap className="w-5 h-5 text-primary" />
                 </div>
-                <h2 className="text-lg font-display font-bold text-foreground">
+                <h2 id="upgrade-modal-title" className="text-lg font-display font-bold text-foreground">
                   Upgrade to unlock this feature
                 </h2>
               </div>
