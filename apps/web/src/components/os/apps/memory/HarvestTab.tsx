@@ -522,8 +522,13 @@ const HarvestTab = () => {
                   <HintTooltip content={s.autoSync ? 'Pause auto-sync' : 'Enable auto-sync'}>
                     <button
                       onClick={async () => {
-                        await adapter.toggleHarvestAutoSync(s.source, !s.autoSync);
-                        fetchSources();
+                        setError(null);
+                        try {
+                          await adapter.toggleHarvestAutoSync(s.source, !s.autoSync);
+                          await fetchSources();
+                        } catch (err) {
+                          setError(err instanceof Error ? err.message : 'Failed to update auto-sync');
+                        }
                       }}
                       className={`p-1 rounded transition-colors ${s.autoSync ? 'text-primary hover:text-primary/70' : 'text-muted-foreground hover:text-foreground'}`}
                     >
@@ -533,8 +538,13 @@ const HarvestTab = () => {
                   <HintTooltip content="Remove source">
                     <button
                       onClick={async () => {
-                        await adapter.removeHarvestSource(s.source);
-                        fetchSources();
+                        setError(null);
+                        try {
+                          await adapter.removeHarvestSource(s.source);
+                          await fetchSources();
+                        } catch (err) {
+                          setError(err instanceof Error ? err.message : 'Failed to remove source');
+                        }
                       }}
                       className="p-1 rounded text-muted-foreground hover:text-destructive transition-colors"
                     >

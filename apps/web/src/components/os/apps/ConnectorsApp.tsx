@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
+import { useToast } from '@/hooks/use-toast';
 import McpCatalog from './connectors/McpCatalog';
 import BrandTile from './connectors/BrandTile';
 import { getBrandIdentity } from './connectors/brand-identity';
@@ -58,6 +59,17 @@ const SETUP_HINTS: Record<string, { url?: string; placeholder?: string; steps?: 
   discord: { url: 'https://discord.com/developers/applications', placeholder: 'Bot token...', steps: ['Create Application → Bot → Copy Token'] },
 };
 
+/**
+ * The token/email inputs are a single shared state reused across every
+ * connector row. They must be cleared whenever the expanded connector
+ * changes (but NOT when re-collapsing the same one) so a credential typed
+ * for connector A can never be submitted to connector B. Pure so it can be
+ * regression-tested without rendering React (see phase5b-connectors.test).
+ */
+export function shouldResetCredentialInputs(prev: string | null, next: string | null): boolean {
+  return prev !== next;
+}
+
 const ConnectorsApp = ({ personaId }: ConnectorsAppProps = {}) => {
   const [tab, setTab] = useState<ConnTab>('services');
   const [connectors, setConnectors] = useState<Connector[]>([]);
@@ -68,8 +80,22 @@ const ConnectorsApp = ({ personaId }: ConnectorsAppProps = {}) => {
   const [connecting, setConnecting] = useState(false);
   const [filter, setFilter] = useState('all');
   const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => { loadConnectors(); }, []);
+
+  // Expand a connector (or collapse when re-clicking the open one). Resets the
+  // token/email inputs whenever the target connector changes so a credential
+  // typed for connector A can never be submitted to connector B.
+  const selectConnector = (id: string | null) => {
+    setExpanded(prev => {
+      if (shouldResetCredentialInputs(prev, id)) {
+        setTokenInput('');
+        setEmailInput('');
+      }
+      return id;
+    });
+  };
 
   const loadConnectors = async () => {
     setLoading(true);
@@ -97,7 +123,14 @@ const ConnectorsApp = ({ personaId }: ConnectorsAppProps = {}) => {
       setEmailInput('');
       setExpanded(null);
       await loadConnectors();
-    } catch (err) { console.error('[ConnectorsApp] connect failed:', err); }
+    } catch (err) {
+      console.error('[ConnectorsApp] connect failed:', err);
+      toast({
+        title: 'Connection failed',
+        description: err instanceof Error ? err.message : 'Could not connect — check the token and server',
+        variant: 'destructive',
+      });
+    }
     finally { setConnecting(false); }
   };
 
@@ -207,7 +240,7 @@ const ConnectorsApp = ({ personaId }: ConnectorsAppProps = {}) => {
                   Connect Composio with a single API key to unlock <strong>250+ services</strong> instantly — Google Workspace, Slack, Notion, Jira, Salesforce, HubSpot, and more. No individual setup needed.
                 </p>
                 <button
-                  onClick={() => setExpanded('composio')}
+                  onClick={() => selectConnector('composio')}
                   className="px-2.5 py-1 rounded-lg bg-violet-500/20 text-violet-400 text-[11px] font-display hover:bg-violet-500/30 transition-colors"
                 >
                   Set up Composio
@@ -228,7 +261,7 @@ const ConnectorsApp = ({ personaId }: ConnectorsAppProps = {}) => {
 
                     return (
                       <div key={conn.id} className="group rounded-xl border border-border/30 overflow-hidden transition-all hover:border-primary/30 hover:bg-secondary/10">
-                        <button onClick={() => setExpanded(isExpanded ? null : conn.id)}
+                        <button onClick={() => selectConnector(isExpanded ? null : conn.id)}
                           className="w-full flex items-center justify-between gap-3 p-2.5 transition-colors">
                           <div className="flex items-center gap-2.5 min-w-0 flex-1">
                             <BrandTile identity={identity} size={36} connected={isConnected} />

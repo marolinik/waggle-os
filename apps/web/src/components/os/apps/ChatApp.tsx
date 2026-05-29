@@ -520,16 +520,25 @@ const ChatApp = ({
   const handlePin = async (msg: ChatMessage) => {
     if (!workspaceId) return;
     const existing = pins.find(p => p.messageContent === msg.content);
-    if (existing) {
-      await adapter.removePin(workspaceId, existing.id);
-      setPins(prev => prev.filter(p => p.id !== existing.id));
-    } else {
-      const result = await adapter.addPin(workspaceId, {
-        messageContent: msg.content,
-        messageRole: msg.role as 'assistant' | 'user',
+    try {
+      if (existing) {
+        await adapter.removePin(workspaceId, existing.id);
+        setPins(prev => prev.filter(p => p.id !== existing.id));
+      } else {
+        const result = await adapter.addPin(workspaceId, {
+          messageContent: msg.content,
+          messageRole: msg.role as 'assistant' | 'user',
+        });
+        const pin = (result as { pin: { id: string; messageContent: string; messageRole: string; pinnedAt: string } }).pin;
+        if (pin) setPins(prev => [...prev, pin]);
+      }
+    } catch (err) {
+      console.error('[ChatApp] pin update failed:', err);
+      toast({
+        variant: 'destructive',
+        title: existing ? "Couldn't unpin message" : "Couldn't pin message",
+        description: 'Please try again.',
       });
-      const pin = (result as { pin: { id: string; messageContent: string; messageRole: string; pinnedAt: string } }).pin;
-      if (pin) setPins(prev => [...prev, pin]);
     }
   };
 
@@ -645,10 +654,17 @@ const ChatApp = ({
     for (const file of files) {
       try {
         await adapter.ingestFile(file);
-      } catch (err) { console.error('[ChatApp] file ingest failed:', err); }
+      } catch (err) {
+        console.error('[ChatApp] file ingest failed:', err);
+        toast({
+          variant: 'destructive',
+          title: `Couldn't ingest ${file.name}`,
+          description: 'The file was not added. Please try again.',
+        });
+      }
     }
     setDragging(false);
-  }, []);
+  }, [toast]);
 
   const handleFileSelect = () => {
     fileInputRef.current?.click();

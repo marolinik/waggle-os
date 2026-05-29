@@ -130,7 +130,10 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
         setMessages(prev => {
           const msgs = [...prev];
           const last = msgs[msgs.length - 1];
-          if (last.role !== 'assistant') return msgs;
+          // Guard the empty-array case: a session/workspace switch mid-stream
+          // resets messages to [] (load effect), after which a late stream
+          // event would read `last.role` off undefined and crash the updater.
+          if (!last || last.role !== 'assistant') return msgs;
           const blocks = [...(last.blocks || [])];
           let toolsUpdate: ToolExecution[] | null = null;
 
