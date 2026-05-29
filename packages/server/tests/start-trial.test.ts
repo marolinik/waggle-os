@@ -136,3 +136,41 @@ describe('POST /api/tier/start-trial', () => {
     expect(persisted.tier).toBe('PRO');
   });
 });
+
+// ── AV-3 — PATCH /api/tier is a dev-only override, disabled in production ──
+// Under the loopback-trust model this route was an unauthenticated free-upgrade
+// path. It now fails closed unless WAGGLE_ALLOW_TIER_OVERRIDE=1.
+describe('PATCH /api/tier override gate (AV-3)', () => {
+  let server: FastifyInstance;
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-tier-gate-'));
+    server = await buildLocalServer({ dataDir: tmpDir });
+  });
+  afterEach(async () => {
+    delete process.env.WAGGLE_ALLOW_TIER_OVERRIDE;
+    await server.close();
+    await new Promise(r => setTimeout(r, 100));
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* EBUSY on win32 */ }
+  });
+
+  it('rejects PATCH /api/tier by default (override disabled) — no free upgrade', async () => {
+    delete process.env.WAGGLE_ALLOW_TIER_OVERRIDE;
+    const res = await server.inject(authInject(server, {
+      method: 'PATCH', url: '/api/tier', payload: { tier: 'TEAMS' },
+    }));
+    expect(res.statusCode).toBe(403);
+    expect(res.json().code).toBe('TIER_OVERRIDE_DISABLED');
+    expect(readConfig(tmpDir).tier).not.toBe('TEAMS');
+  });
+
+  it('allows PATCH /api/tier when WAGGLE_ALLOW_TIER_OVERRIDE=1 (dev/test)', async () => {
+    process.env.WAGGLE_ALLOW_TIER_OVERRIDE = '1';
+    const res = await server.inject(authInject(server, {
+      method: 'PATCH', url: '/api/tier', payload: { tier: 'PRO' },
+    }));
+    expect(res.statusCode).toBe(200);
+    expect(readConfig(tmpDir).tier).toBe('PRO');
+  });
+});

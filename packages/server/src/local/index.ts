@@ -1935,7 +1935,10 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
     try {
       const raw = (server.auditStore as unknown as { db?: { prepare: (sql: string) => { all: () => unknown[] } } })?.db;
       if (raw) {
-        payload.auditRecent = raw.prepare('SELECT * FROM install_audit ORDER BY timestamp DESC LIMIT 500').all();
+        // R2-006: expose only a coarse, non-recon column subset (no capability
+        // names/versions/sources, risk_level, approval_class, initiator or detail)
+        // and cap the rows — the support bundle needs activity shape, not an inventory.
+        payload.auditRecent = raw.prepare('SELECT timestamp, action, capability_type FROM install_audit ORDER BY timestamp DESC LIMIT 50').all();
       }
     } catch { /* non-blocking */ }
     // R2-006: vault key NAMES dropped — even names are recon material and the
