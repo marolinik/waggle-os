@@ -350,19 +350,19 @@ describe('Per-Endpoint Rate Limits', () => {
 describe('Bearer Token Authentication', () => {
   const TEST_TOKEN = 'test-session-token-12345';
 
-  it('allows localhost requests without token (desktop trust)', async () => {
-    // Localhost connections are trusted — desktop app pattern (SEC-011 amendment)
+  it('D1: requires a token on localhost (no desktop trust by default)', async () => {
     const server = await createTestServer({ sessionToken: TEST_TOKEN });
     try {
       const res = await server.inject({ method: 'GET', url: '/api/test' });
-      // inject() simulates localhost — should be trusted
-      expect(res.statusCode).toBe(200);
+      // D1: localhost is no longer auto-trusted — a missing token is 401.
+      expect(res.statusCode).toBe(401);
+      expect(res.json().code).toBe('MISSING_TOKEN');
     } finally {
       await server.close();
     }
   });
 
-  it('allows localhost requests even with wrong token (desktop trust)', async () => {
+  it('D1: rejects a wrong token on localhost', async () => {
     const server = await createTestServer({ sessionToken: TEST_TOKEN });
     try {
       const res = await server.inject({
@@ -370,8 +370,8 @@ describe('Bearer Token Authentication', () => {
         url: '/api/test',
         headers: { authorization: 'Bearer wrong-token' },
       });
-      // inject() simulates localhost — trusted regardless of token
-      expect(res.statusCode).toBe(200);
+      expect(res.statusCode).toBe(401);
+      expect(res.json().code).toBe('INVALID_TOKEN');
     } finally {
       await server.close();
     }
@@ -424,18 +424,29 @@ describe('Bearer Token Authentication', () => {
     }
   });
 
-  it('allows malformed authorization header from localhost (desktop trust)', async () => {
+  it('D1: rejects a malformed authorization header (no Bearer prefix)', async () => {
     const server = await createTestServer({ sessionToken: TEST_TOKEN });
     try {
-      // Missing "Bearer " prefix — but localhost is trusted
       const res = await server.inject({
         method: 'GET',
         url: '/api/test',
-        headers: { authorization: TEST_TOKEN },
+        headers: { authorization: TEST_TOKEN }, // missing "Bearer " prefix → token parses null
       });
-      // inject() simulates localhost — trusted
+      expect(res.statusCode).toBe(401);
+      expect(res.json().code).toBe('INVALID_TOKEN');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('D1 escape hatch: WAGGLE_TRUST_LOCALHOST=1 restores legacy loopback trust', async () => {
+    process.env.WAGGLE_TRUST_LOCALHOST = '1';
+    const server = await createTestServer({ sessionToken: TEST_TOKEN });
+    try {
+      const res = await server.inject({ method: 'GET', url: '/api/test' });
       expect(res.statusCode).toBe(200);
     } finally {
+      delete process.env.WAGGLE_TRUST_LOCALHOST;
       await server.close();
     }
   });

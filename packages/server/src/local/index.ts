@@ -1917,6 +1917,17 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
     sessionToken: server.agentState.wsSessionToken,
   });
 
+  // D1: session-token bootstrap. Auth-exempt (you cannot require the token to fetch
+  // it) but same-origin gated — a cross-origin page is blocked from reading the
+  // response by CORS and rejected here by isLocalRequest. The Tauri webview reads
+  // this once on connect() and sends the token as a Bearer on every other request.
+  server.get('/api/auth/session-token', async (request, reply) => {
+    if (!isLocalRequest(request)) {
+      return reply.code(403).send({ error: 'Forbidden: external origin' });
+    }
+    return { token: server.agentState.wsSessionToken };
+  });
+
   // P5 (PDF 2026-04-17): minimal debug-log viewer for support attachments.
   // Returns health + last 500 audit events + recent cost entries as JSON.
   server.get('/api/debug/logs', async (request, reply) => {

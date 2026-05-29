@@ -235,7 +235,7 @@ export class SessionTimeoutTracker {
 // ── Auth Token (Local Server) ────────────────────────────────────────────
 
 /** Routes exempt from bearer token authentication */
-const AUTH_EXEMPT_PATHS = ['/health'];
+const AUTH_EXEMPT_PATHS = ['/health', '/api/auth/session-token'];
 
 /**
  * AV-1 / R2-004: a Host header is allowed only if present AND (after stripping the
@@ -269,6 +269,9 @@ async function securityMiddlewarePlugin(
   // localhost-trust exemption below. Skipped when bound to 0.0.0.0 (a cloud
   // deploy sits behind its own host/proxy and sets its own Host).
   const enforceHostAllowlist = isLoopbackBind();
+  // D1 escape hatch: restore the legacy "trust any loopback caller" behavior.
+  // Default OFF — the desktop webview sends a bearer token (see /api/auth/session-token).
+  const trustLocalhost = process.env.WAGGLE_TRUST_LOCALHOST === '1';
   const HOST_ALLOWLIST = new Set([
     '127.0.0.1', 'localhost', '::1',
     ...(process.env.WAGGLE_ALLOWED_HOSTS ?? '').split(',').map(s => s.trim()).filter(Boolean),
@@ -303,15 +306,19 @@ async function securityMiddlewarePlugin(
       return reply.code(403).send({ error: 'Forbidden', code: 'BAD_HOST' });
     }
 
-    // ── Bearer token authentication (SEC-011) ──
-    // Local desktop app: localhost requests are trusted (Waggle is a desktop app, not a public server).
-    // External requests still require Bearer token for API access (curl, integrations).
+    // ── Bearer token authentication (SEC-011 + D1) ──
+    // D1: localhost is NO LONGER trusted by default. Waggle is a desktop app that
+    // coexists with browsers/extensions/other local apps, so "any loopback caller is
+    // trusted" let any of them drive the authenticated API (e.g. the PATCH /api/tier
+    // free upgrade). The Tauri webview obtains the token from the auth-exempt,
+    // same-origin-gated /api/auth/session-token bootstrap and sends it as a Bearer.
+    // Set WAGGLE_TRUST_LOCALHOST=1 to restore legacy loopback trust (emergency escape).
     if (sessionToken) {
       const clientIp = request.ip || request.socket?.remoteAddress || '';
       const isLocalhost = clientIp === '127.0.0.1' || clientIp === '::1' || clientIp === '::ffff:127.0.0.1' || clientIp === 'localhost';
       const isAuthExempt = request.method === 'OPTIONS' ||
         AUTH_EXEMPT_PATHS.some(p => requestPath === p) ||
-        isLocalhost; // Desktop app — trust localhost connections
+        (trustLocalhost && isLocalhost);
       if (!isAuthExempt) {
         const authHeader = request.headers.authorization;
         if (!authHeader) {

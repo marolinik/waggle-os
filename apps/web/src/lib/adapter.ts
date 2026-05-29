@@ -107,15 +107,30 @@ class LocalAdapter {
     this._connectAttempted = true;
     try {
       const data = await this.healthProbe();
-      // R1-001: the bearer token is no longer harvested from /health — an
-      // unauthenticated endpoint must not serve it. Localhost clients are
-      // trusted by the sidecar, so the desktop product needs no token; the
-      // authToken field stays null and the Authorization header is omitted.
+      // D1: the sidecar now requires a bearer token even on loopback. Fetch it from
+      // the auth-exempt, same-origin-gated bootstrap and attach it to every request.
+      // (R1-001: it is NOT served by the unauthenticated /health.) Best-effort — if
+      // the bootstrap is unreachable we proceed token-less and authed routes 401,
+      // which surfaces the misconfiguration instead of silently masking it.
+      await this.fetchSessionToken();
       this._connected = true;
       return data;
     } catch (e) {
       this._connected = false;
       throw e;
+    }
+  }
+
+  /** D1: obtain the sidecar session token from the same-origin bootstrap endpoint. */
+  private async fetchSessionToken(): Promise<void> {
+    try {
+      const res = await this.fetch('/api/auth/session-token');
+      if (res.ok) {
+        const body = (await res.json()) as { token?: string };
+        this.authToken = body.token ?? null;
+      }
+    } catch {
+      /* leave authToken null; authed routes will 401 and surface the misconfig */
     }
   }
 
