@@ -28,6 +28,12 @@ jobs:
       - name: TypeScript type check
         run: npx tsc --noEmit
 
+      - name: Lint (root flat config)
+        run: npm run lint
+
+      - name: Tauri TS typecheck (app/scripts)
+        run: npx tsc -p app/tsconfig.json
+
       - run: npm test
 
       - name: Security audit (informational)
