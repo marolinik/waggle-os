@@ -901,7 +901,7 @@ const DEFAULT_LOOP_RECOVERY_JITTER = 0.25;
 
 function defaultLoopSleep(ms: number): Promise<void> {
   return new Promise<void>((resolve) => {
-    // eslint-disable-next-line no-restricted-globals
+     
     setTimeout(resolve, ms);
   });
 }

@@ -913,8 +913,8 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   const { ApprovalGrantStore } = await import('./approval-grants.js');
   const approvalGrantStore = new ApprovalGrantStore(fullConfig.dataDir);
 
-  // Skill hot-reload callback (set after agentState is created)
-  let reloadSkills: ((fresh: LoadedSkill[]) => void) | undefined;
+  // Skill hot-reload callback is defined as a const after agentState is created
+  // (see `reloadSkills` below); referenced lazily from the onSkillsChanged closure.
 
   // L-18: Resolve a FileBackend for a workspace's storage type. Team (S3/MinIO)
   // workspaces return a provider-backed FileBackend so the agent's file tools
@@ -1360,7 +1360,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   });
 
   // Wire up skill hot-reload callback
-  reloadSkills = (fresh: LoadedSkill[]) => {
+  const reloadSkills = (fresh: LoadedSkill[]) => {
     server.agentState.skills.length = 0;
     server.agentState.skills.push(...fresh);
   };

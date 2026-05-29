@@ -101,7 +101,7 @@ if (!SHOULD_RUN) {
 
       // Print the structured checklist. Surfaces a CI-friendly summary even
       // when the UI rolls up per-assertion green ticks.
-      // eslint-disable-next-line no-console
+       
       console.log('\n=== H-33 Stripe smoke checklist ===\n' +
         Object.entries(checklist)
           .map(([k, v]) => `  [${v.passed ? 'x' : ' '}] ${k} — ${v.detail}`)

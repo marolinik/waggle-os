@@ -848,7 +848,7 @@ function renderMarkdown(result: EvalResult): string {
   lines.push('| Scenario | F | E | F − E |');
   lines.push('|----------|-----|-----|-------|');
   let h1Wins = 0;
-  let h1Regressions: number[] = [];
+  const h1Regressions: number[] = [];
   for (const s of result.scenarios) {
     const f = conditionMeanFromRuns(s.conditions['F']);
     const e = conditionMeanFromRuns(s.conditions['E']);

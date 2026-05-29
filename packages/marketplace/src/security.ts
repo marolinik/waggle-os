@@ -901,7 +901,10 @@ export class SecurityGate {
 
     // ── MEDIUM: Hidden instructions (zero-width chars, HTML comments) ──
     const hiddenContent = [
-      /[\u200B\u200C\u200D\u2060\uFEFF]{2,}/,  // Zero-width characters
+      // Zero-width chars (incl. ZWJ U+200D). Written as an alternation rather than a
+      // character class so no-misleading-character-class doesn't flag the joiner \u2014
+      // behavior is identical (matches a run of 2+ zero-width code points).
+      /(?:\u200B|\u200C|\u200D|\u2060|\uFEFF){2,}/,
       /<!--[\s\S]*?-->/,                          // HTML comments (hidden instructions)
       /\[hidden\]/i,
       /\[invisible\]/i,

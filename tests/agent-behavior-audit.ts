@@ -48,7 +48,7 @@ async function chat(message: string, opts: {
       let raw = '';
       const events: SSEEvent[] = [];
       let fullText = '';
-      let currentEvent = '';
+      const currentEvent = '';
 
       res.on('data', (chunk: Buffer) => {
         raw += chunk.toString();

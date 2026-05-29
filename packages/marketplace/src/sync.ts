@@ -840,8 +840,8 @@ const skillsmpAdapter: SyncAdapter = {
       // Resume from saved sync state
       const syncState = db.getSyncState(source.id) || {};
       const completedQueries = new Set<string>((syncState.completedQueries as string[]) || []);
-      let startQueryIndex = (syncState.lastQueryIndex as number) || 0;
-      let startPage = (syncState.lastPage as number) || 1;
+      const startQueryIndex = (syncState.lastQueryIndex as number) || 0;
+      const startPage = (syncState.lastPage as number) || 1;
       const totalSyncedPrior = (syncState.totalSynced as number) || 0;
 
       for (let qi = startQueryIndex; qi < queries.length; qi++) {
@@ -1076,7 +1076,7 @@ const genericAdapter: SyncAdapter = {
  */
 export function normalizeName(name: string): string {
   // Remove common source prefixes (e.g., "awesome-mcp-servers-" prefix, "npm-mcp-servers-")
-  let n = name.replace(
+  const n = name.replace(
     /^(?:awesome-mcp-servers|awesome-claude-skills-travisvn|awesome-agent-skills-[a-z]+|awesome-cc-plugins|awesome-claude-plugins-[a-z]+|npm-mcp-servers|npm-mcp-protocol|skills-sh|agent-skills-cc|mcpmarket|skillsdirectory|mcpservers-org|awesome-skills-app|claude-skills-collection|plugins-plus-skills|antigravity-awesome-skills|skillmatic-awesome-skills|alirezarezvani-claude-skills|microsoft-skills|muratcankoylan-context-engineering|hoodini-ai-agents-skills|hashicorp-agent-skills|supabase-agent-skills|callstack-agent-skills|ckanner-agent-skills)-/i,
     '',
   );

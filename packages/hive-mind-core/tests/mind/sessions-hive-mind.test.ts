@@ -76,7 +76,7 @@ describe('SessionStore (hive-mind port)', () => {
   });
 
   it('ensure() is idempotent for a stable gop_id', () => {
-    const a = sessions.ensure('harvest', null ?? undefined, 'long-lived harvest session');
+    const a = sessions.ensure('harvest', undefined, 'long-lived harvest session');
     const b = sessions.ensure('harvest');
     expect(a.id).toBe(b.id);
     expect(a.summary).toBe('long-lived harvest session');

@@ -134,7 +134,7 @@ export class TeamSync {
    */
   async pullFrames(since?: string): Promise<SyncedFrame[]> {
     try {
-      let url = `${this.config.teamServerUrl}/api/teams/${this.config.teamSlug}/entities?type=memory_frame`;
+      const url = `${this.config.teamServerUrl}/api/teams/${this.config.teamSlug}/entities?type=memory_frame`;
       // Note: `since` filtering would require server-side support. For now, pull all and filter client-side.
 
       const response = await fetch(url, {

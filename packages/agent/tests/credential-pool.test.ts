@@ -89,7 +89,7 @@ describe('round-robin', () => {
 
 describe('429 cooldown', () => {
   it('puts key in 1-hour cooldown on 429', () => {
-    let now = 1000000;
+    const now = 1000000;
     const pool = createPool(2, () => now);
 
     pool.reportError('sk-0', 429, 'Rate limit exceeded');
@@ -138,7 +138,7 @@ describe('429 cooldown', () => {
 
 describe('402 cooldown', () => {
   it('puts key in 24-hour cooldown on 402', () => {
-    let now = 1000000;
+    const now = 1000000;
     const pool = createPool(2, () => now);
 
     pool.reportError('sk-0', 402, 'Insufficient funds');
@@ -192,7 +192,7 @@ describe('401 permanent disable', () => {
 
 describe('other errors', () => {
   it('puts key in 5-minute cooldown for 500/503', () => {
-    let now = 1000000;
+    const now = 1000000;
     const pool = createPool(2, () => now);
 
     pool.reportError('sk-0', 500);

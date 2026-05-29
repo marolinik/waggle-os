@@ -268,7 +268,7 @@ export function costSummary(records: readonly JudgedJsonlRecord[]): CostSummary 
   const perCellUsd: Record<string, number> = {};
   let total = 0;
   const judgeLatencies: number[] = [];
-  let judgeTotal = 0;
+  const judgeTotal = 0;
   let judgeCalls = 0;
   for (const r of records) {
     total += r.usd_per_query;

@@ -424,7 +424,7 @@ function defaultSpawn(
   options: { env?: Record<string, string>; stdio: string[] },
 ): McpProcess {
   // Lazy import to avoid issues in test environments
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+   
   const { spawn } = require('child_process') as typeof import('child_process');
   return spawn(command, args, {
     env: options.env as NodeJS.ProcessEnv | undefined,

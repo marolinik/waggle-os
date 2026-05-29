@@ -73,7 +73,7 @@ let priorDataDir: string | undefined;
 
 beforeAll(async () => {
   if (!cliReachable) {
-    // eslint-disable-next-line no-console
+     
     console.log('[integration] hive-mind-cli not on PATH — round-trip suite will skip.');
     return;
   }

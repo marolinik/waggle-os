@@ -149,6 +149,9 @@ export async function dispatch(args: DispatchArgs): Promise<string | undefined> 
       // returns once the MCP server child has stopped.
       const code = await runMcpStart();
       process.exit(code);
+      // `process.exit` returns `never`, so this is unreachable — but ESLint's
+      // no-fallthrough rule does no type analysis, so make the terminator explicit.
+      break;
     }
 
     case 'mcp-call': {

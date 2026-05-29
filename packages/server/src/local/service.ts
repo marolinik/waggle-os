@@ -190,7 +190,14 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
   });
 
   // 7. Register self-removing shutdown handlers (must add hook before listen)
-  let shutdown: () => Promise<void>;
+  const shutdown = async (): Promise<void> => {
+    process.off('SIGTERM', shutdown);
+    process.off('SIGINT', shutdown);
+    await server.close();
+    if (!skipLiteLLM) {
+      await stopLiteLLM();
+    }
+  };
 
   // Deregister signal handlers when server closes normally (e.g. in tests)
   server.addHook('onClose', async () => {
@@ -259,15 +266,6 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
   };
 
   emit({ phase: 'ready', message: `LLM: ${providerDetail}`, progress: 0.9 });
-
-  shutdown = async () => {
-    process.off('SIGTERM', shutdown);
-    process.off('SIGINT', shutdown);
-    await server.close();
-    if (!skipLiteLLM) {
-      await stopLiteLLM();
-    }
-  };
 
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);

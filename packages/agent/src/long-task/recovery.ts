@@ -158,7 +158,7 @@ const ALWAYS_RETRYABLE: ErrorClassifier = () => 'retryable';
 
 function defaultSleep(ms: number): Promise<void> {
   return new Promise<void>((resolve) => {
-    // eslint-disable-next-line no-restricted-globals
+     
     setTimeout(resolve, ms);
   });
 }

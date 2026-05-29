@@ -93,7 +93,7 @@ export function assertOverridesReachActiveSpec(
     }
   }
   if (missing.length > 0) {
-    // eslint-disable-next-line no-console
+     
     console.warn(
       `[prompt-loader] override-reach check failed — deployed sections on disk ` +
       `not present in active behavioral spec: ${missing.join(', ')}. ` +
