@@ -34,6 +34,16 @@
   },
   "author": "Marko Markovic",
   "license": "MIT",
+  "overrides": {
+    "protobufjs": ">=7.6.1 <8",
+    "js-cookie": ">=3.0.6",
+    "lodash": ">=4.17.24",
+    "tmp": ">=0.2.6",
+    "fastify": ">5.8.4",
+    "@fastify/static": ">9.1.0",
+    "@clerk/fastify": ">=3.1.16",
+    "@xmldom/xmldom": "0.8.13"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/marolinik/waggle-os.git"
@@ -47,6 +57,7 @@
     "waggle"
   ],
   "devDependencies": {
+    "@swc/core": "^1.15.21",
     "@swc/core-win32-x64-msvc": "^1.15.21",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
