@@ -316,8 +316,16 @@ async function securityMiddlewarePlugin(
     if (sessionToken) {
       const clientIp = request.ip || request.socket?.remoteAddress || '';
       const isLocalhost = clientIp === '127.0.0.1' || clientIp === '::1' || clientIp === '::ffff:127.0.0.1' || clientIp === 'localhost';
+      // D1 bootstrap: non-API GETs (the SPA shell + static assets) must load
+      // without a token, else the browser/webview can never fetch the app code
+      // that bootstraps the bearer token (chicken-and-egg → blank 401 page).
+      // These are inert reads carrying no privileged action; every /api/* route
+      // (and any non-GET) stays gated. The token endpoint itself is same-origin
+      // gated (isLocalRequest) so this does not widen the auth boundary.
+      const isNonApiGet = request.method === 'GET' && !requestPath.startsWith('/api/');
       const isAuthExempt = request.method === 'OPTIONS' ||
         AUTH_EXEMPT_PATHS.some(p => requestPath === p) ||
+        isNonApiGet ||
         (trustLocalhost && isLocalhost);
       if (!isAuthExempt) {
         const authHeader = request.headers.authorization;

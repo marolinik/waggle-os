@@ -44,6 +44,14 @@ async function createTestServer(opts?: {
   server.post('/api/vault/:name/reveal', async () => {
     return { ok: true };
   });
+  // Non-API GETs: the SPA shell + static assets. These must load WITHOUT a
+  // bearer token, else a browser can never bootstrap the token (chicken-and-egg).
+  server.get('/', async () => {
+    return '<!doctype html><html><body>waggle</body></html>';
+  });
+  server.get('/assets/app.js', async () => {
+    return 'console.log("app");';
+  });
 
   await server.ready();
   return server;
@@ -425,6 +433,55 @@ describe('Bearer Token Authentication', () => {
     try {
       const res = await server.inject({ method: 'GET', url: '/api/test' });
       expect(res.statusCode).toBe(200);
+    } finally {
+      await server.close();
+    }
+  });
+
+  // ── D1 bootstrap fix: non-API GETs (SPA shell + static assets) must be
+  // auth-exempt. Otherwise a browser/webview gets 401 on GET / and can never
+  // load the app code that fetches the bearer token (unbootstrappable). The
+  // /api/auth/session-token endpoint is same-origin gated; privileged actions
+  // all live under /api/* and stay gated below. ──────────────────────────
+  it('D1 bootstrap: serves the SPA shell (GET /) WITHOUT a token', async () => {
+    const server = await createTestServer({ sessionToken: TEST_TOKEN });
+    try {
+      const res = await server.inject({ method: 'GET', url: '/' });
+      expect(res.statusCode).toBe(200);
+      expect(res.body).toContain('waggle');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('D1 bootstrap: serves a static asset (GET /assets/*) WITHOUT a token', async () => {
+    const server = await createTestServer({ sessionToken: TEST_TOKEN });
+    try {
+      const res = await server.inject({ method: 'GET', url: '/assets/app.js' });
+      expect(res.statusCode).toBe(200);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('D1: a NON-GET to a non-/api path still requires a token (exemption is GET-only)', async () => {
+    const server = await createTestServer({ sessionToken: TEST_TOKEN });
+    try {
+      // POST / is not a static-asset read; the GET-only exemption must not cover it.
+      const res = await server.inject({ method: 'POST', url: '/' });
+      expect(res.statusCode).toBe(401);
+      expect(res.json().code).toBe('MISSING_TOKEN');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('D1: /api/* GETs are STILL gated (exemption does not leak to the API)', async () => {
+    const server = await createTestServer({ sessionToken: TEST_TOKEN });
+    try {
+      const res = await server.inject({ method: 'GET', url: '/api/test' });
+      expect(res.statusCode).toBe(401);
+      expect(res.json().code).toBe('MISSING_TOKEN');
     } finally {
       await server.close();
     }
