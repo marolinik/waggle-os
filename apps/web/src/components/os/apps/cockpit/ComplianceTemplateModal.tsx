@@ -12,6 +12,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { X, Plus, Loader2, Trash2, Pencil } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 
 export interface ComplianceTemplateSections {
   interactions: boolean;
@@ -59,6 +60,8 @@ interface ComplianceTemplateModalProps {
 }
 
 export function ComplianceTemplateModal({ open, onClose, onChange }: ComplianceTemplateModalProps) {
+  // A11y (WCAG 2.1.1/2.4.3): Escape closes, Tab is trapped, focus restores on close.
+  const dialogRef = useFocusTrap<HTMLDivElement>(open, onClose);
   const [templates, setTemplates] = useState<ComplianceTemplate[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -167,14 +170,17 @@ export function ComplianceTemplateModal({ open, onClose, onChange }: ComplianceT
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
+      ref={dialogRef}
+      tabIndex={-1}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm focus:outline-none"
       role="dialog"
       aria-modal="true"
+      aria-labelledby="compliance-template-modal-title"
     >
       <div className="w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-xl bg-secondary border border-border/40 shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border/30">
-          <h3 className="text-sm font-display font-semibold text-foreground">Compliance report templates</h3>
+          <h3 id="compliance-template-modal-title" className="text-sm font-display font-semibold text-foreground">Compliance report templates</h3>
           <button
             onClick={onClose}
             className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"

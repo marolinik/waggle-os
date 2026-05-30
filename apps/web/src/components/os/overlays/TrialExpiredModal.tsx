@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Crown, Users, Check, X, ArrowRight } from 'lucide-react';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 
 interface TrialExpiredModalProps {
   open: boolean;
@@ -25,18 +25,9 @@ const LOSE_FEATURES = [
 ];
 
 export default function TrialExpiredModal({ open, onDismiss, onUpgrade }: TrialExpiredModalProps) {
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-
-  // A11y audit (WCAG 2.1.1): Escape closes the modal — #1 keyboard expectation for modal UIs.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onDismiss();
-    };
-    window.addEventListener('keydown', onKey);
-    dialogRef.current?.focus();
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onDismiss]);
+  // A11y (WCAG 2.1.1/2.4.3): Escape closes, Tab is trapped, focus moves in on
+  // open and restores on close. Replaces the prior Escape-only handler.
+  const dialogRef = useFocusTrap<HTMLDivElement>(open, onDismiss);
 
   return (
     <AnimatePresence>

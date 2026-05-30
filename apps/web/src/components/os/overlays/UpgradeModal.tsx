@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Zap, X, Check, Crown, Users } from 'lucide-react';
 import { TIER_CAPABILITIES } from '@waggle/shared';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 
 interface TierEvent {
   required: string;
@@ -42,7 +43,6 @@ interface UpgradeModalProps {
 
 export default function UpgradeModal({ onStartTrial, onUpgrade }: UpgradeModalProps) {
   const [event, setEvent] = useState<TierEvent | null>(null);
-  const dialogRef = useRef<HTMLDivElement | null>(null);
 
   const handleTierInsufficient = useCallback((e: Event) => {
     setEvent((e as CustomEvent<TierEvent>).detail);
@@ -53,18 +53,12 @@ export default function UpgradeModal({ onStartTrial, onUpgrade }: UpgradeModalPr
     return () => window.removeEventListener('waggle:tier-insufficient', handleTierInsufficient);
   }, [handleTierInsufficient]);
 
-  const close = () => setEvent(null);
+  const close = useCallback(() => setEvent(null), []);
 
-  // A11y audit (WCAG 2.1.1): Escape closes the modal — #1 keyboard expectation for modal UIs.
-  useEffect(() => {
-    if (!event) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
-    };
-    window.addEventListener('keydown', onKey);
-    dialogRef.current?.focus();
-    return () => window.removeEventListener('keydown', onKey);
-  }, [event]);
+  // A11y (WCAG 2.1.1/2.4.3): Escape closes, Tab is trapped within the dialog,
+  // focus moves in on open and restores on close. Replaces the prior hand-rolled
+  // Escape-only handler (no trap, no focus restore).
+  const dialogRef = useFocusTrap<HTMLDivElement>(!!event, close);
 
   const free = TIER_CAPABILITIES.FREE;
   const pro = TIER_CAPABILITIES.PRO;
