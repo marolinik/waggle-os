@@ -100,6 +100,16 @@
     --status-info: #60a5fa;
     --status-ai: #a78bfa;
 
+    /* ── Knowledge-graph node colors ──────────────────────────────────────
+       Referenced via var(--kg-*, <fallback>) in KnowledgeGraphViewer.tsx /
+       kg-export.ts. Defined here (dark) so the token — not the inline fallback
+       — is the source of truth and the light block can override per theme. */
+    --kg-person: #4A90D9;
+    --kg-project: #50C878;
+    --kg-concept: #9B59B6;
+    --kg-org: #E67E22;
+    --kg-default: #95A5A6;
+
     /* ── Semantic surfaces ────────────────────────────────────────────── */
     --surface-card: var(--hive-850);
     --surface-panel: var(--hive-800);
@@ -186,8 +196,22 @@
     --glass-strong-bg: 40 14% 97% / 0.88;
     --glass-border: 36 8% 50% / 0.18;
 
-    /* Status colors — darkened for contrast on the cream surface */
+    /* Status colors — darkened for ≥4.5:1 (WCAG AA text) on the cream surface.
+       Ratios vs hsl(40 18% 97%): healthy 5.16, warning 4.72, error 6.09,
+       info 6.30, ai 6.68. */
     --status-healthy: #047857;
+    --status-warning: #b45309;
+    --status-error: #b91c1c;
+    --status-info: #1d4ed8;
+    --status-ai: #6d28d9;
+
+    /* Knowledge-graph node colors — darkened for AA on cream (ratios: person
+       6.30, project 5.16, concept 5.36, org 4.87, default 7.11). */
+    --kg-person: #1d4ed8;
+    --kg-project: #047857;
+    --kg-concept: #7c3aed;
+    --kg-org: #c2410c;
+    --kg-default: #4b5563;
 
     /* Light shadows */
     --shadow-card: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
