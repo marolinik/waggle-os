@@ -1,3 +1,17 @@
+> **⚠️ DEPRECATED (2026-04-30 monorepo migration) — HISTORICAL/AUDIT REFERENCE ONLY.**
+> This manual describes the dual-repo bidirectional-sync mechanism that ran while the
+> substrate lived in BOTH waggle-os (`packages/core/src/{mind,harvest}/`) and an external
+> `marolinik/hive-mind`. After the migration the substrate lives ONLY at
+> **`packages/hive-mind-core/src/{mind,harvest}/`**, and the OSS mirror is **generated** via
+> `git subtree split` — see [`packages/hive-mind-core/CONTRIBUTING.md`](../packages/hive-mind-core/CONTRIBUTING.md)
+> and [`scripts/oss-subtree-split.sh`](../scripts/oss-subtree-split.sh). The
+> `mind-parity-check.yml` / `sync-mind.yml` workflows referenced below are **inert deprecation
+> anchors** (their `packages/core/src/...` trigger paths no longer exist, so they never fire).
+> Everything below is retained for historical context — do NOT treat it as the active process.
+> See CLAUDE.md §7.5 for the current mechanism.
+
+---
+
 # Memory Substrate Sync — `waggle-os` ↔ `hive-mind`
 
 This document is the operating manual for the two GitHub Actions workflows

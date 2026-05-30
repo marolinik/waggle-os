@@ -145,20 +145,14 @@ Top-level: config.ts, cron-store.ts, file-store.ts, install-audit.ts,
 
 Subdirs:
   compliance/  — compliance reporting, interaction-store, status-checker
-  harvest/     — adapters for chatgpt, claude, claude-code, gemini,
-                 perplexity, pdf, plaintext, markdown, url, universal;
-                 pipeline.ts; dedup.ts
-  mind/        — memory substrate layers. db.ts (MindDB + sqlite-vec),
-                 schema.ts (SCHEMA_SQL + VEC_TABLE_SQL), identity.ts,
-                 awareness.ts, frames.ts (I/P/B + compaction + dedup),
-                 sessions.ts (SessionStore + ensureActive),
-                 search.ts (HybridSearch — FTS5 + vec0 fused via RRF),
-                 knowledge.ts (KnowledgeGraph + bitemporal validity),
-                 scoring.ts (scoring profiles), reconcile.ts, ontology.ts,
-                 concept-tracker.ts, entity-normalizer.ts,
-                 evolution-runs.ts, execution-traces.ts,
-                 improvement-signals.ts, embedding-provider.ts,
-                 *-embedder.ts (api/inprocess/litellm/ollama)
+
+MOVED (2026-04-30 monorepo migration): the memory substrate `mind/` (db/schema/
+  identity/awareness/frames/sessions/search/knowledge/scoring/reconcile/ontology/
+  concept-tracker/entity-normalizer/evolution-runs/execution-traces/
+  improvement-signals/embedding-provider/*-embedder) and `harvest/` (chatgpt/claude/
+  claude-code/gemini/perplexity/pdf/plaintext/markdown/url/universal adapters +
+  pipeline.ts + dedup.ts) now live at **packages/hive-mind-core/src/{mind,harvest}/**,
+  NOT under packages/core/. The OSS mirror is generated from there via subtree-split (§7.5).
 ```
 
 For the deep-dive on what the mind/ substrate does, see [`docs/memory-architecture.md`](docs/memory-architecture.md).
@@ -411,21 +405,29 @@ Target: Two-tier layout — "UNIVERSAL MODES" (8) + "YOUR WORKSPACE SPECIALISTS"
 4. **Tauri IPC allowlist.** Explicit in `app/src-tauri/capabilities/`. Never `allowlist: all: true`.
 5. **Parameterized queries.** No string interpolation in SQL. Ever. better-sqlite3 supports parameters.
 6. **KVARK contact data.** Submits to your API only — no third-party form services.
-7. **Secrets in `packages/core/src/mind/vault.ts`** — use it; don't build parallel secret stores.
+7. **Secrets in `packages/core/src/vault.ts`** — use it; don't build parallel secret stores.
 
 ---
 
-## 7.5. Memory Substrate Sync (waggle-os ↔ hive-mind)
+## 7.5. Memory Substrate Sync (waggle-os → hive-mind, subtree-split)
 
-`packages/core/src/mind/` and `packages/core/src/harvest/` are SHARED with the OSS release artifact at
-[`marolinik/hive-mind`](https://github.com/marolinik/hive-mind). Two GitHub Actions workflows enforce parity:
+The memory substrate lives at **`packages/hive-mind-core/src/{mind,harvest}/`** (moved from
+`packages/core/src/` in the 2026-04-30 monorepo migration). The public OSS mirror at
+[`marolinik/hive-mind`](https://github.com/marolinik/hive-mind) is **generated FROM** this monorepo
+via **`git subtree split`** — it is NOT maintained as a parallel codebase, so the export is
+byte-identical to its source and "parity" is definitionally trivial (no cross-repo drift to police).
 
-- **`mind-parity-check.yml`** — runs hive-mind's tests against waggle-os on every PR/push touching shared paths. Failure blocks merge unless allowlisted in `.parity-allowlist`.
-- **`sync-mind.yml`** — on push to main touching shared paths, opens a filtered auto-PR on `marolinik/hive-mind` (excludes NOT-extracted files: `vault.ts`, `evolution-runs.ts`, `execution-traces.ts`, `improvement-signals.ts`, `compliance/**`).
+**To work on the substrate or publish the OSS mirror:** see
+[`packages/hive-mind-core/CONTRIBUTING.md`](./packages/hive-mind-core/CONTRIBUTING.md) and
+[`scripts/oss-subtree-split.sh`](./scripts/oss-subtree-split.sh). Files that must NOT export to the
+OSS mirror (vault.ts, evolution-runs.ts, execution-traces.ts, improvement-signals.ts, compliance/**)
+are handled by the subtree-split filter — keep that list in sync there.
 
-**Before modifying `packages/core/src/mind/` or `packages/core/src/harvest/`:** read [`.github/sync.md`](./.github/sync.md) for the full operating manual — when to allowlist, how to handle bidirectional bug fixes, and what the EXTRACTION.md filter list covers.
-
-**If you add a new "stays in waggle-os only" file under those paths,** update BOTH the `excluded_paths` array in `sync-mind.yml` AND the "NOT Extracted" section of [`hive-mind/EXTRACTION.md`](https://github.com/marolinik/hive-mind/blob/master/EXTRACTION.md) in the same PR — otherwise the file leaks on the next sync.
+**Deprecated (do not rely on; do not delete):** the old dual-repo bidirectional-sync workflows
+`.github/workflows/{mind-parity-check,sync-mind}.yml` and the `.github/sync.md` manual are **preserved
+as deprecation anchors** from when the substrate was duplicated across two repos. Their trigger paths
+(`packages/core/src/{mind,harvest}/**`) no longer exist, so they never fire; each carries a DEPRECATED
+header explaining the migration. Leave them in place for audit trail.
 
 ---
 
@@ -450,9 +452,9 @@ Grep before creating. These exist and are functional:
 | `packages/agent/src/contradiction-detector.ts` | Memory conflict detection |
 | `packages/shared/src/tiers.ts` | `TIERS`, `TierCapabilities` — canonical tier system |
 | `packages/shared/src/mcp-catalog.ts` | MCP server catalog |
-| `packages/core/src/mind/vault.ts` | Secret storage |
-| `packages/core/src/mind/telemetry.ts` | Telemetry pipeline |
-| `packages/core/src/harvest/pipeline.ts` | Harvest adapters + dedup |
+| `packages/core/src/vault.ts` | Secret storage |
+| `packages/core/src/telemetry.ts` | Telemetry pipeline |
+| `packages/hive-mind-core/src/harvest/pipeline.ts` | Harvest adapters + dedup |
 | `packages/core/src/compliance/` | Compliance + audit |
 | `app/src/components/cockpit/` | Tauri cockpit UI |
 
@@ -548,14 +550,14 @@ For the full polish+launch backlog see `docs/plans/BACKLOG-CONSOLIDATED-2026-04-
 | Term | Definition |
 |---|---|
 | Hive DS | Waggle design system — honey/hive-950/accent tokens in `waggle-theme.css` |
-| FrameStore | SQLite-backed memory frame storage (`packages/core/src/frames.ts`) |
-| HybridSearch | Vector + keyword search (`packages/core/src/search.ts`) |
-| KnowledgeGraph | Entity-relation graph (`packages/core/src/knowledge.ts`) |
-| IdentityLayer | Personal identity persistence (`packages/core/src/identity.ts`) |
-| AwarenessLayer | Active task/state tracking (`packages/core/src/awareness.ts`) |
+| FrameStore | SQLite-backed memory frame storage (`packages/hive-mind-core/src/mind/frames.ts`) |
+| HybridSearch | Vector + keyword search (`packages/hive-mind-core/src/mind/search.ts`) |
+| KnowledgeGraph | Entity-relation graph (`packages/hive-mind-core/src/mind/knowledge.ts`) |
+| IdentityLayer | Personal identity persistence (`packages/hive-mind-core/src/mind/identity.ts`) |
+| AwarenessLayer | Active task/state tracking (`packages/hive-mind-core/src/mind/awareness.ts`) |
 | Cognify | Memory extraction pipeline (`packages/agent/src/cognify.ts`) |
-| Harvest | Conversation/file ingestion (`packages/core/src/harvest/`) |
-| Mind | Per-workspace persistence layer (`packages/core/src/mind/`) |
+| Harvest | Conversation/file ingestion (`packages/hive-mind-core/src/harvest/`) |
+| Mind | Per-workspace persistence layer (`packages/hive-mind-core/src/mind/`) |
 | BEHAVIORAL_SPEC | Core agent rules (`packages/agent/src/behavioral-spec.ts`) |
 | Sidecar | Node.js Fastify server bundled into Tauri (`/sidecar`) |
 | KVARK | Egzakta sovereign enterprise AI — top of the Waggle funnel |
