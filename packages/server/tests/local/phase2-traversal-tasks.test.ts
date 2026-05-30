@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { taskRoutes } from '../../src/local/routes/tasks.js';
+import type { LocalConfig } from '../../src/local/index.js';
 
 // R6-002: the /api/workspaces/:id/tasks handlers used the :id route param
 // directly in the tasks filesystem path (mkdir + write + read) with no
@@ -13,8 +14,10 @@ import { taskRoutes } from '../../src/local/routes/tasks.js';
 
 function buildServer(dataDir: string): FastifyInstance {
   const server = Fastify({ logger: false });
-  // taskRoutes only needs localConfig.dataDir for the workspace-scoped routes.
-  server.decorate('localConfig', { dataDir } as any);
+  // taskRoutes only needs localConfig.dataDir for the workspace-scoped routes;
+  // the rest are filled with inert defaults to satisfy the LocalConfig shape.
+  const localConfig: LocalConfig = { dataDir, port: 0, host: '127.0.0.1', litellmUrl: '' };
+  server.decorate('localConfig', localConfig);
   server.register(taskRoutes);
   return server;
 }

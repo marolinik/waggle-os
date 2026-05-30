@@ -51,7 +51,7 @@ describe('Analytics API', () => {
     ]);
 
     // Override auth handler for tests
-    server._authHandler.fn = async function (request: any, reply: any) {
+    server._authHandler.fn = async function (request, reply) {
       const testUserId = request.headers['x-test-user-id'] as string;
       if (!testUserId) {
         return reply.code(401).send({ error: 'Missing x-test-user-id header' });
@@ -202,13 +202,13 @@ describe('Analytics API', () => {
 
     // Should show top tools
     expect(body.topTools.length).toBeGreaterThanOrEqual(1);
-    const webSearch = body.topTools.find((t: any) => t.name === 'web_search');
+    const webSearch = body.topTools.find((t: { name: string }) => t.name === 'web_search');
     expect(webSearch).toBeDefined();
     expect(webSearch.invocations).toBeGreaterThanOrEqual(2);
 
     // Should show top commands
     expect(body.topCommands.length).toBeGreaterThanOrEqual(1);
-    const research = body.topCommands.find((c: any) => c.name === '/research');
+    const research = body.topCommands.find((c: { name: string }) => c.name === '/research');
     expect(research).toBeDefined();
     expect(research.count).toBeGreaterThanOrEqual(1);
   });
@@ -234,7 +234,7 @@ describe('Analytics API', () => {
     const body = JSON.parse(response.body);
 
     expect(body.capabilityGaps.length).toBeGreaterThanOrEqual(1);
-    const emailGap = body.capabilityGaps.find((g: any) => g.tool === 'email_send');
+    const emailGap = body.capabilityGaps.find((g: { tool: string }) => g.tool === 'email_send');
     expect(emailGap).toBeDefined();
     expect(emailGap.requestCount).toBeGreaterThanOrEqual(1);
     expect(emailGap.suggestion).toContain('email_send');
@@ -252,7 +252,7 @@ describe('Analytics API', () => {
 
     // byUser should include team members
     expect(body.tokenUsage.byUser.length).toBeGreaterThanOrEqual(1);
-    const ownerEntry = body.tokenUsage.byUser.find((u: any) => u.userId === ownerId);
+    const ownerEntry = body.tokenUsage.byUser.find((u: { userId: string }) => u.userId === ownerId);
     expect(ownerEntry).toBeDefined();
     expect(ownerEntry.name).toBe('Analytics Owner');
     expect(typeof ownerEntry.tokens).toBe('number');

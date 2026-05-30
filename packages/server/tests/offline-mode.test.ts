@@ -114,7 +114,7 @@ describe('OfflineManager', () => {
   it('emits notification when transitioning to offline', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-offline-emit-'));
     const bus = new EventEmitter();
-    const notifications: any[] = [];
+    const notifications: Array<{ title: string }> = [];
     bus.on('notification', (data) => notifications.push(data));
 
     // Mock fetch to always fail
@@ -142,9 +142,9 @@ describe('OfflineManager', () => {
   it('emits back_online notification when recovering', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-offline-recov-'));
     const bus = new EventEmitter();
-    const notifications: any[] = [];
+    const notifications: Array<{ title: string }> = [];
     bus.on('notification', (data) => notifications.push(data));
-    const stateChanges: any[] = [];
+    const stateChanges: Array<{ offline: boolean }> = [];
     bus.on('offline_state_change', (data) => stateChanges.push(data));
 
     const originalFetch = globalThis.fetch;

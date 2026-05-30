@@ -115,7 +115,7 @@ describe('Anthropic Proxy Routes', () => {
           stop_reason: 'end_turn',
           usage: { input_tokens: 12, output_tokens: 8 },
         }),
-      })) as any;
+      })) as unknown as typeof globalThis.fetch;
 
       const res = await server.inject({
         method: 'POST',
@@ -143,9 +143,9 @@ describe('Anthropic Proxy Routes', () => {
       expect(body.usage.total_tokens).toBe(20);
 
       // Verify the Anthropic API was called with correct parameters
-      const fetchCall = (globalThis.fetch as any).mock.calls[0];
+      const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
       expect(fetchCall[0]).toBe('https://api.anthropic.com/v1/messages');
-      const requestBody = JSON.parse(fetchCall[1].body);
+      const requestBody = JSON.parse(String(fetchCall[1]?.body ?? ''));
       // B3 cleanup (2026-04-22) — proxy now passes floating alias through
       // unchanged per decisions/2026-04-22-model-route-naming-locked.md §3.
       // Previous behavior rewrote to invalid -20250514 snapshot.
@@ -171,7 +171,7 @@ describe('Anthropic Proxy Routes', () => {
           stop_reason: 'end_turn',
           usage: { input_tokens: 5, output_tokens: 3 },
         }),
-      })) as any;
+      })) as unknown as typeof globalThis.fetch;
 
       const res = await server.inject({
         method: 'POST',
@@ -186,8 +186,9 @@ describe('Anthropic Proxy Routes', () => {
       expect(res.statusCode).toBe(200);
 
       // Verify vault key was used in the request
-      const fetchCall = (globalThis.fetch as any).mock.calls[0];
-      expect(fetchCall[1].headers['x-api-key']).toBe('vault-key-abc');
+      const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
+      const headers = fetchCall[1]?.headers as Record<string, string> | undefined;
+      expect(headers?.['x-api-key']).toBe('vault-key-abc');
     });
 
     it('forwards Anthropic API errors to client', async () => {
@@ -198,7 +199,7 @@ describe('Anthropic Proxy Routes', () => {
         ok: false,
         status: 401,
         text: async () => 'Invalid API key',
-      })) as any;
+      })) as unknown as typeof globalThis.fetch;
 
       const res = await server.inject({
         method: 'POST',
@@ -237,7 +238,7 @@ describe('Anthropic Proxy Routes', () => {
           stop_reason: 'tool_use',
           usage: { input_tokens: 20, output_tokens: 15 },
         }),
-      })) as any;
+      })) as unknown as typeof globalThis.fetch;
 
       const res = await server.inject({
         method: 'POST',
@@ -281,7 +282,7 @@ describe('Anthropic Proxy Routes', () => {
       server = createTestServer();
 
       const captures: Array<{ model: string }> = [];
-      globalThis.fetch = vi.fn(async (_url, init: RequestInit | undefined) => {
+      globalThis.fetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
         const body = init?.body ? JSON.parse(String(init.body)) : {};
         captures.push({ model: body.model });
         return {
@@ -294,7 +295,7 @@ describe('Anthropic Proxy Routes', () => {
             usage: { input_tokens: 1, output_tokens: 1 },
           }),
         };
-      }) as any;
+      }) as unknown as typeof globalThis.fetch;
 
       const floatingAliases = ['claude-sonnet-4-6', 'claude-opus-4-6', 'anthropic/claude-sonnet-4.6', 'anthropic/claude-opus-4.6'];
       for (const alias of floatingAliases) {

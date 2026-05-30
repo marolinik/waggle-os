@@ -61,7 +61,7 @@ describe('Team Knowledge Graph API', () => {
     ]);
 
     // Override auth handler
-    server._authHandler.fn = async function (request: any, reply: any) {
+    server._authHandler.fn = async function (request, reply) {
       const testUserId = request.headers['x-test-user-id'] as string;
       if (!testUserId) {
         return reply.code(401).send({ error: 'Missing x-test-user-id header' });
@@ -133,7 +133,7 @@ describe('Team Knowledge Graph API', () => {
     const body = JSON.parse(response.body);
     expect(Array.isArray(body)).toBe(true);
     expect(body.length).toBeGreaterThanOrEqual(2);
-    expect(body.every((e: any) => e.entityType === 'person')).toBe(true);
+    expect(body.every((e: { entityType: string }) => e.entityType === 'person')).toBe(true);
   });
 
   it('searches entities by name (ILIKE)', async () => {
@@ -146,7 +146,7 @@ describe('Team Knowledge Graph API', () => {
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body);
     expect(body.length).toBeGreaterThanOrEqual(1);
-    expect(body.some((e: any) => e.name === 'Machine Learning')).toBe(true);
+    expect(body.some((e: { name: string }) => e.name === 'Machine Learning')).toBe(true);
   });
 
   it('creates a relation with confidence score', async () => {
@@ -239,7 +239,7 @@ describe('Team Knowledge Graph API', () => {
     });
     expect(res1.statusCode).toBe(200);
     const graph1 = JSON.parse(res1.body);
-    const entityIds1 = graph1.entities.map((e: any) => e.id);
+    const entityIds1 = graph1.entities.map((e: { id: string }) => e.id);
     expect(entityIds1).toContain(nodeA.id);
     expect(entityIds1).toContain(nodeB.id);
     expect(entityIds1).not.toContain(nodeC.id);
@@ -252,7 +252,7 @@ describe('Team Knowledge Graph API', () => {
     });
     expect(res2.statusCode).toBe(200);
     const graph2 = JSON.parse(res2.body);
-    const entityIds2 = graph2.entities.map((e: any) => e.id);
+    const entityIds2 = graph2.entities.map((e: { id: string }) => e.id);
     expect(entityIds2).toContain(nodeA.id);
     expect(entityIds2).toContain(nodeB.id);
     expect(entityIds2).toContain(nodeC.id);

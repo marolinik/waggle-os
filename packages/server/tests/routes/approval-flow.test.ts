@@ -123,7 +123,7 @@ describe('Approval Flow — Server Side', () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.payload);
     expect(body.count).toBeGreaterThanOrEqual(1);
-    const found = body.pending.find((p: any) => p.requestId === requestId);
+    const found = body.pending.find((p: { requestId: string }) => p.requestId === requestId);
     expect(found).toBeDefined();
     expect(found.toolName).toBe('install_capability');
 

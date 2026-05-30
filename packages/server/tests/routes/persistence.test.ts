@@ -10,6 +10,9 @@ import { injectWithAuth } from '../test-utils.js';
 /** Skill ID used for persistence tests */
 const TEST_SKILL = 'retrospective';
 
+/** Minimal shape of a catalog/skills-list entry as returned over the JSON API. */
+type CatalogSkillEntry = { id: string; name: string };
+
 describe('Capability Persistence & Cross-Surface Agreement', () => {
   const tmpDirs: string[] = [];
 
@@ -67,7 +70,7 @@ describe('Capability Persistence & Cross-Surface Agreement', () => {
     });
     expect(catalogRes.statusCode).toBe(200);
     const catalog = catalogRes.json();
-    const skill = catalog.skills.find((s: any) => s.id === TEST_SKILL);
+    const skill = catalog.skills.find((s: CatalogSkillEntry) => s.id === TEST_SKILL);
     expect(skill, `${TEST_SKILL} should exist in catalog after restart`).toBeDefined();
     expect(skill.state).toBe('active');
 
@@ -100,7 +103,7 @@ describe('Capability Persistence & Cross-Surface Agreement', () => {
     const catalog = catalogRes.json();
 
     for (const id of skillsToInstall) {
-      const skill = catalog.skills.find((s: any) => s.id === id);
+      const skill = catalog.skills.find((s: CatalogSkillEntry) => s.id === id);
       expect(skill, `${id} should exist after restart`).toBeDefined();
       expect(skill.state, `${id} should be active after restart`).toBe('active');
     }
@@ -129,7 +132,7 @@ describe('Capability Persistence & Cross-Surface Agreement', () => {
       url: '/api/skills/starter-pack/catalog',
     });
     const catalog = catalogRes.json();
-    const catalogSkill = catalog.skills.find((s: any) => s.id === TEST_SKILL);
+    const catalogSkill = catalog.skills.find((s: CatalogSkillEntry) => s.id === TEST_SKILL);
     expect(catalogSkill, 'catalog should contain installed skill').toBeDefined();
     expect(catalogSkill.state).toBe('active');
 
@@ -139,7 +142,7 @@ describe('Capability Persistence & Cross-Surface Agreement', () => {
       url: '/api/skills',
     });
     const skillsList = skillsRes.json();
-    const listedSkill = skillsList.skills.find((s: any) => s.name === TEST_SKILL);
+    const listedSkill = skillsList.skills.find((s: CatalogSkillEntry) => s.name === TEST_SKILL);
     expect(listedSkill, '/api/skills should contain installed skill').toBeDefined();
 
     // Surface 3: Capabilities status endpoint
@@ -148,7 +151,7 @@ describe('Capability Persistence & Cross-Surface Agreement', () => {
       url: '/api/capabilities/status',
     });
     const caps = capsRes.json();
-    const capSkill = caps.skills.find((s: any) => s.name === TEST_SKILL);
+    const capSkill = caps.skills.find((s: CatalogSkillEntry) => s.name === TEST_SKILL);
     expect(capSkill, '/api/capabilities/status should contain installed skill').toBeDefined();
 
     // Surface 4: In-memory agentState
@@ -184,9 +187,9 @@ describe('Capability Persistence & Cross-Surface Agreement', () => {
     const caps = capsRes.json();
 
     // All surfaces report the skill
-    expect(catalog.skills.find((s: any) => s.id === TEST_SKILL)?.state).toBe('active');
-    expect(skills.skills.find((s: any) => s.name === TEST_SKILL)).toBeDefined();
-    expect(caps.skills.find((s: any) => s.name === TEST_SKILL)).toBeDefined();
+    expect(catalog.skills.find((s: CatalogSkillEntry) => s.id === TEST_SKILL)?.state).toBe('active');
+    expect(skills.skills.find((s: CatalogSkillEntry) => s.name === TEST_SKILL)).toBeDefined();
+    expect(caps.skills.find((s: CatalogSkillEntry) => s.name === TEST_SKILL)).toBeDefined();
     expect(server2.agentState.skills.find(s => s.name === TEST_SKILL)).toBeDefined();
 
     await server2.close();
@@ -209,13 +212,13 @@ describe('Capability Persistence & Cross-Surface Agreement', () => {
 
     // Verify installed in dataDir1
     const cat1 = await injectWithAuth(server1, { method: 'GET', url: '/api/skills/starter-pack/catalog' });
-    expect(cat1.json().skills.find((s: any) => s.id === TEST_SKILL)?.state).toBe('active');
+    expect(cat1.json().skills.find((s: CatalogSkillEntry) => s.id === TEST_SKILL)?.state).toBe('active');
     await server1.close();
 
     // Verify NOT installed in dataDir2
     const server2 = await buildLocalServer({ dataDir: dataDir2 });
     const cat2 = await injectWithAuth(server2, { method: 'GET', url: '/api/skills/starter-pack/catalog' });
-    expect(cat2.json().skills.find((s: any) => s.id === TEST_SKILL)?.state).toBe('available');
+    expect(cat2.json().skills.find((s: CatalogSkillEntry) => s.id === TEST_SKILL)?.state).toBe('available');
     await server2.close();
   });
 
@@ -244,7 +247,7 @@ describe('Capability Persistence & Cross-Surface Agreement', () => {
       method: 'GET',
       url: '/api/skills/starter-pack/catalog',
     });
-    const skill = catalogRes.json().skills.find((s: any) => s.id === TEST_SKILL);
+    const skill = catalogRes.json().skills.find((s: CatalogSkillEntry) => s.id === TEST_SKILL);
     expect(skill?.state).toBe('available');
     await server2.close();
   });

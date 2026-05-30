@@ -16,6 +16,14 @@ import Fastify from 'fastify';
 import { VaultStore } from '@waggle/core';
 import { vaultRoutes } from '../../src/local/routes/vault.js';
 
+/** Shape of a secret summary in the GET /api/vault response (no value exposed). */
+interface VaultSecretSummary {
+  name: string;
+  type: string;
+  updatedAt: string;
+  isCommon: boolean;
+}
+
 function createTestServer(vault: VaultStore) {
   const server = Fastify({ logger: false });
   server.decorate('vault', vault);
@@ -61,7 +69,7 @@ describe('Vault Routes', () => {
       const body = res.json();
       expect(body.secrets).toHaveLength(2);
 
-      const anthropicSecret = body.secrets.find((s: any) => s.name === 'ANTHROPIC_API_KEY');
+      const anthropicSecret = body.secrets.find((s: VaultSecretSummary) => s.name === 'ANTHROPIC_API_KEY');
       expect(anthropicSecret).toBeDefined();
       expect(anthropicSecret.type).toBe('api_key');
       expect(anthropicSecret.updatedAt).toBeDefined();
@@ -76,8 +84,8 @@ describe('Vault Routes', () => {
       const res = await server.inject({ method: 'GET', url: '/api/vault' });
       const body = res.json();
 
-      const anthropic = body.secrets.find((s: any) => s.name === 'ANTHROPIC_API_KEY');
-      const custom = body.secrets.find((s: any) => s.name === 'MY_PRIVATE_KEY');
+      const anthropic = body.secrets.find((s: VaultSecretSummary) => s.name === 'ANTHROPIC_API_KEY');
+      const custom = body.secrets.find((s: VaultSecretSummary) => s.name === 'MY_PRIVATE_KEY');
 
       // ANTHROPIC_API_KEY is not in the new COMMON_KEYS (now uses 'anthropic' as provider ID)
       expect(anthropic.isCommon).toBe(false);

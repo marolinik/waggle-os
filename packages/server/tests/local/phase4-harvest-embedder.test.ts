@@ -24,6 +24,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { MindDB, SessionStore, FrameStore } from '@waggle/core';
+import type { EmbeddingProviderInstance } from '@waggle/core';
 import { buildLocalServer } from '../../src/local/index.js';
 import type { FastifyInstance } from 'fastify';
 import { injectWithAuth } from '../test-utils.js';
@@ -70,35 +71,36 @@ function countVecRows(dataDir: string): number {
  * vector whose first element is `marker` so we can prove WHICH embedder ran.
  * `getActiveProvider()` is controllable so we can drive each branch of the fix.
  */
-function makeEmbedderStub(activeProvider: 'mock' | 'voyage', marker: number) {
+function makeEmbedderStub(activeProvider: 'mock' | 'voyage', marker: number): {
+  calls: { embed: number; embedBatch: number };
+  instance: EmbeddingProviderInstance;
+} {
   const calls = { embed: 0, embedBatch: 0 };
   const vec = () => {
     const f = new Float32Array(VEC_DIMS);
     f[0] = marker;
     return f;
   };
-  return {
-    calls,
-    instance: {
-      dimensions: VEC_DIMS,
-      async embed(_text: string) { calls.embed++; return vec(); },
-      async embedBatch(texts: string[]) { calls.embedBatch++; return texts.map(() => vec()); },
-      getActiveProvider() { return activeProvider; },
-      getStatus() {
-        return {
-          activeProvider,
-          availableProviders: [activeProvider],
-          dimensions: VEC_DIMS,
-          modelName: `stub-${activeProvider}`,
-          probeTimestamp: new Date().toISOString(),
-        };
-      },
-      async reprobe() { return this.getStatus(); },
-      getQuotaStatus() {
-        return { tier: 'PRO' as any, quota: -1, used: 0, remaining: -1, percentage: 0, resetsAt: new Date().toISOString() };
-      },
+  const instance: EmbeddingProviderInstance = {
+    dimensions: VEC_DIMS,
+    async embed(_text: string) { calls.embed++; return vec(); },
+    async embedBatch(texts: string[]) { calls.embedBatch++; return texts.map(() => vec()); },
+    getActiveProvider() { return activeProvider; },
+    getStatus() {
+      return {
+        activeProvider,
+        availableProviders: [activeProvider],
+        dimensions: VEC_DIMS,
+        modelName: `stub-${activeProvider}`,
+        probeTimestamp: new Date().toISOString(),
+      };
+    },
+    async reprobe() { return instance.getStatus(); },
+    getQuotaStatus() {
+      return { tier: 'PRO', quota: -1, used: 0, remaining: -1, percentage: 0, resetsAt: new Date().toISOString() };
     },
   };
+  return { calls, instance };
 }
 
 async function buildServer(dataDir: string): Promise<FastifyInstance> {
@@ -139,7 +141,7 @@ describe('R3-001 — harvest cognify embedder policy', () => {
     // Force the mock/unavailable branch deterministically (independent of
     // whether an inprocess model happens to be present in CI).
     const stub = makeEmbedderStub('mock', 0.111);
-    (server as any).embeddingProvider = stub.instance;
+    server.embeddingProvider = stub.instance;
 
     const before = countVecRows(tmpDir);
 
@@ -161,7 +163,7 @@ describe('R3-001 — harvest cognify embedder policy', () => {
     server = await buildServer(tmpDir);
 
     const stub = makeEmbedderStub('voyage', 0.999);
-    (server as any).embeddingProvider = stub.instance;
+    server.embeddingProvider = stub.instance;
 
     const before = countVecRows(tmpDir);
 

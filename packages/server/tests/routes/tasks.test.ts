@@ -61,7 +61,7 @@ describe('Task Board API', () => {
     ]);
 
     // Override auth handler
-    server._authHandler.fn = async function (request: any, reply: any) {
+    server._authHandler.fn = async function (request, reply) {
       const testUserId = request.headers['x-test-user-id'] as string;
       if (!testUserId) {
         return reply.code(401).send({ error: 'Missing x-test-user-id header' });
@@ -112,7 +112,7 @@ describe('Task Board API', () => {
     const body = JSON.parse(response.body);
     expect(Array.isArray(body)).toBe(true);
     expect(body.length).toBeGreaterThanOrEqual(1);
-    expect(body.some((t: any) => t.id === createdTaskId)).toBe(true);
+    expect(body.some((t: { id: string }) => t.id === createdTaskId)).toBe(true);
   });
 
   it('lists tasks with status filter', async () => {
@@ -141,8 +141,8 @@ describe('Task Board API', () => {
 
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body);
-    expect(body.every((t: any) => t.status === 'open')).toBe(true);
-    expect(body.some((t: any) => t.id === doneTask.id)).toBe(false);
+    expect(body.every((t: { status: string }) => t.status === 'open')).toBe(true);
+    expect(body.some((t: { id: string }) => t.id === doneTask.id)).toBe(false);
   });
 
   it('claims a task — sets assignedTo and status to claimed', async () => {

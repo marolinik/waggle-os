@@ -20,7 +20,25 @@ import { EventEmitter } from 'node:events';
 import { MindDB, SessionStore, FrameStore } from '@waggle/core';
 import { buildLocalServer } from '../../src/local/index.js';
 import type { FastifyInstance } from 'fastify';
+import type { LlmProviderStatus } from '../../src/local/index.js';
+import type {
+  NotificationEvent,
+  SubagentStatusEvent,
+} from '../../src/local/routes/notifications.js';
 import { injectWithAuth } from '../test-utils.js';
+
+/**
+ * Echo mode forces the chat endpoint to bypass the LLM. The test sets an
+ * intentionally off-spec provider ('none' is not in the LlmProviderStatus
+ * union) and an unreachable LiteLLM URL, so the cast at this boundary is
+ * deliberate — the runtime value is the test's, not a real provider status.
+ */
+const ECHO_MODE_PROVIDER = {
+  provider: 'none',
+  health: 'unavailable',
+  detail: 'Test: force echo mode',
+  checkedAt: new Date().toISOString(),
+} as unknown as LlmProviderStatus;
 
 describe('SSE Stream Resilience', () => {
   let server: FastifyInstance;
@@ -52,10 +70,10 @@ describe('SSE Stream Resilience', () => {
     it('chat endpoint sets up abort handling and completes in echo mode', async () => {
       // Force echo mode by marking LLM provider as unavailable AND
       // breaking the health endpoint URL so the HTTP probe also fails
-      const prevProvider = (server as any).agentState.llmProvider;
-      const prevLitellmUrl = (server as any).localConfig.litellmUrl;
-      (server as any).agentState.llmProvider = { provider: 'none', health: 'unavailable', detail: 'Test: force echo mode', checkedAt: new Date().toISOString() };
-      (server as any).localConfig.litellmUrl = 'http://127.0.0.1:1'; // unreachable port
+      const prevProvider = server.agentState.llmProvider;
+      const prevLitellmUrl = server.localConfig.litellmUrl;
+      server.agentState.llmProvider = ECHO_MODE_PROVIDER;
+      server.localConfig.litellmUrl = 'http://127.0.0.1:1'; // unreachable port
 
       const res = await injectWithAuth(server, {
         method: 'POST',
@@ -74,8 +92,8 @@ describe('SSE Stream Resilience', () => {
       expect(body).toContain('test abort handling');
 
       // Restore provider
-      (server as any).agentState.llmProvider = prevProvider;
-      (server as any).localConfig.litellmUrl = prevLitellmUrl;
+      server.agentState.llmProvider = prevProvider;
+      server.localConfig.litellmUrl = prevLitellmUrl;
     });
 
     it('returns 400 when message is missing', async () => {
@@ -92,10 +110,10 @@ describe('SSE Stream Resilience', () => {
 
     it('echo mode includes "local mode" indicator in response', async () => {
       // Force echo mode: set provider unavailable AND break health probe URL
-      const prevProvider = (server as any).agentState.llmProvider;
-      const prevLitellmUrl = (server as any).localConfig.litellmUrl;
-      (server as any).agentState.llmProvider = { provider: 'none', health: 'unavailable', detail: 'Test: force echo mode', checkedAt: new Date().toISOString() };
-      (server as any).localConfig.litellmUrl = 'http://127.0.0.1:1'; // unreachable port
+      const prevProvider = server.agentState.llmProvider;
+      const prevLitellmUrl = server.localConfig.litellmUrl;
+      server.agentState.llmProvider = ECHO_MODE_PROVIDER;
+      server.localConfig.litellmUrl = 'http://127.0.0.1:1'; // unreachable port
 
       const res = await injectWithAuth(server, {
         method: 'POST',
@@ -108,8 +126,8 @@ describe('SSE Stream Resilience', () => {
       expect(res.body).toContain('local mode');
 
       // Restore provider
-      (server as any).agentState.llmProvider = prevProvider;
-      (server as any).localConfig.litellmUrl = prevLitellmUrl;
+      server.agentState.llmProvider = prevProvider;
+      server.localConfig.litellmUrl = prevLitellmUrl;
     });
   });
 
@@ -132,10 +150,10 @@ describe('SSE Stream Resilience', () => {
       const { emitNotification } = await import('../../src/local/routes/notifications.js');
 
       const eventBus = new EventEmitter();
-      const events: any[] = [];
-      eventBus.on('notification', (data) => events.push(data));
+      const events: NotificationEvent[] = [];
+      eventBus.on('notification', (data: NotificationEvent) => events.push(data));
 
-      const fakeFastify = { eventBus } as any;
+      const fakeFastify = { eventBus } as unknown as FastifyInstance;
       emitNotification(fakeFastify, {
         title: 'Test SSE',
         body: 'Testing event emission',
@@ -152,7 +170,7 @@ describe('SSE Stream Resilience', () => {
 
     it('emitNotification is no-op when eventBus is missing', async () => {
       const { emitNotification } = await import('../../src/local/routes/notifications.js');
-      const fakeFastify = {} as any; // No eventBus
+      const fakeFastify = {} as unknown as FastifyInstance; // No eventBus
 
       // Should not throw
       expect(() => {
@@ -168,10 +186,10 @@ describe('SSE Stream Resilience', () => {
       const { emitSubagentStatus } = await import('../../src/local/routes/notifications.js');
 
       const eventBus = new EventEmitter();
-      const events: any[] = [];
-      eventBus.on('subagent_status', (data) => events.push(data));
+      const events: SubagentStatusEvent[] = [];
+      eventBus.on('subagent_status', (data: SubagentStatusEvent) => events.push(data));
 
-      const fakeFastify = { eventBus } as any;
+      const fakeFastify = { eventBus } as unknown as FastifyInstance;
       emitSubagentStatus(fakeFastify, 'ws-1', [
         {
           id: 'agent-1',
@@ -196,10 +214,10 @@ describe('SSE Stream Resilience', () => {
   describe('Multiple concurrent SSE connections', () => {
     it('two chat streams complete independently in echo mode', async () => {
       // Force echo mode: set provider unavailable AND break health probe URL
-      const prevProvider = (server as any).agentState.llmProvider;
-      const prevLitellmUrl = (server as any).localConfig.litellmUrl;
-      (server as any).agentState.llmProvider = { provider: 'none', health: 'unavailable', detail: 'Test: force echo mode', checkedAt: new Date().toISOString() };
-      (server as any).localConfig.litellmUrl = 'http://127.0.0.1:1'; // unreachable port
+      const prevProvider = server.agentState.llmProvider;
+      const prevLitellmUrl = server.localConfig.litellmUrl;
+      server.agentState.llmProvider = ECHO_MODE_PROVIDER;
+      server.localConfig.litellmUrl = 'http://127.0.0.1:1'; // unreachable port
 
       // Open two chat requests simultaneously — both should complete in echo mode
       const [res1, res2] = await Promise.all([
@@ -228,21 +246,21 @@ describe('SSE Stream Resilience', () => {
       expect(res2.body).toContain('event: done');
 
       // Restore provider
-      (server as any).agentState.llmProvider = prevProvider;
-      (server as any).localConfig.litellmUrl = prevLitellmUrl;
+      server.agentState.llmProvider = prevProvider;
+      server.localConfig.litellmUrl = prevLitellmUrl;
     });
 
     it('event bus delivers to multiple listeners independently', async () => {
       const { emitNotification } = await import('../../src/local/routes/notifications.js');
 
       const eventBus = new EventEmitter();
-      const listener1Events: any[] = [];
-      const listener2Events: any[] = [];
+      const listener1Events: NotificationEvent[] = [];
+      const listener2Events: NotificationEvent[] = [];
 
-      eventBus.on('notification', (data) => listener1Events.push(data));
-      eventBus.on('notification', (data) => listener2Events.push(data));
+      eventBus.on('notification', (data: NotificationEvent) => listener1Events.push(data));
+      eventBus.on('notification', (data: NotificationEvent) => listener2Events.push(data));
 
-      const fakeFastify = { eventBus } as any;
+      const fakeFastify = { eventBus } as unknown as FastifyInstance;
 
       emitNotification(fakeFastify, {
         title: 'Broadcast',

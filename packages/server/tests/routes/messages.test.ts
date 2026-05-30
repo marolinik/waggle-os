@@ -76,7 +76,7 @@ describe('Waggle Dance Messages API', () => {
     ]);
 
     // Override auth handler
-    server._authHandler.fn = async function (request: any, reply: any) {
+    server._authHandler.fn = async function (request, reply) {
       const testUserId = request.headers['x-test-user-id'] as string;
       if (!testUserId) {
         return reply.code(401).send({ error: 'Missing x-test-user-id header' });
@@ -233,7 +233,7 @@ describe('Waggle Dance Messages API', () => {
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body);
     expect(Array.isArray(body)).toBe(true);
-    expect(body.every((m: any) => m.type === 'broadcast')).toBe(true);
+    expect(body.every((m: { type: string }) => m.type === 'broadcast')).toBe(true);
     expect(body.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -247,7 +247,7 @@ describe('Waggle Dance Messages API', () => {
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body);
     expect(Array.isArray(body)).toBe(true);
-    expect(body.every((m: any) => m.subtype === 'discovery')).toBe(true);
+    expect(body.every((m: { subtype: string }) => m.subtype === 'discovery')).toBe(true);
   });
 
   it('publishes message to Redis channel on send', async () => {
@@ -321,7 +321,7 @@ describe('Waggle Dance Messages API', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.entities.length).toBeGreaterThanOrEqual(1);
-      expect(body.entities.some((e: any) => e.name === 'Machine Learning')).toBe(true);
+      expect(body.entities.some((e: { name: string }) => e.name === 'Machine Learning')).toBe(true);
     });
 
     it('finds matching tasks by topic', async () => {
@@ -335,7 +335,7 @@ describe('Waggle Dance Messages API', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.relatedTasks.length).toBeGreaterThanOrEqual(1);
-      expect(body.relatedTasks.some((t: any) => t.title.includes('ML pipeline'))).toBe(true);
+      expect(body.relatedTasks.some((t: { title: string }) => t.title.includes('ML pipeline'))).toBe(true);
     });
 
     it('finds matching broadcast messages', async () => {

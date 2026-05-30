@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import type { FastifyRequest, FastifyReply } from 'fastify';
 import { buildServer } from '../src/index.js';
 import { users, proactivePatterns, suggestionsLog } from '../src/db/schema.js';
 import { sql, eq } from 'drizzle-orm';
@@ -42,7 +43,7 @@ describe('Proactive Engine (Task 3.17)', () => {
     await proactiveService.ensurePatternsSeeded();
 
     // Override auth handler
-    server._authHandler.fn = async function (request: any, reply: any) {
+    server._authHandler.fn = async function (request: FastifyRequest, reply: FastifyReply) {
       const testUserId = request.headers['x-test-user-id'] as string;
       if (!testUserId) {
         return reply.code(401).send({ error: 'Missing x-test-user-id header' });
@@ -170,7 +171,7 @@ describe('Proactive Engine (Task 3.17)', () => {
     const body = JSON.parse(response.body);
     expect(Array.isArray(body)).toBe(true);
     // Only pending ones should be returned
-    expect(body.every((s: any) => s.status === 'pending')).toBe(true);
+    expect((body as Array<{ status: string }>).every((s) => s.status === 'pending')).toBe(true);
     expect(body.length).toBe(1);
   });
 

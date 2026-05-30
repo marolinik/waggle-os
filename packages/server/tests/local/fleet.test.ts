@@ -13,12 +13,18 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
+import type { WorkspaceSessionManager } from '../../src/local/workspace-sessions.js';
 import { fleetRoutes } from '../../src/local/routes/fleet.js';
 
-function createTestServer(sessionManager?: any) {
+/**
+ * Each test supplies a minimal session-manager double exposing only the method
+ * the route under test calls (getActive / pause / resume / close). The cast to
+ * the real WorkspaceSessionManager is the deliberate test-boundary cast.
+ */
+function createTestServer(sessionManager?: unknown) {
   const server = Fastify({ logger: false });
   if (sessionManager) {
-    (server as any).sessionManager = sessionManager;
+    server.sessionManager = sessionManager as WorkspaceSessionManager;
   }
   server.register(fleetRoutes);
   return server;

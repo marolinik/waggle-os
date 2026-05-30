@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { WsClientEvent, WsServerEvent } from '@waggle/shared';
-import { createClerkClient } from '@clerk/fastify';
+import { createClerkClient, verifyToken } from '@clerk/fastify';
 import { ConnectionManager } from './connection-manager.js';
 import { teams, messages, users } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
@@ -86,8 +86,10 @@ export async function wsGateway(fastify: FastifyInstance) {
                 const result = await _wsTokenVerifier(token);
                 sub = result.sub;
               } else if (clerk) {
-                // Production path: full Clerk JWT verification
-                const payload = await (clerk as any).verifyToken(token);
+                // Production path: full Clerk JWT verification. `clerk` is only
+                // non-null when clerkSecretKey is set, so the secretKey below is
+                // always present here.
+                const payload = await verifyToken(token, { secretKey: clerkSecretKey });
                 sub = payload.sub;
               } else {
                 // No verifier available — reject. The startup check above ensures

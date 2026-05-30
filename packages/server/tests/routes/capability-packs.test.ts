@@ -35,7 +35,7 @@ describe('Capability Packs API', () => {
     expect(body.packs).toBeDefined();
     expect(body.packs.length).toBeGreaterThanOrEqual(5);
 
-    const research = body.packs.find((p: any) => p.id === 'research-workflow');
+    const research = body.packs.find((p: { id: string }) => p.id === 'research-workflow');
     expect(research).toBeDefined();
     expect(research.name).toBe('Research Workflow');
     expect(research.skills).toHaveLength(3);
@@ -71,7 +71,7 @@ describe('Capability Packs API', () => {
   it('pack state reflects installed skills', async () => {
     const res = await injectWithAuth(server, { method: 'GET', url: '/api/skills/capability-packs/catalog' });
     const body = JSON.parse(res.body);
-    const writing = body.packs.find((p: any) => p.id === 'writing-suite');
+    const writing = body.packs.find((p: { id: string }) => p.id === 'writing-suite');
     expect(writing.packState).toBe('complete');
     expect(writing.installedCount).toBe(3);
   });

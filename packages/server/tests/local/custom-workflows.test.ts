@@ -12,7 +12,11 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import Fastify from 'fastify';
+import type { WorkflowTemplate } from '@waggle/agent';
 import { workflowRoutes } from '../../src/local/routes/workflows.js';
+
+/** Workflow entry in the GET /api/workflows response (template + provenance flag). */
+type WorkflowListEntry = WorkflowTemplate & { builtIn: boolean };
 
 function createTestServer(dataDir: string) {
   const server = Fastify({ logger: false });
@@ -67,7 +71,7 @@ describe('Workflow Routes', () => {
       const res = await server.inject({ method: 'GET', url: '/api/workflows' });
       const body = res.json();
       expect(body.customCount).toBe(1);
-      const custom = body.workflows.find((w: any) => w.name === 'my-flow');
+      const custom = body.workflows.find((w: WorkflowListEntry) => w.name === 'my-flow');
       expect(custom).toBeDefined();
       expect(custom.builtIn).toBe(false);
     });

@@ -11,6 +11,7 @@ import os from 'node:os';
 import { MindDB, SessionStore, FrameStore } from '@waggle/core';
 import { buildLocalServer } from '../../src/local/index.js';
 import type { FastifyInstance } from 'fastify';
+import type { FileEntry } from '../../src/local/storage/types.js';
 import { injectWithAuth } from '../test-utils.js';
 
 describe('File Management API', () => {
@@ -60,7 +61,7 @@ describe('File Management API', () => {
       const entries = res.json();
       expect(Array.isArray(entries)).toBe(true);
 
-      const names = entries.map((e: any) => e.name);
+      const names = entries.map((e: FileEntry) => e.name);
       expect(names).toContain('attachments');
       expect(names).toContain('exports');
       expect(names).toContain('notes');
@@ -114,7 +115,7 @@ describe('File Management API', () => {
         url: `${prefix()}/list?path=/attachments`,
       });
       const entries = res.json();
-      const names = entries.map((e: any) => e.name);
+      const names = entries.map((e: FileEntry) => e.name);
       expect(names).toContain('hello.txt');
     });
 
@@ -180,7 +181,7 @@ describe('File Management API', () => {
         method: 'GET',
         url: `${prefix()}/list?path=/attachments`,
       });
-      const names = res.json().map((e: any) => e.name);
+      const names = res.json().map((e: FileEntry) => e.name);
       expect(names).toContain('screenshots');
     });
 
@@ -224,7 +225,7 @@ describe('File Management API', () => {
         method: 'GET',
         url: `${prefix()}/list?path=/`,
       });
-      const rootNames = origList.json().map((e: any) => e.name);
+      const rootNames = origList.json().map((e: FileEntry) => e.name);
       expect(rootNames).not.toContain('moveme.txt');
     });
 
@@ -314,7 +315,7 @@ describe('File Management API', () => {
         method: 'GET',
         url: `${prefix()}/list?path=/attachments`,
       });
-      const names = list.json().map((e: any) => e.name);
+      const names = list.json().map((e: FileEntry) => e.name);
       expect(names).not.toContain('screenshots');
     });
 

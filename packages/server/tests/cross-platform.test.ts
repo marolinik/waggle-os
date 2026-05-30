@@ -54,8 +54,8 @@ describe('Cross-Platform Verification', () => {
     mind.close();
 
     // Ensure no Tauri globals exist
-    // (globalThis as any).__TAURI__ should be undefined in Node.js)
-    expect((globalThis as any).__TAURI__).toBeUndefined();
+    // (globalThis.__TAURI__ should be undefined in Node.js)
+    expect((globalThis as { __TAURI__?: unknown }).__TAURI__).toBeUndefined();
 
     server = await buildLocalServer({ dataDir: tmpDir });
   }, 30_000);
@@ -70,8 +70,8 @@ describe('Cross-Platform Verification', () => {
   it('server starts without window.__TAURI__', () => {
     // If we reached here, the server booted successfully without Tauri
     expect(server).toBeDefined();
-    expect((globalThis as any).__TAURI__).toBeUndefined();
-    expect((globalThis as any).window?.__TAURI__).toBeUndefined();
+    expect((globalThis as { __TAURI__?: unknown }).__TAURI__).toBeUndefined();
+    expect((globalThis as { window?: { __TAURI__?: unknown } }).window?.__TAURI__).toBeUndefined();
   });
 
   // ── 2. All Critical Endpoints Respond ─────────────────────────────
@@ -209,9 +209,9 @@ describe('Cross-Platform Verification', () => {
 
     it('eventBus is available for notification dispatch', () => {
       // Verify the eventBus is decorated on the server (used by SSE stream)
-      expect((server as any).eventBus).toBeDefined();
-      expect(typeof (server as any).eventBus.on).toBe('function');
-      expect(typeof (server as any).eventBus.emit).toBe('function');
+      expect(server.eventBus).toBeDefined();
+      expect(typeof server.eventBus.on).toBe('function');
+      expect(typeof server.eventBus.emit).toBe('function');
     });
   });
 });
@@ -272,7 +272,7 @@ describe('Mind DB cross-platform', () => {
     `).all('SQLite');
 
     expect(results.length).toBe(1);
-    expect((results[0] as any).content).toContain('SQLite');
+    expect((results[0] as { content: string }).content).toContain('SQLite');
   });
 
   it('WAL mode is enabled', () => {
@@ -433,7 +433,7 @@ describe('Vault encryption cross-platform', () => {
     expect(names).toContain('KEY_C');
     // Values should not be in the list output
     for (const entry of list) {
-      expect((entry as any).value).toBeUndefined();
+      expect((entry as { value?: unknown }).value).toBeUndefined();
     }
   });
 

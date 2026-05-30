@@ -61,23 +61,24 @@ describe('Web Frontend Static Serving', () => {
 describe('getServerBaseUrl logic', () => {
   it('returns localhost:3333 when TAURI_INTERNALS is present', () => {
     // Simulate Tauri environment
-    const origTauri = (globalThis as any).__TAURI_INTERNALS__;
-    (globalThis as any).__TAURI_INTERNALS__ = {};
+    const tauriGlobal = globalThis as { __TAURI_INTERNALS__?: unknown };
+    const origTauri = tauriGlobal.__TAURI_INTERNALS__;
+    tauriGlobal.__TAURI_INTERNALS__ = {};
 
     // The function checks window, so we test the logic directly
-    const isTauri = !!(globalThis as any).__TAURI_INTERNALS__;
+    const isTauri = !!tauriGlobal.__TAURI_INTERNALS__;
     expect(isTauri).toBe(true);
 
     // Cleanup
     if (origTauri === undefined) {
-      delete (globalThis as any).__TAURI_INTERNALS__;
+      delete tauriGlobal.__TAURI_INTERNALS__;
     } else {
-      (globalThis as any).__TAURI_INTERNALS__ = origTauri;
+      tauriGlobal.__TAURI_INTERNALS__ = origTauri;
     }
   });
 
   it('returns origin when not in Tauri', () => {
-    const isTauri = !!(globalThis as any).__TAURI_INTERNALS__;
+    const isTauri = !!(globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
     expect(isTauri).toBe(false);
   });
 });

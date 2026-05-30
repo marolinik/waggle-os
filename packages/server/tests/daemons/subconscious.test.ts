@@ -120,8 +120,8 @@ describe('Subconscious Agent (Task 3.19)', () => {
 
     // Find one that has insights with prompt_change
     const withApproval = entries.find(e => {
-      const state = e.afterState as any;
-      return state?.insights?.some((i: any) => i.type === 'prompt_change');
+      const state = e.afterState as { insights?: Array<{ type: string }> } | null;
+      return state?.insights?.some((i) => i.type === 'prompt_change');
     });
 
     expect(withApproval).toBeTruthy();

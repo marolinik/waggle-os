@@ -1,9 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { EventEmitter } from 'node:events';
 import { WsTeamClient } from '../../src/local/ws-team-client.js';
 
+/** Shape of the mock WebSocket the test inspects. */
+interface MockWs extends EventEmitter {
+  readyState: number;
+  sent: string[];
+  send(data: string): void;
+  close(): void;
+}
+
+/** Typed accessor for the last mock WebSocket instance stashed on globalThis. */
+const globalWithMock = globalThis as typeof globalThis & {
+  __lastMockWs: MockWs | null;
+};
+
 // Mock the 'ws' module
-vi.mock('ws', () => {
-  const EventEmitter = require('node:events').EventEmitter;
+vi.mock('ws', async () => {
+  const { EventEmitter } = await import('node:events');
 
   class MockWebSocket extends EventEmitter {
     readyState = 1; // OPEN
@@ -20,13 +34,13 @@ vi.mock('ws', () => {
   }
 
   // Store last instance for test access
-  (globalThis as any).__lastMockWs = null;
+  (globalThis as typeof globalThis & { __lastMockWs: MockWs | null }).__lastMockWs = null;
 
   return {
     default: class extends MockWebSocket {
       constructor(_url: string) {
         super();
-        (globalThis as any).__lastMockWs = this;
+        (globalThis as typeof globalThis & { __lastMockWs: MockWs | null }).__lastMockWs = this;
         // Simulate async open
         setTimeout(() => this.emit('open'), 5);
       }
@@ -34,8 +48,10 @@ vi.mock('ws', () => {
   };
 });
 
-function getLastWs(): any {
-  return (globalThis as any).__lastMockWs;
+function getLastWs(): MockWs {
+  const ws = globalWithMock.__lastMockWs;
+  if (!ws) throw new Error('No mock WebSocket instance available');
+  return ws;
 }
 
 describe('WsTeamClient', () => {
@@ -46,7 +62,7 @@ describe('WsTeamClient', () => {
   };
 
   beforeEach(() => {
-    (globalThis as any).__lastMockWs = null;
+    globalWithMock.__lastMockWs = null;
   });
 
   it('stores config in constructor', () => {
@@ -93,7 +109,7 @@ describe('WsTeamClient', () => {
 
   it('emits message event on waggle_message', async () => {
     const client = new WsTeamClient(config);
-    const messages: any[] = [];
+    const messages: unknown[] = [];
     client.on('message', (msg) => messages.push(msg));
 
     await client.connect();
@@ -113,7 +129,7 @@ describe('WsTeamClient', () => {
 
   it('emits connected event on joined_team', async () => {
     const client = new WsTeamClient(config);
-    const connected: any[] = [];
+    const connected: Array<{ teamSlug?: string }> = [];
     client.on('connected', (data) => connected.push(data));
 
     await client.connect();

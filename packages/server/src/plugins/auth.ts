@@ -1,6 +1,6 @@
 import fp from 'fastify-plugin';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { createClerkClient } from '@clerk/fastify';
+import { createClerkClient, verifyToken } from '@clerk/fastify';
 import { UserService } from '../services/user-service.js';
 
 export type AuthenticateFn = (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
@@ -17,7 +17,8 @@ declare module 'fastify' {
 }
 
 export default fp(async function authPlugin(fastify: FastifyInstance) {
-  const clerk = createClerkClient({ secretKey: fastify.config.clerkSecretKey });
+  const clerkSecretKey = fastify.config.clerkSecretKey;
+  const clerk = createClerkClient({ secretKey: clerkSecretKey });
   const userService = new UserService(fastify.db);
 
   const clerkAuth: AuthenticateFn = async function (request, reply) {
@@ -27,7 +28,7 @@ export default fp(async function authPlugin(fastify: FastifyInstance) {
     }
 
     try {
-      const payload = await (clerk as any).verifyToken(token);
+      const payload = await verifyToken(token, { secretKey: clerkSecretKey });
       request.clerkId = payload.sub;
 
       // Look up internal user, auto-provision if not found

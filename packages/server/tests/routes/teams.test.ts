@@ -46,7 +46,7 @@ describe('Team API', () => {
     adminId = admin.id;
 
     // Override auth handler to use x-test-user-id header (via indirection object)
-    server._authHandler.fn = async function (request: any, reply: any) {
+    server._authHandler.fn = async function (request, reply) {
       const testUserId = request.headers['x-test-user-id'] as string;
       if (!testUserId) {
         return reply.code(401).send({ error: 'Missing x-test-user-id header' });
@@ -113,7 +113,7 @@ describe('Team API', () => {
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body);
     expect(Array.isArray(body)).toBe(true);
-    const slugs = body.map((t: any) => t.slug);
+    const slugs = body.map((t: { slug: string }) => t.slug);
     expect(slugs).toContain('test-team-crud');
   });
 
@@ -127,7 +127,7 @@ describe('Team API', () => {
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body);
     // memberId is not a member of any team with test- slug yet
-    const testTeams = body.filter((t: any) => t.slug.startsWith('test-'));
+    const testTeams = body.filter((t: { slug: string }) => t.slug.startsWith('test-'));
     expect(testTeams).toHaveLength(0);
   });
 
@@ -273,7 +273,7 @@ describe('Team API', () => {
       headers: { 'x-test-user-id': ownerId },
     });
     const body = JSON.parse(checkResponse.body);
-    const memberIds = body.members.map((m: any) => m.userId);
+    const memberIds = body.members.map((m: { userId: string }) => m.userId);
     expect(memberIds).not.toContain(memberId);
   });
 

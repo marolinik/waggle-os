@@ -1,6 +1,31 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import type { Mock } from 'vitest';
+import type { WebSocket } from 'ws';
+import type { Task, SuggestionEntry } from '@waggle/shared';
+import type { AuthenticateFn } from '../../src/plugins/auth.js';
 import { ConnectionManager } from '../../src/ws/connection-manager.js';
 import { setWsTokenVerifier } from '../../src/ws/gateway.js';
+
+/** A minimal mock WebSocket exposing the surface ConnectionManager touches. */
+interface MockWebSocket {
+  readyState: number;
+  OPEN: number;
+  send: Mock;
+}
+
+/** Build a mock WebSocket whose `send` is a vitest mock the tests can assert on. */
+function mockWs(readyState = 1): MockWebSocket {
+  return { readyState, OPEN: 1, send: vi.fn() };
+}
+
+/**
+ * Cast a mock WebSocket to the real `ws.WebSocket` type at ConnectionManager
+ * boundaries. The real type has a large surface; ConnectionManager only reads
+ * `readyState`/`OPEN` and calls `send`, so the minimal mock is sound here.
+ */
+function asWs(ws: MockWebSocket): WebSocket {
+  return ws as unknown as WebSocket;
+}
 
 /**
  * Create a structurally valid JWT with a given payload.
@@ -20,9 +45,9 @@ function makeTestJwt(payload: Record<string, unknown>): string {
 describe('ConnectionManager', () => {
   it('tracks connections by team and user', () => {
     const cm = new ConnectionManager();
-    const mockWs = { readyState: 1, OPEN: 1, send: vi.fn() } as any;
+    const ws = mockWs();
 
-    cm.add('team1', 'user1', mockWs);
+    cm.add('team1', 'user1', asWs(ws));
     expect(cm.getConnectedUsers('team1')).toEqual(['user1']);
 
     cm.remove('team1', 'user1');
@@ -36,9 +61,9 @@ describe('ConnectionManager', () => {
 
   it('removes team entry when last user disconnects', () => {
     const cm = new ConnectionManager();
-    const mockWs = { readyState: 1, OPEN: 1, send: vi.fn() } as any;
+    const ws = mockWs();
 
-    cm.add('team1', 'user1', mockWs);
+    cm.add('team1', 'user1', asWs(ws));
     expect(cm.getTeamCount()).toBe(1);
 
     cm.remove('team1', 'user1');
@@ -47,21 +72,21 @@ describe('ConnectionManager', () => {
 
   it('tracks multiple users in same team', () => {
     const cm = new ConnectionManager();
-    const ws1 = { readyState: 1, OPEN: 1, send: vi.fn() } as any;
-    const ws2 = { readyState: 1, OPEN: 1, send: vi.fn() } as any;
+    const ws1 = mockWs();
+    const ws2 = mockWs();
 
-    cm.add('team1', 'user1', ws1);
-    cm.add('team1', 'user2', ws2);
+    cm.add('team1', 'user1', asWs(ws1));
+    cm.add('team1', 'user2', asWs(ws2));
     expect(cm.getConnectedUsers('team1')).toEqual(['user1', 'user2']);
   });
 
   it('tracks users across multiple teams', () => {
     const cm = new ConnectionManager();
-    const ws1 = { readyState: 1, OPEN: 1, send: vi.fn() } as any;
-    const ws2 = { readyState: 1, OPEN: 1, send: vi.fn() } as any;
+    const ws1 = mockWs();
+    const ws2 = mockWs();
 
-    cm.add('team1', 'user1', ws1);
-    cm.add('team2', 'user2', ws2);
+    cm.add('team1', 'user1', asWs(ws1));
+    cm.add('team2', 'user2', asWs(ws2));
     expect(cm.getConnectedUsers('team1')).toEqual(['user1']);
     expect(cm.getConnectedUsers('team2')).toEqual(['user2']);
     expect(cm.getTeamCount()).toBe(2);
@@ -69,92 +94,92 @@ describe('ConnectionManager', () => {
 
   it('broadcasts to all team members', () => {
     const cm = new ConnectionManager();
-    const ws1 = { readyState: 1, OPEN: 1, send: vi.fn() } as any;
-    const ws2 = { readyState: 1, OPEN: 1, send: vi.fn() } as any;
+    const ws1 = mockWs();
+    const ws2 = mockWs();
 
-    cm.add('team1', 'user1', ws1);
-    cm.add('team1', 'user2', ws2);
+    cm.add('team1', 'user1', asWs(ws1));
+    cm.add('team1', 'user2', asWs(ws2));
 
-    cm.broadcast('team1', { type: 'task_update', task: {} as any });
+    cm.broadcast('team1', { type: 'task_update', task: {} as unknown as Task });
     expect(ws1.send).toHaveBeenCalledOnce();
     expect(ws2.send).toHaveBeenCalledOnce();
 
-    const sentData = JSON.parse(ws1.send.mock.calls[0][0]);
+    const sentData = JSON.parse(ws1.send.mock.calls[0][0] as string);
     expect(sentData.type).toBe('task_update');
   });
 
   it('excludes user from broadcast', () => {
     const cm = new ConnectionManager();
-    const ws1 = { readyState: 1, OPEN: 1, send: vi.fn() } as any;
-    const ws2 = { readyState: 1, OPEN: 1, send: vi.fn() } as any;
+    const ws1 = mockWs();
+    const ws2 = mockWs();
 
-    cm.add('team1', 'user1', ws1);
-    cm.add('team1', 'user2', ws2);
+    cm.add('team1', 'user1', asWs(ws1));
+    cm.add('team1', 'user2', asWs(ws2));
 
-    cm.broadcast('team1', { type: 'task_update', task: {} as any }, 'user1');
+    cm.broadcast('team1', { type: 'task_update', task: {} as unknown as Task }, 'user1');
     expect(ws1.send).not.toHaveBeenCalled();
     expect(ws2.send).toHaveBeenCalledOnce();
   });
 
   it('skips sockets that are not OPEN', () => {
     const cm = new ConnectionManager();
-    const wsOpen = { readyState: 1, OPEN: 1, send: vi.fn() } as any;
-    const wsClosed = { readyState: 3, OPEN: 1, send: vi.fn() } as any; // readyState 3 = CLOSED
+    const wsOpen = mockWs(1);
+    const wsClosed = mockWs(3); // readyState 3 = CLOSED
 
-    cm.add('team1', 'user1', wsOpen);
-    cm.add('team1', 'user2', wsClosed);
+    cm.add('team1', 'user1', asWs(wsOpen));
+    cm.add('team1', 'user2', asWs(wsClosed));
 
-    cm.broadcast('team1', { type: 'task_update', task: {} as any });
+    cm.broadcast('team1', { type: 'task_update', task: {} as unknown as Task });
     expect(wsOpen.send).toHaveBeenCalledOnce();
     expect(wsClosed.send).not.toHaveBeenCalled();
   });
 
   it('sends to specific user', () => {
     const cm = new ConnectionManager();
-    const ws1 = { readyState: 1, OPEN: 1, send: vi.fn() } as any;
-    const ws2 = { readyState: 1, OPEN: 1, send: vi.fn() } as any;
+    const ws1 = mockWs();
+    const ws2 = mockWs();
 
-    cm.add('team1', 'user1', ws1);
-    cm.add('team1', 'user2', ws2);
+    cm.add('team1', 'user1', asWs(ws1));
+    cm.add('team1', 'user2', asWs(ws2));
 
-    cm.sendTo('team1', 'user1', { type: 'suggestion', suggestion: {} as any });
+    cm.sendTo('team1', 'user1', { type: 'suggestion', suggestion: {} as unknown as SuggestionEntry });
     expect(ws1.send).toHaveBeenCalledOnce();
     expect(ws2.send).not.toHaveBeenCalled();
 
-    const sentData = JSON.parse(ws1.send.mock.calls[0][0]);
+    const sentData = JSON.parse(ws1.send.mock.calls[0][0] as string);
     expect(sentData.type).toBe('suggestion');
   });
 
   it('sendTo does nothing for nonexistent user', () => {
     const cm = new ConnectionManager();
     // Should not throw
-    cm.sendTo('team1', 'nobody', { type: 'task_update', task: {} as any });
+    cm.sendTo('team1', 'nobody', { type: 'task_update', task: {} as unknown as Task });
   });
 
   it('sendTo does nothing for closed socket', () => {
     const cm = new ConnectionManager();
-    const wsClosed = { readyState: 3, OPEN: 1, send: vi.fn() } as any;
+    const wsClosed = mockWs(3);
 
-    cm.add('team1', 'user1', wsClosed);
-    cm.sendTo('team1', 'user1', { type: 'task_update', task: {} as any });
+    cm.add('team1', 'user1', asWs(wsClosed));
+    cm.sendTo('team1', 'user1', { type: 'task_update', task: {} as unknown as Task });
     expect(wsClosed.send).not.toHaveBeenCalled();
   });
 
   it('broadcast does nothing for nonexistent team', () => {
     const cm = new ConnectionManager();
     // Should not throw
-    cm.broadcast('nonexistent', { type: 'task_update', task: {} as any });
+    cm.broadcast('nonexistent', { type: 'task_update', task: {} as unknown as Task });
   });
 
   it('replaces connection when same user re-adds', () => {
     const cm = new ConnectionManager();
-    const ws1 = { readyState: 1, OPEN: 1, send: vi.fn() } as any;
-    const ws2 = { readyState: 1, OPEN: 1, send: vi.fn() } as any;
+    const ws1 = mockWs();
+    const ws2 = mockWs();
 
-    cm.add('team1', 'user1', ws1);
-    cm.add('team1', 'user1', ws2); // replace
+    cm.add('team1', 'user1', asWs(ws1));
+    cm.add('team1', 'user1', asWs(ws2)); // replace
 
-    cm.broadcast('team1', { type: 'task_update', task: {} as any });
+    cm.broadcast('team1', { type: 'task_update', task: {} as unknown as Task });
     expect(ws1.send).not.toHaveBeenCalled();
     expect(ws2.send).toHaveBeenCalledOnce();
     expect(cm.getConnectedUsers('team1')).toEqual(['user1']);
@@ -164,14 +189,14 @@ describe('ConnectionManager', () => {
 
   it('multiple clients with one disconnect: broadcast still reaches remaining 2', () => {
     const cm = new ConnectionManager();
-    const ws1 = { readyState: 1, OPEN: 1, send: vi.fn() } as any;
-    const ws2 = { readyState: 1, OPEN: 1, send: vi.fn() } as any;
-    const ws3 = { readyState: 1, OPEN: 1, send: vi.fn() } as any;
+    const ws1 = mockWs();
+    const ws2 = mockWs();
+    const ws3 = mockWs();
 
     // Register 3 clients in a team
-    cm.add('team1', 'user1', ws1);
-    cm.add('team1', 'user2', ws2);
-    cm.add('team1', 'user3', ws3);
+    cm.add('team1', 'user1', asWs(ws1));
+    cm.add('team1', 'user2', asWs(ws2));
+    cm.add('team1', 'user3', asWs(ws3));
     expect(cm.getConnectedUsers('team1')).toEqual(['user1', 'user2', 'user3']);
 
     // Disconnect user2
@@ -179,7 +204,7 @@ describe('ConnectionManager', () => {
     expect(cm.getConnectedUsers('team1')).toEqual(['user1', 'user3']);
 
     // Broadcast — should reach user1 and user3 only
-    cm.broadcast('team1', { type: 'task_update', task: {} as any });
+    cm.broadcast('team1', { type: 'task_update', task: {} as unknown as Task });
     expect(ws1.send).toHaveBeenCalledOnce();
     expect(ws2.send).not.toHaveBeenCalled();
     expect(ws3.send).toHaveBeenCalledOnce();
@@ -190,11 +215,11 @@ describe('ConnectionManager', () => {
 
   it('reconnection with same userId: no duplicate entries, clean replacement', () => {
     const cm = new ConnectionManager();
-    const wsOriginal = { readyState: 1, OPEN: 1, send: vi.fn() } as any;
-    const wsReconnect = { readyState: 1, OPEN: 1, send: vi.fn() } as any;
+    const wsOriginal = mockWs();
+    const wsReconnect = mockWs();
 
     // Initial connection
-    cm.add('team1', 'user1', wsOriginal);
+    cm.add('team1', 'user1', asWs(wsOriginal));
     expect(cm.getConnectedUsers('team1')).toEqual(['user1']);
 
     // Simulate disconnect
@@ -204,12 +229,12 @@ describe('ConnectionManager', () => {
     expect(cm.getTeamCount()).toBe(0);
 
     // Reconnect with same userId
-    cm.add('team1', 'user1', wsReconnect);
+    cm.add('team1', 'user1', asWs(wsReconnect));
     expect(cm.getConnectedUsers('team1')).toEqual(['user1']);
     expect(cm.getTeamCount()).toBe(1);
 
     // Broadcast should only reach the reconnected socket
-    cm.broadcast('team1', { type: 'task_update', task: {} as any });
+    cm.broadcast('team1', { type: 'task_update', task: {} as unknown as Task });
     expect(wsOriginal.send).not.toHaveBeenCalled();
     expect(wsReconnect.send).toHaveBeenCalledOnce();
 
@@ -236,12 +261,16 @@ describe('WebSocket Gateway (integration)', () => {
     server = await buildServer();
 
     // Override auth to bypass Clerk for REST routes
-    (server as any)._authHandler.fn = async (req: any, reply: any) => {
+    const testAuthHandler: AuthenticateFn = async (req, reply) => {
       const testUserId = req.headers['x-test-user-id'] as string;
-      if (!testUserId) return reply.code(401).send({ error: 'Missing test user' });
+      if (!testUserId) {
+        await reply.code(401).send({ error: 'Missing test user' });
+        return;
+      }
       req.userId = testUserId;
       req.clerkId = 'test';
     };
+    server._authHandler.fn = testAuthHandler;
 
     // Clean up leftover data from previous runs
     const { users, teams, teamMembers } = await import('../../src/db/schema.js');
@@ -316,12 +345,12 @@ describe('WebSocket Gateway (integration)', () => {
     await server.close();
   });
 
-  function connectWs(): Promise<{ ws: import('ws').WebSocket; messages: any[] }> {
+  function connectWs(): Promise<{ ws: import('ws').WebSocket; messages: Record<string, unknown>[] }> {
     return new Promise((resolve, reject) => {
       // Dynamic import to avoid issues if ws isn't available at parse time
       import('ws').then(({ default: WS }) => {
         const ws = new WS(`ws://${address}/ws`);
-        const msgs: any[] = [];
+        const msgs: Record<string, unknown>[] = [];
         ws.on('message', (data: Buffer) => msgs.push(JSON.parse(data.toString())));
         ws.on('open', () => resolve({ ws, messages: msgs }));
         ws.on('error', reject);
@@ -334,7 +363,7 @@ describe('WebSocket Gateway (integration)', () => {
   }
 
   /** Wait until messages array has at least `count` entries, or timeout. */
-  async function waitForMessages(messages: any[], count: number, timeoutMs = 3000) {
+  async function waitForMessages(messages: Record<string, unknown>[], count: number, timeoutMs = 3000) {
     const start = Date.now();
     while (messages.length < count && Date.now() - start < timeoutMs) {
       await wait(50);

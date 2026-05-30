@@ -60,7 +60,7 @@ describe('Team Resources API', () => {
     ]);
 
     // Override auth handler
-    server._authHandler.fn = async function (request: any, reply: any) {
+    server._authHandler.fn = async function (request, reply) {
       const testUserId = request.headers['x-test-user-id'] as string;
       if (!testUserId) {
         return reply.code(401).send({ error: 'Missing x-test-user-id header' });
@@ -211,7 +211,7 @@ describe('Team Resources API', () => {
     const body = JSON.parse(response.body);
     expect(Array.isArray(body)).toBe(true);
     expect(body.length).toBeGreaterThanOrEqual(1);
-    expect(body.every((r: any) => r.resourceType === 'skill')).toBe(true);
+    expect(body.every((r: { resourceType: string }) => r.resourceType === 'skill')).toBe(true);
   });
 
   it('non-member gets 403', async () => {

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import type { FastifyRequest, FastifyReply } from 'fastify';
 import { buildServer } from '../../src/index.js';
 import { users, teams, teamMembers, teamResources, agents, scoutFindings } from '../../src/db/schema.js';
 import { sql, eq } from 'drizzle-orm';
@@ -79,7 +80,7 @@ describe('Scout Agent (Task 3.18)', () => {
     scout = new ScoutAgent(server.db);
 
     // Override auth handler
-    server._authHandler.fn = async function (request: any, reply: any) {
+    server._authHandler.fn = async function (request: FastifyRequest, reply: FastifyReply) {
       const testUserId = request.headers['x-test-user-id'] as string;
       if (!testUserId) {
         return reply.code(401).send({ error: 'Missing x-test-user-id header' });
@@ -105,16 +106,16 @@ describe('Scout Agent (Task 3.18)', () => {
   it('scan creates findings from team resources', async () => {
     const findings = await scout.scan(userId, teamId);
     expect(findings.length).toBeGreaterThanOrEqual(2);
-    expect(findings.every((f: any) => f.status === 'new')).toBe(true);
-    expect(findings.some((f: any) => f.title.includes('Python Data Analyzer'))).toBe(true);
-    expect(findings.some((f: any) => f.title.includes('Code Review Template'))).toBe(true);
+    expect(findings.every((f) => f.status === 'new')).toBe(true);
+    expect(findings.some((f) => f.title.includes('Python Data Analyzer'))).toBe(true);
+    expect(findings.some((f) => f.title.includes('Code Review Template'))).toBe(true);
   });
 
   it('relevance scoring boosts based on user interests', async () => {
     // The Python Data Analyzer should be boosted because user has 'python' interest
     const findings = await scout.listFindings(userId);
-    const pythonFinding = findings.find((f: any) => f.title.includes('Python'));
-    const templateFinding = findings.find((f: any) => f.title.includes('Code Review'));
+    const pythonFinding = findings.find((f) => f.title.includes('Python'));
+    const templateFinding = findings.find((f) => f.title.includes('Code Review'));
 
     expect(pythonFinding).toBeTruthy();
     expect(templateFinding).toBeTruthy();
@@ -133,7 +134,7 @@ describe('Scout Agent (Task 3.18)', () => {
 
   it('dismiss updates status', async () => {
     const findings = await scout.listFindings(userId);
-    const newFinding = findings.find((f: any) => f.status === 'new');
+    const newFinding = findings.find((f) => f.status === 'new');
     expect(newFinding).toBeTruthy();
 
     const updated = await scout.dismiss(newFinding!.id);
@@ -144,13 +145,13 @@ describe('Scout Agent (Task 3.18)', () => {
   it('dismissed finding not resurfaced in future scans', async () => {
     // Clear all non-dismissed findings
     const allFindings = await scout.listFindings(userId);
-    const dismissed = allFindings.filter((f: any) => f.status === 'dismissed');
+    const dismissed = allFindings.filter((f) => f.status === 'dismissed');
     expect(dismissed.length).toBeGreaterThan(0);
 
     // Run scan again — dismissed titles should not reappear as new
     const newFindings = await scout.scan(userId, teamId);
-    const dismissedTitles = dismissed.map((f: any) => f.title);
-    const resurfaced = newFindings.filter((f: any) => dismissedTitles.includes(f.title));
+    const dismissedTitles = dismissed.map((f) => f.title);
+    const resurfaced = newFindings.filter((f) => dismissedTitles.includes(f.title));
     expect(resurfaced.length).toBe(0);
   });
 

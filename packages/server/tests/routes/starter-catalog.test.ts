@@ -175,7 +175,7 @@ describe('Starter Skill Catalog', () => {
     });
 
     const body = JSON.parse(res.payload);
-    const installed = body.skills.find((s: any) => s.id === INSTALL_TEST_SKILL);
+    const installed = body.skills.find((s: { id: string }) => s.id === INSTALL_TEST_SKILL);
     expect(installed).toBeDefined();
     expect(['active', 'installed']).toContain(installed.state);
   });

@@ -13,6 +13,32 @@ import { buildLocalServer } from '../../src/local/index.js';
 import type { FastifyInstance } from 'fastify';
 import { injectWithAuth } from '../test-utils.js';
 
+/** Shape of a model entry in the GET /api/providers response (test-asserted fields). */
+interface ProviderModelResponse {
+  id: string;
+  name: string;
+  cost: string;
+  speed: string;
+}
+
+/** Shape of a provider entry in the GET /api/providers response (test-asserted fields). */
+interface ProviderResponse {
+  id: string;
+  name: string;
+  hasKey: boolean;
+  requiresKey: boolean;
+  badge: string | null;
+  models: ProviderModelResponse[];
+}
+
+/** Shape of a search-provider entry in the GET /api/providers response (test-asserted fields). */
+interface SearchProviderResponse {
+  id: string;
+  hasKey: boolean;
+  requiresKey: boolean;
+  priority: number;
+}
+
 describe('Provider API', () => {
   let server: FastifyInstance;
   let tmpDir: string;
@@ -60,7 +86,7 @@ describe('Provider API', () => {
     it('includes all expected providers', async () => {
       const res = await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
       const { providers } = res.json();
-      const ids = providers.map((p: any) => p.id);
+      const ids = providers.map((p: ProviderResponse) => p.id);
 
       expect(ids).toContain('anthropic');
       expect(ids).toContain('openai');
@@ -80,7 +106,7 @@ describe('Provider API', () => {
     it('ollama does not require a key', async () => {
       const res = await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
       const { providers } = res.json();
-      const ollama = providers.find((p: any) => p.id === 'ollama');
+      const ollama = providers.find((p: ProviderResponse) => p.id === 'ollama');
       expect(ollama.requiresKey).toBe(false);
       expect(ollama.hasKey).toBe(true); // Always true since no key needed
     });
@@ -89,7 +115,7 @@ describe('Provider API', () => {
       const res = await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
       const { providers } = res.json();
       // Fresh vault — no keys configured
-      const openai = providers.find((p: any) => p.id === 'openai');
+      const openai = providers.find((p: ProviderResponse) => p.id === 'openai');
       expect(openai.hasKey).toBe(false);
     });
 
@@ -99,7 +125,7 @@ describe('Provider API', () => {
 
       const res = await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
       const { providers } = res.json();
-      const anthropic = providers.find((p: any) => p.id === 'anthropic');
+      const anthropic = providers.find((p: ProviderResponse) => p.id === 'anthropic');
       expect(anthropic.hasKey).toBe(true);
 
       // Cleanup
@@ -109,7 +135,7 @@ describe('Provider API', () => {
     it('each provider model has id, name, cost, speed', async () => {
       const res = await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
       const { providers } = res.json();
-      const anthropic = providers.find((p: any) => p.id === 'anthropic');
+      const anthropic = providers.find((p: ProviderResponse) => p.id === 'anthropic');
 
       expect(anthropic.models.length).toBeGreaterThanOrEqual(3);
       for (const m of anthropic.models) {
@@ -128,10 +154,10 @@ describe('Provider API', () => {
     it('alibaba provider includes qwen3.6-35b-a3b (LOCKED target)', async () => {
       const res = await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
       const { providers } = res.json();
-      const alibaba = providers.find((p: any) => p.id === 'alibaba');
+      const alibaba = providers.find((p: ProviderResponse) => p.id === 'alibaba');
 
       expect(alibaba).toBeDefined();
-      const modelIds = alibaba.models.map((m: any) => m.id);
+      const modelIds = alibaba.models.map((m: ProviderModelResponse) => m.id);
       expect(modelIds).toContain('qwen3.6-35b-a3b');
     });
 
@@ -142,14 +168,14 @@ describe('Provider API', () => {
       expect(Array.isArray(search)).toBe(true);
       expect(search.length).toBeGreaterThanOrEqual(4);
 
-      const ids = search.map((s: any) => s.id);
+      const ids = search.map((s: SearchProviderResponse) => s.id);
       expect(ids).toContain('perplexity');
       expect(ids).toContain('tavily');
       expect(ids).toContain('brave');
       expect(ids).toContain('duckduckgo');
 
       // DuckDuckGo should always have hasKey=true (free)
-      const ddg = search.find((s: any) => s.id === 'duckduckgo');
+      const ddg = search.find((s: SearchProviderResponse) => s.id === 'duckduckgo');
       expect(ddg.hasKey).toBe(true);
       expect(ddg.requiresKey).toBe(false);
 
@@ -181,7 +207,7 @@ describe('Provider API', () => {
       const res = await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
       const { search } = res.json();
 
-      const sorted = [...search].sort((a: any, b: any) => a.priority - b.priority);
+      const sorted = [...search].sort((a: SearchProviderResponse, b: SearchProviderResponse) => a.priority - b.priority);
       expect(sorted[0].id).toBe('perplexity');
       expect(sorted[1].id).toBe('tavily');
       expect(sorted[2].id).toBe('brave');
@@ -191,14 +217,14 @@ describe('Provider API', () => {
     it('perplexity has badge "Search + LLM"', async () => {
       const res = await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
       const { providers } = res.json();
-      const perplexity = providers.find((p: any) => p.id === 'perplexity');
+      const perplexity = providers.find((p: ProviderResponse) => p.id === 'perplexity');
       expect(perplexity.badge).toBe('Search + LLM');
     });
 
     it('openrouter has badge "Free models!"', async () => {
       const res = await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
       const { providers } = res.json();
-      const openrouter = providers.find((p: any) => p.id === 'openrouter');
+      const openrouter = providers.find((p: ProviderResponse) => p.id === 'openrouter');
       expect(openrouter.badge).toBe('Free models!');
     });
   });
@@ -208,7 +234,7 @@ describe('Perplexity Search Tool', () => {
   it('perplexity_search tool exists in createSearchTools output', async () => {
     const { createSearchTools } = await import('../../src/../../../packages/agent/src/search-tools.js');
     const tools = createSearchTools(async () => null);
-    const names = tools.map((t: any) => t.name);
+    const names = tools.map((t) => t.name);
     expect(names).toContain('perplexity_search');
     expect(names).toContain('tavily_search');
     expect(names).toContain('brave_search');
@@ -217,8 +243,9 @@ describe('Perplexity Search Tool', () => {
   it('perplexity_search returns "not configured" when no key', async () => {
     const { createSearchTools } = await import('../../src/../../../packages/agent/src/search-tools.js');
     const tools = createSearchTools(async () => null);
-    const perplexity = tools.find((t: any) => t.name === 'perplexity_search');
-    const result = await perplexity.execute({ query: 'test' });
+    const perplexity = tools.find((t) => t.name === 'perplexity_search');
+    expect(perplexity).toBeDefined();
+    const result = await perplexity!.execute({ query: 'test' });
     expect(result).toContain('not configured');
   });
 });

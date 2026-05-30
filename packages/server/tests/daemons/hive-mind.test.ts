@@ -163,7 +163,8 @@ describe('Hive Mind Agent (Task 3.20)', () => {
     expect(msg).toBeTruthy();
     expect(msg.type).toBe('broadcast');
     expect(msg.subtype).toBe('discovery');
-    expect((msg.content as any).type).toBe('weekly_digest');
-    expect((msg.content as any).digest).toBeTruthy();
+    const digestContent = msg.content as { type: string; digest: unknown };
+    expect(digestContent.type).toBe('weekly_digest');
+    expect(digestContent.digest).toBeTruthy();
   });
 });

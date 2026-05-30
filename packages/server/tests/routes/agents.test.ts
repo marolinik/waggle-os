@@ -50,7 +50,7 @@ describe('Agent API', () => {
     teamId = team.id;
 
     // Override auth handler for tests
-    server._authHandler.fn = async function (request: any, reply: any) {
+    server._authHandler.fn = async function (request, reply) {
       const testUserId = request.headers['x-test-user-id'] as string;
       if (!testUserId) {
         return reply.code(401).send({ error: 'Missing x-test-user-id header' });
@@ -136,7 +136,7 @@ describe('Agent API', () => {
     const body = JSON.parse(response.body);
     expect(Array.isArray(body)).toBe(true);
     expect(body.length).toBe(2);
-    expect(body.every((a: any) => a.userId === user1Id)).toBe(true);
+    expect(body.every((a: { userId: string }) => a.userId === user1Id)).toBe(true);
   });
 
   it('updates agent model and config', async () => {
@@ -218,7 +218,7 @@ describe('Agent API', () => {
     expect(response.statusCode).toBe(201);
     const body = JSON.parse(response.body);
     expect(body.strategy).toBe('coordinator');
-    const lead = body.members.find((m: any) => m.roleInGroup === 'lead');
+    const lead = body.members.find((m: { roleInGroup: string; agentId: string }) => m.roleInGroup === 'lead');
     expect(lead).toBeDefined();
     expect(lead.agentId).toBe(agent1Id);
   });
@@ -301,7 +301,7 @@ describe('Agent API', () => {
       headers: { 'x-test-user-id': user1Id },
     });
     const remaining = JSON.parse(listResponse.body);
-    const ids = remaining.map((a: any) => a.id);
+    const ids = remaining.map((a: { id: string }) => a.id);
     expect(ids).not.toContain(agent2Id);
   });
 });

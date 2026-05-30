@@ -81,7 +81,7 @@ describe('Marketplace Catalog Seam', () => {
     expect(results.total).toBeGreaterThanOrEqual(0);
     // If results exist, they should match query
     if (results.packages.length > 0) {
-      const names = results.packages.map((p: any) => p.name.toLowerCase() + ' ' + (p.description || '').toLowerCase());
+      const names = results.packages.map((p) => p.name.toLowerCase() + ' ' + (p.description || '').toLowerCase());
       const hasMatch = names.some((n: string) => n.includes('research'));
       expect(hasMatch).toBe(true);
     }
@@ -145,9 +145,9 @@ describe('Marketplace Security Seam', () => {
     expect(result.security_score).toBeLessThan(100);
     expect(result.findings.length).toBeGreaterThan(0);
     // Should detect prompt injection and/or data exfiltration
-    const categories = result.findings.map((f: any) => f.category);
+    const categories = result.findings.map((f) => f.category);
     expect(
-      categories.some((c: string) => c.includes('injection') || c.includes('exfiltration'))
+      categories.some((c) => c.includes('injection') || c.includes('exfiltration'))
     ).toBe(true);
   });
 });
