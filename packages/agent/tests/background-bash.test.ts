@@ -44,7 +44,7 @@ describe('background bash, get_task_output, kill_task', () => {
   describe('bash default timeout change', () => {
     it('has 120s default timeout in description', () => {
       const bash = getTool('bash');
-      const props = (bash.parameters as any).properties;
+      const props = (bash.parameters as { properties: Record<string, { description: string }> }).properties;
       expect(props.timeout.description).toContain('120000');
     });
   });

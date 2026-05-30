@@ -138,7 +138,7 @@ const UNKNOWN_OUTPUTS = new Set([
 ]);
 
 const FORMAT_BULLET_PREFIXES = /^\s*([*\-•]|\d+[.)]\s)/m;
-const FORMAT_JSON_PREFIXES = /^\s*[{\[]/;
+const FORMAT_JSON_PREFIXES = /^\s*[{[]/;
 const FORMAT_FENCE_PREFIX = /^\s*```/;
 
 // ─────────────────────────────────────────────────────────────────────────

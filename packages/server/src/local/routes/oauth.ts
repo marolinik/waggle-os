@@ -189,9 +189,11 @@ export const oauthRoutes: FastifyPluginAsync = async (server) => {
 
     // Handle OAuth error response
     if (oauthError) {
+      const addr = server.server.address();
+      const errPort = (addr && typeof addr === 'object') ? addr.port : 3333;
       return reply.type('text/html').send(
         `<html><body><h2>OAuth Error</h2><p>${escapeXml(oauthError)}: ${escapeXml(error_description ?? 'Unknown error')}</p>` +
-        `<p><a href="http://127.0.0.1:${(server.server.address() as any)?.port ?? 3333}">Return to Waggle</a></p></body></html>`
+        `<p><a href="http://127.0.0.1:${errPort}">Return to Waggle</a></p></body></html>`
       );
     }
 

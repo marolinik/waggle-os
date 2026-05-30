@@ -99,7 +99,7 @@ export function emitAuditEvent(
   event: Omit<AuditEvent, 'id' | 'timestamp'>,
 ): void {
   try {
-    const dataDir = (server as any).localConfig?.dataDir;
+    const dataDir = server.localConfig?.dataDir;
     if (!dataDir) return;
 
     const db = getAuditDb(dataDir);
@@ -127,11 +127,11 @@ export function emitAuditEvent(
       ...event,
       timestamp: new Date().toISOString(),
     };
-    (server as any).eventBus?.emit('audit_event', fullEvent);
+    server.eventBus?.emit('audit_event', fullEvent);
 
     // TeamSync: Push audit event to team server (fire-and-forget)
     try {
-      const wsConfig = (server as any).workspaceManager?.get(event.workspaceId);
+      const wsConfig = event.workspaceId ? server.workspaceManager?.get(event.workspaceId) : null;
       if (wsConfig?.teamId && wsConfig?.teamServerUrl) {
         (async () => {
           try {
@@ -324,10 +324,10 @@ export const eventRoutes: FastifyPluginAsync = async (server) => {
       } catch { /* Client disconnected */ }
     };
 
-    (server as any).eventBus.on('audit_event', handler);
+    server.eventBus.on('audit_event', handler);
 
     request.raw.on('close', () => {
-      (server as any).eventBus.removeListener('audit_event', handler);
+      server.eventBus.removeListener('audit_event', handler);
     });
 
     const keepAlive = setInterval(() => {

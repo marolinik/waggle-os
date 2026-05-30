@@ -55,7 +55,7 @@ export function Jobs({ token, teamSlug }: JobsProps) {
         setError(null);
         const data = await api.listJobs(token, teamSlug);
         if (!cancelled) setJobs(Array.isArray(data) ? data : []);
-      } catch (err: any) {
+      } catch {
         if (!cancelled) {
           setError('Job queue not available. The team server may not support job listing, or is not running.');
           setJobs([]);

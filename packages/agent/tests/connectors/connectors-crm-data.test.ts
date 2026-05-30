@@ -80,7 +80,7 @@ describe('HubSpotConnector', () => {
     await connector.connect(vault);
 
     const mockData = { results: [{ id: '1', properties: { email: 'test@example.com' } }] };
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockData }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockData }) as unknown as typeof fetch;
 
     const result = await connector.execute('list_contacts', { limit: 5 });
     expect(result.success).toBe(true);
@@ -148,7 +148,7 @@ describe('SalesforceConnector', () => {
     await connector.connect(vault);
 
     const mockData = { records: [{ Id: '001xx', Name: 'Test Account' }], totalSize: 1 };
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockData }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockData }) as unknown as typeof fetch;
 
     const result = await connector.execute('search', { query: 'SELECT Id, Name FROM Account LIMIT 1' });
     expect(result.success).toBe(true);
@@ -206,7 +206,7 @@ describe('PipedriveConnector', () => {
     await connector.connect(vault);
 
     const mockData = { success: true, data: [{ id: 1, title: 'Big Deal' }] };
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockData }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockData }) as unknown as typeof fetch;
 
     const result = await connector.execute('list_deals', { limit: 10 });
     expect(result.success).toBe(true);
@@ -312,12 +312,12 @@ describe('GitLabConnector', () => {
     await connector.connect(vault);
 
     const mockProjects = [{ id: 1, name: 'myproject' }];
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockProjects }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockProjects }) as unknown as typeof fetch;
 
     const result = await connector.execute('list_projects', {});
     expect(result.success).toBe(true);
     // Verify the custom base URL was used
-    const callUrl = (globalThis.fetch as any).mock.calls[0][0] as string;
+    const callUrl = vi.mocked(globalThis.fetch).mock.calls[0][0] as string;
     expect(callUrl).toContain('gitlab.mycompany.com');
   });
 });
@@ -416,12 +416,12 @@ describe('DropboxConnector', () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ account_id: 'dbid:ABC', name: { display_name: 'Test' } }),
-    }) as any;
+    }) as unknown as typeof fetch;
 
     const health = await connector.healthCheck();
     expect(health.status).toBe('connected');
     // Verify POST method was used
-    const fetchCall = (globalThis.fetch as any).mock.calls[0];
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
     expect(fetchCall[1].method).toBe('POST');
   });
 });

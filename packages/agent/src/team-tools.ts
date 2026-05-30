@@ -186,16 +186,17 @@ export function createTeamTools(deps: TeamToolDeps): ToolDefinition[] {
             capabilityType: type,
             justification,
           });
-          const res = result as any;
+          const res = result as { error?: string };
           if (res.error?.includes('pending')) {
             return `A request for "${name}" is already pending. Your team admin will review it.`;
           }
           return `Request submitted for "${name}" (${type}). Your team admin will be notified and can approve or reject this request. You'll receive a notification when they decide.`;
-        } catch (err: any) {
-          if (err.message?.includes('409')) {
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          if (message.includes('409')) {
             return `A request for "${name}" is already pending. Your team admin will review it.`;
           }
-          return `Could not submit request: ${err.message}`;
+          return `Could not submit request: ${message}`;
         }
       },
     },

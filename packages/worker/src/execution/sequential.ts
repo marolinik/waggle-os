@@ -1,5 +1,8 @@
 import type { AgentMemberConfig, AgentResult, ExecutionDeps } from './parallel.js';
 
+/** Stub-mode result carries an extra `inputFrom` marker for backward-compat tests. */
+type StubAgentResult = AgentResult & { inputFrom: string };
+
 /**
  * Sequential execution strategy: agents run one after another,
  * each receiving the previous agent's output as context.
@@ -17,15 +20,15 @@ export async function executeSequential(
   for (const { agent, member } of members) {
     if (!deps) {
       // Stub mode (backward compat)
-      const output: AgentResult = {
+      const output: StubAgentResult = {
         agentId: agent.id,
         agentName: agent.name,
         role: member.roleInGroup,
         model: agent.model,
         output: `[Stub] ${agent.name} processed with input from previous step`,
+        // Preserve inputFrom for backward compat with existing tests
+        inputFrom: previousOutput === null ? 'taskInput' : (results[results.length - 1]?.agentName ?? 'taskInput'),
       };
-      // Preserve inputFrom for backward compat with existing tests
-      (output as any).inputFrom = previousOutput === null ? 'taskInput' : (results[results.length - 1]?.agentName);
       results.push(output);
       previousOutput = output.output;
       continue;

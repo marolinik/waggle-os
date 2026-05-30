@@ -137,7 +137,7 @@ Respond with ONLY valid JSON, no markdown or explanation.`;
         return reply.code(502).send({ error: 'LLM request failed' });
       }
 
-      const result = await res.json() as any;
+      const result = await res.json() as { content?: Array<{ text?: string }> };
       const text = result.content?.[0]?.text ?? '';
 
       // Extract JSON from response
@@ -154,8 +154,8 @@ Respond with ONLY valid JSON, no markdown or explanation.`;
         systemPrompt: generated.systemPrompt ?? '',
         tools: Array.isArray(generated.tools) ? generated.tools : [],
       };
-    } catch (err: any) {
-      return reply.code(500).send({ error: err.message ?? 'Generation failed' });
+    } catch (err: unknown) {
+      return reply.code(500).send({ error: err instanceof Error ? err.message : 'Generation failed' });
     }
   });
 

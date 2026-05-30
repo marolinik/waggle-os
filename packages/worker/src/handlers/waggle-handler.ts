@@ -9,6 +9,7 @@ import type { Db } from '../../../server/src/db/connection.js';
 import { teamEntities, tasks } from '../../../server/src/db/schema.js';
 import { sql } from 'drizzle-orm';
 import { WaggleDanceDispatcher } from '@waggle/waggle-dance';
+import type { WaggleMessage } from '@waggle/shared';
 
 export async function waggleHandler(job: Job<JobData>, db: Db): Promise<Record<string, unknown>> {
   const { teamId, input } = job.data;
@@ -36,7 +37,9 @@ export async function waggleHandler(job: Job<JobData>, db: Db): Promise<Record<s
       },
     });
 
-    const result = await dispatcher.dispatch(inputObj as any);
+    // `inputObj` is untrusted job-data; the dispatcher revalidates the
+    // type/subtype combo at runtime before acting on it.
+    const result = await dispatcher.dispatch(inputObj as unknown as WaggleMessage);
     return {
       dispatched: true,
       type: inputObj.type,

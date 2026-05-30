@@ -194,8 +194,8 @@ export function createPresentationTools(workspace: string): ToolDefinition[] {
             `${slides.filter(s => s.table).length} with tables)\n` +
             `IMPORTANT: Describe the presentation content in your response.`
           );
-        } catch (err: any) {
-          return `Error generating presentation: ${err.message}`;
+        } catch (err: unknown) {
+          return `Error generating presentation: ${err instanceof Error ? err.message : String(err)}`;
         }
       },
     },

@@ -59,6 +59,24 @@ export interface CiscoScanResult {
   scanDuration: number;
 }
 
+/**
+ * Shape of a rejected {@link ExecFileFn} call. `child_process.execFile`
+ * rejects with an Error augmented with `code` (`'ENOENT'` or a numeric exit
+ * code), `killed` (true on timeout), and the captured `stdout`/`stderr`.
+ */
+interface ExecFailure {
+  code?: string | number;
+  killed?: boolean;
+  stdout?: string;
+  stderr?: string;
+  message?: string;
+}
+
+/** Narrow an unknown caught value into an {@link ExecFailure} view. */
+function asExecFailure(err: unknown): ExecFailure {
+  return (typeof err === 'object' && err !== null) ? err as ExecFailure : {};
+}
+
 /** Sentinel result returned when the scanner is not installed */
 const SCANNER_NOT_AVAILABLE: CiscoScanResult = {
   passed: true,
@@ -184,19 +202,21 @@ export async function ciscoScan(content: string, filename: string): Promise<Cisc
         timeout: SCAN_TIMEOUT_MS,
       });
       stdout = result.stdout;
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const execErr = asExecFailure(err);
       // skill-scanner exits with code 1 when findings are found — that's not an error
-      if (err.code === 'ENOENT' || err.killed) {
+      if (execErr.code === 'ENOENT' || execErr.killed) {
         // CLI not found or timed out — try python module
         try {
           const result = await _execFile('python', ['-m', 'skill_scanner', ...args], {
             timeout: SCAN_TIMEOUT_MS,
           });
           stdout = result.stdout;
-        } catch (pyErr: any) {
-          if (pyErr.stdout) {
-            stdout = pyErr.stdout;
-            exitCode = pyErr.code ?? 1;
+        } catch (pyErr: unknown) {
+          const pyExecErr = asExecFailure(pyErr);
+          if (pyExecErr.stdout) {
+            stdout = pyExecErr.stdout;
+            exitCode = typeof pyExecErr.code === 'number' ? pyExecErr.code : 1;
           } else {
             // Try python3 as last resort
             try {
@@ -204,10 +224,11 @@ export async function ciscoScan(content: string, filename: string): Promise<Cisc
                 timeout: SCAN_TIMEOUT_MS,
               });
               stdout = result.stdout;
-            } catch (py3Err: any) {
-              if (py3Err.stdout) {
-                stdout = py3Err.stdout;
-                exitCode = py3Err.code ?? 1;
+            } catch (py3Err: unknown) {
+              const py3ExecErr = asExecFailure(py3Err);
+              if (py3ExecErr.stdout) {
+                stdout = py3ExecErr.stdout;
+                exitCode = typeof py3ExecErr.code === 'number' ? py3ExecErr.code : 1;
               } else {
                 return {
                   passed: true,
@@ -220,13 +241,13 @@ export async function ciscoScan(content: string, filename: string): Promise<Cisc
             }
           }
         }
-      } else if (err.stdout) {
+      } else if (execErr.stdout) {
         // Process exited with non-zero but produced output (findings found)
-        stdout = err.stdout;
-        exitCode = err.code ?? 1;
+        stdout = execErr.stdout;
+        exitCode = typeof execErr.code === 'number' ? execErr.code : 1;
       } else {
         // Unexpected error
-        console.warn(`[cisco-scanner] Scan failed: ${err.message || err}`);
+        console.warn(`[cisco-scanner] Scan failed: ${execErr.message || String(err)}`);
         return {
           passed: true,
           score: -1,

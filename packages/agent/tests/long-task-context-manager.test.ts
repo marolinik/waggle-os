@@ -27,6 +27,7 @@ import {
   ContextManager,
   type ContextManagerOptions,
   type CompressionEvent,
+  type ContextCompressionEvent,
 } from '../src/long-task/context-manager.js';
 import type { LlmCallFn, LlmCallResult } from '../src/retrieval-agent-loop.js';
 
@@ -244,12 +245,12 @@ describe('ContextManager — compress (retrieve-only)', () => {
       retainRecentChars: 100,
     });
     await mgr.compress(buildState({ accumulated_context: older + recent }));
-    const evt = events.find(e => e.type === 'context-compressed');
+    const evt = events.find((e): e is ContextCompressionEvent => e.type === 'context-compressed');
     expect(evt && 'archived' in evt && evt.archived).toMatchObject({
       range_start: 0,
       range_end: 1000,
     });
-    expect((evt as any).archived?.archived_text).toBe(older);
+    expect(evt.archived?.archived_text).toBe(older);
   });
 
   it('does NOT call llmCall under retrieve-only', async () => {
@@ -346,8 +347,8 @@ describe('ContextManager — compress (summarize-only)', () => {
       retainRecentChars: 50,
     });
     await mgr.compress(buildState({ accumulated_context: 'a'.repeat(2000) }));
-    const evt = events.find(e => e.type === 'context-compressed');
-    expect((evt as any).cost_usd).toBe(0.0042);
+    const evt = events.find((e): e is ContextCompressionEvent => e.type === 'context-compressed');
+    expect(evt.cost_usd).toBe(0.0042);
   });
 
   it('does NOT emit archived event for summarize-only', async () => {
@@ -360,8 +361,8 @@ describe('ContextManager — compress (summarize-only)', () => {
       retainRecentChars: 50,
     });
     await mgr.compress(buildState({ accumulated_context: 'a'.repeat(2000) }));
-    const evt = events.find(e => e.type === 'context-compressed');
-    expect((evt as any).archived).toBeUndefined();
+    const evt = events.find((e): e is ContextCompressionEvent => e.type === 'context-compressed');
+    expect(evt.archived).toBeUndefined();
   });
 
   it('preserves recent verbatim alongside summary', async () => {
@@ -397,9 +398,9 @@ describe('ContextManager — compress (hybrid)', () => {
     });
     await mgr.compress(buildState({ accumulated_context: 'a'.repeat(2000) }));
     expect(calls.length).toBe(1); // LLM was called
-    const evt = events.find(e => e.type === 'context-compressed');
-    expect((evt as any).archived).toBeDefined();
-    expect((evt as any).strategy).toBe('hybrid');
+    const evt = events.find((e): e is ContextCompressionEvent => e.type === 'context-compressed');
+    expect(evt.archived).toBeDefined();
+    expect(evt.strategy).toBe('hybrid');
   });
 });
 

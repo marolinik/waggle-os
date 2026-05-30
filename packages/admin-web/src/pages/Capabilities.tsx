@@ -5,9 +5,10 @@
  * Allows admins to manage capability policies, overrides, and review requests.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   api,
+  getErrorMessage,
   type CapabilityPolicyResponse,
   type CapabilityOverrideResponse,
   type CapabilityRequestResponse,
@@ -118,22 +119,22 @@ function PoliciesTab({ token, teamSlug }: CapabilitiesProps) {
   const [editBlocked, setEditBlocked] = useState('');
   const [editThreshold, setEditThreshold] = useState('none');
 
-  const fetchPolicies = async () => {
+  const fetchPolicies = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
       const data = await api.listCapabilityPolicies(token, teamSlug);
       setPolicies(data);
-    } catch (err: any) {
-      setError(err.message ?? 'Failed to load policies');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to load policies'));
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, teamSlug]);
 
   useEffect(() => {
     if (token && teamSlug) fetchPolicies();
-  }, [token, teamSlug]);
+  }, [token, teamSlug, fetchPolicies]);
 
   const startEdit = (p: CapabilityPolicyResponse) => {
     setEditingRole(p.role);
@@ -158,8 +159,8 @@ function PoliciesTab({ token, teamSlug }: CapabilitiesProps) {
       });
       setEditingRole(null);
       await fetchPolicies();
-    } catch (err: any) {
-      setError(err.message ?? 'Failed to update policy');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to update policy'));
     }
   };
 
@@ -352,22 +353,22 @@ function OverridesTab({ token, teamSlug }: CapabilitiesProps) {
   const [formDecision, setFormDecision] = useState('approved');
   const [formReason, setFormReason] = useState('');
 
-  const fetchOverrides = async () => {
+  const fetchOverrides = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
       const data = await api.listCapabilityOverrides(token, teamSlug);
       setOverrides(data);
-    } catch (err: any) {
-      setError(err.message ?? 'Failed to load overrides');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to load overrides'));
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, teamSlug]);
 
   useEffect(() => {
     if (token && teamSlug) fetchOverrides();
-  }, [token, teamSlug]);
+  }, [token, teamSlug, fetchOverrides]);
 
   const handleCreate = async () => {
     if (!formName.trim()) return;
@@ -385,8 +386,8 @@ function OverridesTab({ token, teamSlug }: CapabilitiesProps) {
       setFormReason('');
       setShowForm(false);
       await fetchOverrides();
-    } catch (err: any) {
-      setError(err.message ?? 'Failed to create override');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to create override'));
     }
   };
 
@@ -395,8 +396,8 @@ function OverridesTab({ token, teamSlug }: CapabilitiesProps) {
       setError(null);
       await api.deleteCapabilityOverride(token, teamSlug, id);
       await fetchOverrides();
-    } catch (err: any) {
-      setError(err.message ?? 'Failed to remove override');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to remove override'));
     }
   };
 
@@ -604,23 +605,23 @@ function RequestsTab({
   const [decidingId, setDecidingId] = useState<string | null>(null);
   const [decisionReason, setDecisionReason] = useState('');
 
-  const fetchRequests = async () => {
+  const fetchRequests = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
       const data = await api.listCapabilityRequests(token, teamSlug);
       setRequests(data);
       onPendingCount(data.filter((r) => r.status === 'pending').length);
-    } catch (err: any) {
-      setError(err.message ?? 'Failed to load requests');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to load requests'));
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, teamSlug, onPendingCount]);
 
   useEffect(() => {
     if (token && teamSlug) fetchRequests();
-  }, [token, teamSlug]);
+  }, [token, teamSlug, fetchRequests]);
 
   const handleDecision = async (id: string, status: string) => {
     try {
@@ -632,8 +633,8 @@ function RequestsTab({
       setDecidingId(null);
       setDecisionReason('');
       await fetchRequests();
-    } catch (err: any) {
-      setError(err.message ?? 'Failed to process decision');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to process decision'));
     }
   };
 

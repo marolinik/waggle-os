@@ -45,6 +45,27 @@ export interface CreateScheduleInput {
   enabled?: boolean;
 }
 
+export interface CronExecutionRow {
+  id: number;
+  schedule_id: number;
+  schedule_name: string;
+  executed_at: string;
+  duration_ms: number | null;
+  success: number;          // SQLite integer boolean
+  result_summary: string | null;
+  error: string | null;
+}
+
+export interface NotificationRow {
+  id: number;
+  title: string;
+  body: string;
+  category: string;
+  action_url: string | null;
+  read: number;             // SQLite integer boolean
+  created_at: string;
+}
+
 // ── Table DDL ──────────────────────────────────────────────────────────
 
 export const CRON_SCHEDULES_TABLE_SQL = `
@@ -270,13 +291,10 @@ export class CronStore {
   }
 
   /** Get execution history for a schedule (most recent first). */
-  getExecutionHistory(scheduleId: number, limit = 20): Array<{
-    id: number; schedule_id: number; schedule_name: string; executed_at: string;
-    duration_ms: number | null; success: number; result_summary: string | null; error: string | null;
-  }> {
+  getExecutionHistory(scheduleId: number, limit = 20): CronExecutionRow[] {
     return this.db.getDatabase().prepare(
       'SELECT * FROM cron_execution_history WHERE schedule_id = ? ORDER BY executed_at DESC LIMIT ?',
-    ).all(scheduleId, limit) as any[];
+    ).all(scheduleId, limit) as CronExecutionRow[];
   }
 
   // ── W5.10: Notification Persistence ────────────────────────────────
@@ -290,10 +308,7 @@ export class CronStore {
   }
 
   /** Get recent notifications (newest first). */
-  getNotifications(opts?: { since?: string; limit?: number; unreadOnly?: boolean }): Array<{
-    id: number; title: string; body: string; category: string;
-    action_url: string | null; read: number; created_at: string;
-  }> {
+  getNotifications(opts?: { since?: string; limit?: number; unreadOnly?: boolean }): NotificationRow[] {
     const limit = opts?.limit ?? 50;
     let sql = 'SELECT * FROM notifications';
     const conditions: string[] = [];
@@ -303,7 +318,7 @@ export class CronStore {
     if (conditions.length > 0) sql += ' WHERE ' + conditions.join(' AND ');
     sql += ' ORDER BY created_at DESC LIMIT ?';
     params.push(limit);
-    return this.db.getDatabase().prepare(sql).all(...params) as any[];
+    return this.db.getDatabase().prepare(sql).all(...params) as NotificationRow[];
   }
 
   /** Mark a notification as read. */

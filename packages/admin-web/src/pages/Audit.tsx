@@ -62,7 +62,7 @@ export function Audit({ token, teamSlug }: AuditProps) {
         setError(null);
         const data = await api.listAudit(token, teamSlug);
         if (!cancelled) setEntries(Array.isArray(data) ? data : []);
-      } catch (err: any) {
+      } catch {
         if (!cancelled) {
           setError('Could not load audit log. You may need admin access, or the server is not running.');
           setEntries([]);

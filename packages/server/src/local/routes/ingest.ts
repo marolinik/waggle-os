@@ -250,11 +250,21 @@ async function processPptx(name: string, b64: string): Promise<IngestFileResult>
   }
 }
 
+/** Minimal slice of the adm-zip API used here (the package is loaded at runtime via createRequire). */
+interface AdmZipEntry {
+  entryName: string;
+  getData(): Buffer;
+}
+interface AdmZipInstance {
+  getEntries(): AdmZipEntry[];
+}
+type AdmZipConstructor = new (buffer: Buffer) => AdmZipInstance;
+
 /** Try to load adm-zip if available, otherwise return null */
-async function tryLoadAdmZip(): Promise<any> {
+async function tryLoadAdmZip(): Promise<AdmZipConstructor | null> {
   try {
     const require = createRequire(import.meta.url);
-    return require('adm-zip');
+    return require('adm-zip') as AdmZipConstructor;
   } catch {
     return null;
   }
@@ -271,13 +281,13 @@ async function processXlsx(name: string, b64: string): Promise<IngestFileResult>
     const sheetTexts: string[] = [];
     for (const worksheet of workbook.worksheets) {
       const rows: string[] = [];
-      worksheet.eachRow((row: any) => {
-        const values = row.values as any[];
+      worksheet.eachRow((row: { values?: unknown }) => {
+        const values = Array.isArray(row.values) ? row.values : [];
         // ExcelJS row.values is 1-indexed (index 0 is undefined), so slice from 1
-        const cells = values.slice(1).map((v: any) => {
+        const cells = values.slice(1).map((v: unknown) => {
           if (v === null || v === undefined) return '';
-          if (typeof v === 'object' && v.result !== undefined) return String(v.result); // formula
-          if (typeof v === 'object' && v.text !== undefined) return String(v.text); // rich text
+          if (typeof v === 'object' && 'result' in v && v.result !== undefined) return String(v.result); // formula
+          if (typeof v === 'object' && 'text' in v && v.text !== undefined) return String(v.text); // rich text
           return String(v);
         });
         rows.push(cells.join(','));

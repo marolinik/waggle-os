@@ -6,13 +6,14 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ConnectorRegistry, type AuditLogger } from '../../src/connector-registry.js';
 import { BaseConnector, type ConnectorAction, type ConnectorResult } from '../../src/connector-sdk.js';
-import { executeParallel, type ExecutionDeps, type AgentMemberConfig } from '../../../worker/src/execution/parallel.js';
+import { executeParallel, type ExecutionDeps, type AgentMemberConfig, type AgentResult } from '../../../worker/src/execution/parallel.js';
 import { executeSequential } from '../../../worker/src/execution/sequential.js';
 import { executeCoordinator } from '../../../worker/src/execution/coordinator.js';
 import { AgentMessageBus } from '../../src/agent-message-bus.js';
 import { createAgentCommsTools } from '../../src/agent-comms-tools.js';
 import { WorkspaceSessionManager } from '../../../server/src/local/workspace-sessions.js';
-import type { VaultStore } from '@waggle/core';
+import type { MindDB, VaultStore } from '@waggle/core';
+import type { Orchestrator } from '../../src/orchestrator.js';
 import type { ConnectorHealth } from '@waggle/shared';
 
 // ── Mock helpers ──────────────────────────────────────────────────────
@@ -165,7 +166,7 @@ describe('E2E Swarm Scenarios', () => {
       expect(result.strategy).toBe('parallel');
       expect(result.agentCount).toBe(2);
       expect(deps.runAgent).toHaveBeenCalledTimes(2);
-      expect((result.results as any[]).every((r: any) => r.output.length > 0)).toBe(true);
+      expect((result.results as AgentResult[]).every((r) => r.output.length > 0)).toBe(true);
     });
   });
 
@@ -179,7 +180,7 @@ describe('E2E Swarm Scenarios', () => {
       expect(result.strategy).toBe('sequential');
       expect(deps.runAgent).toHaveBeenCalledTimes(2);
       // Second call should have "Previous Agent" in system prompt
-      const calls = (deps.runAgent as any).mock.calls;
+      const calls = vi.mocked(deps.runAgent).mock.calls;
       expect(calls[1][0].systemPrompt).toContain('Previous Agent');
     });
   });
@@ -220,8 +221,8 @@ describe('E2E Swarm Scenarios', () => {
   describe('SW5: Workspace session lifecycle', () => {
     it('create, use, pause, resume, kill session', () => {
       const manager = new WorkspaceSessionManager(3);
-      const mind = { close: vi.fn() } as any;
-      const orchestrator = { setWorkspaceMind: vi.fn() } as any;
+      const mind = { close: vi.fn() } as unknown as MindDB;
+      const orchestrator = { setWorkspaceMind: vi.fn() } as unknown as Orchestrator;
       const tools = [{ name: 't1', description: '', parameters: {}, execute: async () => '' }];
 
       // Create

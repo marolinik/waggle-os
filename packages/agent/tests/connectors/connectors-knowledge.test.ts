@@ -7,6 +7,16 @@ import { ConfluenceConnector } from '../../src/connectors/confluence-connector.j
 import { ObsidianConnector } from '../../src/connectors/obsidian-connector.js';
 import type { VaultStore } from '@waggle/core';
 
+/** Shape of ConnectorResult.data fields asserted by these knowledge-connector tests. */
+type KnowledgeData = {
+  created?: boolean;
+  updated?: boolean;
+  content?: string;
+  name?: string;
+  notes?: { name: string }[];
+  results?: { name: string }[];
+};
+
 function createMockVault(
   connectorId: string,
   cred?: { value: string; isExpired: boolean },
@@ -82,7 +92,7 @@ describe('NotionConnector', () => {
     const vault = createMockVault('notion', { value: 'ntn_test123', isExpired: false });
     await connector.connect(vault);
 
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ type: 'bot' }) }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ type: 'bot' }) }) as unknown as typeof fetch;
 
     const health = await connector.healthCheck();
     expect(health.status).toBe('connected');
@@ -94,13 +104,13 @@ describe('NotionConnector', () => {
     await connector.connect(vault);
 
     const mockResults = { results: [{ id: 'page-1', object: 'page' }] };
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockResults }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockResults }) as unknown as typeof fetch;
 
     const result = await connector.execute('search_pages', { query: 'project plan' });
     expect(result.success).toBe(true);
     expect(result.data).toEqual(mockResults);
 
-    const fetchCall = (globalThis.fetch as any).mock.calls[0];
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
     expect(fetchCall[0]).toContain('/search');
     expect(fetchCall[1].method).toBe('POST');
   });
@@ -110,7 +120,7 @@ describe('NotionConnector', () => {
     await connector.connect(vault);
 
     const mockPage = { id: 'page-1', object: 'page' };
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockPage }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockPage }) as unknown as typeof fetch;
 
     const result = await connector.execute('get_page', { page_id: 'page-1' });
     expect(result.success).toBe(true);
@@ -195,7 +205,7 @@ describe('ConfluenceConnector', () => {
     });
     await connector.connect(vault);
 
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ results: [] }) }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ results: [] }) }) as unknown as typeof fetch;
 
     const health = await connector.healthCheck();
     expect(health.status).toBe('connected');
@@ -221,13 +231,13 @@ describe('ConfluenceConnector', () => {
     await connector.connect(vault);
 
     const mockResults = { results: [{ id: '123', title: 'Test Page' }] };
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockResults }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockResults }) as unknown as typeof fetch;
 
     const result = await connector.execute('search_content', { cql: 'type=page AND text~"test"' });
     expect(result.success).toBe(true);
     expect(result.data).toEqual(mockResults);
 
-    const fetchCall = (globalThis.fetch as any).mock.calls[0];
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
     expect(fetchCall[0]).toContain('mycompany.atlassian.net/wiki/api/v2/search');
     expect(fetchCall[0]).toContain('cql=');
   });
@@ -331,7 +341,7 @@ describe('ObsidianConnector', () => {
       content: '# Hello World\n\nThis is a test note.',
     });
     expect(result.success).toBe(true);
-    expect((result.data as any).created).toBe(true);
+    expect((result.data as KnowledgeData).created).toBe(true);
 
     // Verify the file exists
     const filePath = path.join(tmpDir, 'test-note.md');
@@ -373,8 +383,8 @@ describe('ObsidianConnector', () => {
 
     const result = await connector.execute('get_note', { path: 'read-me.md' });
     expect(result.success).toBe(true);
-    expect((result.data as any).content).toBe('# Test\nContent here');
-    expect((result.data as any).name).toBe('read-me.md');
+    expect((result.data as KnowledgeData).content).toBe('# Test\nContent here');
+    expect((result.data as KnowledgeData).name).toBe('read-me.md');
   });
 
   it('get_note returns error for missing file', async () => {
@@ -397,7 +407,7 @@ describe('ObsidianConnector', () => {
       content: 'new content',
     });
     expect(result.success).toBe(true);
-    expect((result.data as any).updated).toBe(true);
+    expect((result.data as KnowledgeData).updated).toBe(true);
     expect(fs.readFileSync(path.join(tmpDir, 'update-me.md'), 'utf-8')).toBe('new content');
   });
 
@@ -411,9 +421,9 @@ describe('ObsidianConnector', () => {
 
     const result = await connector.execute('list_notes', {});
     expect(result.success).toBe(true);
-    const notes = (result.data as any).notes;
+    const notes = (result.data as { notes: { name: string }[] }).notes;
     expect(notes).toHaveLength(2);
-    expect(notes.map((n: any) => n.name).sort()).toEqual(['note1.md', 'note2.md']);
+    expect(notes.map((n) => n.name).sort()).toEqual(['note1.md', 'note2.md']);
   });
 
   it('list_notes includes subfolder files', async () => {
@@ -426,7 +436,7 @@ describe('ObsidianConnector', () => {
 
     const result = await connector.execute('list_notes', {});
     expect(result.success).toBe(true);
-    expect((result.data as any).notes).toHaveLength(2);
+    expect((result.data as KnowledgeData).notes).toHaveLength(2);
   });
 
   it('list_notes skips hidden directories', async () => {
@@ -439,8 +449,8 @@ describe('ObsidianConnector', () => {
 
     const result = await connector.execute('list_notes', {});
     expect(result.success).toBe(true);
-    expect((result.data as any).notes).toHaveLength(1);
-    expect((result.data as any).notes[0].name).toBe('visible.md');
+    expect((result.data as KnowledgeData).notes).toHaveLength(1);
+    expect((result.data as KnowledgeData).notes[0].name).toBe('visible.md');
   });
 
   it('search_notes finds by filename', async () => {
@@ -452,8 +462,8 @@ describe('ObsidianConnector', () => {
 
     const result = await connector.execute('search_notes', { query: 'project' });
     expect(result.success).toBe(true);
-    expect((result.data as any).results).toHaveLength(1);
-    expect((result.data as any).results[0].name).toBe('project-plan.md');
+    expect((result.data as KnowledgeData).results).toHaveLength(1);
+    expect((result.data as KnowledgeData).results[0].name).toBe('project-plan.md');
   });
 
   it('search_notes finds by content', async () => {
@@ -465,8 +475,8 @@ describe('ObsidianConnector', () => {
 
     const result = await connector.execute('search_notes', { query: 'waggle' });
     expect(result.success).toBe(true);
-    expect((result.data as any).results).toHaveLength(1);
-    expect((result.data as any).results[0].name).toBe('note-b.md');
+    expect((result.data as KnowledgeData).results).toHaveLength(1);
+    expect((result.data as KnowledgeData).results[0].name).toBe('note-b.md');
   });
 
   it('list_folders returns subdirectories', async () => {
@@ -479,9 +489,9 @@ describe('ObsidianConnector', () => {
 
     const result = await connector.execute('list_folders', {});
     expect(result.success).toBe(true);
-    const folders = (result.data as any).folders;
+    const folders = (result.data as { folders: { name: string }[] }).folders;
     expect(folders).toHaveLength(2);
-    expect(folders.map((f: any) => f.name).sort()).toEqual(['Archive', 'Projects']);
+    expect(folders.map((f) => f.name).sort()).toEqual(['Archive', 'Projects']);
   });
 
   it('rejects path traversal', async () => {

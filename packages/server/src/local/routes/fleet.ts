@@ -16,13 +16,13 @@ const log = createLogger('fleet');
 export async function fleetRoutes(fastify: FastifyInstance) {
   // GET /api/fleet — list all active workspace sessions
   fastify.get('/api/fleet', async () => {
-    const sessionManager = (fastify as any).sessionManager;
+    const sessionManager = fastify.sessionManager;
     if (!sessionManager) {
       return { sessions: [], count: 0 };
     }
 
     const costTracker = fastify.agentState?.costTracker;
-    const sessions = sessionManager.getActive().map((s: any) => {
+    const sessions = sessionManager.getActive().map((s) => {
       // Enrich with workspace config (model, budget)
       const wsConfig = fastify.workspaceManager?.get(s.workspaceId);
       const wsCost = costTracker?.getWorkspaceCost(s.workspaceId) ?? 0;
@@ -41,7 +41,7 @@ export async function fleetRoutes(fastify: FastifyInstance) {
     });
 
     // Tier-based maxSessions: FREE=3, PRO=10, TEAMS=25, ENTERPRISE/TRIAL=100
-    const tierRaw = (fastify as any).localConfig?.tier ?? '';
+    const tierRaw = fastify.localConfig?.tier ?? '';
     const tier = parseTier(String(tierRaw)) ?? 'FREE';
     const caps = getCapabilities(tier);
     const maxSessions = tier === 'FREE' ? 3 : tier === 'PRO' ? 10 : tier === 'TEAMS' ? 25 : 100;
@@ -259,7 +259,7 @@ export async function fleetRoutes(fastify: FastifyInstance) {
   // POST /api/fleet/:workspaceId/pause — pause a workspace session
   fastify.post('/api/fleet/:workspaceId/pause', async (request, reply) => {
     const { workspaceId } = request.params as { workspaceId: string };
-    const sessionManager = (fastify as any).sessionManager;
+    const sessionManager = fastify.sessionManager;
     if (!sessionManager) return reply.code(503).send({ error: 'Session manager not available' });
 
     const paused = sessionManager.pause(workspaceId);
@@ -270,7 +270,7 @@ export async function fleetRoutes(fastify: FastifyInstance) {
   // POST /api/fleet/:workspaceId/resume — resume a paused session
   fastify.post('/api/fleet/:workspaceId/resume', async (request, reply) => {
     const { workspaceId } = request.params as { workspaceId: string };
-    const sessionManager = (fastify as any).sessionManager;
+    const sessionManager = fastify.sessionManager;
     if (!sessionManager) return reply.code(503).send({ error: 'Session manager not available' });
 
     const resumed = sessionManager.resume(workspaceId);
@@ -281,7 +281,7 @@ export async function fleetRoutes(fastify: FastifyInstance) {
   // POST /api/fleet/:workspaceId/kill — abort and close a session
   fastify.post('/api/fleet/:workspaceId/kill', async (request, reply) => {
     const { workspaceId } = request.params as { workspaceId: string };
-    const sessionManager = (fastify as any).sessionManager;
+    const sessionManager = fastify.sessionManager;
     if (!sessionManager) return reply.code(503).send({ error: 'Session manager not available' });
 
     const killed = sessionManager.close(workspaceId);

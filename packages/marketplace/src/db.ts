@@ -14,6 +14,8 @@ import type {
   MarketplaceSource,
   MarketplacePack,
   Installation,
+  InstalledPackageRow,
+  PackageUpsertInput,
   SearchOptions,
   SearchResult,
   SearchSort,
@@ -36,6 +38,16 @@ export class MarketplaceDB {
       const count = (this.db.prepare('SELECT COUNT(*) as cnt FROM packages').get() as { cnt: number })?.cnt ?? 0;
       if (count > 0) seedMcpServers(this);
     } catch { /* packages table may not exist in empty DBs */ }
+  }
+
+  /**
+   * Internal escape hatch for sibling marketplace modules (sync, seed,
+   * mcp-registry) that need to run raw SQL not covered by the typed API.
+   * Returns the underlying better-sqlite3 handle. Not part of the public
+   * marketplace surface — prefer the typed methods above where they exist.
+   */
+  getRawDb(): Database.Database {
+    return this.db;
   }
 
   /**
@@ -361,16 +373,15 @@ export class MarketplaceDB {
   /**
    * Get all active installations.
    */
-  listInstallations(): (Installation & { package: MarketplacePackage })[] {
-    const rows = this.db.prepare(`
+  listInstallations(): InstalledPackageRow[] {
+    return this.db.prepare(`
       SELECT i.*, p.name as pkg_name, p.display_name as pkg_display_name,
              p.waggle_install_type, p.category
       FROM installations i
       INNER JOIN packages p ON p.id = i.package_id
       WHERE i.status = 'installed'
       ORDER BY i.installed_at DESC
-    `).all() as any[];
-    return rows;
+    `).all() as InstalledPackageRow[];
   }
 
   /**
@@ -397,7 +408,7 @@ export class MarketplaceDB {
   /**
    * Insert or update a package (used by sync scripts).
    */
-  upsertPackage(pkg: Partial<MarketplacePackage> & { name: string; source_id: number }): number {
+  upsertPackage(pkg: PackageUpsertInput): number {
     const existing = this.db.prepare('SELECT id FROM packages WHERE name = ? AND source_id = ?')
       .get(pkg.name, pkg.source_id) as { id: number } | undefined;
 

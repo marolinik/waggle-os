@@ -134,7 +134,7 @@ describe('Sub-Agent Result Cleanup (11B-6)', () => {
       systemPrompt: 'test',
       tools: [],
       createdAt: now - 500,
-    } as any);
+    });
 
     // Error handler stores a result and cleans up activeAgents
     agentResults.set('crash-agent-1', crashedResult);
@@ -167,7 +167,7 @@ describe('Sub-Agent Result Cleanup (11B-6)', () => {
       systemPrompt: 'running',
       tools: [],
       createdAt: Date.now(),
-    } as any);
+    });
     activeAgents.set('active-2', {
       id: 'active-2',
       name: 'Active Agent 2',
@@ -175,7 +175,7 @@ describe('Sub-Agent Result Cleanup (11B-6)', () => {
       systemPrompt: 'running',
       tools: [],
       createdAt: Date.now(),
-    } as any);
+    });
 
     // Now add one more completed result — this triggers the capacity scenario
     agentResults.set('new-completed', makeResult('new-completed', Date.now()));
@@ -208,7 +208,7 @@ describe('Sub-Agent Result Cleanup (11B-6)', () => {
       systemPrompt: 'analyze data',
       tools: [],
       createdAt: now - 3000,
-    } as any);
+    });
 
     // Simulate kill: store partial result, remove from active
     const partialOutput = 'Partial analysis: found 3 anomalies in dataset...';

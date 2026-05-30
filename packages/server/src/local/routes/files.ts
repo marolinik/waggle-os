@@ -22,6 +22,20 @@ interface PathQuery { path?: string }
 interface PathBody { path: string }
 interface MoveBody { from: string; to: string }
 
+/** Safely read `.message` off an unknown caught value. */
+function errMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/** Safely read a Node-style `.code` off an unknown caught value. */
+function errCode(err: unknown): string | undefined {
+  if (err && typeof err === 'object' && 'code' in err) {
+    const code = (err as { code?: unknown }).code;
+    return typeof code === 'string' ? code : undefined;
+  }
+  return undefined;
+}
+
 /** Resolve workspace and storage provider from request params */
 function resolveWorkspace(server: FastifyInstance, workspaceId: string) {
   const dataDir = server.localConfig.dataDir;
@@ -85,11 +99,12 @@ export async function fileRoutes(server: FastifyInstance) {
         const { provider } = resolveWorkspace(server, workspaceId);
         const entries = await provider.list(dirPath);
         return entries;
-      } catch (err: any) {
-        if (err.message?.includes('Invalid path')) {
-          return reply.status(400).send({ error: err.message });
+      } catch (err: unknown) {
+        const message = errMessage(err);
+        if (message.includes('Invalid path')) {
+          return reply.status(400).send({ error: message });
         }
-        return reply.status(500).send({ error: err.message ?? 'Failed to list files' });
+        return reply.status(500).send({ error: message || 'Failed to list files' });
       }
     },
   );
@@ -119,8 +134,8 @@ export async function fileRoutes(server: FastifyInstance) {
             // Enforce the size limit WHILE reading so an oversized upload can
             // never buffer into memory before the guard runs.
             rawBody = await getRawBody(request, MAX_UPLOAD_SIZE);
-          } catch (err: any) {
-            if (err?.code === MAX_BODY_BYTES_EXCEEDED) {
+          } catch (err: unknown) {
+            if (errCode(err) === MAX_BODY_BYTES_EXCEEDED) {
               return reply.status(413).send({ error: `File exceeds ${MAX_UPLOAD_SIZE / 1024 / 1024}MB limit` });
             }
             throw err;
@@ -155,11 +170,12 @@ export async function fileRoutes(server: FastifyInstance) {
         const indexer = resolveIndexer(server, workspaceId);
         safeIndex(indexer, () => indexer!.indexFile(targetPath, fileData, lookup(body.name)));
         return reply.status(201).send(entry);
-      } catch (err: any) {
-        if (err.message?.includes('Invalid path')) {
-          return reply.status(400).send({ error: err.message });
+      } catch (err: unknown) {
+        const message = errMessage(err);
+        if (message.includes('Invalid path')) {
+          return reply.status(400).send({ error: message });
         }
-        return reply.status(500).send({ error: err.message ?? 'Upload failed' });
+        return reply.status(500).send({ error: message || 'Upload failed' });
       }
     },
   );
@@ -191,11 +207,12 @@ export async function fileRoutes(server: FastifyInstance) {
           .header('Content-Disposition', `attachment; filename="${filename}"`)
           .header('Content-Length', data.length)
           .send(data);
-      } catch (err: any) {
-        if (err.message?.includes('Invalid path')) {
-          return reply.status(400).send({ error: err.message });
+      } catch (err: unknown) {
+        const message = errMessage(err);
+        if (message.includes('Invalid path')) {
+          return reply.status(400).send({ error: message });
         }
-        return reply.status(500).send({ error: err.message ?? 'Download failed' });
+        return reply.status(500).send({ error: message || 'Download failed' });
       }
     },
   );
@@ -215,11 +232,12 @@ export async function fileRoutes(server: FastifyInstance) {
         const { provider } = resolveWorkspace(server, workspaceId);
         const entry = await provider.mkdir(dirPath);
         return reply.status(201).send(entry);
-      } catch (err: any) {
-        if (err.message?.includes('Invalid path')) {
-          return reply.status(400).send({ error: err.message });
+      } catch (err: unknown) {
+        const message = errMessage(err);
+        if (message.includes('Invalid path')) {
+          return reply.status(400).send({ error: message });
         }
-        return reply.status(500).send({ error: err.message ?? 'Failed to create directory' });
+        return reply.status(500).send({ error: message || 'Failed to create directory' });
       }
     },
   );
@@ -241,11 +259,12 @@ export async function fileRoutes(server: FastifyInstance) {
         const indexer = resolveIndexer(server, workspaceId);
         safeIndex(indexer, () => indexer!.removeFile(targetPath));
         return reply.status(204).send();
-      } catch (err: any) {
-        if (err.message?.includes('Invalid path')) {
-          return reply.status(400).send({ error: err.message });
+      } catch (err: unknown) {
+        const message = errMessage(err);
+        if (message.includes('Invalid path')) {
+          return reply.status(400).send({ error: message });
         }
-        return reply.status(500).send({ error: err.message ?? 'Delete failed' });
+        return reply.status(500).send({ error: message || 'Delete failed' });
       }
     },
   );
@@ -267,11 +286,12 @@ export async function fileRoutes(server: FastifyInstance) {
         const indexer = resolveIndexer(server, workspaceId);
         safeIndex(indexer, () => indexer!.moveFile(from, to));
         return entry;
-      } catch (err: any) {
-        if (err.message?.includes('Invalid path') || err.message?.includes('not found')) {
-          return reply.status(400).send({ error: err.message });
+      } catch (err: unknown) {
+        const message = errMessage(err);
+        if (message.includes('Invalid path') || message.includes('not found')) {
+          return reply.status(400).send({ error: message });
         }
-        return reply.status(500).send({ error: err.message ?? 'Move failed' });
+        return reply.status(500).send({ error: message || 'Move failed' });
       }
     },
   );
@@ -303,11 +323,12 @@ export async function fileRoutes(server: FastifyInstance) {
           }
         }
         return entry;
-      } catch (err: any) {
-        if (err.message?.includes('Invalid path') || err.message?.includes('not found')) {
-          return reply.status(400).send({ error: err.message });
+      } catch (err: unknown) {
+        const message = errMessage(err);
+        if (message.includes('Invalid path') || message.includes('not found')) {
+          return reply.status(400).send({ error: message });
         }
-        return reply.status(500).send({ error: err.message ?? 'Copy failed' });
+        return reply.status(500).send({ error: message || 'Copy failed' });
       }
     },
   );

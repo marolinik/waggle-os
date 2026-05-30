@@ -48,11 +48,11 @@ export function emitNotification(fastify: FastifyInstance, event: Omit<Notificat
     timestamp: new Date().toISOString(),
     ...event,
   };
-  (fastify as any).eventBus?.emit('notification', full);
+  fastify.eventBus?.emit('notification', full);
 
   // W5.10: Persist notification so it survives offline/restart
   try {
-    (fastify as any).cronStore?.saveNotification(event.title, event.body, event.category, event.actionUrl);
+    fastify.cronStore?.saveNotification(event.title, event.body, event.category, event.actionUrl);
   } catch { /* non-blocking */ }
 }
 
@@ -64,7 +64,7 @@ export function emitSubagentStatus(fastify: FastifyInstance, workspaceId: string
     agents,
     timestamp: new Date().toISOString(),
   };
-  (fastify as any).eventBus?.emit('subagent_status', event);
+  fastify.eventBus?.emit('subagent_status', event);
 }
 
 /** Emit a workflow suggestion event on the eventBus for SSE relay */
@@ -81,7 +81,7 @@ export function emitWorkflowSuggestion(
     reason,
     timestamp: new Date().toISOString(),
   };
-  (fastify as any).eventBus?.emit('workflow_suggestion', event);
+  fastify.eventBus?.emit('workflow_suggestion', event);
 }
 
 export async function notificationRoutes(fastify: FastifyInstance) {
@@ -113,7 +113,7 @@ export async function notificationRoutes(fastify: FastifyInstance) {
       } catch { /* Client disconnected */ }
     };
 
-    const eventBus = (fastify as any).eventBus;
+    const eventBus = fastify.eventBus;
     if (eventBus) {
       eventBus.on('notification', notificationHandler);
       eventBus.on('subagent_status', subagentHandler);
@@ -140,7 +140,7 @@ export async function notificationRoutes(fastify: FastifyInstance) {
     Querystring: { since?: string; limit?: string; unread?: string };
   }>('/api/notifications', async (request) => {
     const { since, limit, unread } = request.query;
-    const cronStore = (fastify as any).cronStore;
+    const cronStore = fastify.cronStore;
     if (!cronStore?.getNotifications) return { notifications: [], count: 0 };
     const results = cronStore.getNotifications({
       since,
@@ -155,7 +155,7 @@ export async function notificationRoutes(fastify: FastifyInstance) {
   }>('/api/notifications/:id/read', async (request, reply) => {
     const id = parseInt(request.params.id, 10);
     if (isNaN(id)) return reply.status(400).send({ error: 'Invalid ID' });
-    const cronStore = (fastify as any).cronStore;
+    const cronStore = fastify.cronStore;
     if (!cronStore?.markNotificationRead) return reply.status(503).send({ error: 'Not available' });
     cronStore.markNotificationRead(id);
     return { read: true, id };
@@ -166,7 +166,7 @@ export async function notificationRoutes(fastify: FastifyInstance) {
     Querystring: { unread?: string; limit?: string };
   }>('/api/notifications/history', async (request) => {
     const { unread, limit } = request.query;
-    const cronStore = (fastify as any).cronStore;
+    const cronStore = fastify.cronStore;
     if (!cronStore?.getNotifications) return { notifications: [], count: 0, unread: 0 };
     const results = cronStore.getNotifications({
       limit: limit ? parseInt(limit, 10) : 100,
@@ -181,7 +181,7 @@ export async function notificationRoutes(fastify: FastifyInstance) {
   }>('/api/notifications/:id/read', async (request, reply) => {
     const id = parseInt(request.params.id, 10);
     if (isNaN(id)) return reply.status(400).send({ error: 'Invalid ID' });
-    const cronStore = (fastify as any).cronStore;
+    const cronStore = fastify.cronStore;
     if (!cronStore?.markNotificationRead) return reply.status(503).send({ error: 'Not available' });
     cronStore.markNotificationRead(id);
     return { read: true, id };
@@ -189,7 +189,7 @@ export async function notificationRoutes(fastify: FastifyInstance) {
 
   // Q16:C — POST /api/notifications/read-all — mark all notifications as read
   fastify.post('/api/notifications/read-all', async (_request, reply) => {
-    const cronStore = (fastify as any).cronStore;
+    const cronStore = fastify.cronStore;
     if (!cronStore?.markAllRead) return reply.status(503).send({ error: 'Not available' });
     const count = cronStore.markAllRead();
     return { markedRead: count };
@@ -202,7 +202,7 @@ export async function notificationRoutes(fastify: FastifyInstance) {
   }>('/api/cron/:id/history', async (request, reply) => {
     const id = parseInt(request.params.id, 10);
     if (isNaN(id)) return reply.status(400).send({ error: 'Invalid ID' });
-    const cronStore = (fastify as any).cronStore;
+    const cronStore = fastify.cronStore;
     if (!cronStore?.getExecutionHistory) return reply.status(503).send({ error: 'Not available' });
     const limit = request.query.limit ? parseInt(request.query.limit, 10) : 20;
     const history = cronStore.getExecutionHistory(id, limit);

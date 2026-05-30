@@ -16,7 +16,7 @@ async function waitForJobStatus(
   target: string,
   timeoutMs = 10_000,
   intervalMs = 200,
-): Promise<any> {
+): Promise<Awaited<ReturnType<JobService['getJob']>>> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const job = await jobService.getJob(jobId);
@@ -41,7 +41,7 @@ describe('BullMQ Worker', () => {
 
     // Override handlers with fast mocks (real handlers call LiteLLM which isn't running in tests)
     workerInstance.processor.register('chat', async (job) => ({
-      response: `Mock response for: ${(job.data.input as any).message}`,
+      response: `Mock response for: ${String(job.data.input.message ?? '')}`,
       model: 'mock',
     }));
     workerInstance.processor.register('task', async (job) => ({

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { api, type TeamResponse, type TaskResponse } from '../api.js';
+import { api, getErrorMessage, type TeamResponse, type TaskResponse } from '../api.js';
 
 interface DashboardProps {
   token: string;
@@ -68,8 +68,8 @@ export function Dashboard({ token, teamSlug }: DashboardProps) {
         if (teamData.status === 'rejected' && taskData.status === 'rejected') {
           setError('Could not connect to team server. Is it running?');
         }
-      } catch (err: any) {
-        if (!cancelled) setError(err.message ?? 'Failed to load dashboard data');
+      } catch (err) {
+        if (!cancelled) setError(getErrorMessage(err, 'Failed to load dashboard data'));
       } finally {
         if (!cancelled) setLoading(false);
       }

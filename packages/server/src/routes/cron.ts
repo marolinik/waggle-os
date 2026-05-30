@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { CronService } from '../services/cron-service.js';
 import { TeamService } from '../services/team-service.js';
 import { createCronSchema } from '@waggle/shared';
@@ -7,7 +7,7 @@ export async function cronRoutes(fastify: FastifyInstance) {
   const cronService = new CronService(fastify.db);
   const teamService = new TeamService(fastify.db);
 
-  async function resolveTeam(request: any, reply: any, slug: string) {
+  async function resolveTeam(request: FastifyRequest, reply: FastifyReply, slug: string) {
     const team = await teamService.getBySlug(slug);
     if (!team) {
       reply.code(404).send({ error: 'Team not found' });
@@ -39,8 +39,8 @@ export async function cronRoutes(fastify: FastifyInstance) {
     try {
       const schedule = await cronService.create(team.id, request.userId, parsed.data);
       return reply.code(201).send(schedule);
-    } catch (err: any) {
-      return reply.code(400).send({ error: 'Invalid cron expression', message: err.message });
+    } catch (err: unknown) {
+      return reply.code(400).send({ error: 'Invalid cron expression', message: err instanceof Error ? err.message : String(err) });
     }
   });
 
@@ -77,8 +77,8 @@ export async function cronRoutes(fastify: FastifyInstance) {
         return reply.code(404).send({ error: 'Schedule not found' });
       }
       return updated;
-    } catch (err: any) {
-      return reply.code(400).send({ error: 'Invalid cron expression', message: err.message });
+    } catch (err: unknown) {
+      return reply.code(400).send({ error: 'Invalid cron expression', message: err instanceof Error ? err.message : String(err) });
     }
   });
 }

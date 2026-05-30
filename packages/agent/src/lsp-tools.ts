@@ -17,12 +17,32 @@ import * as fs from 'node:fs';
 import { spawn, type ChildProcess } from 'node:child_process';
 import type { ToolDefinition } from './tools.js';
 
+// ── Minimal LSP/JSON-RPC wire shapes (only the fields we read) ──
+interface LspPosition { line?: number; character?: number }
+interface LspRange { start?: LspPosition; end?: LspPosition }
+interface LspDiagnostic { severity?: number; range?: LspRange; message?: string }
+interface LspLocation { uri?: string; targetUri?: string; range?: LspRange; targetRange?: LspRange }
+interface LspMarkup { value?: string }
+type LspHoverContent = string | LspMarkup;
+
+/** A parsed JSON-RPC response body. `result` is untyped wire data. */
+interface JsonRpcMessage {
+  id?: number;
+  error?: { message?: string };
+  result?: unknown;
+}
+
+interface PendingRequest {
+  resolve: (v: unknown) => void;
+  reject: (e: Error) => void;
+}
+
 // Module-level LSP state
 let lspProcess: ChildProcess | null = null;
 let lspInitialized = false;
 let lspWorkspace: string = '';
 let requestId = 0;
-let pendingRequests = new Map<number, { resolve: (v: any) => void; reject: (e: any) => void }>();
+let pendingRequests = new Map<number, PendingRequest>();
 let receiveBuffer = '';
 
 /** Reset module-level state (for testing). */
@@ -45,8 +65,8 @@ function sendMessage(msg: object): void {
   lspProcess.stdin.write(header + json);
 }
 
-/** Send a request and wait for a response. */
-function sendRequest(method: string, params: object): Promise<any> {
+/** Send a request and wait for a response. The result is raw JSON-RPC wire data. */
+function sendRequest(method: string, params: object): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const id = ++requestId;
     pendingRequests.set(id, { resolve, reject });
@@ -92,7 +112,7 @@ function handleData(data: string): void {
     receiveBuffer = receiveBuffer.slice(bodyStart + contentLength);
 
     try {
-      const msg = JSON.parse(body);
+      const msg = JSON.parse(body) as JsonRpcMessage;
       if (msg.id !== undefined && pendingRequests.has(msg.id)) {
         const pending = pendingRequests.get(msg.id)!;
         pendingRequests.delete(msg.id);
@@ -126,7 +146,7 @@ async function ensureLsp(workspacePath: string): Promise<void> {
       env: { ...process.env },
       shell: process.platform === 'win32',
     });
-  } catch (err: any) {
+  } catch {
     throw new Error(
       'LSP requires typescript-language-server. Install with: npm install -g typescript-language-server typescript',
     );
@@ -172,10 +192,10 @@ async function ensureLsp(workspacePath: string): Promise<void> {
     // Send initialized notification
     sendNotification('initialized', {});
     lspInitialized = true;
-  } catch (err: any) {
+  } catch (err: unknown) {
     await stopLsp();
     throw new Error(
-      `LSP initialization failed: ${err.message}. Ensure typescript-language-server is installed globally.`,
+      `LSP initialization failed: ${err instanceof Error ? err.message : String(err)}. Ensure typescript-language-server is installed globally.`,
     );
   }
 }
@@ -266,9 +286,9 @@ export function createLspTools(workspacePath: string): ToolDefinition[] {
 
           // Use document diagnostic request
           try {
-            const result = await sendRequest('textDocument/diagnostic', {
+            const result = (await sendRequest('textDocument/diagnostic', {
               textDocument: { uri },
-            });
+            })) as { items?: LspDiagnostic[] } | null;
 
             const items = result?.items ?? [];
             if (items.length === 0) {
@@ -276,7 +296,7 @@ export function createLspTools(workspacePath: string): ToolDefinition[] {
             }
 
             return items
-              .map((d: any) => {
+              .map((d) => {
                 const severity = d.severity === 1 ? 'Error' : d.severity === 2 ? 'Warning' : d.severity === 3 ? 'Info' : 'Hint';
                 const line = (d.range?.start?.line ?? 0) + 1;
                 const col = (d.range?.start?.character ?? 0) + 1;
@@ -287,8 +307,8 @@ export function createLspTools(workspacePath: string): ToolDefinition[] {
             // Fallback: just report that we tried
             return `Diagnostics not available for ${filePath}. The language server may not support pull diagnostics.`;
           }
-        } catch (err: any) {
-          return `LSP diagnostics error: ${err.message}`;
+        } catch (err: unknown) {
+          return `LSP diagnostics error: ${err instanceof Error ? err.message : String(err)}`;
         }
       },
     },
@@ -330,18 +350,18 @@ export function createLspTools(workspacePath: string): ToolDefinition[] {
           await ensureLsp(workspacePath);
           await openFile(absPath);
 
-          const result = await sendRequest('textDocument/definition', {
+          const result = (await sendRequest('textDocument/definition', {
             textDocument: { uri: fileUri(absPath) },
             position: { line, character: column },
-          });
+          })) as LspLocation | LspLocation[] | null;
 
           if (!result || (Array.isArray(result) && result.length === 0)) {
             return `No definition found at ${filePath}:${line + 1}:${column + 1}`;
           }
 
-          const locations = Array.isArray(result) ? result : [result];
+          const locations: LspLocation[] = Array.isArray(result) ? result : [result];
           return locations
-            .map((loc: any) => {
+            .map((loc) => {
               const uri = loc.uri ?? loc.targetUri ?? '';
               const range = loc.range ?? loc.targetRange ?? {};
               const startLine = (range.start?.line ?? 0) + 1;
@@ -351,8 +371,8 @@ export function createLspTools(workspacePath: string): ToolDefinition[] {
               return `Definition: ${relPath}:${startLine}`;
             })
             .join('\n');
-        } catch (err: any) {
-          return `LSP definition error: ${err.message}`;
+        } catch (err: unknown) {
+          return `LSP definition error: ${err instanceof Error ? err.message : String(err)}`;
         }
       },
     },
@@ -394,11 +414,11 @@ export function createLspTools(workspacePath: string): ToolDefinition[] {
           await ensureLsp(workspacePath);
           await openFile(absPath);
 
-          const result = await sendRequest('textDocument/references', {
+          const result = (await sendRequest('textDocument/references', {
             textDocument: { uri: fileUri(absPath) },
             position: { line, character: column },
             context: { includeDeclaration: true },
-          });
+          })) as LspLocation[] | null;
 
           if (!result || result.length === 0) {
             return `No references found at ${filePath}:${line + 1}:${column + 1}`;
@@ -414,8 +434,8 @@ export function createLspTools(workspacePath: string): ToolDefinition[] {
           }
 
           return lines.join('\n');
-        } catch (err: any) {
-          return `LSP references error: ${err.message}`;
+        } catch (err: unknown) {
+          return `LSP references error: ${err instanceof Error ? err.message : String(err)}`;
         }
       },
     },
@@ -457,10 +477,10 @@ export function createLspTools(workspacePath: string): ToolDefinition[] {
           await ensureLsp(workspacePath);
           await openFile(absPath);
 
-          const result = await sendRequest('textDocument/hover', {
+          const result = (await sendRequest('textDocument/hover', {
             textDocument: { uri: fileUri(absPath) },
             position: { line, character: column },
-          });
+          })) as { contents?: LspHoverContent | LspHoverContent[] } | null;
 
           if (!result || !result.contents) {
             return `No hover info at ${filePath}:${line + 1}:${column + 1}`;
@@ -469,17 +489,17 @@ export function createLspTools(workspacePath: string): ToolDefinition[] {
           // Parse hover contents — can be string, MarkupContent, or MarkedString[]
           const contents = result.contents;
           if (typeof contents === 'string') return contents;
-          if (contents.value) return contents.value;
           if (Array.isArray(contents)) {
             return contents
-              .map((c: any) => (typeof c === 'string' ? c : c.value ?? ''))
+              .map((c) => (typeof c === 'string' ? c : c.value ?? ''))
               .filter(Boolean)
               .join('\n\n');
           }
+          if (contents.value) return contents.value;
 
           return JSON.stringify(contents, null, 2);
-        } catch (err: any) {
-          return `LSP hover error: ${err.message}`;
+        } catch (err: unknown) {
+          return `LSP hover error: ${err instanceof Error ? err.message : String(err)}`;
         }
       },
     },

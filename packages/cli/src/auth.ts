@@ -15,6 +15,11 @@ interface AuthData {
   serverUrl: string;
 }
 
+interface WaggleConfig {
+  auth?: AuthData;
+  [key: string]: unknown;
+}
+
 export class AuthManager {
   private configDir: string;
   private configPath: string;
@@ -110,17 +115,21 @@ export class AuthManager {
     return config.auth ?? null;
   }
 
-  private readConfig(): Record<string, any> {
+  private readConfig(): WaggleConfig {
     try {
       if (!existsSync(this.configPath)) return {};
       const raw = readFileSync(this.configPath, 'utf-8');
-      return JSON.parse(raw);
+      const parsed: unknown = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        return parsed as WaggleConfig;
+      }
+      return {};
     } catch {
       return {};
     }
   }
 
-  private writeConfig(config: Record<string, any>): void {
+  private writeConfig(config: WaggleConfig): void {
     mkdirSync(this.configDir, { recursive: true });
     writeFileSync(this.configPath, JSON.stringify(config, null, 2));
   }

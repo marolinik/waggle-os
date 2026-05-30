@@ -48,7 +48,7 @@ describe('GitHubConnector', () => {
     const vault = createMockVault({ value: 'ghp_test123', isExpired: false });
     await connector.connect(vault);
 
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ login: 'user' }) }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ login: 'user' }) }) as unknown as typeof fetch;
 
     const health = await connector.healthCheck();
     expect(health.status).toBe('connected');
@@ -59,7 +59,7 @@ describe('GitHubConnector', () => {
     const vault = createMockVault({ value: 'ghp_test123', isExpired: false });
     await connector.connect(vault);
 
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 401, text: async () => 'Unauthorized' }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 401, text: async () => 'Unauthorized' }) as unknown as typeof fetch;
 
     const health = await connector.healthCheck();
     expect(health.status).toBe('error');
@@ -71,7 +71,7 @@ describe('GitHubConnector', () => {
     await connector.connect(vault);
 
     const mockRepos = [{ name: 'waggle', full_name: 'user/waggle' }];
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockRepos }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockRepos }) as unknown as typeof fetch;
 
     const result = await connector.execute('list_repos', { per_page: 10 });
     expect(result.success).toBe(true);
@@ -83,7 +83,7 @@ describe('GitHubConnector', () => {
     await connector.connect(vault);
 
     const mockIssue = { number: 42, title: 'Bug report' };
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockIssue }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockIssue }) as unknown as typeof fetch;
 
     const result = await connector.execute('create_issue', {
       owner: 'user', repo: 'waggle', title: 'Bug report',

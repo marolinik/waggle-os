@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { HybridSearch } from '@waggle/core';
+import type { HybridSearch, MemoryFrame } from '@waggle/core';
 import { MemoryLinker } from '../src/memory-linker.js';
 
 describe('MemoryLinker', () => {
@@ -12,13 +12,13 @@ describe('MemoryLinker', () => {
 
     vi.mocked(mockSearch.search).mockResolvedValueOnce([
       {
-        frame: { id: 1, content: 'TypeScript generics guide' } as any,
+        frame: { id: 1, content: 'TypeScript generics guide' } as unknown as MemoryFrame,
         rrfScore: 0.5,
         relevanceScore: 0.4,
         finalScore: 0.45,
       },
       {
-        frame: { id: 2, content: 'Advanced type inference' } as any,
+        frame: { id: 2, content: 'Advanced type inference' } as unknown as MemoryFrame,
         rrfScore: 0.3,
         relevanceScore: 0.2,
         finalScore: 0.25,
@@ -39,13 +39,13 @@ describe('MemoryLinker', () => {
 
     vi.mocked(mockSearch.search).mockResolvedValueOnce([
       {
-        frame: { id: 3, content: 'Cooking recipes' } as any,
+        frame: { id: 3, content: 'Cooking recipes' } as unknown as MemoryFrame,
         rrfScore: 0.1,
         relevanceScore: 0.05,
         finalScore: 0.08,
       },
       {
-        frame: { id: 4, content: 'Grocery list' } as any,
+        frame: { id: 4, content: 'Grocery list' } as unknown as MemoryFrame,
         rrfScore: 0.05,
         relevanceScore: 0.02,
         finalScore: 0.03,

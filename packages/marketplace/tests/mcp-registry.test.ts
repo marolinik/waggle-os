@@ -313,9 +313,10 @@ describe('seedMcpServers', () => {
       const pkg = db.getPackageByName(server.name);
       expect(pkg).not.toBeNull();
       expect(pkg!.install_manifest).toBeDefined();
-      expect((pkg!.install_manifest as any).mcp_config).toBeDefined();
-      expect((pkg!.install_manifest as any).mcp_config.command).toBeTruthy();
-      expect(Array.isArray((pkg!.install_manifest as any).mcp_config.args)).toBe(true);
+      const manifest = pkg!.install_manifest;
+      expect(manifest?.mcp_config).toBeDefined();
+      expect(manifest?.mcp_config?.command).toBeTruthy();
+      expect(Array.isArray(manifest?.mcp_config?.args)).toBe(true);
     }
   });
 
@@ -343,7 +344,7 @@ describe('seedMcpServers', () => {
     seedMcpServers(db);
 
     // Manually delete a few entries and re-seed
-    const rawDb = (db as any).db;
+    const rawDb = db.getRawDb();
     rawDb.prepare("DELETE FROM packages WHERE name = 'filesystem'").run();
     rawDb.prepare("DELETE FROM packages WHERE name = 'github'").run();
 

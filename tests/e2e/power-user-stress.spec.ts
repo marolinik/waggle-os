@@ -363,7 +363,7 @@ test.describe('8. Data Integrity', () => {
   test('workspace list is consistent between API and UI', async ({ page, request }) => {
     const apiRes = await request.get(`${BASE}/api/workspaces`);
     const apiWorkspaces = await apiRes.json();
-    const apiNames = (Array.isArray(apiWorkspaces) ? apiWorkspaces : []).map((w: any) => w.name);
+    const apiNames = (Array.isArray(apiWorkspaces) ? apiWorkspaces : []).map((w: { name: string }) => w.name);
 
     await gotoDesktop(page);
     await page.locator('button[aria-label="Home"]').click();

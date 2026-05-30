@@ -32,6 +32,7 @@ import type {
   InstallationType,
   McpServerConfig,
   PluginManifest,
+  PostInstallHook,
 } from './types';
 
 const WAGGLE_DIR = join(homedir(), '.waggle');
@@ -42,6 +43,18 @@ const MCP_CONFIG_PATH = join(process.cwd(), '.mcp.json');
 
 /** Waggle server API base URL (when running locally) */
 const API_BASE = process.env.WAGGLE_API_URL || 'http://localhost:3000';
+
+/** A single server entry inside a `.mcp.json` file. */
+interface McpConfigEntry {
+  command: string;
+  args: string[];
+  env?: Record<string, string>;
+}
+
+/** Shape of the `.mcp.json` config file we read/write. */
+interface McpConfigFile {
+  mcpServers: Record<string, McpConfigEntry>;
+}
 
 export class MarketplaceInstaller {
   private db: MarketplaceDB;
@@ -590,7 +603,7 @@ export class MarketplaceInstaller {
   private recordScanResult(packageId: number, result: ScanResult): void {
     try {
       // Update package security columns
-      const db = (this.db as any).db; // Access underlying better-sqlite3 instance
+      const db = this.db.getRawDb(); // Access underlying better-sqlite3 instance
       if (db && db.prepare) {
         db.prepare(`
           UPDATE packages SET
@@ -695,9 +708,9 @@ This skill was installed from the marketplace. Configure or extend it as needed 
   }
 
   private updateMcpConfig(serverConfig: McpServerConfig): void {
-    let mcpJson: { mcpServers: Record<string, any> } = { mcpServers: {} };
+    let mcpJson: McpConfigFile = { mcpServers: {} };
     if (existsSync(MCP_CONFIG_PATH)) {
-      mcpJson = JSON.parse(readFileSync(MCP_CONFIG_PATH, 'utf-8'));
+      mcpJson = JSON.parse(readFileSync(MCP_CONFIG_PATH, 'utf-8')) as McpConfigFile;
     }
     mcpJson.mcpServers[serverConfig.name] = {
       command: serverConfig.command,
@@ -709,12 +722,12 @@ This skill was installed from the marketplace. Configure or extend it as needed 
 
   private removeMcpConfig(serverName: string): void {
     if (!existsSync(MCP_CONFIG_PATH)) return;
-    const mcpJson = JSON.parse(readFileSync(MCP_CONFIG_PATH, 'utf-8'));
+    const mcpJson = JSON.parse(readFileSync(MCP_CONFIG_PATH, 'utf-8')) as McpConfigFile;
     delete mcpJson.mcpServers[serverName];
     writeFileSync(MCP_CONFIG_PATH, JSON.stringify(mcpJson, null, 2), 'utf-8');
   }
 
-  private async runPostInstallHook(hook: any, cwd: string): Promise<void> {
+  private async runPostInstallHook(hook: PostInstallHook, cwd: string): Promise<void> {
     switch (hook.type) {
       case 'run_command':
         if (hook.command) {

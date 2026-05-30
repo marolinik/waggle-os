@@ -55,24 +55,38 @@ export default tseslint.config(
       globals: { ...globals.node, ...globals.browser },
     },
     rules: {
-      "react-hooks/rules-of-hooks": "warn",
-      "react-hooks/exhaustive-deps": "warn",
-      // unused-vars is noisy in a large TS codebase (matches apps/web): off for now.
-      "@typescript-eslint/no-unused-vars": "off",
-      // High-volume legacy patterns — surface as warnings, don't block the gate.
+      // RATCHET (lint-debt burndown): 937 no-explicit-any -> 210, all now in
+      // packages/server. Every rule below is at 0 occurrences repo-wide, so they
+      // are promoted warn->error to LOCK IN the burndown against regression.
+      // packages/server keeps its residual rule-types at "warn" via the override below.
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "error",
+      "@typescript-eslint/no-unused-vars": "off", // intentionally off (noisy in a large TS codebase)
+      "@typescript-eslint/no-explicit-any": "error",
+      "@typescript-eslint/no-require-imports": "error",
+      "@typescript-eslint/ban-ts-comment": "error",
+      "@typescript-eslint/no-empty-object-type": "error",
+      "@typescript-eslint/no-unsafe-function-type": "error",
+      "@typescript-eslint/no-this-alias": "error",
+      "@typescript-eslint/no-unused-expressions": "error",
+      "no-empty": "error",
+      "no-constant-condition": ["error", { checkLoops: false }],
+      "no-control-regex": "error",
+      "no-useless-escape": "error",
+      "no-case-declarations": "error",
+      "no-prototype-builtins": "error",
+    },
+  },
+  {
+    // packages/server carries the residual lint debt to burn down next: 210
+    // no-explicit-any + 2 no-require-imports + 1 no-unsafe-function-type (auth/
+    // dynamic-boundary + test code). Keep just these three as warnings HERE; the
+    // rest of the repo is ratcheted to error. Tighten as server's debt is paid down.
+    files: ["packages/server/**/*.{ts,tsx}"],
+    rules: {
       "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/no-require-imports": "warn",
-      "@typescript-eslint/ban-ts-comment": "warn",
-      "@typescript-eslint/no-empty-object-type": "warn",
       "@typescript-eslint/no-unsafe-function-type": "warn",
-      "@typescript-eslint/no-this-alias": "warn",
-      "@typescript-eslint/no-unused-expressions": "warn",
-      "no-empty": "warn",
-      "no-constant-condition": ["warn", { checkLoops: false }],
-      "no-control-regex": "warn",
-      "no-useless-escape": "warn",
-      "no-case-declarations": "warn",
-      "no-prototype-builtins": "warn",
     },
   },
 );

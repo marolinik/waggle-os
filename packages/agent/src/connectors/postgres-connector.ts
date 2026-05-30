@@ -8,6 +8,23 @@ import { BaseConnector, type ConnectorAction, type ConnectorResult } from '../co
 import type { VaultStore } from '@waggle/core';
 import type { ConnectorHealth } from '@waggle/shared';
 
+// ── Minimal shape of the optional `pg` module (only what we use) ──
+interface PgField { name: string; dataTypeID: number }
+interface PgQueryResult {
+  rows: Record<string, unknown>[];
+  rowCount: number | null;
+  command?: string;
+  fields?: PgField[];
+}
+interface PgClient {
+  connect(): Promise<void>;
+  query(sql: string, params?: unknown[]): Promise<PgQueryResult>;
+  end(): Promise<void>;
+}
+interface PgModule {
+  Client: new (config: { connectionString: string | null }) => PgClient;
+}
+
 export class PostgresConnector extends BaseConnector {
   readonly id = 'postgres';
   readonly name = 'PostgreSQL';
@@ -69,8 +86,8 @@ export class PostgresConnector extends BaseConnector {
   ];
 
   private connectionString: string | null = null;
-  private pgModule: any = null;
-  private client: any = null;
+  private pgModule: PgModule | null = null;
+  private client: PgClient | null = null;
 
   async connect(vault: VaultStore): Promise<void> {
     const cred = vault.getConnectorCredential(this.id);
@@ -79,8 +96,9 @@ export class PostgresConnector extends BaseConnector {
     // Try to dynamically import pg
     if (this.connectionString) {
       try {
-        // @ts-expect-error pg is an optional dependency
-        this.pgModule = await import('pg');
+        // pg is an optional dependency loaded at runtime; the dynamic specifier
+        // is intentionally untyped (no @types/pg in this package's deps).
+        this.pgModule = (await import('pg' as string)) as unknown as PgModule;
       } catch {
         this.pgModule = null;
       }
@@ -134,14 +152,15 @@ export class PostgresConnector extends BaseConnector {
     }
   }
 
-  private async getClient(): Promise<any> {
+  private async getClient(): Promise<PgClient> {
+    if (!this.pgModule) throw new Error('pg module not installed');
     const client = new this.pgModule.Client({ connectionString: this.connectionString });
     await client.connect();
     return client;
   }
 
   private async runQuery(params: Record<string, unknown>): Promise<ConnectorResult> {
-    let client: any;
+    let client: PgClient | undefined;
     try {
       const sql = String(params.sql);
       // Safety check: only allow SELECT / WITH / EXPLAIN / SHOW
@@ -160,7 +179,7 @@ export class PostgresConnector extends BaseConnector {
         data: {
           rows: result.rows,
           rowCount: result.rowCount,
-          fields: result.fields?.map((f: any) => ({ name: f.name, dataTypeID: f.dataTypeID })),
+          fields: result.fields?.map((f) => ({ name: f.name, dataTypeID: f.dataTypeID })),
         },
       };
     } catch (err: unknown) {
@@ -170,7 +189,7 @@ export class PostgresConnector extends BaseConnector {
   }
 
   private async runExecute(params: Record<string, unknown>): Promise<ConnectorResult> {
-    let client: any;
+    let client: PgClient | undefined;
     try {
       const sql = String(params.sql);
       // Safety: block DROP DATABASE, TRUNCATE on system tables, etc.
@@ -198,7 +217,7 @@ export class PostgresConnector extends BaseConnector {
   }
 
   private async listTables(params: Record<string, unknown>): Promise<ConnectorResult> {
-    let client: any;
+    let client: PgClient | undefined;
     try {
       const schema = String(params.schema ?? 'public');
       client = await this.getClient();
@@ -223,7 +242,7 @@ export class PostgresConnector extends BaseConnector {
   }
 
   private async describeTable(params: Record<string, unknown>): Promise<ConnectorResult> {
-    let client: any;
+    let client: PgClient | undefined;
     try {
       const table = String(params.table);
       const schema = String(params.schema ?? 'public');
@@ -257,7 +276,7 @@ export class PostgresConnector extends BaseConnector {
           table,
           schema,
           columns: columns.rows,
-          primaryKey: pk.rows.map((r: any) => r.column_name),
+          primaryKey: pk.rows.map((r) => r.column_name),
         },
       };
     } catch (err: unknown) {

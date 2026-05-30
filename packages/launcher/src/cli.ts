@@ -145,9 +145,10 @@ async function main() {
     if (!noBrowser) {
       openBrowser(url);
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
     console.error();
-    console.error(`  Failed to start: ${err.message}`);
+    console.error(`  Failed to start: ${message}`);
     console.error();
     process.exit(1);
   }

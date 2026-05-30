@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Job } from 'bullmq';
 import type { Db } from '../../../server/src/db/connection.js';
+import type { JobData } from '../../src/job-processor.js';
+
+/** Build a minimal Job<JobData> mock — only `.data` is exercised by handlers. */
+function makeJob(data: JobData): Job<JobData> {
+  return { data } as unknown as Job<JobData>;
+}
 
 vi.mock('@waggle/agent', () => ({
   runAgentLoop: vi.fn(async () => ({
@@ -21,15 +28,13 @@ describe('Chat Handler', () => {
   });
 
   it('calls runAgentLoop and returns response with correct shape', async () => {
-    const mockJob = {
-      data: {
-        jobId: 'j1',
-        teamId: 't1',
-        userId: 'u1',
-        jobType: 'chat',
-        input: { message: 'hello world' },
-      },
-    } as any;
+    const mockJob = makeJob({
+      jobId: 'j1',
+      teamId: 't1',
+      userId: 'u1',
+      jobType: 'chat',
+      input: { message: 'hello world' },
+    });
 
     const result = await chatHandler(mockJob, mockDb);
 
@@ -41,15 +46,13 @@ describe('Chat Handler', () => {
   });
 
   it('passes correct config to runAgentLoop', async () => {
-    const mockJob = {
-      data: {
-        jobId: 'j2',
-        teamId: 't1',
-        userId: 'u1',
-        jobType: 'chat',
-        input: { message: 'test message', model: 'gpt-4o' },
-      },
-    } as any;
+    const mockJob = makeJob({
+      jobId: 'j2',
+      teamId: 't1',
+      userId: 'u1',
+      jobType: 'chat',
+      input: { message: 'test message', model: 'gpt-4o' },
+    });
 
     await chatHandler(mockJob, mockDb);
 
@@ -62,15 +65,13 @@ describe('Chat Handler', () => {
   });
 
   it('creates system tools with workspaceDir from input', async () => {
-    const mockJob = {
-      data: {
-        jobId: 'j3',
-        teamId: 't1',
-        userId: 'u1',
-        jobType: 'chat',
-        input: { message: 'test', workspaceDir: '/custom/workspace' },
-      },
-    } as any;
+    const mockJob = makeJob({
+      jobId: 'j3',
+      teamId: 't1',
+      userId: 'u1',
+      jobType: 'chat',
+      input: { message: 'test', workspaceDir: '/custom/workspace' },
+    });
 
     await chatHandler(mockJob, mockDb);
 
@@ -78,15 +79,13 @@ describe('Chat Handler', () => {
   });
 
   it('uses default model when not specified in input', async () => {
-    const mockJob = {
-      data: {
-        jobId: 'j4',
-        teamId: 't1',
-        userId: 'u1',
-        jobType: 'chat',
-        input: { message: 'hi' },
-      },
-    } as any;
+    const mockJob = makeJob({
+      jobId: 'j4',
+      teamId: 't1',
+      userId: 'u1',
+      jobType: 'chat',
+      input: { message: 'hi' },
+    });
 
     await chatHandler(mockJob, mockDb);
 
@@ -95,15 +94,13 @@ describe('Chat Handler', () => {
   });
 
   it('handles missing message gracefully', async () => {
-    const mockJob = {
-      data: {
-        jobId: 'j5',
-        teamId: 't1',
-        userId: 'u1',
-        jobType: 'chat',
-        input: {},
-      },
-    } as any;
+    const mockJob = makeJob({
+      jobId: 'j5',
+      teamId: 't1',
+      userId: 'u1',
+      jobType: 'chat',
+      input: {},
+    });
 
     const result = await chatHandler(mockJob, mockDb);
 
@@ -114,15 +111,13 @@ describe('Chat Handler', () => {
   });
 
   it('includes userId in response', async () => {
-    const mockJob = {
-      data: {
-        jobId: 'j6',
-        teamId: 't1',
-        userId: 'user-abc',
-        jobType: 'chat',
-        input: { message: 'test' },
-      },
-    } as any;
+    const mockJob = makeJob({
+      jobId: 'j6',
+      teamId: 't1',
+      userId: 'user-abc',
+      jobType: 'chat',
+      input: { message: 'test' },
+    });
 
     const result = await chatHandler(mockJob, mockDb);
 

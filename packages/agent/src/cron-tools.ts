@@ -111,7 +111,7 @@ export function createCronTools(): ToolDefinition[] {
 
           if (!response.ok) {
             const err = await response.json().catch(() => ({ error: response.statusText }));
-            return `Failed to create schedule: ${(err as any).error || response.statusText}`;
+            return `Failed to create schedule: ${(err as { error?: string }).error || response.statusText}`;
           }
 
           const created = (await response.json()) as {
@@ -156,7 +156,7 @@ export function createCronTools(): ToolDefinition[] {
           const response = await fetch(`${BASE_URL}/api/cron`);
           if (!response.ok) {
             const err = await response.json().catch(() => ({ error: response.statusText }));
-            return `Failed to list schedules: ${(err as any).error || response.statusText}`;
+            return `Failed to list schedules: ${(err as { error?: string }).error || response.statusText}`;
           }
 
           const data = (await response.json()) as {
@@ -242,7 +242,7 @@ export function createCronTools(): ToolDefinition[] {
 
           if (!delResp.ok) {
             const err = await delResp.json().catch(() => ({ error: delResp.statusText }));
-            return `Failed to delete schedule: ${(err as any).error || delResp.statusText}`;
+            return `Failed to delete schedule: ${(err as { error?: string }).error || delResp.statusText}`;
           }
 
           return `Schedule "${match.name}" (ID: ${match.id}) deleted successfully.`;
@@ -295,7 +295,7 @@ export function createCronTools(): ToolDefinition[] {
 
           if (!triggerResp.ok) {
             const err = await triggerResp.json().catch(() => ({ error: triggerResp.statusText }));
-            return `Failed to trigger schedule: ${(err as any).error || triggerResp.statusText}`;
+            return `Failed to trigger schedule: ${(err as { error?: string }).error || triggerResp.statusText}`;
           }
 
           const result = (await triggerResp.json()) as {

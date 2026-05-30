@@ -242,7 +242,7 @@ describe('deliverCronResult — XSS prevention', () => {
       prefs, registry, emitter,
     );
 
-    const callArgs = (emailConnector.execute as any).mock.calls[0][1];
+    const callArgs = vi.mocked(emailConnector.execute).mock.calls[0][1] as Record<string, string>;
     expect(callArgs.html).not.toContain('<script>');
     expect(callArgs.html).toContain('&lt;script&gt;');
     expect(callArgs.html).toContain('&amp;');

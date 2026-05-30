@@ -131,8 +131,8 @@ export function createInsightsTools(deps: InsightsDeps): ToolDefinition[] {
               ? 'Moderate corrections — some patterns may need attention.'
               : 'Low correction rate — current approach is working well.',
           }, null, 2);
-        } catch (err: any) {
-          return `Error generating insights: ${err.message}`;
+        } catch (err: unknown) {
+          return `Error generating insights: ${err instanceof Error ? err.message : String(err)}`;
         }
       },
     },

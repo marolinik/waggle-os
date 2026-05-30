@@ -15,6 +15,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { glob } from 'glob';
+// Type-only import: erased at compile time, so it does not force @aws-sdk/client-s3
+// (a devDependency) into the runtime bundle for local-only users.
+import type { S3Client } from '@aws-sdk/client-s3';
 
 // ── Interface ───────────────────────────────────────────────────────
 
@@ -303,13 +306,15 @@ export interface S3Config {
 
 export class S3FileStore implements FileStore {
   private config: S3Config;
-  private client: any; // S3Client — lazy import to avoid bundling for local-only users
+  // Lazily constructed S3 client; the SDK is imported on first use to avoid
+  // bundling it for local-only users.
+  private client: S3Client | undefined;
 
   constructor(config: S3Config) {
     this.config = config;
   }
 
-  private async getClient() {
+  private async getClient(): Promise<S3Client> {
     if (this.client) return this.client;
     const { S3Client } = await import('@aws-sdk/client-s3');
     this.client = new S3Client({
@@ -335,8 +340,11 @@ export class S3FileStore implements FileStore {
       Bucket: this.config.bucket,
       Key: key,
     }));
+    const body = response.Body;
+    if (!body) throw new Error(`S3 object has no body: ${key}`);
     const chunks: Uint8Array[] = [];
-    for await (const chunk of response.Body as any) chunks.push(chunk);
+    // In Node.js the S3 streaming body is an async-iterable readable stream.
+    for await (const chunk of body as AsyncIterable<Uint8Array>) chunks.push(chunk);
     return Buffer.concat(chunks);
   }
 

@@ -110,8 +110,8 @@ export function createSearchTools(
             result += '\n\nSources:\n' + citations.map((c, i) => `[${i + 1}] ${c}`).join('\n');
           }
           return result;
-        } catch (err: any) {
-          return `Perplexity search error: ${err.message}`;
+        } catch (err: unknown) {
+          return `Perplexity search error: ${err instanceof Error ? err.message : String(err)}`;
         }
       },
     },
@@ -187,8 +187,8 @@ export function createSearchTools(
                 `[${i + 1}] ${r.title}\n    ${r.url}\n    ${r.content}`,
             )
             .join('\n\n');
-        } catch (err: any) {
-          return `Tavily search error: ${err.message}`;
+        } catch (err: unknown) {
+          return `Tavily search error: ${err instanceof Error ? err.message : String(err)}`;
         }
       },
     },
@@ -275,8 +275,8 @@ export function createSearchTools(
                 `[${i + 1}] ${r.title}\n    ${r.url}\n    ${r.description}`,
             )
             .join('\n\n');
-        } catch (err: any) {
-          return `Brave search error: ${err.message}`;
+        } catch (err: unknown) {
+          return `Brave search error: ${err instanceof Error ? err.message : String(err)}`;
         }
       },
     },

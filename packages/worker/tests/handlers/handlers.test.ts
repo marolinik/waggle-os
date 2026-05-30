@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Job } from 'bullmq';
 import type { Db } from '../../../server/src/db/connection.js';
+import type { JobData } from '../../src/job-processor.js';
+
+/** Build a minimal Job<JobData> mock — only `.data` is exercised by handlers. */
+function makeJob(data: JobData): Job<JobData> {
+  return { data } as unknown as Job<JobData>;
+}
 
 // ── Mock @waggle/agent before importing handlers ────────────────────────
 vi.mock('@waggle/agent', () => ({
@@ -16,7 +23,7 @@ vi.mock('@waggle/agent', () => ({
 
 // ── Mock drizzle-orm ────────────────────────────────────────────────────
 vi.mock('drizzle-orm', () => ({
-  eq: vi.fn((col: any, val: any) => ({ column: col, value: val })),
+  eq: vi.fn((col: unknown, val: unknown) => ({ column: col, value: val })),
 }));
 
 // ── Mock server DB schema ───────────────────────────────────────────────
@@ -47,15 +54,15 @@ import { runAgentLoop } from '@waggle/agent';
 // ── Helper: mock DB ─────────────────────────────────────────────────────
 
 function createMockDb(overrides?: {
-  selectResult?: any[];
-  selectResultSecond?: any[];
+  selectResult?: unknown[];
+  selectResultSecond?: unknown[];
 }): Db {
   const selectResult = overrides?.selectResult ?? [];
   const hasSecondResult = overrides?.selectResultSecond !== undefined;
   const selectResultSecond = overrides?.selectResultSecond ?? [];
   let selectCallCount = 0;
 
-  const mockChain = (results: any[]) => ({
+  const mockChain = (results: unknown[]) => ({
     from: vi.fn().mockReturnValue({
       where: vi.fn().mockResolvedValue(results),
       innerJoin: vi.fn().mockReturnValue({
@@ -98,15 +105,13 @@ describe('Task Handler', () => {
     };
 
     const mockDb = createMockDb({ selectResult: [mockTask] });
-    const mockJob = {
-      data: {
-        jobId: 'j1',
-        teamId: 'team-1',
-        userId: 'user-1',
-        jobType: 'task',
-        input: { taskId: 'task-1' },
-      },
-    } as any;
+    const mockJob = makeJob({
+      jobId: 'j1',
+      teamId: 'team-1',
+      userId: 'user-1',
+      jobType: 'task',
+      input: { taskId: 'task-1' },
+    });
 
     const result = await taskHandler(mockJob, mockDb);
 
@@ -138,15 +143,13 @@ describe('Task Handler', () => {
     const mockDb = createMockDb({ selectResult: [mockTask] });
     vi.mocked(runAgentLoop).mockRejectedValueOnce(new Error('LLM API timeout'));
 
-    const mockJob = {
-      data: {
-        jobId: 'j2',
-        teamId: 'team-1',
-        userId: 'user-1',
-        jobType: 'task',
-        input: { taskId: 'task-2' },
-      },
-    } as any;
+    const mockJob = makeJob({
+      jobId: 'j2',
+      teamId: 'team-1',
+      userId: 'user-1',
+      jobType: 'task',
+      input: { taskId: 'task-2' },
+    });
 
     await expect(taskHandler(mockJob, mockDb)).rejects.toThrow('LLM API timeout');
 
@@ -156,30 +159,26 @@ describe('Task Handler', () => {
 
   it('throws if taskId is missing from input', async () => {
     const mockDb = createMockDb();
-    const mockJob = {
-      data: {
-        jobId: 'j3',
-        teamId: 'team-1',
-        userId: 'user-1',
-        jobType: 'task',
-        input: {}, // no taskId
-      },
-    } as any;
+    const mockJob = makeJob({
+      jobId: 'j3',
+      teamId: 'team-1',
+      userId: 'user-1',
+      jobType: 'task',
+      input: {}, // no taskId
+    });
 
     await expect(taskHandler(mockJob, mockDb)).rejects.toThrow('taskHandler requires input.taskId');
   });
 
   it('throws if task is not found in DB', async () => {
     const mockDb = createMockDb({ selectResult: [] }); // no task found
-    const mockJob = {
-      data: {
-        jobId: 'j4',
-        teamId: 'team-1',
-        userId: 'user-1',
-        jobType: 'task',
-        input: { taskId: 'nonexistent-task' },
-      },
-    } as any;
+    const mockJob = makeJob({
+      jobId: 'j4',
+      teamId: 'team-1',
+      userId: 'user-1',
+      jobType: 'task',
+      input: { taskId: 'nonexistent-task' },
+    });
 
     await expect(taskHandler(mockJob, mockDb)).rejects.toThrow('Task not found: nonexistent-task');
   });
@@ -195,15 +194,13 @@ describe('Task Handler', () => {
     };
 
     const mockDb = createMockDb({ selectResult: [mockTask] });
-    const mockJob = {
-      data: {
-        jobId: 'j5',
-        teamId: 'team-1', // requesting team doesn't match
-        userId: 'user-1',
-        jobType: 'task',
-        input: { taskId: 'task-5' },
-      },
-    } as any;
+    const mockJob = makeJob({
+      jobId: 'j5',
+      teamId: 'team-1', // requesting team doesn't match
+      userId: 'user-1',
+      jobType: 'task',
+      input: { taskId: 'task-5' },
+    });
 
     await expect(taskHandler(mockJob, mockDb)).rejects.toThrow(
       'Task task-5 does not belong to team team-1',
@@ -222,30 +219,26 @@ describe('Group Handler', () => {
 
   it('throws if groupId is missing from input', async () => {
     const mockDb = createMockDb();
-    const mockJob = {
-      data: {
-        jobId: 'j1',
-        teamId: 'team-1',
-        userId: 'user-1',
-        jobType: 'group',
-        input: {}, // no groupId
-      },
-    } as any;
+    const mockJob = makeJob({
+      jobId: 'j1',
+      teamId: 'team-1',
+      userId: 'user-1',
+      jobType: 'group',
+      input: {}, // no groupId
+    });
 
     await expect(groupHandler(mockJob, mockDb)).rejects.toThrow('groupHandler requires input.groupId');
   });
 
   it('throws if group is not found in DB', async () => {
     const mockDb = createMockDb({ selectResult: [] });
-    const mockJob = {
-      data: {
-        jobId: 'j2',
-        teamId: 'team-1',
-        userId: 'user-1',
-        jobType: 'group',
-        input: { groupId: 'nonexistent-group' },
-      },
-    } as any;
+    const mockJob = makeJob({
+      jobId: 'j2',
+      teamId: 'team-1',
+      userId: 'user-1',
+      jobType: 'group',
+      input: { groupId: 'nonexistent-group' },
+    });
 
     await expect(groupHandler(mockJob, mockDb)).rejects.toThrow('Agent group not found: nonexistent-group');
   });
@@ -254,15 +247,13 @@ describe('Group Handler', () => {
     const mockGroup = { id: 'group-1', strategy: 'parallel', name: 'Test Group' };
     // First select returns the group, second returns empty members
     const mockDb = createMockDb({ selectResult: [mockGroup], selectResultSecond: [] });
-    const mockJob = {
-      data: {
-        jobId: 'j3',
-        teamId: 'team-1',
-        userId: 'user-1',
-        jobType: 'group',
-        input: { groupId: 'group-1' },
-      },
-    } as any;
+    const mockJob = makeJob({
+      jobId: 'j3',
+      teamId: 'team-1',
+      userId: 'user-1',
+      jobType: 'group',
+      input: { groupId: 'group-1' },
+    });
 
     await expect(groupHandler(mockJob, mockDb)).rejects.toThrow('Agent group group-1 has no members');
   });
@@ -281,15 +272,13 @@ describe('Group Handler', () => {
     ];
 
     const mockDb = createMockDb({ selectResult: [mockGroup], selectResultSecond: mockMembers });
-    const mockJob = {
-      data: {
-        jobId: 'j4',
-        teamId: 'team-1',
-        userId: 'user-1',
-        jobType: 'group',
-        input: { groupId: 'group-1', taskInput: { task: 'analyze data' } },
-      },
-    } as any;
+    const mockJob = makeJob({
+      jobId: 'j4',
+      teamId: 'team-1',
+      userId: 'user-1',
+      jobType: 'group',
+      input: { groupId: 'group-1', taskInput: { task: 'analyze data' } },
+    });
 
     const result = await groupHandler(mockJob, mockDb);
 
@@ -313,15 +302,13 @@ describe('Group Handler', () => {
     ];
 
     const mockDb = createMockDb({ selectResult: [mockGroup], selectResultSecond: mockMembers });
-    const mockJob = {
-      data: {
-        jobId: 'j5',
-        teamId: 'team-1',
-        userId: 'user-1',
-        jobType: 'group',
-        input: { groupId: 'group-2', taskInput: { task: 'research and draft' } },
-      },
-    } as any;
+    const mockJob = makeJob({
+      jobId: 'j5',
+      teamId: 'team-1',
+      userId: 'user-1',
+      jobType: 'group',
+      input: { groupId: 'group-2', taskInput: { task: 'research and draft' } },
+    });
 
     const result = await groupHandler(mockJob, mockDb);
 
@@ -340,15 +327,13 @@ describe('Group Handler', () => {
     ];
 
     const mockDb = createMockDb({ selectResult: [mockGroup], selectResultSecond: mockMembers });
-    const mockJob = {
-      data: {
-        jobId: 'j6',
-        teamId: 'team-1',
-        userId: 'user-1',
-        jobType: 'group',
-        input: { groupId: 'group-3', taskInput: {} },
-      },
-    } as any;
+    const mockJob = makeJob({
+      jobId: 'j6',
+      teamId: 'team-1',
+      userId: 'user-1',
+      jobType: 'group',
+      input: { groupId: 'group-3', taskInput: {} },
+    });
 
     await expect(groupHandler(mockJob, mockDb)).rejects.toThrow('Unknown execution strategy: unknown_strategy');
   });

@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
-import type { SearchScope, Importance, MemoryFrame } from '@waggle/core';
+import type { SearchScope, Importance, FrameSource, MemoryFrame } from '@waggle/core';
 import { FrameStore, SessionStore, KnowledgeGraph } from '@waggle/core';
 import { extractEntities } from '@waggle/agent';
 import { emitAuditEvent } from './events.js';
@@ -169,7 +169,7 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
         // D7: Recover original provenance from the frame's DB row if available.
         // The HybridSearch result includes the full frame — check for _original_source
         // or fall back to the frame object's nested source field.
-        const frameObj = (r as any).frame;
+        const frameObj = (r as { frame?: { source?: string } }).frame;
         const dbSource = frameObj?.source;
         if (dbSource && dbSource !== 'personal' && dbSource !== 'workspace') {
           obj._provenance_source = dbSource;
@@ -255,10 +255,13 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
     // M4: Sanitize content to prevent stored XSS
     const content = sanitizeFrameContent(rawContent);
 
-    const imp = (importance ?? 'normal') as Importance;
+    const VALID_IMPORTANCE: readonly Importance[] = ['critical', 'important', 'normal', 'temporary', 'deprecated'];
+    const imp: Importance = VALID_IMPORTANCE.includes(importance as Importance)
+      ? (importance as Importance)
+      : 'normal';
     // D6: Validate source to prevent raw SQLite CHECK constraint errors
-    const VALID_SOURCES = ['user_stated', 'tool_verified', 'agent_inferred', 'import', 'system'];
-    const src = source ?? 'import';
+    const VALID_SOURCES: readonly FrameSource[] = ['user_stated', 'tool_verified', 'agent_inferred', 'import', 'system'];
+    const src: FrameSource = (source ?? 'import') as FrameSource;
     if (!VALID_SOURCES.includes(src)) {
       return reply.status(400).send({
         error: `Invalid source "${src}". Valid values: ${VALID_SOURCES.join(', ')}`,
@@ -266,7 +269,7 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
     }
 
     // F13: determine whether to run entity extraction (default: true)
-    const extractParam = (request.query as any)?.extract;
+    const extractParam = request.query?.extract;
     const shouldExtract = extractParam !== 'false' && extractParam !== '0';
 
     // Determine target mind
@@ -310,9 +313,9 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
     const latestI = frames.getLatestIFrame(gopId);
     let frame;
     if (latestI) {
-      frame = frames.createPFrame(gopId, content, latestI.id, imp as any, src as any);
+      frame = frames.createPFrame(gopId, content, latestI.id, imp, src);
     } else {
-      frame = frames.createIFrame(gopId, content, imp as any, src as any);
+      frame = frames.createIFrame(gopId, content, imp, src);
     }
 
     // F13: Run entity extraction and KG enrichment after storing the frame
@@ -457,12 +460,14 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
     const content = sanitizeFrameContent(rawContent);
 
     // D6: Validate importance if provided
-    const VALID_IMPORTANCE = ['critical', 'important', 'normal', 'temporary', 'deprecated'];
-    if (importance && !VALID_IMPORTANCE.includes(importance)) {
+    const VALID_IMPORTANCE: readonly Importance[] = ['critical', 'important', 'normal', 'temporary', 'deprecated'];
+    if (importance && !VALID_IMPORTANCE.includes(importance as Importance)) {
       return reply.status(400).send({
         error: `Invalid importance "${importance}". Valid values: ${VALID_IMPORTANCE.join(', ')}`,
       });
     }
+    // After validation, `importance` is either undefined or a valid Importance.
+    const imp: Importance | undefined = importance as Importance | undefined;
 
     const workspace = request.query.workspace ?? request.query.workspaceId;
 
@@ -473,7 +478,7 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
       const wsDb = server.agentState.getWorkspaceMindDb(workspace);
       if (wsDb) {
         const wsFrames = new FrameStore(wsDb);
-        const result = wsFrames.update(frameId, content, importance as any);
+        const result = wsFrames.update(frameId, content, imp);
         if (result) {
           updated = result as unknown as Record<string, unknown>;
           mindLabel = 'workspace';
@@ -482,7 +487,7 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
     }
     if (!updated) {
       const personalFrames = new FrameStore(server.multiMind.personal);
-      const result = personalFrames.update(frameId, content, importance as any);
+      const result = personalFrames.update(frameId, content, imp);
       if (result) {
         updated = result as unknown as Record<string, unknown>;
         mindLabel = 'personal';

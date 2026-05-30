@@ -74,21 +74,21 @@ const updateTemplateSchema = z.object({
 
 export async function complianceRoutes(fastify: FastifyInstance) {
   // GET /api/compliance/status — evaluate current compliance
-  fastify.get('/api/compliance/status', async (_request, reply) => {
-    const personalDb = (fastify as any).multiMind?.personal;
+  fastify.get<{ Querystring: { workspaceId?: string } }>('/api/compliance/status', async (_request, reply) => {
+    const personalDb = fastify.multiMind?.personal;
     if (!personalDb) {
       return reply.code(503).send({ error: 'Personal mind not available' });
     }
 
     const store = new InteractionStore(personalDb);
     const checker = new ComplianceStatusChecker(store);
-    const workspaceId = (_request.query as any)?.workspaceId;
+    const workspaceId = _request.query?.workspaceId;
     return checker.check(workspaceId || undefined);
   });
 
   // POST /api/compliance/export — generate audit report
   fastify.post('/api/compliance/export', async (request, reply) => {
-    const personalDb = (fastify as any).multiMind?.personal;
+    const personalDb = fastify.multiMind?.personal;
     if (!personalDb) {
       return reply.code(503).send({ error: 'Personal mind not available' });
     }
@@ -100,14 +100,12 @@ export async function complianceRoutes(fastify: FastifyInstance) {
 
     const interactionStore = new InteractionStore(personalDb);
     const harvestStore = new HarvestSourceStore(personalDb);
-    const wsManager = (fastify as any).workspaceManager as
-      | { get: (id: string) => { name?: string; riskLevel?: string; riskClassifiedAt?: string } | null }
-      | undefined;
+    const wsManager = fastify.workspaceManager;
     const generator = new ReportGenerator({
       interactionStore,
       harvestStore,
       getWorkspaceName: (id) => wsManager?.get(id)?.name ?? id,
-      getWorkspaceRisk: (id) => (wsManager?.get(id)?.riskLevel as any) ?? 'minimal',
+      getWorkspaceRisk: (id) => wsManager?.get(id)?.riskLevel ?? 'minimal',
       getWorkspaceRiskClassifiedAt: (id) => wsManager?.get(id)?.riskClassifiedAt ?? null,
     });
 
@@ -131,7 +129,7 @@ export async function complianceRoutes(fastify: FastifyInstance) {
 
   // GET /api/compliance/interactions — list recent interactions
   fastify.get('/api/compliance/interactions', async (request, reply) => {
-    const personalDb = (fastify as any).multiMind?.personal;
+    const personalDb = fastify.multiMind?.personal;
     if (!personalDb) {
       return reply.code(503).send({ error: 'Personal mind not available' });
     }
@@ -148,7 +146,7 @@ export async function complianceRoutes(fastify: FastifyInstance) {
 
   // POST /api/compliance/interactions — record an AI interaction
   fastify.post('/api/compliance/interactions', async (request, reply) => {
-    const personalDb = (fastify as any).multiMind?.personal;
+    const personalDb = fastify.multiMind?.personal;
     if (!personalDb) {
       return reply.code(503).send({ error: 'Personal mind not available' });
     }
@@ -170,7 +168,7 @@ export async function complianceRoutes(fastify: FastifyInstance) {
   // state. Returns application/pdf with a Content-Disposition hint so
   // browsers trigger a Save dialog.
   fastify.post('/api/compliance/export-pdf', async (request, reply) => {
-    const personalDb = (fastify as any).multiMind?.personal;
+    const personalDb = fastify.multiMind?.personal;
     if (!personalDb) {
       return reply.code(503).send({ error: 'Personal mind not available' });
     }
@@ -182,14 +180,12 @@ export async function complianceRoutes(fastify: FastifyInstance) {
 
     const interactionStore = new InteractionStore(personalDb);
     const harvestStore = new HarvestSourceStore(personalDb);
-    const wsManager = (fastify as any).workspaceManager as
-      | { get: (id: string) => { name?: string; riskLevel?: string; riskClassifiedAt?: string } | null }
-      | undefined;
+    const wsManager = fastify.workspaceManager;
     const generator = new ReportGenerator({
       interactionStore,
       harvestStore,
       getWorkspaceName: (id) => wsManager?.get(id)?.name ?? id,
-      getWorkspaceRisk: (id) => (wsManager?.get(id)?.riskLevel as any) ?? 'minimal',
+      getWorkspaceRisk: (id) => wsManager?.get(id)?.riskLevel ?? 'minimal',
       getWorkspaceRiskClassifiedAt: (id) => wsManager?.get(id)?.riskClassifiedAt ?? null,
     });
 
@@ -224,7 +220,7 @@ export async function complianceRoutes(fastify: FastifyInstance) {
 
   // GET /api/compliance/models — get model inventory
   fastify.get('/api/compliance/models', async (request, reply) => {
-    const personalDb = (fastify as any).multiMind?.personal;
+    const personalDb = fastify.multiMind?.personal;
     if (!personalDb) {
       return reply.code(503).send({ error: 'Personal mind not available' });
     }
@@ -242,7 +238,7 @@ export async function complianceRoutes(fastify: FastifyInstance) {
   // and /export-pdf routes stay template-agnostic.
 
   fastify.get('/api/compliance/templates', async (_request, reply) => {
-    const personalDb = (fastify as any).multiMind?.personal;
+    const personalDb = fastify.multiMind?.personal;
     if (!personalDb) return reply.code(503).send({ error: 'Personal mind not available' });
     const store = new ComplianceTemplateStore(personalDb);
     return { templates: store.list() };
@@ -251,7 +247,7 @@ export async function complianceRoutes(fastify: FastifyInstance) {
   fastify.get<{ Params: { id: string } }>(
     '/api/compliance/templates/:id',
     async (request, reply) => {
-      const personalDb = (fastify as any).multiMind?.personal;
+      const personalDb = fastify.multiMind?.personal;
       if (!personalDb) return reply.code(503).send({ error: 'Personal mind not available' });
       const id = Number(request.params.id);
       if (!Number.isFinite(id)) return reply.code(400).send({ error: 'Invalid id' });
@@ -263,7 +259,7 @@ export async function complianceRoutes(fastify: FastifyInstance) {
   );
 
   fastify.post('/api/compliance/templates', async (request, reply) => {
-    const personalDb = (fastify as any).multiMind?.personal;
+    const personalDb = fastify.multiMind?.personal;
     if (!personalDb) return reply.code(503).send({ error: 'Personal mind not available' });
     const parsed = createTemplateSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -281,7 +277,7 @@ export async function complianceRoutes(fastify: FastifyInstance) {
   fastify.patch<{ Params: { id: string } }>(
     '/api/compliance/templates/:id',
     async (request, reply) => {
-      const personalDb = (fastify as any).multiMind?.personal;
+      const personalDb = fastify.multiMind?.personal;
       if (!personalDb) return reply.code(503).send({ error: 'Personal mind not available' });
       const id = Number(request.params.id);
       if (!Number.isFinite(id)) return reply.code(400).send({ error: 'Invalid id' });
@@ -303,7 +299,7 @@ export async function complianceRoutes(fastify: FastifyInstance) {
   fastify.delete<{ Params: { id: string } }>(
     '/api/compliance/templates/:id',
     async (request, reply) => {
-      const personalDb = (fastify as any).multiMind?.personal;
+      const personalDb = fastify.multiMind?.personal;
       if (!personalDb) return reply.code(503).send({ error: 'Personal mind not available' });
       const id = Number(request.params.id);
       if (!Number.isFinite(id)) return reply.code(400).send({ error: 'Invalid id' });

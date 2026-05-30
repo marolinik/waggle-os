@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events';
+import { spawn, type StdioOptions } from 'node:child_process';
 import type { Readable, Writable } from 'stream';
 import type { ToolDefinition } from '../tools.js';
 
@@ -423,11 +424,8 @@ function defaultSpawn(
   args: string[],
   options: { env?: Record<string, string>; stdio: string[] },
 ): McpProcess {
-  // Lazy import to avoid issues in test environments
-   
-  const { spawn } = require('child_process') as typeof import('child_process');
   return spawn(command, args, {
     env: options.env as NodeJS.ProcessEnv | undefined,
-    stdio: options.stdio as any,
+    stdio: options.stdio as StdioOptions,
   }) as unknown as McpProcess;
 }

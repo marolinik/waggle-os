@@ -91,7 +91,7 @@ describe('ComposioConnector', () => {
     const vault = createMockVault({ value: 'cmp_test_key', isExpired: false });
     await connector.connect(vault);
 
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ items: [] }) }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ items: [] }) }) as unknown as typeof fetch;
 
     const health = await connector.healthCheck();
     expect(health.status).toBe('connected');
@@ -102,7 +102,7 @@ describe('ComposioConnector', () => {
     const vault = createMockVault({ value: 'cmp_test_key', isExpired: false });
     await connector.connect(vault);
 
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 401, text: async () => 'Unauthorized' }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 401, text: async () => 'Unauthorized' }) as unknown as typeof fetch;
 
     const health = await connector.healthCheck();
     expect(health.status).toBe('error');
@@ -114,13 +114,13 @@ describe('ComposioConnector', () => {
     await connector.connect(vault);
 
     const mockData = { items: [{ id: 'int_1', name: 'GitHub' }] };
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockData }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockData }) as unknown as typeof fetch;
 
     const result = await connector.execute('list_integrations', {});
     expect(result.success).toBe(true);
     expect(result.data).toEqual(mockData);
 
-    const fetchCall = (globalThis.fetch as any).mock.calls[0];
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
     expect(fetchCall[0]).toContain('/integrations');
   });
 
@@ -129,13 +129,13 @@ describe('ComposioConnector', () => {
     await connector.connect(vault);
 
     const mockActions = { items: [{ name: 'GITHUB_CREATE_ISSUE' }] };
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockActions }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockActions }) as unknown as typeof fetch;
 
     const result = await connector.execute('list_actions', { appName: 'github' });
     expect(result.success).toBe(true);
     expect(result.data).toEqual(mockActions);
 
-    const fetchCall = (globalThis.fetch as any).mock.calls[0];
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
     expect(fetchCall[0]).toContain('appName=github');
   });
 
@@ -144,7 +144,7 @@ describe('ComposioConnector', () => {
     await connector.connect(vault);
 
     const mockResult = { execution_output: { status: 'success' } };
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockResult }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockResult }) as unknown as typeof fetch;
 
     const result = await connector.execute('execute_action', {
       actionId: 'GITHUB_CREATE_ISSUE',
@@ -152,11 +152,11 @@ describe('ComposioConnector', () => {
       connectedAccountId: 'acc_123',
     });
     expect(result.success).toBe(true);
-    expect((result.data as any).actionId).toBe('GITHUB_CREATE_ISSUE');
-    expect((result.data as any).service).toBe('composio');
-    expect((result.data as any).result).toEqual(mockResult);
+    expect((result.data as Record<string, unknown>).actionId).toBe('GITHUB_CREATE_ISSUE');
+    expect((result.data as Record<string, unknown>).service).toBe('composio');
+    expect((result.data as Record<string, unknown>).result).toEqual(mockResult);
 
-    const fetchCall = (globalThis.fetch as any).mock.calls[0];
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
     expect(fetchCall[0]).toContain('/actions/GITHUB_CREATE_ISSUE/execute');
     expect(fetchCall[1].method).toBe('POST');
   });
@@ -175,12 +175,12 @@ describe('ComposioConnector', () => {
     await connector.connect(vault);
 
     const mockResults = { items: [{ name: 'GMAIL_SEND_EMAIL' }] };
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockResults }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockResults }) as unknown as typeof fetch;
 
     const result = await connector.execute('search_actions', { searchQuery: 'send email' });
     expect(result.success).toBe(true);
 
-    const fetchCall = (globalThis.fetch as any).mock.calls[0];
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
     expect(fetchCall[0]).toContain('searchQuery=send+email');
   });
 

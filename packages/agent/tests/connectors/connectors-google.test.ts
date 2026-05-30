@@ -98,7 +98,7 @@ describe('GmailConnector', () => {
     const vault = createMockVault('gmail', { value: 'ya29.test_token', isExpired: false });
     await connector.connect(vault);
 
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ emailAddress: 'user@gmail.com' }) }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ emailAddress: 'user@gmail.com' }) }) as unknown as typeof fetch;
 
     const health = await connector.healthCheck();
     expect(health.status).toBe('connected');
@@ -109,7 +109,7 @@ describe('GmailConnector', () => {
     await connector.connect(vault);
 
     const mockData = { messages: [{ id: '123', threadId: 'abc' }], resultSizeEstimate: 1 };
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockData }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockData }) as unknown as typeof fetch;
 
     const result = await connector.execute('list_messages', { maxResults: 5 });
     expect(result.success).toBe(true);
@@ -208,7 +208,7 @@ describe('GoogleDocsConnector', () => {
     const vault = createMockVault('gdocs', { value: 'ya29.test_token', isExpired: false });
     await connector.connect(vault);
 
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ user: { displayName: 'Test' } }) }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ user: { displayName: 'Test' } }) }) as unknown as typeof fetch;
 
     const health = await connector.healthCheck();
     expect(health.status).toBe('connected');
@@ -219,7 +219,7 @@ describe('GoogleDocsConnector', () => {
     await connector.connect(vault);
 
     const mockData = { documentId: 'abc', title: 'Test Doc', body: {} };
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockData }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockData }) as unknown as typeof fetch;
 
     const result = await connector.execute('get_document', { documentId: 'abc' });
     expect(result.success).toBe(true);
@@ -324,7 +324,7 @@ describe('GoogleDriveConnector', () => {
     const vault = createMockVault('gdrive', { value: 'ya29.test_token', isExpired: false });
     await connector.connect(vault);
 
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ user: { displayName: 'Test' } }) }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ user: { displayName: 'Test' } }) }) as unknown as typeof fetch;
 
     const health = await connector.healthCheck();
     expect(health.status).toBe('connected');
@@ -335,7 +335,7 @@ describe('GoogleDriveConnector', () => {
     await connector.connect(vault);
 
     const mockData = { files: [{ id: 'f1', name: 'report.pdf' }], nextPageToken: null };
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockData }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockData }) as unknown as typeof fetch;
 
     const result = await connector.execute('list_files', { pageSize: 10 });
     expect(result.success).toBe(true);
@@ -438,7 +438,7 @@ describe('GoogleSheetsConnector', () => {
     const vault = createMockVault('gsheets', { value: 'ya29.test_token', isExpired: false });
     await connector.connect(vault);
 
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ user: { displayName: 'Test' } }) }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ user: { displayName: 'Test' } }) }) as unknown as typeof fetch;
 
     const health = await connector.healthCheck();
     expect(health.status).toBe('connected');
@@ -449,7 +449,7 @@ describe('GoogleSheetsConnector', () => {
     await connector.connect(vault);
 
     const mockData = { spreadsheetId: 'abc', properties: { title: 'Budget' }, sheets: [] };
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockData }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockData }) as unknown as typeof fetch;
 
     const result = await connector.execute('get_spreadsheet', { spreadsheetId: 'abc' });
     expect(result.success).toBe(true);
@@ -461,7 +461,7 @@ describe('GoogleSheetsConnector', () => {
     await connector.connect(vault);
 
     const mockData = { range: 'Sheet1!A1:D10', majorDimension: 'ROWS', values: [['a', 'b'], ['c', 'd']] };
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockData }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockData }) as unknown as typeof fetch;
 
     const result = await connector.execute('get_values', { spreadsheetId: 'abc', range: 'Sheet1!A1:D10' });
     expect(result.success).toBe(true);

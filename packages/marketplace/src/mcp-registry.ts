@@ -32,7 +32,7 @@ const MCP_REGISTRY_SOURCE = {
  */
 function ensureMcpSource(db: MarketplaceDB): number {
   // Access the underlying better-sqlite3 instance
-  const rawDb = (db as any).db;
+  const rawDb = db.getRawDb();
 
   const existing = rawDb
     .prepare('SELECT id FROM sources WHERE name = ?')
@@ -749,7 +749,7 @@ export function seedMcpServers(db: MarketplaceDB): number {
       const seedManifest = server.install_manifest;
       if (seedManifest?.npm_package && (!manifest || !manifest.npm_package)) {
         const patched = { ...manifest, ...seedManifest };
-        const rawDb = (db as any).db;
+        const rawDb = db.getRawDb();
         rawDb
           .prepare('UPDATE packages SET install_manifest = ? WHERE id = ?')
           .run(JSON.stringify(patched), existing.id);
@@ -776,17 +776,17 @@ export function seedMcpServers(db: MarketplaceDB): number {
       rating_count: server.rating_count || 0,
       category: server.category || 'integration',
       subcategory: server.subcategory || null,
-      platforms: JSON.stringify(server.platforms || ['waggle']) as any,
-      dependencies: JSON.stringify(server.dependencies || []) as any,
-      packs: JSON.stringify(server.packs || []) as any,
-      install_manifest: JSON.stringify(server.install_manifest) as any,
+      platforms: JSON.stringify(server.platforms || ['waggle']),
+      dependencies: JSON.stringify(server.dependencies || []),
+      packs: JSON.stringify(server.packs || []),
+      install_manifest: JSON.stringify(server.install_manifest),
     });
 
     added++;
   }
 
   // Update source package count
-  const rawDb = (db as any).db;
+  const rawDb = db.getRawDb();
   rawDb
     .prepare('UPDATE sources SET total_packages = ? WHERE id = ?')
     .run(MCP_SERVERS.length, sourceId);

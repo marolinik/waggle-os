@@ -230,7 +230,7 @@ describe('summarizeMiddle', () => {
       fetch: fetchMock,
     }, 'Previous context here');
 
-    const callBody = JSON.parse((fetchMock as any).mock.calls[0][1].body);
+    const callBody = JSON.parse(vi.mocked(fetchMock).mock.calls[0][1]!.body as string);
     const systemMsg = callBody.messages[0];
     expect(systemMsg.role).toBe('system');
     expect(systemMsg.content).toContain('Previous context here');
@@ -364,7 +364,7 @@ describe('compressConversation', () => {
 
     expect(result.summary).toContain('Updated summary');
     // Verify the previous summary was sent to the LLM
-    const callBody = JSON.parse((fetchMock as any).mock.calls[0][1].body);
+    const callBody = JSON.parse(vi.mocked(fetchMock).mock.calls[0][1]!.body as string);
     const hasOldSummary = callBody.messages.some(
       (m: { content: string }) => m.content.includes('Old summary from last compression')
     );

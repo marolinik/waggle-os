@@ -1,4 +1,5 @@
 import type { AuditService } from '../services/audit-service.js';
+import type { agentAuditLog } from '../db/schema.js';
 
 export function createAuditWrapper(auditService: AuditService) {
   return async function auditAction(params: {
@@ -10,7 +11,7 @@ export function createAuditWrapper(auditService: AuditService) {
     beforeState?: Record<string, unknown>;
     requiresApproval?: boolean;
     action: () => Promise<Record<string, unknown>>;
-  }): Promise<{ auditEntry: any; result?: Record<string, unknown> }> {
+  }): Promise<{ auditEntry: typeof agentAuditLog.$inferSelect; result?: Record<string, unknown> }> {
     if (params.requiresApproval) {
       // Don't execute -- just log for approval
       const auditEntry = await auditService.log({

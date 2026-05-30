@@ -831,7 +831,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           const wsTemplateId = server.workspaceManager?.get(effectiveWorkspace)?.templateId;
           if (wsTemplateId) {
             const { BUILT_IN_TEMPLATES } = await import('./workspace-templates.js');
-            const tpl = BUILT_IN_TEMPLATES?.find?.((t: any) => t.id === wsTemplateId);
+            const tpl = BUILT_IN_TEMPLATES?.find?.((t) => t.id === wsTemplateId);
             if (tpl) {
               templateContext = `\n\n# Workspace Template: ${tpl.name}\nThis workspace uses the "${tpl.name}" template. ${tpl.description ?? ''}\nGreet the user with a warm, template-appropriate welcome that shows you understand their domain.\n`;
               if (tpl.starterMemory?.length) {
@@ -1064,7 +1064,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // enhanced prompt (e.g., "Draft the following. Search memory first...")
           let lastUserIdx = -1;
           for (let i = history.length - 1; i >= 0; i--) {
-            if ((history[i] as any).role === 'user') { lastUserIdx = i; break; }
+            if (history[i].role === 'user') { lastUserIdx = i; break; }
           }
           if (lastUserIdx >= 0) {
             history[lastUserIdx] = { role: 'user', content: reroutedMessage };
@@ -1100,7 +1100,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // GEPA: if the prompt was expanded, replace the last user message
         // so the LLM sees the optimized version (original stays in disk history)
         if (gepaExpanded) {
-          windowedMessages = windowedMessages.map((m: any, i: number, arr: any[]) => {
+          windowedMessages = windowedMessages.map((m, i, arr) => {
             if (i === arr.length - 1 && m.role === 'user') {
               return { ...m, content: `${gepaExpanded}\n\n(Original: "${m.content}")` };
             }

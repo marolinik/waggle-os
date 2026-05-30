@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { AuthManager } from '../src/auth.js';
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -72,8 +72,11 @@ describe('AuthManager', () => {
     setup();
     // Write some pre-existing config
     const configPath = join(tempDir, 'config.json');
-    const { writeFileSync, mkdirSync } = require('node:fs');
-    try { mkdirSync(tempDir, { recursive: true }); } catch {}
+    try {
+      mkdirSync(tempDir, { recursive: true });
+    } catch {
+      // tempDir already exists from setup(); recursive mkdir is idempotent.
+    }
     writeFileSync(configPath, JSON.stringify({ apiKey: 'sk-existing', model: 'claude' }));
 
     auth.saveToken('my-token', 'me@test.com');

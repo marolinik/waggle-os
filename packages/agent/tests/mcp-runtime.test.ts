@@ -2,6 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PassThrough } from 'stream';
 import { McpServerInstance, McpRuntime, type McpServerConfig, type McpProcess, type SpawnFn } from '../src/mcp/mcp-runtime.js';
 
+/** Minimal JSON-RPC request shape the mock server reads off the wire. */
+interface MockJsonRpcRequest {
+  id?: number | string | null;
+  method?: string;
+  params?: { name?: string; arguments?: { path?: string } };
+}
+
 // ── Mock MCP Process Factory ───────────────────────────────────────────
 
 function createMockMcpProcess() {
@@ -17,7 +24,7 @@ function createMockMcpProcess() {
     kill: vi.fn(() => true),
     on: vi.fn((event: string, listener: (...args: unknown[]) => void) => {
       // Store exit/error handlers for manual triggering
-      (mockProcess as any)[`_${event}Handler`] = listener;
+      (mockProcess as unknown as Record<string, unknown>)[`_${event}Handler`] = listener;
       return mockProcess;
     }),
     removeAllListeners: vi.fn(() => mockProcess),
@@ -41,7 +48,7 @@ function createMockMcpProcess() {
     const line = chunk.toString().trim();
     if (!line) return;
 
-    let request: any;
+    let request: MockJsonRpcRequest;
     try {
       request = JSON.parse(line);
     } catch {
@@ -138,7 +145,7 @@ describe('McpServerInstance', () => {
     expect(instance.getState()).toBe('ready');
 
     // Simulate process exit
-    const exitHandler = (lastProcess().mockProcess as any)._exitHandler;
+    const exitHandler = (lastProcess().mockProcess as unknown as Record<string, () => void>)._exitHandler;
     expect(exitHandler).toBeDefined();
     exitHandler();
 
@@ -161,7 +168,7 @@ describe('McpServerInstance', () => {
     stdin.on('data', (chunk: Buffer) => {
       const line = chunk.toString().trim();
       if (!line) return;
-      let request: any;
+      let request: MockJsonRpcRequest;
       try { request = JSON.parse(line); } catch { return; }
       if (request.id == null) return;
 

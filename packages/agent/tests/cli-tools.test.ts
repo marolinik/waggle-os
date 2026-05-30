@@ -9,7 +9,7 @@ describe('cli_discover', () => {
 
     // At minimum, node and npm should be found (we're in a Node.js environment)
     expect(result.found).toBeGreaterThanOrEqual(1);
-    expect(result.programs.some((p: any) => p.name === 'node')).toBe(true);
+    expect(result.programs.some((p: { name: string }) => p.name === 'node')).toBe(true);
   });
 
   it('marks allowed programs correctly', async () => {
@@ -17,11 +17,11 @@ describe('cli_discover', () => {
     const discover = tools.find(t => t.name === 'cli_discover')!;
     const result = JSON.parse(await discover.execute({}));
 
-    const nodeProg = result.programs.find((p: any) => p.name === 'node');
+    const nodeProg = result.programs.find((p: { name: string }) => p.name === 'node');
     expect(nodeProg?.allowed).toBe(true);
 
     // git may or may not be present, but if it is, it shouldn't be allowed
-    const gitProg = result.programs.find((p: any) => p.name === 'git');
+    const gitProg = result.programs.find((p: { name: string }) => p.name === 'git');
     if (gitProg) {
       expect(gitProg.allowed).toBe(false);
     }
@@ -32,7 +32,7 @@ describe('cli_discover', () => {
     const discover = tools.find(t => t.name === 'cli_discover')!;
     const result = JSON.parse(await discover.execute({}));
 
-    const nodeProg = result.programs.find((p: any) => p.name === 'node');
+    const nodeProg = result.programs.find((p: { name: string }) => p.name === 'node');
     expect(nodeProg?.version).toBeTruthy();
     expect(nodeProg?.version.length).toBeGreaterThan(0);
   });

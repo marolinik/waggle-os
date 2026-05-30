@@ -18,9 +18,14 @@ import fs from 'node:fs';
 const API = 'http://127.0.0.1:3333';
 const WAGGLE_DIR = path.join(os.homedir(), '.waggle');
 
+interface SSEEventData {
+  content?: string;
+  [key: string]: unknown;
+}
+
 interface SSEEvent {
   event: string;
-  data: any;
+  data: SSEEventData;
 }
 
 // ── Chat helper: sends message, collects SSE response ──────────────
@@ -65,7 +70,7 @@ async function chat(message: string, opts: {
           }
           if (!dataStr) continue;
           try {
-            const data = JSON.parse(dataStr);
+            const data = JSON.parse(dataStr) as SSEEventData;
             events.push({ event: eventType || 'unknown', data });
             if (eventType === 'token' && data.content) {
               fullText += data.content;
@@ -401,7 +406,7 @@ async function session8_evolutionPipeline() {
   check('Evolution status endpoint accessible', statusRes.ok, `status ${statusRes.status}`);
 
   if (statusRes.ok) {
-    const status = await statusRes.json() as any;
+    const status = await statusRes.json() as Record<string, unknown>;
     check('Evolution status has expected fields',
       'counts' in status || 'traceCount' in status || 'totalRuns' in status,
       JSON.stringify(status).slice(0, 100));

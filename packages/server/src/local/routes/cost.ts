@@ -71,8 +71,8 @@ export const costRoutes: FastifyPluginAsync = async (server) => {
    * otherwise returns empty array (base CostTracker has no entry access).
    */
   function getEntries(): UsageEntryLike[] {
-    if (typeof (costTracker as any).getUsageEntries === 'function') {
-      return (costTracker as any).getUsageEntries() as UsageEntryLike[];
+    if (typeof costTracker.getUsageEntries === 'function') {
+      return [...costTracker.getUsageEntries()];
     }
     return [];
   }
@@ -82,8 +82,8 @@ export const costRoutes: FastifyPluginAsync = async (server) => {
    * otherwise falling back to Sonnet pricing.
    */
   function calcCost(input: number, output: number, model: string): number {
-    if (typeof (costTracker as any).calculateCost === 'function') {
-      return (costTracker as any).calculateCost(input, output, model) as number;
+    if (typeof costTracker.calculateCost === 'function') {
+      return costTracker.calculateCost(input, output, model);
     }
     return estimateCost(input, output);
   }

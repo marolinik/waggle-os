@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { TeamService } from '../services/team-service.js';
 import { TeamCapabilityGovernance } from '../services/team-capability-governance.js';
 import { MessageService } from '../services/message-service.js';
@@ -17,7 +17,7 @@ export async function capabilityGovernanceRoutes(fastify: FastifyInstance) {
   const teamService = new TeamService(fastify.db);
   const governance = new TeamCapabilityGovernance(fastify.db);
 
-  async function resolveTeam(request: any, reply: any, slug: string) {
+  async function resolveTeam(request: FastifyRequest, reply: FastifyReply, slug: string) {
     const team = await teamService.getBySlug(slug);
     if (!team) {
       reply.code(404).send({ error: 'Team not found' });
@@ -33,7 +33,7 @@ export async function capabilityGovernanceRoutes(fastify: FastifyInstance) {
     return { team, membership };
   }
 
-  function requireAdmin(membership: { role: string }, reply: any): boolean {
+  function requireAdmin(membership: { role: string }, reply: FastifyReply): boolean {
     const level = ROLE_HIERARCHY[membership.role] ?? 0;
     if (level < ROLE_HIERARCHY.admin) {
       reply.code(403).send({ error: 'Admin or owner role required' });
@@ -141,8 +141,10 @@ export async function capabilityGovernanceRoutes(fastify: FastifyInstance) {
         request.userId,
       );
       return reply.code(201).send(override);
-    } catch (err: any) {
-      if (err.message?.includes('unique') || err.message?.includes('UNIQUE') || err.code === '23505') {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '';
+      const code = (err && typeof err === 'object' && 'code' in err) ? (err as { code?: unknown }).code : undefined;
+      if (message.includes('unique') || message.includes('UNIQUE') || code === '23505') {
         return reply.code(409).send({ error: 'Override already exists for this capability' });
       }
       throw err;
@@ -192,11 +194,11 @@ export async function capabilityGovernanceRoutes(fastify: FastifyInstance) {
       justification: body.justification,
     });
 
-    if ('duplicate' in result && result.duplicate) {
+    if (result.duplicate) {
       return reply.code(409).send({ error: 'A pending request for this capability already exists' });
     }
 
-    return reply.code(201).send((result as any).request);
+    return reply.code(201).send(result.request);
   });
 
   // GET /api/teams/:slug/capability-requests — list requests

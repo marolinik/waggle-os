@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import type { MessageType, MessageSubtype } from '@waggle/shared';
 import { validateMessageTypeCombo, isRoutedMessage } from '../src/protocol.js';
 
 describe('Waggle Dance protocol', () => {
@@ -30,11 +31,11 @@ describe('Waggle Dance protocol', () => {
     });
 
     it('rejects completely invalid types', () => {
-      expect(validateMessageTypeCombo('invalid' as any, 'discovery')).toBe(false);
+      expect(validateMessageTypeCombo('invalid' as MessageType, 'discovery')).toBe(false);
     });
 
     it('rejects completely invalid subtypes', () => {
-      expect(validateMessageTypeCombo('request', 'invalid' as any)).toBe(false);
+      expect(validateMessageTypeCombo('request', 'invalid' as MessageSubtype)).toBe(false);
     });
   });
 

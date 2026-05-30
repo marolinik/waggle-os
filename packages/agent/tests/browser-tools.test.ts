@@ -98,7 +98,7 @@ describe('Browser Tools', () => {
     it('browser_navigate requires url', () => {
       const tool = getTool('browser_navigate');
       expect(tool.parameters.required).toEqual(['url']);
-      expect((tool.parameters.properties as any).url.type).toBe('string');
+      expect((tool.parameters.properties as Record<string, { type: string }>).url.type).toBe('string');
     });
 
     it('browser_click requires selector', () => {
@@ -118,7 +118,7 @@ describe('Browser Tools', () => {
 
     it('browser_screenshot has optional full_page', () => {
       const tool = getTool('browser_screenshot');
-      expect((tool.parameters.properties as any).full_page.type).toBe('boolean');
+      expect((tool.parameters.properties as Record<string, { type: string }>).full_page.type).toBe('boolean');
     });
 
     it('browser_snapshot has no required params', () => {

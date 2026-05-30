@@ -88,7 +88,7 @@ describe('LinearConnector', () => {
     const vault = createMockVault('linear', { value: 'lin_api_test123', isExpired: false });
     await connector.connect(vault);
 
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: { viewer: { id: '1', name: 'User' } } }) }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: { viewer: { id: '1', name: 'User' } } }) }) as unknown as typeof fetch;
 
     const health = await connector.healthCheck();
     expect(health.status).toBe('connected');
@@ -99,7 +99,7 @@ describe('LinearConnector', () => {
     await connector.connect(vault);
 
     const mockData = { data: { issues: { nodes: [{ id: '1', title: 'Test' }] } } };
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockData }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockData }) as unknown as typeof fetch;
 
     const result = await connector.execute('list_issues', {});
     expect(result.success).toBe(true);
@@ -188,7 +188,7 @@ describe('AsanaConnector', () => {
     const vault = createMockVault('asana', { value: 'asana_pat_test123', isExpired: false });
     await connector.connect(vault);
 
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: { gid: '1', name: 'User' } }) }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: { gid: '1', name: 'User' } }) }) as unknown as typeof fetch;
 
     const health = await connector.healthCheck();
     expect(health.status).toBe('connected');
@@ -199,7 +199,7 @@ describe('AsanaConnector', () => {
     await connector.connect(vault);
 
     const mockData = { data: [{ gid: '1', name: 'Task 1' }] };
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockData }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockData }) as unknown as typeof fetch;
 
     const result = await connector.execute('list_tasks', { project: 'proj123' });
     expect(result.success).toBe(true);
@@ -293,7 +293,7 @@ describe('TrelloConnector', () => {
     });
     await connector.connect(vault);
 
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ id: '1', username: 'user' }) }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ id: '1', username: 'user' }) }) as unknown as typeof fetch;
 
     const health = await connector.healthCheck();
     expect(health.status).toBe('connected');
@@ -306,14 +306,14 @@ describe('TrelloConnector', () => {
     await connector.connect(vault);
 
     const mockBoards = [{ id: '1', name: 'My Board' }];
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockBoards }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockBoards }) as unknown as typeof fetch;
 
     const result = await connector.execute('list_boards', {});
     expect(result.success).toBe(true);
     expect(result.data).toEqual(mockBoards);
 
     // Verify auth params are in the URL
-    const fetchCall = (globalThis.fetch as any).mock.calls[0];
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
     expect(fetchCall[0]).toContain('key=trello_key_test');
     expect(fetchCall[0]).toContain('token=trello_token_test');
   });
@@ -402,7 +402,7 @@ describe('MondayConnector', () => {
     const vault = createMockVault('monday', { value: 'monday_api_test123', isExpired: false });
     await connector.connect(vault);
 
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: { me: { id: '1', name: 'User' } } }) }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: { me: { id: '1', name: 'User' } } }) }) as unknown as typeof fetch;
 
     const health = await connector.healthCheck();
     expect(health.status).toBe('connected');
@@ -413,7 +413,7 @@ describe('MondayConnector', () => {
     await connector.connect(vault);
 
     const mockData = { data: { boards: [{ id: '1', name: 'Sprint Board' }] } };
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockData }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockData }) as unknown as typeof fetch;
 
     const result = await connector.execute('list_boards', {});
     expect(result.success).toBe(true);

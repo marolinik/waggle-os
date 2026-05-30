@@ -265,7 +265,7 @@ describe('Execution Strategies (real execution)', () => {
       await executeSequential(mockMembers, { task: 'pipeline' }, deps);
 
       // Second call should have "Previous Agent's Output" in the system prompt
-      const calls = (deps.runAgent as any).mock.calls;
+      const calls = vi.mocked(deps.runAgent).mock.calls;
       expect(calls[0][0].systemPrompt).not.toContain('Previous Agent');
       expect(calls[1][0].systemPrompt).toContain('Previous Agent');
       expect(calls[2][0].systemPrompt).toContain('Previous Agent');

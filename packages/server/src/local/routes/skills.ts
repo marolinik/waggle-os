@@ -718,7 +718,7 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
   server.post<{
     Body: { sourceDir?: string; path?: string };
   }>('/api/plugins/install', async (request, reply) => {
-    const sourceDir = (request.body as any)?.sourceDir ?? (request.body as any)?.path;
+    const sourceDir = request.body?.sourceDir ?? request.body?.path;
     if (!sourceDir) {
       return reply.status(400).send({ error: 'sourceDir or path is required' });
     }
@@ -779,14 +779,14 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
     const pluginDir = path.join(pluginsDir, name);
     const manifestPath = path.join(pluginDir, 'plugin.json');
     if (!fs.existsSync(manifestPath)) return reply.code(404).send({ error: `Plugin "${name}" not found` });
-    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as { tools?: Array<{ name: string; description: string }> };
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as { tools?: Array<{ name: string; description: string; parameters?: unknown }> };
     const declaredTools = manifest.tools ?? [];
     const toolsDirPath = path.join(pluginDir, 'tools');
     const toolsWithStatus = declaredTools.map(tool => {
       const slug = tool.name.replace(/[^a-zA-Z0-9_-]/g, '-');
       const candidates = [path.join(toolsDirPath, `${slug}.js`), path.join(toolsDirPath, `${slug}.cjs`), path.join(toolsDirPath, `${tool.name}.js`)];
       const implFile = candidates.find(f => fs.existsSync(f));
-      return { name: tool.name, description: tool.description, parameters: (tool as any).parameters ?? { type: 'object', properties: {} }, hasImplementation: !!implFile, implPath: implFile ?? null, content: implFile ? fs.readFileSync(implFile, 'utf-8') : null };
+      return { name: tool.name, description: tool.description, parameters: tool.parameters ?? { type: 'object', properties: {} }, hasImplementation: !!implFile, implPath: implFile ?? null, content: implFile ? fs.readFileSync(implFile, 'utf-8') : null };
     });
     return { pluginName: name, tools: toolsWithStatus, toolsDir: toolsDirPath };
   });
@@ -840,9 +840,10 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
     if (!/^[a-zA-Z0-9_-]+$/.test(toolName)) return reply.code(400).send({ error: 'tool name must be alphanumeric/hyphens/underscores only' });
     const manifestPath = path.join(pluginsDir, pluginName, 'plugin.json');
     if (!fs.existsSync(manifestPath)) return reply.code(404).send({ error: `Plugin "${pluginName}" not found` });
-    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as any;
+    interface PluginManifestTool { name: string; description: string; parameters?: Record<string, unknown> }
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as { tools?: PluginManifestTool[] };
     if (!manifest.tools) manifest.tools = [];
-    if (manifest.tools.find((t: any) => t.name === toolName)) return reply.code(409).send({ error: `Tool "${toolName}" already exists` });
+    if (manifest.tools.find((t) => t.name === toolName)) return reply.code(409).send({ error: `Tool "${toolName}" already exists` });
     manifest.tools.push({ name: toolName, description, parameters: parameters ?? { type: 'object', properties: {}, required: [] } });
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8');
     return { ok: true, tool: manifest.tools.at(-1), totalTools: manifest.tools.length };

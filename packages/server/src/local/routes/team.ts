@@ -125,11 +125,13 @@ export async function teamRoutes(fastify: FastifyInstance) {
       if (!healthRes.ok) {
         return reply.code(502).send({ error: `Team server returned ${healthRes.status}` });
       }
-    } catch (err: any) {
-      if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+    } catch (err: unknown) {
+      const name = err instanceof Error ? err.name : '';
+      if (name === 'TimeoutError' || name === 'AbortError') {
         return reply.code(504).send({ error: 'Team server connection timed out' });
       }
-      return reply.code(502).send({ error: `Cannot reach team server: ${err.message}` });
+      const message = err instanceof Error ? err.message : String(err);
+      return reply.code(502).send({ error: `Cannot reach team server: ${message}` });
     }
 
     // Try to get user info from the team server
@@ -207,11 +209,13 @@ export async function teamRoutes(fastify: FastifyInstance) {
 
       const teams = await res.json();
       return reply.code(200).send(teams);
-    } catch (err: any) {
-      if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+    } catch (err: unknown) {
+      const name = err instanceof Error ? err.name : '';
+      if (name === 'TimeoutError' || name === 'AbortError') {
         return reply.code(504).send({ error: 'Team server request timed out' });
       }
-      return reply.code(502).send({ error: `Cannot reach team server: ${err.message}` });
+      const message = err instanceof Error ? err.message : String(err);
+      return reply.code(502).send({ error: `Cannot reach team server: ${message}` });
     }
   });
 
@@ -370,7 +374,7 @@ export async function teamRoutes(fastify: FastifyInstance) {
     }
 
     try {
-      const teamSlug = (teamServer as any).teamSlug ?? 'default';
+      const teamSlug = (teamServer as { teamSlug?: string }).teamSlug ?? 'default';
       const messagesUrl = `${teamServer.url}/api/teams/${teamSlug}/messages?limit=${limit}`;
       const res = await fetch(messagesUrl, {
         headers: { 'Authorization': `Bearer ${teamServer.token}` },
@@ -378,8 +382,8 @@ export async function teamRoutes(fastify: FastifyInstance) {
       });
 
       if (res.ok) {
-        const data = await res.json() as any;
-        const messages = data.messages ?? data ?? [];
+        const data = await res.json() as { messages?: unknown[] } | unknown[];
+        const messages = (Array.isArray(data) ? data : data?.messages) ?? [];
         if (Array.isArray(messages) && messages.length > 0) {
           emitNotification(fastify, {
             title: 'Team message',
@@ -399,12 +403,12 @@ export async function teamRoutes(fastify: FastifyInstance) {
   // --- Capability Governance Proxy ---
 
   // In-memory policy cache: teamId → { permissions, fetchedAt }
-  const policyCache = new Map<string, { permissions: any; fetchedAt: number }>();
+  const policyCache = new Map<string, { permissions: unknown; fetchedAt: number }>();
   const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
   // Listen for policy update events to invalidate cache
-  if ((fastify as any).eventBus) {
-    (fastify as any).eventBus.on('capability_policy_update', (data: any) => {
+  if (fastify.eventBus) {
+    fastify.eventBus.on('capability_policy_update', (data: { teamId?: string } | undefined) => {
       if (data?.teamId) policyCache.delete(data.teamId);
       else policyCache.clear(); // Clear all if no specific teamId
     });
@@ -427,7 +431,7 @@ export async function teamRoutes(fastify: FastifyInstance) {
     }
 
     try {
-      const teamSlug = (teamServer as any).teamSlug ?? 'default';
+      const teamSlug = (teamServer as { teamSlug?: string }).teamSlug ?? 'default';
       const url = `${teamServer.url.replace(/\/$/, '')}/api/teams/${teamSlug}/capability-policies`;
       const res = await fetch(url, {
         headers: { 'Authorization': `Bearer ${teamServer.token}` },
@@ -506,7 +510,7 @@ export async function teamRoutes(fastify: FastifyInstance) {
 
     // Team workspaces
     const allWorkspaces = fastify.workspaceManager.list();
-    const teamWorkspaces = allWorkspaces.filter((ws: any) => ws.teamId === team.id || ws.team === team.id);
+    const teamWorkspaces = allWorkspaces.filter((ws) => ws.teamId === team.id || ws.team === team.id);
 
     return {
       ...normalizeTeam(team),
@@ -562,8 +566,8 @@ export async function teamRoutes(fastify: FastifyInstance) {
     // Unlink workspaces from this team
     const allWorkspaces = fastify.workspaceManager.list();
     for (const ws of allWorkspaces) {
-      if ((ws as any).teamId === team.id || (ws as any).team === team.id) {
-        fastify.workspaceManager.update(ws.id, { teamId: undefined, team: null } as any);
+      if (ws.teamId === team.id || ws.team === team.id) {
+        fastify.workspaceManager.update(ws.id, { teamId: undefined, team: null });
       }
     }
 
@@ -697,8 +701,8 @@ export async function teamRoutes(fastify: FastifyInstance) {
     // Find all workspaces linked to this team
     const allWorkspaces = fastify.workspaceManager.list();
     const teamWsIds = allWorkspaces
-      .filter((ws: any) => ws.teamId === team.id || ws.team === team.id)
-      .map((ws: any) => ws.id);
+      .filter((ws) => ws.teamId === team.id || ws.team === team.id)
+      .map((ws) => ws.id);
 
     if (teamWsIds.length === 0) {
       return { items: [], teamId: team.id };

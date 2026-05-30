@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MindDB, ExecutionTraceStore, EvolutionRunStore } from '@waggle/core';
+import type { ParsedExecutionTrace, EvolutionRun } from '@waggle/core';
 import {
   EvolutionOrchestrator,
   eligibleForEvolution,
@@ -108,7 +109,7 @@ describe('eligibleForEvolution', () => {
           input: 'q', output: 'a', reasoning: [], toolCalls: [], artifacts: [],
           tokens: { input: 0, output: 0 }, tags: [],
         },
-      } as any,
+      } as unknown as ParsedExecutionTrace,
     ]);
     expect(eligible).toHaveLength(1);
   });
@@ -118,7 +119,7 @@ describe('eligibleForEvolution', () => {
       {
         id: 1, outcome: 'pending',
         payload: { input: 'q', output: 'a', reasoning: [], toolCalls: [], artifacts: [], tokens: { input: 0, output: 0 }, tags: [] },
-      } as any,
+      } as unknown as ParsedExecutionTrace,
     ]);
     expect(eligible).toHaveLength(0);
   });
@@ -128,7 +129,7 @@ describe('eligibleForEvolution', () => {
       {
         id: 1, outcome: 'success',
         payload: { input: '', output: 'a', reasoning: [], toolCalls: [], artifacts: [], tokens: { input: 0, output: 0 }, tags: [] },
-      } as any,
+      } as unknown as ParsedExecutionTrace,
     ]);
     expect(eligible).toHaveLength(0);
   });
@@ -142,7 +143,7 @@ describe('eligibleForEvolution', () => {
           tokens: { input: 0, output: 0 }, tags: [],
           correctionFeedback: 'use bullets',
         },
-      } as any,
+      } as unknown as ParsedExecutionTrace,
     ]);
     expect(eligible).toHaveLength(1);
   });
@@ -164,7 +165,7 @@ describe('summarizeRuns', () => {
       { status: 'accepted', target_kind: 'persona-system-prompt', delta_accuracy: 0.12 },
       { status: 'rejected', target_kind: 'tool-description', delta_accuracy: 0.02 },
       { status: 'deployed', target_kind: 'persona-system-prompt', delta_accuracy: 0.09 },
-    ] as any[];
+    ] as unknown as EvolutionRun[];
     const s = summarizeRuns(runs);
     expect(s.total).toBe(4);
     expect(s.byStatus.proposed).toBe(1);

@@ -198,7 +198,7 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
           }, (error, stdout, stderr) => {
             clearTimeout(timer);
             if (error) {
-              if ((error as any).code === 'ABORT_ERR') {
+              if (error.code === 'ABORT_ERR') {
                 resolve(`Error: Command timeout after ${timeout}ms`);
                 return;
               }
@@ -246,11 +246,14 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
             if (ext === '.pdf') {
               const stat = fs.statSync(resolved);
               try {
-                const pdfParse = await import('pdf-parse');
+                // pdf-parse is an optional CJS module; describe only the call we make.
+                type PdfParseFn = (buf: Buffer) => Promise<{ text: string }>;
+                const pdfModule = (await import('pdf-parse')) as unknown as
+                  PdfParseFn & { default?: PdfParseFn };
                 const buffer = fs.readFileSync(resolved);
-                const parseFn = (pdfParse as any).default ?? pdfParse;
+                const parseFn: PdfParseFn = pdfModule.default ?? pdfModule;
                 const data = await parseFn(buffer);
-                const text = data.text as string;
+                const text = data.text;
                 return text || `[PDF file: ${filePath}, ${stat.size} bytes, no text content extracted]`;
               } catch {
                 return `[PDF file: ${filePath}, ${stat.size} bytes. Install pdf-parse for text extraction: npm install pdf-parse]`;
@@ -301,8 +304,8 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
           }
 
           return lines.join('\n');
-        } catch (err: any) {
-          return `Error: ${err.message}`;
+        } catch (err: unknown) {
+          return `Error: ${err instanceof Error ? err.message : String(err)}`;
         }
       },
     },
@@ -333,8 +336,8 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
             fs.writeFileSync(resolved, contentStr);
           }
           return `Successfully wrote ${filePath}`;
-        } catch (err: any) {
-          return `Error: ${err.message}`;
+        } catch (err: unknown) {
+          return `Error: ${err instanceof Error ? err.message : String(err)}`;
         }
       },
     },
@@ -395,8 +398,8 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
 
           const countMsg = replaceAll && occurrences > 1 ? ` (${occurrences} occurrences)` : '';
           return `Successfully edited ${filePath}${countMsg}`;
-        } catch (err: any) {
-          return `Error: ${err.message}`;
+        } catch (err: unknown) {
+          return `Error: ${err instanceof Error ? err.message : String(err)}`;
         }
       },
     },
@@ -428,8 +431,8 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
               + `\n\n[Showing ${MAX_FILE_RESULTS} of ${matches.length} files. Use a more specific pattern to narrow results.]`;
           }
           return matches.join('\n');
-        } catch (err: any) {
-          return `Error: ${err.message}`;
+        } catch (err: unknown) {
+          return `Error: ${err instanceof Error ? err.message : String(err)}`;
         }
       },
     },
@@ -563,8 +566,8 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
             output += `\n\n[Showing ${maxResults} matches. Use max_results parameter or a more specific pattern for different results.]`;
           }
           return output;
-        } catch (err: any) {
-          return `Error: ${err.message}`;
+        } catch (err: unknown) {
+          return `Error: ${err instanceof Error ? err.message : String(err)}`;
         }
       },
     },
@@ -641,8 +644,8 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
           searchCache.set(cacheKey, output);
 
           return output;
-        } catch (err: any) {
-          return `Search error: ${err.message}`;
+        } catch (err: unknown) {
+          return `Search error: ${err instanceof Error ? err.message : String(err)}`;
         }
       },
     },
@@ -725,9 +728,9 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
 
           if (!text) return 'Page fetched but no text content found.';
           return text.slice(0, maxLength);
-        } catch (err: any) {
-          if (err.name === 'AbortError') return 'Error: Request timed out (15s)';
-          return `Fetch error: ${err.message}`;
+        } catch (err: unknown) {
+          if (err instanceof Error && err.name === 'AbortError') return 'Error: Request timed out (15s)';
+          return `Fetch error: ${err instanceof Error ? err.message : String(err)}`;
         }
       },
     },
@@ -820,8 +823,8 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
             .join('\n');
 
           return `Successfully applied ${edits.length} edit(s) across ${fileCounts.size} file(s):\n${summary}`;
-        } catch (err: any) {
-          return `Error: ${err.message}`;
+        } catch (err: unknown) {
+          return `Error: ${err instanceof Error ? err.message : String(err)}`;
         }
       },
     },
@@ -921,12 +924,12 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
             const parts: string[] = [];
 
             if (error) {
-              if ((error as any).code === 'ABORT_ERR') {
+              if (error.code === 'ABORT_ERR') {
                 resolve(`Error: Code execution timed out after ${timeout}ms`);
                 return;
               }
               // Check for runtime not found
-              if ((error as any).code === 'ENOENT' || (error.message && error.message.includes('not found'))) {
+              if (error.code === 'ENOENT' || (error.message && error.message.includes('not found'))) {
                 resolve(`Error: ${language} runtime not found. Please ensure ${language === 'python' ? 'python3/python' : 'node'} is installed and on PATH.`);
                 return;
               }

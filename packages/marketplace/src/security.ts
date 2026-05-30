@@ -65,6 +65,66 @@ export type SecurityEngine =
   | 'waggle_heuristics'
   | 'content_hash';
 
+/** Response shape from the Gen Trust Hub cloud scan API (best-effort). */
+interface GenTrustHubResponse {
+  severity?: string;
+  risk_level?: string;
+  details?: string;
+  message?: string;
+  threats?: Array<{
+    type?: string;
+    severity?: string;
+    title?: string;
+    description?: string;
+    details?: string;
+  }>;
+}
+
+/** A single issue as reported by the optional `mcp-guardian` library. */
+interface GuardianIssue {
+  ruleId?: string;
+  category?: string;
+  message?: string;
+  description?: string;
+  details?: string;
+}
+
+/** Raw JSON emitted by the Cisco `skill-scanner` CLI (best-effort shape). */
+interface CiscoScannerOutput {
+  verdict?: string;
+  summary?: string;
+  findings?: Array<{
+    rule_id?: string;
+    id?: string;
+    severity?: string;
+    level?: string;
+    category?: string;
+    type?: string;
+    title?: string;
+    message?: string;
+    description?: string;
+    details?: string;
+    location?: string;
+    line?: number;
+  }>;
+}
+
+/**
+ * Error thrown by `child_process.execFileSync`/`execSync` — augmented with the
+ * captured stdio and exit status. Narrowed from `unknown` in catch blocks.
+ */
+interface ExecError {
+  status?: number;
+  stdout?: string | Buffer;
+  stderr?: string | Buffer;
+  message?: string;
+}
+
+/** Narrow an unknown caught value into an {@link ExecError} view. */
+function asExecError(err: unknown): ExecError {
+  return (typeof err === 'object' && err !== null) ? err as ExecError : {};
+}
+
 export interface ScanResult {
   package_name: string;
   package_type: string;
@@ -286,7 +346,7 @@ export class SecurityGate {
         return findings;
       }
 
-      const data = await response.json() as any;
+      const data = await response.json() as GenTrustHubResponse;
 
       // Parse the response into findings
       if (data.severity === 'CRITICAL THREAT' || data.severity === 'CRITICAL') {
@@ -324,7 +384,7 @@ export class SecurityGate {
           findings.push({
             rule_id: `GEN-T-${threat.type || 'unknown'}`,
             severity: (threat.severity || 'MEDIUM').toUpperCase() as Severity,
-            category: this.mapGenCategory(threat.type),
+            category: this.mapGenCategory(threat.type || ''),
             title: threat.title || threat.type || 'Gen Trust Hub threat',
             description: threat.description || threat.details || '',
             engine: 'gen_trust_hub',
@@ -425,19 +485,20 @@ export class SecurityGate {
       try { unlinkSync(tempFile); } catch { /* ignore */ }
 
     } catch (err) {
-      const errMsg = (err as any).stderr || (err as Error).message;
+      const execErr = asExecError(err);
+      const errMsg = (execErr.stderr?.toString()) || (err instanceof Error ? err.message : String(err));
 
       // Exit code 1 from skill-scanner means findings were found — try to parse stdout
-      if ((err as any).status === 1 && (err as any).stdout) {
+      if (execErr.status === 1 && execErr.stdout) {
         try {
-          const result = JSON.parse((err as any).stdout);
+          const result = JSON.parse(execErr.stdout.toString()) as CiscoScannerOutput;
           if (result.findings) {
             for (const f of result.findings) {
               findings.push({
                 rule_id: f.rule_id || `CISCO-${findings.length}`,
-                severity: this.mapCiscoSeverity(f.severity || f.level),
-                category: this.mapCiscoCategory(f.category || f.type),
-                title: f.title || f.message,
+                severity: this.mapCiscoSeverity(f.severity || f.level || ''),
+                category: this.mapCiscoCategory(f.category || f.type || ''),
+                title: f.title || f.message || 'Cisco scanner finding',
                 description: f.description || '',
                 location: f.location,
                 engine: 'cisco_skill_scanner',
@@ -574,22 +635,22 @@ export class SecurityGate {
         const result = guardian.scanToolDescription(mcpConfig.name, descToScan);
 
         if (result.status === 'critical') {
-          for (const issue of (result.issues || []) as any[]) {
+          for (const issue of (result.issues || []) as GuardianIssue[]) {
             findings.push({
               rule_id: `MCG-${issue.ruleId || 'CRIT'}`,
               severity: 'CRITICAL',
-              category: this.mapGuardianCategory(issue.category),
+              category: this.mapGuardianCategory(issue.category || ''),
               title: issue.message || 'MCP Guardian: Critical pattern detected',
               description: issue.description || issue.details || '',
               engine: 'mcp_guardian',
             });
           }
         } else if (result.status === 'warning') {
-          for (const issue of (result.issues || []) as any[]) {
+          for (const issue of (result.issues || []) as GuardianIssue[]) {
             findings.push({
               rule_id: `MCG-${issue.ruleId || 'WARN'}`,
               severity: 'MEDIUM',
-              category: this.mapGuardianCategory(issue.category),
+              category: this.mapGuardianCategory(issue.category || ''),
               title: issue.message || 'MCP Guardian: Warning pattern detected',
               description: issue.description || issue.details || '',
               engine: 'mcp_guardian',

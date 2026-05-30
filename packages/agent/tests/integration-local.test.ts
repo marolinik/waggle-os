@@ -225,7 +225,7 @@ describe('Integration: Local Mode', () => {
     // Verify the tool result message sent to LLM contains the error
     const secondCallBody = JSON.parse(fetch.mock.calls[1][1]!.body as string);
     const toolMsg = secondCallBody.messages.find(
-      (m: any) => m.role === 'tool' && m.tool_call_id === 'call_err_1'
+      (m: { role?: string; tool_call_id?: string }) => m.role === 'tool' && m.tool_call_id === 'call_err_1'
     );
     expect(toolMsg).toBeDefined();
     expect(toolMsg.content).toContain('Error:');

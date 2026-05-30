@@ -21,6 +21,14 @@ import * as path from 'node:path';
 import type { AuditReport, ComplianceStatus, ArticleStatus, AIActRiskLevel } from '@waggle/core';
 import type { TDocumentDefinitions, Content, TableCell } from 'pdfmake/interfaces.js';
 
+// Minimal surface of the pdfmake static we use (createPdf().getBuffer()).
+interface PdfPrinter {
+  getBuffer(cb: (buffer: Buffer) => void): void;
+}
+interface PdfMakeStatic {
+  createPdf(docDef: TDocumentDefinitions): PdfPrinter;
+}
+
 /**
  * Optional template-sourced overrides (M-03). Applied over the workspace-derived
  * values so a single workspace can render under multiple branded templates without
@@ -239,7 +247,7 @@ export function buildComplianceDocDefinition(
 
     { text: 'Human Oversight Log', style: 'h1', margin: [0, 0, 0, 6] },
     { text: `Art. 14 record of human approve/deny/modify actions on agent-proposed tool calls. Total this period: ${report.humanOversightLog.length}.`, fontSize: 10, color: '#333333', margin: [0, 0, 0, 10] },
-    ...([] as Content[]).concat(oversightLogTable(report) as any),
+    ...([] as Content[]).concat(oversightLogTable(report) as Content[] | Content),
 
     { text: 'Harvest Provenance', style: 'h1', margin: [0, 0, 0, 6] },
     { text: 'Art. 10 data-quality record of conversation imports and their downstream frame counts.', fontSize: 10, color: '#333333', margin: [0, 0, 0, 10] },
@@ -312,7 +320,7 @@ export async function renderComplianceReportPdf(
 ): Promise<Buffer> {
   const docDef = buildComplianceDocDefinition(report, overrides);
   const pdfMakeModule = await import('pdfmake/build/pdfmake.js');
-  const pdfMake = (pdfMakeModule.default ?? pdfMakeModule) as any;
+  const pdfMake = (pdfMakeModule.default ?? pdfMakeModule) as unknown as PdfMakeStatic;
   const printer = pdfMake.createPdf(docDef);
   return new Promise<Buffer>((resolve, reject) => {
     printer.getBuffer((buffer: Buffer) => {

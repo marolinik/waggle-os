@@ -83,7 +83,7 @@ async function skipOnboarding(page: Page): Promise<void> {
  */
 async function navigateTo(page: Page, viewName: string): Promise<void> {
   // If onboarding overlay is visible, press Escape or click skip to dismiss it
-  const overlay = page.locator('.fixed.inset-0.z-\[9999\]');
+  const overlay = page.locator('.fixed.inset-0.z-\\[9999\\]');
   if (await overlay.isVisible({ timeout: 500 }).catch(() => false)) {
     // Try to find and click a skip/dismiss button
     const skipBtn = page.locator('button').filter({ hasText: /skip|dismiss|close|later/i }).first();

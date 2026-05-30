@@ -242,7 +242,7 @@ test.describe('B2 — Memory Persistence (vs ChatGPT / Claude Code / Hermes)', (
       const results = data.results ?? data.recalled ?? [];
 
       // Zero tolerance for cross-workspace data leakage
-      const leaked = results.some((r: any) => JSON.stringify(r).includes(secretData));
+      const leaked = results.some((r: unknown) => JSON.stringify(r).includes(secretData));
       expect(leaked, `CRITICAL: Data from workspace A leaked into workspace B`).toBe(false);
     }
   });
@@ -297,7 +297,7 @@ test.describe('B3 — Tool & Connector Breadth (vs OpenClaw / Paperclip / Claude
     const res = await request.get(`${API}/api/connectors`);
     const data = await res.json();
     const categories = new Set(
-      data.connectors.map((c: any) => c.category).filter(Boolean)
+      data.connectors.map((c: { category?: string }) => c.category).filter(Boolean)
     );
     expect(
       categories.size,
@@ -336,7 +336,7 @@ test.describe('B3 — Tool & Connector Breadth (vs OpenClaw / Paperclip / Claude
     expect(data.personas.length).toBeGreaterThanOrEqual(17);
 
     // Personas must cover all major professional roles
-    const ids = data.personas.map((p: any) => p.id);
+    const ids = data.personas.map((p: { id: string }) => p.id);
     const requiredRoles = ['researcher', 'analyst', 'coder', 'consultant', 'sales-rep', 'legal-professional'];
     for (const role of requiredRoles) {
       expect(ids, `Missing persona: ${role} — competitors don't have role-specific agents`).toContain(role);
@@ -437,11 +437,11 @@ test.describe('B4 — Multi-Agent Concurrency (vs Claude Code / ChatGPT / OpenCl
     const listRes = await request.get(`${API}/api/hooks`);
     expect(listRes.ok()).toBe(true);
     const data = await listRes.json();
-    const found = data.rules.find((r: any) => r.pattern === 'global-agent-safety-bench');
+    const found = data.rules.find((r: { pattern: string }) => r.pattern === 'global-agent-safety-bench');
     expect(found, 'Hook must be globally visible across all agent sessions').toBeDefined();
 
     // Cleanup
-    const idx = data.rules.findIndex((r: any) => r.pattern === 'global-agent-safety-bench');
+    const idx = data.rules.findIndex((r: { pattern: string }) => r.pattern === 'global-agent-safety-bench');
     if (idx >= 0) await request.delete(`${API}/api/hooks/${idx}`);
   });
 

@@ -52,6 +52,59 @@ export interface MarketplacePackage {
   updated_at: string;
 }
 
+/**
+ * Input shape accepted by {@link MarketplaceDB.upsertPackage}.
+ *
+ * `name` and `source_id` are required. The JSON-serializable columns
+ * (`platforms`, `dependencies`, `packs`, `install_manifest`) accept EITHER
+ * their structured form (object/array) OR a pre-serialized JSON string —
+ * `upsertPackage` serializes objects on the way in, so sync adapters that
+ * have already called `JSON.stringify()` can pass the string directly.
+ */
+export type PackageUpsertInput =
+  & Omit<Partial<MarketplacePackage>, 'platforms' | 'dependencies' | 'packs' | 'install_manifest'>
+  & {
+    name: string;
+    source_id: number;
+    platforms?: string[] | string;
+    dependencies?: string[] | string;
+    packs?: string[] | string;
+    install_manifest?: InstallManifest | string | null;
+  };
+
+/**
+ * Optional security-scan columns persisted on the `packages` table by the
+ * installer's `recordScanResult()`. They are not part of the core
+ * {@link MarketplacePackage} shape (a freshly-synced package has none of them),
+ * so callers that read them must treat every field as possibly-absent.
+ */
+export interface PackageSecurityColumns {
+  security_status?: 'unscanned' | 'clean' | 'low' | 'medium' | 'high' | 'critical' | string;
+  security_score?: number;
+  last_scanned_at?: string | null;
+  content_hash?: string | null;
+  scan_engines?: string | null;
+  scan_findings?: string | null;
+  /** 1 = installation was blocked by the security gate, 0 = allowed. */
+  scan_blocked?: 0 | 1;
+}
+
+/** A catalog package row augmented with its (optional) persisted scan columns. */
+export type ScannedPackage = MarketplacePackage & PackageSecurityColumns;
+
+/**
+ * Flat row returned by {@link MarketplaceDB.listInstallations}.
+ *
+ * The query joins `installations` (all columns) with a handful of package
+ * columns aliased as `pkg_*`; it is NOT a nested `{ package: ... }` object.
+ */
+export interface InstalledPackageRow extends Installation {
+  pkg_name: string;
+  pkg_display_name: string;
+  waggle_install_type: MarketplacePackage['waggle_install_type'];
+  category: string;
+}
+
 export interface MarketplacePack {
   id: number;
   slug: string;

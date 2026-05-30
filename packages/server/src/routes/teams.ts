@@ -130,8 +130,8 @@ export async function teamRoutes(fastify: FastifyInstance) {
         return reply.code(404).send({ error: 'Member not found' });
       }
       return reply.code(204).send();
-    } catch (err: any) {
-      if (err.message === 'Cannot remove the team owner') {
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message === 'Cannot remove the team owner') {
         return reply.code(403).send({ error: err.message });
       }
       throw err;

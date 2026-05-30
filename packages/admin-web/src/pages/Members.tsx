@@ -5,8 +5,8 @@
  * Talks to team server via api.ts.
  */
 
-import React, { useEffect, useState } from 'react';
-import { api, type TeamMemberResponse } from '../api.js';
+import React, { useCallback, useEffect, useState } from 'react';
+import { api, getErrorMessage, type TeamMemberResponse } from '../api.js';
 
 interface MembersProps {
   token: string;
@@ -25,22 +25,22 @@ export function Members({ token, teamSlug }: MembersProps) {
   const [inviteRole, setInviteRole] = useState('member');
   const [inviting, setInviting] = useState(false);
 
-  const fetchMembers = async () => {
+  const fetchMembers = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
       const team = await api.getTeam(token, teamSlug);
       setMembers(team.members ?? []);
-    } catch (err: any) {
-      setError(err.message ?? 'Failed to load members');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to load members'));
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, teamSlug]);
 
   useEffect(() => {
     if (token && teamSlug) fetchMembers();
-  }, [token, teamSlug]);
+  }, [token, teamSlug, fetchMembers]);
 
   const handleInvite = async () => {
     if (!inviteEmail.trim()) return;
@@ -50,8 +50,8 @@ export function Members({ token, teamSlug }: MembersProps) {
       await api.inviteMember(token, teamSlug, inviteEmail.trim(), inviteRole);
       setInviteEmail('');
       await fetchMembers();
-    } catch (err: any) {
-      setError(err.message ?? 'Invite failed');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Invite failed'));
     } finally {
       setInviting(false);
     }
@@ -62,8 +62,8 @@ export function Members({ token, teamSlug }: MembersProps) {
       setError(null);
       await api.updateMemberRole(token, teamSlug, userId, newRole);
       await fetchMembers();
-    } catch (err: any) {
-      setError(err.message ?? 'Role change failed');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Role change failed'));
     }
   };
 
@@ -74,8 +74,8 @@ export function Members({ token, teamSlug }: MembersProps) {
       setError(null);
       await api.removeMember(token, teamSlug, userId);
       await fetchMembers();
-    } catch (err: any) {
-      setError(err.message ?? 'Remove failed');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Remove failed'));
     }
   };
 

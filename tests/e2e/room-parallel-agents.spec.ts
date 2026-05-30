@@ -63,6 +63,12 @@ async function installSseMock(page: Page) {
   // so it lands before the adapter ever calls `new EventSource(...)`.
   await page.addInitScript((roster) => {
     type Listener = (e: MessageEvent) => void;
+    interface MockWindow {
+      __p6MockSources?: unknown[];
+      EventSource: unknown;
+      localStorage: Storage;
+    }
+    const win = window as unknown as MockWindow;
 
     class MockEventSource {
       url: string;
@@ -74,8 +80,8 @@ async function installSseMock(page: Page) {
 
       constructor(url: string) {
         this.url = url;
-        (window as any).__p6MockSources = ((window as any).__p6MockSources || []);
-        (window as any).__p6MockSources.push(this);
+        win.__p6MockSources = (win.__p6MockSources || []);
+        win.__p6MockSources.push(this);
 
         // Give React a moment to mount and the adapter to call addEventListener.
         setTimeout(() => {
@@ -105,7 +111,7 @@ async function installSseMock(page: Page) {
       }
     }
 
-    (window as any).EventSource = MockEventSource;
+    win.EventSource = MockEventSource;
     // Skip boot screen so we get to Desktop immediately.
     try {
       window.localStorage.setItem('waggle-booted', 'true');

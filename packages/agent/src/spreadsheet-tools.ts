@@ -132,8 +132,8 @@ export function createSpreadsheetTools(workspace: string): ToolDefinition[] {
             `Total: ${sheets.length} sheets, ${totalRows} data rows.\n` +
             `IMPORTANT: Describe the spreadsheet content in your response.`
           );
-        } catch (err: any) {
-          return `Error generating spreadsheet: ${err.message}`;
+        } catch (err: unknown) {
+          return `Error generating spreadsheet: ${err instanceof Error ? err.message : String(err)}`;
         }
       },
     },

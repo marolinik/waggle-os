@@ -171,7 +171,7 @@ function insertSource(
     source_type: string;
   },
 ): number {
-  const rawDb = (db as any).db;
+  const rawDb = db.getRawDb();
   const result = rawDb
     .prepare(
       `INSERT INTO sources (name, display_name, url, source_type, platform, total_packages, install_method, api_endpoint, description)
@@ -808,10 +808,10 @@ describe('deduplicatePackages', () => {
       downloads: 100,
       stars: 50,
       category: 'general',
-      platforms: JSON.stringify([]) as any,
-      dependencies: JSON.stringify([]) as any,
-      packs: JSON.stringify([]) as any,
-      install_manifest: JSON.stringify({}) as any,
+      platforms: JSON.stringify([]),
+      dependencies: JSON.stringify([]),
+      packs: JSON.stringify([]),
+      install_manifest: JSON.stringify({}),
     });
 
     db.upsertPackage({
@@ -827,10 +827,10 @@ describe('deduplicatePackages', () => {
       downloads: 10,
       stars: 5,
       category: 'general',
-      platforms: JSON.stringify([]) as any,
-      dependencies: JSON.stringify([]) as any,
-      packs: JSON.stringify([]) as any,
-      install_manifest: JSON.stringify({}) as any,
+      platforms: JSON.stringify([]),
+      dependencies: JSON.stringify([]),
+      packs: JSON.stringify([]),
+      install_manifest: JSON.stringify({}),
     });
 
     const removed = deduplicatePackages(db);
@@ -863,10 +863,10 @@ describe('deduplicatePackages', () => {
       downloads: 0,
       stars: 0,
       category: 'general',
-      platforms: JSON.stringify([]) as any,
-      dependencies: JSON.stringify([]) as any,
-      packs: JSON.stringify([]) as any,
-      install_manifest: JSON.stringify({}) as any,
+      platforms: JSON.stringify([]),
+      dependencies: JSON.stringify([]),
+      packs: JSON.stringify([]),
+      install_manifest: JSON.stringify({}),
     });
 
     db.upsertPackage({
@@ -880,10 +880,10 @@ describe('deduplicatePackages', () => {
       downloads: 0,
       stars: 0,
       category: 'general',
-      platforms: JSON.stringify([]) as any,
-      dependencies: JSON.stringify([]) as any,
-      packs: JSON.stringify([]) as any,
-      install_manifest: JSON.stringify({}) as any,
+      platforms: JSON.stringify([]),
+      dependencies: JSON.stringify([]),
+      packs: JSON.stringify([]),
+      install_manifest: JSON.stringify({}),
     });
 
     const removed = deduplicatePackages(db);

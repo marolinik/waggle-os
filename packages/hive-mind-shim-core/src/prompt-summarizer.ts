@@ -22,7 +22,7 @@ export interface SummarizeOptions {
 
 const DEFAULT_MAX_CHARS = 500;
 const ELLIPSIS = '…';
-const SENTENCE_BOUNDARY = /(?<=[.!?])\s+(?=[A-Z(\[])/g;
+const SENTENCE_BOUNDARY = /(?<=[.!?])\s+(?=[A-Z([])/g;
 
 export function summarizeTurn(content: string, opts: SummarizeOptions = {}): string {
   const maxChars = opts.maxChars ?? DEFAULT_MAX_CHARS;

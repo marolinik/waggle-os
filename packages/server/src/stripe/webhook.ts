@@ -94,7 +94,7 @@ export const webhookRoutes: FastifyPluginAsync = async (server) => {
       return reply.code(400).send({ error: 'INVALID_SIGNATURE' });
     }
 
-    const dataDir = (server as any).localConfig?.dataDir;
+    const dataDir = server.localConfig?.dataDir;
     if (!dataDir) {
       return reply.code(500).send({ error: 'SERVER_MISCONFIGURED' });
     }

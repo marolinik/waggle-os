@@ -73,9 +73,9 @@ export function checkPortAvailable(port: number): Promise<boolean> {
  */
 function hasAnthropicKey(dataDir: string, server?: FastifyInstance): boolean {
   // Vault first — encrypted storage is the canonical secret store
-  if (server && (server as any).vault) {
+  if (server && server.vault) {
     try {
-      const entry = (server as any).vault.get('anthropic');
+      const entry = server.vault.get('anthropic');
       if (entry?.value) return true;
     } catch { /* vault read failed */ }
   }
@@ -237,7 +237,7 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
     // Fall back to built-in Anthropic proxy
     const selfUrl = `http://127.0.0.1:${port}/v1`;
     server.agentState.litellmApiKey = server.agentState.wsSessionToken;
-    (server.localConfig as any).litellmUrl = selfUrl;
+    server.localConfig.litellmUrl = selfUrl;
     providerName = 'anthropic-proxy';
 
     const hasKey = hasAnthropicKey(dataDir, server);

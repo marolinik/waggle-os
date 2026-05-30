@@ -17,29 +17,29 @@ import path from 'node:path';
 import { createLogger } from '../logger.js';
 const log = createLogger('marketplace-dev');
 import fs from 'node:fs';
+import { MarketplaceDB, SecurityGate } from '@waggle/marketplace';
+import type { InstallationType, MarketplacePack, MarketplacePackage } from '@waggle/marketplace';
 
 export async function marketplaceDevRoutes(fastify: FastifyInstance) {
   // Only register if dev flag is set
   if (process.env.WAGGLE_DEV_MARKETPLACE !== '1') return;
 
-  const dataDir = (fastify as any).localConfig?.dataDir ?? path.join(
+  const dataDir = fastify.localConfig?.dataDir ?? path.join(
     process.env.HOME ?? process.env.USERPROFILE ?? '.',
     '.waggle',
   );
 
-  // Lazy-load marketplace to avoid import errors if package not built
-  let db: any = null;
-  let securityGate: any = null;
+  // Lazy-instantiate marketplace handles on first use.
+  let db: MarketplaceDB | null = null;
+  let securityGate: SecurityGate | null = null;
 
-  function getDb() {
+  function getDb(): MarketplaceDB | null {
     if (db) return db;
     try {
-      // Dynamic import path — marketplace.db location
       const dbPath = path.join(dataDir, 'marketplace.db');
       if (!fs.existsSync(dbPath)) {
         return null;
       }
-      const { MarketplaceDB } = require('@waggle/marketplace');
       db = new MarketplaceDB(dbPath);
       return db;
     } catch (err) {
@@ -48,10 +48,9 @@ export async function marketplaceDevRoutes(fastify: FastifyInstance) {
     }
   }
 
-  function getSecurityGate() {
+  function getSecurityGate(): SecurityGate | null {
     if (securityGate) return securityGate;
     try {
-      const { SecurityGate } = require('@waggle/marketplace');
       securityGate = new SecurityGate();
       return securityGate;
     } catch (err) {
@@ -80,7 +79,7 @@ export async function marketplaceDevRoutes(fastify: FastifyInstance) {
 
     const results = marketplace.search({
       query: query || '',
-      type: type as any,
+      type: type as InstallationType | undefined,
       category,
       limit: limit ? parseInt(limit, 10) : 20,
     });
@@ -106,10 +105,10 @@ export async function marketplaceDevRoutes(fastify: FastifyInstance) {
     // Run a dry scan on a sample skill content to prove the seam works
     const sampleContent = `# Sample Skill\n\nThis is a test skill for security scanning.\n\n## Steps\n1. Read context\n2. Analyze\n3. Respond`;
 
-    const result = await gate.scan(
-      { name: 'test-skill', package_type: 'skill' },
-      sampleContent,
-    );
+    // Dev-only heuristic scan: the gate only reads name/package_type here, so a
+    // minimal stub stands in for a full catalog package.
+    const stubPkg = { name: 'test-skill', package_type: 'skill' } as Pick<MarketplacePackage, 'name' | 'package_type'> as MarketplacePackage;
+    const result = await gate.scan(stubPkg, sampleContent);
 
     return {
       _dev: true,
@@ -139,7 +138,7 @@ export async function marketplaceDevRoutes(fastify: FastifyInstance) {
       _dev: true,
       _note: 'Pack catalog for reconciliation — not final pack model',
       packCount: packs.length,
-      packs: packs.map((p: any) => ({
+      packs: packs.map((p: MarketplacePack) => ({
         slug: p.slug,
         displayName: p.display_name,
         description: p.description,

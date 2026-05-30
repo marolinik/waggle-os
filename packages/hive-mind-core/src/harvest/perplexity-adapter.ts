@@ -43,7 +43,7 @@ export class PerplexityAdapter implements SourceAdapter {
     }
 
     // Single-thread shape: the root itself has messages
-    if (Array.isArray((root as any).messages)) {
+    if (Array.isArray(root.messages)) {
       return this.parseSingleThread(root);
     }
 

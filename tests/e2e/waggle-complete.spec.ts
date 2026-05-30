@@ -25,6 +25,12 @@ import { test, expect, type Page, type APIRequestContext } from '@playwright/tes
 
 const API = 'http://127.0.0.1:3333';
 
+// ── Minimal response shapes (API JSON is untyped at the boundary) ──────────
+interface ConnectorShape { id?: string; name?: string }
+interface PersonaShape { id: string }
+interface HookRuleShape { pattern: string }
+interface SkillShape { name?: string }
+
 // ── Helpers ──────────────────────────────────────────────────────────────
 
 async function waitForApp(page: Page) {
@@ -425,7 +431,7 @@ test.describe('5. Connectors', () => {
   test('5.3 Composio connector is present', async ({ request }) => {
     const res = await request.get(`${API}/api/connectors`);
     const data = await res.json();
-    const composio = data.connectors.find((c: any) => c.id === 'composio');
+    const composio = data.connectors.find((c: ConnectorShape) => c.id === 'composio');
     expect(composio).toBeDefined();
     expect(composio.name).toMatch(/composio/i);
   });
@@ -454,7 +460,7 @@ test.describe('6. Personas', () => {
   test('6.2 New personas exist (general-purpose, planner, verifier, coordinator)', async ({ request }) => {
     const res = await request.get(`${API}/api/personas`);
     const data = await res.json();
-    const ids = data.personas.map((p: any) => p.id);
+    const ids = data.personas.map((p: PersonaShape) => p.id);
     expect(ids).toContain('general-purpose');
     expect(ids).toContain('planner');
     expect(ids).toContain('verifier');
@@ -464,7 +470,7 @@ test.describe('6. Personas', () => {
   test('6.3 Read-only personas exist (planner, verifier)', async ({ request }) => {
     const res = await request.get(`${API}/api/personas`);
     const data = await res.json();
-    const ids = data.personas.map((p: any) => p.id);
+    const ids = data.personas.map((p: PersonaShape) => p.id);
     expect(ids).toContain('planner');
     expect(ids).toContain('verifier');
     // isReadOnly is a backend-only field not serialized to API — verify by name presence
@@ -555,7 +561,7 @@ test.describe('8. Hooks API', () => {
     expect(data.ok).toBe(true);
     expect(Array.isArray(data.rules)).toBe(true);
     // Find our rule
-    const added = data.rules.find((r: any) => r.pattern === 'e2e-test-pattern-xyz');
+    const added = data.rules.find((r: HookRuleShape) => r.pattern === 'e2e-test-pattern-xyz');
     expect(added).toBeDefined();
     expect(added.type).toBe('deny');
     expect(added.tools).toContain('bash');
@@ -584,7 +590,7 @@ test.describe('8. Hooks API', () => {
     // Get current rules
     const listRes = await request.get(`${API}/api/hooks`);
     const listData = await listRes.json();
-    const idx = listData.rules.findIndex((r: any) => r.pattern === 'e2e-delete-test-xyz');
+    const idx = listData.rules.findIndex((r: HookRuleShape) => r.pattern === 'e2e-delete-test-xyz');
 
     if (idx >= 0) {
       const delRes = await request.delete(`${API}/api/hooks/${idx}`);
@@ -592,7 +598,7 @@ test.describe('8. Hooks API', () => {
       const delData = await delRes.json();
       expect(delData.ok).toBe(true);
       // Rule should be gone
-      const notFound = delData.rules.find((r: any) => r.pattern === 'e2e-delete-test-xyz');
+      const notFound = delData.rules.find((r: HookRuleShape) => r.pattern === 'e2e-delete-test-xyz');
       expect(notFound).toBeUndefined();
     }
   });
@@ -737,9 +743,10 @@ test.describe('11. Skills CRUD', () => {
   test('11.3 GET /api/skills after create includes new skill', async ({ request }) => {
     const res = await request.get(`${API}/api/skills`);
     const data = await res.json();
-    const found = data.skills.find((s: any) =>
-      (s.name ?? s) === TEST_SKILL_NAME || JSON.stringify(s).includes(TEST_SKILL_NAME)
-    );
+    const found = data.skills.find((s: string | SkillShape) => {
+      const name = typeof s === 'string' ? s : s.name;
+      return name === TEST_SKILL_NAME || JSON.stringify(s).includes(TEST_SKILL_NAME);
+    });
     // Note: skill may not be instantly visible depending on directory scan
     expect(Array.isArray(data.skills)).toBe(true);
   });

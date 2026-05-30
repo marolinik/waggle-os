@@ -7,42 +7,52 @@
 
 import { randomUUID } from 'node:crypto';
 import type { SourceAdapter, UniversalImportItem, ConversationMessage } from './types.js';
+import { asRecord, firstString, getArray, getString, type RawRecord } from './raw-types.js';
 
 export class ClaudeAdapter implements SourceAdapter {
   readonly sourceType = 'claude' as const;
   readonly displayName = 'Claude';
 
   parse(input: unknown): UniversalImportItem[] {
-    const conversations = Array.isArray(input) ? input : (input as any)?.conversations;
+    const root = asRecord(input);
+    const conversations = Array.isArray(input) ? input : root && getArray(root, 'conversations');
     if (!Array.isArray(conversations)) return [];
 
     const items: UniversalImportItem[] = [];
 
-    for (const conv of conversations) {
-      const title = conv.name || conv.title || 'Untitled';
+    for (const rawConv of conversations) {
+      const conv = asRecord(rawConv);
+      if (!conv) continue;
+      const title = firstString(conv, 'name', 'title') || 'Untitled';
       const messages: ConversationMessage[] = [];
 
-      const chatMessages = conv.chat_messages ?? conv.messages ?? [];
-      for (const msg of chatMessages) {
-        const role = (msg.sender === 'human' || msg.role === 'user') ? 'user' as const : 'assistant' as const;
+      const chatMessages = getArray(conv, 'chat_messages') ?? getArray(conv, 'messages') ?? [];
+      for (const rawMsg of chatMessages) {
+        const msg = asRecord(rawMsg);
+        if (!msg) continue;
+        const role = (getString(msg, 'sender') === 'human' || getString(msg, 'role') === 'user')
+          ? 'user' as const
+          : 'assistant' as const;
 
         // Handle content blocks (Claude format)
         let text: string;
-        if (Array.isArray(msg.content)) {
-          text = msg.content
-            .filter((b: any) => b.type === 'text')
-            .map((b: any) => b.text)
+        const blocks = getArray(msg, 'content');
+        if (blocks) {
+          text = blocks
+            .map(asRecord)
+            .filter((b): b is RawRecord => b !== null && b.type === 'text')
+            .map(b => getString(b, 'text') ?? '')
             .join('\n')
             .trim();
         } else {
-          text = (msg.text ?? msg.content ?? '').trim();
+          text = (getString(msg, 'text') ?? getString(msg, 'content') ?? '').trim();
         }
         if (!text) continue;
 
         messages.push({
           role,
           text,
-          timestamp: msg.created_at ?? msg.timestamp,
+          timestamp: getString(msg, 'created_at') ?? getString(msg, 'timestamp'),
         });
       }
 
@@ -55,31 +65,34 @@ export class ClaudeAdapter implements SourceAdapter {
         title,
         content: messages.map(m => `${m.role}: ${m.text}`).join('\n\n'),
         messages,
-        timestamp: conv.created_at ?? conv.create_time ?? new Date().toISOString(),
+        timestamp: firstString(conv, 'created_at', 'create_time') ?? new Date().toISOString(),
         metadata: {
-          conversationId: conv.uuid ?? conv.id,
+          conversationId: firstString(conv, 'uuid', 'id'),
           messageCount: messages.length,
-          projectId: conv.project_uuid ?? undefined,
+          projectId: getString(conv, 'project_uuid') ?? undefined,
         },
       });
     }
 
     // Extract project knowledge files if present
-    const root = input as any;
-    if (Array.isArray(root?.projects)) {
-      for (const project of root.projects) {
-        if (Array.isArray(project.docs)) {
-          for (const doc of project.docs) {
-            items.push({
-              id: randomUUID(),
-              source: 'claude',
-              type: 'artifact',
-              title: doc.filename ?? doc.title ?? 'Project Document',
-              content: doc.content ?? '',
-              timestamp: doc.created_at ?? new Date().toISOString(),
-              metadata: { projectName: project.name, type: 'project_knowledge' },
-            });
-          }
+    const projects = root && getArray(root, 'projects');
+    if (projects) {
+      for (const rawProject of projects) {
+        const project = asRecord(rawProject);
+        const docs = project && getArray(project, 'docs');
+        if (!docs) continue;
+        for (const rawDoc of docs) {
+          const doc = asRecord(rawDoc);
+          if (!doc) continue;
+          items.push({
+            id: randomUUID(),
+            source: 'claude',
+            type: 'artifact',
+            title: firstString(doc, 'filename', 'title') ?? 'Project Document',
+            content: getString(doc, 'content') ?? '',
+            timestamp: getString(doc, 'created_at') ?? new Date().toISOString(),
+            metadata: { projectName: getString(project, 'name'), type: 'project_knowledge' },
+          });
         }
       }
     }

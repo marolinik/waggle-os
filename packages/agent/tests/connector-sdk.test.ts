@@ -148,7 +148,7 @@ describe('ConnectorRegistry', () => {
   it('getAll() returns all registered connectors', () => {
     registry.register(new MockConnector());
     const c2 = new MockConnector();
-    (c2 as any).id = 'mock2'; // Override for second registration
+    (c2 as { id: string }).id = 'mock2'; // Override for second registration
     // Note: can't easily override readonly. Use Object.defineProperty.
     Object.defineProperty(c2, 'id', { value: 'mock2' });
     registry.register(c2);
@@ -281,7 +281,7 @@ describe('Dynamic tool generation', () => {
     const tools = registry.generateTools();
     // No tool should have _connectorMeta in its schema (risk is determined by tool name, not args)
     for (const tool of tools) {
-      expect((tool.parameters as any)._connectorMeta).toBeUndefined();
+      expect(tool.parameters._connectorMeta).toBeUndefined();
     }
   });
 

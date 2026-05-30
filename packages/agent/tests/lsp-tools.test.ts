@@ -4,7 +4,7 @@ import type { ToolDefinition } from '../src/tools.js';
 
 // Mock child_process.spawn to prevent actually spawning LSP servers
 vi.mock('node:child_process', async (importOriginal) => {
-  const original = await importOriginal() as any;
+  const original = await importOriginal<typeof import('node:child_process')>();
   return {
     ...original,
     spawn: vi.fn(() => {
@@ -112,8 +112,8 @@ describe('LSP Tools', () => {
       // Create a real temp file to pass the file-exists check
       const fs = await import('node:fs');
       const tmpFile = '/tmp/test-workspace/test.ts';
-      try { fs.mkdirSync('/tmp/test-workspace', { recursive: true }); } catch {}
-      try { fs.writeFileSync(tmpFile, 'const x = 1;'); } catch {}
+      try { fs.mkdirSync('/tmp/test-workspace', { recursive: true }); } catch { /* dir may already exist */ }
+      try { fs.writeFileSync(tmpFile, 'const x = 1;'); } catch { /* best-effort fixture setup */ }
 
       const tool = getTool('lsp_diagnostics');
       const result = await tool.execute({ file_path: 'test.ts' });
@@ -122,7 +122,7 @@ describe('LSP Tools', () => {
       expect(result).toMatch(/error|LSP|typescript-language-server/i);
 
       // Cleanup
-      try { fs.unlinkSync(tmpFile); } catch {}
+      try { fs.unlinkSync(tmpFile); } catch { /* best-effort cleanup */ }
     });
   });
 });

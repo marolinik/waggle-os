@@ -19,7 +19,7 @@ export const portalRoutes: FastifyPluginAsync = async (server) => {
     }
 
     // Read stripe_customer_id from config.json
-    const dataDir = (server as any).localConfig?.dataDir;
+    const dataDir = server.localConfig?.dataDir;
     let customerId: string | null = null;
     try {
       const configPath = path.join(dataDir, 'config.json');

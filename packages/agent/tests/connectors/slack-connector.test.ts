@@ -50,7 +50,7 @@ describe('SlackConnector', () => {
 
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true, json: async () => ({ ok: true, user: 'waggle-bot' }),
-    }) as any;
+    }) as unknown as typeof fetch;
 
     const health = await connector.healthCheck();
     expect(health.status).toBe('connected');
@@ -62,7 +62,7 @@ describe('SlackConnector', () => {
 
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true, json: async () => ({ ok: true, ts: '1234567890.123456' }),
-    }) as any;
+    }) as unknown as typeof fetch;
 
     const result = await connector.execute('send_message', { channel: '#general', text: 'Hello!' });
     expect(result.success).toBe(true);

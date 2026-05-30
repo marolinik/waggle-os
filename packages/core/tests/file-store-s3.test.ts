@@ -5,19 +5,21 @@ import { S3FileStore, type S3Config } from '../src/file-store.js';
 
 const mockSend = vi.fn();
 
+type CommandInput = Record<string, unknown>;
+
 class MockS3Client {
   send = mockSend;
-  constructor(_config: any) {}
+  constructor(_config: unknown) {}
 }
 
 vi.mock('@aws-sdk/client-s3', () => {
   return {
     S3Client: MockS3Client,
-    GetObjectCommand: class { [k: string]: any; _type = 'GetObject'; constructor(input: any) { Object.assign(this, input); } },
-    PutObjectCommand: class { [k: string]: any; _type = 'PutObject'; constructor(input: any) { Object.assign(this, input); } },
-    DeleteObjectCommand: class { [k: string]: any; _type = 'DeleteObject'; constructor(input: any) { Object.assign(this, input); } },
-    ListObjectsV2Command: class { [k: string]: any; _type = 'ListObjects'; constructor(input: any) { Object.assign(this, input); } },
-    CopyObjectCommand: class { [k: string]: any; _type = 'CopyObject'; constructor(input: any) { Object.assign(this, input); } },
+    GetObjectCommand: class { [k: string]: unknown; _type = 'GetObject'; constructor(input: CommandInput) { Object.assign(this, input); } },
+    PutObjectCommand: class { [k: string]: unknown; _type = 'PutObject'; constructor(input: CommandInput) { Object.assign(this, input); } },
+    DeleteObjectCommand: class { [k: string]: unknown; _type = 'DeleteObject'; constructor(input: CommandInput) { Object.assign(this, input); } },
+    ListObjectsV2Command: class { [k: string]: unknown; _type = 'ListObjects'; constructor(input: CommandInput) { Object.assign(this, input); } },
+    CopyObjectCommand: class { [k: string]: unknown; _type = 'CopyObject'; constructor(input: CommandInput) { Object.assign(this, input); } },
   };
 });
 

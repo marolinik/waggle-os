@@ -21,7 +21,7 @@ export class TeamService {
       });
 
       // Seed default capability policies
-      const governance = new TeamCapabilityGovernance(tx as any);
+      const governance = new TeamCapabilityGovernance(tx);
       await governance.seedDefaultPolicies(team.id, ownerId);
 
       return team;

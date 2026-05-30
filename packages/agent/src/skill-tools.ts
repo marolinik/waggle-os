@@ -13,9 +13,12 @@ import { SkillRecommender } from './skill-recommender.js';
 import { searchCapabilities, validateInstallCandidate, type MarketplaceCandidate } from './capability-acquisition.js';
 import { assessTrust, formatTrustSummary } from './trust-model.js';
 import type { InstallAuditStore } from '@waggle/core';
+// Type-only import — erased at runtime, so it does NOT reintroduce the
+// agent ↔ marketplace runtime cycle that the lazy import below guards against.
+import type { SecurityGate, MarketplacePackage } from '@waggle/marketplace';
 // Lazy import to avoid circular dependency (agent ↔ marketplace)
-let _SecurityGate: any = null;
-async function getSecurityGate() {
+let _SecurityGate: typeof SecurityGate | null = null;
+async function getSecurityGate(): Promise<typeof SecurityGate> {
   if (!_SecurityGate) {
     const mod = await import('@waggle/marketplace');
     _SecurityGate = mod.SecurityGate;
@@ -537,10 +540,15 @@ Only use this after acquire_capability has identified a specific installable can
             enable_mcp_guardian: false,
             enable_heuristics: true,
           });
-          const scanResult = await gate.scan(
-            { name, package_type: 'skill', waggle_install_type: 'skill' } as any,
-            sourceContent,
-          );
+          // Heuristics-only scan needs just these identity fields; the rest of
+          // MarketplacePackage is irrelevant here. Build a typed partial and
+          // widen to the full param type (scan() reads only name/type fields).
+          const scanPkg: Partial<MarketplacePackage> = {
+            name,
+            package_type: 'skill',
+            waggle_install_type: 'skill',
+          };
+          const scanResult = await gate.scan(scanPkg as MarketplacePackage, sourceContent);
 
           // CRITICAL: refuse installation
           if (scanResult.overall_severity === 'CRITICAL') {
@@ -555,7 +563,7 @@ Only use this after acquire_capability has identified a specific installable can
               initiator: 'system',
               detail: `SecurityGate blocked: ${scanResult.findings.length} CRITICAL finding(s)`,
             });
-            const findingsText = scanResult.findings.map((f: any) => `- [${f.severity}] ${f.title}: ${f.description}`).join('\n');
+            const findingsText = scanResult.findings.map((f) => `- [${f.severity}] ${f.title}: ${f.description}`).join('\n');
             return (
               `## Installation Blocked — CRITICAL Security Finding\n\n` +
               `**${name}** cannot be installed due to critical security issues:\n\n` +
@@ -567,7 +575,7 @@ Only use this after acquire_capability has identified a specific installable can
 
           // HIGH: include warning note — the agent should inform the user
           if (scanResult.overall_severity === 'HIGH') {
-            const findingsText = scanResult.findings.map((f: any) => `- [${f.severity}] ${f.title}`).join('\n');
+            const findingsText = scanResult.findings.map((f) => `- [${f.severity}] ${f.title}`).join('\n');
             securityNote = (
               `\n### Security Warning\n` +
               `SecurityGate found HIGH severity issues (score: ${scanResult.security_score}/100):\n` +

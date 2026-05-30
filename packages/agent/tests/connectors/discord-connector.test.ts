@@ -71,7 +71,7 @@ describe('DiscordConnector', () => {
 
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true, json: async () => ({ id: '123', username: 'waggle-bot' }),
-    }) as any;
+    }) as unknown as typeof fetch;
 
     const health = await connector.healthCheck();
     expect(health.status).toBe('connected');
@@ -83,7 +83,7 @@ describe('DiscordConnector', () => {
 
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true, json: async () => ({ id: '987654321', content: 'Hello!' }),
-    }) as any;
+    }) as unknown as typeof fetch;
 
     const result = await connector.execute('send_message', { channel_id: '123456', content: 'Hello!' });
     expect(result.success).toBe(true);
@@ -104,11 +104,11 @@ describe('DiscordConnector', () => {
 
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true, json: async () => ([]),
-    }) as any;
+    }) as unknown as typeof fetch;
 
     await connector.execute('list_guilds', {});
 
-    const fetchCall = (globalThis.fetch as any).mock.calls[0];
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
     expect(fetchCall[0]).toContain('discord.com/api/v10');
     expect(fetchCall[1].headers.Authorization).toBe('Bot my-bot-token');
   });

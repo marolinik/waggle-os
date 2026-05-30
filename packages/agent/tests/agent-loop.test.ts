@@ -114,7 +114,7 @@ describe('runAgentLoop', () => {
     // Second call should include tool result message
     const secondBody = JSON.parse(fetch.mock.calls[1][1].body);
     const toolResultMsg = secondBody.messages.find(
-      (m: any) => m.role === 'tool' && m.tool_call_id === 'call_1'
+      (m: { role?: string; tool_call_id?: string }) => m.role === 'tool' && m.tool_call_id === 'call_1'
     );
     expect(toolResultMsg).toBeDefined();
     expect(toolResultMsg.content).toBe('Echo: hi');
@@ -208,7 +208,7 @@ describe('runAgentLoop', () => {
     // Verify the tool result message sent back to the LLM contains route suggestions
     const secondBody = JSON.parse(fetch.mock.calls[1][1].body);
     const toolResultMsg = secondBody.messages.find(
-      (m: any) => m.role === 'tool' && m.tool_call_id === 'call_missing'
+      (m: { role?: string; tool_call_id?: string }) => m.role === 'tool' && m.tool_call_id === 'call_missing'
     );
     expect(toolResultMsg).toBeDefined();
     expect(toolResultMsg.content).toContain('Tool "research" not found');
@@ -251,7 +251,7 @@ describe('runAgentLoop', () => {
 
     // Verify plugin tool was included in the tools sent to the LLM
     const firstBody = JSON.parse(fetch.mock.calls[0][1].body);
-    const toolNames = firstBody.tools.map((t: any) => t.function.name);
+    const toolNames = firstBody.tools.map((t: { function: { name: string } }) => t.function.name);
     expect(toolNames).toContain('plugin_search');
   });
 
@@ -282,7 +282,7 @@ describe('runAgentLoop', () => {
 
     // Both tools should appear in the LLM request
     const body = JSON.parse(fetch.mock.calls[0][1].body);
-    const toolNames = body.tools.map((t: any) => t.function.name);
+    const toolNames = body.tools.map((t: { function: { name: string } }) => t.function.name);
     expect(toolNames).toContain('base_tool');
     expect(toolNames).toContain('plugin_tool');
     expect(toolNames).toHaveLength(2);
@@ -607,7 +607,7 @@ describe('Agent error paths (PRQ-045)', () => {
     // The tool result sent back to LLM should indicate the error
     const secondBody = JSON.parse(fetch.mock.calls[1][1].body);
     const toolResultMsg = secondBody.messages.find(
-      (m: any) => m.role === 'tool' && m.tool_call_id === 'call_bad'
+      (m: { role?: string; tool_call_id?: string }) => m.role === 'tool' && m.tool_call_id === 'call_bad'
     );
     expect(toolResultMsg).toBeDefined();
     expect(toolResultMsg.content).toContain('Error');
@@ -645,7 +645,7 @@ describe('Agent error paths (PRQ-045)', () => {
     // Verify error was communicated back to the LLM
     const secondBody = JSON.parse(fetch.mock.calls[1][1].body);
     const toolResultMsg = secondBody.messages.find(
-      (m: any) => m.role === 'tool' && m.tool_call_id === 'call_fail'
+      (m: { role?: string; tool_call_id?: string }) => m.role === 'tool' && m.tool_call_id === 'call_fail'
     );
     expect(toolResultMsg).toBeDefined();
     expect(toolResultMsg.content).toContain('Error executing failing_tool');

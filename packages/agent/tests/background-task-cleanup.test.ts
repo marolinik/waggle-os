@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import type { ChildProcess } from 'node:child_process';
 import {
   backgroundTasks,
   cleanupStaleTasks,
@@ -31,7 +32,7 @@ describe('Background Task Cleanup (11B-6)', () => {
     const recent = now - 1000;
 
     backgroundTasks.set('old-1', {
-      process: null as any,
+      process: null as unknown as ChildProcess,
       stdout: '',
       stderr: '',
       status: 'completed',
@@ -40,7 +41,7 @@ describe('Background Task Cleanup (11B-6)', () => {
     });
 
     backgroundTasks.set('old-2', {
-      process: null as any,
+      process: null as unknown as ChildProcess,
       stdout: '',
       stderr: '',
       status: 'failed',
@@ -49,7 +50,7 @@ describe('Background Task Cleanup (11B-6)', () => {
     });
 
     backgroundTasks.set('recent-1', {
-      process: null as any,
+      process: null as unknown as ChildProcess,
       stdout: '',
       stderr: '',
       status: 'completed',
@@ -67,7 +68,7 @@ describe('Background Task Cleanup (11B-6)', () => {
     const old = Date.now() - STALE_TASK_THRESHOLD_MS - 10_000;
 
     backgroundTasks.set('running-old', {
-      process: null as any,
+      process: null as unknown as ChildProcess,
       stdout: '',
       stderr: '',
       status: 'running',
@@ -81,7 +82,7 @@ describe('Background Task Cleanup (11B-6)', () => {
 
   it('cleanupStaleTasks returns 0 when nothing is stale', () => {
     backgroundTasks.set('fresh', {
-      process: null as any,
+      process: null as unknown as ChildProcess,
       stdout: '',
       stderr: '',
       status: 'completed',
@@ -95,7 +96,7 @@ describe('Background Task Cleanup (11B-6)', () => {
   it('background tasks have createdAt timestamp', () => {
     const before = Date.now();
     backgroundTasks.set('test', {
-      process: null as any,
+      process: null as unknown as ChildProcess,
       stdout: '',
       stderr: '',
       status: 'completed',

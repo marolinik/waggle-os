@@ -5,7 +5,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { api, type TeamResponse } from '../api.js';
+import { api, getErrorMessage, type TeamResponse } from '../api.js';
 
 interface TeamSettingsProps {
   token: string;
@@ -29,8 +29,8 @@ export function TeamSettings({ token, teamSlug, onTeamUpdated }: TeamSettingsPro
         const t = await api.getTeam(token, teamSlug);
         setTeam(t);
         setName(t.name);
-      } catch (err: any) {
-        setError(err.message ?? 'Failed to load team');
+      } catch (err) {
+        setError(getErrorMessage(err, 'Failed to load team'));
       } finally {
         setLoading(false);
       }
@@ -47,8 +47,8 @@ export function TeamSettings({ token, teamSlug, onTeamUpdated }: TeamSettingsPro
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       onTeamUpdated?.();
-    } catch (err: any) {
-      setError(err.message ?? 'Save failed');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Save failed'));
     } finally {
       setSaving(false);
     }

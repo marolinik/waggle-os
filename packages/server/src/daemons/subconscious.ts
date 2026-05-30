@@ -29,7 +29,7 @@ export class SubconsciousAgent {
     return recentJobs.length >= SUBCONSCIOUS_INTERACTION_THRESHOLD;
   }
 
-  async reflect(userId: string): Promise<{ auditEntry: any; insights: Insight[] }> {
+  async reflect(userId: string): Promise<{ auditEntry: typeof agentAuditLog.$inferSelect; insights: Insight[] }> {
     // Get recent completed jobs
     const recentJobs = await this.db.select().from(agentJobs)
       .where(and(
@@ -55,7 +55,7 @@ export class SubconsciousAgent {
     return { auditEntry, insights };
   }
 
-  private analyzePatterns(jobs: any[]): Insight[] {
+  private analyzePatterns(jobs: Array<typeof agentJobs.$inferSelect>): Insight[] {
     const insights: Insight[] = [];
 
     // Pattern: repeated job types

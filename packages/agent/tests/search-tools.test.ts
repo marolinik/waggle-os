@@ -197,7 +197,7 @@ describe('Search Tools', () => {
       expect(calledUrl).toContain('count=10');
       expect(calledUrl).toContain('freshness=day');
 
-      const headers = (fetchSpy.mock.calls[0][1] as any).headers;
+      const headers = (fetchSpy.mock.calls[0][1] as { headers: Record<string, string> }).headers;
       expect(headers['X-Subscription-Token']).toBe('BSA-test-key');
     });
 

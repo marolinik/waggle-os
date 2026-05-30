@@ -107,7 +107,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
     }
     // F3: Filter by teamId — return only workspaces linked to this team
     if (teamFilter) {
-      workspaces = workspaces.filter((ws: any) => ws.teamId === teamFilter || ws.team === teamFilter);
+      workspaces = workspaces.filter((ws) => ws.teamId === teamFilter || ws.team === teamFilter);
     }
     return workspaces;
   });
@@ -189,8 +189,9 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
         { id: ws.id, storageType: storageType ?? 'virtual', storagePath, storageConfig },
         server.localConfig.dataDir,
       );
-      if ('ensureStructure' in provider) {
-        (provider as any).ensureStructure();
+      const maybeStructured = provider as { ensureStructure?: () => void };
+      if (typeof maybeStructured.ensureStructure === 'function') {
+        maybeStructured.ensureStructure();
       }
     } catch { /* non-blocking */ }
 
@@ -251,7 +252,8 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
     const template = resolvedTemplateId;
     if (template && TEMPLATE_PACK_MAP[template]) {
       const packId = TEMPLATE_PACK_MAP[template];
-      const port = (server.server.address() as any)?.port ?? 3333;
+      const addr = server.server.address();
+      const port = (addr && typeof addr === 'object') ? addr.port : 3333;
       fetch(`http://127.0.0.1:${port}/api/skills/capability-packs/${packId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -823,7 +825,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
 
     const costTracker = server.agentState.costTracker;
     const used = costTracker.getWorkspaceCost(request.params.id);
-    const budget = (ws as any).budget ?? null;
+    const budget = ws.budget ?? null;
     const remaining = budget != null ? Math.max(0, budget - used) : null;
 
     // Budget status
@@ -836,12 +838,12 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
 
     // Usage history (last 7 days from cost tracker entries)
     const entries = costTracker.getUsageEntries();
-    const wsEntries = entries.filter((e: any) => e.workspaceId === request.params.id);
+    const wsEntries = entries.filter((e) => e.workspaceId === request.params.id);
     const dailyMap = new Map<string, number>();
     for (const e of wsEntries) {
-      const day = (e as any).timestamp?.slice(0, 10) ?? '';
+      const day = e.timestamp?.slice(0, 10) ?? '';
       if (!day) continue;
-      const cost = costTracker.calculateCost((e as any).input, (e as any).output, (e as any).model);
+      const cost = costTracker.calculateCost(e.input, e.output, e.model);
       dailyMap.set(day, (dailyMap.get(day) ?? 0) + cost);
     }
     const history = Array.from(dailyMap.entries())

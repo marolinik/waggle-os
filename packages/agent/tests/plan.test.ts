@@ -54,7 +54,7 @@ describe('Plan', () => {
     plan.completeCurrentStep('result-1');
 
     const json = plan.toJSON();
-    const restored = Plan.fromJSON(json as any);
+    const restored = Plan.fromJSON(json as Parameters<typeof Plan.fromJSON>[0]);
 
     expect(restored.getSteps()).toEqual(plan.getSteps());
     expect(restored.getCurrentStep()?.title).toBe('Step 2');

@@ -13,7 +13,18 @@ import {
   toRichText,
   stripFrontmatter,
   extractNotionPageId,
+  type NotionBlock,
+  type NotionBlockPayload,
 } from '../src/adapters/notion.js';
+
+/**
+ * Read the rich-text payload a block carries under its dynamic `block.type`
+ * key. The block stores it as `unknown` (open-ended Notion shape), so narrow
+ * it to the known {@link NotionBlockPayload} at the test boundary.
+ */
+function payloadOf(block: NotionBlock): NotionBlockPayload {
+  return block[block.type] as NotionBlockPayload;
+}
 
 describe('stripFrontmatter', () => {
   it('removes a leading YAML block and extracts name', () => {
@@ -85,8 +96,7 @@ describe('markdownToBlocks', () => {
     expect(blocks[0].type).toBe('heading_1');
     expect(blocks[1].type).toBe('heading_2');
     expect(blocks[2].type).toBe('heading_3');
-    const h1 = blocks[0] as any;
-    expect(h1.heading_1.rich_text[0].text.content).toBe('H1 Heading');
+    expect(payloadOf(blocks[0]).rich_text[0].text.content).toBe('H1 Heading');
   });
 
   it('maps "- item" and "* item" bullets to bulleted_list_item', () => {
@@ -94,8 +104,7 @@ describe('markdownToBlocks', () => {
     const blocks = markdownToBlocks(md);
     expect(blocks).toHaveLength(3);
     for (const b of blocks) expect(b.type).toBe('bulleted_list_item');
-    const first = blocks[0] as any;
-    expect(first.bulleted_list_item.rich_text[0].text.content).toBe('First');
+    expect(payloadOf(blocks[0]).rich_text[0].text.content).toBe('First');
   });
 
   it('maps "> quote" to quote block', () => {
@@ -103,8 +112,7 @@ describe('markdownToBlocks', () => {
     const blocks = markdownToBlocks(md);
     expect(blocks).toHaveLength(1);
     expect(blocks[0].type).toBe('quote');
-    const q = blocks[0] as any;
-    expect(q.quote.rich_text[0].text.content).toBe('A quote line');
+    expect(payloadOf(blocks[0]).rich_text[0].text.content).toBe('A quote line');
   });
 
   it('consolidates adjacent non-special lines into a single paragraph', () => {
@@ -113,8 +121,7 @@ describe('markdownToBlocks', () => {
     expect(blocks).toHaveLength(2);
     expect(blocks[0].type).toBe('paragraph');
     expect(blocks[1].type).toBe('paragraph');
-    const p1 = blocks[0] as any;
-    expect(p1.paragraph.rich_text[0].text.content).toBe('First line. Second line continues.');
+    expect(payloadOf(blocks[0]).rich_text[0].text.content).toBe('First line. Second line continues.');
   });
 
   it('flushes paragraphs when a heading interrupts the block', () => {
@@ -126,11 +133,11 @@ describe('markdownToBlocks', () => {
   it('preserves inline links inside paragraphs', () => {
     const md = `See [Notion](https://notion.so) for more.`;
     const blocks = markdownToBlocks(md);
-    const p = blocks[0] as any;
-    expect(p.type).toBe('paragraph');
-    const linkItem = p.paragraph.rich_text.find((t: any) => t.text.link);
-    expect(linkItem.text.content).toBe('Notion');
-    expect(linkItem.text.link.url).toBe('https://notion.so');
+    expect(blocks[0].type).toBe('paragraph');
+    const richText = payloadOf(blocks[0]).rich_text;
+    const linkItem = richText.find((t) => t.text.link);
+    expect(linkItem?.text.content).toBe('Notion');
+    expect(linkItem?.text.link?.url).toBe('https://notion.so');
   });
 
   it('returns empty array for empty input', () => {

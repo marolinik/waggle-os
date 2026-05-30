@@ -18,6 +18,11 @@ import type { FastifyPluginAsync } from 'fastify';
 import fs from 'node:fs';
 import path from 'node:path';
 
+/** Minimal shape of an OpenAI-compatible chat-completions response. */
+interface ChatCompletionResponse {
+  choices?: Array<{ message?: { content?: string } }>;
+}
+
 /**
  * Identity suggestion extracted from harvested memory frames.
  * Surfaced in UserProfileApp's Identity tab as a pending-review banner until
@@ -263,7 +268,7 @@ Sample text:
       });
 
       if (res.ok) {
-        const data = await res.json() as any;
+        const data = await res.json() as ChatCompletionResponse;
         const content = data.choices?.[0]?.message?.content ?? '';
         const jsonMatch = content.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
@@ -322,7 +327,7 @@ Brand description:
       });
 
       if (res.ok) {
-        const data = await res.json() as any;
+        const data = await res.json() as ChatCompletionResponse;
         const content = data.choices?.[0]?.message?.content ?? '';
         const jsonMatch = content.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
@@ -394,7 +399,7 @@ Write a factual, professional bio. If you don't have enough info, write what you
       });
 
       if (res.ok) {
-        const data = await res.json() as any;
+        const data = await res.json() as ChatCompletionResponse;
         const bio = data.choices?.[0]?.message?.content ?? '';
         if (bio) {
           profile.bio = bio.trim();

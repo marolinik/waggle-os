@@ -8,6 +8,7 @@ import {
   createPromptExpander,
   getProgram,
   PROGRAM_REGISTRY,
+  type ProgramName,
 } from '../src/signatures.js';
 import { PromptOptimizer } from '../src/optimizer.js';
 import type { AxAIService } from '@ax-llm/ax';
@@ -124,7 +125,7 @@ describe('Prompt Optimization (Ax Integration)', () => {
     });
 
     it('getProgram throws for unknown program', () => {
-      expect(() => getProgram('nonexistent' as any)).toThrow('Unknown program: nonexistent');
+      expect(() => getProgram('nonexistent' as ProgramName)).toThrow('Unknown program: nonexistent');
     });
 
     it('each registry entry creates a valid program', () => {

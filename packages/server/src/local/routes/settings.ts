@@ -136,8 +136,8 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
         if (apiKey && server.vault) {
           server.vault.set(name, apiKey, { models, baseUrl });
           // Invalidate health check key cache so next /health re-validates
-          if (typeof (server as any)._invalidateKeyValidationCache === 'function') {
-            (server as any)._invalidateKeyValidationCache();
+          if (typeof server._invalidateKeyValidationCache === 'function') {
+            server._invalidateKeyValidationCache();
           }
         }
 
@@ -481,11 +481,11 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
     Querystring: { from?: string; to?: string; format?: 'json' | 'csv' };
   }>('/api/admin/audit-export', { preHandler: [requireTier('TEAMS')] }, async (request, reply) => {
     const { from, to, format = 'json' } = request.query;
-    const auditStore = (server as any).installAuditStore;
+    const auditStore = server.auditStore;
     if (!auditStore?.getAll) {
       return reply.code(503).send({ error: 'Audit store not available' });
     }
-    const records = auditStore.getAll() as Array<Record<string, string>>;
+    const records = auditStore.getAll();
     const filtered = records.filter((r) => {
       if (from && (r.timestamp ?? '') < from) return false;
       if (to && (r.timestamp ?? '') > to) return false;

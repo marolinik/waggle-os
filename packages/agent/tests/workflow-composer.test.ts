@@ -254,7 +254,7 @@ describe('Template Validation', () => {
   });
 
   it('rejects invalid aggregation', () => {
-    const errors = validateTemplate(makeTemplate({ aggregation: 'invalid' as any }));
+    const errors = validateTemplate(makeTemplate({ aggregation: 'invalid' as unknown as WorkflowTemplate['aggregation'] }));
     expect(errors.some(e => e.field === 'aggregation')).toBe(true);
   });
 

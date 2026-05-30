@@ -2,10 +2,19 @@ import type { FastifyInstance } from 'fastify';
 import { users } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 
+/** Subset of the Clerk user webhook payload `data` object that we consume. */
+interface ClerkWebhookUserData {
+  id: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  email_addresses?: Array<{ email_address?: string }>;
+  image_url?: string | null;
+}
+
 export async function webhookRoutes(fastify: FastifyInstance) {
   fastify.post('/api/webhooks/clerk', async (request, reply) => {
     // In production: verify Clerk webhook signature via svix
-    const event = request.body as { type: string; data: Record<string, any> };
+    const event = request.body as { type: string; data: ClerkWebhookUserData };
 
     switch (event.type) {
       case 'user.created': {

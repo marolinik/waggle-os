@@ -50,7 +50,7 @@ describe('EmailConnector', () => {
 
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true, json: async () => ({ username: 'waggle' }),
-    }) as any;
+    }) as unknown as typeof fetch;
 
     const health = await connector.healthCheck();
     expect(health.status).toBe('connected');
@@ -63,7 +63,7 @@ describe('EmailConnector', () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       status: 202, ok: true, headers: new Map([['X-Message-Id', 'msg-123']]),
       text: async () => '',
-    }) as any;
+    }) as unknown as typeof fetch;
 
     const result = await connector.execute('send_email', {
       to: 'user@example.com',
@@ -71,7 +71,7 @@ describe('EmailConnector', () => {
       body: 'Hello from Waggle!',
     });
     expect(result.success).toBe(true);
-    expect((result.data as any).sent).toBe(true);
+    expect((result.data as Record<string, unknown>).sent).toBe(true);
   });
 
   it('execute(send_email) requires to, subject, body params', async () => {
@@ -82,7 +82,7 @@ describe('EmailConnector', () => {
     // The connector trusts the agent to provide required params per inputSchema
     globalThis.fetch = vi.fn().mockResolvedValue({
       status: 400, ok: false, text: async () => 'Missing to',
-    }) as any;
+    }) as unknown as typeof fetch;
 
     const result = await connector.execute('send_email', { subject: 'Test', body: 'Hello' });
     expect(result.success).toBe(false);
@@ -95,7 +95,7 @@ describe('EmailConnector', () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       status: 202, ok: true, headers: new Map(),
       text: async () => '',
-    }) as any;
+    }) as unknown as typeof fetch;
 
     const result = await connector.execute('send_template', {
       to: 'user@example.com',
@@ -111,20 +111,21 @@ describe('EmailConnector', () => {
 
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true, json: async () => ({ status: 'delivered', events: [] }),
-    }) as any;
+    }) as unknown as typeof fetch;
 
     const result = await connector.execute('check_delivery', { message_id: 'msg-123' });
     expect(result.success).toBe(true);
-    expect((result.data as any).status).toBe('delivered');
+    expect((result.data as Record<string, unknown>).status).toBe('delivered');
   });
 
   it('rate limiter rejects after max daily sends', async () => {
     const vault = createMockVault({ value: 'SG.test_key' });
     await connector.connect(vault);
 
-    // Artificially set send count to max
-    (connector as any).dailySendCount = 100;
-    (connector as any).dailyResetDate = new Date().toISOString().slice(0, 10);
+    // Artificially set send count to max (reach into private rate-limit state)
+    const rateState = connector as unknown as { dailySendCount: number; dailyResetDate: string };
+    rateState.dailySendCount = 100;
+    rateState.dailyResetDate = new Date().toISOString().slice(0, 10);
 
     const result = await connector.execute('send_email', {
       to: 'user@example.com', subject: 'Test', body: 'Hello',

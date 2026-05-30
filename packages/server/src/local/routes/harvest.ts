@@ -202,8 +202,15 @@ function isScanLocalRequest(data: unknown): boolean {
   );
 }
 
+type HarvestProgressListener = (e: Event) => void;
+
+/** Process-wide registry of harvest-progress listeners, shared across requests. */
+const globalWithListeners = globalThis as typeof globalThis & {
+  __harvestProgressListeners?: Set<HarvestProgressListener>;
+};
+
 function emitHarvestProgress(data: { phase: string; current: number; total: number; source: string }) {
-  const listeners = (globalThis as any).__harvestProgressListeners as Set<(e: Event) => void> | undefined;
+  const listeners = globalWithListeners.__harvestProgressListeners;
   if (!listeners || listeners.size === 0) return;
   const event = new CustomEvent('harvest-progress', { detail: data });
   for (const fn of listeners) fn(event);
@@ -241,7 +248,7 @@ export async function harvestRoutes(fastify: FastifyInstance) {
       resumeFromRun?: number;
     };
 
-    const personalDb = (fastify as any).multiMind?.personal;
+    const personalDb = fastify.multiMind?.personal;
     if (!personalDb) {
       return reply.code(503).send({ error: 'Personal mind not available' });
     }
@@ -510,7 +517,7 @@ export async function harvestRoutes(fastify: FastifyInstance) {
 
   // GET /api/harvest/sources — list all registered sources
   fastify.get('/api/harvest/sources', async (_request, reply) => {
-    const personalDb = (fastify as any).multiMind?.personal;
+    const personalDb = fastify.multiMind?.personal;
     if (!personalDb) {
       return reply.code(503).send({ error: 'Personal mind not available' });
     }
@@ -530,7 +537,7 @@ export async function harvestRoutes(fastify: FastifyInstance) {
       return reply.code(400).send({ error: 'source and displayName required' });
     }
 
-    const personalDb = (fastify as any).multiMind?.personal;
+    const personalDb = fastify.multiMind?.personal;
     if (!personalDb) {
       return reply.code(503).send({ error: 'Personal mind not available' });
     }
@@ -546,7 +553,7 @@ export async function harvestRoutes(fastify: FastifyInstance) {
 
   // DELETE /api/harvest/sources/:source — remove a registered source
   fastify.delete<{ Params: { source: string } }>('/api/harvest/sources/:source', async (request, reply) => {
-    const personalDb = (fastify as any).multiMind?.personal;
+    const personalDb = fastify.multiMind?.personal;
     if (!personalDb) return reply.code(503).send({ error: 'Personal mind not available' });
     const store = new HarvestSourceStore(personalDb);
     store.remove(request.params.source as ImportSourceType);
@@ -556,7 +563,7 @@ export async function harvestRoutes(fastify: FastifyInstance) {
   // PATCH /api/harvest/sources/:source — toggle auto-sync
   fastify.patch<{ Params: { source: string }; Body: { autoSync?: boolean; syncIntervalHours?: number } }>(
     '/api/harvest/sources/:source', async (request, reply) => {
-      const personalDb = (fastify as any).multiMind?.personal;
+      const personalDb = fastify.multiMind?.personal;
       if (!personalDb) return reply.code(503).send({ error: 'Personal mind not available' });
       const store = new HarvestSourceStore(personalDb);
       const { autoSync, syncIntervalHours } = request.body ?? {};
@@ -575,15 +582,15 @@ export async function harvestRoutes(fastify: FastifyInstance) {
       'Connection': 'keep-alive',
     });
 
-    const listener = (e: Event) => {
+    const listener: HarvestProgressListener = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       reply.raw.write(`data: ${JSON.stringify(detail)}\n\n`);
     };
-    (globalThis as any).__harvestProgressListeners ??= new Set();
-    (globalThis as any).__harvestProgressListeners.add(listener);
+    globalWithListeners.__harvestProgressListeners ??= new Set();
+    globalWithListeners.__harvestProgressListeners.add(listener);
 
     request.raw.on('close', () => {
-      (globalThis as any).__harvestProgressListeners?.delete(listener);
+      globalWithListeners.__harvestProgressListeners?.delete(listener);
     });
   });
 
@@ -591,7 +598,7 @@ export async function harvestRoutes(fastify: FastifyInstance) {
   // 'running' or 'failed' state with a surviving cache. UI uses this on
   // mount to decide whether to render the "Resume?" banner.
   fastify.get('/api/harvest/runs/latest-interrupted', async (_request, reply) => {
-    const personalDb = (fastify as any).multiMind?.personal;
+    const personalDb = fastify.multiMind?.personal;
     if (!personalDb) return reply.code(503).send({ error: 'Personal mind not available' });
     const runStore = new HarvestRunStore(personalDb);
     const run = runStore.getLatestInterrupted();
@@ -606,7 +613,7 @@ export async function harvestRoutes(fastify: FastifyInstance) {
   // GET /api/harvest/runs — M-08: list recent runs. Primarily for debugging
   // and future history views; UI presently only consumes `latest-interrupted`.
   fastify.get<{ Querystring: { limit?: string } }>('/api/harvest/runs', async (request, reply) => {
-    const personalDb = (fastify as any).multiMind?.personal;
+    const personalDb = fastify.multiMind?.personal;
     if (!personalDb) return reply.code(503).send({ error: 'Personal mind not available' });
     const runStore = new HarvestRunStore(personalDb);
     const limit = Math.min(Number(request.query.limit) || 50, 500);
@@ -617,7 +624,7 @@ export async function harvestRoutes(fastify: FastifyInstance) {
   // interrupted run. Marks it abandoned and deletes the cached input so it
   // stops surfacing in the banner.
   fastify.post<{ Params: { id: string } }>('/api/harvest/runs/:id/abandon', async (request, reply) => {
-    const personalDb = (fastify as any).multiMind?.personal;
+    const personalDb = fastify.multiMind?.personal;
     if (!personalDb) return reply.code(503).send({ error: 'Personal mind not available' });
     const runStore = new HarvestRunStore(personalDb);
     const id = Number(request.params.id);
@@ -640,7 +647,7 @@ export async function harvestRoutes(fastify: FastifyInstance) {
   // in UserProfileApp. Mirrors the profile.analyze-style pattern (internal
   // Haiku proxy call).
   fastify.post('/api/harvest/extract-identity', async (_request, reply) => {
-    const personalDb = (fastify as any).multiMind?.personal;
+    const personalDb = fastify.multiMind?.personal;
     if (!personalDb) {
       return reply.code(503).send({ error: 'Personal mind not available' });
     }
@@ -720,7 +727,7 @@ ${sandboxed}
         }),
       });
       if (res.ok) {
-        const data = await res.json() as any;
+        const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
         const content = data.choices?.[0]?.message?.content ?? '';
         // M-09 BLOCKER-5: robust JSON extract (direct → code-fence →
         // balanced-bracket walk) instead of the old greedy /\{[\s\S]*\}/.

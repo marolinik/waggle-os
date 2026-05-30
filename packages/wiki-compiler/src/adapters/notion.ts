@@ -54,7 +54,7 @@ export interface NotionBlock {
   [key: string]: unknown;
 }
 
-interface RichText {
+export interface RichText {
   type: 'text';
   text: { content: string; link?: { url: string } | null };
   annotations?: {
@@ -62,6 +62,16 @@ interface RichText {
     italic?: boolean;
     code?: boolean;
   };
+}
+
+/**
+ * The per-type payload a {@link NotionBlock} carries under its dynamic
+ * `[block.type]` key (e.g. `block.heading_1`, `block.paragraph`). Each holds
+ * the converted rich-text run. Exposed for narrowing the block's indexed
+ * `unknown` value at consumer/test boundaries.
+ */
+export interface NotionBlockPayload {
+  rich_text: RichText[];
 }
 
 /** Strip a leading YAML frontmatter block (--- ... ---) if present. */

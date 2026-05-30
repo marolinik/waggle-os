@@ -19,7 +19,7 @@ import { type Tier, assertTierCapability, TierError, parseTier, getEffectiveTier
  */
 export function readTierFromRequest(request: FastifyRequest): Tier {
   try {
-    const dataDir = (request.server as any).localConfig?.dataDir;
+    const dataDir = request.server.localConfig?.dataDir;
     if (!dataDir) return 'FREE';
     const configPath = path.join(dataDir, 'config.json');
     if (fs.existsSync(configPath)) {

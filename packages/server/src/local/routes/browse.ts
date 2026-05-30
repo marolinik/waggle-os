@@ -68,11 +68,11 @@ export async function browseRoutes(server: FastifyInstance) {
         result.sort((a, b) => a.name.localeCompare(b.name));
 
         return { entries: result, current: resolved };
-      } catch (err: any) {
-        if (err.code === 'EACCES') {
+      } catch (err: unknown) {
+        if (err && typeof err === 'object' && 'code' in err && err.code === 'EACCES') {
           return reply.status(403).send({ error: 'Permission denied' });
         }
-        return reply.status(500).send({ error: err.message ?? 'Failed to browse directory' });
+        return reply.status(500).send({ error: err instanceof Error ? err.message : 'Failed to browse directory' });
       }
     },
   );
@@ -101,11 +101,11 @@ export async function browseRoutes(server: FastifyInstance) {
           path: resolved,
           type: 'directory',
         });
-      } catch (err: any) {
-        if (err.code === 'EACCES') {
+      } catch (err: unknown) {
+        if (err && typeof err === 'object' && 'code' in err && err.code === 'EACCES') {
           return reply.status(403).send({ error: 'Permission denied' });
         }
-        return reply.status(500).send({ error: err.message ?? 'Failed to create directory' });
+        return reply.status(500).send({ error: err instanceof Error ? err.message : 'Failed to create directory' });
       }
     },
   );

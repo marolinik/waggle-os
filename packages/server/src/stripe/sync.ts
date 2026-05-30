@@ -29,7 +29,7 @@ export const syncRoutes: FastifyPluginAsync = async (server) => {
       return reply.code(400).send({ error: 'MISSING_SESSION_ID', message: 'sessionId is required.' });
     }
 
-    const dataDir = (server as any).localConfig?.dataDir;
+    const dataDir = server.localConfig?.dataDir;
     if (!dataDir) {
       return reply.code(500).send({ error: 'SERVER_MISCONFIGURED' });
     }

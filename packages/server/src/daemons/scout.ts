@@ -14,7 +14,7 @@ interface Finding {
 export class ScoutAgent {
   constructor(private db: Db) {}
 
-  async scan(userId: string, teamId: string): Promise<any[]> {
+  async scan(userId: string, teamId: string): Promise<Array<typeof scoutFindings.$inferSelect>> {
     const findings: Finding[] = [];
 
     // Source 1: Check team resources for newly shared items

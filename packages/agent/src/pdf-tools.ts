@@ -8,6 +8,15 @@ import * as path from 'node:path';
 import type { TDocumentDefinitions, Content } from 'pdfmake/interfaces.js';
 import type { ToolDefinition } from './tools.js';
 
+// Minimal surface of the pdfmake static we use (the lib's own type export is
+// browser/vfs-coupled; we only call createPdf().getBuffer()).
+interface PdfPrinter {
+  getBuffer(cb: (buffer: Buffer) => void): void;
+}
+interface PdfMakeStatic {
+  createPdf(docDef: TDocumentDefinitions): PdfPrinter;
+}
+
 function resolveSafe(workspace: string, filePath: string): string {
   const resolved = path.resolve(workspace, filePath);
   if (!resolved.startsWith(path.resolve(workspace))) {
@@ -188,7 +197,7 @@ export function createPdfTools(workspace: string): ToolDefinition[] {
           };
 
           const pdfMakeModule = await import('pdfmake/build/pdfmake.js');
-          const pdfMake = (pdfMakeModule.default ?? pdfMakeModule) as any;
+          const pdfMake = (pdfMakeModule.default ?? pdfMakeModule) as unknown as PdfMakeStatic;
           const printer = pdfMake.createPdf(docDef);
 
           const pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
@@ -210,8 +219,8 @@ export function createPdfTools(workspace: string): ToolDefinition[] {
             `Content: ${lineCount} lines of markdown parsed into PDF.\n` +
             `IMPORTANT: Describe the document content in your response.`
           );
-        } catch (err: any) {
-          return `Error generating PDF: ${err.message}`;
+        } catch (err: unknown) {
+          return `Error generating PDF: ${err instanceof Error ? err.message : String(err)}`;
         }
       },
     },

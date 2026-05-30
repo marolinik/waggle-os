@@ -4,7 +4,7 @@ import type { ConnectorHealth } from '@waggle/shared';
 export async function connectorRoutes(fastify: FastifyInstance) {
   // GET /api/connectors — list all connectors with live status from registry
   fastify.get('/api/connectors', async () => {
-    const registry = (fastify as any).connectorRegistry;
+    const registry = fastify.connectorRegistry;
     if (registry) {
       return { connectors: registry.getDefinitions() };
     }
@@ -15,7 +15,7 @@ export async function connectorRoutes(fastify: FastifyInstance) {
   // GET /api/connectors/:id/health — delegate to registry healthCheck
   fastify.get('/api/connectors/:id/health', async (request, reply) => {
     const { id } = request.params as { id: string };
-    const registry = (fastify as any).connectorRegistry;
+    const registry = fastify.connectorRegistry;
 
     if (registry) {
       try {
@@ -56,7 +56,7 @@ export async function connectorRoutes(fastify: FastifyInstance) {
     const { id } = request.params as { id: string };
 
     // Verify the connector exists in the registry
-    const registry = (fastify as any).connectorRegistry;
+    const registry = fastify.connectorRegistry;
     if (registry && !registry.get(id)) {
       return reply.code(404).send({ error: 'Connector not found' });
     }

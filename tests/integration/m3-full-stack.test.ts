@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import type { FastifyRequest, FastifyReply } from 'fastify';
 import { buildServer } from '../../packages/server/src/index.js';
 import {
   users, teams, teamMembers, tasks, messages,
@@ -33,7 +34,7 @@ describe('M3 Full Stack Integration', () => {
     await server.db.execute(sql`DELETE FROM users WHERE clerk_id LIKE 'integ_%'`);
 
     // Override auth handler for testing
-    server._authHandler.fn = async function (request: any, reply: any) {
+    server._authHandler.fn = async function (request: FastifyRequest, reply: FastifyReply) {
       const testUserId = request.headers['x-test-user-id'] as string;
       if (!testUserId) {
         return reply.code(401).send({ error: 'Missing x-test-user-id header' });

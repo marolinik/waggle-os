@@ -7,44 +7,66 @@
 
 import { randomUUID } from 'node:crypto';
 import type { SourceAdapter, UniversalImportItem, ConversationMessage } from './types.js';
+import { asRecord, getArray, getNumber, getString, type RawRecord } from './raw-types.js';
 
 export class ChatGPTAdapter implements SourceAdapter {
   readonly sourceType = 'chatgpt' as const;
   readonly displayName = 'ChatGPT';
 
   parse(input: unknown): UniversalImportItem[] {
-    const conversations = Array.isArray(input) ? input : (input as any)?.conversations;
+    const root = asRecord(input);
+    const conversations = Array.isArray(input) ? input : root && getArray(root, 'conversations');
     if (!Array.isArray(conversations)) return [];
 
     const items: UniversalImportItem[] = [];
 
-    for (const conv of conversations) {
-      const title = conv.title || 'Untitled';
+    for (const rawConv of conversations) {
+      const conv = asRecord(rawConv);
+      if (!conv) continue;
+      const title = getString(conv, 'title') || 'Untitled';
       const messages: ConversationMessage[] = [];
 
       // ChatGPT uses a mapping object with node IDs
-      if (conv.mapping && typeof conv.mapping === 'object') {
-        const nodes = Object.values(conv.mapping) as any[];
+      const mapping = asRecord(conv.mapping);
+      if (mapping) {
+        const nodes = Object.values(mapping)
+          .map(asRecord)
+          .filter((n): n is RawRecord => n !== null);
         const sorted = nodes
-          .filter((n: any) => n?.message?.content?.parts?.length > 0)
-          .sort((a: any, b: any) => (a.message?.create_time ?? 0) - (b.message?.create_time ?? 0));
+          .filter(n => {
+            const msg = asRecord(n.message);
+            const content = msg && asRecord(msg.content);
+            const parts = content && getArray(content, 'parts');
+            return (parts?.length ?? 0) > 0;
+          })
+          .sort((a, b) => {
+            const am = asRecord(a.message);
+            const bm = asRecord(b.message);
+            return (am && getNumber(am, 'create_time') ? getNumber(am, 'create_time')! : 0)
+              - (bm && getNumber(bm, 'create_time') ? getNumber(bm, 'create_time')! : 0);
+          });
 
         for (const node of sorted) {
-          const msg = node.message;
-          if (!msg || !msg.author?.role) continue;
-          if (msg.author.role === 'system') continue;
+          const msg = asRecord(node.message);
+          const author = msg && asRecord(msg.author);
+          const authorRole = author && getString(author, 'role');
+          if (!msg || !authorRole) continue;
+          if (authorRole === 'system') continue;
 
-          const role = msg.author.role === 'user' ? 'user' as const : 'assistant' as const;
-          const text = (msg.content?.parts ?? [])
-            .filter((p: any) => typeof p === 'string')
+          const role = authorRole === 'user' ? 'user' as const : 'assistant' as const;
+          const content = asRecord(msg.content);
+          const parts = content ? getArray(content, 'parts') : undefined;
+          const text = (parts ?? [])
+            .filter((p): p is string => typeof p === 'string')
             .join('\n')
             .trim();
           if (!text) continue;
 
+          const createTime = getNumber(msg, 'create_time');
           messages.push({
             role,
             text,
-            timestamp: msg.create_time ? new Date(msg.create_time * 1000).toISOString() : undefined,
+            timestamp: createTime ? new Date(createTime * 1000).toISOString() : undefined,
           });
         }
       }
@@ -53,6 +75,7 @@ export class ChatGPTAdapter implements SourceAdapter {
 
       // Also check for custom instructions in conversation metadata
       const customInstructions = conv.custom_instructions;
+      const createTime = getNumber(conv, 'create_time');
 
       items.push({
         id: randomUUID(),
@@ -61,9 +84,9 @@ export class ChatGPTAdapter implements SourceAdapter {
         title,
         content: messages.map(m => `${m.role}: ${m.text}`).join('\n\n'),
         messages,
-        timestamp: conv.create_time ? new Date(conv.create_time * 1000).toISOString() : new Date().toISOString(),
+        timestamp: createTime ? new Date(createTime * 1000).toISOString() : new Date().toISOString(),
         metadata: {
-          conversationId: conv.id ?? conv.conversation_id,
+          conversationId: getString(conv, 'id') ?? getString(conv, 'conversation_id'),
           messageCount: messages.length,
           ...(customInstructions ? { customInstructions } : {}),
         },
@@ -71,7 +94,6 @@ export class ChatGPTAdapter implements SourceAdapter {
     }
 
     // Also extract custom instructions / memory as separate items
-    const root = input as any;
     if (root?.user_custom_instructions) {
       items.push({
         id: randomUUID(),
@@ -86,16 +108,20 @@ export class ChatGPTAdapter implements SourceAdapter {
       });
     }
 
-    if (Array.isArray(root?.memories)) {
-      for (const mem of root.memories) {
-        const content = typeof mem === 'string' ? mem : mem?.content ?? mem?.text ?? JSON.stringify(mem);
+    const memories = root && getArray(root, 'memories');
+    if (memories) {
+      for (const rawMem of memories) {
+        const mem = asRecord(rawMem);
+        const content = typeof rawMem === 'string'
+          ? rawMem
+          : (mem && (getString(mem, 'content') ?? getString(mem, 'text'))) ?? JSON.stringify(rawMem);
         items.push({
           id: randomUUID(),
           source: 'chatgpt',
           type: 'memory',
           title: 'ChatGPT Memory',
           content,
-          timestamp: mem?.created_at ?? new Date().toISOString(),
+          timestamp: (mem && getString(mem, 'created_at')) ?? new Date().toISOString(),
           metadata: { type: 'chatgpt_memory' },
         });
       }

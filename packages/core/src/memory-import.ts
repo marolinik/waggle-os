@@ -35,23 +35,70 @@ export interface ImportResult {
   errors: string[];
 }
 
+// ── Raw export shapes (untrusted external JSON; all fields optional) ──
+
+/** A ChatGPT export node carries an optional message in its `mapping` entry. */
+interface ChatGPTMessage {
+  author?: { role?: string };
+  content?: { parts?: unknown[] };
+  create_time?: number;
+}
+
+interface ChatGPTNode {
+  message?: ChatGPTMessage;
+}
+
+interface ChatGPTConversation {
+  title?: string;
+  mapping?: Record<string, ChatGPTNode>;
+  create_time?: number;
+}
+
+interface ClaudeMessage {
+  sender?: string;
+  role?: string;
+  text?: string;
+  content?: string;
+  created_at?: string;
+  timestamp?: string;
+}
+
+interface ClaudeConversation {
+  name?: string;
+  title?: string;
+  chat_messages?: ClaudeMessage[];
+  messages?: ClaudeMessage[];
+  created_at?: string;
+  create_time?: string;
+}
+
+/** Pull the `conversations` array out of an export that may be the array itself. */
+function extractConversations(json: unknown): unknown[] {
+  if (Array.isArray(json)) return json;
+  if (json && typeof json === 'object' && 'conversations' in json) {
+    const c = (json as { conversations?: unknown }).conversations;
+    if (Array.isArray(c)) return c;
+  }
+  return [];
+}
+
 // ── Parsers ───────────────────────────────────────
 
 export function parseChatGPTExport(json: unknown): ParsedConversation[] {
-  const conversations = Array.isArray(json) ? json : (json as any)?.conversations;
-  if (!Array.isArray(conversations)) return [];
+  const conversations = extractConversations(json);
 
-  return conversations.map((conv: any) => {
+  return conversations.map((raw) => {
+    const conv = raw as ChatGPTConversation;
     const title = conv.title || 'Untitled';
     const messages: ConversationMessage[] = [];
 
     // ChatGPT uses a mapping object with node IDs
     if (conv.mapping && typeof conv.mapping === 'object') {
-      const nodes = Object.values(conv.mapping) as any[];
+      const nodes = Object.values(conv.mapping);
       // Sort by create_time for chronological order
       const sorted = nodes
-        .filter((n: any) => n?.message?.content?.parts?.length > 0)
-        .sort((a: any, b: any) => (a.message?.create_time ?? 0) - (b.message?.create_time ?? 0));
+        .filter((n) => (n?.message?.content?.parts?.length ?? 0) > 0)
+        .sort((a, b) => (a.message?.create_time ?? 0) - (b.message?.create_time ?? 0));
 
       for (const node of sorted) {
         const msg = node.message;
@@ -60,7 +107,7 @@ export function parseChatGPTExport(json: unknown): ParsedConversation[] {
         if (msg.author.role === 'system') continue; // Skip system messages
 
         const text = (msg.content?.parts ?? [])
-          .filter((p: any) => typeof p === 'string')
+          .filter((p): p is string => typeof p === 'string')
           .join('\n')
           .trim();
         if (!text) continue;
@@ -83,10 +130,10 @@ export function parseChatGPTExport(json: unknown): ParsedConversation[] {
 }
 
 export function parseClaudeExport(json: unknown): ParsedConversation[] {
-  const conversations = Array.isArray(json) ? json : (json as any)?.conversations;
-  if (!Array.isArray(conversations)) return [];
+  const conversations = extractConversations(json);
 
-  return conversations.map((conv: any) => {
+  return conversations.map((raw) => {
+    const conv = raw as ClaudeConversation;
     const title = conv.name || conv.title || 'Untitled';
     const messages: ConversationMessage[] = [];
 
@@ -218,13 +265,14 @@ export function processImport(jsonData: unknown, source: ImportSource): ImportRe
     conversations = source === 'chatgpt'
       ? parseChatGPTExport(jsonData)
       : parseClaudeExport(jsonData);
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
     return {
       source,
       conversationsFound: 0,
       conversationsParsed: 0,
       knowledgeExtracted: [],
-      errors: [`Parse error: ${err.message}`],
+      errors: [`Parse error: ${message}`],
     };
   }
 

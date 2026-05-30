@@ -4,7 +4,7 @@ import {
   teamCapabilityOverrides,
   teamCapabilityRequests,
 } from '../db/schema.js';
-import type { Db } from '../db/connection.js';
+import type { DbExecutor } from '../db/connection.js';
 
 export interface EffectivePermissions {
   role: string;
@@ -117,7 +117,7 @@ export function getDefaultPolicies(): DefaultPolicy[] {
 }
 
 export class TeamCapabilityGovernance {
-  constructor(private db: Db) {}
+  constructor(private db: DbExecutor) {}
 
   /**
    * Get effective permissions for a role in a team, including overrides.

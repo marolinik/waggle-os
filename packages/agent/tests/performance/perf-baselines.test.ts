@@ -11,7 +11,7 @@ import { composePersonaPrompt, PERSONAS, getPersona } from '../../src/personas.j
 import { AgentMessageBus } from '../../src/agent-message-bus.js';
 import { needsConfirmation, getApprovalClass } from '../../src/confirmation.js';
 import { WorkspaceSessionManager } from '../../../server/src/local/workspace-sessions.js';
-import type { VaultStore } from '@waggle/core';
+import type { MindDB, VaultStore } from '@waggle/core';
 import type { ConnectorHealth } from '@waggle/shared';
 
 // ── Helpers ───────────────────────────────────────────────────────────
@@ -146,7 +146,7 @@ describe('Performance Baselines', () => {
 
   it('workspace session create + close < 5ms', () => {
     const manager = new WorkspaceSessionManager(3);
-    const mind = { close: vi.fn() } as any;
+    const mind = { close: vi.fn() } as unknown as MindDB;
     const tools = [{ name: 't', description: '', parameters: {}, execute: async () => '' }];
 
     const ms = timeMs(() => {

@@ -18,7 +18,7 @@ import { MarketplaceDB } from './db';
 import { MarketplaceInstaller } from './installer';
 import { MarketplaceSync } from './sync';
 import { SecurityGate } from './security';
-import type { InstallationType } from './types';
+import type { InstallationType, ScannedPackage } from './types';
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -162,8 +162,8 @@ async function main() {
 
         console.log(`\n📋 Installed packages (${installations.length}):\n`);
         for (const inst of installations) {
-          console.log(`  • ${(inst as any).pkg_display_name} v${inst.installed_version}`);
-          console.log(`    Type: ${(inst as any).waggle_install_type} | Path: ${inst.install_path}`);
+          console.log(`  • ${inst.pkg_display_name} v${inst.installed_version}`);
+          console.log(`    Type: ${inst.waggle_install_type} | Path: ${inst.install_path}`);
           console.log(`    Installed: ${inst.installed_at}`);
           console.log();
         }
@@ -313,11 +313,13 @@ async function main() {
       }
 
       case 'audit': {
-        // Show security status of all packages in DB
-        const results = db.search({ limit: 999 }).packages;
-        const unscanned = results.filter(p => !(p as any).security_status || (p as any).security_status === 'unscanned');
-        const blocked = results.filter(p => (p as any).scan_blocked === 1);
-        const risky = results.filter(p => ['high', 'critical'].includes((p as any).security_status || ''));
+        // Show security status of all packages in DB. `search()` returns
+        // `SELECT p.*`, so the persisted scan columns ride along at runtime —
+        // view them through ScannedPackage rather than the core package type.
+        const results = db.search({ limit: 999 }).packages as ScannedPackage[];
+        const unscanned = results.filter(p => !p.security_status || p.security_status === 'unscanned');
+        const blocked = results.filter(p => p.scan_blocked === 1);
+        const risky = results.filter(p => ['high', 'critical'].includes(p.security_status || ''));
 
         console.log(`\n🛡️  Marketplace Security Audit`);
         console.log(`${'─'.repeat(50)}`);
@@ -329,11 +331,11 @@ async function main() {
 
         if (blocked.length > 0) {
           console.log('\n🚫 Blocked packages:');
-          blocked.forEach(p => console.log(`  • ${p.display_name} (${(p as any).security_status})`));
+          blocked.forEach(p => console.log(`  • ${p.display_name} (${p.security_status})`));
         }
         if (risky.length > 0) {
           console.log('\n⚠️  Risky packages:');
-          risky.forEach(p => console.log(`  • ${p.display_name} — score: ${(p as any).security_score}/100`));
+          risky.forEach(p => console.log(`  • ${p.display_name} — score: ${p.security_score}/100`));
         }
         if (unscanned.length > 0) {
           console.log(`\n💡 Run "waggle-market scan-all" to scan ${unscanned.length} unscanned packages.`);

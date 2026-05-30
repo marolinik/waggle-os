@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { MessageService } from '../services/message-service.js';
 import { TeamService } from '../services/team-service.js';
 import { sendMessageSchema } from '@waggle/shared';
@@ -15,7 +15,7 @@ export async function messageRoutes(fastify: FastifyInstance) {
   const messageService = new MessageService(fastify.db);
   const teamService = new TeamService(fastify.db);
 
-  async function resolveTeam(request: any, reply: any, slug: string) {
+  async function resolveTeam(request: FastifyRequest, reply: FastifyReply, slug: string) {
     const team = await teamService.getBySlug(slug);
     if (!team) {
       reply.code(404).send({ error: 'Team not found' });

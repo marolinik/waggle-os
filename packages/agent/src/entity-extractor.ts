@@ -140,15 +140,17 @@ export async function extractEntitiesWithLLM(
   try {
     const response = await llmCall(LLM_EXTRACT_PROMPT + text.slice(0, 3000));
     const cleaned = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    const parsed = JSON.parse(cleaned);
+    const parsed: unknown = JSON.parse(cleaned);
 
     if (!Array.isArray(parsed)) return extractEntities(text);
 
+    // Untrusted LLM output — narrow each element through a partial shape.
+    type RawEntity = { name?: unknown; type?: unknown; confidence?: unknown };
     const validTypes = new Set(['person', 'project', 'technology', 'organization', 'tool', 'concept']);
-    return parsed
-      .filter((e: any) => e.name && validTypes.has(e.type))
+    return (parsed as RawEntity[])
+      .filter((e) => typeof e.name === 'string' && typeof e.type === 'string' && validTypes.has(e.type))
       .slice(0, 20)
-      .map((e: any) => ({
+      .map((e) => ({
         name: String(e.name),
         type: e.type as ExtractedEntity['type'],
         confidence: Math.max(0, Math.min(1, Number(e.confidence) || 0.7)),

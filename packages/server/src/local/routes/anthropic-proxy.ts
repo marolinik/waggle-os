@@ -7,7 +7,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyPluginAsync, FastifyInstance } from 'fastify';
 import { validateOrigin } from '../cors-config.js';
 
 interface OpenAIMessage {
@@ -30,6 +30,23 @@ interface ChatCompletionBody {
   stream_options?: { include_usage?: boolean };
   max_tokens?: number;
   temperature?: number;
+}
+
+/** Shape of a parsed Anthropic Messages API streaming (SSE) event. */
+interface AnthropicStreamEvent {
+  type: string;
+  message?: { usage?: { input_tokens?: number } };
+  content_block?: { type?: string; id?: string; name?: string };
+  delta?: { type?: string; text?: string; partial_json?: string };
+  usage?: { output_tokens?: number };
+}
+
+/** Shape of a non-streaming Anthropic Messages API response. */
+interface AnthropicMessageResponse {
+  content?: Array<{ type: string; text?: string; id?: string; name?: string; input?: unknown }>;
+  stop_reason?: string;
+  usage?: { input_tokens?: number; output_tokens?: number };
+  model?: string;
 }
 
 /** Map model names (from various formats) to Anthropic model IDs */
@@ -214,8 +231,8 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
               const payload = line.slice(6).trim();
               if (!payload || payload === '[DONE]') continue;
 
-              let event: any;
-              try { event = JSON.parse(payload); } catch { continue; }
+              let event: AnthropicStreamEvent;
+              try { event = JSON.parse(payload) as AnthropicStreamEvent; } catch { continue; }
 
               // Translate Anthropic stream events to OpenAI format
               if (event.type === 'message_start') {
@@ -225,8 +242,8 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
                   // Text block start — nothing to emit yet
                 } else if (event.content_block?.type === 'tool_use') {
                   toolCallIndex++;
-                  currentToolId = event.content_block.id;
-                  currentToolName = event.content_block.name;
+                  currentToolId = event.content_block.id ?? '';
+                  currentToolName = event.content_block.name ?? '';
                   raw.write(`data: ${JSON.stringify({
                     choices: [{
                       delta: {
@@ -283,33 +300,35 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
       raw.end();
     } else {
       // Non-streaming — translate Anthropic response to OpenAI format
-      const data = await anthropicRes.json() as any;
+      const data = await anthropicRes.json() as AnthropicMessageResponse;
 
       let textContent = '';
-      const toolCalls: Array<{ id: string; type: string; function: { name: string; arguments: string } }> = [];
+      type ToolCall = { id: string; type: string; function: { name: string; arguments: string } };
+      const toolCalls: ToolCall[] = [];
 
       for (const block of data.content ?? []) {
         if (block.type === 'text') {
-          textContent += block.text;
+          textContent += block.text ?? '';
         } else if (block.type === 'tool_use') {
           toolCalls.push({
-            id: block.id,
+            id: block.id ?? '',
             type: 'function',
-            function: { name: block.name, arguments: JSON.stringify(block.input) },
+            function: { name: block.name ?? '', arguments: JSON.stringify(block.input) },
           });
         }
       }
 
-      const choice: Record<string, unknown> = {
-        message: {
-          role: 'assistant',
-          content: textContent || null,
-        },
-        finish_reason: data.stop_reason === 'tool_use' ? 'tool_calls' : 'stop',
+      const message: { role: string; content: string | null; tool_calls?: ToolCall[] } = {
+        role: 'assistant',
+        content: textContent || null,
       };
       if (toolCalls.length > 0) {
-        (choice.message as any).tool_calls = toolCalls;
+        message.tool_calls = toolCalls;
       }
+      const choice = {
+        message,
+        finish_reason: data.stop_reason === 'tool_use' ? 'tool_calls' : 'stop',
+      };
 
       return reply.send({
         choices: [choice],
@@ -325,7 +344,7 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
 };
 
 /** Read Anthropic API key. Vault is the primary source; env and config are legacy fallbacks. */
-function getAnthropicKey(server: any): string | null {
+function getAnthropicKey(server: FastifyInstance): string | null {
   // Vault first — encrypted storage is the canonical secret store
   if (server.vault) {
     try {
@@ -343,7 +362,7 @@ function getAnthropicKey(server: any): string | null {
   try {
     const configPath = path.join(server.localConfig.dataDir, 'config.json');
     const raw = fs.readFileSync(configPath, 'utf-8');
-    const config = JSON.parse(raw);
+    const config = JSON.parse(raw) as { providers?: { anthropic?: { apiKey?: string } } };
     if (config?.providers?.anthropic?.apiKey) return config.providers.anthropic.apiKey;
   } catch {
     // Config not available

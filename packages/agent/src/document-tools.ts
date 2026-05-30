@@ -22,7 +22,9 @@ import {
   PageBreak,
   Footer,
   Header,
+  LevelFormat,
   type IRunOptions,
+  type ISectionOptions,
 } from 'docx';
 import type { ToolDefinition } from './tools.js';
 
@@ -373,7 +375,7 @@ export function createDocumentTools(workspace: string): ToolDefinition[] {
           const bodyElements = blocksToDocx(blocks);
 
           // Build sections
-          const sections: any[] = [];
+          const sections: ISectionOptions[] = [];
 
           // Title page section
           if (includeTitlePage && title) {
@@ -505,7 +507,7 @@ export function createDocumentTools(workspace: string): ToolDefinition[] {
                   levels: [
                     {
                       level: 0,
-                      format: 'decimal' as any,
+                      format: LevelFormat.DECIMAL,
                       text: '%1.',
                       alignment: AlignmentType.START,
                     },
@@ -615,8 +617,8 @@ export function createDocumentTools(workspace: string): ToolDefinition[] {
             `Summary: ${summary}...\n` +
             `IMPORTANT: Provide a 2-3 sentence summary of the document content in your response to the user. Do NOT just say "Generating document..." — describe what was generated.`
           );
-        } catch (err: any) {
-          return `Error generating document: ${err.message}`;
+        } catch (err: unknown) {
+          return `Error generating document: ${err instanceof Error ? err.message : String(err)}`;
         }
       },
     },

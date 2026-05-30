@@ -91,6 +91,138 @@ interface SyncAdapter {
   sync(source: MarketplaceSource, db: MarketplaceDB, vaultLookup?: VaultLookupFn): Promise<SyncResult>;
 }
 
+// ─── External JSON Boundary Shapes ─────────────────────────────────
+// Marketplace sources return loosely-structured JSON. These interfaces model
+// the fields the adapters actually read — every field is optional because
+// upstream payloads vary by provider and version. Treat them as a typed view
+// over untrusted data: never assume a field is present.
+
+/** A single skill/plugin/MCP entry as returned by a remote registry. */
+interface RemoteCatalogItem {
+  id?: string | number;
+  slug?: string;
+  name?: string;
+  title?: string;
+  description?: string;
+  summary?: string;
+  author?: string;
+  creator?: string;
+  owner?: string;
+  version?: string;
+  license?: string;
+  type?: string;
+  category?: string;
+  tags?: string[];
+  url?: string;
+  homepage?: string;
+  repository_url?: string;
+  repo_url?: string;
+  raw_url?: string;
+  content_url?: string;
+  download_url?: string;
+  skillUrl?: string;
+  githubUrl?: string;
+  npm_package?: string;
+  downloads?: number;
+  installs?: number;
+  download_count?: number;
+  stars?: number;
+  likes?: number;
+  rating?: number;
+  rating_count?: number;
+  platforms?: string[];
+  dependencies?: string[];
+  identifier?: string;
+  api?: unknown;
+}
+
+/** Generic paginated/wrapped registry response (web-registry + generic adapters). */
+interface RemoteCatalogResponse {
+  skills?: RemoteCatalogItem[];
+  data?: RemoteCatalogItem[] | { skills?: RemoteCatalogItem[]; pagination?: { hasNext?: boolean } };
+  items?: RemoteCatalogItem[];
+  tools?: RemoteCatalogItem[];
+  plugins?: RemoteCatalogItem[];
+  results?: RemoteCatalogItem[];
+}
+
+/** GitHub git-tree API response. */
+interface GitHubTreeResponse {
+  tree?: Array<{ type?: string; path?: string }>;
+}
+
+/** GitHub repos list entry. */
+interface GitHubRepo {
+  name: string;
+  full_name: string;
+  description?: string | null;
+  topics?: string[];
+  html_url: string;
+  homepage?: string | null;
+  clone_url: string;
+  stargazers_count?: number;
+  license?: { spdx_id?: string | null } | null;
+}
+
+/** npm search API response. */
+interface NpmSearchResponse {
+  objects?: NpmSearchObject[];
+  results?: NpmSearchObject[];
+}
+
+interface NpmPackageInfo {
+  name?: string;
+  description?: string;
+  version?: string;
+  keywords?: string[];
+  publisher?: { username?: string };
+  author?: { name?: string };
+  maintainers?: Array<{ username?: string }>;
+  links?: { repository?: string; homepage?: string; npm?: string };
+  repository?: { url?: string };
+}
+
+/**
+ * A search hit from the npm registry. npm's `/-/v1/search` nests the package
+ * under `.package`, but some mirrors return the package fields inline — so this
+ * extends {@link NpmPackageInfo} to cover both shapes (`obj.package || obj`).
+ */
+interface NpmSearchObject extends NpmPackageInfo {
+  package?: NpmPackageInfo;
+}
+
+/** ClawHub paginated skills response. */
+interface ClawHubResponse {
+  skills?: RemoteCatalogItem[];
+  data?: RemoteCatalogItem[];
+}
+
+/** SkillsMP search response (nested data envelope). */
+interface SkillsMpResponse {
+  skills?: RemoteCatalogItem[];
+  data?: {
+    skills?: RemoteCatalogItem[];
+    pagination?: { hasNext?: boolean };
+  } | RemoteCatalogItem[];
+}
+
+/** LobeHub plugin index response. */
+interface LobeHubResponse {
+  plugins?: LobeHubPlugin[];
+}
+
+interface LobeHubPlugin {
+  identifier?: string;
+  name?: string;
+  description?: string;
+  version?: string;
+  author?: string;
+  homepage?: string;
+  category?: string;
+  installs?: number;
+  api?: unknown;
+}
+
 // ─── Awesome-List Parser Adapter ───────────────────────────────────
 // Handles GitHub "awesome-*" repos that contain markdown lists of links.
 
@@ -205,10 +337,10 @@ const awesomeListAdapter: SyncAdapter = {
             downloads: 0,
             stars: 0,
             category: installType === 'mcp' ? 'integration' : 'general',
-            platforms: JSON.stringify(['claude_code', 'waggle']) as any,
-            dependencies: JSON.stringify([]) as any,
-            packs: JSON.stringify([]) as any,
-            install_manifest: JSON.stringify(manifest) as any,
+            platforms: JSON.stringify(['claude_code', 'waggle']),
+            dependencies: JSON.stringify([]),
+            packs: JSON.stringify([]),
+            install_manifest: JSON.stringify(manifest),
           });
           result.added++;
         } catch (itemErr) {
@@ -252,28 +384,29 @@ const githubRepoContentAdapter: SyncAdapter = {
       const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/main?recursive=1`;
       const response = await fetch(treeUrl, { headers: githubHeaders() });
 
-      let treeData: any;
+      let treeData: GitHubTreeResponse;
       if (!response.ok) {
         // Try master branch
         const fallbackUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/master?recursive=1`;
         const fallbackResp = await fetch(fallbackUrl, { headers: githubHeaders() });
         if (!fallbackResp.ok) throw new Error(`GitHub tree API: ${response.status} / ${fallbackResp.status}`);
-        treeData = await fallbackResp.json();
+        treeData = await fallbackResp.json() as GitHubTreeResponse;
       } else {
-        treeData = await response.json();
+        treeData = await response.json() as GitHubTreeResponse;
       }
 
       const tree = treeData.tree || [];
 
       // Look for SKILL.md, skill.md, *.skill.md files
-      const skillFiles = tree.filter((item: any) =>
+      const skillFiles = tree.filter((item) =>
         item.type === 'blob' &&
+        !!item.path &&
         /(?:^|\/)(?:SKILL\.md|skill\.md|[^/]+\.skill\.md)$/i.test(item.path)
       );
 
       for (const file of skillFiles) {
-        // Derive skill name from file path
-        const pathParts = file.path.split('/');
+        // Derive skill name from file path (path presence guaranteed by the filter above)
+        const pathParts = file.path!.split('/');
         const dirName = pathParts.length > 1 ? pathParts[pathParts.length - 2] : pathParts[0];
         const slug = slugify(dirName.replace(/\.skill\.md$/i, '').replace(/\.md$/i, ''));
         if (!slug) continue;
@@ -297,10 +430,10 @@ const githubRepoContentAdapter: SyncAdapter = {
             downloads: 0,
             stars: 0,
             category: 'general',
-            platforms: JSON.stringify(['claude_code', 'waggle']) as any,
-            dependencies: JSON.stringify([]) as any,
-            packs: JSON.stringify([]) as any,
-            install_manifest: JSON.stringify({ skill_url: rawUrl }) as any,
+            platforms: JSON.stringify(['claude_code', 'waggle']),
+            dependencies: JSON.stringify([]),
+            packs: JSON.stringify([]),
+            install_manifest: JSON.stringify({ skill_url: rawUrl }),
           });
           result.added++;
         } catch (itemErr) {
@@ -384,10 +517,10 @@ const webRegistryAdapter: SyncAdapter = {
 
         if (!response.ok) throw new Error(`API ${response.status}: ${response.statusText}`);
 
-        const data = await response.json() as any;
+        const data = await response.json() as RemoteCatalogItem[] | RemoteCatalogResponse;
 
         // Try multiple JSON response formats
-        let items: any[] = [];
+        let items: RemoteCatalogItem[] = [];
         if (Array.isArray(data)) {
           items = data;
         } else if (data.skills && Array.isArray(data.skills)) {
@@ -452,10 +585,10 @@ const webRegistryAdapter: SyncAdapter = {
             downloads: item.downloads || item.installs || item.download_count || 0,
             stars: item.stars || item.likes || item.rating || 0,
             category: item.category || item.tags?.[0] || 'general',
-            platforms: JSON.stringify(item.platforms || ['claude_code', 'waggle']) as any,
-            dependencies: JSON.stringify(item.dependencies || []) as any,
-            packs: JSON.stringify([]) as any,
-            install_manifest: JSON.stringify(manifest) as any,
+            platforms: JSON.stringify(item.platforms || ['claude_code', 'waggle']),
+            dependencies: JSON.stringify(item.dependencies || []),
+            packs: JSON.stringify([]),
+            install_manifest: JSON.stringify(manifest),
           });
           result.added++;
         } catch (itemErr) {
@@ -492,8 +625,8 @@ const webRegistryAdapter: SyncAdapter = {
 // ─── NPM Search Adapter ───────────────────────────────────────────
 // Searches npm registry for MCP server packages.
 
-/** Parse npm search API response into package entries */
-export function parseNpmSearchResults(data: any): Array<{
+/** A normalized npm package entry produced by {@link parseNpmSearchResults}. */
+export interface NpmPackageEntry {
   name: string;
   description: string;
   version: string;
@@ -502,12 +635,15 @@ export function parseNpmSearchResults(data: any): Array<{
   repository_url: string | null;
   homepage_url: string | null;
   keywords: string[];
-}> {
+}
+
+/** Parse npm search API response into package entries */
+export function parseNpmSearchResults(data: NpmSearchResponse): NpmPackageEntry[] {
   const objects = data.objects || data.results || [];
   if (!Array.isArray(objects)) return [];
 
-  return objects.map((obj: any) => {
-    const pkg = obj.package || obj;
+  return objects.map((obj): NpmPackageEntry => {
+    const pkg: NpmPackageInfo = obj.package || obj;
     return {
       name: pkg.name || '',
       description: pkg.description || '',
@@ -518,7 +654,7 @@ export function parseNpmSearchResults(data: any): Array<{
       homepage_url: pkg.links?.homepage || pkg.links?.npm || null,
       keywords: pkg.keywords || [],
     };
-  }).filter((pkg: any) => pkg.name);
+  }).filter((pkg) => pkg.name);
 }
 
 const npmSearchAdapter: SyncAdapter = {
@@ -539,7 +675,7 @@ const npmSearchAdapter: SyncAdapter = {
 
       if (!response.ok) throw new Error(`npm API ${response.status}: ${response.statusText}`);
 
-      const data = await response.json() as any;
+      const data = await response.json() as NpmSearchResponse;
       const packages = parseNpmSearchResults(data);
 
       for (const pkg of packages) {
@@ -572,10 +708,10 @@ const npmSearchAdapter: SyncAdapter = {
             downloads: 0,
             stars: 0,
             category: 'integration',
-            platforms: JSON.stringify(['claude_code', 'waggle', 'cursor']) as any,
-            dependencies: JSON.stringify([]) as any,
-            packs: JSON.stringify([]) as any,
-            install_manifest: JSON.stringify(manifest) as any,
+            platforms: JSON.stringify(['claude_code', 'waggle', 'cursor']),
+            dependencies: JSON.stringify([]),
+            packs: JSON.stringify([]),
+            install_manifest: JSON.stringify(manifest),
           });
           result.added++;
         } catch (itemErr) {
@@ -624,12 +760,12 @@ const githubAdapter: SyncAdapter = {
       const response = await fetch(apiUrl, { headers: githubHeaders() });
       if (!response.ok) throw new Error(`GitHub API ${response.status}: ${response.statusText}`);
 
-      const repos = await response.json() as any[];
+      const repos = await response.json() as GitHubRepo[];
 
       for (const repo of repos) {
         // Filter for skill/MCP/plugin repos
         const topics = repo.topics || [];
-        const isSkill = topics.some((t: string) =>
+        const isSkill = topics.some((t) =>
           ['skill', 'agent-skill', 'claude-code', 'mcp', 'mcp-server', 'plugin'].includes(t)
         ) || repo.name.includes('skill') || repo.name.includes('mcp');
 
@@ -664,10 +800,10 @@ const githubAdapter: SyncAdapter = {
           downloads: 0,
           stars: repo.stargazers_count || 0,
           category: installType === 'mcp' ? 'integration' : 'development',
-          platforms: JSON.stringify(['claude_code', 'waggle']) as any,
-          dependencies: JSON.stringify([]) as any,
-          packs: JSON.stringify([]) as any,
-          install_manifest: JSON.stringify(manifest) as any,
+          platforms: JSON.stringify(['claude_code', 'waggle']),
+          dependencies: JSON.stringify([]),
+          packs: JSON.stringify([]),
+          install_manifest: JSON.stringify(manifest),
         });
 
         result.added++;
@@ -728,8 +864,8 @@ const clawhubAdapter: SyncAdapter = {
           break;
         }
 
-        const data = await response.json() as any;
-        const skills = data.skills || data.data || data;
+        const data = await response.json() as ClawHubResponse | RemoteCatalogItem[];
+        const skills = Array.isArray(data) ? data : (data.skills || data.data);
 
         if (!Array.isArray(skills) || skills.length === 0) {
           // Full sync complete — reset sync state
@@ -739,19 +875,22 @@ const clawhubAdapter: SyncAdapter = {
         }
 
         for (const skill of skills) {
+          const skillName = skill.slug || skill.name?.toLowerCase().replace(/\s+/g, '-');
+          if (!skillName) continue;
+
           const manifest: InstallManifest = {
             skill_url: skill.raw_url || skill.download_url || `${apiBase}/skills/${skill.id || skill.slug}/raw`,
           };
 
           db.upsertPackage({
             source_id: source.id,
-            name: skill.slug || skill.name?.toLowerCase().replace(/\s+/g, '-'),
-            display_name: skill.name || skill.title,
+            name: skillName,
+            display_name: skill.name || skill.title || skillName,
             description: skill.description || '',
             author: skill.author || skill.creator || 'community',
             package_type: 'skill',
             waggle_install_type: 'skill',
-            waggle_install_path: `skills/${skill.slug || skill.name?.toLowerCase().replace(/\s+/g, '-')}.md`,
+            waggle_install_path: `skills/${skillName}.md`,
             version: skill.version || '1.0.0',
             license: skill.license || 'MIT',
             repository_url: skill.repository_url || null,
@@ -761,10 +900,10 @@ const clawhubAdapter: SyncAdapter = {
             rating: skill.rating || 0,
             rating_count: skill.rating_count || 0,
             category: skill.category || 'general',
-            platforms: JSON.stringify(skill.platforms || ['claude_code', 'waggle']) as any,
-            dependencies: JSON.stringify(skill.dependencies || []) as any,
-            packs: JSON.stringify([]) as any,
-            install_manifest: JSON.stringify(manifest) as any,
+            platforms: JSON.stringify(skill.platforms || ['claude_code', 'waggle']),
+            dependencies: JSON.stringify(skill.dependencies || []),
+            packs: JSON.stringify([]),
+            install_manifest: JSON.stringify(manifest),
           });
 
           result.added++;
@@ -879,8 +1018,13 @@ const skillsmpAdapter: SyncAdapter = {
             break;
           }
 
-          const data = await response.json() as any;
-          const skills = data?.data?.skills || data?.skills || data?.data || [];
+          const data = await response.json() as SkillsMpResponse;
+          const nestedData = data?.data;
+          const skills: RemoteCatalogItem[] =
+            (!Array.isArray(nestedData) ? nestedData?.skills : undefined)
+            || data?.skills
+            || (Array.isArray(nestedData) ? nestedData : undefined)
+            || [];
 
           if (!Array.isArray(skills) || skills.length === 0) {
             hasMore = false;
@@ -889,7 +1033,7 @@ const skillsmpAdapter: SyncAdapter = {
 
         for (const skill of skills) {
           // Dedup across queries by skill ID
-          const skillId = skill.id || skill.slug || skill.name;
+          const skillId = String(skill.id || skill.slug || skill.name || '');
           if (!skillId || seenIds.has(skillId)) continue;
           seenIds.add(skillId);
 
@@ -915,16 +1059,16 @@ const skillsmpAdapter: SyncAdapter = {
             downloads: 0,
             stars: skill.stars || 0,
             category: skill.category || 'general',
-            platforms: JSON.stringify(['claude_code', 'codex', 'cursor', 'waggle']) as any,
-            dependencies: JSON.stringify([]) as any,
-            packs: JSON.stringify([]) as any,
-            install_manifest: JSON.stringify(manifest) as any,
+            platforms: JSON.stringify(['claude_code', 'codex', 'cursor', 'waggle']),
+            dependencies: JSON.stringify([]),
+            packs: JSON.stringify([]),
+            install_manifest: JSON.stringify(manifest),
           });
 
           result.added++;
         }
 
-          const pagination = data?.data?.pagination;
+          const pagination = (nestedData && !Array.isArray(nestedData)) ? nestedData.pagination : undefined;
           hasMore = pagination?.hasNext === true && skills.length > 0;
           page++;
 
@@ -963,46 +1107,49 @@ const lobehubAdapter: SyncAdapter = {
       const response = await fetch(indexUrl);
       if (!response.ok) throw new Error(`LobeHub index: ${response.status}`);
 
-      const data = await response.json() as any;
-      const plugins = data.plugins || data;
+      const data = await response.json() as LobeHubResponse | LobeHubPlugin[];
+      const plugins: LobeHubPlugin[] = Array.isArray(data) ? data : (data.plugins || []);
 
       if (!Array.isArray(plugins)) throw new Error('Unexpected LobeHub response format');
 
       for (const plugin of plugins) {
+        const identifier = plugin.identifier || plugin.name?.toLowerCase().replace(/\s+/g, '-');
+        if (!identifier) continue;
+
         const manifest: InstallManifest = {
           plugin_manifest: {
-            name: plugin.identifier || plugin.name,
+            name: identifier,
             version: plugin.version || '1.0.0',
             description: plugin.description || '',
             skills: [],
             mcpServers: plugin.api ? [{
-              name: plugin.identifier,
+              name: identifier,
               command: 'npx',
-              args: ['-y', `@lobehub/${plugin.identifier}`],
+              args: ['-y', `@lobehub/${identifier}`],
             }] : [],
           },
         };
 
         db.upsertPackage({
           source_id: source.id,
-          name: plugin.identifier || plugin.name?.toLowerCase().replace(/\s+/g, '-'),
-          display_name: plugin.name || plugin.identifier,
+          name: identifier,
+          display_name: plugin.name || identifier,
           description: plugin.description || '',
           author: plugin.author || 'lobehub',
           package_type: 'plugin',
           waggle_install_type: 'plugin',
-          waggle_install_path: `plugins/${plugin.identifier}/`,
+          waggle_install_path: `plugins/${identifier}/`,
           version: plugin.version || '1.0.0',
           license: 'MIT',
-          repository_url: `https://github.com/lobehub/lobe-chat-plugins/tree/main/plugins/${plugin.identifier}`,
-          homepage_url: plugin.homepage || `https://lobehub.com/plugins/${plugin.identifier}`,
+          repository_url: `https://github.com/lobehub/lobe-chat-plugins/tree/main/plugins/${identifier}`,
+          homepage_url: plugin.homepage || `https://lobehub.com/plugins/${identifier}`,
           downloads: plugin.installs || 0,
           stars: 0,
           category: plugin.category || 'integration',
-          platforms: JSON.stringify(['lobehub', 'waggle']) as any,
-          dependencies: JSON.stringify([]) as any,
-          packs: JSON.stringify([]) as any,
-          install_manifest: JSON.stringify(manifest) as any,
+          platforms: JSON.stringify(['lobehub', 'waggle']),
+          dependencies: JSON.stringify([]),
+          packs: JSON.stringify([]),
+          install_manifest: JSON.stringify(manifest),
         });
 
         result.added++;
@@ -1031,17 +1178,27 @@ const genericAdapter: SyncAdapter = {
       const response = await fetch(source.api_endpoint!);
       if (!response.ok) throw new Error(`API ${response.status}`);
 
-      const data = await response.json() as any;
-      const items = Array.isArray(data) ? data : data.skills || data.plugins || data.data || [];
+      const data = await response.json() as RemoteCatalogItem[] | RemoteCatalogResponse;
+      const items: RemoteCatalogItem[] = Array.isArray(data)
+        ? data
+        : (data.skills || data.plugins || (Array.isArray(data.data) ? data.data : undefined) || []);
+
+      const validPackageTypes: ReadonlyArray<MarketplacePackage['package_type']> =
+        ['skill', 'plugin', 'mcp_server', 'template', 'pack'];
 
       for (const item of items) {
+        const packageType: MarketplacePackage['package_type'] =
+          item.type && (validPackageTypes as readonly string[]).includes(item.type)
+            ? item.type as MarketplacePackage['package_type']
+            : 'skill';
+
         db.upsertPackage({
           source_id: source.id,
           name: item.slug || item.name?.toLowerCase().replace(/\s+/g, '-') || `${source.name}-${result.added}`,
           display_name: item.name || item.title || item.slug,
           description: item.description || '',
           author: item.author || source.name,
-          package_type: item.type || 'skill',
+          package_type: packageType,
           waggle_install_type: item.type === 'mcp' ? 'mcp' : item.type === 'plugin' ? 'plugin' : 'skill',
           waggle_install_path: `skills/${item.slug || item.name?.toLowerCase().replace(/\s+/g, '-')}.md`,
           version: item.version || '1.0.0',
@@ -1050,12 +1207,12 @@ const genericAdapter: SyncAdapter = {
           downloads: item.downloads || item.installs || 0,
           stars: item.stars || item.likes || 0,
           category: item.category || 'general',
-          platforms: JSON.stringify(['waggle']) as any,
-          dependencies: JSON.stringify([]) as any,
-          packs: JSON.stringify([]) as any,
+          platforms: JSON.stringify(['waggle']),
+          dependencies: JSON.stringify([]),
+          packs: JSON.stringify([]),
           install_manifest: JSON.stringify({
             skill_url: item.raw_url || item.content_url,
-          }) as any,
+          }),
         });
 
         result.added++;
@@ -1090,7 +1247,7 @@ export function normalizeName(name: string): string {
  * @returns Count of duplicates removed
  */
 export function deduplicatePackages(db: MarketplaceDB): number {
-  const rawDb = (db as any).db;
+  const rawDb = db.getRawDb();
 
   // Get all packages with their scores
   const allPackages = rawDb.prepare(

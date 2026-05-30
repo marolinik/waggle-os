@@ -78,7 +78,7 @@ export class HiveMindAgent {
     return { digest, messageId: msg.id };
   }
 
-  private detectDuplicateWork(tasksList: any[]): DuplicateWork[] {
+  private detectDuplicateWork(tasksList: Array<{ title: string; createdBy: string }>): DuplicateWork[] {
     // Group by similar titles (case-insensitive first 20 chars)
     const groups = new Map<string, { titles: string[]; users: Set<string> }>();
     for (const task of tasksList) {
@@ -92,7 +92,7 @@ export class HiveMindAgent {
       .map(g => ({ titles: g.titles, users: Array.from(g.users) }));
   }
 
-  private generateRecommendations(jobs: any[], duplicates: DuplicateWork[], bestPractices: any[]): string[] {
+  private generateRecommendations(jobs: unknown[], duplicates: DuplicateWork[], bestPractices: unknown[]): string[] {
     const recommendations: string[] = [];
     if (duplicates.length > 0) {
       recommendations.push(`${duplicates.length} potential duplicate work detected. Consider checking the hive before starting tasks.`);

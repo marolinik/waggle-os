@@ -1,11 +1,18 @@
 import { execFileSync } from 'node:child_process';
 import type { ToolDefinition } from './tools.js';
 
+/** Extract a human-readable message from a child_process spawn error. */
+function spawnErrorText(err: unknown): string {
+  const stderr = (err as { stderr?: Buffer | string })?.stderr;
+  const stderrText = typeof stderr === 'string' ? stderr : stderr?.toString();
+  return stderrText?.trim() || (err instanceof Error ? err.message : String(err));
+}
+
 function runGit(cwd: string, args: string[], timeoutMs = 10_000): string {
   try {
     return execFileSync('git', args, { cwd, encoding: 'utf-8', timeout: timeoutMs }).trim();
-  } catch (err: any) {
-    return err.stderr?.trim() || err.message;
+  } catch (err: unknown) {
+    return spawnErrorText(err);
   }
 }
 
@@ -13,8 +20,8 @@ function runGit(cwd: string, args: string[], timeoutMs = 10_000): string {
 function runCmd(cmd: string, cmdArgs: string[], cwd: string, timeoutMs = 60_000): string {
   try {
     return execFileSync(cmd, cmdArgs, { cwd, encoding: 'utf-8', timeout: timeoutMs }).trim();
-  } catch (err: any) {
-    return err.stderr?.trim() || err.message;
+  } catch (err: unknown) {
+    return spawnErrorText(err);
   }
 }
 

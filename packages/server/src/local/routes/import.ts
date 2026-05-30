@@ -42,7 +42,7 @@ export async function importRoutes(fastify: FastifyInstance) {
 
     // Save to personal memory
     try {
-      const personalDb = (fastify as any).multiMind?.personal;
+      const personalDb = fastify.multiMind?.personal;
       if (!personalDb) {
         return reply.code(503).send({ error: 'Personal mind not available' });
       }
@@ -62,8 +62,8 @@ export async function importRoutes(fastify: FastifyInstance) {
         saved,
         message: `Imported ${saved} knowledge items from ${sourceLabel} into personal memory`,
       };
-    } catch (err: any) {
-      return reply.code(500).send({ error: `Import failed: ${err.message}` });
+    } catch (err: unknown) {
+      return reply.code(500).send({ error: `Import failed: ${err instanceof Error ? err.message : String(err)}` });
     }
   });
 }

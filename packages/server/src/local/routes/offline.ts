@@ -13,7 +13,7 @@ import type { FastifyInstance } from 'fastify';
 export async function offlineRoutes(fastify: FastifyInstance) {
   // GET /api/offline/status — returns current offline state
   fastify.get('/api/offline/status', async () => {
-    const mgr = (fastify as any).offlineManager;
+    const mgr = fastify.offlineManager;
     if (!mgr) {
       return {
         offline: false,
@@ -30,7 +30,7 @@ export async function offlineRoutes(fastify: FastifyInstance) {
 
   // POST /api/offline/queue — queue a user message
   fastify.post('/api/offline/queue', async (request, reply) => {
-    const mgr = (fastify as any).offlineManager;
+    const mgr = fastify.offlineManager;
     if (!mgr) {
       return reply.status(503).send({ error: 'Offline manager not available' });
     }
@@ -48,7 +48,7 @@ export async function offlineRoutes(fastify: FastifyInstance) {
 
   // GET /api/offline/queue — list queued messages
   fastify.get('/api/offline/queue', async () => {
-    const mgr = (fastify as any).offlineManager;
+    const mgr = fastify.offlineManager;
     if (!mgr) {
       return { messages: [] };
     }
@@ -57,7 +57,7 @@ export async function offlineRoutes(fastify: FastifyInstance) {
 
   // DELETE /api/offline/queue/:id — remove a specific queued message
   fastify.delete('/api/offline/queue/:id', async (request, reply) => {
-    const mgr = (fastify as any).offlineManager;
+    const mgr = fastify.offlineManager;
     if (!mgr) {
       return reply.status(503).send({ error: 'Offline manager not available' });
     }
@@ -72,7 +72,7 @@ export async function offlineRoutes(fastify: FastifyInstance) {
 
   // DELETE /api/offline/queue — clear all queued messages
   fastify.delete('/api/offline/queue', async () => {
-    const mgr = (fastify as any).offlineManager;
+    const mgr = fastify.offlineManager;
     if (!mgr) {
       return { cleared: 0 };
     }

@@ -30,7 +30,7 @@ export const exportRoutes: FastifyPluginAsync = async (server) => {
     const dataDir = server.localConfig.dataDir;
     const today = new Date().toISOString().slice(0, 10);
     // P0-4: Accept both 'workspaceId' and 'workspace'
-    const scopedWorkspaceId = (request.body as any)?.workspaceId ?? (request.body as any)?.workspace as string | undefined;
+    const scopedWorkspaceId = request.body?.workspaceId ?? request.body?.workspace;
 
     // Create ZIP archive
     const archive = archiver('zip', { zlib: { level: 6 } });

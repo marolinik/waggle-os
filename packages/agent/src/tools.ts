@@ -7,6 +7,8 @@ import type {
   HybridSearch,
   KnowledgeGraph,
   Embedder,
+  Importance,
+  FrameSource,
 } from '@waggle/core';
 import type { CognifyPipeline } from './cognify.js';
 import type { FeedbackHandler } from './feedback-handler.js';
@@ -212,7 +214,7 @@ export function createMindTools(deps: MindToolDeps): ToolDefinition[] {
           if (wsResults.length > 0) {
             sections.push('## Workspace Memory');
             sections.push(...wsResults.map((r, i) =>
-              `[${i + 1}] (score: ${r.finalScore.toFixed(3)}, type: ${r.frame.frame_type}, importance: ${r.frame.importance}, source: ${(r.frame as any).source ?? 'user_stated'})\n${r.frame.content}`
+              `[${i + 1}] (score: ${r.finalScore.toFixed(3)}, type: ${r.frame.frame_type}, importance: ${r.frame.importance}, source: ${r.frame.source ?? 'user_stated'})\n${r.frame.content}`
             ));
           }
         }
@@ -227,7 +229,7 @@ export function createMindTools(deps: MindToolDeps): ToolDefinition[] {
               sections.push('## Personal Memory\n_(Cross-workspace — not specific to this workspace)_');
             }
             sections.push(...personalResults.map((r, i) =>
-              `[${i + 1}] (score: ${r.finalScore.toFixed(3)}, type: ${r.frame.frame_type}, importance: ${r.frame.importance}, source: ${(r.frame as any).source ?? 'user_stated'})\n${r.frame.content}`
+              `[${i + 1}] (score: ${r.finalScore.toFixed(3)}, type: ${r.frame.frame_type}, importance: ${r.frame.importance}, source: ${r.frame.source ?? 'user_stated'})\n${r.frame.content}`
             ));
           }
         }
@@ -250,17 +252,18 @@ export function createMindTools(deps: MindToolDeps): ToolDefinition[] {
 
         for (const [label, db] of [['personal', deps.db], ...(wsLayers ? [['workspace', wsLayers.db] as const] : [])] as const) {
           const raw = db.getDatabase();
-          let fallbackFrames: Array<{ id: number; content: string; frame_type: string; importance: string }>;
+          type FallbackFrameRow = { id: number; content: string; frame_type: string; importance: string };
+          let fallbackFrames: FallbackFrameRow[];
           if (keywords.length > 0) {
             const likeClauses = keywords.map(() => "LOWER(content) LIKE '%' || ? || '%' ESCAPE '\\'").join(' OR ');
             const likeParams = keywords.map(k => k.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_'));
             fallbackFrames = raw.prepare(
               `SELECT id, content, frame_type, importance FROM memory_frames WHERE ${likeClauses} ORDER BY id DESC LIMIT ?`
-            ).all(...likeParams, limit) as any[];
+            ).all(...likeParams, limit) as FallbackFrameRow[];
           } else {
             fallbackFrames = raw.prepare(
               'SELECT id, content, frame_type, importance FROM memory_frames ORDER BY id DESC LIMIT ?'
-            ).all(limit) as any[];
+            ).all(limit) as FallbackFrameRow[];
           }
           if (fallbackFrames.length > 0) {
             if (wsLayers) allFallback.push(`## ${label === 'workspace' ? 'Workspace' : 'Personal'} Memory`);
@@ -374,9 +377,18 @@ export function createMindTools(deps: MindToolDeps): ToolDefinition[] {
           return `Memory save rate limit reached (${MAX_SAVES_PER_SESSION} saves this session). This prevents memory flooding. Start a new session to save more memories.`;
         }
 
-        let importance = typeof args.importance === 'string' ? args.importance : 'normal';
+        // Untrusted args: validate against the canonical unions, default on mismatch.
+        const VALID_IMPORTANCE: readonly Importance[] = ['critical', 'important', 'normal', 'temporary', 'deprecated'];
+        const VALID_SOURCE: readonly FrameSource[] = ['user_stated', 'tool_verified', 'agent_inferred', 'import', 'system', 'personal', 'workspace', 'team_sync'];
+        let importance: Importance =
+          typeof args.importance === 'string' && (VALID_IMPORTANCE as readonly string[]).includes(args.importance)
+            ? (args.importance as Importance)
+            : 'normal';
         const target = typeof args.target === 'string' ? args.target : 'workspace';
-        const source = typeof args.source === 'string' ? args.source : 'user_stated';
+        const source: FrameSource =
+          typeof args.source === 'string' && (VALID_SOURCE as readonly string[]).includes(args.source)
+            ? (args.source as FrameSource)
+            : 'user_stated';
         const wsLayers = deps.getWorkspaceLayers?.();
 
         // F6: Derive confidence from source if not explicitly provided
@@ -529,7 +541,7 @@ export function createMindTools(deps: MindToolDeps): ToolDefinition[] {
 
         // Use cognify pipeline if available (extracts entities + indexes for search)
         if (targetCognify) {
-          const result = await targetCognify.cognify(content, importance as any);
+          const result = await targetCognify.cognify(content, importance);
           return `Memory saved to ${mindLabel} mind (importance: ${importance}, source: ${source}, confidence: ${confidence}${dramaticFlag}${conflictFlag}, entities: ${result.entitiesExtracted}, relations: ${result.relationsCreated}).`;
         }
 
@@ -544,9 +556,9 @@ export function createMindTools(deps: MindToolDeps): ToolDefinition[] {
         }
         const latestI = targetFrames.getLatestIFrame(gopId);
         if (latestI) {
-          targetFrames.createPFrame(gopId, content, latestI.id, importance as any, source as any);
+          targetFrames.createPFrame(gopId, content, latestI.id, importance, source);
         } else {
-          targetFrames.createIFrame(gopId, content, importance as any, source as any);
+          targetFrames.createIFrame(gopId, content, importance, source);
         }
         return `Memory saved to ${mindLabel} mind (importance: ${importance}, source: ${source}, confidence: ${confidence}${dramaticFlag}${conflictFlag}).`;
       },

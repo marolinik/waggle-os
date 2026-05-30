@@ -150,7 +150,7 @@ describe('VaultStore', () => {
       },
     };
 
-    const migrated = vault.migrateFromConfig(config as any);
+    const migrated = vault.migrateFromConfig(config);
     expect(migrated).toBe(2);
 
     const anthropic = vault.get('anthropic');
@@ -173,10 +173,10 @@ describe('VaultStore', () => {
       },
     };
 
-    const first = vault.migrateFromConfig(config as any);
+    const first = vault.migrateFromConfig(config);
     expect(first).toBe(1);
 
-    const second = vault.migrateFromConfig(config as any);
+    const second = vault.migrateFromConfig(config);
     expect(second).toBe(0);
   });
 

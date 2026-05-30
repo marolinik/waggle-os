@@ -12,6 +12,7 @@
  */
 
 import { EventEmitter } from 'node:events';
+import type { WebSocket as WsWebSocket, RawData } from 'ws';
 import { createLogger } from './logger.js';
 const log = createLogger('team-ws');
 
@@ -21,9 +22,16 @@ export interface WsTeamClientConfig {
   teamSlug: string;
 }
 
+/** Inbound events from the team WebSocket server. */
+interface TeamServerEvent {
+  type: string;
+  teamSlug?: string;
+  message?: unknown;
+}
+
 export class WsTeamClient extends EventEmitter {
   private config: WsTeamClientConfig;
-  private ws: any = null;
+  private ws: WsWebSocket | null = null;
   private reconnectDelay = 1000;
   private maxReconnectDelay = 30000;
   private shouldReconnect = true;
@@ -50,9 +58,9 @@ export class WsTeamClient extends EventEmitter {
         this.send({ type: 'authenticate', token: this.config.token });
       });
 
-      this.ws.on('message', (data: any) => {
+      this.ws.on('message', (data: RawData) => {
         try {
-          const event = JSON.parse(data.toString());
+          const event = JSON.parse(data.toString()) as TeamServerEvent;
           this.handleEvent(event);
         } catch { /* invalid JSON — ignore */ }
       });
@@ -75,7 +83,7 @@ export class WsTeamClient extends EventEmitter {
     }
   }
 
-  private handleEvent(event: any): void {
+  private handleEvent(event: TeamServerEvent): void {
     switch (event.type) {
       case 'authenticated':
         this._authenticated = true;
@@ -123,7 +131,7 @@ export class WsTeamClient extends EventEmitter {
     return this._authenticated && this.ws?.readyState === 1; // WebSocket.OPEN
   }
 
-  send(event: any): void {
+  send(event: unknown): void {
     if (this.ws?.readyState === 1) {
       this.ws.send(JSON.stringify(event));
     }

@@ -21,7 +21,7 @@ export class KnowledgeService {
       validTo?: string;
     },
   ) {
-    const values: Record<string, unknown> = {
+    const values: typeof teamEntities.$inferInsert = {
       teamId,
       entityType: data.entityType,
       name: data.name,
@@ -31,7 +31,7 @@ export class KnowledgeService {
     if (data.validFrom) values.validFrom = new Date(data.validFrom);
     if (data.validTo) values.validTo = new Date(data.validTo);
 
-    const [entity] = await this.db.insert(teamEntities).values(values as any).returning();
+    const [entity] = await this.db.insert(teamEntities).values(values).returning();
     return entity;
   }
 
@@ -88,8 +88,8 @@ export class KnowledgeService {
     relationTypes?: string[],
   ) {
     const visited = new Set<string>([startEntityId]);
-    const resultEntities: any[] = [];
-    const resultRelations: any[] = [];
+    const resultEntities: Array<typeof teamEntities.$inferSelect> = [];
+    const resultRelations: Array<typeof teamRelations.$inferSelect> = [];
 
     let frontier = [startEntityId];
 

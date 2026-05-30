@@ -8,7 +8,7 @@
  * /api/marketplace/ contracts.
  */
 
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
@@ -21,14 +21,24 @@ import { requireTier } from '../../middleware/assert-tier.js';
 
 type ScanStatus = 'passed' | 'failed' | 'not_scanned' | 'unavailable';
 
+/**
+ * The `packages` table carries security-scan columns (populated by the
+ * security gate) that are not part of the public `MarketplacePackage` shape,
+ * since `search()` does `SELECT p.*`. Narrow to this when reading them.
+ */
+type PackageWithSecurity = MarketplacePackage & {
+  security_status?: string;
+  security_score?: number;
+};
+
 export async function marketplaceRoutes(fastify: FastifyInstance) {
   // ── Helpers ──────────────────────────────────────────────────────────
 
   function getDb(): MarketplaceDB | null {
-    return (fastify as any).marketplace ?? null;
+    return fastify.marketplace ?? null;
   }
 
-  function requireDb(reply: any): MarketplaceDB | null {
+  function requireDb(reply: FastifyReply): MarketplaceDB | null {
     const db = getDb();
     if (!db) {
       reply.code(503).send({
@@ -76,9 +86,9 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
 
     // Annotate each package with installation status and scan status
     const annotated = results.packages.map(pkg => {
-      const rawPkg = pkg as any;
-      const secStatus = rawPkg.security_status as string | undefined;
-      const secScore = rawPkg.security_score as number | undefined;
+      const rawPkg = pkg as PackageWithSecurity;
+      const secStatus = rawPkg.security_status;
+      const secScore = rawPkg.security_score;
 
       let scanStatus: ScanStatus = 'not_scanned';
       if (secStatus && secStatus !== 'unscanned') {
@@ -211,7 +221,7 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
       if (severity === 'CRITICAL') {
         // Log to audit store if available
         try {
-          (fastify as any).auditStore?.record({
+          fastify.auditStore?.record({
             capabilityName: pkg.name,
             capabilityType: pkg.waggle_install_type,
             source: 'marketplace',
@@ -236,7 +246,7 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
       // HIGH (score 25): Blocked unless force=true
       if (severity === 'HIGH' && !body.force) {
         try {
-          (fastify as any).auditStore?.record({
+          fastify.auditStore?.record({
             capabilityName: pkg.name,
             capabilityType: pkg.waggle_install_type,
             source: 'marketplace',
@@ -261,16 +271,16 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
       // HIGH with force=true: Log the override to audit trail
       if (severity === 'HIGH' && body.force) {
         try {
-          (fastify as any).auditStore?.record({
+          fastify.auditStore?.record({
             capabilityName: pkg.name,
             capabilityType: pkg.waggle_install_type,
             source: 'marketplace',
             riskLevel: 'high',
             trustSource: 'security-gate',
-            approvalClass: 'force-override',
+            approvalClass: 'elevated',
             action: 'approved',
             initiator: 'user',
-            detail: `User forced install despite HIGH severity findings: ${scanResult.findings.map(f => f.title).join('; ')}`,
+            detail: `User force-override install despite HIGH severity findings: ${scanResult.findings.map(f => f.title).join('; ')}`,
           });
         } catch { /* audit failure is non-blocking */ }
       }
@@ -278,7 +288,7 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
       // MEDIUM: Log warning but proceed
       if (severity === 'MEDIUM') {
         try {
-          (fastify as any).auditStore?.record({
+          fastify.auditStore?.record({
             capabilityName: pkg.name,
             capabilityType: pkg.waggle_install_type,
             source: 'marketplace',
@@ -295,7 +305,7 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
       // LOW: Log to audit trail only
       if (severity === 'LOW') {
         try {
-          (fastify as any).auditStore?.record({
+          fastify.auditStore?.record({
             capabilityName: pkg.name,
             capabilityType: pkg.waggle_install_type,
             source: 'marketplace',
@@ -328,7 +338,7 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
     // Update security status in DB after successful install
     if (result.success && scanResult) {
       try {
-        const rawDb = (db as any).db;
+        const rawDb = db.getRawDb();
         if (rawDb?.prepare) {
           rawDb.prepare(`
             UPDATE packages SET
@@ -636,7 +646,7 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
 
     if (db) {
       try {
-        const rawDb = (db as any).db;
+        const rawDb = db.getRawDb();
         if (rawDb?.prepare) {
           const row = rawDb.prepare(`
             SELECT
@@ -690,7 +700,7 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
     }
 
     // Read the skill file from ~/.waggle/skills/
-    const waggleHome = (fastify as any).localConfig?.dataDir || join(homedir(), '.waggle');
+    const waggleHome = fastify.localConfig?.dataDir || join(homedir(), '.waggle');
     const skillPath = join(waggleHome, 'skills', `${skillName}.md`);
 
     if (!existsSync(skillPath)) {
@@ -772,12 +782,12 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
       stars: 0,
       rating: 0,
       rating_count: 0,
-      platforms: JSON.stringify(['all']) as any,
-      dependencies: JSON.stringify([]) as any,
-      packs: JSON.stringify([]) as any,
+      platforms: JSON.stringify(['all']),
+      dependencies: JSON.stringify([]),
+      packs: JSON.stringify([]),
       install_manifest: JSON.stringify({
         skill_content: content,
-      }) as any,
+      }),
     });
 
     return reply.code(201).send({

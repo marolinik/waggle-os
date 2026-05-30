@@ -62,7 +62,7 @@ describe('JiraConnector', () => {
 
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true, json: async () => ({ displayName: 'Test User' }),
-    }) as any;
+    }) as unknown as typeof fetch;
 
     const health = await connector.healthCheck();
     expect(health.status).toBe('connected');
@@ -79,7 +79,7 @@ describe('JiraConnector', () => {
     const mockIssue = { key: 'PROJ-42', id: '10042' };
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true, json: async () => mockIssue,
-    }) as any;
+    }) as unknown as typeof fetch;
 
     const result = await connector.execute('create_issue', {
       project: 'PROJ',
@@ -105,7 +105,7 @@ describe('JiraConnector', () => {
       })
       .mockResolvedValueOnce({
         ok: true, json: async () => ({}), text: async () => '',
-      }) as any;
+      }) as unknown as typeof fetch;
 
     const result = await connector.execute('transition_issue', {
       issueKey: 'PROJ-42',

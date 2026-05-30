@@ -52,7 +52,7 @@ function writeTasks(dataDir: string, workspaceId: string, tasks: TeamTask[]): vo
 }
 
 export const taskRoutes: FastifyPluginAsync = async (fastify) => {
-  const dataDir = (fastify as any).localConfig.dataDir as string;
+  const dataDir = fastify.localConfig.dataDir;
 
   /**
    * D3: GET /api/tasks — global task view across all workspaces.
@@ -61,7 +61,7 @@ export const taskRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get<{
     Querystring: { status?: string };
   }>('/api/tasks', async (request, reply) => {
-    const workspaces = (fastify as any).workspaceManager?.list() ?? [];
+    const workspaces = fastify.workspaceManager?.list() ?? [];
     const allTasks: Array<TeamTask & { workspaceId: string; workspaceName: string }> = [];
 
     for (const ws of workspaces) {

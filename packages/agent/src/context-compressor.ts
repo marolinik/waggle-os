@@ -90,7 +90,10 @@ function detectContentType(text: string): 'code' | 'json' | 'prose' | 'mixed' {
   const codeRatio = codeChars / sample.length;
   if (codeRatio > 0.06) return 'code';
 
-  // Non-ASCII ratio for multilingual detection
+  // Non-ASCII ratio for multilingual detection. The \x00-\x7F range boundary
+  // is intentional — we count every code point OUTSIDE the 7-bit ASCII block,
+  // so the control-char lower bound is the correct, deliberate range start.
+  // eslint-disable-next-line no-control-regex
   const nonAscii = (sample.match(/[^\x00-\x7F]/g) || []).length;
   if (nonAscii / sample.length > 0.15) return 'mixed';
 

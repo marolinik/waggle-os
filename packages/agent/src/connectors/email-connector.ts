@@ -147,8 +147,8 @@ export class EmailConnector extends BaseConnector {
 
     try {
       const personalizations: Record<string, unknown>[] = [{ to: [{ email: params.to }] }];
-      if (params.cc) (personalizations[0] as any).cc = [{ email: params.cc }];
-      if (params.bcc) (personalizations[0] as any).bcc = [{ email: params.bcc }];
+      if (params.cc) personalizations[0].cc = [{ email: params.cc }];
+      if (params.bcc) personalizations[0].bcc = [{ email: params.bcc }];
 
       const content = params.html
         ? [{ type: 'text/html', value: params.body }]

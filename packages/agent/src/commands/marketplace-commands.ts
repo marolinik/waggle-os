@@ -172,10 +172,10 @@ function marketplaceCommand(): CommandDefinition {
             const response = await fetch(url);
             if (!response.ok) {
               const err = await response.json().catch(() => ({ error: response.statusText }));
-              return `Marketplace search failed: ${(err as any).error || response.statusText}`;
+              return `Marketplace search failed: ${(err as { error?: string }).error || response.statusText}`;
             }
-            const data = await response.json();
-            return formatSearchResults(data as any);
+            const data = await response.json() as Parameters<typeof formatSearchResults>[0];
+            return formatSearchResults(data);
           } catch (err) {
             return `Marketplace search error: ${err instanceof Error ? err.message : String(err)}`;
           }
@@ -241,10 +241,10 @@ function marketplaceCommand(): CommandDefinition {
             const response = await fetch(`${BASE_URL}/api/marketplace/packs`);
             if (!response.ok) {
               const err = await response.json().catch(() => ({ error: response.statusText }));
-              return `Failed to list packs: ${(err as any).error || response.statusText}`;
+              return `Failed to list packs: ${(err as { error?: string }).error || response.statusText}`;
             }
-            const data = await response.json();
-            return formatPacks(data as any);
+            const data = await response.json() as Parameters<typeof formatPacks>[0];
+            return formatPacks(data);
           } catch (err) {
             return `Packs error: ${err instanceof Error ? err.message : String(err)}`;
           }
@@ -255,10 +255,10 @@ function marketplaceCommand(): CommandDefinition {
             const response = await fetch(`${BASE_URL}/api/marketplace/installed`);
             if (!response.ok) {
               const err = await response.json().catch(() => ({ error: response.statusText }));
-              return `Failed to list installed: ${(err as any).error || response.statusText}`;
+              return `Failed to list installed: ${(err as { error?: string }).error || response.statusText}`;
             }
-            const data = await response.json();
-            return formatInstalled(data as any);
+            const data = await response.json() as Parameters<typeof formatInstalled>[0];
+            return formatInstalled(data);
           } catch (err) {
             return `Installed error: ${err instanceof Error ? err.message : String(err)}`;
           }
@@ -271,7 +271,7 @@ function marketplaceCommand(): CommandDefinition {
             });
             if (!response.ok) {
               const err = await response.json().catch(() => ({ error: response.statusText }));
-              return `Sync failed: ${(err as any).error || response.statusText}`;
+              return `Sync failed: ${(err as { error?: string }).error || response.statusText}`;
             }
             const data = await response.json() as {
               results?: Array<{ source: string; added: number; updated: number; errors: string[] }>;

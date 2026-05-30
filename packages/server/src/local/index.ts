@@ -10,8 +10,9 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
-import { MindDB, MultiMind, MultiMindCache, WorkspaceManager, WaggleConfig, createEmbeddingProvider, type EmbeddingProviderConfig, type EmbeddingProviderInstance, FrameStore, SessionStore, InstallAuditStore, CronStore, AwarenessLayer, VaultStore, SkillHashStore, OptimizationLogStore, ImprovementSignalStore, HarvestSourceStore, ClaudeCodeAdapter, reconcileIndexes, TeamSync, TelemetryStore, TELEMETRY_EVENTS, ExecutionTraceStore, EvolutionRunStore, ComplianceTemplateStore } from '@waggle/core';
+import { MindDB, MultiMind, MultiMindCache, WorkspaceManager, WaggleConfig, createEmbeddingProvider, type EmbeddingProviderConfig, type EmbeddingProviderInstance, FrameStore, SessionStore, InstallAuditStore, CronStore, AwarenessLayer, VaultStore, SkillHashStore, OptimizationLogStore, ImprovementSignalStore, HarvestSourceStore, ClaudeCodeAdapter, reconcileIndexes, TeamSync, TelemetryStore, TELEMETRY_EVENTS, ExecutionTraceStore, EvolutionRunStore, ComplianceTemplateStore, type WorkspaceConfig } from '@waggle/core';
 import { corsOriginAllowed } from './cors-config.js';
+import { getStorageProvider } from './storage/index.js';
 import { resolveBindHost } from './net-config.js';
 import { isLocalRequest } from './origin-guard.js';
 import { MemoryWeaver } from '@waggle/weaver';
@@ -144,6 +145,10 @@ export interface LocalConfig {
   host: string;
   dataDir: string;       // ~/.waggle
   litellmUrl: string;    // http://localhost:4000
+  /** Governed CLI execution — allowlist of program names the agent may run. */
+  cli?: { allowlist?: string[] };
+  /** Active subscription tier, when known (drives session/feature caps). */
+  tier?: string;
 }
 
 /** Pending approval request — resolved when user approves or denies. */
@@ -230,6 +235,10 @@ export interface AgentState {
   llmProvider: LlmProviderStatus;
   /** Session token for WebSocket authentication (generated on server startup) */
   wsSessionToken: string;
+  /** Memory-weaver run timestamps for the personal mind. */
+  weaverState: { lastPersonalConsolidation: string | null; lastPersonalDecay: string | null };
+  /** Per-workspace memory-weaver run timestamps, keyed by workspace ID. */
+  workspaceWeaverStatus: Record<string, { lastConsolidation: string | null }>;
 }
 
 declare module 'fastify' {
@@ -271,6 +280,8 @@ declare module 'fastify' {
      * Started at boot, stopped on close.
      */
     harnessTraceBridge: HarnessTraceBridge;
+    /** Clears the cached LLM key-validation result; called by the settings route after a key update. */
+    _invalidateKeyValidationCache?: () => void;
   }
 }
 
@@ -631,7 +642,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   const lspTools = createLspTools(defaultWorkspace);
 
   // CLI tools — governed CLI program execution
-  const cliAllowlist = (fullConfig as any).cli?.allowlist ?? [];
+  const cliAllowlist = fullConfig.cli?.allowlist ?? [];
   const cliTools = createCliTools({ allowlist: cliAllowlist });
 
   // Dynamic connector tools (initial — regenerated per workspace in buildToolsForWorkspace)
@@ -926,9 +937,6 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     try {
       const wsMeta = wsManager.get(workspaceId);
       if (!wsMeta || wsMeta.storageType !== 'team') return undefined;
-      // Lazy-import to avoid dragging storage code into the hot path on
-      // non-team workspaces.
-      const { getStorageProvider } = require('./storage/index.js') as typeof import('./storage/index.js');
       const provider = getStorageProvider(
         {
           id: wsMeta.id,
@@ -1121,7 +1129,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   // ── TeamSync cache — one TeamSync instance per team workspace ──
   const teamSyncCache = new Map<string, TeamSync>();
 
-  function getTeamSync(workspaceId: string, wsConfig: any, waggleConfig: WaggleConfig): TeamSync | null {
+  function getTeamSync(workspaceId: string, wsConfig: WorkspaceConfig | null, waggleConfig: WaggleConfig): TeamSync | null {
     if (!wsConfig?.teamId || !wsConfig?.teamServerUrl) return null;
     const cached = teamSyncCache.get(workspaceId);
     if (cached) return cached;
@@ -2174,7 +2182,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   }
 
   // Expose cache invalidation for settings route to call after key update
-  (server as any)._invalidateKeyValidationCache = () => {
+  server._invalidateKeyValidationCache = () => {
     keyValidationCache = null;
     // If currently degraded due to bad key, reset to healthy for re-validation
     if (server.agentState.llmProvider.health === 'degraded') {
@@ -2186,19 +2194,20 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   // IMP-15: API docs — auto-generated from Fastify route registry
   server.get('/api/docs', async () => {
     const routes: Array<{ method: string; url: string; prefix: string }> = [];
-    // Fastify exposes registered routes via the internal routing tree
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const allRoutes: any[] = (server as any).routes ?? [];
+    // Fastify exposes registered routes via the internal routing tree, which is
+    // not part of the public typings — read it through an `unknown[]` and narrow.
+    const allRoutes: unknown[] = (server as { routes?: unknown[] }).routes ?? [];
     // Iterate printRoutes() style — Fastify 4.x stores routes differently
     // Use server.printRoutes() as a fallback reference
     try {
       // Fastify stores routes in server[Symbol.for('registered-routes')] or similar
       // Best approach: iterate after ready using routesByMethod
       for (const route of allRoutes) {
-        if (typeof route === 'object' && route.url && route.method) {
-          const methods = Array.isArray(route.method) ? route.method : [route.method];
+        if (route && typeof route === 'object' && 'url' in route && 'method' in route) {
+          const r = route as { url: string; method: string | string[]; prefix?: string };
+          const methods = Array.isArray(r.method) ? r.method : [r.method];
           for (const m of methods) {
-            routes.push({ method: m, url: route.url, prefix: route.prefix ?? '' });
+            routes.push({ method: m, url: r.url, prefix: r.prefix ?? '' });
           }
         }
       }

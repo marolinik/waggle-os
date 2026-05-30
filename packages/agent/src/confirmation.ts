@@ -173,7 +173,7 @@ const TRUSTED_AUTOPASS = new Set<string>([
  * Kept deliberately small — only truly terminal operations.
  */
 const CRITICAL_NEVER_AUTOPASS: RegExp[] = [
-  /\brm\s+-[rf]+\s*[\/~]\s*(?:$|\s)/,             // rm -rf / or rm -rf ~
+  /\brm\s+-[rf]+\s*[/~]\s*(?:$|\s)/,             // rm -rf / or rm -rf ~
   /\brm\s+-[rf]+\s+\$HOME/,                        // rm -rf $HOME
   /\brm\s+-[rf]+\s+\/\*/,                          // rm -rf /*
   /\bsudo\b/,                                      // any sudo

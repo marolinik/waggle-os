@@ -12,6 +12,7 @@
 
 import { randomUUID } from 'node:crypto';
 import type { SourceAdapter, UniversalImportItem, ImportSourceType, ConversationMessage } from './types.js';
+import { asRecord, firstString, getArray, getString, type RawRecord } from './raw-types.js';
 
 /** Heuristic source detection from content cues. */
 function detectSource(input: unknown): ImportSourceType {
@@ -27,31 +28,36 @@ function detectSource(input: unknown): ImportSourceType {
     return 'unknown';
   }
 
-  if (typeof input === 'object' && input !== null) {
-    const keys = Object.keys(input);
-    if (keys.includes('perplexity') || (input as any).source === 'perplexity') return 'perplexity';
-    if (keys.includes('grok') || (input as any).source === 'grok') return 'grok';
-    if ((input as any).provider === 'qwen') return 'qwen';
+  const obj = asRecord(input);
+  if (obj) {
+    const keys = Object.keys(obj);
+    const source = getString(obj, 'source');
+    if (keys.includes('perplexity') || source === 'perplexity') return 'perplexity';
+    if (keys.includes('grok') || source === 'grok') return 'grok';
+    if (getString(obj, 'provider') === 'qwen') return 'qwen';
   }
 
   return 'unknown';
 }
 
 /** Try to find conversations in any JSON structure. */
-function findConversations(obj: any): any[] | null {
+function findConversations(obj: unknown): RawRecord[] | null {
   if (Array.isArray(obj)) {
-    if (obj.length > 0 && (obj[0].messages || obj[0].chat_messages || obj[0].turns || obj[0].history)) {
-      return obj;
+    const first = asRecord(obj[0]);
+    if (obj.length > 0 && first && (first.messages || first.chat_messages || first.turns || first.history)) {
+      return obj.map(asRecord).filter((c): c is RawRecord => c !== null);
     }
-    if (obj.length > 0 && (obj[0].role || obj[0].sender || obj[0].author)) {
+    if (obj.length > 0 && first && (first.role || first.sender || first.author)) {
       return [{ title: 'Imported Conversation', messages: obj }];
     }
   }
 
-  if (typeof obj === 'object' && obj !== null) {
+  const record = asRecord(obj);
+  if (record) {
     for (const key of ['conversations', 'chats', 'threads', 'sessions', 'history', 'data']) {
-      if (Array.isArray(obj[key])) {
-        return findConversations(obj[key]);
+      const nested = getArray(record, key);
+      if (nested) {
+        return findConversations(nested);
       }
     }
   }
@@ -96,23 +102,26 @@ export class UniversalAdapter implements SourceAdapter {
     return items;
   }
 
-  private parseJson(input: any): UniversalImportItem[] {
+  private parseJson(input: object): UniversalImportItem[] {
     const source = detectSource(input);
     const items: UniversalImportItem[] = [];
     const conversations = findConversations(input);
 
     if (conversations) {
       for (const conv of conversations) {
-        const title = conv.title ?? conv.name ?? conv.subject ?? 'Imported Conversation';
-        const rawMessages = conv.messages ?? conv.chat_messages ?? conv.turns ?? conv.history ?? [];
+        const title = firstString(conv, 'title', 'name', 'subject') ?? 'Imported Conversation';
+        const rawMessages = getArray(conv, 'messages') ?? getArray(conv, 'chat_messages')
+          ?? getArray(conv, 'turns') ?? getArray(conv, 'history') ?? [];
         const messages: ConversationMessage[] = [];
 
-        for (const msg of rawMessages) {
+        for (const rawMsg of rawMessages) {
+          const msg = asRecord(rawMsg);
+          if (!msg) continue;
           const role = this.resolveRole(msg);
           if (!role) continue;
           const text = this.extractText(msg);
           if (!text) continue;
-          messages.push({ role, text, timestamp: msg.timestamp ?? msg.created_at ?? msg.createTime });
+          messages.push({ role, text, timestamp: firstString(msg, 'timestamp', 'created_at', 'createTime') });
         }
 
         if (messages.length === 0) continue;
@@ -124,18 +133,19 @@ export class UniversalAdapter implements SourceAdapter {
           title,
           content: messages.map(m => `${m.role}: ${m.text}`).join('\n\n'),
           messages,
-          timestamp: conv.created_at ?? conv.createTime ?? conv.timestamp ?? new Date().toISOString(),
-          metadata: { parseMethod: 'universal-json', detectedSource: source, conversationId: conv.id },
+          timestamp: firstString(conv, 'created_at', 'createTime', 'timestamp') ?? new Date().toISOString(),
+          metadata: { parseMethod: 'universal-json', detectedSource: source, conversationId: getString(conv, 'id') },
         });
       }
     }
 
     if (items.length === 0) {
+      const record = asRecord(input);
       items.push({
         id: randomUUID(),
         source,
         type: 'memory',
-        title: (input as any).title ?? 'Imported Data',
+        title: (record && getString(record, 'title')) ?? 'Imported Data',
         content: JSON.stringify(input, null, 2).slice(0, 50000),
         timestamp: new Date().toISOString(),
         metadata: { parseMethod: 'universal-json-raw', detectedSource: source },
@@ -183,27 +193,40 @@ export class UniversalAdapter implements SourceAdapter {
     return messages;
   }
 
-  private resolveRole(msg: any): 'user' | 'assistant' | null {
-    const role = msg.role ?? msg.sender ?? msg.author ?? msg.type;
+  private resolveRole(msg: RawRecord): 'user' | 'assistant' | null {
+    const role = firstString(msg, 'role', 'sender', 'author', 'type');
     if (!role) return null;
-    const r = String(role).toLowerCase();
+    const r = role.toLowerCase();
     if (['user', 'human', 'me'].includes(r)) return 'user';
     if (['assistant', 'ai', 'bot', 'model', 'system'].includes(r)) return 'assistant';
     return null;
   }
 
-  private extractText(msg: any): string {
-    if (typeof msg.text === 'string') return msg.text.trim();
-    if (typeof msg.content === 'string') return msg.content.trim();
-    if (Array.isArray(msg.content)) {
-      return msg.content
-        .filter((b: any) => typeof b === 'string' || b.type === 'text')
-        .map((b: any) => typeof b === 'string' ? b : b.text)
+  private extractText(msg: RawRecord): string {
+    const directText = getString(msg, 'text');
+    if (directText !== undefined) return directText.trim();
+    const directContent = getString(msg, 'content');
+    if (directContent !== undefined) return directContent.trim();
+    const contentBlocks = getArray(msg, 'content');
+    if (contentBlocks) {
+      return contentBlocks
+        .map(b => {
+          if (typeof b === 'string') return b;
+          const rec = asRecord(b);
+          return rec && rec.type === 'text' ? getString(rec, 'text') ?? '' : undefined;
+        })
+        .filter((t): t is string => typeof t === 'string')
         .join('\n')
         .trim();
     }
-    if (Array.isArray(msg.parts)) {
-      return msg.parts.filter((p: any) => p.text).map((p: any) => p.text).join('\n').trim();
+    const parts = getArray(msg, 'parts');
+    if (parts) {
+      return parts
+        .map(asRecord)
+        .map(p => (p ? getString(p, 'text') : undefined))
+        .filter((t): t is string => typeof t === 'string')
+        .join('\n')
+        .trim();
     }
     return '';
   }

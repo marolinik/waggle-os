@@ -19,16 +19,46 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import type { ToolDefinition } from './tools.js';
 
+// playwright-core is an OPTIONAL runtime dependency loaded via dynamic import.
+// It is not a declared dependency of this package, so we describe only the
+// minimal surface we use rather than importing its types (which would create
+// an undeclared compile-time dependency). These structural interfaces narrow
+// the otherwise-untyped dynamic module to exactly the calls we make.
+interface BrowserPage {
+  goto(url: string, opts?: { waitUntil?: string; timeout?: number }): Promise<unknown>;
+  title(): Promise<string>;
+  url(): string;
+  screenshot(opts: { path: string; fullPage: boolean }): Promise<unknown>;
+  click(selector: string, opts?: { timeout?: number }): Promise<unknown>;
+  fill(selector: string, value: string, opts?: { timeout?: number }): Promise<unknown>;
+  evaluate<R>(pageFunction: () => R): Promise<Awaited<R>>;
+  evaluate(pageFunction: string): Promise<unknown>;
+}
+interface BrowserContext {
+  newPage(): Promise<BrowserPage>;
+}
+interface BrowserInstance {
+  newContext(): Promise<BrowserContext>;
+  close(): Promise<void>;
+}
+interface ChromiumLauncher {
+  launch(opts: { headless: boolean; args: string[] }): Promise<BrowserInstance>;
+}
+interface PlaywrightModule {
+  chromium?: ChromiumLauncher;
+  default?: { chromium?: ChromiumLauncher };
+}
+
 // Module-level browser state — shared across all tool invocations in a session
-let browserInstance: any = null;
-let pageInstance: any = null;
-let playwrightModule: any = null;
+let browserInstance: BrowserInstance | null = null;
+let pageInstance: BrowserPage | null = null;
+let playwrightModule: PlaywrightModule | null = null;
 
 /** Try to import playwright-core. Returns the module or null. */
-async function getPlaywright(): Promise<any> {
+async function getPlaywright(): Promise<PlaywrightModule | null> {
   if (playwrightModule) return playwrightModule;
   try {
-    playwrightModule = await import('playwright-core');
+    playwrightModule = (await import('playwright-core')) as PlaywrightModule;
     return playwrightModule;
   } catch {
     return null;
@@ -36,7 +66,9 @@ async function getPlaywright(): Promise<any> {
 }
 
 /** Ensure a browser and page are running. Returns { browser, page } or throws. */
-async function ensureBrowser(workspacePath: string): Promise<{ browser: any; page: any }> {
+async function ensureBrowser(
+  workspacePath: string,
+): Promise<{ browser: BrowserInstance; page: BrowserPage }> {
   const pw = await getPlaywright();
   if (!pw) {
     throw new Error(
@@ -132,8 +164,8 @@ export function createBrowserTools(workspacePath: string): ToolDefinition[] {
           const title = await page.title();
           const finalUrl = page.url();
           return `Navigated to: ${finalUrl}\nTitle: ${title}`;
-        } catch (err: any) {
-          return `Browser navigate error: ${err.message}`;
+        } catch (err: unknown) {
+          return `Browser navigate error: ${err instanceof Error ? err.message : String(err)}`;
         }
       },
     },
@@ -162,8 +194,8 @@ export function createBrowserTools(workspacePath: string): ToolDefinition[] {
           const filepath = path.join(screenshotDir, filename);
           await page.screenshot({ path: filepath, fullPage });
           return `Screenshot saved: ${filepath}`;
-        } catch (err: any) {
-          return `Browser screenshot error: ${err.message}`;
+        } catch (err: unknown) {
+          return `Browser screenshot error: ${err instanceof Error ? err.message : String(err)}`;
         }
       },
     },
@@ -189,8 +221,8 @@ export function createBrowserTools(workspacePath: string): ToolDefinition[] {
           const { page } = await ensureBrowser(workspacePath);
           await page.click(selector, { timeout: 10_000 });
           return `Clicked element: ${selector}`;
-        } catch (err: any) {
-          return `Browser click error: ${err.message}`;
+        } catch (err: unknown) {
+          return `Browser click error: ${err instanceof Error ? err.message : String(err)}`;
         }
       },
     },
@@ -221,8 +253,8 @@ export function createBrowserTools(workspacePath: string): ToolDefinition[] {
           const { page } = await ensureBrowser(workspacePath);
           await page.fill(selector, value, { timeout: 10_000 });
           return `Filled "${selector}" with value (${value.length} chars)`;
-        } catch (err: any) {
-          return `Browser fill error: ${err.message}`;
+        } catch (err: unknown) {
+          return `Browser fill error: ${err instanceof Error ? err.message : String(err)}`;
         }
       },
     },
@@ -253,8 +285,8 @@ export function createBrowserTools(workspacePath: string): ToolDefinition[] {
             return `Result: ${JSON.stringify(result, null, 2)}`;
           }
           return `Result: ${String(result)}`;
-        } catch (err: any) {
-          return `Browser evaluate error: ${err.message}`;
+        } catch (err: unknown) {
+          return `Browser evaluate error: ${err instanceof Error ? err.message : String(err)}`;
         }
       },
     },
@@ -339,8 +371,8 @@ export function createBrowserTools(workspacePath: string): ToolDefinition[] {
           }
 
           return `Page snapshot:\n\n${snapshot}`;
-        } catch (err: any) {
-          return `Browser snapshot error: ${err.message}`;
+        } catch (err: unknown) {
+          return `Browser snapshot error: ${err instanceof Error ? err.message : String(err)}`;
         }
       },
     },

@@ -13,8 +13,8 @@ import { MemoryWeaver } from '@waggle/weaver';
 export const weaverRoutes: FastifyPluginAsync = async (server) => {
   // F2: GET /api/weaver/status — check weaver state
   server.get('/api/weaver/status', async () => {
-    const weaverState = (server.agentState as any).weaverState ?? {};
-    const workspaceWeavers = (server.agentState as any).workspaceWeaverStatus ?? {};
+    const weaverState = server.agentState.weaverState ?? { lastPersonalConsolidation: null, lastPersonalDecay: null };
+    const workspaceWeavers = server.agentState.workspaceWeaverStatus ?? {};
 
     return {
       personalMind: {
@@ -22,7 +22,7 @@ export const weaverRoutes: FastifyPluginAsync = async (server) => {
         lastDecay: weaverState.lastPersonalDecay ?? null,
         timerActive: true,
       },
-      workspaces: Object.entries(workspaceWeavers).map(([id, state]: [string, any]) => ({
+      workspaces: Object.entries(workspaceWeavers).map(([id, state]) => ({
         id,
         lastConsolidation: state?.lastConsolidation ?? null,
         timerActive: true,

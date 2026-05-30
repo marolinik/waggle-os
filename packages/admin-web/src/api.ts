@@ -5,6 +5,16 @@
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3100';
 
+/**
+ * Extracts a human-readable message from an unknown thrown value.
+ * Use in `catch (err)` blocks where `err` is `unknown` under strict mode.
+ */
+export function getErrorMessage(error: unknown, fallback = 'Unexpected error'): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return fallback;
+}
+
 async function apiFetch<T = unknown>(path: string, token: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: { Authorization: `Bearer ${token}` },

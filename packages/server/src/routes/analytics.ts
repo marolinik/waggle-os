@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { AnalyticsService } from '../services/analytics-service.js';
 import { TeamService } from '../services/team-service.js';
 
@@ -8,7 +8,7 @@ export async function analyticsRoutes(fastify: FastifyInstance) {
   const analyticsService = new AnalyticsService(fastify.db);
   const teamService = new TeamService(fastify.db);
 
-  async function requireAdmin(request: any, reply: any, slug: string) {
+  async function requireAdmin(request: FastifyRequest, reply: FastifyReply, slug: string) {
     const team = await teamService.getBySlug(slug);
     if (!team) {
       reply.code(404).send({ error: 'Team not found' });

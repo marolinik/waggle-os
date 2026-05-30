@@ -187,7 +187,7 @@ const NEW_SOURCES: NewSource[] = [
  * @returns Count of newly added sources
  */
 export function seedNewSources(db: MarketplaceDB): number {
-  const rawDb = (db as any).db;
+  const rawDb = db.getRawDb();
   let added = 0;
 
   for (const source of NEW_SOURCES) {

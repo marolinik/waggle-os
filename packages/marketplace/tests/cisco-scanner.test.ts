@@ -116,11 +116,11 @@ function mockScannerWithFindingsExec(findingsJson: string) {
     }
 
     if (args.includes('scan') || args.some(a => a === 'scan')) {
-      const err: any = new Error('Process exited with code 1');
-      err.code = 1;
-      err.stdout = findingsJson;
-      err.stderr = '';
-      throw err;
+      throw Object.assign(new Error('Process exited with code 1'), {
+        code: 1,
+        stdout: findingsJson,
+        stderr: '',
+      });
     }
 
     throw Object.assign(new Error(`Command not found: ${cmd}`), { code: 'ENOENT' });

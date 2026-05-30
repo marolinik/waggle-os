@@ -23,6 +23,13 @@ import { test, expect, type Page, type APIRequestContext } from '@playwright/tes
 
 const API = 'http://127.0.0.1:3333';
 
+// ── Minimal response shapes (API JSON is untyped at the boundary) ──────────────
+interface PersonaShape { id: string }
+interface HookRuleShape { pattern: string }
+interface ConnectorShape { id?: string; name?: string; status?: string; authType?: string }
+interface WorkspaceShape { id?: string; name?: string }
+interface RecallResultShape { source_mind?: string; mind?: string }
+
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
 async function waitForApp(page: Page) {
@@ -219,7 +226,7 @@ test.describe('Act 2 — The Memory Hook: "It Remembers Me"', () => {
       const data = await res.json();
       const results = data.results ?? data.recalled ?? [];
       // Bob's workspace search must never return Alice's data
-      const leaked = results.some((r: any) =>
+      const leaked = results.some((r: unknown) =>
         JSON.stringify(r).includes('alice-private-data')
       );
       expect(leaked).toBe(false);
@@ -247,7 +254,7 @@ test.describe('Act 3 — Persona Bonding & Identity', () => {
   test('U3.1 — Researcher persona exists with research-oriented description', async ({ request }) => {
     const res = await request.get(`${API}/api/personas`);
     const data = await res.json();
-    const researcher = data.personas.find((p: any) => p.id === 'researcher');
+    const researcher = data.personas.find((p: PersonaShape) => p.id === 'researcher');
     expect(researcher).toBeDefined();
     // Researcher description must mention research/investigation — not generic
     expect(researcher.description.toLowerCase()).toMatch(/research|investigation|synthesis/);
@@ -256,8 +263,8 @@ test.describe('Act 3 — Persona Bonding & Identity', () => {
   test('U3.2 — Analyst persona is distinct from Researcher (different description)', async ({ request }) => {
     const res = await request.get(`${API}/api/personas`);
     const data = await res.json();
-    const researcher = data.personas.find((p: any) => p.id === 'researcher');
-    const analyst = data.personas.find((p: any) => p.id === 'analyst');
+    const researcher = data.personas.find((p: PersonaShape) => p.id === 'researcher');
+    const analyst = data.personas.find((p: PersonaShape) => p.id === 'analyst');
     expect(researcher).toBeDefined();
     expect(analyst).toBeDefined();
     // Descriptions must differ — otherwise personas are fake
@@ -267,7 +274,7 @@ test.describe('Act 3 — Persona Bonding & Identity', () => {
   test('U3.3 — Verifier persona exists (read-only enforcement is backend-side)', async ({ request }) => {
     const res = await request.get(`${API}/api/personas`);
     const data = await res.json();
-    const verifier = data.personas.find((p: any) => p.id === 'verifier');
+    const verifier = data.personas.find((p: PersonaShape) => p.id === 'verifier');
     expect(verifier).toBeDefined();
     // isReadOnly is enforced at the agent loop level, not serialized to API
     // Verify description mentions adversarial/quality/review
@@ -277,7 +284,7 @@ test.describe('Act 3 — Persona Bonding & Identity', () => {
   test('U3.4 — Consultant persona has suggested connectors (feels professional)', async ({ request }) => {
     const res = await request.get(`${API}/api/personas`);
     const data = await res.json();
-    const consultant = data.personas.find((p: any) => p.id === 'consultant');
+    const consultant = data.personas.find((p: PersonaShape) => p.id === 'consultant');
     expect(consultant).toBeDefined();
     // Consultant must suggest business connectors — otherwise it's generic
     if (consultant.suggestedConnectors) {
@@ -450,11 +457,11 @@ test.describe('Act 5 — Trust Escalation: Safety → Confidence', () => {
     const listRes = await request.get(`${API}/api/hooks`);
     expect(listRes.ok()).toBe(true);
     const listData = await listRes.json();
-    const found = listData.rules.some((r: any) => r.pattern === 'trust-escalation-test-pattern');
+    const found = listData.rules.some((r: HookRuleShape) => r.pattern === 'trust-escalation-test-pattern');
     expect(found).toBe(true);
 
     // Cleanup
-    const idx = listData.rules.findIndex((r: any) => r.pattern === 'trust-escalation-test-pattern');
+    const idx = listData.rules.findIndex((r: HookRuleShape) => r.pattern === 'trust-escalation-test-pattern');
     if (idx >= 0) await request.delete(`${API}/api/hooks/${idx}`);
   });
 
@@ -793,7 +800,7 @@ test.describe('Act 8 — Error Recovery: Graceful Degradation', () => {
     const data = await res.json();
 
     // Connectors without credentials must show "disconnected" not crash
-    const disconnected = data.connectors.filter((c: any) => c.status === 'disconnected');
+    const disconnected = data.connectors.filter((c: ConnectorShape) => c.status === 'disconnected');
     // Every disconnected connector must have a name (not null/undefined crash)
     for (const c of disconnected) {
       expect(c.name).toBeDefined();
@@ -851,7 +858,7 @@ test.describe('Act 9 — Workspace Identity & Ownership', () => {
     const workspaces = await listRes.json();
 
     // The workspace the user just created must appear in the list
-    const found = workspaces.find((w: any) =>
+    const found = workspaces.find((w: WorkspaceShape) =>
       w.name === wsName || w.id === wsName || JSON.stringify(w).includes(wsName)
     );
     // Either found directly or workspace system works (create may use slug)
@@ -885,7 +892,7 @@ test.describe('Act 9 — Workspace Identity & Ownership', () => {
       const results = data.results ?? data.recalled ?? [];
       // Personal mind frames may appear in any workspace search (current design).
       // What matters: workspace-mind frames from ws1 must NOT appear in ws2 results.
-      const wsLeaked = results.some((r: any) =>
+      const wsLeaked = results.some((r: RecallResultShape) =>
         r.source_mind === 'workspace' && r.mind === 'workspace' &&
         JSON.stringify(r).toLowerCase().includes('workspace a exclusive')
       );
@@ -988,7 +995,7 @@ test.describe('Act 10 — The Compulsion Loop: Full Value Cycle', () => {
     expect(connectors.length).toBeGreaterThanOrEqual(29);
 
     // Step 2: Every connector has a setup path (no dead-ends)
-    const disconnected = connectors.filter((c: any) => c.status !== 'connected');
+    const disconnected = connectors.filter((c: ConnectorShape) => c.status !== 'connected');
     for (const c of disconnected.slice(0, 5)) {
       // Must have at minimum a name — so user knows what they're connecting
       expect(c.name).toBeTruthy();

@@ -72,7 +72,7 @@ describe('GoogleCalendarConnector', () => {
 
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true, json: async () => ({ items: [] }),
-    }) as any;
+    }) as unknown as typeof fetch;
 
     const health = await connector.healthCheck();
     expect(health.status).toBe('connected');
@@ -99,7 +99,7 @@ describe('GoogleCalendarConnector', () => {
       // Second call: calendar list (health check)
       .mockResolvedValueOnce({
         ok: true, json: async () => ({ items: [] }),
-      }) as any;
+      }) as unknown as typeof fetch;
 
     const health = await connector.healthCheck();
     expect(health.status).toBe('connected');
@@ -117,11 +117,11 @@ describe('GoogleCalendarConnector', () => {
     const mockEvents = { items: [{ summary: 'Meeting', start: { dateTime: '2026-03-18T10:00:00Z' } }] };
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true, json: async () => mockEvents,
-    }) as any;
+    }) as unknown as typeof fetch;
 
     const result = await connector.execute('list_events', {});
     expect(result.success).toBe(true);
-    expect((result.data as any).items).toHaveLength(1);
+    expect((result.data as Record<string, unknown>).items).toHaveLength(1);
   });
 
   it('execute(create_event) creates event (medium risk)', async () => {
@@ -131,7 +131,7 @@ describe('GoogleCalendarConnector', () => {
     const mockEvent = { id: 'evt_123', summary: 'Team standup' };
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true, json: async () => mockEvent,
-    }) as any;
+    }) as unknown as typeof fetch;
 
     const result = await connector.execute('create_event', {
       summary: 'Team standup',
@@ -139,7 +139,7 @@ describe('GoogleCalendarConnector', () => {
       end: '2026-03-19T09:15:00Z',
     });
     expect(result.success).toBe(true);
-    expect((result.data as any).id).toBe('evt_123');
+    expect((result.data as Record<string, unknown>).id).toBe('evt_123');
   });
 
   it('execute(find_free_time) returns available slots', async () => {
@@ -149,7 +149,7 @@ describe('GoogleCalendarConnector', () => {
     const mockFreeBusy = { calendars: { primary: { busy: [] } } };
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true, json: async () => mockFreeBusy,
-    }) as any;
+    }) as unknown as typeof fetch;
 
     const result = await connector.execute('find_free_time', {
       duration: 30,
@@ -201,7 +201,7 @@ describe('OAuth2 token refresh', () => {
       })
       .mockResolvedValueOnce({
         ok: true, json: async () => ({ items: [] }),
-      }) as any;
+      }) as unknown as typeof fetch;
 
     await connector.execute('list_events', {});
 
@@ -223,7 +223,7 @@ describe('OAuth2 token refresh', () => {
 
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false, status: 400, text: async () => 'invalid_grant',
-    }) as any;
+    }) as unknown as typeof fetch;
 
     const result = await connector.execute('list_events', {});
     expect(result.success).toBe(false);

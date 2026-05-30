@@ -86,7 +86,7 @@ describe('MSTeamsConnector', () => {
     const vault = createMockVault('ms-teams', { value: 'graph-token-123', isExpired: false });
     await connector.connect(vault);
 
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ displayName: 'User' }) }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ displayName: 'User' }) }) as unknown as typeof fetch;
 
     const health = await connector.healthCheck();
     expect(health.status).toBe('connected');
@@ -96,7 +96,7 @@ describe('MSTeamsConnector', () => {
     const vault = createMockVault('ms-teams', { value: 'graph-token-123', isExpired: false });
     await connector.connect(vault);
 
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 401 }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 401 }) as unknown as typeof fetch;
 
     const health = await connector.healthCheck();
     expect(health.status).toBe('error');
@@ -108,13 +108,13 @@ describe('MSTeamsConnector', () => {
     await connector.connect(vault);
 
     const mockTeams = { value: [{ id: 't1', displayName: 'Engineering' }] };
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockTeams }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockTeams }) as unknown as typeof fetch;
 
     const result = await connector.execute('list_teams', {});
     expect(result.success).toBe(true);
     expect(result.data).toEqual(mockTeams);
 
-    const fetchCall = (globalThis.fetch as any).mock.calls[0];
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
     expect(fetchCall[0]).toContain('/me/joinedTeams');
   });
 
@@ -123,14 +123,14 @@ describe('MSTeamsConnector', () => {
     await connector.connect(vault);
 
     const mockMsg = { id: 'msg1' };
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockMsg }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockMsg }) as unknown as typeof fetch;
 
     const result = await connector.execute('send_message', {
       team_id: 't1', channel_id: 'c1', content: 'Hello Teams!',
     });
     expect(result.success).toBe(true);
 
-    const fetchCall = (globalThis.fetch as any).mock.calls[0];
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
     expect(fetchCall[0]).toContain('/teams/t1/channels/c1/messages');
     expect(fetchCall[1].method).toBe('POST');
   });
@@ -216,7 +216,7 @@ describe('OutlookConnector', () => {
     const vault = createMockVault('outlook', { value: 'graph-token-456', isExpired: false });
     await connector.connect(vault);
 
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ displayName: 'User' }) }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ displayName: 'User' }) }) as unknown as typeof fetch;
 
     const health = await connector.healthCheck();
     expect(health.status).toBe('connected');
@@ -227,13 +227,13 @@ describe('OutlookConnector', () => {
     await connector.connect(vault);
 
     const mockEvents = { value: [{ id: 'ev1', subject: 'Standup' }] };
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockEvents }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockEvents }) as unknown as typeof fetch;
 
     const result = await connector.execute('list_events', { $top: 10 });
     expect(result.success).toBe(true);
     expect(result.data).toEqual(mockEvents);
 
-    const fetchCall = (globalThis.fetch as any).mock.calls[0];
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
     expect(fetchCall[0]).toContain('/me/events');
   });
 
@@ -242,7 +242,7 @@ describe('OutlookConnector', () => {
     await connector.connect(vault);
 
     const mockEvent = { id: 'ev2', subject: 'Team Sync' };
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockEvent }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockEvent }) as unknown as typeof fetch;
 
     const result = await connector.execute('create_event', {
       subject: 'Team Sync',
@@ -252,7 +252,7 @@ describe('OutlookConnector', () => {
     });
     expect(result.success).toBe(true);
 
-    const fetchCall = (globalThis.fetch as any).mock.calls[0];
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
     expect(fetchCall[0]).toContain('/me/events');
     expect(fetchCall[1].method).toBe('POST');
     const body = JSON.parse(fetchCall[1].body);
@@ -265,7 +265,7 @@ describe('OutlookConnector', () => {
     const vault = createMockVault('outlook', { value: 'graph-token-456', isExpired: false });
     await connector.connect(vault);
 
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, text: async () => '' }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, text: async () => '' }) as unknown as typeof fetch;
 
     const result = await connector.execute('send_email', {
       to: ['bob@example.com'],
@@ -274,7 +274,7 @@ describe('OutlookConnector', () => {
     });
     expect(result.success).toBe(true);
 
-    const fetchCall = (globalThis.fetch as any).mock.calls[0];
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
     expect(fetchCall[0]).toContain('/me/sendMail');
     expect(fetchCall[1].method).toBe('POST');
   });
@@ -284,12 +284,12 @@ describe('OutlookConnector', () => {
     await connector.connect(vault);
 
     const mockResults = { value: [{ id: 'm1', subject: 'Project Update' }] };
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockResults }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockResults }) as unknown as typeof fetch;
 
     const result = await connector.execute('search_emails', { query: 'project' });
     expect(result.success).toBe(true);
 
-    const fetchCall = (globalThis.fetch as any).mock.calls[0];
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
     expect(fetchCall[0]).toContain('/me/messages');
     // URLSearchParams encodes $ as %24
     expect(decodeURIComponent(fetchCall[0])).toContain('$search');
@@ -375,7 +375,7 @@ describe('OneDriveConnector', () => {
     const vault = createMockVault('onedrive', { value: 'graph-token-789', isExpired: false });
     await connector.connect(vault);
 
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ driveType: 'personal' }) }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ driveType: 'personal' }) }) as unknown as typeof fetch;
 
     const health = await connector.healthCheck();
     expect(health.status).toBe('connected');
@@ -385,7 +385,7 @@ describe('OneDriveConnector', () => {
     const vault = createMockVault('onedrive', { value: 'graph-token-789', isExpired: false });
     await connector.connect(vault);
 
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 403 }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 403 }) as unknown as typeof fetch;
 
     const health = await connector.healthCheck();
     expect(health.status).toBe('error');
@@ -397,13 +397,13 @@ describe('OneDriveConnector', () => {
     await connector.connect(vault);
 
     const mockFiles = { value: [{ id: 'f1', name: 'document.docx' }] };
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockFiles }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockFiles }) as unknown as typeof fetch;
 
     const result = await connector.execute('list_files', {});
     expect(result.success).toBe(true);
     expect(result.data).toEqual(mockFiles);
 
-    const fetchCall = (globalThis.fetch as any).mock.calls[0];
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
     expect(fetchCall[0]).toContain('/me/drive/root/children');
   });
 
@@ -412,12 +412,12 @@ describe('OneDriveConnector', () => {
     await connector.connect(vault);
 
     const mockFiles = { value: [{ id: 'f2', name: 'report.xlsx' }] };
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockFiles }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockFiles }) as unknown as typeof fetch;
 
     const result = await connector.execute('list_files', { folder_path: 'Documents/Work' });
     expect(result.success).toBe(true);
 
-    const fetchCall = (globalThis.fetch as any).mock.calls[0];
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
     expect(fetchCall[0]).toContain('/me/drive/root:/Documents/Work:/children');
   });
 
@@ -426,12 +426,12 @@ describe('OneDriveConnector', () => {
     await connector.connect(vault);
 
     const mockResults = { value: [{ id: 'f3', name: 'notes.txt' }] };
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockResults }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockResults }) as unknown as typeof fetch;
 
     const result = await connector.execute('search_files', { query: 'notes' });
     expect(result.success).toBe(true);
 
-    const fetchCall = (globalThis.fetch as any).mock.calls[0];
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
     expect(fetchCall[0]).toContain('/me/drive/root/search');
     expect(fetchCall[0]).toContain('notes');
   });
@@ -441,7 +441,7 @@ describe('OneDriveConnector', () => {
     await connector.connect(vault);
 
     const mockFile = { id: 'f4', name: 'notes.txt' };
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockFile }) as any;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockFile }) as unknown as typeof fetch;
 
     const result = await connector.execute('upload_file', {
       path: 'Documents/notes.txt',
@@ -449,7 +449,7 @@ describe('OneDriveConnector', () => {
     });
     expect(result.success).toBe(true);
 
-    const fetchCall = (globalThis.fetch as any).mock.calls[0];
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
     expect(fetchCall[0]).toContain('/me/drive/root:/Documents/notes.txt:/content');
     expect(fetchCall[1].method).toBe('PUT');
   });
@@ -461,13 +461,13 @@ describe('OneDriveConnector', () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       text: async () => 'file content here',
-    }) as any;
+    }) as unknown as typeof fetch;
 
     const result = await connector.execute('get_file', { item_id: 'f1' });
     expect(result.success).toBe(true);
-    expect((result.data as any).content).toBe('file content here');
+    expect((result.data as Record<string, unknown>).content).toBe('file content here');
 
-    const fetchCall = (globalThis.fetch as any).mock.calls[0];
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
     expect(fetchCall[0]).toContain('/me/drive/items/f1/content');
   });
 

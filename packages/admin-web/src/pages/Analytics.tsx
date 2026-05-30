@@ -6,7 +6,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { api, type AnalyticsResponse } from '../api.js';
+import { api, getErrorMessage, type AnalyticsResponse } from '../api.js';
 
 interface AnalyticsProps {
   token: string;
@@ -299,8 +299,8 @@ export function Analytics({ token, teamSlug }: AnalyticsProps) {
         setError(null);
         const result = await api.getAnalytics(token, teamSlug);
         if (!cancelled) setData(result);
-      } catch (err: any) {
-        if (!cancelled) setError(err.message ?? 'Failed to load analytics');
+      } catch (err) {
+        if (!cancelled) setError(getErrorMessage(err, 'Failed to load analytics'));
       } finally {
         if (!cancelled) setLoading(false);
       }

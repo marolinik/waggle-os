@@ -6,6 +6,7 @@
 
 import { randomUUID } from 'node:crypto';
 import type { SourceAdapter, UniversalImportItem, ConversationMessage } from './types.js';
+import { asRecord, firstString, getArray, getString, type RawRecord } from './raw-types.js';
 
 export class GeminiAdapter implements SourceAdapter {
   readonly sourceType = 'gemini' as const;
@@ -17,30 +18,36 @@ export class GeminiAdapter implements SourceAdapter {
       return this.parseConversationArray(input);
     }
 
-    const root = input as any;
+    const root = asRecord(input);
+    if (!root) return [];
 
     // Google Takeout format: { conversations: [...] }
-    if (Array.isArray(root?.conversations)) {
-      return this.parseConversationArray(root.conversations);
+    const conversations = getArray(root, 'conversations');
+    if (conversations) {
+      return this.parseConversationArray(conversations);
     }
 
     // Gemini API history format: { history: [...] }
-    if (Array.isArray(root?.history)) {
+    if (getArray(root, 'history')) {
       return this.parseSingleConversation(root);
     }
 
     return [];
   }
 
-  private parseConversationArray(conversations: any[]): UniversalImportItem[] {
+  private parseConversationArray(conversations: unknown[]): UniversalImportItem[] {
     const items: UniversalImportItem[] = [];
 
-    for (const conv of conversations) {
-      const title = conv.title ?? conv.name ?? 'Untitled';
+    for (const rawConv of conversations) {
+      const conv = asRecord(rawConv);
+      if (!conv) continue;
+      const title = firstString(conv, 'title', 'name') ?? 'Untitled';
       const messages: ConversationMessage[] = [];
 
-      const entries = conv.messages ?? conv.turns ?? conv.history ?? [];
-      for (const entry of entries) {
+      const entries = getArray(conv, 'messages') ?? getArray(conv, 'turns') ?? getArray(conv, 'history') ?? [];
+      for (const rawEntry of entries) {
+        const entry = asRecord(rawEntry);
+        if (!entry) continue;
         const role = this.resolveRole(entry);
         if (!role || role === 'system') continue;
 
@@ -50,7 +57,7 @@ export class GeminiAdapter implements SourceAdapter {
         messages.push({
           role,
           text,
-          timestamp: entry.createTime ?? entry.create_time ?? entry.timestamp,
+          timestamp: firstString(entry, 'createTime', 'create_time', 'timestamp'),
         });
       }
 
@@ -63,11 +70,11 @@ export class GeminiAdapter implements SourceAdapter {
         title,
         content: messages.map(m => `${m.role}: ${m.text}`).join('\n\n'),
         messages,
-        timestamp: conv.createTime ?? conv.create_time ?? conv.created_at ?? new Date().toISOString(),
+        timestamp: firstString(conv, 'createTime', 'create_time', 'created_at') ?? new Date().toISOString(),
         metadata: {
-          conversationId: conv.id ?? conv.conversationId,
+          conversationId: firstString(conv, 'id', 'conversationId'),
           messageCount: messages.length,
-          model: conv.model ?? conv.modelVersion,
+          model: firstString(conv, 'model', 'modelVersion'),
         },
       });
     }
@@ -75,11 +82,13 @@ export class GeminiAdapter implements SourceAdapter {
     return items;
   }
 
-  private parseSingleConversation(conv: any): UniversalImportItem[] {
+  private parseSingleConversation(conv: RawRecord): UniversalImportItem[] {
     const messages: ConversationMessage[] = [];
-    const entries = conv.history ?? [];
+    const entries = getArray(conv, 'history') ?? [];
 
-    for (const entry of entries) {
+    for (const rawEntry of entries) {
+      const entry = asRecord(rawEntry);
+      if (!entry) continue;
       const role = this.resolveRole(entry);
       if (!role || role === 'system') continue;
       const text = this.extractText(entry);
@@ -93,36 +102,40 @@ export class GeminiAdapter implements SourceAdapter {
       id: randomUUID(),
       source: 'gemini',
       type: 'conversation',
-      title: conv.title ?? 'Gemini Conversation',
+      title: getString(conv, 'title') ?? 'Gemini Conversation',
       content: messages.map(m => `${m.role}: ${m.text}`).join('\n\n'),
       messages,
       timestamp: new Date().toISOString(),
-      metadata: { model: conv.model },
+      metadata: { model: getString(conv, 'model') },
     }];
   }
 
-  private resolveRole(entry: any): 'user' | 'assistant' | 'system' | null {
-    const role = entry.role ?? entry.author ?? entry.sender;
+  private resolveRole(entry: RawRecord): 'user' | 'assistant' | 'system' | null {
+    const role = firstString(entry, 'role', 'author', 'sender');
     if (!role) return null;
-    const r = String(role).toLowerCase();
+    const r = role.toLowerCase();
     if (r === 'user' || r === 'human') return 'user';
     if (r === 'model' || r === 'assistant' || r === 'gemini') return 'assistant';
     if (r === 'system') return 'system';
     return null;
   }
 
-  private extractText(entry: any): string {
+  private extractText(entry: RawRecord): string {
     // Gemini parts format: { parts: [{ text: "..." }] }
-    if (Array.isArray(entry.parts)) {
-      return entry.parts
-        .filter((p: any) => typeof p.text === 'string')
-        .map((p: any) => p.text)
+    const parts = getArray(entry, 'parts');
+    if (parts) {
+      return parts
+        .map(asRecord)
+        .map(p => (p ? getString(p, 'text') : undefined))
+        .filter((t): t is string => typeof t === 'string')
         .join('\n')
         .trim();
     }
     // Simple text field
-    if (typeof entry.text === 'string') return entry.text.trim();
-    if (typeof entry.content === 'string') return entry.content.trim();
+    const text = getString(entry, 'text');
+    if (text !== undefined) return text.trim();
+    const content = getString(entry, 'content');
+    if (content !== undefined) return content.trim();
     return '';
   }
 }
