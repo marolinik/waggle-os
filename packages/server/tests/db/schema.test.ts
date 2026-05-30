@@ -72,7 +72,7 @@ describe('PostgreSQL schema', () => {
       WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
       ORDER BY table_name
     `);
-    const tableNames = (result as any[]).map((r: any) => r.table_name);
+    const tableNames = (result as Array<{ table_name: string }>).map((r) => r.table_name);
     expect(tableNames).toContain('users');
     expect(tableNames).toContain('teams');
     expect(tableNames).toContain('team_members');

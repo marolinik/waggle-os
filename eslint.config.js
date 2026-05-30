@@ -77,16 +77,7 @@ export default tseslint.config(
       "no-prototype-builtins": "error",
     },
   },
-  {
-    // packages/server carries the residual lint debt to burn down next: 210
-    // no-explicit-any + 2 no-require-imports + 1 no-unsafe-function-type (auth/
-    // dynamic-boundary + test code). Keep just these three as warnings HERE; the
-    // rest of the repo is ratcheted to error. Tighten as server's debt is paid down.
-    files: ["packages/server/**/*.{ts,tsx}"],
-    rules: {
-      "@typescript-eslint/no-explicit-any": "warn",
-      "@typescript-eslint/no-require-imports": "warn",
-      "@typescript-eslint/no-unsafe-function-type": "warn",
-    },
-  },
+  // (packages/server override removed — its 210 no-explicit-any + 3 tail warnings
+  // were burned down to 0, so it is now ratcheted to "error" repo-wide like everything
+  // else. The whole repo is at 0 lint errors AND 0 warnings under this config.)
 );

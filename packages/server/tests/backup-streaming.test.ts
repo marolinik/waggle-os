@@ -80,7 +80,7 @@ describe('Backup Streaming (CQ-010)', () => {
         expect(meta.relativePath).toBeDefined();
         expect(meta.fullPath).toBeDefined();
         expect(meta.sizeBytes).toBeGreaterThanOrEqual(0);
-        expect((meta as any).content).toBeUndefined();
+        expect((meta as Record<string, unknown>).content).toBeUndefined();
       }
     });
 

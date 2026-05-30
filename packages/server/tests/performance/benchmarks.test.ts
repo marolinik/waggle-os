@@ -22,6 +22,7 @@ import { MindDB, FrameStore, SessionStore, VaultStore, WorkspaceManager } from '
 import { buildLocalServer } from '../../src/local/index.js';
 import type { FastifyInstance } from 'fastify';
 import { injectWithAuth } from '../test-utils.js';
+import Database from 'better-sqlite3';
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 
@@ -276,7 +277,6 @@ describe('Performance Benchmarks', () => {
       // approach was racy when other tests (backup-*) also touched the
       // source file — a torn copy produced a malformed temp DB.
       try {
-        const Database = require('better-sqlite3');
         const db = new Database(dbPath, { readonly: true, fileMustExist: true });
 
         const start = Date.now();

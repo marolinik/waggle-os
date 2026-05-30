@@ -77,7 +77,7 @@ function createMockKvarkServerWithAsk(): typeof globalThis.fetch {
     if (urlStr.includes('/api/chat/ask') && init?.method === 'POST') {
       return new Response(JSON.stringify(MOCK_ASK_RESPONSE), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
-    return (base as Function)(url, init);
+    return (base as (u: string | URL | Request, i?: RequestInit) => Promise<Response>)(url, init);
   }) as unknown as typeof globalThis.fetch;
 }
 

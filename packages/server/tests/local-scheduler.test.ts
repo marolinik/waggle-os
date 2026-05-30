@@ -34,7 +34,7 @@ describe('LocalScheduler', () => {
     ).run(schedule.id);
 
     const executed: number[] = [];
-    const executor = vi.fn(async (s: any) => {
+    const executor = vi.fn(async (s: { id: number }) => {
       executed.push(s.id);
     });
 

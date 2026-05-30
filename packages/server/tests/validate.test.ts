@@ -46,9 +46,10 @@ describe('assertSafeSegment', () => {
     try {
       assertSafeSegment('../../etc/passwd', 'workspaceId');
       expect.fail('should have thrown');
-    } catch (err: any) {
-      expect(err.message).toContain('Invalid workspaceId');
-      expect(err.statusCode).toBe(400);
+    } catch (err) {
+      const e = err as { message: string; statusCode: number };
+      expect(e.message).toContain('Invalid workspaceId');
+      expect(e.statusCode).toBe(400);
     }
   });
 });
