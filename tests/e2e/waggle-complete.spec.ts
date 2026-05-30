@@ -884,17 +884,21 @@ test.describe('13. Plugin Tool Files API', () => {
 // ══════════════════════════════════════════════════════════════════════════
 
 test.describe('14. UI Journey Tests', () => {
-  // These tests require the frontend to be built (app/dist/).
-  // Skip the entire describe block if the server returns JSON on '/' instead of HTML.
-  test.beforeEach(async ({ request }, testInfo) => {
+  // These tests require the frontend to be built (dist/) and served by the
+  // webServer. Skip only if the server returns JSON on '/' instead of HTML.
+  // NOTE: this guard previously probed :8080 (a dev server that never runs in
+  // this harness), so the entire UI suite silently skipped. Probe the real
+  // :3333 baseURL the webServer actually serves.
+  test.beforeEach(async ({ request, baseURL }, testInfo) => {
+    const root = baseURL ?? 'http://127.0.0.1:3333';
     try {
-      const res = await request.get('http://127.0.0.1:8080/', { timeout: 5_000 });
+      const res = await request.get(`${root}/`, { timeout: 5_000 });
       const ct = res.headers()['content-type'] ?? '';
       if (!ct.includes('text/html')) {
-        testInfo.skip(true, 'Frontend not built (server returns JSON on /) — skipping UI tests');
+        testInfo.skip(true, `Frontend not built (server returns ${ct || 'non-HTML'} on /) — skipping UI tests`);
       }
     } catch {
-      testInfo.skip(true, 'Frontend dev server not reachable on :8080 — skipping UI tests');
+      testInfo.skip(true, `Frontend not reachable on ${root} — skipping UI tests`);
     }
   });
   test('14.1 App loads without blank screen or JS crash', async ({ page }) => {

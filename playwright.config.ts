@@ -65,5 +65,10 @@ export default defineConfig({
     timeout: 120_000, // 2 min — Vite build (~30-60s) + server boot (~5-10s)
     stdout: 'pipe',
     stderr: 'pipe',
+    // D1: the e2e suite drives /api/* routes directly (no token bootstrap), so
+    // trust loopback in the harness — mirrors vitest.setup.ts which defaults
+    // this ON for the test env. The production default stays SECURE (token
+    // required); this only affects the locally-spawned test server.
+    env: { ...process.env, WAGGLE_TRUST_LOCALHOST: '1' },
   },
 });

@@ -72,6 +72,10 @@ jobs:
         env:
           WAGGLE_ECHO_MODE: "1"
           NODE_ENV: test
+          # D1: the e2e suite hits /api/* directly without a bearer token; trust
+          # loopback in CI's test server (prod default stays secure). Mirrors
+          # vitest.setup.ts and playwright.config.ts webServer.env.
+          WAGGLE_TRUST_LOCALHOST: "1"
 
       - name: Upload Playwright report
         if: failure()
