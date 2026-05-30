@@ -4,10 +4,45 @@
   "description": "Waggle CLI — interactive AI agent with persistent memory",
   "type": "module",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "bin": {
     "waggle": "bin/waggle.js"
   },
+  "files": [
+    "dist",
+    "bin"
+  ],
   "license": "MIT",
+  "author": "Marko Markovic",
+  "homepage": "https://github.com/marolinik/waggle-os/tree/main/packages/cli#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/marolinik/waggle-os.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/marolinik/waggle-os/issues"
+  },
+  "keywords": [
+    "waggle",
+    "ai",
+    "agent",
+    "cli",
+    "memory",
+    "llm"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
