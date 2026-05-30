@@ -113,9 +113,15 @@ export const webhookRoutes: FastifyPluginAsync = async (server) => {
 
       switch (event.type) {
         case 'checkout.session.completed': {
-          const session = event.data.object as { metadata?: Record<string, string>; customer?: string };
+          const session = event.data.object as { payment_status?: string; metadata?: Record<string, string>; customer?: string };
+          // R1-002 (webhook path): checkout.session.completed also fires for
+          // UNPAID sessions (async/delayed payment methods, incomplete
+          // checkouts). Only grant a tier once payment has actually settled —
+          // same gate as the /api/stripe/sync path (sync.ts). 'paid' covers
+          // normal purchases; 'no_payment_required' covers 100%-off coupons.
+          const paid = session.payment_status === 'paid' || session.payment_status === 'no_payment_required';
           const tierRaw = session.metadata?.tier;
-          if (tierRaw) {
+          if (paid && tierRaw) {
             const parsed = parseTier(tierRaw);
             if (parsed) {
               const customerId = typeof session.customer === 'string' ? session.customer : undefined;

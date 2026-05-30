@@ -101,7 +101,12 @@ async function handleCheckoutCompleted(
   const session = event.data.object;
   const userId = session.metadata?.clerkUserId;
   const tier = asTier(session.metadata?.tier);
-  if (!userId || !tier) return;
+  // R1-002 (webhook path): only grant once payment has settled.
+  // checkout.session.completed also fires for unpaid/async sessions.
+  const paid =
+    session.payment_status === 'paid' ||
+    session.payment_status === 'no_payment_required';
+  if (!userId || !tier || !paid) return;
 
   await patchClerkPublicMetadata(userId, {
     subscriptionTier: tier,
