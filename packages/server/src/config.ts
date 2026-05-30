@@ -25,6 +25,18 @@ export function loadConfig(): ServerConfig {
     redisUrl: process.env.REDIS_URL ?? 'redis://localhost:6381',
     clerkSecretKey: process.env.CLERK_SECRET_KEY ?? '',
     clerkPublishableKey: process.env.CLERK_PUBLISHABLE_KEY ?? '',
-    corsOrigin: (process.env.CORS_ORIGIN ?? 'http://localhost:5173').split(','),
+    corsOrigin: (() => {
+      const origins = process.env.CORS_ORIGIN;
+      if (!origins) {
+        // Fail closed in production: a missing CORS_ORIGIN must not silently
+        // fall back to a localhost dev origin (which both blocks the real prod
+        // frontend AND leaves an unintended localhost origin allowed).
+        if (process.env.NODE_ENV === 'production') {
+          throw new Error('CORS_ORIGIN environment variable is required in production');
+        }
+        return ['http://localhost:5173'];
+      }
+      return origins.split(',').map((o) => o.trim()).filter(Boolean);
+    })(),
   };
 }
