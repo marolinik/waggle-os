@@ -46,6 +46,23 @@ services:
         sync: false
       - key: WAGGLE_LICENSE_KEY
         sync: false
+      # Stripe billing — without these the sidecar's checkout/webhook routes
+      # return 503 and tier upgrades silently never apply in the hosted deploy.
+      # STRIPE_SECRET_KEY: API key; STRIPE_WEBHOOK_SECRET: verifies webhook sigs.
+      # Prices use the 4-var period contract (priceIdForTier, stripe/index.ts):
+      # STRIPE_PRICE_<TIER>_<MONTHLY|ANNUAL>.
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_PRO_MONTHLY
+        sync: false
+      - key: STRIPE_PRICE_PRO_ANNUAL
+        sync: false
+      - key: STRIPE_PRICE_TEAMS_MONTHLY
+        sync: false
+      - key: STRIPE_PRICE_TEAMS_ANNUAL
+        sync: false
     disk:
       name: waggle-data
       mountPath: /data

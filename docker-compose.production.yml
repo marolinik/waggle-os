@@ -7,11 +7,17 @@
 #   ANTHROPIC_API_KEY    — Your Anthropic API key
 #   CLERK_SECRET_KEY     — Clerk authentication secret (team mode)
 #   CLERK_PUBLISHABLE_KEY — Clerk publishable key
+#   CORS_ORIGIN          — Frontend origin(s), comma-separated, exact-match.
+#                          REQUIRED: the team server (index.ts) fails closed in
+#                          production if unset. e.g. https://app.example.com
 #   WAGGLE_LICENSE_KEY   — Waggle license key (optional for V1)
 #
 # Optional:
 #   OPENAI_API_KEY       — If using OpenAI models
 #   WAGGLE_MAX_USERS     — Max team members (default: unlimited)
+#
+# NOTE: Stripe billing runs in the SIDECAR server (render.yaml), not this team
+# server — its webhooks route is Clerk-only, so no STRIPE_* vars are needed here.
 
 services:
   waggle:
@@ -35,6 +41,10 @@ services:
       # now defaults to loopback (desktop-safe), so cloud/server deploys opt in.
       - WAGGLE_HOST=0.0.0.0
       - NODE_ENV=production
+      # Team server (packages/server/src/index.ts — this Dockerfile's entrypoint)
+      # fails closed if CORS_ORIGIN is unset under NODE_ENV=production (config.ts).
+      # Set it to your deployed frontend origin(s), comma-separated, exact-match.
+      - CORS_ORIGIN=${CORS_ORIGIN:?set CORS_ORIGIN to your frontend origin, e.g. https://app.example.com}
       - MINIO_ENDPOINT=minio:9000
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-waggle}
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-waggle_s3_prod}
