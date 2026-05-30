@@ -10,7 +10,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
-import { MindDB, MultiMind, MultiMindCache, WorkspaceManager, WaggleConfig, createEmbeddingProvider, type EmbeddingProviderConfig, type EmbeddingProviderInstance, FrameStore, SessionStore, InstallAuditStore, CronStore, AwarenessLayer, VaultStore, SkillHashStore, OptimizationLogStore, ImprovementSignalStore, HarvestSourceStore, ClaudeCodeAdapter, reconcileIndexes, TeamSync, TelemetryStore, TELEMETRY_EVENTS, ExecutionTraceStore, EvolutionRunStore, ComplianceTemplateStore, type WorkspaceConfig } from '@waggle/core';
+import { MindDB, MultiMind, MultiMindCache, WorkspaceManager, WaggleConfig, createEmbeddingProvider, type EmbeddingProviderConfig, type EmbeddingProviderInstance, FrameStore, SessionStore, InstallAuditStore, CronStore, AwarenessLayer, VaultStore, SkillHashStore, OptimizationLogStore, ImprovementSignalStore, HarvestSourceStore, ClaudeCodeAdapter, reconcileIndexes, TeamSync, TelemetryStore, TELEMETRY_EVENTS, ExecutionTraceStore, EvolutionRunStore, ComplianceTemplateStore, harvestSetHash, type WorkspaceConfig } from '@waggle/core';
 import { corsOriginAllowed } from './cors-config.js';
 import { getStorageProvider } from './storage/index.js';
 import { resolveBindHost } from './net-config.js';
@@ -1223,7 +1223,9 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
             personalFrameStore.createIFrame('harvest', `${label}\n\n${content}`, 'normal', 'import');
             saved++;
           }
-          harvestStore.recordSync(src.source, items.length, saved);
+          // R3-004: store the content digest so the manual harvest route can
+          // skip an unchanged re-scan on the next sync.
+          harvestStore.recordSync(src.source, items.length, saved, harvestSetHash(items));
           log.info(`[harvest-auto-sync] ${src.source}: imported ${saved} items`);
         } catch (err) {
           log.debug(`[harvest-auto-sync] ${src.source} failed:`, err);
@@ -1446,7 +1448,8 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
                   personalFrames.createIFrame('harvest', `${label}\n\n${content}`, 'normal', 'import');
                   saved++;
                 }
-                harvestStore.recordSync(src.source, items.length, saved);
+                // R3-004: store the content digest for next-sync skip.
+                harvestStore.recordSync(src.source, items.length, saved, harvestSetHash(items));
                 totalItems += items.length;
                 totalFrames += saved;
                 sourcesScanned++;

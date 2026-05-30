@@ -74,7 +74,7 @@ export { PlaintextAdapter } from './harvest/plaintext-adapter.js';
 export { UrlAdapter } from './harvest/url-adapter.js';
 export { PdfAdapter } from './harvest/pdf-adapter.js';
 export { HarvestPipeline, type LLMCallFn, type PipelineOptions } from './harvest/pipeline.js';
-export { dedup } from './harvest/dedup.js';
+export { dedup, harvestSetHash } from './harvest/dedup.js';
 export type {
   ImportSourceType, ImportItemType, UniversalImportItem, DistilledKnowledge,
   HarvestPipelineResult, HarvestSource, SourceAdapter, FilesystemAdapter,

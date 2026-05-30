@@ -70,7 +70,7 @@ export {
   UrlAdapter,
   PdfAdapter,
   HarvestPipeline, type LLMCallFn, type PipelineOptions,
-  dedup,
+  dedup, harvestSetHash,
   type ImportSourceType, type ImportItemType, type UniversalImportItem, type DistilledKnowledge,
   type HarvestPipelineResult, type HarvestSource, type SourceAdapter, type FilesystemAdapter,
   type ClassifiedItem, type ExtractedContent, type KnowledgeProvenance,

@@ -15,7 +15,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import {
   HarvestSourceStore, HarvestRunStore, ChatGPTAdapter, ClaudeAdapter,
-  ClaudeCodeAdapter, GeminiAdapter, UniversalAdapter,
+  ClaudeCodeAdapter, GeminiAdapter, UniversalAdapter, harvestSetHash,
   type ImportSourceType, type UniversalImportItem,
   type SourceAdapter, type FilesystemAdapter,
 } from '@waggle/core';
@@ -327,6 +327,25 @@ export async function harvestRoutes(fastify: FastifyInstance) {
       };
     }
 
+    // R3-004: skip the O(n·500) per-item rescan when this source's content is
+    // unchanged since the last sync. Hash the incoming set and compare to the
+    // stored last_content_hash. Only for a fresh (non-resume) run — resuming
+    // means a prior pass was interrupted mid-save and must continue.
+    const incomingHash = harvestSetHash(items);
+    if (resumingRunId === null) {
+      const priorStore = new HarvestSourceStore(personalDb);
+      const prior = priorStore.getBySource(source);
+      if (prior?.lastContentHash && prior.lastContentHash === incomingHash) {
+        return {
+          source,
+          itemCount: items.length,
+          saved: 0,
+          skipped: true,
+          message: `No changes since last sync for ${source} — skipped ${items.length} unchanged items.`,
+        };
+      }
+    }
+
     // M-08: cache input + open a run row before any pipeline work. Skip cache
     // writing when resuming (the cache already exists and is referenced on
     // the prior run row).
@@ -406,7 +425,7 @@ export async function harvestRoutes(fastify: FastifyInstance) {
       // Update harvest source tracking
       const harvestStore = new HarvestSourceStore(personalDb);
       harvestStore.upsert(source, adapter.displayName ?? source);
-      harvestStore.recordSync(source, items.length, saved);
+      harvestStore.recordSync(source, items.length, saved, incomingHash);
 
       // Post-harvest cognify: extract entities + relations from imported frames.
       //
