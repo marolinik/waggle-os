@@ -230,7 +230,7 @@ describe('Stripe Webhook — tier update logic', () => {
       nextEvent = {
         id: 'evt_atomic_1',
         type: 'checkout.session.completed',
-        data: { object: { metadata: { tier: 'PRO' }, customer: 'cus_123' } },
+        data: { object: { payment_status: 'paid', metadata: { tier: 'PRO' }, customer: 'cus_123' } },
       };
 
       const app = await buildServer();
@@ -259,7 +259,7 @@ describe('Stripe Webhook — tier update logic', () => {
       nextEvent = {
         id: 'evt_dup_1',
         type: 'checkout.session.completed',
-        data: { object: { metadata: { tier: 'PRO' }, customer: 'cus_abc' } },
+        data: { object: { payment_status: 'paid', metadata: { tier: 'PRO' }, customer: 'cus_abc' } },
       };
 
       const configPath = path.join(tmpDir, 'config.json');
@@ -281,7 +281,7 @@ describe('Stripe Webhook — tier update logic', () => {
       nextEvent = {
         id: 'evt_dup_1', // same id
         type: 'checkout.session.completed',
-        data: { object: { metadata: { tier: 'TEAMS' }, customer: 'cus_xyz' } },
+        data: { object: { payment_status: 'paid', metadata: { tier: 'TEAMS' }, customer: 'cus_xyz' } },
       };
 
       const app2 = await buildServer();
@@ -297,6 +297,57 @@ describe('Stripe Webhook — tier update logic', () => {
       const afterSecond = fs.readFileSync(configPath, 'utf-8');
       expect(afterSecond).toBe(afterFirst);
       expect(JSON.parse(afterSecond).tier).toBe('PRO');
+    });
+
+    // ── R1-002 (webhook path): payment gate ─────────────────────────────
+    // checkout.session.completed fires for UNPAID sessions too (async payment
+    // methods, expired/incomplete checkouts). Granting a paid tier on those is
+    // a free-upgrade bypass. Mirror the sync.ts:46 guard: only payment_status
+    // 'paid' | 'no_payment_required' may grant.
+    it('does NOT grant a tier when payment_status is unpaid (R1-002 webhook gate)', async () => {
+      process.env['STRIPE_WEBHOOK_SECRET'] = 'whsec_test';
+      nextEvent = {
+        id: 'evt_unpaid_1',
+        type: 'checkout.session.completed',
+        data: { object: { payment_status: 'unpaid', metadata: { tier: 'TEAMS' }, customer: 'cus_unpaid' } },
+      };
+
+      const app = await buildServer();
+      try {
+        const res = await postEvent(app);
+        // Still ack the event (200) so Stripe stops retrying — but no grant.
+        expect(res.statusCode).toBe(200);
+      } finally {
+        await app.close();
+      }
+
+      // No config.json written at all (no tier ever granted from an unpaid session).
+      const configPath = path.join(tmpDir, 'config.json');
+      const tier = fs.existsSync(configPath)
+        ? JSON.parse(fs.readFileSync(configPath, 'utf-8')).tier
+        : undefined;
+      expect(tier).not.toBe('TEAMS');
+      expect(tier).toBeUndefined();
+    });
+
+    it('grants a tier when payment_status is no_payment_required (100%-off coupon)', async () => {
+      process.env['STRIPE_WEBHOOK_SECRET'] = 'whsec_test';
+      nextEvent = {
+        id: 'evt_free_1',
+        type: 'checkout.session.completed',
+        data: { object: { payment_status: 'no_payment_required', metadata: { tier: 'PRO' }, customer: 'cus_free' } },
+      };
+
+      const app = await buildServer();
+      try {
+        const res = await postEvent(app);
+        expect(res.statusCode).toBe(200);
+      } finally {
+        await app.close();
+      }
+
+      const raw = JSON.parse(fs.readFileSync(path.join(tmpDir, 'config.json'), 'utf-8'));
+      expect(raw.tier).toBe('PRO');
     });
   });
 });
