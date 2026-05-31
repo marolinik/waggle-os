@@ -215,7 +215,10 @@ async function fetchOllamaModels(): Promise<{ models: ProviderModel[]; reachable
       const isCloud = typeof m.remote_host === 'string' && m.remote_host.length > 0;
       const sizeMB = isCloud ? 0 : Math.round((m.size ?? 0) / 1024 / 1024);
       return {
-        id: m.name,
+        // 'ollama/' routing prefix so the chat route can detect a local model
+        // and send it to Ollama's endpoint instead of LiteLLM. Display name
+        // stays the bare tag. (Matches the LiteLLM/industry provider convention.)
+        id: `ollama/${m.name}`,
         name: m.name,
         cost: isCloud ? '$$' : '$',
         speed: isCloud ? 'medium' : 'fast',

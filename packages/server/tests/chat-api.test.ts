@@ -188,6 +188,33 @@ describe('Chat Streaming API', () => {
     expect(persisted!.content).toContain('my horse is named Comet');
   });
 
+  // #4: a locally-selected Ollama model must route to Ollama's OpenAI-compatible
+  // endpoint (graceful degradation / sovereignty), NOT LiteLLM which doesn't have
+  // it — and the 'ollama/' routing prefix must be stripped to the bare tag.
+  it('routes an Ollama-selected model to the local Ollama endpoint, not LiteLLM (#4)', async () => {
+    resetRateLimiter(server);
+    let capturedUrl: string | undefined;
+    let capturedModel: string | undefined;
+    const originalRunner = server.agentRunner;
+    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      capturedUrl = config.litellmUrl;
+      capturedModel = config.model;
+      if (config.onToken) config.onToken('ok');
+      return { content: 'ok', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } };
+    };
+
+    await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: { message: 'hi', model: 'ollama/llama3.2:latest' },
+    });
+
+    expect(capturedUrl).toMatch(/:11434\/v1$/);    // routed to Ollama, not LiteLLM
+    expect(capturedModel).toBe('llama3.2:latest');  // 'ollama/' prefix stripped
+
+    server.agentRunner = originalRunner;
+  });
+
   // H-07 G4 · agent errors must finalize the execution trace with
   // outcome='abandoned'. Without this, the trace row stays 'pending' and
   // the evolution dataset builder skips it, starving the loop of the

@@ -1275,8 +1275,17 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             })
           : null;
 
+        // #4: route locally-selected Ollama models to Ollama's OpenAI-compatible
+        // endpoint instead of LiteLLM (graceful degradation / sovereignty story).
+        // The sidecar reaches Ollama directly (as it does for embeddings) — no
+        // Docker->host hop, no API key. Strip the 'ollama/' routing prefix to the
+        // bare tag Ollama expects (e.g. "llama3.2:latest").
+        const isOllamaModel = resolvedModel.startsWith('ollama/');
+        const ollamaUrl = (process.env.OLLAMA_HOST?.replace(/\/+$/, '') ?? 'http://localhost:11434') + '/v1';
+
         const runConfig: typeof agentConfig = {
           ...agentConfig,
+          ...(isOllamaModel ? { litellmUrl: ollamaUrl, model: resolvedModel.slice('ollama/'.length) } : {}),
           litellmApiKey: effectiveApiKey,
           ...(traceRecorder && traceHandle
             ? { traceRecording: { recorder: traceRecorder, handle: traceHandle } }
@@ -1340,14 +1349,18 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               // No pool keys left — fall back to different model
               modelSwitchReason = `${resolvedModel} failed (${errStatus}), all keys exhausted`;
               resolvedModel = fallbackModel;
-              result = await agentRunner({ ...runConfig, model: resolvedModel });
+              // #4: the fallback is a LiteLLM/cloud model — reset litellmUrl in
+              // case the original was an Ollama model routed to the local endpoint.
+              result = await agentRunner({ ...runConfig, model: resolvedModel, litellmUrl: getLitellmUrl() });
             } else {
               throw primaryErr;
             }
           } else if (isRetryableError(primaryErr) && fallbackModel && resolvedModel !== fallbackModel) {
             modelSwitchReason = `${resolvedModel} failed (${(primaryErr as { status?: number }).status ?? 'timeout'})`;
             resolvedModel = fallbackModel;
-            result = await agentRunner({ ...runConfig, model: resolvedModel });
+            // #4: reset litellmUrl — the fallback is a LiteLLM/cloud model even
+            // if the original selection was a local Ollama model.
+            result = await agentRunner({ ...runConfig, model: resolvedModel, litellmUrl: getLitellmUrl() });
           } else {
             throw primaryErr;
           }
