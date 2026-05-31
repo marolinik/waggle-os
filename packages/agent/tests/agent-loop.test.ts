@@ -455,7 +455,14 @@ describe('runAgentLoop', () => {
 
     expect(fetch).toHaveBeenCalledTimes(1);
     const init = fetch.mock.calls[0][1];
-    expect(init.signal).toBe(abortController.signal);
+    // #2: the loop now merges the client-disconnect signal with a per-request
+    // timeout (AbortSignal.any), so the fetch receives a *derived* signal rather
+    // than the same object. The forwarding contract is functional, not identity:
+    // aborting the client signal must abort the signal the fetch actually saw.
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+    expect(init.signal.aborted).toBe(false);
+    abortController.abort();
+    expect(init.signal.aborted).toBe(true);
   });
 
   // R3-008: an abort that fires while the in-flight response is being read must

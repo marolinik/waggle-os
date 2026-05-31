@@ -3,7 +3,7 @@ import { LoopGuard } from './loop-guard.js';
 import { parseChatCompletionStream } from './sse-parser.js';
 import { maybeFireCompletionGate, initialGateState } from './loop-gates.js';
 import { executeToolCall } from './tool-executor.js';
-import { handleNonOkResponse, initialRetryState } from './retry-policy.js';
+import { handleNonOkResponse, handleNetworkError, initialRetryState } from './retry-policy.js';
 import type { HookRegistry } from './hooks.js';
 import type { CapabilityRouter } from './capability-router.js';
 import type { TraceRecorder, TraceHandle } from './trace-recorder.js';
@@ -245,8 +245,12 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
   let totalOutputTokens = 0;
   let allStreamedContent = ''; // Accumulate ALL streamed content across all turns
   const guard = new LoopGuard();
-  // 429 / 5xx retry counters — see `./retry-policy.ts` for the protocol.
+  // 429 / 5xx / network retry counters — see `./retry-policy.ts` for the protocol.
   let retryState = initialRetryState();
+  // Per-request LLM timeout, merged with the client-disconnect signal below, so a
+  // hung connection can't wedge a turn forever. Generous default for long
+  // streaming generations; override via WAGGLE_LLM_TIMEOUT_MS.
+  const llmTimeoutMs = parseInt(process.env.WAGGLE_LLM_TIMEOUT_MS ?? '', 10) || 300_000;
   // One-shot completion gates (D3 verification, D1 skill distillation) +
   // preserved-answer slot for issue #4. See `./loop-gates.ts` for details.
   let gateState = initialGateState();
@@ -273,18 +277,42 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       body.stream_options = { include_usage: true };
     }
 
-    const response = await fetchFn(`${litellmUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${litellmApiKey}`,
-      },
-      body: JSON.stringify(body),
-      // R3-008: forward the abort signal into the in-flight request so an
-      // aborted run tears down the connection (and, on the streaming path,
-      // the body reader rejects) instead of consuming the stream to completion.
-      signal: config.signal,
-    });
+    // R3-008: forward the client-disconnect signal so an aborted run tears down
+    // the connection (and, on the streaming path, the body reader rejects)
+    // instead of consuming the stream to completion. Merged with a per-request
+    // timeout so a hung connection can't wedge the turn forever.
+    const timeoutSignal = AbortSignal.timeout(llmTimeoutMs);
+    const requestSignal = config.signal
+      ? AbortSignal.any([config.signal, timeoutSignal])
+      : timeoutSignal;
+
+    let response: Response;
+    try {
+      response = await fetchFn(`${litellmUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${litellmApiKey}`,
+        },
+        body: JSON.stringify(body),
+        signal: requestSignal,
+      });
+    } catch (netErr) {
+      // The fetch promise itself rejected — a network-level failure (endpoint
+      // down / restarting, socket hang-up, "fetch failed") or our timeout fired.
+      // A genuine client disconnect re-throws (caught by the between-turn guard
+      // above and the post-read guard below). Everything else is a transient
+      // outage that must NOT kill the turn: retry with backoff, same protocol as
+      // a 5xx, capped at 3 attempts before surfacing a clean fatal error.
+      if (config.signal?.aborted) throw netErr;
+      const action = handleNetworkError(netErr, retryState);
+      if (action.kind === 'fatal') throw action.error;
+      if (onToken) onToken(action.notice);
+      await new Promise(r => setTimeout(r, action.waitMs));
+      retryState = action.state;
+      turn--; // retry this turn without consuming a turn
+      continue;
+    }
 
     if (!response.ok) {
       const action = await handleNonOkResponse(response, retryState);

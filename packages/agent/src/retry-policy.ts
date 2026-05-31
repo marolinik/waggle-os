@@ -24,10 +24,12 @@ const RATE_LIMIT_RETRY_AFTER_DEFAULT_SECONDS = 5;
 export interface RetryState {
   rateLimitRetries: number;
   serverErrorRetries: number;
+  /** Network-level failures: the fetch promise rejected (no HTTP response). */
+  networkErrorRetries: number;
 }
 
 export function initialRetryState(): RetryState {
-  return { rateLimitRetries: 0, serverErrorRetries: 0 };
+  return { rateLimitRetries: 0, serverErrorRetries: 0, networkErrorRetries: 0 };
 }
 
 export type RetryAction =
@@ -130,5 +132,37 @@ export async function handleNonOkResponse(
   return {
     kind: 'fatal',
     error: new Error(`LLM error (${response.status}): ${errorBody}`),
+  };
+}
+
+/**
+ * Decide what to do with a network-level failure: the `fetch` promise itself
+ * rejected, so we never saw an HTTP response. Causes include "fetch failed" /
+ * ECONNREFUSED / socket hang-up (endpoint down or restarting) and an
+ * AbortSignal.timeout firing (hung connection). The peer gave us no
+ * information, so — like a 5xx — back off ourselves: exponential delay
+ * (capped 30s), retry cap 3. Beyond the cap, a clean user-facing fatal error.
+ *
+ * NOTE: the caller must distinguish a genuine client-disconnect abort (which
+ * should NOT retry) before calling this — see agent-loop's fetch try/catch.
+ */
+export function handleNetworkError(err: unknown, state: RetryState): RetryAction {
+  const next = state.networkErrorRetries + 1;
+  const detail = err instanceof Error ? err.message : String(err);
+  if (next >= MAX_RETRIES) {
+    return {
+      kind: 'fatal',
+      error: new Error(
+        `Could not reach the model endpoint after ${MAX_RETRIES} attempts (${detail}). ` +
+          `It may be down or restarting — try again in a moment.`,
+      ),
+    };
+  }
+  const waitMs = Math.min(1000 * Math.pow(2, next), MAX_SERVER_ERROR_WAIT_MS);
+  return {
+    kind: 'retry',
+    waitMs,
+    notice: `\n[Connection to the model failed — retrying in ${waitMs / 1000}s (retry ${next}/${MAX_RETRIES})...]\n`,
+    state: { ...state, networkErrorRetries: next },
   };
 }
