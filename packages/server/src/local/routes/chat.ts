@@ -1239,8 +1239,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
         // ── Credential pool: resolve API key with round-robin ──
         // Extract provider name from model ID (e.g., "anthropic" from "claude-sonnet-4-6")
+        // NOTE: the credential pool injects a *provider* key (e.g. sk-ant-…). That is
+        // correct only on the direct-provider path (anthropic-proxy / openai-compat).
+        // When routing THROUGH LiteLLM, every request must use the LiteLLM master key —
+        // LiteLLM holds the real provider keys internally and validates any *other* key
+        // as a virtual key against its DB, returning "No connected db." (no_db_connection)
+        // when no DB is attached. So skip the pool entirely on the LiteLLM path.
+        const usingLiteLLM = server.agentState.llmProvider?.provider === 'litellm';
         const providerName = resolvedModel.startsWith('claude') ? 'anthropic' : resolvedModel.split('/')[0] ?? 'anthropic';
-        const credPool = getCredentialPool(providerName);
+        const credPool = usingLiteLLM ? undefined : getCredentialPool(providerName);
         const poolKey = credPool?.getKey();
         const effectiveApiKey = poolKey ?? server.agentState.litellmApiKey;
 

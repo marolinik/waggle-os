@@ -335,6 +335,84 @@ describe('Chat Streaming API', () => {
   });
 });
 
+/**
+ * Regression: in-app chat failed with LiteLLM's
+ *   {"message":"No connected db.","type":"no_db_connection","code":"400"}
+ * because the credential pool injected a *provider* key (e.g. sk-ant-…) as the
+ * bearer sent TO LiteLLM. LiteLLM validates only its master key in-memory; any
+ * other key is treated as a virtual key and looked up in its database → 400 when
+ * no DB is attached. The fix: skip the credential pool when the active provider
+ * is LiteLLM, so the LiteLLM master key is used. The direct anthropic-proxy path
+ * must still use the per-provider pool key.
+ */
+describe('Chat LiteLLM key routing (regression: no_db_connection)', () => {
+  let server: FastifyInstance;
+  let tmpDir: string;
+  let capturedKey: string | undefined;
+  const MASTER_KEY = 'sk-litellm-master-test';
+  const POOL_KEY = 'sk-ant-pool-test';
+
+  beforeAll(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-keyroute-'));
+    const mind = new MindDB(path.join(tmpDir, 'personal.mind'));
+    mind.close();
+
+    server = await buildLocalServer({ dataDir: tmpDir });
+
+    // Seed a provider key so the 'anthropic' credential pool is NON-empty —
+    // without this the pool is empty and the bug can't be observed.
+    server.vault.set('anthropic', POOL_KEY);
+
+    // The LiteLLM master key Waggle authenticates to the proxy with.
+    server.agentState.litellmApiKey = MASTER_KEY;
+
+    // Capturing runner — records the key the chat route resolved for this turn.
+    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      capturedKey = config.litellmApiKey;
+      if (config.onToken) config.onToken('ok');
+      return { content: 'ok', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } };
+    };
+  });
+
+  afterAll(async () => {
+    await server.close();
+    await new Promise(r => setTimeout(r, 100));
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* EBUSY on Windows */ }
+  });
+
+  it('LiteLLM provider → sends the LiteLLM master key, NOT a provider pool key', async () => {
+    server.agentState.llmProvider = {
+      provider: 'litellm', health: 'healthy', detail: 'test', checkedAt: new Date().toISOString(),
+    };
+    capturedKey = undefined;
+
+    await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: { message: 'hi', model: 'claude-sonnet-4-6' },
+    });
+
+    // Pre-fix this was POOL_KEY → LiteLLM rejected it as an unknown virtual key.
+    expect(capturedKey).toBe(MASTER_KEY);
+    expect(capturedKey).not.toBe(POOL_KEY);
+  });
+
+  it('anthropic-proxy provider → still uses the credential pool key (direct path unchanged)', async () => {
+    server.agentState.llmProvider = {
+      provider: 'anthropic-proxy', health: 'healthy', detail: 'test', checkedAt: new Date().toISOString(),
+    };
+    capturedKey = undefined;
+
+    await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: { message: 'hi', model: 'claude-sonnet-4-6' },
+    });
+
+    expect(capturedKey).toBe(POOL_KEY);
+  });
+});
+
 describe('applyContextWindow', () => {
   it('returns all messages when under the limit', () => {
     const messages = [
