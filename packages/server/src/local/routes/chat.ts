@@ -39,6 +39,7 @@ import { isRegulatedContent, isRetryableError, isAmbiguousMessage, shouldSuggest
 import { persistMessage, loadSessionMessages } from './chat-persistence.js';
 import { MAX_CONTEXT_MESSAGES, applyContextWindow, buildSkillPromptSection } from './chat-context.js';
 import { getGovernancePermissions } from './chat-governance.js';
+import { applyPersonaToolFilter } from '../persona-tool-filter.js';
 import { assertSafeSegment } from './validate.js';
 
 // ── Re-exports for backwards compatibility ─────────────────────────────
@@ -1004,40 +1005,19 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             ? server.agentState.buildToolsForWorkspace(workspacePath)
             : allTools;
 
-        // W3.1: Filter tools by persona — non-technical personas get a reduced tool set
-        // Always include memory tools (search_memory, save_memory) + discovery tools regardless of persona
-        const ALWAYS_AVAILABLE = new Set([
-          'search_memory', 'save_memory', 'get_identity', 'get_awareness', 'query_knowledge',
-          'add_task', 'correct_knowledge', 'list_skills', 'search_skills', 'suggest_skill',
-          'acquire_capability', 'install_capability', 'compose_workflow', 'create_plan',
-          'add_plan_step', 'execute_step', 'show_plan',
-        ]);
-        // Resolve persona: per-window override > workspace config (same
-        // resolution order as buildSystemPrompt for Phase A.2 consistency).
+        // W3.1: Filter tools by persona — non-technical personas get a reduced
+        // tool set. The always-available + read-only-write-strip policy lives in
+        // persona-tool-filter.ts (extracted so the closed-learning-loop guarantee
+        // — create_skill survives the allowlist — is unit-testable; this block is
+        // !hasCustomRunner-gated and therefore unreachable from route tests).
+        // Resolution order matches buildSystemPrompt (Phase A.2): per-window
+        // override > workspace config.
         const wsConfig = effectiveWorkspace ? server.workspaceManager?.get(effectiveWorkspace) : null;
         const activePersonaId = personaOverride ?? wsConfig?.personaId ?? null;
         if (!hasCustomRunner && activePersonaId) {
           const persona = resolvePersona(activePersonaId);
           if (persona) {
-            // Allowlist: keep only declared tools + always-available (if persona declares any)
-            if (persona.tools.length > 0) {
-              const allowedTools = new Set([...persona.tools, ...ALWAYS_AVAILABLE]);
-              effectiveTools = effectiveTools.filter(t => allowedTools.has(t.name));
-            }
-            // Denylist: remove explicitly denied tools — wins over allowlist AND ALWAYS_AVAILABLE
-            if (persona.disallowedTools?.length) {
-              const denied = new Set(persona.disallowedTools);
-              effectiveTools = effectiveTools.filter(t => !denied.has(t.name));
-            }
-            // Read-only personas: strip all write tools
-            if (persona.isReadOnly) {
-              const WRITE_TOOLS = new Set([
-                'write_file', 'edit_file', 'git_commit', 'git_push', 'git_merge',
-                'save_memory', 'correct_knowledge', 'generate_docx', 'install_capability',
-                'spawn_agent', 'execute_step', 'bash',
-              ]);
-              effectiveTools = effectiveTools.filter(t => !WRITE_TOOLS.has(t.name));
-            }
+            effectiveTools = applyPersonaToolFilter(effectiveTools, persona);
           }
         }
 
