@@ -1,4 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
+import { createPortal } from 'react-dom';
 import type { AppId, DockEntry } from '@/lib/dock-tiers';
 
 interface DockTrayProps {
@@ -14,7 +15,13 @@ const DockTray = ({ items, onSelect, onClose, anchorRect }: DockTrayProps) => {
   left = Math.max(8, Math.min(left, window.innerWidth - trayWidth - 8));
   const bottom = window.innerHeight - anchorRect.top + 8;
 
-  return (
+  // Portal to <body>: the dock container uses `-translate-x-1/2` (a transform,
+  // which makes it the containing block for position:fixed descendants) AND
+  // `overflow-x-auto` (which forces overflow-y to compute as auto). Rendered as
+  // a child of the dock, this `fixed` tray was therefore positioned relative to
+  // the transformed dock and clipped by its overflow — so it never visibly
+  // surfaced. Portaling to body restores true viewport-relative positioning.
+  return createPortal(
     <AnimatePresence>
       <motion.div
         data-dock-tray
@@ -42,7 +49,8 @@ const DockTray = ({ items, onSelect, onClose, anchorRect }: DockTrayProps) => {
           );
         })}
       </motion.div>
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 };
 
