@@ -1,0 +1,58 @@
+{
+  "name": "@waggle/hive-mind-hooks-core",
+  "version": "0.1.0",
+  "description": "Tool-agnostic foundation for the hive-mind lifecycle-hook port portfolio. Generalizes the reversible-install primitives, the EventAdapter-parameterized lifecycle handler bodies, and the jsonRegister merge helper proven by @waggle/hive-mind-hooks-claude-code so the codex/codex-desktop/cursor/hermes/openclaw packages stay thin. Codec-agnostic — YAML/JSON5 parsers live in the consumer packages.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "build:clean": "tsc --build --clean",
+    "typecheck": "tsc --build && tsc --noEmit -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@waggle/hive-mind-shim-core": "*"
+  },
+  "peerDependencies": {
+    "@waggle/hive-mind-cli": "*"
+  },
+  "peerDependenciesMeta": {
+    "@waggle/hive-mind-cli": {
+      "optional": true
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/marolinik/waggle-os.git",
+    "directory": "packages/hive-mind-hooks-core"
+  },
+  "homepage": "https://github.com/marolinik/waggle-os/tree/main/packages/hive-mind-hooks-core#readme",
+  "bugs": {
+    "url": "https://github.com/marolinik/waggle-os/issues"
+  },
+  "author": "Egzakta Group d.o.o. <hello@egzakta.com> (https://egzakta.com)",
+  "keywords": [
+    "hive-mind",
+    "memory",
+    "ai",
+    "mcp",
+    "hook",
+    "silent-capture",
+    "foundation"
+  ],
+  "types": "dist/index.d.ts"
+}
