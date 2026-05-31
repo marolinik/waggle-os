@@ -25,6 +25,7 @@ import {
   generateSkillMarkdown,
   type SkillTemplate,
 } from './skill-creator.js';
+import { redactSkillContent } from './skill-redaction.js';
 
 export interface AutoExtractMessage {
   role: string;
@@ -111,7 +112,9 @@ export async function autoExtractAndCreateSkill(
     }
   }
 
-  const md = annotateWithScope(generateSkillMarkdown(finalTemplate));
+  // Strip secrets + user-home paths — the auto-extracted pattern is derived
+  // from session messages, which can carry both.
+  const md = redactSkillContent(annotateWithScope(generateSkillMarkdown(finalTemplate))).content;
   fs.writeFileSync(filePath, md, 'utf-8');
 
   if (deps.improvementSignals) {

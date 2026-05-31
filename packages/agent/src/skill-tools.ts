@@ -26,6 +26,7 @@ async function getSecurityGate(): Promise<typeof SecurityGate> {
   return _SecurityGate;
 }
 import { generateSkillMarkdown, type SkillTemplate } from './skill-creator.js';
+import { redactSkillContent } from './skill-redaction.js';
 import {
   parseSkillFrontmatter,
   serializeFrontmatter,
@@ -225,13 +226,20 @@ export function createSkillTools(deps: SkillToolsDeps): ToolDefinition[] {
           return 'Error: Provide either "content" (raw markdown) or "description" + "steps" (structured input).';
         }
 
+        // Strip secrets + user-home paths before persisting — the loop's
+        // "strip secrets/paths" directive, enforced deterministically (not just
+        // model-advisory). Surfaced in the result so the agent/user can see it.
+        const { content: safeContent, redactions } = redactSkillContent(content);
         const filePath = path.join(skillsDir, `${name}.md`);
         const exists = fs.existsSync(filePath);
 
-        fs.writeFileSync(filePath, content, 'utf-8');
+        fs.writeFileSync(filePath, safeContent, 'utf-8');
         onSkillsChanged?.();
 
-        return `${exists ? 'Updated' : 'Created'} skill "${name}" (${content.length} chars).\nLocation: ${filePath}\n\nThe skill is now active and will be included in your system prompt for all future messages.`;
+        const redactNote = redactions.length
+          ? `\n⚠️ Redacted ${redactions.length} secret(s)/path(s) before saving: ${redactions.join(', ')}.`
+          : '';
+        return `${exists ? 'Updated' : 'Created'} skill "${name}" (${safeContent.length} chars).${redactNote}\nLocation: ${filePath}\n\nThe skill is now active and will be included in your system prompt for all future messages.`;
       },
     },
 
@@ -775,7 +783,7 @@ Only use this after acquire_capability has identified a specific installable can
           scope: target,
           promoted_from: [...(parsed.frontmatter.promoted_from ?? []), currentScope],
         };
-        const newContent = serializeFrontmatter(updatedFrontmatter, parsed.body);
+        const newContent = redactSkillContent(serializeFrontmatter(updatedFrontmatter, parsed.body)).content;
 
         // 7. Atomic-ish move: write to new location, then remove old.
         // Writing first means a crash before the unlink leaves two copies,

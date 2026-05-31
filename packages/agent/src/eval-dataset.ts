@@ -124,6 +124,26 @@ export function detectSecrets(text: string): string | null {
 /** Exported for tests / tools that want the full list. */
 export const SECRET_PATTERN_NAMES = SECRET_PATTERNS.map(p => p.name);
 
+/**
+ * Redact every secret-pattern match in a string, replacing each with
+ * `[REDACTED:<pattern-name>]`. Returns the scrubbed text + the de-duplicated
+ * list of pattern names that fired. Reuses the same curated SECRET_PATTERNS as
+ * detectSecrets so there is a single source of truth for "what is a secret".
+ */
+export function redactSecrets(text: string): { text: string; found: string[] } {
+  let out = text;
+  const found: string[] = [];
+  for (const { name, re } of SECRET_PATTERNS) {
+    const global = new RegExp(re.source, re.flags.replace('g', '') + 'g');
+    const replaced = out.replace(global, `[REDACTED:${name}]`);
+    if (replaced !== out) {
+      found.push(name);
+      out = replaced;
+    }
+  }
+  return { text: out, found };
+}
+
 // ── Deterministic PRNG (mulberry32) ─────────────────────────────
 
 function makeRng(seed: number): () => number {

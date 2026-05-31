@@ -6,7 +6,7 @@ import type { FastifyPluginAsync } from 'fastify';
 
 const log = createLogger('skills');
 import { PluginManager, getStarterSkillsDir, listStarterSkills, listCapabilityPacks, getPackManifest } from '@waggle/sdk';
-import { loadSkills, SkillRecommender, assessTrust, generateSkillMarkdown, type SkillTemplate } from '@waggle/agent';
+import { loadSkills, SkillRecommender, assessTrust, generateSkillMarkdown, redactSkillContent, type SkillTemplate } from '@waggle/agent';
 import { computeSkillHash } from '@waggle/core';
 
 /** Capability family definitions — user-job-first grouping */
@@ -404,7 +404,8 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
       return reply.status(400).send({ error: 'Invalid skill name (no spaces, slashes, or dots)' });
     }
     const filePath = path.join(skillsDir, `${name}.md`);
-    fs.writeFileSync(filePath, content, 'utf-8');
+    // Enforce the "strip secrets/paths" policy on UI-authored skills too.
+    fs.writeFileSync(filePath, redactSkillContent(content).content, 'utf-8');
 
     // Record content hash for change detection
     try {
@@ -462,7 +463,7 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
     const content = generateSkillMarkdown(template);
     const filePath = path.join(skillsDir, `${kebabName}.md`);
 
-    fs.writeFileSync(filePath, content, 'utf-8');
+    fs.writeFileSync(filePath, redactSkillContent(content).content, 'utf-8');
 
     // Record content hash for change detection
     try {
@@ -519,7 +520,7 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
     if (!fs.existsSync(filePath)) {
       return reply.status(404).send({ error: 'Skill not found' });
     }
-    fs.writeFileSync(filePath, content, 'utf-8');
+    fs.writeFileSync(filePath, redactSkillContent(content).content, 'utf-8');
 
     // Update content hash for change detection
     try {
