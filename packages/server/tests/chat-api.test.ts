@@ -158,6 +158,36 @@ describe('Chat Streaming API', () => {
     server.agentRunner = originalRunner;
   });
 
+  // #3 launch-blocker: memory capture must NOT depend on generation success.
+  // When the model call throws, the happy-path write-back never runs — so the
+  // route persists the raw user turn directly, else "remembers everything" breaks.
+  it('persists the raw user turn to memory even when generation fails (#3)', async () => {
+    resetRateLimiter(server);
+    const originalRunner = server.agentRunner;
+    server.agentRunner = async () => {
+      throw new Error('LiteLLM is not available');
+    };
+
+    const seed = 'Launch-blocker seed: my horse is named Comet and I live in Belgrade.';
+    const res = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: { message: seed },
+    });
+
+    // The turn failed — an error event was surfaced to the client.
+    const errorEvents = parseSSE(res.body).filter(e => e.event === 'error');
+    expect(errorEvents.length).toBe(1);
+
+    server.agentRunner = originalRunner;
+
+    // ...but the raw user turn was still persisted to memory (write decoupled
+    // from generation success), so it is recallable on the next turn.
+    const persisted = server.agentState.orchestrator.getFrames().findDuplicate(seed);
+    expect(persisted).not.toBeNull();
+    expect(persisted!.content).toContain('my horse is named Comet');
+  });
+
   // H-07 G4 · agent errors must finalize the execution trace with
   // outcome='abandoned'. Without this, the trace row stays 'pending' and
   // the evolution dataset builder skips it, starving the loop of the

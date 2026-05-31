@@ -501,6 +501,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     let traceHandle: TraceHandle | null = null;
     let traceFinalized = false;
 
+    // #3 (launch-blocker): hoist the resolved orchestrator so the outer catch
+    // can persist the raw user turn even when generation fails. Memory capture
+    // must not be contingent on LLM success ("remembers everything").
+    let activeSessionOrch: Orchestrator | undefined;
+
     try {
       const hasCustomRunner = !!server.agentRunner;
 
@@ -583,6 +588,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           log.warn(`[session] Failed to create workspace session for "${effectiveWorkspace}": ${(err as Error).message}`);
         }
       }
+      // #3 (launch-blocker): expose the resolved orchestrator to the outer
+      // catch so a failed generation still persists the raw user turn.
+      activeSessionOrch = sessionOrch;
 
       // Check if LiteLLM is available — if not, use echo mode
       // F2 fix: When using the built-in Anthropic proxy, the /health/liveliness
@@ -1618,6 +1626,30 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       }
       // Send clean error to user — don't leak raw recalled context (contains system prompt instructions)
       sendEvent('error', { message: errorMessage });
+
+      // #3 (launch-blocker): memory capture MUST NOT depend on generation
+      // success. On the happy path the write-back at ~L1410 captures the
+      // exchange; when the model call fails that never runs, so the user's
+      // turn would be lost from memory ("remembers everything" broken). Persist
+      // the raw turn directly here — NOT via the conservative pattern-write-back
+      // (which may extract nothing) — so it's recallable (keyword half of
+      // HybridSearch now; embedded on the next cognify/distill pass). The 8-char
+      // floor skips trivial acks ("ok", "thanks"). Best-effort: a persistence
+      // failure must never mask the original error or break the SSE stream.
+      if (activeSessionOrch && message.trim().length >= 8) {
+        try {
+          const frames = activeSessionOrch.getFrames();
+          const sessions = activeSessionOrch.getSessions();
+          const active = sessions.getActive();
+          const gopId = active.length > 0 ? active[0].gop_id : sessions.create().gop_id;
+          const latestI = frames.getLatestIFrame(gopId);
+          if (latestI) frames.createPFrame(gopId, message, latestI.id, 'normal', 'user_stated');
+          else frames.createIFrame(gopId, message, 'normal', 'user_stated');
+          log.info('[chat] persisted raw user turn to memory despite generation failure');
+        } catch (persistErr) {
+          log.warn('[chat] raw-turn persistence on error path failed:', persistErr instanceof Error ? persistErr.message : String(persistErr));
+        }
+      }
     } finally {
       // Review Critical #2: defensive cleanup for the pre:tool hook. The happy path
       // already unregisters and sets to undefined; this guarantees we never leak the
