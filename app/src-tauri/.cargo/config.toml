@@ -1,4 +1,17 @@
-# Ensure MSVC linker is found before Git's link.exe
-# This is needed because Git Bash ships a GNU coreutils `link` that shadows MSVC's linker.
-[target.x86_64-pc-windows-msvc]
-linker = "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\link.exe"
+# Intentionally NO `linker` override here.
+#
+# A previous version pinned the MSVC linker to an absolute, version-stamped path
+# (…/MSVC/14.44.35207/…/link.exe) so Git Bash's GNU coreutils `link` couldn't
+# shadow MSVC's linker on one local machine. That pin rotted: windows-latest CI
+# ships a different MSVC toolset, and so does any dev box without that exact
+# version, so cargo failed with:
+#   error: linker `…14.44.35207…\link.exe` not found
+#   note: The system cannot find the path specified. (os error 3)
+#
+# rustc/cc auto-detect the MSVC linker via vswhere on a properly installed
+# toolchain — windows-latest works out of the box, no override needed.
+#
+# If Git's `link` shadows MSVC's linker locally, fix it in the ENVIRONMENT, not
+# here: build from a "Developer Command Prompt for VS 2022" (or run
+# vcvarsall.bat) so MSVC's bin precedes Git on PATH. Do NOT re-pin an absolute,
+# version-stamped path — it breaks CI and every other machine.
