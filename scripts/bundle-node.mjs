@@ -81,10 +81,16 @@ if (platform === 'win32') {
   const buffer = Buffer.from(await response.arrayBuffer());
   fs.writeFileSync(archivePath, buffer);
 
-  // Extract bin/node from the tarball (safe — no user input in args)
+  // Extract bin/node from the tarball. The archive root is the versioned dir
+  // (node-vX-os-arch/), so the member must include that prefix; --strip-
+  // components=1 then drops it so the file lands at <extractDir>/bin/node.
+  // BSD tar (macOS) matches members against the FULL archived path, so a bare
+  // "bin/node" matches nothing → "tar: bin/node: Not found in archive".
+  // (safe — no user input in args)
   const extractDir = path.join(cacheDir, 'extract');
   fs.mkdirSync(extractDir, { recursive: true });
-  execFileSync('tar', ['xzf', archivePath, '-C', extractDir, '--strip-components=1', 'bin/node'], {
+  const member = `node-v${NODE_VERSION}-${osPart}-${nodeArch}/bin/node`;
+  execFileSync('tar', ['xzf', archivePath, '-C', extractDir, '--strip-components=1', member], {
     stdio: 'inherit',
   });
 

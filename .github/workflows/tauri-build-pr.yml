@@ -77,7 +77,11 @@ jobs:
         run: cd apps/web && npx vite build
 
       - name: Build Tauri (Windows)
-        run: cd app && npx tauri build
+        # @tauri-apps/cli is declared in app/package.json devDeps but is absent
+        # from package-lock.json, so `npm install` never installs it and a bare
+        # `npx tauri` errors "could not determine executable to run". Fetch the
+        # CLI explicitly by package name (npx resolves the win32 binary).
+        run: cd app && npx --yes @tauri-apps/cli@2 build
         env:
           # Skip code signing for PR verification — release.yml handles signing
           # only on tag push.
@@ -140,7 +144,9 @@ jobs:
         run: cd apps/web && npx vite build
 
       - name: Build Tauri (macOS universal)
-        run: cd app && npx tauri build --target universal-apple-darwin
+        # See verify-windows note: fetch @tauri-apps/cli by package name (absent
+        # from the lockfile). npx resolves the darwin universal binary.
+        run: cd app && npx --yes @tauri-apps/cli@2 build --target universal-apple-darwin
         env:
           TAURI_PRIVATE_KEY: ''
           TAURI_KEY_PASSWORD: ''
