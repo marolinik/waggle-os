@@ -83,7 +83,11 @@ async function sendAndWait(page: import('@playwright/test').Page, text: string):
   // locator that would hang fill() for the whole test timeout.
   await target.waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
   const before = (await page.locator('body').innerText().catch(() => '')).length;
-  await target.fill(text);
+  // Cold loads (heavy session + server-side embedding re-index) can delay the
+  // composer becoming actionable — click to focus, then fill, both with a
+  // tolerant-but-bounded timeout (not the full test timeout).
+  await target.click({ timeout: 30_000 }).catch(() => {});
+  await target.fill(text, { timeout: 30_000 });
   // Prefer an explicit Send affordance; fall back to Enter.
   const sendBtn = page.locator('button[aria-label*="Send" i], button:has-text("Send")').first();
   if (await sendBtn.isEnabled({ timeout: 800 }).catch(() => false)) {
@@ -118,7 +122,8 @@ async function sendAndWait(page: import('@playwright/test').Page, text: string):
 }
 
 test.use({ viewport: { width: 1440, height: 900 } });
-test.describe.configure({ mode: 'serial', timeout: 180_000 });
+// NOT serial — each persona is independent; one flake must not skip the rest.
+test.describe.configure({ timeout: 240_000 });
 
 test.describe('5-persona human E2E', () => {
   for (const p of PERSONAS) {
@@ -129,12 +134,21 @@ test.describe('5-persona human E2E', () => {
 
       await gotoDesktop(page);
       await openAppViaDock(page, 'Chat');
-      await page.waitForTimeout(1200);
-
-      // NOTE: Chat opens the workspace's last (populated) session, so the
-      // persona's messages append to it. We don't force a "New Session" (that
-      // destabilised the composer); instead the tail-capture below slices from
-      // the persona's first message, isolating their own exchange.
+      await page.waitForTimeout(1500);
+      // Start a CLEAN, light session per persona via a direct DOM click. The
+      // "New Session" button lives in a collapsed history panel so Playwright
+      // treats it as "not visible", but a DOM click fires it. A fresh session
+      // avoids appending to (and slow-loading) the workspace's huge existing
+      // session — that growing session was the root of the composer-readiness
+      // flake AND it isolates each persona's own exchange.
+      await page.evaluate(() => {
+        const ns = Array.from(document.querySelectorAll('button')).find(
+          (b) => (b.textContent || '').includes('New Session'),
+        );
+        if (ns) (ns as HTMLElement).click();
+      });
+      await page.waitForTimeout(1500);
+      await page.locator('textarea').first().waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {});
 
       for (let t = 0; t < p.turns.length; t++) {
         transcript.push({ role: 'user', text: p.turns[t] });

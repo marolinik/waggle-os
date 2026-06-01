@@ -1,45 +1,43 @@
 /**
  * 5-persona HUMAN E2E — reaction phase. Run via the Workflow tool:
- *   Workflow({ scriptPath: "scripts/persona-reactor-workflow.mjs", args: { personas: [...] } })
+ *   Workflow({ scriptPath: "scripts/persona-reactor-workflow.mjs",
+ *              args: { personaFiles: ["tests/vision/artifacts/personas/maya-founder.json", ...] } })
  *
- * For each persona captured by tests/vision/personas.spec.ts, one reactor agent
- * READS that persona's real screenshots + the real transcript (what they typed,
- * what the live agent actually replied, what Memory showed afterward) and reacts
- * strictly IN CHARACTER — real feeling, emotional bonding, honest friction. A
- * synthesis agent then aggregates the five lived experiences into a report.
+ * Each captured persona session (a JSON written by the journey: who, goal,
+ * transcript, conversationRendered = the agent's REAL reply, optional
+ * screenshots) is handed to one reactor agent that READS the file and reacts
+ * strictly IN CHARACTER — real feeling, emotional bonding, honest friction.
+ * A synthesis agent aggregates the five lived experiences into a report.
  *
- * Grounded in reality: reactors react to what the app ACTUALLY did, not an
- * imagined session — so the feelings are about real responses, not fiction.
- *
- * args.personas: [{ id, who, goal, transcript, conversationRendered,
- *                   memoryAfter, screenshots[], consoleErrors[] }]
+ * Grounded in reality: reactors react to what the live app ACTUALLY replied.
  */
 
 export const meta = {
   name: 'persona-experience-e2e',
   description: 'Five human personas react in-character to their REAL live-app sessions; synthesize the collective emotional + UX verdict',
   phases: [
-    { title: 'React', detail: 'one in-character reactor per persona (reads real screens + transcript)' },
+    { title: 'React', detail: 'one in-character reactor per persona (reads its real session JSON)' },
     { title: 'Synthesize', detail: 'aggregate the five lived experiences into one report' },
   ],
 }
 
 let parsed = args
 if (typeof parsed === 'string') { try { parsed = JSON.parse(parsed) } catch { parsed = {} } }
-const personas = Array.isArray(parsed?.personas) ? parsed.personas : []
-if (personas.length === 0) {
-  log('No personas supplied. Pass args.personas = [the artifacts/personas/*.json objects].')
-  return { error: 'no-personas' }
+const files = Array.isArray(parsed?.personaFiles) ? parsed.personaFiles : []
+if (files.length === 0) {
+  log('No personaFiles supplied. Pass args.personaFiles = [paths to artifacts/personas/*.json].')
+  return { error: 'no-persona-files' }
 }
 
-log(`Living through ${personas.length} real persona session(s)...`)
+log(`Living through ${files.length} real persona session(s)...`)
 
 const REACT_SCHEMA = {
   type: 'object',
-  required: ['feeling', 'gotMe', 'bondingMoment', 'worstFriction', 'scores', 'wouldReturn', 'verdictOneLine'],
+  required: ['persona', 'feeling', 'gotMe', 'bondingMoment', 'worstFriction', 'scores', 'wouldReturn', 'verdictOneLine'],
   additionalProperties: false,
   properties: {
-    feeling: { type: 'string', description: 'first-person, visceral, specific to what ACTUALLY happened on screen — not generic' },
+    persona: { type: 'string', description: 'the persona id from the file' },
+    feeling: { type: 'string', description: 'first-person, visceral, specific to what the agent ACTUALLY said — not generic' },
     gotMe: { type: 'boolean', description: 'did the agent genuinely understand who I am and what I needed?' },
     bondingMoment: { type: 'string', description: 'the single moment I felt a connection — or "none" with why' },
     worstFriction: { type: 'string', description: 'the single thing that most broke the spell or frustrated me' },
@@ -61,40 +59,26 @@ const REACT_SCHEMA = {
 phase('React')
 
 const reactions = await parallel(
-  personas.map((p) => () =>
+  files.map((f) => () =>
     agent(
-      `You ARE this person — react in first person, in their voice, with their actual emotional disposition. Do NOT be a polite reviewer; be the human.
+      `Use the Read tool to open this persona session file:
+${f}
 
-WHO YOU ARE:
-${p.who}
+It is JSON with: id (your persona), who (exactly who you are — your disposition), goal (why you opened Waggle), transcript (what YOU typed), conversationRendered (the agent's REAL reply, verbatim, as it appeared on your screen), and screenshots (Read any that are listed).
 
-WHY YOU OPENED WAGGLE TODAY:
-${p.goal}
+Now BECOME that person and react in first person, in their voice, with their actual emotional disposition. You are NOT a polite reviewer — you are the human who just had this exact exchange.
 
-WHAT ACTUALLY HAPPENED — use the Read tool to LOOK at your real screenshots before reacting:
-${(p.screenshots || []).map((s) => `  ${s}`).join('\n')}
+React to the AGENT'S ACTUAL WORDS in conversationRendered — quote a phrase that landed or fell flat. Be honest:
+- If it nailed you, let yourself feel that.
+- If it was generic, hedging, or missed you, let it sting and say so.
+- Watch for anything that felt OFF — e.g. it assuming facts about you that you never said (did it confuse you with someone else?). That breaks trust; react to it as a real person would.
+- Did its "memory" (recalling/saving) make the persistence promise feel real to you, or was it noise?
 
-THE REAL TRANSCRIPT (what you typed → what the agent actually replied is in the rendered conversation below):
-You said:
-${(p.transcript || []).map((m) => `  • ${m.text}`).join('\n')}
-
-The conversation as it rendered on your screen (this is the agent's REAL reply — judge IT, the actual words):
-"""
-${(p.conversationRendered || '').slice(0, 5000)}
-"""
-
-What Memory showed AFTER your chat (did your conversation leave a trace — the thing they promise makes this different?):
-"""
-${(p.memoryAfter || '').slice(0, 1500)}
-"""
-
-${(p.consoleErrors || []).length ? `(Under the hood there were console errors: ${JSON.stringify(p.consoleErrors)} — you wouldn't see these, but they may have caused glitches you DID feel.)` : ''}
-
-Now react HONESTLY as yourself. Be specific to the real words the agent said — quote a phrase that landed or fell flat. If it was generic or missed you, say so and let it sting. If it genuinely got you, let yourself feel that. Did you BOND? Would you come back tomorrow? What's the one moment that connected and the one that broke it?
+Did you BOND? Would you come back tomorrow? What's the one moment that connected and the one that broke it? Set scores honestly (1-10). Put the persona id in "persona".
 
 Return ONLY the structured reaction.`,
-      { label: `react:${p.id}`, phase: 'React', schema: REACT_SCHEMA },
-    ).then((r) => ({ id: p.id, who: p.who, goal: p.goal, ...r })),
+      { label: `react:${f.split(/[\\/]/).pop()}`, phase: 'React', schema: REACT_SCHEMA },
+    ),
   ),
 )
 
@@ -106,7 +90,7 @@ log(`Avg bonding ${avg('bonding')}/10 · trust ${avg('trust')}/10 · delight ${a
 phase('Synthesize')
 
 const report = await agent(
-  `You are a head of product synthesizing FIVE real, in-character human reactions to live first sessions with Waggle OS (each grounded in the user's actual screens + the agent's actual replies). Write an honest UX + emotional report to the repo-relative path:
+  `You are a head of product synthesizing FIVE real, in-character human reactions to live first sessions with Waggle OS (each grounded in the agent's actual replies). Write an honest UX + emotional report to the repo-relative path:
 tests/vision/artifacts/persona-experience-report.md  (use the Write tool)
 
 Reactions (JSON):
@@ -116,11 +100,11 @@ The report must contain:
 1. "# Waggle — 5-Persona Human E2E" + a one-line emotional verdict (averages: bonding ${avg('bonding')}/10, trust ${avg('trust')}/10, delight ${avg('delight')}/10; ${returners}/${ok.length} would return).
 2. A per-persona section: who they are, their one-line verdict, bonding/trust/delight scores, the bonding moment, the worst friction, and a representative quote of how they FELT.
 3. "## What made them bond" — the cross-persona triggers of genuine connection (cite which personas).
-4. "## What broke the spell" — the cross-persona friction themes, ordered by how much they hurt.
-5. "## The memory moat — did they feel it?" — did the post-chat Memory state make anyone feel the persistence promise was real? Be honest if it didn't land.
+4. "## What broke the spell" — the cross-persona friction themes, ordered by how much they hurt. (If any persona felt the agent confused them with someone else / asserted unfamiliar facts, surface that prominently — it's an identity/workspace-bleed risk.)
+5. "## The memory moat — did they feel it?" — did the recall/save behavior make anyone feel the persistence promise was real? Be honest if it didn't land.
 6. "## Verdict: would real humans bond with this?" — your unsentimental call + the top 3 changes that would most raise bonding/return rate.
 
-Be specific and honest — if the sessions were mediocre or the agent was generic, SAY so; do not inflate. Then return { reportPath, avgBonding, avgTrust, avgDelight, wouldReturn: ${returners}, total: ${ok.length} }.`,
+Be specific and honest — if a session was mediocre or generic, SAY so; do not inflate. Then return { reportPath, avgBonding, avgTrust, avgDelight, wouldReturn: ${returners}, total: ${ok.length} }.`,
   {
     label: 'synthesize',
     phase: 'Synthesize',
