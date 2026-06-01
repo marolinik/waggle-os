@@ -42,3 +42,22 @@ The lone failure: `tsc --noEmit -p apps/web/tsconfig.node.json` → `vite.config
 
 ## Conclusion
 Main at `f72cda5` is green for everything shipped this cycle. The only red is environmental (no local Docker infra) or pre-existing (dual-vite), with documented evidence and zero attribution to session commits. No code changes required.
+
+---
+
+## Addendum — CI health (GitHub Actions `ci.yml`), discovered 2026-06-01
+
+Investigating the no-Docker test gate surfaced that **CI's `test` job has been RED on every push** (and is a multi-layer breakage, all pre-existing):
+
+- **L1 — `npm install` → `EBADPLATFORM`** *(FIXED — PR #5, branch `fix/ci-cross-platform-install-and-unit-gate`)*. Root `package.json` pinned 4 Windows-only native binaries (`@rolldown/binding-win32-x64-msvc`, `@swc/core-win32-x64-msvc`, `lightningcss-win32-x64-msvc`, `sqlite-vec-windows-x64`) as **hard** deps, so `npm install` failed on Linux/macOS. Fix: moved them to `optionalDependencies` (npm skips os-mismatched optional deps). Verified on CI: install + tsc + lint + app-tsc now PASS on Linux.
+- **L2 — bare `npx tsc --noEmit`**: FINE (root `tsconfig.json` is a near-noop; exit 0).
+- **L3 — `npm run lint`**: FINE (0/0).
+- **L4 — `npm test` (full vitest, no Docker)** *(unit-gate split landed in PR #5)*: default `npm test` now excludes the 19 Postgres/Redis suites so the gate runs without Docker.
+
+**Remaining CI-debt (pre-existing, NOT caused by PR #5 — revealed because L1 let tests run for the first time in a while). Full CI-green needs all three:**
+
+1. **Workspace packages not built before tests** (~23 failures): `ci.yml` runs `npm test` with no prior build, so `@waggle/{shared,hive-mind-core,hive-mind-shim-core,hive-mind-hooks-core,hive-mind-hooks-codex}` fail to resolve their entry (no `dist/`). Locally these resolve only because `dist/` exists from prior builds. Fix options: add a build step in CI, OR add vitest `resolve.alias` → `src` for these packages (mirrors the existing `@waggle/marketplace` alias). Note `build:packages` alone is insufficient — it only builds shared/core/agent/server, not the `hive-mind-*` packages.
+2. **Uncommitted seed DB** (~80 failures): the marketplace sync suites `copyfile` `packages/marketplace/marketplace.db`, a gitignored/uncommitted file absent on a fresh CI checkout. Fix: generate the seed in test setup, commit a fixture, or gate these tests.
+3. **Tests asserting on local working-tree state** (~4): assertions that `.planning/` exists at repo root and a hive-950 hex allow-list — both depend on gitignored/local-only state absent on CI. Fix: make these robust to a clean checkout, or scope them out of CI.
+
+These three are a scoped follow-up (some involve judgment calls about how the tests *should* obtain their fixtures), tracked here rather than force-fixed in the install/gate PR.
