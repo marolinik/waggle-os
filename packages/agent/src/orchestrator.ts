@@ -530,7 +530,7 @@ export class Orchestrator {
         + "These are facts saved in this WORKSPACE'S memory, retrieved for the user's current message. "
         + 'They may come from earlier sessions, other sessions, or imported sources — NOT necessarily from this conversation.\n'
         + 'IMPORTANT — ground your response in them, but attribute provenance HONESTLY:\n'
-        + '- Say "your saved memory shows…" / "from your workspace notes…". Do NOT say "from our previous discussion" or "you just mentioned" unless it was actually said earlier in THIS conversation.\n'
+        + '- Attribute saved / earlier-session memory EXPLICITLY as memory: "your saved memory shows…", "in an earlier session you noted…", "from your workspace notes…". Never imply an ongoing relationship — do NOT say "welcome back", "you\'re back in context", "as we\'ve been discussing", or "from our last session", even when the recalled memory is real and cross-session. Reserve "you just said" / "as you mentioned" strictly for things said earlier in THIS same conversation.\n'
         + '- On the user\'s first message, do NOT claim continuity ("welcome back", "as we discussed", "you\'re back in context") — you have no prior turn with them yet.\n'
         + '- State ONLY what the memories below actually say. Do NOT invent specifics (numbers, names, dates, competitors) that are not present — if unsure, ask rather than assert.\n'
         + '- Do NOT ignore relevant memories. Do NOT present memory content as your own reasoning — attribute it.\n\n'
