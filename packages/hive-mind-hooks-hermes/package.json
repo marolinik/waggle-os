@@ -1,27 +1,47 @@
 {
   "name": "@waggle/hive-mind-hooks-hermes",
-  "version": "0.0.1",
-  "description": "STUB — hive-mind silent capture shim for hermes. Wave 2/3 of marolinik/waggle-os monorepo migration. Implementation pending.",
+  "version": "0.1.0",
+  "description": "Hermes silent capture shim for hive-mind. Adds on_session_start / pre_llm_call / post_llm_call shell hooks that route conversation episodes into hive-mind frames via @waggle/hive-mind-shim-core. Reversible, create-if-missing install — additive marker-tagged merge into ~/.hermes/config.yaml with literal byte-identical uninstall (YAML round-trip is lossy). No PreCompact event (Hermes ships no compaction hook). Built on @waggle/hive-mind-hooks-core.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "hermes-hooks": "dist/bin/hermes-hooks.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./hooks/session-start": "./dist/hooks/session-start.js",
+    "./hooks/user-prompt-submit": "./dist/hooks/user-prompt-submit.js",
+    "./hooks/stop": "./dist/hooks/stop.js"
   },
   "scripts": {
-    "build": "tsc --build"
-  },
-  "dependencies": {
-    "@waggle/hive-mind-shim-core": "*"
+    "build": "tsc --build",
+    "build:clean": "tsc --build --clean",
+    "typecheck": "tsc --build && tsc --noEmit -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "engines": {
     "node": ">=20"
   },
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "@waggle/hive-mind-hooks-core": "*",
+    "@waggle/hive-mind-shim-core": "*",
+    "yaml": "^2.9.0"
+  },
+  "peerDependencies": {
+    "@waggle/hive-mind-cli": "*"
+  },
+  "peerDependenciesMeta": {
+    "@waggle/hive-mind-cli": {
+      "optional": true
+    }
   },
   "repository": {
     "type": "git",
@@ -39,7 +59,8 @@
     "memory",
     "ai",
     "hook",
-    "stub"
+    "silent-capture",
+    "yaml"
   ],
   "types": "dist/index.d.ts"
 }

@@ -6,8 +6,8 @@
  * shipped a `bin`; the other hook packages were Wave 2/3 `export {}` stubs
  * with no bin, so `npx @waggle/hive-mind-hooks-<id>` ALWAYS failed for the
  * user. HOOKS_COHORT fixed this by gating hook actions on the tools whose
- * package actually ships a bin. The cohort has since grown as Tier-A
- * packages landed (claude-code, codex, codex-desktop, cursor).
+ * package actually ships a bin. The cohort has since grown as Tier-A/B
+ * packages landed (claude-code, codex, codex-desktop, cursor, hermes).
  *
  * The existing tool-launcher tests mock execCapture and only assert the
  * npx command SHAPE, so the binless-stub failure was invisible. These
@@ -54,7 +54,7 @@ describe('HOOKS_COHORT grounding (R8-001)', () => {
   });
 
   it('matches the current real-bin cohort (snapshot tripwire)', () => {
-    expect([...HOOKS_COHORT].sort()).toEqual(['claude-code', 'codex', 'codex-desktop', 'cursor']);
+    expect([...HOOKS_COHORT].sort()).toEqual(['claude-code', 'codex', 'codex-desktop', 'cursor', 'hermes']);
   });
 
   it('is a strict subset of LAUNCH_COHORT (all hook targets are launchable, not vice-versa)', () => {

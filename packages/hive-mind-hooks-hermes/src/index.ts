@@ -1,11 +1,71 @@
-// @waggle/hive-mind-hooks-hermes — STUB.
-//
-// Wave 2/3 implementation pending per CC Sesija B brief 2026-04-30 §2.3 Task B10.
-// This package exists in the monorepo so that subtree-split + dependency-graph
-// tooling sees the package boundary; runtime functionality lands in a future
-// sprint when the hermes client's hook surface is implemented.
-//
-// See packages/hive-mind-hooks-claude-code for the Wave 1 reference shape.
+/**
+ * @waggle/hive-mind-hooks-hermes — barrel export.
+ *
+ * Hermes silent-capture shim for hive-mind. A bespoke-YAML installer built
+ * on @waggle/hive-mind-hooks-core, with create-if-missing semantics
+ * (Hermes's `~/.hermes/config.yaml` is optional). Targets the SHELL-HOOKS
+ * system (the top-level `hooks:` block) — NOT the gateway dir-hooks nor the
+ * in-process plugin hooks.
+ *
+ * Three events only (NO PreCompact — Hermes ships no compaction hook):
+ *   - SessionStart is SPLIT across `on_session_start` (observer) and
+ *     `pre_llm_call` (inject, gated `is_first_turn`).
+ *   - UserPromptSubmit → `pre_llm_call`.
+ *   - Stop → `post_llm_call`.
+ *
+ * YAML round-trip is lossy, so reversibility relies on the literal
+ * byte-identical backup written at install time. Programmatic install /
+ * uninstall / verify lifecycle; most users invoke the `hermes-hooks` bin.
+ */
 
-// TODO: Wave 2/3 implementation
-export {};
+export type {
+  InstallOptions,
+  InstallResult,
+} from './install.js';
+export { install } from './install.js';
+
+export type {
+  UninstallOptions,
+  UninstallResult,
+} from './uninstall.js';
+export { uninstall } from './uninstall.js';
+
+export type {
+  VerifyOptions,
+  VerifyResult,
+  VerifyCheck,
+} from './verify.js';
+export { verify } from './verify.js';
+
+export type {
+  HermesPaths,
+  ResolvePathsOptions,
+  HookBasename,
+} from './paths.js';
+export {
+  resolvePaths,
+  allHookBasenames,
+  backupPathFor,
+  hookCommandFor,
+} from './paths.js';
+
+export {
+  hermesAdapter,
+  HERMES_EVENT_NAME,
+  HERMES_SESSION_START_OBSERVE_EVENT,
+} from './adapter.js';
+
+export type {
+  HermesHookEntry,
+  HermesRegisterEntry,
+} from './yaml-merger.js';
+export {
+  parseConfig,
+  serializeConfig,
+  yamlRegister,
+  yamlUnregister,
+  hasHiveEntries,
+  isHiveEntry,
+  HIVE_MIND_MARKER,
+  HOOKS_KEY,
+} from './yaml-merger.js';
