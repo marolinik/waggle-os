@@ -61,6 +61,11 @@ jobs:
 
       - run: npm install
 
+      # apps/web's tsc build imports @waggle/shared etc. which export dist/;
+      # build the workspace packages first (the deploy does this via build:all).
+      - name: Build packages
+        run: npm run build:packages
+
       - name: Build frontend
         run: npm run build
 
