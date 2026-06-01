@@ -52,14 +52,14 @@ const execFileAsync = promisify(execFile);
 
 /**
  * Tools whose hive-mind hook package is real (ships a `bin`) and can
- * therefore be installed/verified/uninstalled via npx. Today only
- * claude-code qualifies; cursor / claude-desktop / codex /
- * codex-desktop / hermes / openclaw hook packages are binless
+ * therefore be installed/verified/uninstalled via npx. claude-code and
+ * codex qualify (both ship a real bin); cursor / claude-desktop /
+ * codex-desktop / hermes / openclaw hook packages are still binless
  * `export {}` stubs (Wave 2/3). Hook code paths gate on THIS cohort,
  * not LAUNCH_COHORT, so the UI never offers a hook action that npx
  * cannot fulfil.
  */
-export const HOOKS_COHORT: readonly ToolId[] = ['claude-code'] as const;
+export const HOOKS_COHORT: readonly ToolId[] = ['claude-code', 'codex'] as const;
 
 // ── Injectable deps ─────────────────────────────────────────────────
 
@@ -296,7 +296,7 @@ export async function runHookCommand(
       stdout: '',
       stderr: '',
       code: -1,
-      error: `Hook management for '${opts.id}' is not supported yet — only claude-code ships a functional hook package today.`,
+      error: `Hook management for '${opts.id}' is not supported yet — only claude-code and codex ship functional hook packages today.`,
     };
   }
   const deps = resolveDeps(opts.deps ?? {});

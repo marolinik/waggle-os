@@ -1,11 +1,49 @@
-// @waggle/hive-mind-hooks-codex — STUB.
-//
-// Wave 2/3 implementation pending per CC Sesija B brief 2026-04-30 §2.3 Task B10.
-// This package exists in the monorepo so that subtree-split + dependency-graph
-// tooling sees the package boundary; runtime functionality lands in a future
-// sprint when the codex client's hook surface is implemented.
-//
-// See packages/hive-mind-hooks-claude-code for the Wave 1 reference shape.
+/**
+ * @waggle/hive-mind-hooks-codex — barrel export.
+ *
+ * OpenAI Codex silent-capture shim for hive-mind. The second reference
+ * shape: a CC-clone JSON installer built on @waggle/hive-mind-hooks-core,
+ * with create-if-missing semantics (codex's `~/.codex/hooks.json` is
+ * optional). Programmatic install / uninstall / verify lifecycle; most
+ * users invoke the `codex-hooks` bin.
+ */
 
-// TODO: Wave 2/3 implementation
-export {};
+export type {
+  InstallOptions,
+  InstallResult,
+} from './install.js';
+export { install } from './install.js';
+
+export type {
+  UninstallOptions,
+  UninstallResult,
+} from './uninstall.js';
+export { uninstall } from './uninstall.js';
+
+export type {
+  VerifyOptions,
+  VerifyResult,
+  VerifyCheck,
+} from './verify.js';
+export { verify } from './verify.js';
+
+export type {
+  CodexPaths,
+  ResolvePathsOptions,
+  HookBasename,
+} from './paths.js';
+export {
+  resolvePaths,
+  allHookBasenames,
+  backupPathFor,
+  hookCommandFor,
+} from './paths.js';
+
+export {
+  codexAdapter,
+  codexRegisterSpec,
+  extractTrigger,
+  CODEX_EVENT_NAME,
+  HIVE_MIND_MARKER,
+  SESSION_START_MATCHER,
+} from './adapter.js';
