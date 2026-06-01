@@ -23,7 +23,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { rmSync, existsSync } from 'node:fs';
 import { MindDB } from '../../src/mind/db.js';
-import { FrameStore } from '../../src/mind/frames.js';
+import { FrameStore, stripHmPrefix } from '../../src/mind/frames.js';
 
 describe('FrameStore (hive-mind port)', () => {
   let dbPath: string;
@@ -181,5 +181,134 @@ describe('FrameStore (hive-mind port)', () => {
     expect(stats.byImportance.critical).toBe(1);
     expect(stats.byImportance.important).toBe(1);
     expect(stats.byImportance.normal).toBe(2);
+  });
+});
+
+/**
+ * OQ-6 — provenance-insensitive save-side dedup. The OpenClaw gateway can
+ * capture the same turn that a backend tool (Claude Code / Codex) also
+ * captures via its own lifecycle hooks, producing two frames with identical
+ * bodies but different `[hm session:… src:… event:…] ` prefixes. `findDuplicate`
+ * now strips that prefix before hashing, so the two collapse into one stored
+ * frame (later writer only bumps `access_count`).
+ *
+ * Design: docs/superpowers/specs/2026-06-01-openclaw-dedup-design.md
+ */
+describe('FrameStore provenance-insensitive dedup (OQ-6)', () => {
+  let dbPath: string;
+  let db: MindDB;
+  let frames: FrameStore;
+
+  beforeEach(() => {
+    dbPath = join(tmpdir(), `waggle-mind-dedup-test-${Date.now()}-${Math.random()}.mind`);
+    db = new MindDB(dbPath);
+    db.getDatabase()
+      .prepare("INSERT INTO sessions (gop_id, status, started_at) VALUES ('gop-test', 'active', datetime('now'))")
+      .run();
+    frames = new FrameStore(db);
+  });
+
+  afterEach(() => {
+    db.close();
+    if (existsSync(dbPath)) rmSync(dbPath);
+    for (const suffix of ['-shm', '-wal']) {
+      if (existsSync(dbPath + suffix)) rmSync(dbPath + suffix);
+    }
+  });
+
+  it('collapses two same-body captures from different sources into one frame', () => {
+    const openclaw = frames.createIFrame(
+      'gop-test',
+      '[hm session:openclaw-gateway:c1 src:openclaw event:stop] the shared turn body',
+    );
+    const backend = frames.createIFrame(
+      'gop-test',
+      '[hm session:s2 src:claude-code event:stop] the shared turn body',
+    );
+
+    // Second (backend) capture returns the FIRST (openclaw) frame — no new row.
+    expect(backend.id).toBe(openclaw.id);
+    expect(frames.getStats().total).toBe(1);
+
+    // First writer's frame is kept verbatim, with its provenance intact.
+    const row = frames.getById(openclaw.id);
+    expect(row?.content).toBe(
+      '[hm session:openclaw-gateway:c1 src:openclaw event:stop] the shared turn body',
+    );
+    // The later duplicate bumped access_count.
+    expect(row?.access_count).toBeGreaterThanOrEqual(1);
+  });
+
+  it('keeps two frames when the bodies differ despite matching prefixes shape', () => {
+    const a = frames.createIFrame(
+      'gop-test',
+      '[hm session:openclaw-gateway:c1 src:openclaw event:stop] body one',
+    );
+    const b = frames.createIFrame(
+      'gop-test',
+      '[hm session:s2 src:claude-code event:stop] body two',
+    );
+
+    expect(b.id).not.toBe(a.id);
+    expect(frames.getStats().total).toBe(2);
+  });
+
+  it('regression: non-prefixed identical bodies still dedup exactly as before', () => {
+    const first = frames.createIFrame('gop-test', 'plain harvested body');
+    const second = frames.createIFrame('gop-test', 'plain harvested body');
+
+    expect(second.id).toBe(first.id);
+    expect(frames.getStats().total).toBe(1);
+    expect(frames.getById(first.id)?.access_count).toBeGreaterThanOrEqual(1);
+  });
+
+  it('collapses a prefixed capture against an existing non-prefixed body', () => {
+    const plain = frames.createIFrame('gop-test', 'the shared turn body');
+    const prefixed = frames.createIFrame(
+      'gop-test',
+      '[hm session:openclaw-gateway:c1 src:openclaw event:stop] the shared turn body',
+    );
+
+    expect(prefixed.id).toBe(plain.id);
+    expect(frames.getStats().total).toBe(1);
+    // First writer (the plain body) is preserved verbatim.
+    expect(frames.getById(plain.id)?.content).toBe('the shared turn body');
+  });
+
+  it('does not dedup a duplicate older than the 500-frame recency window', () => {
+    // Insert a target body, then push it past the LIMIT 500 window with 500
+    // distinct fillers, then attempt to re-insert the same body. Because the
+    // original is now beyond the window, it is not found → a new row is made.
+    const original = frames.createIFrame('gop-test', 'recency-bound body');
+    for (let i = 0; i < 500; i++) {
+      frames.createIFrame('gop-test', `filler-${i}`);
+    }
+    const reinserted = frames.createIFrame('gop-test', 'recency-bound body');
+
+    expect(reinserted.id).not.toBe(original.id);
+    // Both the original and the re-inserted copy exist (502 total: 2 bodies + 500 fillers).
+    expect(frames.getStats().total).toBe(502);
+  });
+});
+
+describe('stripHmPrefix helper', () => {
+  it('removes a well-formed hive-mind metadata prefix', () => {
+    expect(
+      stripHmPrefix('[hm session:openclaw-gateway:c1 src:openclaw event:stop] the body'),
+    ).toBe('the body');
+  });
+
+  it('leaves prefix-less content untouched (no-op)', () => {
+    expect(stripHmPrefix('plain harvested body')).toBe('plain harvested body');
+  });
+
+  it('does not over-strip a body that merely contains brackets later', () => {
+    expect(stripHmPrefix('do X [note] then Y')).toBe('do X [note] then Y');
+  });
+
+  it('strips only the leading prefix, preserving later brackets in the body', () => {
+    expect(
+      stripHmPrefix('[hm src:claude-code event:stop] do X [note] then Y'),
+    ).toBe('do X [note] then Y');
   });
 });

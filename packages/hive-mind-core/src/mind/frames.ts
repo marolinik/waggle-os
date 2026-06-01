@@ -47,6 +47,20 @@ const IMPORTANCE_MULTIPLIERS: Record<Importance, number> = {
   deprecated: 0.3,
 };
 
+/**
+ * Strip the leading hive-mind metadata prefix `[hm session:… src:… event:…] `
+ * so save-side dedup (`findDuplicate`) compares the semantic turn BODY, not the
+ * provenance. The prefix is emitted by shim-core's `buildPrefix`
+ * (`[hm <tokens>] `) and carries `session:`/`src:`/`event:` tokens; two captures
+ * of the same turn from different sources differ only in that prefix. Content
+ * without the prefix (harvest / ingest / cognify) is returned unchanged — a
+ * no-op. The regex anchors on `[hm ` and stops at the first `]`, so a body that
+ * merely contains `[` brackets later is never over-stripped.
+ */
+export function stripHmPrefix(content: string): string {
+  return content.replace(/^\[hm [^\]]*\]\s*/, '');
+}
+
 export class FrameStore {
   private db: MindDB;
 
@@ -242,6 +256,14 @@ export class FrameStore {
    * character (0x20), which would mis-compare any content with trailing
    * newlines, tabs, or carriage returns.
    *
+   * Comparison is also provenance-insensitive (OQ-6): both the incoming
+   * content and each stored frame's content are passed through
+   * `stripHmPrefix` before hashing, so two same-body captures of the same
+   * turn collapse into one frame regardless of which source's `[hm …]`
+   * metadata prefix they carry (e.g. an OpenClaw-gateway capture vs the
+   * backend tool's own lifecycle-hook capture). Content without the prefix
+   * (harvest / ingest / cognify) is unaffected — the strip is a no-op.
+   *
    * NOTE: Only the last 500 frames are inspected as a cost bound. This is
    * deliberate — hash-based dedup across an unbounded table would need a
    * separate content_hash column with its own index. If a duplicate check
@@ -249,14 +271,14 @@ export class FrameStore {
    * gop_id-scoped guard.
    */
   findDuplicate(content: string): MemoryFrame | null {
-    const hash = createHash('sha256').update(content.trim()).digest('hex');
+    const hash = createHash('sha256').update(stripHmPrefix(content).trim()).digest('hex');
     const existing = this.db.getDatabase().prepare(`
       SELECT * FROM memory_frames
       ORDER BY id DESC LIMIT 500
     `).all() as MemoryFrame[];
 
     for (const frame of existing) {
-      const frameHash = createHash('sha256').update(frame.content.trim()).digest('hex');
+      const frameHash = createHash('sha256').update(stripHmPrefix(frame.content).trim()).digest('hex');
       if (frameHash === hash) {
         // Update access count instead of creating duplicate
         this.touch(frame.id);
