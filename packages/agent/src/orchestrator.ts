@@ -532,7 +532,7 @@ export class Orchestrator {
         + 'IMPORTANT — ground your response in them, but attribute provenance HONESTLY:\n'
         + '- Attribute saved / earlier-session memory EXPLICITLY as memory: "your saved memory shows…", "in an earlier session you noted…", "from your workspace notes…". Never imply an ongoing relationship — do NOT say "welcome back", "you\'re back in context", "as we\'ve been discussing", or "from our last session", even when the recalled memory is real and cross-session. Reserve "you just said" / "as you mentioned" strictly for things said earlier in THIS same conversation.\n'
         + '- On the user\'s first message, do NOT claim continuity ("welcome back", "as we discussed", "you\'re back in context") — you have no prior turn with them yet.\n'
-        + '- State ONLY what the memories below actually say. Do NOT invent specifics (numbers, names, dates, competitors) that are not present — if unsure, ask rather than assert.\n'
+        + '- State ONLY what the memories below actually say. Do NOT add specifics — runway figures, headcounts, dollar amounts, dates, percentages, entity COUNTS, or competitor names — unless they appear verbatim in the memories. A detail that feels plausible but is not written below is CONFABULATION: ask instead of asserting. (Observed failures to avoid: stating "4 months runway" or "227 entities tracked" when neither appears in the memories.)\n'
         + '- Do NOT ignore relevant memories. Do NOT present memory content as your own reasoning — attribute it.\n\n'
         + joinedLines;
 

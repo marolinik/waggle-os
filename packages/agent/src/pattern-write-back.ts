@@ -290,7 +290,11 @@ export async function runPatternWriteBack(
       if (decisionLines.length > 0 && saved.length < 5) {
         const text = decisionLines[0].replace(/^[-*\d.#]+\s*/, '').trim();
         if (text.length > 20) {
-          await save(`Recommendation: ${text.slice(0, RECALL_LINE_LENGTH)}`, 'important');
+          // Confabulation-persistence guard: this is the AGENT's own assertion,
+          // not a user-stated fact. Persist it audit-visible but at 'temporary'
+          // so the recall path (which excludes 'temporary') can't re-surface a
+          // confabulated specific as authoritative memory on a later turn.
+          await save(`Recommendation: ${text.slice(0, RECALL_LINE_LENGTH)}`, 'temporary');
           savedStructured = true;
           break;
         }
@@ -319,7 +323,9 @@ export async function runPatternWriteBack(
         const keyPoints = bullets.slice(0, 3).join('; ');
         const heading = lines.find(l => l.startsWith('#'))?.replace(/^#+\s+/, '') ?? '';
         const prefix = heading ? `${heading}: ` : 'Key points: ';
-        await save(`${prefix}${keyPoints.slice(0, FINDINGS_SLICE_LENGTH)}`, 'normal');
+        // Agent-extracted bullets from its own reply — audit-visible but
+        // 'temporary' (recall-excluded) so confabulated specifics can't loop back.
+        await save(`${prefix}${keyPoints.slice(0, FINDINGS_SLICE_LENGTH)}`, 'temporary');
         savedStructured = true;
       }
     }
@@ -332,7 +338,9 @@ export async function runPatternWriteBack(
       const summary = heading
         ? `${heading}${firstMeaningful ? ': ' + firstMeaningful : ''}`
         : firstMeaningful || 'Work output produced';
-      await save(`Work completed: ${summary.slice(0, RECALL_LINE_LENGTH)}`, 'normal');
+      // Agent's own summary of its reply — audit-visible but 'temporary'
+      // (recall-excluded) to sever the confabulation→save→recall-as-fact loop.
+      await save(`Work completed: ${summary.slice(0, RECALL_LINE_LENGTH)}`, 'temporary');
     }
   }
 
