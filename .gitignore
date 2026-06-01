@@ -206,3 +206,6 @@ apps/www/public/brand/_backup-*/
 # Lighthouse audit artifacts (regenerable via `npx lighthouse`)
 apps/www/lighthouse-report.json
 
+
+# Vision-harness capture output (regenerated per run)
+tests/vision/artifacts/
