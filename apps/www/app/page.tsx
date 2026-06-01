@@ -1,8 +1,11 @@
 import { getTranslations } from 'next-intl/server';
 import Navbar from './_components/Navbar';
 import Hero from './_components/Hero';
-import ProofPointsBand from './_components/ProofPointsBand';
 import HowItWorks from './_components/HowItWorks';
+import Pillars from './_components/Pillars';
+import ComparisonBeat from './_components/ComparisonBeat';
+import ProofPointsBand from './_components/ProofPointsBand';
+import WowBeat from './_components/WowBeat';
 import BrandPersonasCard from './_components/BrandPersonasCard';
 import Pricing from './_components/Pricing';
 import TrustBand from './_components/TrustBand';
@@ -18,11 +21,16 @@ interface HomePageProps {
 }
 
 /**
- * Waggle landing page — v3.2 (Sesija D §3.2 with full i18n).
+ * Waggle landing page — N2 IA.
  *
- * Renders 8 locked sections in IA order. Hero variant resolves server-side
- * from URL search params per amendment §1.1; Personas wrapper copy lives in
- * `messages/en.json` under `landing.personas_section.*`.
+ * Spec IA order: hero → how-it-works → pillars → comparison → proof → wow →
+ * trust → pricing → final CTA. The Personas section (not in the spec IA) is
+ * kept, placed between WowBeat and TrustBand.
+ *
+ * Hero variant still resolves server-side from URL search params (the A/B
+ * resolver infra is intact) but the Hero renders the committed flat copy.
+ * Personas wrapper copy lives in `messages/en.json` under
+ * `landing.personas_section.*`.
  */
 export default async function HomePage({ searchParams }: HomePageProps) {
   const params = await searchParams;
@@ -38,8 +46,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       <Navbar />
       <main>
         <Hero variantId={variantId} />
-        <ProofPointsBand />
         <HowItWorks />
+        <Pillars />
+        <ComparisonBeat />
+        <ProofPointsBand />
+        <WowBeat />
         <section
           id="personas"
           style={{ background: 'var(--hive-950, #08090c)' }}
@@ -51,8 +62,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             subtitle={t('subtitle')}
           />
         </section>
-        <Pricing />
         <TrustBand />
+        <Pricing />
         <FinalCTA />
       </main>
       <Footer />

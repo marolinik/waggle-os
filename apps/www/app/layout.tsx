@@ -119,13 +119,13 @@ const inter = Inter({
 /* `getTranslations`-driven values pulled at request time.             */
 /* ────────────────────────────────────────────────────────────────── */
 
-const META_TITLE = 'Waggle — Your AI Agent Workspace';
+const META_TITLE = 'Waggle — The AI Workspace for Experts';
 const META_DESCRIPTION =
-  'Desktop AI agent workspace with persistent memory, 53+ tools, and zero cloud dependency. Free for individuals.';
+  "Be the expert. We'll be the AI. The workspace where you go to work — it knows you, knows your projects, and runs the AI so you don't have to. Local-first.";
 const META_OG_DESCRIPTION =
-  'A workspace where AI agents remember your context, connect to your tools, and improve with every interaction. Desktop-native. Privacy-first.';
+  "Be the expert. We'll be the AI. It knows you, knows your projects, runs the AI for you, and stays yours. Where experts go to work — local-first.";
 const META_TWITTER_DESCRIPTION =
-  'Desktop AI agent workspace with persistent memory, 53+ tools, and zero cloud dependency.';
+  "Be the expert. We'll be the AI. The workspace that knows you and your work, runs the AI for you, and stays yours.";
 const META_CANONICAL = 'https://waggle-os.ai/';
 const META_OG_IMAGE = 'https://waggle-os.ai/brand/waggle-logo.jpeg';
 

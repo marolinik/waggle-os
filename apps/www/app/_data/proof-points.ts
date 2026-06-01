@@ -1,11 +1,12 @@
 /**
- * 5 proof point cards for the SOTA Band, in v3.2 LOCKED order.
+ * 3 honest proof point cards for the proof band (N2 rewrite).
  *
- * Reorder per amendment §1.2: Trio-strict 33.5% card DROPPED (pilot fail-ovi
- * h2/h3/h4); replaced by GEPA Faza 1 +12.5pp (production-validated).
+ * Only verifiable claims: the 0.3-point convergence (73.1 vs 73.4 on the same
+ * memory layer) and 87.5% single-hop trio-strict. The 67.8% AND-of-3 LoCoMo
+ * lead and the raw judge-ensemble math live in the proof copy keys
+ * (landing.proof.subhead / landing.proof.methodology), not here.
  *
- * Card 2 description rewording per amendment §1.2 (lock #4):
- * "Substrate beats Mem0 paper by 7.1 points on LoCoMo."
+ * No +12.5pp GEPA claim, no 74% / Mem0-win, no 91% — those were removed.
  */
 
 export interface ProofPoint {
@@ -18,42 +19,27 @@ export interface ProofPoint {
 
 export const proofPoints: readonly ProofPoint[] = Object.freeze([
   {
-    id: 'gepa',
-    caption: 'GEPA evaluation',
-    stat: '+12.5pp',
-    name: 'Claude smarter on held-out',
+    id: 'convergence',
+    caption: 'Same memory layer',
+    stat: '0.3 pts',
+    name: 'Small model, frontier class',
     description:
-      'Independently validated cognitive uplift from the Waggle memory layer. Production-wired today. Methodology in arxiv preprint.',
+      'Two very different models land within 0.3 points on the same memory layer — so a small local model performs in the same class as a frontier one. The layer, not the model, does the work.',
   },
   {
-    id: 'locomo',
-    caption: 'LoCoMo substrate',
-    stat: '74%',
-    name: 'Beats Mem0 paper claim (66.9%)',
-    description: 'Substrate beats Mem0 paper by 7.1 points on LoCoMo.',
+    id: 'single-hop',
+    caption: 'Trio-strict',
+    stat: '87.5%',
+    name: 'Single-hop reasoning',
+    description:
+      'Single-hop reasoning, trio-strict: 87.5%. Three rival models had to agree before an answer counted.',
   },
   {
-    id: 'apache',
-    caption: 'Substrate',
-    stat: 'Apache 2.0',
-    name: 'Open source, fork it',
+    id: 'portable-layer',
+    caption: 'Local-first',
+    stat: 'Goes with you',
+    name: 'Intelligence in the layer',
     description:
-      'Fork it, audit it, deploy it on your own infra. No license games, no rug-pull risk.',
-  },
-  {
-    id: 'zero-cloud',
-    caption: 'Network',
-    stat: 'Zero cloud',
-    name: 'Local-first by default',
-    description:
-      'Your work never leaves your device unless you explicitly opt in. Provider routing is signed and traced.',
-  },
-  {
-    id: 'eu-ai-act',
-    caption: 'EU AI Act',
-    stat: 'Article 12',
-    name: 'Audit reports built-in',
-    description:
-      'Compliance reports generated from work activity. No separate compliance workstream, no spreadsheet exports.',
+      'The intelligence lives in the layer, not the model — so it goes wherever you go, even onto a small model on your own machine.',
   },
 ]);

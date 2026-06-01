@@ -2,51 +2,69 @@ import type { CSSProperties } from 'react';
 import { getTranslations } from 'next-intl/server';
 import DownloadCTA from './DownloadCTA';
 import HeroVisual from './HeroVisual';
-import { heroVariantsMeta, type HeroVariantId } from '../_data/hero-variants';
+import type { HeroVariantId } from '../_data/hero-variants';
 
 interface HeroProps {
   readonly variantId: HeroVariantId;
 }
 
+const MICROCOPY_KEYS = [
+  'microcopy_local_first',
+  'microcopy_any_model',
+  'microcopy_data',
+] as const;
+
 /**
- * Hero section — 5-variant copy resolved server-side from URL search params
- * via `_lib/hero-headline-resolver.ts`. Variant A (Marcus, default) renders
- * with split-color headline (lead in cool light + honey emphasis); B-E use
- * single-sentence headlines.
+ * Hero section — N2 single committed variant.
  *
- * Microcopy strip below CTAs is v3.2 LOCKED (lock #1):
- *   "17 AI platforms · Local-first · Apache 2.0 · EU AI Act ready"
+ * The 5-variant A/B infra (resolver, `heroVariantsMeta`, HeroVisual dev tabs)
+ * stays intact: `variantId` is still resolved server-side in `page.tsx` and
+ * passed to `<HeroVisual initialVariant={variantId} />` for the dev variant
+ * tabs. The Hero COPY no longer switches by variant — it reads the committed
+ * FLAT keys under `landing.hero.*`. The `variant_*` blocks remain in en.json
+ * as inert data for the resolver/dev-tabs only.
+ *
+ * The headline ("Be the expert. We'll be the AI.") renders with the second
+ * sentence in honey for visual parity with the prior split-color treatment.
+ * The single microcopy line is replaced by the 3 committed chips.
  *
  * All strings load from `messages/en.json` under `landing.hero.*`.
  * `<HeroVisual>` is a Client Component (animations + dev variant tabs);
  * this server component composes it directly.
  */
 export default async function Hero({ variantId }: HeroProps) {
-  const meta = heroVariantsMeta[variantId];
   const t = await getTranslations('landing.hero');
-  const tv = await getTranslations(`landing.hero.${meta.i18nKey}`);
+
+  // Committed headline is one locked string ("Be the expert. We'll be the
+  // AI."). Split on the first sentence boundary to render the second sentence
+  // in honey for visual parity with the prior split-color treatment, while
+  // keeping the copy i18n-driven (no hardcoded JSX literal that could drift
+  // from en.json). Falls back to the whole string if the boundary is absent.
+  const headline = t('headline');
+  const splitAt = headline.indexOf('. ');
+  const headlineLead = splitAt >= 0 ? headline.slice(0, splitAt + 1) : headline;
+  const headlineEmphasis = splitAt >= 0 ? headline.slice(splitAt + 2) : '';
 
   return (
     <section id="hero" style={sectionStyle} className="honeycomb-bg">
       <div style={containerStyle} className="hero-grid">
         {/* Left column — text + CTAs */}
         <div style={leftColStyle}>
-          <p style={eyebrowStyle}>{tv('eyebrow')}</p>
+          <p style={eyebrowStyle}>{t('eyebrow')}</p>
 
           <h1 style={headlineStyle}>
-            {tv('headline_lead')}
-            {meta.hasEmphasis ? (
+            {headlineLead}
+            {headlineEmphasis ? (
               <>
                 {' '}
                 <span style={{ color: 'var(--honey-400, #f5b731)' }}>
-                  {tv('headline_emphasis')}
+                  {headlineEmphasis}
                 </span>
               </>
             ) : null}
           </h1>
 
-          <p style={subheadStyle}>{tv('subhead')}</p>
-          <p style={bodyStyle}>{tv('body')}</p>
+          <p style={subheadStyle}>{t('subhead')}</p>
 
           <div style={ctaRowStyle}>
             <DownloadCTA section="hero" variant="primary" />
@@ -55,8 +73,14 @@ export default async function Hero({ variantId }: HeroProps) {
             </a>
           </div>
 
-          {/* v3.2 LOCKED (lock #1) */}
-          <p style={microcopyStyle}>{t('microcopy')}</p>
+          <ul style={microcopyStyle} className="hero-microcopy">
+            {MICROCOPY_KEYS.map((key) => (
+              <li key={key} style={microcopyItemStyle}>
+                <span aria-hidden="true" style={microcopyDotStyle} />
+                {t(key)}
+              </li>
+            ))}
+          </ul>
         </div>
 
         {/* Right column — SVG hive diagram */}
@@ -118,15 +142,8 @@ const headlineStyle: CSSProperties = {
 const subheadStyle: CSSProperties = {
   fontSize: 'clamp(16px, 1.6vw, 18px)',
   lineHeight: 1.5,
-  marginBottom: 16,
-  color: 'var(--hive-200, #b0b7cc)',
-};
-
-const bodyStyle: CSSProperties = {
-  fontSize: 14,
-  lineHeight: 1.6,
   marginBottom: 32,
-  color: 'var(--hive-300, #7d869e)',
+  color: 'var(--hive-200, #b0b7cc)',
 };
 
 const ctaRowStyle: CSSProperties = {
@@ -151,10 +168,32 @@ const secondaryCTAStyle: CSSProperties = {
 };
 
 const microcopyStyle: CSSProperties = {
+  listStyle: 'none',
+  padding: 0,
+  margin: 0,
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: 16,
+  rowGap: 8,
   fontSize: 12,
   fontFamily: "'JetBrains Mono', monospace",
   color: 'var(--hive-400, #5a6380)',
   letterSpacing: '0.02em',
+};
+
+const microcopyItemStyle: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 8,
+};
+
+const microcopyDotStyle: CSSProperties = {
+  width: 4,
+  height: 4,
+  borderRadius: '50%',
+  background: 'var(--honey-500, #e5a000)',
+  display: 'inline-block',
 };
 
 const heroResponsiveCss = `
