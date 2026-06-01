@@ -63,21 +63,29 @@ export function createCliTools(config: CliToolsConfig): ToolDefinition[] {
         properties: {},
       },
       execute: async () => {
-        const results: Array<{ name: string; version: string; allowed: boolean }> = [];
+        type CliResult = { name: string; version: string; allowed: boolean };
 
-        for (const cli of KNOWN_CLIS) {
-          try {
-            const args = cli.versionFlag.split(' ');
-            const { stdout } = await execFileAsync(cli.name, args, { timeout: 5000 });
-            results.push({
-              name: cli.name,
-              version: stdout.trim().split('\n')[0],
-              allowed: allowSet.has('*') || allowSet.has(cli.name),
-            });
-          } catch {
-            // CLI not found — skip
-          }
-        }
+        // Probe every known CLI in parallel. Sequentially this was up to
+        // KNOWN_CLIS.length × 5s (~130s) — far over the 30s test budget on CI
+        // runners (where most of these CLIs are present), which made the
+        // cli_discover test flaky. Promise.all bounds wall-time to the slowest
+        // single probe (~5s) and preserves KNOWN_CLIS order in the output.
+        const settled = await Promise.all(
+          KNOWN_CLIS.map(async (cli): Promise<CliResult | null> => {
+            try {
+              const args = cli.versionFlag.split(' ');
+              const { stdout } = await execFileAsync(cli.name, args, { timeout: 5000 });
+              return {
+                name: cli.name,
+                version: stdout.trim().split('\n')[0],
+                allowed: allowSet.has('*') || allowSet.has(cli.name),
+              };
+            } catch {
+              return null; // CLI not found — skip
+            }
+          }),
+        );
+        const results = settled.filter((r): r is CliResult => r !== null);
 
         return JSON.stringify({
           found: results.length,
