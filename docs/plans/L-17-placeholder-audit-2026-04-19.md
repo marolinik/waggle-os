@@ -90,3 +90,16 @@ production code must:
   2. Bump the pinned count in the test.
 
 Making a ticket easy is better than making the rule loud.
+
+## 2026-06-01 update — 6 → 1 (Wave 2/3 hook ports)
+
+The Wave 2/3 hook ports implemented 5 of the 6 subtree-split stub packages,
+removing their `// TODO: Wave 2/3 implementation` markers:
+`hive-mind-hooks-{codex, codex-desktop, cursor, hermes, openclaw}`.
+
+The only remaining production-path marker is the still-deferred stub
+`packages/hive-mind-hooks-claude-desktop/src/index.ts:10` (Claude Desktop is
+MCP-only — no hook surface — and was explicitly excluded from Wave 2/3, see
+`docs/superpowers/specs/2026-06-01-wave23-hook-stubs-design.md` §1/D1).
+
+`EXPECTED_MARKER_COUNT` bumped 6 → 1 accordingly.

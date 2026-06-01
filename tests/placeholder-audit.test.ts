@@ -25,11 +25,15 @@ const REPO_ROOT = resolve(__dirname, '..');
  * - 2026-05-10: 0 → 6 (Phase 2 consolidation merge of
  *   feature/hive-mind-monorepo-migration; 6 subtree-split hook packages
  *   carry intentional `// TODO: Wave 2/3 implementation` STUB markers)
+ * - 2026-06-01: 6 → 1 (Wave 2/3 hook ports implemented 5 of the 6 stub
+ *   packages — codex / codex-desktop / cursor / hermes / openclaw — removing
+ *   their `// TODO: Wave 2/3 implementation` markers; only the still-deferred
+ *   `hive-mind-hooks-claude-desktop` stub remains)
  *
  * Update this when the audit doc is bumped; NEVER bump it without documenting
  * the new hit in docs/plans/L-17-placeholder-audit-2026-04-19.md.
  */
-const EXPECTED_MARKER_COUNT = 6;
+const EXPECTED_MARKER_COUNT = 1;
 
 const MARKER_REGEX = /\/\/\s*(?:MOCK|TODO|FIXME|XXX):|\/\*\s*(?:MOCK|TODO|FIXME|XXX):/g;
 
