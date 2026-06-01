@@ -33,7 +33,8 @@ WAGGLE_TRUST_LOCALHOST=1 node --env-file=.env \
 npx playwright test tests/vision/capture.spec.ts
 ```
 
-### 2. Judge — `judge-workflow.mjs` (run via the Workflow tool)
+### 2. Judge — `scripts/vision-judge-workflow.mjs` (run via the Workflow tool)
+(Lives under `scripts/` — Workflow scripts use top-level `return`/`await` + injected globals, so they're not standard ES modules and `scripts/**` is ESLint-ignored.)
 One independent vision-judge subagent per screenshot (each **Reads** the PNG —
 that is the vision step) grades the 5-dimension rubric; the reducer applies the
 objective floor and an agent writes `artifacts/vision-report.md`.
@@ -41,7 +42,7 @@ objective floor and an agent writes `artifacts/vision-report.md`.
 ```js
 // assemble the manifest from the capture sidecars, then:
 Workflow({
-  scriptPath: "tests/vision/judge-workflow.mjs",
+  scriptPath: "scripts/vision-judge-workflow.mjs",
   args: { captures: [ { surface, png, expectation, consoleErrors } /* … */ ] }
 })
 ```
