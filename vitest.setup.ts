@@ -23,6 +23,18 @@ if (!process.env.WAGGLE_TRUST_LOCALHOST) {
   process.env.WAGGLE_TRUST_LOCALHOST = '1';
 }
 
+// Pin the embedding provider to 'mock' for tests. The auto-fallback chain
+// (embedding-provider.ts) probes the in-process @xenova/transformers model
+// FIRST — it fails to init on some dev machines (-> mock) but succeeds on CI
+// Linux (-> 'inprocess'), making getActiveProvider() platform-dependent and
+// breaking mock-embedder-guard assertions (plus downloading ~87MB of model
+// weights into the test data dir). 'mock' short-circuits the chain
+// deterministically: no network, no native model load. Read by
+// WaggleConfig.getEmbeddingConfig(); CI/dev can still override.
+if (!process.env.EMBEDDING_PROVIDER) {
+  process.env.EMBEDDING_PROVIDER = 'mock';
+}
+
 try {
   const content = readFileSync(resolve(process.cwd(), '.env'), 'utf-8');
   for (const line of content.split('\n')) {

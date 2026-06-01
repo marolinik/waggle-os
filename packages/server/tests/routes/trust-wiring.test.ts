@@ -63,19 +63,10 @@ describe('Trust Model Runtime Wiring', () => {
       });
       expect(res.statusCode).toBe(200);
 
-      // Check audit trail
-      const personalPath = path.join(tmpDir, 'personal.mind');
-      const db = new Database(personalPath);
-      const entries = db.prepare(
-        "SELECT * FROM install_audit WHERE capability_name = 'brainstorm' ORDER BY id",
-      ).all() as Array<{
-        capability_name: string;
-        action: string;
-        risk_level: string;
-        trust_source: string;
-        approval_class: string;
-      }>;
-      db.close();
+      // Check audit trail — read through the server's own auditStore (the
+      // writer connection). A fresh better-sqlite3 reader can miss WAL rows the
+      // server hasn't checkpointed, which is flaky across platforms/boot timing.
+      const entries = server.auditStore.getByCapability('brainstorm');
 
       // API route records 1 installed entry (agent tool path records approved + installed)
       expect(entries.length).toBeGreaterThanOrEqual(1);
@@ -99,14 +90,11 @@ describe('Trust Model Runtime Wiring', () => {
 
       // The API route handler returns 404, but the skill-tools install_capability
       // path records failures. Check if any failed entries exist.
-      const personalPath = path.join(tmpDir, 'personal.mind');
-      const db = new Database(personalPath);
-      const count = db.prepare(
-        "SELECT count(*) as c FROM install_audit",
-      ).get() as { c: number };
-      db.close();
+      // Read through the server's writer connection (avoids the cross-connection
+      // WAL visibility race a fresh reader hits).
+      const total = server.auditStore.getAll().length;
       // At least the brainstorm entry from the previous test should exist
-      expect(count.c).toBeGreaterThanOrEqual(1);
+      expect(total).toBeGreaterThanOrEqual(1);
     });
 
     it('duplicate install does not create new audit entries', async () => {

@@ -30,6 +30,10 @@ const BATCH_SIZE = 10;
 const EXCLUDE_PATTERNS = [
   'node_modules',
   '.git',
+  // In-process embedding model cache (<dataDir>/models): re-downloadable
+  // @huggingface/transformers ONNX weights (~90MB+), not user data. Excluding
+  // keeps portable backups small and under MAX_BACKUP_SIZE.
+  'models',
   'marketplace.db',
   'marketplace.db-journal',
   'marketplace.db-wal',

@@ -42,8 +42,14 @@ interface SearchProviderResponse {
 describe('Provider API', () => {
   let server: FastifyInstance;
   let tmpDir: string;
+  let prevOllamaHost: string | undefined;
 
   beforeAll(async () => {
+    // Pin Ollama to a dead port so reachability is deterministic everywhere:
+    // Windows dev boxes often run a local daemon (:11434 → reachable), CI does
+    // not. The route reports hasKey = live reachability for ollama.
+    prevOllamaHost = process.env.OLLAMA_HOST;
+    process.env.OLLAMA_HOST = 'http://127.0.0.1:1';
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-providers-'));
     const personalPath = path.join(tmpDir, 'personal.mind');
     const mind = new MindDB(personalPath);
@@ -58,6 +64,8 @@ describe('Provider API', () => {
   afterAll(async () => {
     await server.close();
     fs.rmSync(tmpDir, { recursive: true, force: true });
+    if (prevOllamaHost === undefined) delete process.env.OLLAMA_HOST;
+    else process.env.OLLAMA_HOST = prevOllamaHost;
   });
 
   describe('GET /api/providers', () => {
@@ -108,7 +116,9 @@ describe('Provider API', () => {
       const { providers } = res.json();
       const ollama = providers.find((p: ProviderResponse) => p.id === 'ollama');
       expect(ollama.requiresKey).toBe(false);
-      expect(ollama.hasKey).toBe(true); // Always true since no key needed
+      // hasKey mirrors live daemon reachability for ollama; pinned to a dead
+      // port in beforeAll → deterministically false on every platform/CI.
+      expect(ollama.hasKey).toBe(false);
     });
 
     it('providers without vault keys show hasKey=false', async () => {

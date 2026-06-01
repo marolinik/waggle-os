@@ -344,6 +344,10 @@ describe('runOne — acceptance criteria', () => {
       litellmUrl: 'http://unused',
       litellmApiKey: 'unused',
       sampleLockPath: STAGE_2_LOCK,
+      // This test only exercises lock loading + deterministic ordering; skip
+      // preregistration emission (needs a manifest in the sibling PM-Waggle-OS
+      // repo, absent on CI — covered separately by preregistration.test.ts).
+      emitPreregistrationEvent: false,
     });
     const records = readJsonl(outputPath);
     expect(records).toHaveLength(50);
@@ -366,6 +370,7 @@ describe('runOne — acceptance criteria', () => {
       litellmUrl: 'http://unused',
       litellmApiKey: 'unused',
       sampleLockPath: STAGE_2_LOCK,
+      emitPreregistrationEvent: false,
     });
     const records2 = readJsonl(outputPath2);
     expect(records2.map(r => r.instance_id)).toEqual(records.map(r => r.instance_id));

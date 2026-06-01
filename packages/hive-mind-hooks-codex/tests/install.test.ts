@@ -11,6 +11,15 @@ import { HIVE_MIND_MARKER } from '../src/adapter.js';
 
 const execFileAsync = promisify(execFile);
 
+// This file's last test spawns the COMPILED CLI (dist/bin/codex-hooks.js).
+// dist/ is gitignored and a clean CI checkout runs no build step, so the
+// artifact is absent there — skip (don't fail) when it's missing. The other
+// tests import from ../src and need no build.
+const BIN_PATH = resolve(
+  fileURLToPath(new URL('../dist/bin/codex-hooks.js', import.meta.url)),
+);
+const BIN_BUILT = existsSync(BIN_PATH);
+
 interface TestEnv {
   home: string;
   hooksDir: string;
@@ -162,14 +171,11 @@ describe('install (codex)', () => {
 
   // ── install UX: the /hooks trust step must be surfaced ────────────────
 
-  it('install output mentions the one-time /hooks trust step', async () => {
+  it.skipIf(!BIN_BUILT)('install output mentions the one-time /hooks trust step', async () => {
     env = await bootstrap(undefined);
-    const binPath = resolve(
-      fileURLToPath(new URL('../dist/bin/codex-hooks.js', import.meta.url)),
-    );
     const { stdout } = await execFileAsync(
       process.execPath,
-      [binPath, 'install', '--hooks-dir', env.hooksDir],
+      [BIN_PATH, 'install', '--hooks-dir', env.hooksDir],
       { env: { ...process.env, HOME: env.home, USERPROFILE: env.home } },
     );
     expect(stdout).toContain('/hooks');
