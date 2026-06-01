@@ -380,10 +380,12 @@ function lifecycleForOpenclawEvent(
     const native = a.eventName[lc];
     if (native === undefined) continue;
     if (native === joined) return lc;
-    // PreCompact: the runtime action is 'compact:before' while the
-    // HOOK.md events[] entry is 'session:compact:before'. Accept a match
-    // on the action suffix too.
-    if (native.endsWith(`:${ev.action}`) && ev.type !== '') return lc;
+    // PreCompact ONLY: the runtime action is 'compact:before' while the
+    // HOOK.md events[] entry is 'session:compact:before'. Accept a match on
+    // the action suffix exclusively for pre-compact — applying it to every
+    // lifecycle would mis-map an unrelated type whose action suffix collides
+    // (e.g. type='gateway' action='sent' must NOT map to stop's 'message:sent').
+    if (lc === 'pre-compact' && native.endsWith(`:${ev.action}`) && ev.type !== '') return lc;
   }
   return undefined;
 }
@@ -481,9 +483,18 @@ export function makeOpenclawHandler(
         await new Promise<void>((resolve) => {
           const timer = setTimeout(() => {
             stopTimers.delete(key);
+            // FAIL-OPEN §7.3.1: this save is DETACHED (fires after dispatch's
+            // try/catch has returned), so a rejection here would escape as an
+            // unhandled rejection. Catch it explicitly before resolving.
             void runStopBody(a, stopPayload, ctx, {
               summaryBudgetChars: opts.summaryBudgetChars,
-            }).finally(() => resolve());
+            })
+              .catch((err) => {
+                ctx.logger.warn('openclaw debounced stop save failed open', {
+                  error: err instanceof Error ? err.message : String(err),
+                });
+              })
+              .finally(() => resolve());
           }, debounceMs);
           stopTimers.set(key, { timer, resolve });
         });

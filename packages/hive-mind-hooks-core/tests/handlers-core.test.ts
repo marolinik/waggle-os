@@ -211,6 +211,20 @@ describe('makeOpenclawHandler — lifecycle dispatch', () => {
     expect(bridge.cleanupFrames).not.toHaveBeenCalled();
   });
 
+  it('does NOT map an unrelated type whose action suffix collides (suffix-match is pre-compact-only)', async () => {
+    // 'message:sent' is Stop's native key; a 'gateway:sent' event shares the
+    // ':sent' suffix but must NOT route to Stop — the action-suffix fallback is
+    // reserved for pre-compact's compact:before alias.
+    const a = openclawAdapter();
+    const bridge = makeMockBridge();
+    const handler = makeOpenclawHandler(a);
+    await handler.handle(
+      { event: { type: 'gateway', action: 'sent' }, extracted: { cwd: '/p', sessionId: 's1', response: 'x' } as StopExtracted },
+      makeCtx(bridge),
+    );
+    expect(bridge.saveMemory).not.toHaveBeenCalled();
+  });
+
   it('debounces message:sent — every dispatch resolves, only the last saves', async () => {
     const a = openclawAdapter();
     const bridge = makeMockBridge();
@@ -258,6 +272,31 @@ describe('makeOpenclawHandler — FAIL-OPEN (invariant §7.3(1))', () => {
       extracted: { cwd: '/proj', sessionId: 's1', recallLimit: 20 } as SessionStartExtracted,
     };
     await expect(handler.handle(input, makeCtx(bridge))).resolves.toBeUndefined();
+  });
+
+  it('swallows a rejecting save in the DEBOUNCE branch (no unhandled rejection)', async () => {
+    // The debounced Stop save fires in a detached timer AFTER dispatch's
+    // try/catch returned, so a rejection there would escape as an unhandled
+    // rejection unless explicitly caught. Regression guard for the openclaw
+    // stopDebounceMs path (the only caller that sets it).
+    const a = openclawAdapter();
+    const bridge = makeMockBridge({ saveMemoryThrows: new Error('cli down') });
+    const handler = makeOpenclawHandler(a, { stopDebounceMs: 5 });
+    const rejections: unknown[] = [];
+    const onRej = (e: unknown): void => { rejections.push(e); };
+    process.on('unhandledRejection', onRej);
+    try {
+      await handler.handle(
+        { event: { type: 'message', action: 'sent', sessionKey: 't1' }, extracted: { cwd: '/p', sessionId: 's1', response: 'final', parent: undefined } as StopExtracted },
+        makeCtx(bridge),
+      );
+      // Flush any detached microtask carrying an unhandled rejection.
+      await new Promise((r) => setTimeout(r, 20));
+    } finally {
+      process.off('unhandledRejection', onRej);
+    }
+    expect(bridge.saveMemory).toHaveBeenCalledTimes(1);
+    expect(rejections).toEqual([]);
   });
 });
 
