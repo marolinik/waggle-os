@@ -3,7 +3,7 @@
 **Date:** 2026-06-01 (v2)
 **Subject of this document:** how Waggle's published LoCoMo memory-substrate numbers are produced, what they mean, and how to reproduce them offline.
 
-> **v2 honesty note.** This revision aligns the public methodology page to the canonical run record in the hive-mind repository (`benchmarks/locomo/RESULTS.md`, run v5, 2026-05-21). The previous v1 of this document led with an oracle-ceiling number framed as a retrieval headline, claimed a clean win over Mem0, and carried a "+27.35-point methodology gap" brand that the canonical v5 run revised down. Those claims are corrected below. Every number on this page is traceable to a committed artifact and re-derivable offline.
+> **v2 honesty note.** This revision aligns the public methodology page to the canonical run record in the hive-mind repository (`benchmarks/locomo/RESULTS.md`, run v5, dated 2026-05-11 with the trio re-judge on 2026-05-21). The previous v1 of this document led with an oracle-ceiling number framed as a retrieval headline, claimed a clean win over Mem0, and carried a "+27.35-point methodology gap" brand that the canonical v5 run revised down. Those claims are corrected below. Every number on this page is traceable to a committed artifact and re-derivable offline.
 
 ---
 
@@ -31,7 +31,7 @@ Primary results are reported on **N=320**, stratified **80 per category** across
 
 ### 1.3 Subject model and substrate
 
-The headline subject model is `claude-opus-4-7` (Anthropic Messages API). The retrieval substrate is the **v5 frozen architecture**: distilled-dense facts (~53 per conversation) + K=5 importance retrieval + K=10 semantic retrieval + cross-encoder reranker + a synthesis-encouraging system prompt.
+The headline subject model is `claude-opus-4-7` (Anthropic Messages API). The retrieval substrate is the **v4 frozen architecture** (the eval generation is run v5): distilled-dense facts (~53 per conversation) + K=5 importance retrieval + K=10 semantic retrieval + cross-encoder reranker + a synthesis-encouraging system prompt.
 
 ### 1.4 Headline result
 
@@ -93,7 +93,7 @@ For the canonical v5 run we report **pairwise agreement** between judges (the fr
 
 The three judges also land within ~4pp of one another on overall correctness (Opus 230/320, GPT 223/320, MiniMax 236/320), so the ensemble agrees on aggregate quality even where individual rows are disputed. Disagreement is concentrated in the multi-hop and open-ended categories, where a binary "correct" verdict is genuinely fuzzy.
 
-> Cohen's κ for the canonical v5 judge set (Opus 4.7 + GPT-5.5 + MiniMax M2.7) is not published in the run record; only pairwise agreement percentages are. A prior, *different* judge set (Opus 4.6 + GPT-5 + MiniMax M2.7, a separate earlier run) reported κ_trio ≈ 0.7878 — that figure belongs to that earlier configuration and is **not** the inter-judge κ for the headline v5 run. **[UNVERIFIED — founder to confirm against RESULTS.md]** whether a Cohen's κ should be published for the v5 judge set; until then we report pairwise agreement only.
+> For the canonical v5 judge set we report **pairwise agreement only** (above); no Cohen's κ is published for this ensemble. Pairwise agreement is the inter-judge metric carried in the run record.
 
 ### 3.3 Parser-fix audit trail
 
@@ -206,13 +206,11 @@ The hive-mind substrate (bitemporal knowledge graph retrieval, frame compression
 
 A separate "multiplier hypothesis" pilot — testing whether the Waggle memory layer would more than double downstream agentic task performance on real PM / research / engineering scenarios — produced negative results in an early small-N pilot and was **not** confirmed. We disclose this explicitly: honest negatives build credibility, and this negative does not affect the LoCoMo substrate measurement above.
 
-> The specific pilot tallies (per-scenario success counts, N, and date) reported in the prior v1 of this document originated in PM-Waggle-OS planning notes and are **not** present in the hive-mind run record (`RESULTS.md`). **[UNVERIFIED — founder to confirm against RESULTS.md]** the exact multiplier-pilot numbers and re-test preconditions before restating them publicly. Until confirmed, we state only the directional finding (the multiplier hypothesis was not confirmed in an early pilot) and do not assert specific figures.
+> By design we state only the **directional** finding — the multiplier hypothesis was not confirmed in an early pilot. Specific per-scenario tallies are deliberately not restated here, pending a properly powered re-test.
 
-### 7.3 GEPA cross-family validation — not in the LoCoMo run record
+### 7.3 GEPA cross-family validation — not published here
 
-The prior v1 of this document reported a GEPA (reflective prompt-evolution) cross-family table claiming a "+12.5pp Pass-II uplift" with a "0pp gap" between a Claude variant and a Qwen variant. Those specific GEPA uplift figures are **not** present in the LoCoMo run record (`RESULTS.md`).
-
-> **[UNVERIFIED — founder to confirm against RESULTS.md]** the GEPA "+12.5pp uplift" and "0pp held-out gap" figures and their source run. We have removed them as a headline. Note that the *separate* and verified "substrate ≈ subject" convergence (Opus 73.1% vs Qwen 73.4%, Δ−0.3pp, §2) is the LoCoMo-grounded version of the "open model reaches frontier quality on the same layer" story and should be cited in place of the unverified GEPA uplift numbers.
+Earlier internal material reported a GEPA (reflective prompt-evolution) cross-family uplift table. Those figures are not part of the canonical LoCoMo run record and are **not** published on this page. The verified, LoCoMo-grounded version of the "an open model reaches frontier quality on the same memory layer" story is the **substrate ≈ subject** convergence (Opus 73.1% vs Qwen 73.4%, Δ−0.3pp, §2) — cite that instead.
 
 ### 7.4 Judge-ensemble cost
 
