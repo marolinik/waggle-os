@@ -42,17 +42,16 @@ export default function CapabilityRequestCard({ request }: CapabilityRequestCard
       if (isMarketplace) {
         // Marketplace requires numeric packageId. The agent only knows the
         // name, so resolve via search first. If we miss, surface a hint.
-        const searchRes = await fetch(`${adapter.getServerUrl()}/api/marketplace/search?query=${encodeURIComponent(request.name)}&limit=1`);
+        // BUG #7: route through the authenticated adapter (attaches the bearer
+        // token) instead of a raw fetch() — a raw call 401s because no token is
+        // attached, which previously surfaced as a spurious "not found".
+        const searchRes = await adapter.searchMarketplace(request.name, 1);
         const searchData = await searchRes.json().catch(() => ({ packages: [] }));
         const pkg = (searchData.packages ?? [])[0];
         if (!pkg) {
           throw new Error(`Marketplace package "${request.name}" not found`);
         }
-        const res = await fetch(`${adapter.getServerUrl()}/api/marketplace/install`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ packageId: pkg.id }),
-        });
+        const res = await adapter.installMarketplacePackage(pkg.id);
         if (res.status === 403) {
           window.dispatchEvent(new CustomEvent('waggle:tier-insufficient', {
             detail: { required: 'PRO', actual: 'FREE', message: `Installing "${request.name}" needs a Pro plan or active trial.` },

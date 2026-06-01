@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Store, Search, Download, Trash2, Loader2, Shield, Package, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
+import { useService } from '@/providers/ServiceProvider';
 import { useToast } from '@/hooks/use-toast';
 
 interface MarketplacePackage {
@@ -26,6 +27,12 @@ type Tab = 'search' | 'installed';
 
 const MarketplaceApp = () => {
   const { toast } = useToast();
+  // BUG #7: `connected` flips true only after adapter.connect() resolves, which
+  // is also when the session token has bootstrapped (adapter.fetchSessionToken
+  // runs inside connect()). We use it both as a fetch guard (don't fire while
+  // the token is still null → 401 → empty cache) and as a trigger to (re)fetch
+  // the catalog the moment the token becomes available.
+  const { connected } = useService();
   const [tab, setTab] = useState<Tab>('search');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<MarketplacePackage[]>([]);
@@ -35,9 +42,13 @@ const MarketplaceApp = () => {
   const [total, setTotal] = useState(0);
 
   const searchPackages = useCallback(async (q: string) => {
+    // Guard: skip while the token is still bootstrapping. The `connected`
+    // effect below re-runs this once it is ready, so a first-load race
+    // self-resolves instead of caching an empty 401 catalog.
+    if (!adapter.isConnected) return;
     setLoading(true);
     try {
-      const res = await fetch(`${adapter.getServerUrl()}/api/marketplace/search?query=${encodeURIComponent(q)}&limit=20`);
+      const res = await adapter.searchMarketplace(q, 20);
       if (res.ok) {
         const data: SearchResult = await res.json();
         setResults(data.packages ?? []);
@@ -48,9 +59,10 @@ const MarketplaceApp = () => {
   }, []);
 
   const loadInstalled = useCallback(async () => {
+    if (!adapter.isConnected) return;
     setLoading(true);
     try {
-      const res = await fetch(`${adapter.getServerUrl()}/api/marketplace/installed`);
+      const res = await adapter.getMarketplaceInstalled();
       if (res.ok) {
         const data = await res.json();
         setInstalled(data.installations ?? []);
@@ -59,26 +71,31 @@ const MarketplaceApp = () => {
     finally { setLoading(false); }
   }, []);
 
-  // Initial load
+  // (Re)fetch when the token becomes available AND on tab activation. Keying
+  // on `connected` means a first-load race (mount before adapter.connect()
+  // finished) self-heals the instant the token bootstraps; keying on `tab`
+  // means switching tabs always pulls fresh data — so the marketplace can
+  // never get stuck on a stale/empty 401 cache. We refresh both data sets
+  // (search results + installed list, the latter also drives the tab badge
+  // count) since each call is cheap and authenticated.
   useEffect(() => {
-    searchPackages('');
+    if (!connected) return;
+    searchPackages(query);
     loadInstalled();
-  }, [searchPackages, loadInstalled]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected, tab, searchPackages, loadInstalled]);
 
-  // Debounced search
+  // Debounced search (only meaningful on the Browse tab once connected).
   useEffect(() => {
+    if (!connected || tab !== 'search') return;
     const t = setTimeout(() => searchPackages(query), 300);
     return () => clearTimeout(t);
-  }, [query, searchPackages]);
+  }, [query, connected, tab, searchPackages]);
 
   const handleInstall = async (pkg: MarketplacePackage) => {
     setInstalling(pkg.id);
     try {
-      const res = await fetch(`${adapter.getServerUrl()}/api/marketplace/install`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ packageId: pkg.id }),
-      });
+      const res = await adapter.installMarketplacePackage(pkg.id);
       if (res.ok) {
         toast({ title: 'Installed', description: `${pkg.name} installed successfully` });
         setResults(prev => prev.map(p => p.id === pkg.id ? { ...p, installed: true } : p));
@@ -112,11 +129,7 @@ const MarketplaceApp = () => {
 
   const handleUninstall = async (pkg: MarketplacePackage) => {
     try {
-      await fetch(`${adapter.getServerUrl()}/api/marketplace/uninstall`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ packageId: pkg.id }),
-      });
+      await adapter.uninstallMarketplacePackage(pkg.id);
       toast({ title: 'Uninstalled', description: `${pkg.name} removed` });
       setInstalled(prev => prev.filter(p => p.id !== pkg.id));
       setResults(prev => prev.map(p => p.id === pkg.id ? { ...p, installed: false } : p));

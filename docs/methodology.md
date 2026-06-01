@@ -1,209 +1,234 @@
 # Waggle Methodology Documentation
 
-**Date:** 2026-05-02 (v1)
-**Companion:** Forthcoming arxiv preprint *"Apples-to-Apples on LoCoMo: A Bitemporal Local-First Memory Substrate and a +27.35-Point Methodology Gap"* (scheduled within 60 days post-publication)
+**Date:** 2026-06-01 (v2)
+**Subject of this document:** how Waggle's published LoCoMo memory-substrate numbers are produced, what they mean, and how to reproduce them offline.
+
+> **v2 honesty note.** This revision aligns the public methodology page to the canonical run record in the hive-mind repository (`benchmarks/locomo/RESULTS.md`, run v5, dated 2026-05-11 with the trio re-judge on 2026-05-21). The previous v1 of this document led with an oracle-ceiling number framed as a retrieval headline, claimed a clean win over Mem0, and carried a "+27.35-point methodology gap" brand that the canonical v5 run revised down. Those claims are corrected below. Every number on this page is traceable to a committed artifact and re-derivable offline.
 
 ---
 
 ## Summary
 
-Waggle's substrate-vs-Mem0 LoCoMo evaluation produces 74% on the same protocol that yielded Mem0's published 66.9% — a 7.1-point empirical gap. The methodology gap is broader: when self-judging (the same model evaluating its own retrieval) is replaced with a trio-strict judge ensemble (κ_trio = 0.7878), agreement-corrected scores drop by 27.35 percentage points across competing systems. We document the protocol below so any reader can reproduce, contest, or extend the results.
+We measured Waggle's memory substrate on the LoCoMo long-term conversational memory benchmark (N=320 stratified) under multiple evaluation protocols. The defensible, reproducible headline is the **trio-strict** result: under a 3-vendor judge ensemble (Anthropic Opus 4.7 + OpenAI GPT-5.5 + MiniMax M2.7, scored as a logical AND of all three), the substrate scores **67.8% (217/320)**. This number is cross-vendor, conservative by design, and re-derivable offline from committed judgments with zero API calls.
 
-This document covers (1) the LoCoMo evaluation protocol we ran, (2) the judge ensemble methodology that distinguishes our results from prior published claims, (3) the self-judge bias quantification that motivates the +27.35pp methodology gap framing, (4) the GEPA cross-family generalization findings, (5) reproducibility instructions, and (6) limitations including a documented negative result.
+The load-bearing scientific finding is **substrate ≈ subject**: two very different SOTA subject models — Anthropic Opus 4.7 and a ~35B open-weights local model (Qwen3.6-35B-A3B) — converge to within **0.3 percentage points** on the *same* retrieval substrate under self-judge (73.1% vs 73.4%). The binding constraint on accuracy is the memory layer, not the model. *The layer, not the model.*
+
+The strongest category is fully reliable across vendors: **single-hop trio-strict 87.5%** exactly matches its self-judge score (0pp inflation). The hardest cell is disclosed honestly: **multi-hop trio-strict 61.3%**, where one judge most often dissents.
+
+This document covers (1) the LoCoMo evaluation protocol, (2) the trio-strict judge-ensemble rationale and inter-judge agreement, (3) the self-judge bias quantification (+5.3pp on this system), (4) the Mem0 matched-protocol comparison, (5) offline reproducibility instructions, and (6) limitations including a documented negative result.
 
 ---
 
 ## 1. LoCoMo Evaluation Protocol
 
-### 1.1 Dataset and decomposition
+### 1.1 Dataset and provenance
 
-We use the LoCoMo-1540 long-term conversational memory benchmark (Maharana et al., 2024) as the substrate evaluation target. LoCoMo provides synthesized multi-session conversations with question-answer pairs designed to test memory retrieval at conversational distance.
+We evaluate on the LoCoMo benchmark (`snap-research/locomo`, file `locomo10.json`), pinned by SHA-256 `79fa87e9…ea698ff4` (2,805,274 bytes), sourced from the upstream public release. LoCoMo provides multi-session conversations with question-answer pairs designed to test memory retrieval at conversational distance.
 
-We decompose evaluations into five evaluation cells corresponding to retrieval condition:
-1. **No-context baseline** — model answers from prompt only, no conversation history available
-2. **Full-context oracle** — entire conversation history in prompt
-3. **Substrate retrieval (Waggle)** — bitemporal knowledge graph retrieval surfaces relevant frames
-4. **Substrate retrieval (Mem0 reproduction)** — peer-reviewed Mem0 retrieval surfaces relevant memories per their published protocol
-5. **Hybrid combinations** — substrate retrieval + selective oracle augmentation for upper bound estimation
+### 1.2 Sample size and stratification
 
-For each cell, we evaluate across five question type categories (factual recall, temporal reasoning, multi-session synthesis, contradiction handling, compositional inference).
+Primary results are reported on **N=320**, stratified **80 per category** across four question categories: multi-hop, temporal, open-ended, single-hop. The LoCoMo "adversarial" category (category 5) is excluded from the 4-way split. Sampling is deterministic and reconstructible: `xorshift32(seed=42)` + Fisher-Yates per bucket, bucket order [1,2,3,4], sorted by `instance_id` ascending. The sample, dataset SHA, and seed are committed so the test set itself is reconstructible.
 
-### 1.2 Sample size and pre-registration
+### 1.3 Subject model and substrate
 
-Primary results are reported on N=400 samples per cell, with sample selection pre-registered in manifest v6 (commit anchor in companion arxiv preprint Appendix). Pre-registration covers cell composition, threshold criteria, and acceptance/rejection rules before any results are observed. This protocol is designed to prevent post-hoc selection bias which has been observed in prior memory-system evaluations.
+The headline subject model is `claude-opus-4-7` (Anthropic Messages API). The retrieval substrate is the **v4 frozen architecture** (the eval generation is run v5): distilled-dense facts (~53 per conversation) + K=5 importance retrieval + K=10 semantic retrieval + cross-encoder reranker + a synthesis-encouraging system prompt.
 
-### 1.3 Headline result
+### 1.4 Headline result
 
-**Waggle substrate retrieval achieves 74% accuracy on LoCoMo-1540, exceeding Mem0's published claim of 66.9% by 7.1 percentage points** under the same evaluation protocol. The full-context oracle ceiling is 27.25% above no-context baseline, indicating substantial headroom for retrieval improvement (V2 retrieval is in active development, see arxiv preprint §5).
+**Under the trio-strict 3-vendor judge ensemble, Waggle's substrate scores 67.8% (217/320) on LoCoMo (N=320 stratified).** This is the conservative, cross-vendor, offline-reproducible number and the one we lead with. The same answers under a less strict majority rule (≥2 of 3 judges) score 70.0% (224/320). The self-judge reference (Opus judging Opus) is 73.1% (234/320) and is disclosed as inflated — never the headline.
 
----
-
-## 2. Judge Ensemble Methodology
-
-### 2.1 Why trio-strict ensemble
-
-A persistent issue in long-term memory benchmark evaluation is **self-judging bias** — the same LLM family acts as both retrieval system and answer evaluator, inflating scores relative to held-out judge protocols. Prior published memory-system claims (including the Zep ↔ Mem0 dispute documented in GitHub issue getzep/zep-papers#5) make this concern empirically established.
-
-Waggle uses a three-judge ensemble drawn from independent model families:
-- Anthropic Claude Opus 4.6
-- OpenAI GPT-5
-- MiniMax M2.7
-
-A response is scored as correct only when **all three judges agree** (trio-strict). This is a deliberately conservative criterion designed to reduce single-family bias.
-
-### 2.2 Inter-judge agreement (κ_trio)
-
-We report Cohen's kappa for each pair of judges and the trio-strict aggregate:
-
-| Pair | κ |
-|------|---|
-| (Opus, GPT) | 0.8480 |
-| (Opus, MiniMax) | 0.8549 |
-| (GPT, MiniMax) | (computed in companion arxiv) |
-| **Trio-strict aggregate** | **κ_trio = 0.7878** |
-
-The Opus-MiniMax pairing exceeds Opus-GPT, indicating that MiniMax substitution for prior judge candidates is methodologically defensible — not a downgrade. Per GEPA Faza 1 closure record, Zhipu and DeepSeek were considered and disqualified after probe testing (Zhipu showed GPT-echo behavior at 0% deviation; DeepSeek showed GPT-alignment escalation under reasoning conditions).
-
-### 2.3 Judge calibration evolution
-
-The ensemble composition evolved through eleven amendment cycles documented in companion arxiv preprint Appendix. Each amendment was triggered by an empirically identified bias, decoupling probe, or calibration miss. We present the calibration evolution as positive methodology maturity rather than as a defect — the bias-detection guardrails functioned as designed.
+| Metric | Value |
+|---|---:|
+| **Trio-strict (AND of 3) — headline** | **217 / 320 = 67.8%** |
+| Trio-majority (≥2 of 3) | 224 / 320 = 70.0% |
+| Self-judge (Opus alone, reference only) | 234 / 320 = 73.1% |
+| Self-judge inflation | **+5.3 pp** |
+| Parse failures | 4 / 320 = 1.25% (irrecoverable noise) |
 
 ---
 
-## 3. Self-Judge Bias Quantification (+27.35pp Methodology Gap)
+## 2. The "Layer, Not the Model" Finding (Substrate ≈ Subject)
 
-### 3.1 Methodology gap finding
+The central scientific result is that the **substrate is the binding constraint, not the subject LLM**. We ran the same v5 retrieval substrate under two very different SOTA subject models and scored both under the identical self-judge protocol:
 
-When competing memory systems publish self-judge LoCoMo accuracy (the same model both retrieves and evaluates), we observe substantial inflation relative to held-out judge protocols. Across the systems we evaluated, the average gap is **+27.35 percentage points**.
+| Subject model | multi | temporal | open-ended | single | **TOTAL** |
+|---|---:|---:|---:|---:|---:|
+| Opus 4.7 (frontier cloud) | 75.0% | 67.5% | 62.5% | 87.5% | **73.1%** |
+| Qwen3.6-35B-A3B (~35B open-weights, local) | 78.8% | 67.1% | 58.8% | 88.8% | **73.4%** |
+| **Δ (Opus − Qwen)** | −3.8 | +0.4 | +3.8 | −1.3 | **−0.3 pp** |
 
-This is the central methodology contribution of our work. The implication: **single-judge LoCoMo scores reported in the 80-95% range are not directly comparable to trio-strict scores in the 60-75% range**. Cross-paper performance comparisons require methodology disclosure.
+The two models land **within 0.3 percentage points** of each other on identical retrieval. Opus trades ~5pp on lookup-style questions for +3.8pp on the synthesis-heavy open-ended category — a different failure mode, the same envelope. A frontier cloud model and a ~35B model you can run on-premises reach the same accuracy on the same memory layer.
 
-### 3.2 How measured
+This is the architectural basis for sovereign / regulated deployment: organizations that cannot run frontier-cloud models for compliance, data-residency, or sovereignty reasons can pair a local ~35B model with the Waggle substrate and reach comparable accuracy on these conditions. The driver of quality is the memory layer.
 
-For each evaluated system:
-1. Run the system's documented self-judge protocol on identical samples
-2. Score outputs both with self-judge and with our trio-strict ensemble
-3. Report the per-sample disagreement rate
-4. Aggregate over N=400 to compute the methodology gap
-
-The 27.35pp figure is the cross-system average. Per-system gaps vary from 22pp to 31pp depending on system architecture.
-
-### 3.3 Implications for the field
-
-The +27.35pp methodology gap is offered as a contribution, not a critique. It motivates:
-- Mandatory judge methodology disclosure in future memory-system publications
-- Trio-strict ensemble adoption (or comparable held-out judge protocol) as community standard
-- Re-evaluation of prior published claims under shared methodology
-
-We invite reproduction. Code, judge ensemble configurations, and per-sample disagreement matrices are referenced in §5 below.
+> Note on scope: this convergence is measured under the **self-judge** protocol (73.1% / 73.4%) because both subject runs were scored that way; the cross-vendor trio-strict ensemble was run on the Opus answer set. The ~0.3pp convergence is the verified claim; it should be cited as a self-judge result, not as a trio-strict result.
 
 ---
 
-## 4. GEPA Cross-Family Validation
+## 3. Judge Ensemble Methodology
 
-### 4.1 GEPA in Waggle pipeline
+### 3.1 Why a trio-strict ensemble
 
-We use GEPA (Genetic-Pareto), the reflective prompt evolution optimizer published as Agrawal et al. 2025 (arxiv:2507.19457, ICLR 2026 Oral), as one component of our orchestration optimization stack. GEPA evolves textual prompt components (in our case, retrieval orchestrator prompts and persona conditioning frames) using reflective natural-language feedback.
+A persistent issue in long-term-memory benchmark evaluation is **self-judging bias** — the same LLM family acts as both the answer generator and the answer evaluator, which inflates scores relative to held-out-judge protocols. To control for single-family bias, Waggle uses a three-judge ensemble drawn from independent model vendors and scores a response **correct only when all three judges agree** (logical AND, "trio-strict"). This is conservative by design — it is the harder bar, not the easier one.
 
-Waggle's GEPA implementation operates in two phases:
-- **Phase 1 (closed 2026-04-29):** Cross-family generalization validation on held-out evaluation samples
-- **Phase 2 (in progress):** Production-traffic deployment with telemetry from real user interactions
+The three judges (each polled with the Mem0 verbatim "be generous" accuracy prompt):
 
-### 4.2 Phase 1 cross-family findings
+| Role | Model |
+|---|---|
+| Anthropic | `claude-opus-4-7` |
+| OpenAI | `gpt-5.5-2026-04-23` |
+| MiniMax | `MiniMax-M2.7` |
 
-Under held-out validation methodology (samples never seen during prompt evolution), Phase 1 produced two production-ready candidates with comparable cognitive uplift:
+A row where any judge fails to parse is excluded — counted as not-correct, with the denominator held at 320. Four rows (1.25%) were irrecoverable parse noise.
 
-| Variant | Base model family | Pass II uplift | Held-out parity |
-|---------|-------------------|----------------|-----------------|
-| `claude::gen1-v1` | Anthropic Claude (frontier) | +12.5pp | validated |
-| `qwen-thinking::gen1-v1` | Open-source Qwen 35B (on-prem) | +12.5pp | 0pp gap vs Claude variant |
+### 3.2 Inter-judge agreement
 
-The 0pp gap between Claude and Qwen 35B variants on held-out samples is the cross-family generalization finding. Open-source Qwen 35B reaches Claude flagship cognitive performance under the Waggle memory layer — same uplift, no measurable accuracy gap on validation.
+For the canonical v5 run we report **pairwise agreement** between judges (the fraction of co-parsed rows on which two judges return the same verdict):
 
-### 4.3 Why this matters for sovereign deployment
+| Pair | Agreement |
+|---|---:|
+| Opus ↔ GPT | 98.3% (286/291) |
+| Opus ↔ MiniMax | 93.5% (260/278) |
+| GPT ↔ MiniMax | 95.1% (250/263) |
 
-The Qwen 35B finding has direct implications for organizations that cannot deploy frontier-cloud models due to compliance, data residency, or sovereignty requirements. Per Phase 1 evidence, on-prem Qwen 35B with Waggle memory layer achieves Claude-class quality on validated samples — this is the architectural basis for the Waggle Variant B (compliance/regulated industries) and KVARK enterprise sovereign positioning.
+The three judges also land within ~4pp of one another on overall correctness (Opus 230/320, GPT 223/320, MiniMax 236/320), so the ensemble agrees on aggregate quality even where individual rows are disputed. Disagreement is concentrated in the multi-hop and open-ended categories, where a binary "correct" verdict is genuinely fuzzy.
 
-A standalone companion paper covering the GEPA cross-family generalization findings in extended form is in preparation.
+> For the canonical v5 judge set we report **pairwise agreement only** (above); no Cohen's κ is published for this ensemble. Pairwise agreement is the inter-judge metric carried in the run record.
+
+### 3.3 Parser-fix audit trail
+
+We disclose the full audit trail of the trio re-judge. A first trio run (v1, 2026-05-21 morning) produced 184/320 = 57.5% because of a parser bug: MiniMax's `max_tokens` budget (800) was too small and its reasoning tokens consumed the budget before the verdict label was emitted, and the parser did not accept the natural-language "INCORRECT" as a WRONG synonym. This produced 63 parse failures (19.7%), which were (wrongly) treated as not-correct and inflated the apparent self-judge gap. The fix raised MiniMax to `max_tokens: 3000` (and Opus/GPT to 500), taught the parser to accept "INCORRECT", and re-judged only the 63 failed rows. After the fix, 59 of 63 resolved, leaving 4 irrecoverable. The canonical, post-fix result is **217/320 = 67.8%** (the v2 file). We keep the buggy v1 judgments committed as an audit trail.
 
 ---
 
-## 5. Reproducibility
+## 4. Self-Judge Bias Quantification (+5.3pp on this system)
 
-### 5.1 Code
+When the same answers are scored by Opus-alone (self-judge) versus the trio-strict ensemble, the self-judge score is **+5.3 percentage points higher** (73.1% → 67.8%). This is well within cross-LLM-benchmark norms and is the honest, measured inflation for this system.
 
-The Waggle hive-mind substrate is open source under Apache 2.0 license at github.com/marolinik/hive-mind. Substrate retrieval, bitemporal knowledge graph implementation, and frame compression are all in repo.
+> Earlier internal (PM-Waggle-OS) work carried a "+27.35pp methodology gap" estimate. The canonical v5 run **measured the inflation directly on this system at +5.3pp** — substantially less than that prior estimate. We do not carry the +27.35pp figure forward, and we have dropped the "+27.35-Point Methodology Gap" framing entirely. The honest number is +5.3pp.
 
-The evaluation harness, judge ensemble configuration, and prompt evolution implementation are also Apache 2.0 licensed. Repository link is in the companion arxiv preprint Appendix.
+### 4.1 Per-category inflation
 
-### 5.2 Data
+The inflation is not uniform — it is concentrated exactly where binary correctness is fuzzy:
 
-LoCoMo-1540 is publicly available per the original benchmark publication. Our pre-registered sample selection manifests (v6 series) are checked into the evaluation repository with SHA anchors documented in the companion arxiv preprint.
+| Category | Trio-strict | Self-judge | Inflation |
+|---|---:|---:|---:|
+| single-hop | **87.5%** (70/80) | 87.5% | **0 pp** (exact match) |
+| temporal | 65.0% (52/80) | 67.5% | +2.5 pp |
+| open-ended | 57.5% (46/80) | 62.5% | +5.0 pp |
+| multi-hop | **61.3%** (49/80) | 75.0% | +13.7 pp |
 
-### 5.3 Run instructions
+**Single-hop trio-strict (87.5%) exactly matches self-judge** — the substrate's strongest category is fully reliable across all three vendors with zero inflation. **Multi-hop is the hard cell** (61.3% trio-strict) and the most inflated (+13.7pp), because multi-hop reasoning is where one judge most frequently dissents. We disclose multi-hop as the honest weak point rather than averaging it away.
+
+### 4.2 Implications
+
+Single-judge LoCoMo scores reported elsewhere in the 80–95% range are not directly comparable to trio-strict scores in the 60–70% range. Cross-paper comparisons require judge-methodology disclosure. We offer trio-strict (or a comparable held-out-judge protocol) as a community-friendly bar, and we publish both our trio-strict headline and our self-judge reference so a reader can map onto whichever methodology a venue uses.
+
+---
+
+## 5. Mem0 Comparison (Matched Protocol)
+
+We compare against Mem0's published LoCoMo number under a **matched protocol**, and we are explicit about what is and is not a clean win.
+
+| Comparison | Waggle | Mem0 paper | Δ |
+|---|---:|---:|---:|
+| Same-protocol self-judge (same dataset, same protocol, same judge prompt) | 73.1% | 68.5% | **+4.6 pp (Waggle)** |
+| Waggle **trio-strict** vs Mem0 **self-judge** | 67.8% | 68.5% | −0.7 pp (essentially tied) |
+
+Two honest readings:
+
+1. **Under matched self-judge methodology** (the apples-to-apples comparison — same dataset, same "be generous" prompt, same single-judge protocol Mem0 used), Waggle scores **+4.6pp over Mem0's published 68.5%**, cross-validated on two subject models (Opus 73.1%, Qwen 73.4%).
+2. **When Waggle is held to the stricter trio-strict bar while Mem0 keeps its single permissive self-judge**, the two are **essentially tied** (−0.7pp). This comparison is deliberately in Waggle's disadvantage — a 3-vendor AND-of-3 ensemble vs a single permissive judge — so the "tied" reading is conservative.
+
+**We do not claim a clean 7.1-point win over Mem0.** The previous "74% beats Mem0's 66.9% by 7.1 points" headline compared a Waggle oracle-ceiling number against a re-judged Mem0 figure and is withdrawn. The defensible statement is: under matched self-judge protocol Waggle is modestly ahead (+4.6pp); under the stricter trio-strict bar the substrates are roughly tied.
+
+> On the "74%" number: that figure is a **full-context oracle ceiling** (the subject model is given the entire conversation history, not substrate-mediated retrieval), measured in an earlier Stage-3 run. It is a headroom indicator, **not** the substrate-retrieval accuracy, and it is **not** the headline on this page. The headline accuracy is the trio-strict 67.8%.
+
+---
+
+## 6. Reproducibility
+
+### 6.1 Offline reproduction (zero API calls)
+
+The headline number is re-derivable offline from committed judgments, with no network and no model calls:
 
 ```bash
 git clone https://github.com/marolinik/hive-mind.git
 cd hive-mind
-npm install
-npm run eval -- --benchmark locomo --manifest v6 --judge trio-strict
+node benchmarks/locomo/rescore.mjs
 ```
 
-Estimated runtime: ~6 hours on a single-GPU workstation. Estimated cost (for trio-strict judge API calls): ~$30 per N=400 cell.
+Expected output (exit 0):
 
-### 5.4 Per-sample disagreement matrices
+```
+  Trio-strict (AND of 3)   217/320 = 67.8%
+  Trio-majority (>=2 of 3) 224/320 = 70.0%
+  Parse failures           4/320
+  single-hop   70/80   multi-hop 49/80   temporal 52/80   open-ended 46/80
+  opus 230/320   gpt 223/320   mm 236/320
+```
 
-Per-sample judge agreement and disagreement matrices are released alongside the code. Researchers wishing to investigate specific question type categories or bias modes can filter the matrices directly.
+The rescore is adversarial about its own inputs: it (1) verifies each artifact's SHA-256 against `MANIFEST.json` (tamper-evidence), (2) independently recomputes every per-row verdict from the raw per-judge verdicts and cross-checks against the committed fields (0 mismatches expected), and (3) asserts the strict/majority/per-category/per-judge tallies match the MANIFEST exactly, exiting non-zero on any drift. This is the intended verification route, and it costs **$0**.
 
----
+### 6.2 Committed artifacts
 
-## 6. Limitations and Negative Results
+The committed reproducibility set (`benchmarks/locomo/artifacts/`):
 
-### 6.1 V1 retrieval underperformance
+| File | Role |
+|---|---|
+| `trio-judgments-v5-retrieval.v2.jsonl` | canonical per-row trio judgments (the rescore input, post parser-fix) |
+| `cell-retrieval-v5-claude.jsonl` | the v5 retrieval answers that were judged |
+| `sample-cells-23-N320.jsonl` | the N=320 stratified question sample (the test set) |
+| `dataset-MANIFEST.json` | upstream LoCoMo dataset provenance (source URL + SHA + shape) |
+| `sample-MANIFEST.json` | sampling provenance (seed=42 + algorithm + per-bucket SHAs) |
+| `MANIFEST.json` | pins all artifact SHA-256s + dataset SHA + seed + the expected-results contract |
 
-Our V1 retrieval implementation achieves 22.25% on LoCoMo-1540 (substrate-mediated retrieval cell). The full-context oracle ceiling is 27.25%, indicating the V1 retrieval underperforms the oracle by 5pp. V2 retrieval, in active development, targets closing this gap. The substrate (74% on oracle conditions) is decoupled from retrieval — substrate quality is independently validated even where V1 retrieval has known limitations.
+### 6.3 Full re-run from scratch
 
-### 6.2 Multiplier pilot — Negative Result
+Regenerating the answers and judgments from the numbered `benchmarks/locomo/*.mjs` harness requires API keys and roughly **$23–26** of spend (v5 retrieval ~$5; trio judging, including the redo of parse-failures, ~$14–17; original self-judge ~$9). The offline `rescore.mjs` path needs neither network nor keys.
 
-We piloted a "multiplier hypothesis" claim — that Waggle memory layer would produce >2x downstream task performance on h2/h3/h4 agentic scenarios (real PM, research, and engineering tasks). The N=12 pilot (2026-04-26) produced negative results:
-- h2: 1/3 success
-- h3: 0/3 success
-- h4: 0/3 success
+### 6.4 Code license
 
-We disclose this finding explicitly. The negative result does not affect the substrate-vs-Mem0 primary contribution or the methodology gap finding. Re-test preconditions are documented:
-- B-frame compaction stability (currently in active development)
-- Harvest timestamp fix (commit anchor in companion arxiv preprint)
-- Minimum sample size (N≥48 for adequate statistical power)
-
-The multiplier finding is restated as conditional and deferred for follow-up evaluation. Branch B prerequisites must land before re-test.
-
-### 6.3 Judge ensemble cost
-
-Trio-strict evaluation is approximately 3x the cost of single-judge evaluation due to triple API calls. For research budgets, this is the meaningful trade-off for higher-confidence accuracy claims. Researchers may prefer single-judge protocols for early-stage exploration and reserve trio-strict for publication-grade claims.
-
----
-
-## 7. References
-
-- Mem0 (peer-reviewed paper): Mem0.ai/research, arxiv:2504.19413
-- LoCoMo benchmark: Maharana et al., 2024
-- GEPA: Agrawal et al. 2025, arxiv:2507.19457 (ICLR 2026 Oral)
-- EVOLVESCHEMA: Pavlukhin 2026 (companion arxiv preprint scheduled)
-- ACE: Zhang et al. 2025, arxiv:2510.04618 (Stanford/SambaNova)
-- Zep ↔ Mem0 benchmark dispute: github.com/getzep/zep-papers/issues/5
-
-Forthcoming Waggle arxiv preprint will provide full bibliographic details, methodology amendments documentation, judge calibration logs, and per-sample disagreement matrices.
+The hive-mind substrate (bitemporal knowledge graph retrieval, frame compression, reranker) and the evaluation harness are open source under Apache 2.0 at github.com/marolinik/hive-mind.
 
 ---
 
-## 8. Companion publications
+## 7. Limitations and Negative Results
 
-This methodology document accompanies the forthcoming Waggle arxiv preprint *"Apples-to-Apples on LoCoMo: A Bitemporal Local-First Memory Substrate and a +27.35-Point Methodology Gap"* (scheduled within 60 days of this document publication). A standalone GEPA cross-family generalization paper is also in preparation.
+### 7.1 What is not in this measurement
 
-For the most current evaluation results, methodology amendments, and reproducibility artifacts, consult the Waggle research repository at github.com/marolinik/hive-mind (canonical OSS substrate distribution).
+- **Single configuration, no ablation.** The full stack is on; we have not yet ablated the reranker / chunker / 8k embedder / distilled facts one at a time to attribute the contribution of each lever.
+- **Confidence intervals are eyeballed.** Rough binomial spread is ~2pp at N=80 per cell, ~1pp at N=320 total. We have not computed formal CIs.
+- **CLI library-mode only.** The MCP path is not yet benchmarked (its reranker wiring is incomplete); no MCP-path number is published.
+- **κ not published for the v5 judge set** (see §3.2). We report pairwise agreement only for the headline run.
+
+### 7.2 Multiplier pilot — negative result (disclosed honestly)
+
+A separate "multiplier hypothesis" pilot — testing whether the Waggle memory layer would more than double downstream agentic task performance on real PM / research / engineering scenarios — produced negative results in an early small-N pilot and was **not** confirmed. We disclose this explicitly: honest negatives build credibility, and this negative does not affect the LoCoMo substrate measurement above.
+
+> By design we state only the **directional** finding — the multiplier hypothesis was not confirmed in an early pilot. Specific per-scenario tallies are deliberately not restated here, pending a properly powered re-test.
+
+### 7.3 GEPA cross-family validation — not published here
+
+Earlier internal material reported a GEPA (reflective prompt-evolution) cross-family uplift table. Those figures are not part of the canonical LoCoMo run record and are **not** published on this page. The verified, LoCoMo-grounded version of the "an open model reaches frontier quality on the same memory layer" story is the **substrate ≈ subject** convergence (Opus 73.1% vs Qwen 73.4%, Δ−0.3pp, §2) — cite that instead.
+
+### 7.4 Judge-ensemble cost
+
+Trio-strict evaluation is roughly 3× the API cost of single-judge evaluation (triple the judge calls). For early-stage exploration a single judge is fine; trio-strict is reserved for publication-grade claims, where the higher-confidence cross-vendor bar is worth the cost.
 
 ---
 
-**Document maintenance:** This document is versioned. v1 published 2026-05-02 covers protocol and findings as of GEPA Faza 1 closure. Subsequent versions will incorporate Phase 5 production deployment results, V2 retrieval improvements, and additional benchmark portfolio (Gaia2, τ³-bench banking_knowledge) as they become available.
+## 8. References
+
+- LoCoMo benchmark: Maharana et al., 2024 — dataset `snap-research/locomo`, `locomo10.json`.
+- Mem0 (peer-reviewed): Mem0.ai/research, arXiv:2504.19413 — published LoCoMo self-judge figure 68.5%.
+- GEPA (Genetic-Pareto reflective prompt optimization): Agrawal et al., 2025, arXiv:2507.19457.
+- Canonical run record: `benchmarks/locomo/RESULTS.md` and `benchmarks/locomo/artifacts/MANIFEST.json` in github.com/marolinik/hive-mind.
+
+For the most current evaluation results and reproducibility artifacts, consult the hive-mind research repository (canonical OSS substrate distribution). When the run record and any prose disagree, **the run record (`RESULTS.md` / `MANIFEST.json`, re-derivable by `rescore.mjs`) is canonical.**
+
+---
+
+**Document maintenance:** This document is versioned. v2 (2026-06-01) realigns the public methodology page to the canonical v5 LoCoMo run record and removes the withdrawn "+27.35-Point Methodology Gap" / "7.1-point Mem0 win" / GEPA-uplift framings. Subsequent versions will incorporate ablation results, formal confidence intervals, an MCP-path benchmark, and any additional benchmarks once they are reproduced in-repo.
 
 License: This documentation is released under Creative Commons Attribution 4.0 International (CC BY 4.0). Code and evaluation artifacts referenced are Apache 2.0 licensed.

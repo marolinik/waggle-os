@@ -3,16 +3,21 @@ import { getTranslations } from 'next-intl/server';
 import { proofPoints } from '../_data/proof-points';
 
 /**
- * SOTA Proof Band — 5 cards in v3.2 LOCKED order.
+ * Proof Band — N2 honest 3-chip set.
  *
  * Card content lives in `_data/proof-points.ts` (still as TS const, since
  * it's a structured data file rather than JSX literals — and `proofPoints`
  * is consumed via `{card.field}` interpolation, not as JSX text).
  *
  * Section header strings live in `messages/en.json` under `landing.proof.*`.
+ * A methodology footnote (`proof.methodology`) renders under the header. The
+ * `proof.human_quote` slot is a LAUNCH-BLOCKER placeholder: it is intentionally
+ * empty in en.json, so the figure is guarded and renders NOTHING until one real
+ * tester quote is supplied — never a fabricated testimonial.
  */
 export default async function ProofPointsBand() {
   const t = await getTranslations('landing.proof');
+  const humanQuote = t('human_quote');
 
   return (
     <section id="proof" style={sectionStyle}>
@@ -33,6 +38,17 @@ export default async function ProofPointsBand() {
             </li>
           ))}
         </ul>
+
+        <details style={methodologyStyle}>
+          <summary style={methodologySummaryStyle}>How this is measured</summary>
+          <p style={methodologyBodyStyle}>{t('methodology')}</p>
+        </details>
+
+        {humanQuote ? (
+          <figure style={quoteStyle}>
+            <blockquote style={quoteTextStyle}>{humanQuote}</blockquote>
+          </figure>
+        ) : null}
       </div>
 
       <style>{proofResponsiveCss}</style>
@@ -75,7 +91,7 @@ const gridStyle: CSSProperties = {
   padding: 0,
   margin: 0,
   display: 'grid',
-  gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
   gap: 16,
 };
 const cardStyle: CSSProperties = {
@@ -115,6 +131,38 @@ const descriptionStyle: CSSProperties = {
   lineHeight: 1.5,
   color: 'var(--hive-300, #7d869e)',
   marginTop: 8,
+};
+const methodologyStyle: CSSProperties = {
+  maxWidth: 720,
+  margin: '40px auto 0',
+  textAlign: 'left',
+  fontFamily: "'Inter', system-ui, sans-serif",
+};
+const methodologySummaryStyle: CSSProperties = {
+  fontSize: 12,
+  fontWeight: 600,
+  textTransform: 'uppercase',
+  letterSpacing: '0.1em',
+  color: 'var(--hive-300, #7d869e)',
+  cursor: 'pointer',
+};
+const methodologyBodyStyle: CSSProperties = {
+  fontSize: 13,
+  lineHeight: 1.6,
+  color: 'var(--hive-400, #5a6380)',
+  marginTop: 12,
+};
+const quoteStyle: CSSProperties = {
+  maxWidth: 640,
+  margin: '40px auto 0',
+  textAlign: 'center',
+};
+const quoteTextStyle: CSSProperties = {
+  margin: 0,
+  fontSize: 18,
+  lineHeight: 1.5,
+  fontStyle: 'italic',
+  color: 'var(--hive-100, #dce0eb)',
 };
 const proofResponsiveCss = `
   @media (max-width: 1024px) {

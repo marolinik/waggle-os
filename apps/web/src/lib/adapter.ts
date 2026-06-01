@@ -707,6 +707,37 @@ class LocalAdapter {
     return unwrapArray(await res.json());
   }
 
+  /**
+   * BUG #7 (marketplace boot-race): these four endpoints back MarketplaceApp's
+   * Browse/Installed tabs and install/uninstall actions. They MUST go through
+   * the authenticated `this.fetch()` (which attaches the bearer token) — a raw
+   * fetch() returns 401 before the session token has bootstrapped, and the UI
+   * was silently caching the empty 401 body as an empty catalog. The install/
+   * uninstall variants return the raw Response so the caller can keep its
+   * existing status-aware handling (403 → UpgradeModal, scan-blocked toasts).
+   */
+  async searchMarketplace(query: string, limit = 20): Promise<Response> {
+    return this.fetch(`/api/marketplace/search?query=${encodeURIComponent(query)}&limit=${limit}`);
+  }
+
+  async getMarketplaceInstalled(): Promise<Response> {
+    return this.fetch('/api/marketplace/installed');
+  }
+
+  async installMarketplacePackage(packageId: number): Promise<Response> {
+    return this.fetch('/api/marketplace/install', {
+      method: 'POST',
+      body: JSON.stringify({ packageId }),
+    });
+  }
+
+  async uninstallMarketplacePackage(packageId: number): Promise<Response> {
+    return this.fetch('/api/marketplace/uninstall', {
+      method: 'POST',
+      body: JSON.stringify({ packageId }),
+    });
+  }
+
   async installMarketplacePack(packId: string): Promise<void> {
     const res = await this.fetch('/api/marketplace/install', {
       method: 'POST',
