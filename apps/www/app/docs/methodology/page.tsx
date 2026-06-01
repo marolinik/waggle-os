@@ -31,7 +31,7 @@ export const dynamic = 'force-static';
 export const metadata: Metadata = {
   title: 'Methodology — Waggle',
   description:
-    "Waggle's substrate-vs-Mem0 LoCoMo evaluation produces 74% on the same protocol that yielded Mem0's published 66.9% — a 7.1-point empirical gap.",
+    "How Waggle's memory is evaluated: an independent LoCoMo test scored by a 3-vendor judge ensemble (Opus + GPT + MiniMax, AND-of-3) — 67.8%, conservative, cross-vendor, and reproducible offline.",
   alternates: { canonical: 'https://waggle-os.ai/docs/methodology' },
   robots: { index: true, follow: true },
 };
