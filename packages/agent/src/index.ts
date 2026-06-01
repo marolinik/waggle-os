@@ -190,6 +190,7 @@ export {
 } from './prompt-loader.js';
 export { LoopGuard, type LoopGuardConfig } from './loop-guard.js';
 export { scanForInjection, type ScanResult } from './injection-scanner.js';
+export { checkGrounding, extractClaimedSpecifics, type GroundingResult, type ClaimedSpecific } from './grounding-check.js';
 export { CostTracker, DEFAULT_MODEL_PRICING, type ModelPricing, type UsageStats, type UsageEntry } from './cost-tracker.js';
 export { extractEntities, type ExtractedEntity } from './entity-extractor.js';
 export { CognifyPipeline, type CognifyConfig, type CognifyResult } from './cognify.js';

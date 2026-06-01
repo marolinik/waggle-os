@@ -5,7 +5,7 @@ import path from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
-import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, planSkillDistillation, TraceRecorder, generateTurnId, logTurnEvent, type TraceHandle } from '@waggle/agent';
+import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, planSkillDistillation, TraceRecorder, generateTurnId, logTurnEvent, checkGrounding, type TraceHandle } from '@waggle/agent';
 import type { AgentLoopConfig, AgentResponse, Orchestrator, AutonomyLevel } from '@waggle/agent';
 import type { WorkspaceSession } from '../workspace-sessions.js';
 import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
@@ -1549,6 +1549,30 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // IMP-004: Contextual cron suggestion — nudge user about /schedule when response discusses recurring work
         if (!hasCustomRunner && finalContent && shouldSuggestSchedule(finalContent, result.toolsUsed ?? [])) {
           finalContent += SCHEDULE_SUGGESTION;
+        }
+
+        // Grounding guard (verification layer): flag quantitative specifics the
+        // reply asserts that are NOT in the recalled memory / user message. Prompt
+        // instructions don't reliably suppress this confabulation (verified live),
+        // so surface high-signal cases honestly rather than let invented numbers
+        // read as recalled facts. Deterministic + cheap. count/money trigger an
+        // honest hedge note; durations/percents only inform the log signal
+        // (noisier — advice timelines like "2 weeks" would false-positive). The
+        // nuanced cases (proper nouns, "4 months runway") need the LLM verifier.
+        if (!hasCustomRunner && finalContent && recalledContext) {
+          const grounding = checkGrounding(finalContent, recalledContext + '\n' + message);
+          if (grounding.ungrounded.length > 0) {
+            log.info('[grounding] reply asserts specifics absent from recalled memory', {
+              score: grounding.score,
+              ungrounded: grounding.ungrounded.map((s) => s.text),
+            });
+          }
+          const hedgeWorthy = grounding.ungrounded.filter((s) => s.kind === 'count' || s.kind === 'money');
+          if (hedgeWorthy.length > 0 && process.env.WAGGLE_GROUNDING_HEDGE !== '0') {
+            const items = hedgeWorthy.map((s) => `"${s.text}"`).join(', ');
+            const one = hedgeWorthy.length === 1;
+            finalContent += `\n\n---\n*Note: ${items} ${one ? 'is' : 'are'} not in your saved memory — please treat ${one ? 'it' : 'them'} as an assumption, not a recalled fact.*`;
+          }
         }
 
         // Add assistant response to history (maintains context for next turn) and persist
