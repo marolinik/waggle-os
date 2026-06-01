@@ -52,14 +52,14 @@ const execFileAsync = promisify(execFile);
 
 /**
  * Tools whose hive-mind hook package is real (ships a `bin`) and can
- * therefore be installed/verified/uninstalled via npx. claude-code and
- * codex qualify (both ship a real bin); cursor / claude-desktop /
- * codex-desktop / hermes / openclaw hook packages are still binless
- * `export {}` stubs (Wave 2/3). Hook code paths gate on THIS cohort,
- * not LAUNCH_COHORT, so the UI never offers a hook action that npx
- * cannot fulfil.
+ * therefore be installed/verified/uninstalled via npx. claude-code, codex,
+ * and codex-desktop qualify (all ship a real bin — codex-desktop is a thin
+ * re-export of codex that shares ~/.codex/); cursor / claude-desktop /
+ * hermes / openclaw hook packages are still binless `export {}` stubs
+ * (Wave 2/3). Hook code paths gate on THIS cohort, not LAUNCH_COHORT, so the
+ * UI never offers a hook action that npx cannot fulfil.
  */
-export const HOOKS_COHORT: readonly ToolId[] = ['claude-code', 'codex'] as const;
+export const HOOKS_COHORT: readonly ToolId[] = ['claude-code', 'codex', 'codex-desktop'] as const;
 
 // ── Injectable deps ─────────────────────────────────────────────────
 

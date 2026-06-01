@@ -1,10 +1,13 @@
 {
   "name": "@waggle/hive-mind-hooks-codex-desktop",
-  "version": "0.0.1",
-  "description": "STUB — hive-mind silent capture shim for codex-desktop. Wave 2/3 of marolinik/waggle-os monorepo migration. Implementation pending.",
+  "version": "0.1.0",
+  "description": "OpenAI Codex Desktop silent capture shim for hive-mind. A thin re-export of @waggle/hive-mind-hooks-codex — Codex Desktop shares the same ~/.codex/ config root as the Codex CLI, so install / uninstall / verify behave identically and write into the same ~/.codex/hooks.json + pointer. Exists as a distinct package so the dependency graph + subtree-split see the boundary and the launcher resolves hookPackageFor('codex-desktop').",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "codex-desktop-hooks": "dist/bin/codex-desktop-hooks.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -12,16 +15,28 @@
     }
   },
   "scripts": {
-    "build": "tsc --build"
-  },
-  "dependencies": {
-    "@waggle/hive-mind-shim-core": "*"
+    "build": "tsc --build",
+    "build:clean": "tsc --build --clean",
+    "typecheck": "tsc --build && tsc --noEmit -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "engines": {
     "node": ">=20"
   },
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "@waggle/hive-mind-hooks-codex": "*"
+  },
+  "peerDependencies": {
+    "@waggle/hive-mind-cli": "*"
+  },
+  "peerDependenciesMeta": {
+    "@waggle/hive-mind-cli": {
+      "optional": true
+    }
   },
   "repository": {
     "type": "git",
@@ -35,11 +50,13 @@
   "author": "Egzakta Group d.o.o. <hello@egzakta.com> (https://egzakta.com)",
   "keywords": [
     "codex-desktop",
+    "codex",
+    "openai",
     "hive-mind",
     "memory",
     "ai",
     "hook",
-    "stub"
+    "silent-capture"
   ],
   "types": "dist/index.d.ts"
 }

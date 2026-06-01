@@ -188,10 +188,16 @@ function resolveDeps(opts: ToolDetectionDeps): ResolvedDeps {
  */
 const HOOK_POINTER_BY_TOOL: Record<ToolId, string> = {
   'claude-code': '.claude/hive-mind-install.json',
+  // TODO(claude-desktop): '.config/Claude/...' is NOT a real Claude Desktop
+  // config dir on any platform (mac ~/Library/Application Support/Claude/,
+  // win %APPDATA%\Claude\). claude-desktop has no lifecycle-hook surface — it
+  // is the deferred MCP-bridge port (Wave 2/3 spec §6.3); fix this pointer when
+  // that work lands.
   'claude-desktop': '.config/Claude/hive-mind-install.json',
   'cursor': '.cursor/hive-mind-install.json',
   'codex': '.codex/hive-mind-install.json',
-  'codex-desktop': '.config/Codex/hive-mind-install.json',
+  // codex-desktop shares ~/.codex/ with the Codex CLI — same pointer file.
+  'codex-desktop': '.codex/hive-mind-install.json',
   'hermes': '.hermes/hive-mind-install.json',
   'openclaw': '.openclaw/hive-mind-install.json',
 };
