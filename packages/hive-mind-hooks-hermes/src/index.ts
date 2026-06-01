@@ -13,6 +13,11 @@
  *   - UserPromptSubmit → `pre_llm_call`.
  *   - Stop → `post_llm_call`.
  *
+ * Because Hermes has no PreCompact event, the `cleanup_frames` maintenance
+ * pass is approximated OPT-IN from the per-turn Stop hook
+ * (`WAGGLE_HERMES_COMPACT_ON_STOP`, default off; time-gated by
+ * `WAGGLE_HERMES_COMPACT_WINDOW_MIN`) — see `compact-on-stop.ts`.
+ *
  * YAML round-trip is lossy, so reversibility relies on the literal
  * byte-identical backup written at install time. Programmatic install /
  * uninstall / verify lifecycle; most users invoke the `hermes-hooks` bin.
@@ -54,6 +59,15 @@ export {
   HERMES_EVENT_NAME,
   HERMES_SESSION_START_OBSERVE_EVENT,
 } from './adapter.js';
+
+export type { MaybeCompactOptions } from './compact-on-stop.js';
+export {
+  maybeCompactOnStop,
+  compactStatePath,
+  isCompactEnabled,
+  resolveWindowMs,
+  DEFAULT_WINDOW_MS,
+} from './compact-on-stop.js';
 
 export type {
   HermesHookEntry,

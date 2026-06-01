@@ -1,4 +1,7 @@
-import { describe, expect, it, afterEach, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { runStop } from '../../src/hooks/stop.js';
 import { makeHookCaptures, makeMockBridge } from './_test-helpers.js';
 import type { HookFrame } from '@waggle/hive-mind-shim-core';
@@ -127,6 +130,117 @@ describe('hermes stop handler (post_llm_call — assistant_response in extra)', 
       bridge,
     });
     expect(bridge.saveMemory).not.toHaveBeenCalled();
+    expect(cap.exits).toEqual([0]);
+  });
+});
+
+describe('hermes stop handler — opt-in compact-on-stop (OQ-4)', () => {
+  let home: string;
+
+  beforeEach(async () => {
+    home = await mkdtemp(join(tmpdir(), 'hmher-stop-compact-'));
+  });
+
+  afterEach(async () => {
+    vi.unstubAllEnvs();
+    await rm(home, { recursive: true, force: true });
+  });
+
+  // case 9
+  it('DEFAULT-OFF: flag unset → save happens AND cleanupFrames NOT called', async () => {
+    const bridge = makeMockBridge();
+    const cap = makeHookCaptures();
+    await runStop({
+      readStdin: async () => JSON.stringify({ extra: { assistant_response: 'an answer', session_id: 's' } }),
+      writeStdout: cap.writeStdout,
+      exit: cap.exit,
+      bridge,
+      now: () => 1_000_000,
+      home,
+    });
+    expect(bridge.saveMemory).toHaveBeenCalledTimes(1);
+    expect(bridge.cleanupFrames).not.toHaveBeenCalled();
+    expect(cap.exits).toEqual([0]);
+  });
+
+  // case 10
+  it('flag on, eligible → save happens AND cleanupFrames called, save BEFORE cleanup', async () => {
+    vi.stubEnv('WAGGLE_HERMES_COMPACT_ON_STOP', '1');
+    const order: string[] = [];
+    const bridge = makeMockBridge();
+    bridge.saveMemory.mockImplementation(async () => {
+      order.push('save');
+      return { id: 'frame-1', success: true, workspace: 'personal' };
+    });
+    bridge.cleanupFrames.mockImplementation(async () => {
+      order.push('cleanup');
+      return { pruned: 0 };
+    });
+    const cap = makeHookCaptures();
+    await runStop({
+      readStdin: async () => JSON.stringify({ extra: { assistant_response: 'an answer', session_id: 's' } }),
+      writeStdout: cap.writeStdout,
+      exit: cap.exit,
+      bridge,
+      now: () => 2_000_000,
+      home,
+    });
+    expect(bridge.saveMemory).toHaveBeenCalledTimes(1);
+    expect(bridge.cleanupFrames).toHaveBeenCalledTimes(1);
+    expect(order).toEqual(['save', 'cleanup']);
+    expect(cap.exits).toEqual([0]);
+  });
+
+  // case 11
+  it('flag on, eligible, cleanupFrames rejects → exits 0 and saveMemory still called once', async () => {
+    vi.stubEnv('WAGGLE_HERMES_COMPACT_ON_STOP', '1');
+    const bridge = makeMockBridge();
+    bridge.cleanupFrames.mockRejectedValueOnce(new Error('cli unreachable'));
+    const cap = makeHookCaptures();
+    await runStop({
+      readStdin: async () => JSON.stringify({ extra: { assistant_response: 'an answer', session_id: 's' } }),
+      writeStdout: cap.writeStdout,
+      exit: cap.exit,
+      bridge,
+      now: () => 3_000_000,
+      home,
+    });
+    expect(cap.exits).toEqual([0]);
+    expect(bridge.saveMemory).toHaveBeenCalledTimes(1);
+  });
+
+  // case 12
+  it('flag on, no assistant_response (no save) → cleanupFrames still gate-eligible and runs, exits 0', async () => {
+    vi.stubEnv('WAGGLE_HERMES_COMPACT_ON_STOP', '1');
+    const bridge = makeMockBridge();
+    const cap = makeHookCaptures();
+    await runStop({
+      readStdin: async () => JSON.stringify({ extra: { session_id: 's' } }),
+      writeStdout: cap.writeStdout,
+      exit: cap.exit,
+      bridge,
+      now: () => 4_000_000,
+      home,
+    });
+    expect(bridge.saveMemory).not.toHaveBeenCalled();
+    expect(bridge.cleanupFrames).toHaveBeenCalledTimes(1);
+    expect(cap.exits).toEqual([0]);
+  });
+
+  // case 13 — save-before-compact ordering lock (flag ON)
+  it('SAVE-FIRST: flag on but saveMemory rejects → cleanupFrames NOT called, exits 0', async () => {
+    vi.stubEnv('WAGGLE_HERMES_COMPACT_ON_STOP', '1');
+    const bridge = makeMockBridge({ saveMemoryThrows: new Error('cli fail') });
+    const cap = makeHookCaptures();
+    await runStop({
+      readStdin: async () => JSON.stringify({ extra: { assistant_response: 'an answer', session_id: 's' } }),
+      writeStdout: cap.writeStdout,
+      exit: cap.exit,
+      bridge,
+      now: () => 5_000_000,
+      home,
+    });
+    expect(bridge.cleanupFrames).not.toHaveBeenCalled();
     expect(cap.exits).toEqual([0]);
   });
 });

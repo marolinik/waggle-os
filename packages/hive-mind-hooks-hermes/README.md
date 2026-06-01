@@ -50,14 +50,17 @@ npx @waggle/hive-mind-hooks-hermes uninstall  # byte-identical restore (or remov
 | SessionStart (recall + inject) | `on_session_start` (observer) **+** `pre_llm_call` (`is_first_turn`) | full (split) | observer side is a no-op; inject side fires on the first turn only and appends `{ "context": "..." }` to the user message (not the system prompt — preserves the prefix cache) |
 | UserPromptSubmit (save temporary) | `pre_llm_call` | full | the user text arrives at `extra.user_message`; saved every turn |
 | Stop (summarize + save) | `post_llm_call` | full | the assistant text arrives at `extra.assistant_response`; `on_session_finalize` is gateway-only and is **not** used |
-| PreCompact (compact memory) | **— (none)** | **absent** | Hermes ships **no compaction hook** (`VALID_HOOKS` has no compact entry) — there is genuinely nothing to bind, so this maintenance step does not run under Hermes |
+| PreCompact (compact memory) | **— (none)** | **opt-in approximation** | Hermes ships **no compaction hook** (`VALID_HOOKS` has no compact entry) — there is genuinely nothing to bind. Set `WAGGLE_HERMES_COMPACT_ON_STOP=1` (default off) to approximate it from the per-turn Stop hook, time-gated by `WAGGLE_HERMES_COMPACT_WINDOW_MIN` (minutes, default 10) so it runs at most once per window |
 
 **Disclosures:**
 
 - **No PreCompact event at all.** Hermes has no compaction hook, so the
-  `compact_memory` maintenance step that claude-code runs on PreCompact does
-  **not** run under Hermes. Memory still accrues correctly; only the periodic
-  compaction nudge is absent.
+  `cleanup_frames` maintenance step that claude-code runs on PreCompact does
+  **not** run under Hermes by default. Memory still accrues correctly; only the
+  periodic compaction nudge is absent. **Opt-in:** set
+  `WAGGLE_HERMES_COMPACT_ON_STOP=1` to approximate it from the per-turn Stop
+  hook, time-gated by `WAGGLE_HERMES_COMPACT_WINDOW_MIN` (minutes, default 10)
+  so the maintenance pass fires at most once per window.
 - **SessionStart is split** across `on_session_start` (observer) and
   `pre_llm_call` (inject). One compiled script is registered under both; it
   gates injection on `is_first_turn` so it injects once per session, not every

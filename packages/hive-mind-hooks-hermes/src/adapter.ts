@@ -22,8 +22,10 @@
  *     do NOT use it; `post_llm_call` is the dependable per-turn Stop signal.)
  *
  * There is NO PreCompact event — Hermes ships no compaction hook
- * (`eventName['pre-compact'] = undefined`); the gap is documented, never
- * approximated.
+ * (`eventName['pre-compact'] = undefined`); the maintenance pass is
+ * approximated opt-in from Stop (`WAGGLE_HERMES_COMPACT_ON_STOP`, default
+ * off) — see `compact-on-stop.ts`. (`eventName['pre-compact']` stays
+ * `undefined`; we are NOT registering a hook.)
  *
  * Hermes events carry block/inject control purely via stdout JSON (no
  * exit-code-2 contract). Our hooks are capture-only, so they emit `{}` or

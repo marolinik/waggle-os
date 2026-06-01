@@ -21,12 +21,36 @@ import {
   type HookRunOptions,
 } from '@waggle/hive-mind-hooks-core';
 import { hermesAdapter } from '../adapter.js';
+import { maybeCompactOnStop } from '../compact-on-stop.js';
 
-export async function runStop(opts: Partial<HookRunOptions> = {}): Promise<void> {
-  return runHook(makeStopHandler(hermesAdapter), {
+export interface HermesStopOptions extends Partial<HookRunOptions> {
+  /** Injectable clock for the compact gate (tests). */
+  now?: () => number;
+  /** $HOME override for the compact state file (tests). */
+  home?: string;
+  /** Compact window override in ms (tests). */
+  compactWindowMs?: number;
+}
+
+export async function runStop(opts: HermesStopOptions = {}): Promise<void> {
+  const { now, home, compactWindowMs, ...runOpts } = opts;
+  const base = makeStopHandler(hermesAdapter);
+  const handler: typeof base = {
+    parse: base.parse,
+    async run(payload, ctx) {
+      // Primary save first — unchanged. If this throws, the compact step is
+      // skipped and the throw lands in runHook's fail-open catch (exit 0).
+      await base.run(payload, ctx);
+      // Best-effort maintenance layered after the save. Never throws/rejects,
+      // so it cannot affect the already-completed save or the exit code.
+      await maybeCompactOnStop(ctx, { now, home, windowMs: compactWindowMs });
+      return undefined;
+    },
+  };
+  return runHook(handler, {
     name: 'stop',
     loggerPrefix: 'hermes-hooks',
-    ...opts,
+    ...runOpts,
   });
 }
 

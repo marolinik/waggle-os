@@ -93,6 +93,8 @@ function printInstallSummary(result: InstallResult): void {
     '  3 events only — SessionStart (split: on_session_start + pre_llm_call/is_first_turn),',
     '  UserPromptSubmit (pre_llm_call), Stop (post_llm_call). NO PreCompact event (Hermes',
     '  ships no compaction hook). See the README Capture fidelity table.',
+    '  Opt-in: set WAGGLE_HERMES_COMPACT_ON_STOP=1 to approximate the PreCompact',
+    '  maintenance pass from the Stop hook (time-gated, default off).',
     '',
     'Done. New Hermes sessions will silently capture to hive-mind.',
     'Run "hermes-hooks verify" to inspect, "hermes-hooks uninstall" to revert.',
