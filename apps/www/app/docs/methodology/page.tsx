@@ -42,7 +42,7 @@ export default function MethodologyPage() {
       <header style={headerStyle}>
         <a href="/" style={brandLinkStyle}>
           <img
-            src="/brand/waggle-logo.jpeg"
+            src="/brand/logo.jpeg"
             alt="Waggle"
             width={28}
             height={28}

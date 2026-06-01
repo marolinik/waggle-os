@@ -127,7 +127,7 @@ const META_OG_DESCRIPTION =
 const META_TWITTER_DESCRIPTION =
   "Be the expert. We'll be the AI. The workspace that knows you and your work, runs the AI for you, and stays yours.";
 const META_CANONICAL = 'https://waggle-os.ai/';
-const META_OG_IMAGE = 'https://waggle-os.ai/brand/waggle-logo.jpeg';
+const META_OG_IMAGE = 'https://waggle-os.ai/brand/logo.jpeg';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://waggle-os.ai/'),
@@ -139,14 +139,14 @@ export const metadata: Metadata = {
     description: META_OG_DESCRIPTION,
     url: META_CANONICAL,
     type: 'website',
-    images: ['/brand/waggle-logo.jpeg'],
+    images: ['/brand/logo.jpeg'],
   },
   twitter: {
     card: 'summary_large_image',
     title: META_TITLE,
     description: META_TWITTER_DESCRIPTION,
   },
-  icons: { icon: '/brand/waggle-logo.jpeg' },
+  icons: { icon: '/brand/logo.jpeg' },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -165,7 +165,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <meta name="twitter:title" content={META_TITLE} />
         <meta name="twitter:description" content={META_TWITTER_DESCRIPTION} />
         <meta name="twitter:image" content={META_OG_IMAGE} />
-        <link rel="icon" href="/brand/waggle-logo.jpeg" />
+        <link rel="icon" href="/brand/logo.jpeg" />
       </head>
       <body style={{ fontFamily: 'var(--font-inter), Inter, system-ui, sans-serif' }}>
         <ClerkProvider appearance={HIVE_CLERK_APPEARANCE}>
