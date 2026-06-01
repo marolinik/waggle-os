@@ -51,7 +51,7 @@ export default function Navbar() {
       <div style={containerStyle}>
         <a href="#hero" style={brandLinkStyle} aria-label="Waggle">
           <img
-            src="/brand/waggle-logo.jpeg"
+            src="/brand/logo.jpeg"
             alt="Waggle"
             width={32}
             height={32}
