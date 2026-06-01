@@ -70,9 +70,15 @@ describe('oss-subtree-split.sh — forbidden monorepo-level entries', () => {
     'benchmarks',
   ];
 
-  it('every forbidden entry exists as a monorepo-level dir (otherwise the guard is dead)', () => {
+  // .planning / .scratch / .mind are gitignored working dirs — forbidden from
+  // the OSS export if present, but legitimately ABSENT on a clean checkout (CI).
+  // The "dead guard" existence check therefore applies only to the tracked dirs;
+  // a gitignored working dir that's simply not present is fine.
+  const GITIGNORED_WORKING_DIRS = new Set(['.planning', '.scratch', '.mind']);
+  it('every tracked forbidden entry exists as a monorepo-level dir (otherwise the guard is dead)', () => {
     for (const f of FORBIDDEN) {
       const monorepoLevel = join(REPO_ROOT, f);
+      if (GITIGNORED_WORKING_DIRS.has(f) && !existsSync(monorepoLevel)) continue;
       expect(
         existsSync(monorepoLevel),
         `Forbidden entry '${f}' is not present at monorepo root — the script's negative-assertion guard is dead.`,

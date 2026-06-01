@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitest/config';
 import path from 'node:path';
 import { INFRA_TEST_SUITES } from './vitest.infra-suites';
+import { waggleSrcAliases } from './vitest.aliases';
 
 /**
  * Infra-lane vitest config — runs ONLY the suites that require live PostgreSQL
@@ -13,7 +14,7 @@ import { INFRA_TEST_SUITES } from './vitest.infra-suites';
 export default defineConfig({
   resolve: {
     alias: {
-      '@waggle/marketplace': path.resolve(__dirname, 'packages/marketplace/src/index.ts'),
+      ...waggleSrcAliases(__dirname),
       '@/': path.resolve(__dirname, 'app/src') + '/',
       '@': path.resolve(__dirname, 'app/src'),
     },

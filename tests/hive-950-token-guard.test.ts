@@ -23,11 +23,16 @@ const WEB_SRC = resolve(REPO_ROOT, 'apps/web/src');
 const ALLOW_LIST = new Set([
   'apps/web/src/index.css', //         token definitions per theme
   'apps/web/src/waggle-theme.css', //  consumes var(--hive-950)
-].map(p => p.replace(/\//g, '\\')));
+]);
 
-/** Normalise to repo-relative path with OS-native separators for ALLOW_LIST lookup. */
+/**
+ * Repo-relative path with forward slashes for ALLOW_LIST lookup. Must be
+ * cross-platform: a prior version normalised the ALLOW_LIST to backslashes,
+ * so on Linux (CI) the allow-listed files never matched and their legitimate
+ * #08090c / --hive-950 declarations were flagged as violations.
+ */
 function asRepoPath(absolute: string): string {
-  return relative(REPO_ROOT, absolute);
+  return relative(REPO_ROOT, absolute).replace(/\\/g, '/');
 }
 
 describe('CR-2 · hive-950 token discipline', () => {
