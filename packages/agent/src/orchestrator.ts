@@ -527,9 +527,13 @@ export class Orchestrator {
       }
 
       const text = '# Recalled Memories\n'
-        + 'These memories were automatically retrieved for the user\'s current message.\n'
-        + 'IMPORTANT: Use these to ground your response. Cite them naturally: "From our previous discussion...", "You mentioned that...", "Based on your workspace context..."\n'
-        + 'Do NOT ignore relevant memories. Do NOT present memory content as your own reasoning — attribute it.\n\n'
+        + "These are facts saved in this WORKSPACE'S memory, retrieved for the user's current message. "
+        + 'They may come from earlier sessions, other sessions, or imported sources — NOT necessarily from this conversation.\n'
+        + 'IMPORTANT — ground your response in them, but attribute provenance HONESTLY:\n'
+        + '- Say "your saved memory shows…" / "from your workspace notes…". Do NOT say "from our previous discussion" or "you just mentioned" unless it was actually said earlier in THIS conversation.\n'
+        + '- On the user\'s first message, do NOT claim continuity ("welcome back", "as we discussed", "you\'re back in context") — you have no prior turn with them yet.\n'
+        + '- State ONLY what the memories below actually say. Do NOT invent specifics (numbers, names, dates, competitors) that are not present — if unsure, ask rather than assert.\n'
+        + '- Do NOT ignore relevant memories. Do NOT present memory content as your own reasoning — attribute it.\n\n'
         + joinedLines;
 
       logTurnEvent(opts?.turnId, {
