@@ -13,7 +13,11 @@ services:
     name: waggle-server
     runtime: node
     plan: starter
-    buildCommand: npm install && cd app && npm run build
+    # Build the real UI (apps/web → root /dist) and all workspace packages
+    # (incl. @waggle/hive-mind-core/dist, a runtime dep). The old `cd app &&
+    # npm run build` ran Vite in app/ — the Tauri shell, which has no src/ —
+    # and served a stale committed shell.
+    buildCommand: npm install && npm run build:all
     startCommand: npx tsx packages/server/src/local/start.ts --skip-litellm
     healthCheckPath: /health
     envVars:
@@ -26,7 +30,7 @@ services:
       - key: WAGGLE_HOST
         value: 0.0.0.0
       - key: WAGGLE_FRONTEND_DIR
-        value: ./app/dist
+        value: ./dist
       - key: WAGGLE_DATA_DIR
         value: /data
       - key: DATABASE_URL
