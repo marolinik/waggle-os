@@ -2,11 +2,14 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "composite": true,
-    "rootDir": "./src",
     "outDir": "./dist",
+    "rootDir": "./src",
     "tsBuildInfoFile": "./dist/.tsbuildinfo"
   },
-  "references": [{ "path": "../hive-mind-shim-core" }],
   "include": ["src/**/*.ts"],
-  "exclude": ["dist", "node_modules", "**/*.test.ts"]
+  "exclude": ["src/**/*.test.ts", "tests/**", "dist/**", "node_modules/**"],
+  "references": [
+    { "path": "../hive-mind-hooks-core" },
+    { "path": "../hive-mind-shim-core" }
+  ]
 }

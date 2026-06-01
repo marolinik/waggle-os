@@ -262,12 +262,13 @@ describe('runHookCommand', () => {
     expect(result.error).toContain('exec failed');
   });
 
-  // R8-001: hook management is gated on HOOKS_COHORT — the cursor/claude-desktop/
+  // R8-001: hook management is gated on HOOKS_COHORT — the claude-desktop/
   // hermes/openclaw hook packages are still binless Wave-2/3 stubs, so routing
-  // npx at them always failed for the user. claude-code, codex, and codex-desktop
-  // ship real bins (codex-desktop is a thin re-export of codex sharing ~/.codex/),
-  // so they ROUTE; every remaining stub tool must REFUSE without invoking npx.
-  it.each<ToolId>(['claude-code', 'codex', 'codex-desktop'])(
+  // npx at them always failed for the user. claude-code, codex, codex-desktop,
+  // and cursor ship real bins (codex-desktop is a thin re-export of codex
+  // sharing ~/.codex/; cursor is a JSON installer with degraded events), so
+  // they ROUTE; every remaining stub tool must REFUSE without invoking npx.
+  it.each<ToolId>(['claude-code', 'codex', 'codex-desktop', 'cursor'])(
     'routes the hook command for HOOKS_COHORT tool (%s)',
     async (id) => {
       const { calls, execCapture } = captureExec();
@@ -278,7 +279,7 @@ describe('runHookCommand', () => {
   );
 
   it.each<ToolId>([
-    'cursor', 'claude-desktop', 'hermes', 'openclaw',
+    'claude-desktop', 'hermes', 'openclaw',
   ])('refuses hook command for non-HOOKS_COHORT stub tool (%s) without calling npx', async (id) => {
     const { calls, execCapture } = captureExec();
     const result = await runHookCommand({ id, action: 'install', deps: { execCapture } });

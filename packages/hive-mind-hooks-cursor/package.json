@@ -1,27 +1,47 @@
 {
   "name": "@waggle/hive-mind-hooks-cursor",
-  "version": "0.0.1",
-  "description": "STUB — hive-mind silent capture shim for cursor. Wave 2/3 of marolinik/waggle-os monorepo migration. Implementation pending.",
+  "version": "0.1.0",
+  "description": "Cursor silent capture shim for hive-mind. Adds sessionStart / beforeSubmitPrompt / stop / preCompact hooks that route conversation episodes into hive-mind frames via @waggle/hive-mind-shim-core. Reversible, create-if-missing install — additive merge into ~/.cursor/hooks.json with byte-identical uninstall. Degraded events: beforeSubmitPrompt is save-only (no inject), preCompact is observational, Stop turn read via transcript_path. Built on @waggle/hive-mind-hooks-core.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "cursor-hooks": "dist/bin/cursor-hooks.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./hooks/session-start": "./dist/hooks/session-start.js",
+    "./hooks/user-prompt-submit": "./dist/hooks/user-prompt-submit.js",
+    "./hooks/stop": "./dist/hooks/stop.js",
+    "./hooks/pre-compact": "./dist/hooks/pre-compact.js"
   },
   "scripts": {
-    "build": "tsc --build"
-  },
-  "dependencies": {
-    "@waggle/hive-mind-shim-core": "*"
+    "build": "tsc --build",
+    "build:clean": "tsc --build --clean",
+    "typecheck": "tsc --build && tsc --noEmit -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "engines": {
     "node": ">=20"
   },
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "@waggle/hive-mind-hooks-core": "*",
+    "@waggle/hive-mind-shim-core": "*"
+  },
+  "peerDependencies": {
+    "@waggle/hive-mind-cli": "*"
+  },
+  "peerDependenciesMeta": {
+    "@waggle/hive-mind-cli": {
+      "optional": true
+    }
   },
   "repository": {
     "type": "git",
@@ -39,7 +59,7 @@
     "memory",
     "ai",
     "hook",
-    "stub"
+    "silent-capture"
   ],
   "types": "dist/index.d.ts"
 }

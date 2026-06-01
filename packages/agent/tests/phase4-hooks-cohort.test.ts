@@ -1,10 +1,13 @@
 /**
  * AI-OS Phase 4 — HOOKS_COHORT regression (R8-001 / R8-002 / R8-003).
  *
- * Bug: hook install/verify/uninstall was gated on LAUNCH_COHORT (all 7
- * tools), but only @waggle/hive-mind-hooks-claude-code ships a `bin`.
- * The other 6 hook packages are Wave 2/3 `export {}` stubs with no bin,
- * so `npx @waggle/hive-mind-hooks-<id>` ALWAYS fails for the user.
+ * Bug (R8-001): hook install/verify/uninstall was gated on LAUNCH_COHORT
+ * (all 7 tools), but at the time only @waggle/hive-mind-hooks-claude-code
+ * shipped a `bin`; the other hook packages were Wave 2/3 `export {}` stubs
+ * with no bin, so `npx @waggle/hive-mind-hooks-<id>` ALWAYS failed for the
+ * user. HOOKS_COHORT fixed this by gating hook actions on the tools whose
+ * package actually ships a bin. The cohort has since grown as Tier-A
+ * packages landed (claude-code, codex, codex-desktop, cursor).
  *
  * The existing tool-launcher tests mock execCapture and only assert the
  * npx command SHAPE, so the binless-stub failure was invisible. These
@@ -12,7 +15,7 @@
  *   1. ground HOOKS_COHORT against the real on-disk hook packages
  *      (a tool is hook-capable iff its package.json declares a bin),
  *   2. prove runHookCommand REFUSES stub tools without invoking npx,
- *   3. prove claude-code (the one real target) still routes through.
+ *   3. prove the real targets still route through.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -50,8 +53,8 @@ describe('HOOKS_COHORT grounding (R8-001)', () => {
     expect([...HOOKS_COHORT].sort()).toEqual([...realTargets].sort());
   });
 
-  it('is exactly [claude-code] today — the only functional hook package', () => {
-    expect([...HOOKS_COHORT]).toEqual(['claude-code']);
+  it('matches the current real-bin cohort (snapshot tripwire)', () => {
+    expect([...HOOKS_COHORT].sort()).toEqual(['claude-code', 'codex', 'codex-desktop', 'cursor']);
   });
 
   it('is a strict subset of LAUNCH_COHORT (all hook targets are launchable, not vice-versa)', () => {
