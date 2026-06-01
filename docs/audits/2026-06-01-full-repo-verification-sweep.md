@@ -60,4 +60,16 @@ Investigating the no-Docker test gate surfaced that **CI's `test` job has been R
 2. **Uncommitted seed DB** (~80 failures): the marketplace sync suites `copyfile` `packages/marketplace/marketplace.db`, a gitignored/uncommitted file absent on a fresh CI checkout. Fix: generate the seed in test setup, commit a fixture, or gate these tests.
 3. **Tests asserting on local working-tree state** (~4): assertions that `.planning/` exists at repo root and a hive-950 hex allow-list — both depend on gitignored/local-only state absent on CI. Fix: make these robust to a clean checkout, or scope them out of CI.
 
-These three are a scoped follow-up (some involve judgment calls about how the tests *should* obtain their fixtures), tracked here rather than force-fixed in the install/gate PR.
+### Resolution (PR #5, `fix/ci-cross-platform-install-and-unit-gate`)
+
+The `test` job is now **GREEN on CI Linux** (workflow conclusion `success`). The 228 pre-existing failures were resolved in layers, all verified on CI:
+
+1. **Install** — 4 Windows-only natives → `optionalDependencies`.
+2. **Workspace resolution** (~23 + cascades) — `vitest.aliases.ts` maps every `@waggle/*` (with a `src/index.ts`) to its `src/` dir in both vitest configs (subpath-safe).
+3. **Seed/env fixtures** — excluded `sync-verification` (gitignored 13MB `marketplace.db`); skip the `marketplace.db exists` assertions when absent; fixed the hive-950 backslash allow-list; `.planning` guard tolerates clean checkout.
+4. **The final 9** (parallel root-cause) — **2 product bugs** (`backup.ts` excludes the `models/` ONNX cache from backups; `trust-wiring` reads audit via the writer connection, not a fresh WAL reader) + determinism (`EMBEDDING_PROVIDER=mock` test pin; dead-port Ollama; benchmark `emitPreregistrationEvent:false`; codex `skipIf(!BIN_BUILT)`).
+
+**Residual (non-blocking, pre-existing, follow-up):**
+- **`e2e` job "Build frontend"** — `apps/web`'s real tsc build can't resolve dist-exporting `@waggle/*` deps (`@waggle/hive-mind-core`, …) because the e2e job builds only `build:packages` (shared/core/agent/server), not the `hive-mind-*` packages. `e2e` is `continue-on-error` so it does NOT block CI. Fix options: build all imported `@waggle` packages, or add `@waggle/*`→`src` `paths` to `apps/web/tsconfig.app.json` (mirror the vitest aliases) — but validate against the deploy's `build:all` first.
+- **Docker infra test lane** (the 19 Postgres/Redis suites) — still local-only via `npm run test:infra`; a Docker-services CI job needs a verified migrate step.
+- **dual-vite `tsconfig.node.json`** — pre-existing, not in any build path.
