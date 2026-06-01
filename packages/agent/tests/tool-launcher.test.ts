@@ -262,14 +262,16 @@ describe('runHookCommand', () => {
     expect(result.error).toContain('exec failed');
   });
 
-  // R8-001: hook management is gated on HOOKS_COHORT — the claude-desktop/
-  // openclaw hook packages are still binless Wave-2/3 stubs, so routing
-  // npx at them always failed for the user. claude-code, codex, codex-desktop,
-  // cursor, and hermes ship real bins (codex-desktop is a thin re-export of
-  // codex sharing ~/.codex/; cursor is a JSON installer with degraded events;
-  // hermes is a YAML installer with 3 events, no PreCompact), so they ROUTE;
-  // every remaining stub tool must REFUSE without invoking npx.
-  it.each<ToolId>(['claude-code', 'codex', 'codex-desktop', 'cursor', 'hermes'])(
+  // R8-001: hook management is gated on HOOKS_COHORT — the claude-desktop
+  // hook package is still a binless stub (deferred MCP-bridge category), so
+  // routing npx at it always failed for the user. claude-code, codex,
+  // codex-desktop, cursor, hermes, and openclaw ship real bins (codex-desktop
+  // is a thin re-export of codex sharing ~/.codex/; cursor is a JSON installer
+  // with degraded events; hermes is a YAML installer with 3 events, no
+  // PreCompact; openclaw is a JSON5 + in-process-TS installer with 4 events,
+  // Stop debounced), so they ROUTE; every remaining stub tool must REFUSE
+  // without invoking npx.
+  it.each<ToolId>(['claude-code', 'codex', 'codex-desktop', 'cursor', 'hermes', 'openclaw'])(
     'routes the hook command for HOOKS_COHORT tool (%s)',
     async (id) => {
       const { calls, execCapture } = captureExec();
@@ -280,7 +282,7 @@ describe('runHookCommand', () => {
   );
 
   it.each<ToolId>([
-    'claude-desktop', 'openclaw',
+    'claude-desktop',
   ])('refuses hook command for non-HOOKS_COHORT stub tool (%s) without calling npx', async (id) => {
     const { calls, execCapture } = captureExec();
     const result = await runHookCommand({ id, action: 'install', deps: { execCapture } });

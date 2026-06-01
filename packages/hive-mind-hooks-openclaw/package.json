@@ -1,27 +1,45 @@
 {
   "name": "@waggle/hive-mind-hooks-openclaw",
-  "version": "0.0.1",
-  "description": "STUB — hive-mind silent capture shim for openclaw. Wave 2/3 of marolinik/waggle-os monorepo migration. Implementation pending.",
+  "version": "0.1.0",
+  "description": "OpenClaw silent capture shim for hive-mind. Registers in-process internal hooks (agent:bootstrap / message:received / message:sent / compact:before) that route gateway conversation episodes into hive-mind frames via @waggle/hive-mind-shim-core. Reversible, create-if-missing install — writes a managed ~/.openclaw/hooks/hive-mind/ dir + minimal-touch JSON5 edit, with literal byte-identical uninstall (JSON5 round-trip is lossy). Stop debounced (message:sent is 0..N/turn). Built on @waggle/hive-mind-hooks-core.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "openclaw-hooks": "dist/bin/openclaw-hooks.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./handler": "./dist/handler.js"
   },
   "scripts": {
-    "build": "tsc --build"
-  },
-  "dependencies": {
-    "@waggle/hive-mind-shim-core": "*"
+    "build": "tsc --build",
+    "build:clean": "tsc --build --clean",
+    "typecheck": "tsc --build && tsc --noEmit -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "engines": {
     "node": ">=20"
   },
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "@waggle/hive-mind-hooks-core": "*",
+    "@waggle/hive-mind-shim-core": "*",
+    "json5": "^2.2.3"
+  },
+  "peerDependencies": {
+    "@waggle/hive-mind-cli": "*"
+  },
+  "peerDependenciesMeta": {
+    "@waggle/hive-mind-cli": {
+      "optional": true
+    }
   },
   "repository": {
     "type": "git",
@@ -39,7 +57,9 @@
     "memory",
     "ai",
     "hook",
-    "stub"
+    "silent-capture",
+    "json5",
+    "in-process"
   ],
   "types": "dist/index.d.ts"
 }
