@@ -94,7 +94,7 @@ export interface DatasetInstance {
 }
 
 export interface DatasetSpec {
-  id: 'locomo' | 'longmemeval' | 'synthetic';
+  id: 'locomo' | 'longmemeval' | 'beam-128k' | 'beam-1m' | 'synthetic';
   displayName: string;
   /** Where the loader looks for the data. Relative to `benchmarks/data/`. */
   dataPath: string;
