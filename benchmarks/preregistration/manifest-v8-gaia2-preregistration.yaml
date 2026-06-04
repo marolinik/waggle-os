@@ -1,0 +1,498 @@
+# Manifest v8 — GAIA 2 Ambiguity+Adaptability Ablation Pre-Registration
+# Canonical markdown surface: manifest-v8-gaia2-preregistration.md
+# Authority: PM (Marko Markovic) — v8 emission 2026-06-04
+# SHA-256 of this YAML's bytes recorded in v8 anchor commit message.
+
+manifest_version: v8.0.0-preregistration
+manifest_type: gaia2_ambiguity_adaptability_hive_mind_ablation
+locked_date: 2026-06-04
+authority: "PM (Marko Markovic) — v8 emission under full PM authority. Extends waggle-os benchmark programme to ARE/GAIA 2. Does not supersede v6/v7."
+sprint: 13
+task: "3.1_gaia2_hive_mind_ablation"
+stage: 1
+phase: preregistration
+branch: feature/gaia2-hive-mind-ablation
+supersedes: NONE  # v8 extends the programme; v6/v7 LoCoMo/GEPA lineage continues independently
+inherits_from:
+  - hive_mind_v5_architecture_locomo_73pct
+  - waggle_os_bench_spec_lock_v1
+extends:
+  - manifest_v6_locomo_stage3
+  - manifest_v7_gepa_faza1
+
+# ── Motivation ───────────────────────────────────────────────────────────────
+
+motivation:
+  parent_finding: "Substrate >> subject model: Opus 4.7 and Qwen3.6-35B converge to 73.1%/73.4% on identical retrieval substrate (hive-mind LoCoMo v5, N=320)"
+  research_question: "Do I/P/B frames provide incremental lift on GAIA 2 tasks requiring instruction-conflict detection (Ambiguity split) and plan-invalidation recovery (Adaptability split)?"
+  frame_alignment:
+    P_frames: "Record agent hypotheses and planned actions before execution"
+    B_frames: "Record corrections and resolved contradictions"
+    Ambiguity_split: "Requires detecting that two instructions conflict before acting — directly maps to P-frame retrieval + B-frame write"
+    Adaptability_split: "Requires updating a prior committed plan when new information arrives — directly maps to B-frame plan_invalidation type"
+  known_blocker: "signal.SIGALRM unavailable on Windows — smoke run smoke-c2-2026-04-30 failed 3/3 scenarios with AttributeError"
+
+# ── Primary Hypothesis ───────────────────────────────────────────────────────
+
+primary_hypothesis:
+  name: ipb_lift_ambiguity_adaptability
+  direction: one_sided_positive
+  statement: "score(hive_mind_ipb) - score(no_memory_baseline) >= 10pp on pooled Ambiguity+Adaptability splits"
+  test: fisher_exact_one_sided
+  alpha_threshold: 0.10
+  effect_size_threshold_pp: 10
+  pooling: ambiguity_plus_adaptability
+  one_sided_justification:
+    - "Theory-driven: I/P/B architecture explicitly designed for contradiction tracking"
+    - "LoCoMo Gate C monotonicity: no-memory 0.0% < retrieval 35% < agentic 40% < oracle 55% at N=20"
+    - "Semantic alignment: both selected splits require capabilities that map onto P/B frame semantics"
+  threshold_rationale:
+    - "10pp (vs 5pp LoCoMo standard) because GAIA 2 write-action scoring is harder (argument-level exact+soft vs string match)"
+    - "I/P/B frames are structural advantage on contradiction tasks, not marginal"
+    - "Power: ~70% at N=100 per cell, alpha=0.10 (Wilson-based estimate)"
+  failure_policy:
+    action: "Report full cell distribution; PM adjudication on larger N or revised integration"
+    constraint: "Do NOT claim negative result without replication; N=100 pilot may underpower marginal effects"
+
+# ── Secondary Endpoints ──────────────────────────────────────────────────────
+
+secondary_endpoints:
+  S1:
+    name: monotonicity_baseline_to_retrieval
+    statement: "no_memory_baseline <= hive_mind_retrieval"
+    direction: one_sided_positive
+    threshold_pp: 0
+    test: fisher_exact_one_sided
+    alpha: 0.20
+  S2:
+    name: monotonicity_retrieval_to_ipb
+    statement: "hive_mind_retrieval <= hive_mind_ipb"
+    direction: one_sided_positive
+    threshold_pp: 0
+    test: fisher_exact_one_sided
+    alpha: 0.20
+  S3:
+    name: ambiguity_split_ipb_vs_baseline
+    statement: "hive_mind_ipb - no_memory_baseline on Ambiguity split only"
+    direction: descriptive
+    threshold_pp: 0
+    report: [point_estimate, wilson_95_ci]
+  S4:
+    name: adaptability_split_ipb_vs_baseline
+    statement: "hive_mind_ipb - no_memory_baseline on Adaptability split only"
+    direction: descriptive
+    threshold_pp: 0
+    report: [point_estimate, wilson_95_ci]
+  S5:
+    name: temporal_split_negative_control
+    statement: "hive_mind_ipb vs no_memory_baseline on Temporal split (null expected)"
+    direction: descriptive_null_expected
+    rationale: "Temporal failures driven by wall-clock latency, not memory. Positive lift here signals confound."
+    cells: [no_memory_baseline, hive_mind_ipb]
+    report: [point_estimate]
+  S6:
+    name: cost_efficiency
+    statement: "cost_per_solved_scenario across cells"
+    direction: descriptive
+    report: [median, iqr_usd]
+  S7:
+    name: substrate_vs_model_strength
+    statement: "Opus 4.x vs Qwen3.6-35B on hive_mind_ipb cell"
+    direction: descriptive
+    rationale: "Replication of LoCoMo substrate-is-the-moat finding in GAIA 2 context"
+    report: [delta_pp, wilson_95_ci]
+
+# ── Sample Design ─────────────────────────────────────────────────────────────
+
+sample:
+  cells:
+    - name: no_memory_baseline
+      description: "Standard ARE ReAct loop, no memory injection, no hive-mind substrate"
+      subject: qwen3.6-35b-a3b
+      splits: [ambiguity, adaptability, temporal_negative_control]
+    - name: hive_mind_retrieval
+      description: "ARE ReAct loop + HybridSearch passive recall, I-frames only, no P/B frame writes"
+      subject: qwen3.6-35b-a3b
+      splits: [ambiguity, adaptability]
+    - name: hive_mind_ipb
+      description: "ARE ReAct loop + full hive-mind substrate (retrieval + I/P/B frames + contradiction gate)"
+      subject: qwen3.6-35b-a3b
+      splits: [ambiguity, adaptability, temporal_negative_control]
+    - name: hive_mind_ipb_strong
+      description: "Same as hive_mind_ipb with Opus 4.x subject"
+      subject: claude-opus-4-x
+      splits: [ambiguity, adaptability]
+  n_per_cell_per_split:
+    primary: 50
+    pilot_expand_to: 100  # authorized at Phase 2 gate by PM if inconclusive
+  n_primary_scenarios: 100  # 50 ambiguity + 50 adaptability per cell
+  n_negative_control_scenarios: 50  # temporal, no_memory_baseline + hive_mind_ipb only
+  total_executions: 500  # 4*100 primary + 2*50 negative control
+  instance_selection_seed: 42
+  instance_selection_method: "shuffle-then-take-first-N per split, deterministic given seed"
+  matched_design: true  # same scenarios flow through all cells
+  concurrency: 1  # within-cell; may raise to <=4 at Phase 2 gate with PM authorization
+  concurrency_rationale: "Conservative default pending ARE rate-limit characterization at Phase 1"
+
+# ── Dataset ───────────────────────────────────────────────────────────────────
+
+dataset:
+  name: gaia2_are
+  paper: "Froger et al., arXiv:2509.17158, September 2025"
+  paper_url: https://arxiv.org/abs/2509.17158
+  license: CC_BY_4.0
+  framework_license: MIT
+  canonical_repo: "https://github.com/facebookresearch/agentbenchmark"  # to be confirmed at Phase 1
+  total_public_scenarios: 800
+  universes: 10
+  selected_splits:
+    - name: ambiguity
+      description: "Clarification of conflicting/ambiguous requests (e.g., scheduling conflicts)"
+      target_n: 50
+      primary: true
+    - name: adaptability
+      description: "Response to dynamic environment changes (e.g., update email based on follow-up)"
+      target_n: 50
+      primary: true
+    - name: temporal
+      description: "Time-sensitive actions with deadlines — negative control"
+      target_n: 50
+      primary: false
+  dataset_integrity:
+    sha256_recorded_at: "Phase 1 clone time, in run manifest"
+    modification_policy: "No modifications to scenario content, oracle traces, or verifier DAGs"
+
+# ── Model Stack ───────────────────────────────────────────────────────────────
+
+subject_models:
+  primary:
+    alias: qwen3.6-35b-a3b-via-dashscope-direct
+    provider: alibaba_dashscope_intl
+    thinking: on
+    price_per_million_input_usd: 0.20
+    price_per_million_output_usd: 0.80
+    cells: [no_memory_baseline, hive_mind_retrieval, hive_mind_ipb]
+  primary_fallback:
+    alias: qwen3.6-35b-a3b-via-openrouter
+    provider: openrouter
+    thinking: on
+    cells: [no_memory_baseline, hive_mind_retrieval, hive_mind_ipb]
+    trigger: fetch_error_on_primary
+  strong:
+    alias: claude-opus-4-x  # exact alias pinned at Phase 1
+    provider: anthropic_direct
+    cells: [hive_mind_ipb_strong]
+  strong_fallback:
+    alias: claude-sonnet-4-x  # fallback if Opus rate-limits
+    provider: anthropic_direct
+    cells: [hive_mind_ipb_strong]
+    trigger: rate_limit_on_opus
+
+judge_protocol:
+  layer_1_are_verifier:
+    type: deterministic
+    description: "ARE scenario DAG verifier — argument-level exact match for hard fields + causality/time constraint validation"
+    llm_calls: 0
+  layer_2_soft_judge:
+    primary:
+      alias: llama-3.3-70b-instruct-via-openrouter
+      rationale: "Matches ARE paper baseline judge (arXiv:2509.17158 §4.2) for leaderboard comparability"
+      temperature: 0
+      applies_to: open_ended_fields_only
+    cross_validation:
+      alias: claude-opus-4-x
+      sample_fraction: 0.20
+      purpose: "Pairwise κ calibration: κ(ARE-Llama, Opus) >= 0.65 required for Phase 2 gate"
+      temperature: 0
+  score_aggregation: "arithmetic mean of (hard-check pass rates + soft-judge pass rates) per ARE §4"
+  note: "v8 does NOT use the waggle-os LoCoMo judge ensemble (Opus+GPT+MiniMax). GAIA 2 requires structural verifier checks."
+
+kappa_calibration:
+  judges: [llama-3.3-70b-instruct, claude-opus-4-x]
+  sample_fraction: 0.20
+  metric: pairwise_cohen_kappa
+  pass_threshold: 0.65
+  halt_threshold: 0.60
+  action_on_halt: "Phase 2 requires judge renegotiation; PM raise"
+
+# ── Substrate ──────────────────────────────────────────────────────────────────
+
+substrate:
+  implementation: "@waggle/core (hive-mind v5 architecture)"
+  components:
+    MindDB: "SQLite + sqlite-vec, :memory: per scenario"
+    FrameStore: "I/P/B-frame CRUD + FTS5 auto-index"
+    HybridSearch: "RRF-fused FTS5 + vec0"
+    SessionStore: "per-scenario session lifecycle"
+    embedder: "createOllamaEmbedder(), nomic-embed-text, 1024 dims, local $0"
+  lifecycle: "createSubstrate(:memory:) at scenario start; substrate.close() at scenario exit; no persistence between scenarios"
+  verifier_independence: "ARE verifier scores actual tool calls in environment, not memory contents"
+  cell_config:
+    no_memory_baseline:
+      MindDB: none
+      FrameStore: none
+      frame_types_written: none
+      HybridSearch: none
+    hive_mind_retrieval:
+      MindDB: ":memory:"
+      FrameStore: "active (read-only after ingest)"
+      frame_types_written: [I_frames]
+      HybridSearch: "conv-scoped, top-K=20"
+    hive_mind_ipb:
+      MindDB: ":memory:"
+      FrameStore: "active (read+write during run)"
+      frame_types_written: [I_frames, P_frames, B_frames]
+      HybridSearch: "conv-scoped, top-K=20"
+    hive_mind_ipb_strong:
+      MindDB: ":memory:"
+      FrameStore: "active (read+write during run)"
+      frame_types_written: [I_frames, P_frames, B_frames]
+      HybridSearch: "conv-scoped, top-K=20"
+
+ipb_frame_contract:
+  I_frames:
+    written_when: "after each user message and each environment event notification"
+    content: "raw turn text"
+  P_frames:
+    written_when: "BEFORE each write-action tool call"
+    content: "agent's stated intent + predicted post-state (extracted from reasoning trace)"
+    purpose: "retrievable record of expected outcome for contradiction detection"
+  B_frames:
+    written_when: "when contradiction detected between new content and prior P-frame"
+    trigger_types:
+      instruction_conflict: "new user message contradicts prior P-frame (Ambiguity split)"
+      plan_invalidation: "environment event contradicts prior P-frame (Adaptability split)"
+    content: "conflicting pair (new content + prior P-frame ID), resolved intent if any, conflict_type label"
+
+contradiction_gate:
+  fires_when: ">=1 P-frames in substrate AND agent is about to execute a write-action tool call"
+  steps:
+    1: "Retrieve top-3 P-frames by semantic similarity to current action"
+    2: "Ask gate model: 'Does the proposed action contradict any of these prior plans?'"
+    3_if_YES: "Write B-frame; inject '# Contradiction Warning' block into agent context before write-action"
+    3_if_NO: "Proceed without injection"
+  gate_model: "default = same subject model as outer agent loop; alternative lightweight model deferred to Phase 1 profiling"
+  gate_model_decision: "deferred to Phase 1 gate after latency profiling — NOT a methodology deviation"
+
+# ── Agent Architecture ────────────────────────────────────────────────────────
+
+agent_architecture:
+  base: "ARE paper standard uniform ReAct loop (temperature=0.5, max_generation=16384 tokens, per arXiv:2509.17158 §4.2)"
+  base_rationale: "Adopted for leaderboard comparability — all GAIA 2 baseline models use this loop"
+  hive_mind_hooks:
+    no_memory_baseline: "ARE loop unmodified — no hooks"
+    hive_mind_cells:
+      pre_turn: "search_memory(query=current_user_message, topK=20, scopeToSession=true) -> inject Recalled Memories block"
+      pre_write_action: "contradiction_gate (§6.2)"
+      post_turn: "write I-frame (always) + write P-frame if turn contained write-action intent"
+  tool_allowlist: "all 101 ARE tools available — hive-mind substrate is additive, not restrictive"
+
+sigalrm_fix:
+  blocker: "AttributeError: module 'signal' has no attribute 'SIGALRM' — Windows OS"
+  failed_smoke_run: "benchmarks/gaia2/runs/smoke-c2-2026-04-30 (3/3 failures)"
+  resolution_priority:
+    1:
+      name: WSL2
+      description: "Run ARE inside WSL2 Linux environment — zero code change"
+      status: preferred
+    2:
+      name: Docker
+      description: "Run harness + ARE inside Linux container via Docker Desktop"
+      status: fallback
+    3:
+      name: asyncio_shim
+      description: "Patch ARE timeout to use asyncio.wait_for instead of signal.SIGALRM"
+      status: last_resort_requires_PM_approval
+  phase_1_gate: "No execution begins until clean smoke run (0 SIGALRM exceptions, >=1 scenario scored >=0.5)"
+
+# ── Stopping Rules ────────────────────────────────────────────────────────────
+
+stopping_rules:
+  budget_hard_halt_usd: 80.00
+  budget_cap_usd: 90.00
+  scenario_exception_rate:
+    threshold: 0.20  # 20% of scenarios in a cell
+    action: halt_cell_and_PM_raise_before_next_cell
+  are_environment_health:
+    check: pre_cell_are_ping
+    action: halt_before_cell
+  subject_fetch_failures:
+    consecutive_failures: 5
+    action: halt_persist_partial
+  kappa_failure:
+    threshold_lt: 0.60
+    phase: Phase_1_exit
+    action: halt_PM_raise_judge_renegotiation
+  deviation_from_preregistration:
+    action: immediate_halt_PM_raise_repreregistration_required_v9
+  sigalrm_unresolved:
+    action: halt_report_blocker_await_environment_decision
+  no_interim_looks: true
+
+# ── Post-Hoc Exclusion ────────────────────────────────────────────────────────
+
+post_hoc_exclusion:
+  policy: none
+  denominator: all_500_executions
+  execution_loss_handling:
+    included_in_denominator: true
+    reported_separately: true
+    sources:
+      - verifier_error
+      - environment_crash
+  known_bug_exception:
+    requires: "PM decision document (not manifest amendment)"
+    condition: "ARE-acknowledged issue tracker bug on specific scenario ID"
+
+# ── Deviation Policy ──────────────────────────────────────────────────────────
+
+deviation_policy:
+  on_detection:
+    - immediate_halt
+    - PM_raise
+    - re_preregister_v9
+  permitted_non_deviations:
+    - "SIGALRM fix option choice (WSL2 vs Docker) per §7"
+    - "Gate model selection for contradiction check (subject model vs lightweight) per §6.2"
+    - "litellm-config.yaml alias additions (no semantic changes to existing aliases)"
+    - "N adjustment if split has <50 scenarios at Phase 1 — threshold adjusts proportionally; PM raise required"
+
+# ── Code Freeze ───────────────────────────────────────────────────────────────
+
+code_freeze:
+  head: "recorded at v8 anchor commit"
+  branch: feature/gaia2-hive-mind-ablation
+  frozen_substrate_paths:
+    - packages/core/src/mind/search.ts
+    - packages/core/src/mind/frames.ts
+    - packages/core/src/mind/sessions.ts
+    - packages/core/src/mind/db.ts
+    - packages/agent/src/agent-loop.ts
+    - benchmarks/harness/src/substrate.ts
+  frozen_v8_paths_at_phase1_codefreeze:
+    - benchmarks/gaia2/src/adapter.ts
+    - benchmarks/gaia2/src/cells-gaia2.ts
+    - benchmarks/gaia2/src/contradiction-gate.ts
+    - benchmarks/gaia2/src/runner-gaia2.ts
+    - benchmarks/gaia2/src/judge-gaia2.ts
+  permitted_delta_during_run:
+    - "new JSONL files to benchmarks/gaia2/runs/"
+    - "new artefacts to benchmarks/gaia2/results/"
+
+# ── Scope Boundaries ──────────────────────────────────────────────────────────
+
+scope_boundaries:
+  claimable_at_gate_d:
+    - "I/P/B hive-mind lift magnitude + significance on GAIA 2 Ambiguity + Adaptability (pre-registered cells + models)"
+    - "Per-cell per-split scenario success rates with Wilson 95% CIs"
+    - "Temporal split negative control result"
+    - "Contradiction gate firing rate + per-firing outcome (resolved vs unresolved)"
+    - "Cost-per-solved-scenario across cells"
+    - "Substrate-is-the-moat finding (if S7 Opus ~ Qwen on hive_mind_ipb)"
+  not_claimable_at_gate_d:
+    - "General GAIA 2 leaderboard rank (v8 tests 2 of 7 splits)"
+    - "Multi-model generalization beyond Qwen3.6-35B + Opus 4.x"
+    - "Production agent performance on real environments"
+    - "'beats Opus 4.x without hive-mind' framing (requires v9 + explicit cross-model ablation)"
+  reserved_for_pm:
+    - "Public claim phrasing and venue"
+    - "Full 7-split leaderboard submission (requires v9)"
+    - "Publication timing and co-author decisions"
+
+# ── PM Gates ─────────────────────────────────────────────────────────────────
+
+pm_gates:
+  gate_p_plus_phase_1_environment_unblock:
+    trigger: "SIGALRM fix verified + clean smoke run + Phase 1 code-freeze commit"
+    pre_kick_checks:
+      - sigalrm_resolution_option_confirmed
+      - clean_smoke_run_at_least_1_scenario_score_gte_0.5_zero_exceptions
+      - all_v8_specific_frozen_paths_committed_at_phase1_codefreeze
+      - kappa_calibration_plan_confirmed_20pct_sample_llama_plus_opus
+      - litellm_config_includes_all_v8_subject_aliases
+      - ollama_nomic_embed_text_liveness_confirmed_in_execution_environment
+    action: "CC halts; awaits PM-RATIFY-V8-PHASE1 before Phase 2 execution"
+    self_advance: forbidden
+  gate_p_plus_plus_phase_2_execution:
+    trigger: PM-RATIFY-V8-PHASE1
+    pre_kick_checks:
+      - phase1_exit_report_at_benchmarks_gaia2_preregistration_phase1_exit_report.md
+      - kappa_llama_opus_gte_0.65_on_calibration_sample
+      - budget_envelope_confirmed_80_hard_halt
+      - cell_execution_order_confirmed
+    action: "kick N=500 execution"
+    execution_order: [no_memory_baseline, hive_mind_retrieval, hive_mind_ipb, hive_mind_ipb_strong]
+    self_advance: forbidden
+  gate_d_post_run:
+    trigger: "N=500 run exit (clean or halted)"
+    action: "CC writes gate-d exit report at benchmarks/gaia2/results/v8-gate-d-exit-report.md; halts"
+    pm_decides:
+      - claim_composition_and_venue
+      - full_7_split_leaderboard_submission_v9
+      - publication_timing
+    self_advance: forbidden
+
+# ── Budget ────────────────────────────────────────────────────────────────────
+
+budget:
+  hard_halt_usd: 80.00
+  cap_usd: 90.00
+  expected_burn_usd_range: [41, 73]
+  breakdown_expected:
+    phase_1_smoke_adapter_kappa: "5-10"
+    n500_qwen_subject_3cells_100scenarios: "10-15"
+    n100_opus_subject_1cell: "20-30"
+    are_llama_soft_judge_n500: "5-8"
+    opus_crossval_20pct: "3-5"
+    contradiction_gate_calls_30pct_firing_rate: "3-5"
+    ollama_embedding_local: 0
+  wall_clock_estimate:
+    phase_1_days: 1
+    phase_2_hours_range: [4, 8]
+    phase_2_note: "ARE scenarios have longer execution traces than LoCoMo turns; temporal scenario wait periods may require simulation"
+
+# ── Build Tasks (Appendix A) ──────────────────────────────────────────────────
+
+build_tasks_before_phase1_codefreeze:
+  - id: A1
+    file: benchmarks/gaia2/src/adapter.ts
+    description: "Map ARE scenario JSON schema -> harness DatasetInstance equivalent; extract split label, oracle trace, universe ID"
+  - id: A2
+    file: benchmarks/gaia2/src/cells-gaia2.ts
+    description: "Four cell implementations wrapping ARE loop with hive-mind hooks"
+  - id: A3
+    file: benchmarks/gaia2/src/contradiction-gate.ts
+    description: "P-frame retrieval + conflict check + B-frame write + context injection"
+  - id: A4
+    file: benchmarks/gaia2/src/runner-gaia2.ts
+    description: "Scenario runner: load ARE env, run cell, call ARE verifier, emit JSONL"
+  - id: A5
+    file: benchmarks/gaia2/src/judge-gaia2.ts
+    description: "ARE verifier wrapper + Llama 3.3 70B soft-judge + Opus cross-validation"
+  - id: A6
+    description: "SIGALRM fix — WSL2 or Docker environment setup; clean smoke run gate"
+  - id: A7
+    file: litellm-config.yaml
+    description: "Add llama-3.3-70b-instruct-via-openrouter alias + Opus 4.x alias if not present"
+
+# ── Related Artefacts ──────────────────────────────────────────────────────────
+
+related:
+  v8_specific:
+    anchor_commit: THIS_COMMIT
+    failed_smoke_run: "benchmarks/gaia2/runs/smoke-c2-2026-04-30 (SIGALRM blocker — audit trail)"
+    are_paper: "Froger et al., arXiv:2509.17158, September 2025"
+    gaia2_comparison_report: "docs/gaia-comparison.md (2026-06-04)"
+  prior_locomo_lineage:
+    v6_anchor: fc169250c3c27cd3
+    v7_gepa: see_manifest_v7_gepa_faza1.yaml
+    bench_spec_lock_v1: PM-Waggle-OS/decisions/2026-04-22-bench-spec-locked.manifest.yaml
+  hive_mind:
+    locomo_v5_results: "hive-mind/benchmarks/locomo/RESULTS.md (73.1% Opus / 73.4% Qwen)"
+    trio_strict_rejudge: "hive-mind/data/judgments/trio-judgments-v5-retrieval.v2.jsonl (67.8% AND-of-3)"
+    methodology: "hive-mind/benchmarks/METHODOLOGY.md"
+
+# ── Manifest Lock ──────────────────────────────────────────────────────────────
+
+manifest_path: benchmarks/preregistration/manifest-v8-gaia2-preregistration.yaml
+manifest_locked_at: 2026-06-04T00:00:00Z
