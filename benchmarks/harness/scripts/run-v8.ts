@@ -48,16 +48,40 @@ import path from 'node:path';
 import url from 'node:url';
 import process from 'node:process';
 
-import { generateTurnId, logTurnEvent } from '@waggle/agent';
+// @waggle/agent stubs — avoids pulling in heavy agent package during harness runs.
+// generateTurnId: UUID v4 via crypto. logTurnEvent: no-op (observability only in prod).
+function generateTurnId(): string {
+  return crypto.randomUUID();
+}
+function logTurnEvent(_turnId: string, _event: Record<string, unknown>): void {
+  // no-op in harness context; real agent logging wired in full waggle runtime
+}
 import type {
   CellName, DatasetSpec, JsonlRecord, ModelSpec, RunConfig,
 } from '../src/types.js';
 import { loadDataset, getDatasetVersion, sampleInstances } from '../src/datasets.js';
 import { createLlmClient } from '../src/llm.js';
 import { JsonlWriter, buildAggregate, scoreAccuracy, percentile } from '../src/metrics.js';
-import { cells, isCellName } from '../src/cells.js';
-import { hiveMindIpbCell } from '../src/cells-ipb.js';
-import type { CellInput } from '../src/cells-ipb.js';
+// Cells are imported dynamically to avoid @waggle/agent package resolution at startup.
+// (cells.ts → @waggle/agent → docx/exceljs/etc. which aren't installed in harness-only envs)
+// These are resolved lazily on first actual cell invocation.
+// Lazy-loaded cell modules (resolved on first invocation, not at import time)
+
+async function loadCells(): Promise<{
+  cells: typeof import('../src/cells.js').cells;
+  isCellName: typeof import('../src/cells.js').isCellName;
+  hiveMindIpbCell: typeof import('../src/cells-ipb.js').hiveMindIpbCell;
+}> {
+  const [cellsMod, ipbMod] = await Promise.all([
+    import('../src/cells.js'),
+    import('../src/cells-ipb.js'),
+  ]);
+  return {
+    cells: cellsMod.cells,
+    isCellName: cellsMod.isCellName,
+    hiveMindIpbCell: ipbMod.hiveMindIpbCell,
+  };
+}
 import { createSubstrate } from '../src/substrate.js';
 import type { Substrate } from '../src/substrate.js';
 import { extractTurnsFromLongMemEval, ingestLongMemEvalCorpus } from '../src/ingest-longmemeval.js';
@@ -285,17 +309,19 @@ async function runOneV8(config: V8RunOneConfig): Promise<void> {
     const instance = sampled[i];
     const turnId = generateTurnId();
 
+    // Lazy-load cell modules on first iteration (avoids @waggle/agent at import time)
+    const { cells, isCellName, hiveMindIpbCell } = await loadCells();
+
     let result;
     if (cellName === 'hive_mind_ipb') {
-      const cellInput: CellInput = {
+      result = await hiveMindIpbCell({
         instance,
         model: activeModel,
         llm,
         turnId,
         substrate,
         retrievalTopK: 20,
-      };
-      result = await hiveMindIpbCell(cellInput);
+      });
     } else if (isCellName(cellName)) {
       result = await cells[cellName]({
         instance,
