@@ -2,46 +2,51 @@
 /**
  * Canonical BEAM archive builder — Track A (manifest-v8.2-final.md).
  *
- * IMPORTANT: BEAM data must be downloaded separately with Python before
- * running this script. This script does NOT download anything.
+ * BEAM data ships inside the mohammadtavakoli78/BEAM GitHub repo under chats/.
+ * No separate download step is required if you have cloned the repo.
  *
- * Prerequisites:
- *   cd /path/to/BEAM
- *   pip install -r requirements.txt
- *   python src/beam/download_dataset.py
+ * Actual directory layout (discovered by inspection):
+ *   <beam-repo>/chats/<size>/              100K | 500K | 1M | 10M
+ *     <N>/                                numbered conversation directories (1-based)
+ *       chat.json                          [{batch_number, time_anchor, turns: [[{role,id,time_anchor,index,question_type,content}, ...], ...]}]
+ *       probing_questions/
+ *         probing_questions.json           {<category>: [{question, <answer_field>, difficulty, ...}, ...], ...}
+ *       topic.json                         {topic, description, ...}
  *
- * Reads:   <beam-data-path>/<chat-size>/   (discovered JSON files)
+ * Chat-size alias: repo uses "100K" for what we call "128K" (~130K tokens each).
+ *
+ * Reads:   <beam-chats-path>/<chat-size-dir>/
  * Writes:  benchmarks/data/beam/beam-<chat-size>.jsonl
  *          benchmarks/data/beam/beam-<chat-size>.meta.json
  *
  * Canonicalisation guarantees (required for dataset_version hash determinism):
- *   1. Include every (conversation × memory_ability) probing question pair.
- *   2. Sort by instance_id ascending — stable regardless of file/key order.
- *   3. Serialize each record with JSON.stringify (no spaces, explicit key
- *      iteration order) and join with `\n` + trailing newline. No BOM.
- *   4. Compute SHA-256 of the final byte stream.
+ *   1. Include every (conversation × memory_ability × question) triple.
+ *   2. Sort by instance_id ascending.
+ *   3. JSON.stringify each row (no spaces, explicit key order) + '\n'. No BOM.
+ *   4. SHA-256 of the final byte stream.
  *
- * Per-instance JSONL row schema (flat, downstream-parseable by DatasetInstance):
+ * Per-instance JSONL schema:
  *   {
- *     "instance_id":       "beam_<chat_size>_<conversation_id>_<memory_ability>_q<index>",
- *     "conversation_id":   "beam_<conversation_id>",
- *     "question":          "<probing question text>",
- *     "expected":          ["<reference answer>"],
- *     "context":           "<all turns as 'user: ...\nassistant: ...'>",
- *     "memory_ability":    "<category>",
- *     "chat_size":         "<128K|500K|1M|10M>",
+ *     "instance_id":        "beam_<chatSize>_<convId>_<ability>_q<idx>",
+ *     "conversation_id":    "beam_<convId>",
+ *     "question":           "<probing question>",
+ *     "expected":           ["<reference answer>"],
+ *     "context":            "<flat role: content lines>",
+ *     "memory_ability":     "<category>",
+ *     "chat_size":          "<128K|500K|1M|10M>",
  *     "conversation_index": <int>
  *   }
  *
  * Source: mohammadtavakoli78/BEAM (GitHub)
- * Paper: Tavakoli, Salemi, Ye, Abdalla, Zamani, Mitchell 2024,
- *        "Beyond a Million Tokens: Benchmarking and Enhancing Long-Term Memory
- *         in LLMs" (arXiv:2510.27246, ICLR 2026).
+ * Paper:  Tavakoli et al. 2024 "Beyond a Million Tokens: Benchmarking and
+ *         Enhancing Long-Term Memory in LLMs" (arXiv:2510.27246, ICLR 2026).
  *
  * Zero LLM calls. Zero npm packages beyond Node.js built-ins.
  *
  * Usage:
- *   tsx build-beam-canonical.ts --beam-data-path /path/to/BEAM/data [--chat-size 128K]
+ *   tsx build-beam-canonical.ts --beam-chats-path /path/to/BEAM/chats [--chat-size 128K]
+ *   # --beam-chats-path defaults to <repo-root>/benchmarks/harness/scripts/../../../BEAM/chats
+ *   #                                i.e. a sibling BEAM clone next to waggle-os
  */
 
 import crypto from 'node:crypto';
@@ -56,6 +61,17 @@ import url from 'node:url';
 
 const VALID_CHAT_SIZES = ['128K', '500K', '1M', '10M'] as const;
 type ChatSize = (typeof VALID_CHAT_SIZES)[number];
+
+/**
+ * Map our canonical chat-size names to the directory names used in the BEAM repo.
+ * 128K ≈ 100K (actual token count ~130K).
+ */
+const CHAT_SIZE_DIR_MAP: Record<ChatSize, string[]> = {
+  '128K': ['100K'],
+  '500K': ['500K'],
+  '1M':   ['1M'],
+  '10M':  ['10M'],
+};
 
 /**
  * All 10 BEAM memory ability categories.
@@ -76,43 +92,41 @@ const MEMORY_ABILITIES = [
 type MemoryAbility = (typeof MEMORY_ABILITIES)[number];
 
 // ---------------------------------------------------------------------------
-// BEAM data schema (inferred from repo README and paper §3)
-// The actual JSON layout is discovered at runtime; we try two known formats.
+// BEAM data schema (verified by inspection of actual BEAM repo files)
 // ---------------------------------------------------------------------------
 
-/** A single turn in a BEAM conversation. */
-interface BeamTurn {
-  role: 'user' | 'assistant' | string;
+/** One message inside a BEAM conversation turn. */
+interface BeamMessage {
+  role: string;
   content: string;
+  id?: number;
+  time_anchor?: string | null;
+  index?: string;
+  question_type?: string;
+}
+
+/** One batch (session) in chat.json. */
+interface BeamBatch {
+  batch_number?: number;
+  time_anchor?: string | null;
+  turns: BeamMessage[][];  // list of turn groups; each group is list of msgs
 }
 
 /**
- * A single probing question attached to one (conversation, memory_ability) pair.
- * Field names are guesses from the paper; we normalise at runtime.
+ * Per-category probing question.
+ * Answer field varies by category — we try all known variants.
  */
 interface BeamProbingQuestion {
   question?: string;
-  query?: string;         // alternative field name
-  answer?: string;
-  reference?: string;     // alternative field name
-  memory_ability?: string;
-  category?: string;      // alternative field name
-}
-
-/**
- * One BEAM conversation record as it might appear in the JSON.
- * The exact schema is discovered at runtime — we emit a clear error if
- * neither expected layout is found.
- */
-interface BeamConversationRecord {
-  conversation_id?: string;
-  id?: string;             // alternative field name
-  index?: number;
-  turns?: BeamTurn[];
-  messages?: BeamTurn[];   // alternative field name
-  conversation?: BeamTurn[]; // alternative field name
-  questions?: BeamProbingQuestion[];
-  probing_questions?: BeamProbingQuestion[];
+  // Category-specific answer fields (verified by inspection):
+  answer?: string;             // event_ordering, information_extraction, knowledge_update, multi_session_reasoning, temporal_reasoning
+  ideal_response?: string;     // abstention
+  ideal_answer?: string;       // contradiction_resolution
+  expected_compliance?: string; // instruction_following, preference_following
+  ideal_summary?: string;       // summarization
+  // Extra fields (stored for provenance, not used in eval directly):
+  difficulty?: string;
+  rubric?: string[];
   [key: string]: unknown;
 }
 
@@ -143,56 +157,63 @@ const FIELD_ORDER: readonly (keyof CanonicalInstance)[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Context assembly
+// Turn flattening
 // ---------------------------------------------------------------------------
 
 /**
- * Concatenate all conversation turns into a single context string.
- * Format: "user: ...\nassistant: ...\nuser: ..."
+ * Flatten BEAM's nested batch/turn-group structure into a flat list of
+ * {role, content} messages, preserving temporal order.
+ *
+ * chat.json structure:
+ *   [ {batch_number, time_anchor, turns: [ [msg, msg, ...], [msg, ...] ]} ]
+ *
+ * We flatten: batches → turn groups → individual messages.
+ * We only emit messages with non-empty content.
  */
-function buildContext(turns: BeamTurn[]): string {
-  return turns
-    .map(t => {
-      const role = String(t.role ?? 'unknown').toLowerCase();
-      const content = String(t.content ?? '');
-      return `${role}: ${content}`;
-    })
-    .join('\n');
+function flattenBeamTurns(batches: BeamBatch[]): Array<{ role: string; content: string }> {
+  const out: Array<{ role: string; content: string }> = [];
+  for (const batch of batches) {
+    if (!Array.isArray(batch.turns)) continue;
+    for (const turnGroup of batch.turns) {
+      if (!Array.isArray(turnGroup)) continue;
+      for (const msg of turnGroup) {
+        const role = String(msg.role ?? 'unknown').toLowerCase();
+        const content = String(msg.content ?? '').trim();
+        if (content) {
+          out.push({ role, content });
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Convert flat message list to context string.
+ * Format: "user: ...\nassistant: ...\n"
+ */
+function buildContext(msgs: Array<{ role: string; content: string }>): string {
+  return msgs.map(m => `${m.role}: ${m.content}`).join('\n');
 }
 
 // ---------------------------------------------------------------------------
-// Schema normalisation helpers
+// Answer normalisation
 // ---------------------------------------------------------------------------
 
-function normaliseTurns(record: BeamConversationRecord): BeamTurn[] | null {
-  const raw = record.turns ?? record.messages ?? record.conversation;
-  if (!Array.isArray(raw) || raw.length === 0) return null;
-  return raw as BeamTurn[];
-}
-
-function normaliseQuestions(record: BeamConversationRecord): BeamProbingQuestion[] | null {
-  const raw = record.questions ?? record.probing_questions;
-  if (!Array.isArray(raw) || raw.length === 0) return null;
-  return raw as BeamProbingQuestion[];
-}
-
-function normaliseConversationId(record: BeamConversationRecord, fileIndex: number): string {
-  const id = record.conversation_id ?? record.id;
-  if (id !== undefined && id !== null) return String(id);
-  // Fall back to file position index
-  return String(fileIndex);
-}
-
-function normaliseQuestion(pq: BeamProbingQuestion): string | null {
-  return pq.question ?? pq.query ?? null;
-}
-
+/**
+ * Extract the reference answer from a probing question, trying all known
+ * per-category answer field names.
+ * Returns null if no answer field is found.
+ */
 function normaliseAnswer(pq: BeamProbingQuestion): string | null {
-  return pq.answer ?? pq.reference ?? null;
-}
-
-function normaliseMemoryAbility(pq: BeamProbingQuestion, fallback: string): string {
-  return pq.memory_ability ?? pq.category ?? fallback;
+  return (
+    pq.answer ??
+    pq.ideal_response ??
+    pq.ideal_answer ??
+    pq.expected_compliance ??
+    pq.ideal_summary ??
+    null
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -208,65 +229,59 @@ function serializeCanonical(inst: CanonicalInstance): string {
 }
 
 // ---------------------------------------------------------------------------
-// File discovery
+// Directory discovery
 // ---------------------------------------------------------------------------
 
 /**
- * Discover all JSON files under `dirPath`. Returns absolute paths.
- * Searches `dirPath` directly and one level of subdirectories.
+ * Locate the chat-size directory under beamChatsPath.
+ * Maps our canonical size name to the BEAM repo directory name.
  */
-function discoverJsonFiles(dirPath: string): string[] {
-  const results: string[] = [];
-  const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-  for (const entry of entries) {
-    const full = path.join(dirPath, entry.name);
-    if (entry.isFile() && entry.name.endsWith('.json')) {
-      results.push(full);
-    } else if (entry.isDirectory()) {
-      // One level deeper
-      const inner = fs.readdirSync(full, { withFileTypes: true });
-      for (const ie of inner) {
-        if (ie.isFile() && ie.name.endsWith('.json')) {
-          results.push(path.join(full, ie.name));
-        }
-      }
-    }
-  }
-  return results;
-}
-
-/**
- * Locate the right data sub-directory for the requested chat-size.
- * Tries: <beamDataPath>/<chatSize>/, <beamDataPath>/
- */
-function locateDataDir(beamDataPath: string, chatSize: string): string | null {
-  const candidates = [
-    path.join(beamDataPath, chatSize),
-    path.join(beamDataPath, chatSize.toLowerCase()),
-    beamDataPath,
-  ];
-  for (const c of candidates) {
-    if (fs.existsSync(c) && fs.statSync(c).isDirectory()) {
-      return c;
+function locateChatSizeDir(beamChatsPath: string, chatSize: ChatSize): string | null {
+  const candidates = CHAT_SIZE_DIR_MAP[chatSize] ?? [chatSize];
+  for (const dirName of candidates) {
+    const full = path.join(beamChatsPath, dirName);
+    if (fs.existsSync(full) && fs.statSync(full).isDirectory()) {
+      return full;
     }
   }
   return null;
+}
+
+/**
+ * Return all numbered conversation directories inside chatSizeDir.
+ * These are directories whose names are numeric strings (1, 2, 3, ...).
+ */
+function discoverConversationDirs(chatSizeDir: string): string[] {
+  const entries = fs.readdirSync(chatSizeDir, { withFileTypes: true });
+  return entries
+    .filter(e => e.isDirectory() && /^\d+$/.test(e.name))
+    .sort((a, b) => Number(a.name) - Number(b.name))
+    .map(e => path.join(chatSizeDir, e.name));
 }
 
 // ---------------------------------------------------------------------------
 // CLI arg parsing
 // ---------------------------------------------------------------------------
 
-function parseArgs(): { beamDataPath: string; chatSize: ChatSize } {
+function parseArgs(): { beamChatsPath: string; chatSize: ChatSize } {
   const argv = process.argv.slice(2);
-  let beamDataPath = '';
+  let beamChatsPath = '';
   let chatSize: ChatSize = '128K';
 
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === '--beam-data-path' && argv[i + 1]) {
-      beamDataPath = argv[++i];
-    } else if (argv[i] === '--chat-size' && argv[i + 1]) {
-      const val = argv[++i] as ChatSize;
+    const flag = argv[i];
+    const next = argv[i + 1];
+    if ((flag === '--beam-chats-path' || flag === '--beam-data-path') && next) {
+      // Accept both --beam-chats-path (new) and --beam-data-path (old compat)
+      // If user passes BEAM root (contains chats/ subdir), auto-append chats/
+      let p = next;
+      if (fs.existsSync(path.join(p, 'chats'))) {
+        p = path.join(p, 'chats');
+      }
+      beamChatsPath = p;
+      i++;
+    } else if (flag === '--chat-size' && next) {
+      const val = next as ChatSize;
       if (!VALID_CHAT_SIZES.includes(val)) {
         console.error(
           `[build-beam-canonical] unknown --chat-size "${val}". Valid: ${VALID_CHAT_SIZES.join(', ')}`,
@@ -274,10 +289,11 @@ function parseArgs(): { beamDataPath: string; chatSize: ChatSize } {
         process.exit(1);
       }
       chatSize = val;
+      i++;
     }
   }
 
-  return { beamDataPath, chatSize };
+  return { beamChatsPath, chatSize };
 }
 
 // ---------------------------------------------------------------------------
@@ -285,123 +301,131 @@ function parseArgs(): { beamDataPath: string; chatSize: ChatSize } {
 // ---------------------------------------------------------------------------
 
 function main(): void {
-  const { beamDataPath, chatSize } = parseArgs();
+  const { beamChatsPath: beamChatsPathArg, chatSize } = parseArgs();
 
   const here = url.fileURLToPath(import.meta.url);
   // Script lives at benchmarks/harness/scripts/build-beam-canonical.ts
-  // Resolve repo root by going 3 levels up: scripts/ -> harness/ -> benchmarks/ -> repo root
+  // repo root = 3 levels up: scripts/ → harness/ → benchmarks/ → repo root
   const scriptDir = path.dirname(here);
   const repoRoot = path.resolve(scriptDir, '..', '..', '..');
   const dataDir = path.resolve(repoRoot, 'benchmarks', 'data');
 
-  // ------------------------------------------------------------------
-  // Step 1: validate BEAM data path
-  // ------------------------------------------------------------------
+  // Auto-discover beamChatsPath if not provided:
+  // Try <repo-root>/../BEAM/chats (sibling clone convention)
+  let beamChatsPath = beamChatsPathArg;
+  if (!beamChatsPath) {
+    const siblingGuess = path.resolve(repoRoot, '..', 'BEAM', 'chats');
+    if (fs.existsSync(siblingGuess)) {
+      beamChatsPath = siblingGuess;
+      console.log(`[build-beam-canonical] auto-discovered BEAM chats at ${beamChatsPath}`);
+    } else {
+      console.error('[build-beam-canonical] --beam-chats-path is required (or clone BEAM as sibling of waggle-os).\n');
+      console.error('Clone with:  git clone https://github.com/mohammadtavakoli78/BEAM.git');
+      console.error('Then re-run: tsx build-beam-canonical.ts --beam-chats-path /path/to/BEAM/chats');
+      process.exit(2);
+    }
+  }
 
-  if (!beamDataPath) {
-    console.error('[build-beam-canonical] --beam-data-path is required.\n');
-    console.error('BEAM dataset not found.');
-    console.error('Download it with:');
-    console.error('  cd /path/to/BEAM');
-    console.error('  pip install -r requirements.txt');
-    console.error('  python src/beam/download_dataset.py');
-    console.error('Then re-run this script with --beam-data-path /path/to/BEAM/data');
+  if (!fs.existsSync(beamChatsPath)) {
+    console.error(`[build-beam-canonical] BEAM chats path not found: ${beamChatsPath}`);
     process.exit(2);
   }
 
-  if (!fs.existsSync(beamDataPath)) {
-    console.error(`[build-beam-canonical] BEAM dataset not found at ${beamDataPath}.`);
-    console.error('Download it with:');
-    console.error('  cd /path/to/BEAM');
-    console.error('  pip install -r requirements.txt');
-    console.error('  python src/beam/download_dataset.py');
-    console.error(`Then re-run this script with --beam-data-path ${beamDataPath}`);
-    process.exit(2);
-  }
+  // ------------------------------------------------------------------
+  // Step 1: locate chat-size directory
+  // ------------------------------------------------------------------
 
-  const chatSizeDir = locateDataDir(beamDataPath, chatSize);
+  const chatSizeDir = locateChatSizeDir(beamChatsPath, chatSize);
   if (!chatSizeDir) {
+    const tried = (CHAT_SIZE_DIR_MAP[chatSize] ?? [chatSize]).map(d => path.join(beamChatsPath, d));
     console.error(
-      `[build-beam-canonical] could not find chat-size directory for "${chatSize}" under ${beamDataPath}.`,
+      `[build-beam-canonical] could not find chat-size directory for "${chatSize}" under ${beamChatsPath}.`,
     );
-    console.error(
-      `Expected one of: ${VALID_CHAT_SIZES.map(s => path.join(beamDataPath, s)).join(', ')}`,
-    );
-    console.error('Make sure python src/beam/download_dataset.py completed successfully.');
+    console.error(`Tried: ${tried.join(', ')}`);
     process.exit(2);
   }
 
   console.log(`[build-beam-canonical] chat-size directory: ${chatSizeDir}`);
 
   // ------------------------------------------------------------------
-  // Step 2: discover and parse JSON files
+  // Step 2: scan conversation directories
   // ------------------------------------------------------------------
 
-  const jsonFiles = discoverJsonFiles(chatSizeDir);
-  if (jsonFiles.length === 0) {
+  const convDirs = discoverConversationDirs(chatSizeDir);
+  if (convDirs.length === 0) {
     console.error(
-      `[build-beam-canonical] no JSON files found under ${chatSizeDir}. ` +
-        'Did the BEAM download script complete?',
+      `[build-beam-canonical] no numbered conversation directories found under ${chatSizeDir}.`,
     );
     process.exit(2);
   }
 
-  console.log(`[build-beam-canonical] found ${jsonFiles.length} JSON file(s)`);
+  console.log(`[build-beam-canonical] found ${convDirs.length} conversation directories`);
 
   const all: CanonicalInstance[] = [];
-  const skipStats = { unknownSchema: 0, missingQuestion: 0, missingAnswer: 0, noTurns: 0 };
+  const skipStats = {
+    missingChat: 0,
+    missingProbing: 0,
+    missingQuestion: 0,
+    missingAnswer: 0,
+    noTurns: 0,
+  };
 
-  let fileIndex = 0;
-  for (const filePath of jsonFiles) {
-    let records: unknown;
+  for (let convIdx = 0; convIdx < convDirs.length; convIdx++) {
+    const convDir = convDirs[convIdx];
+    const convId = path.basename(convDir);  // e.g. "1", "2", ...
+
+    // ── Load chat.json ──────────────────────────────────────────────
+    const chatJsonPath = path.join(convDir, 'chat.json');
+    if (!fs.existsSync(chatJsonPath)) {
+      console.warn(`[build-beam-canonical] skipping ${convDir}: no chat.json`);
+      skipStats.missingChat++;
+      continue;
+    }
+
+    let batches: BeamBatch[];
     try {
-      records = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      batches = JSON.parse(fs.readFileSync(chatJsonPath, 'utf-8')) as BeamBatch[];
     } catch (err) {
-      console.warn(`[build-beam-canonical] skipping unparseable file: ${filePath} (${String(err)})`);
+      console.warn(`[build-beam-canonical] skipping ${chatJsonPath}: ${String(err)}`);
+      skipStats.missingChat++;
       continue;
     }
 
-    // Accept: top-level array of conversation records, or top-level object with a key
-    const recordArray: BeamConversationRecord[] = Array.isArray(records)
-      ? (records as BeamConversationRecord[])
-      : typeof records === 'object' && records !== null
-        ? // Try common wrapper keys: "data", "conversations", "items"
-          ((records as Record<string, unknown>)['data'] ??
-            (records as Record<string, unknown>)['conversations'] ??
-            (records as Record<string, unknown>)['items'] ??
-            // Fall back: treat single record wrapped in array
-            [records]) as BeamConversationRecord[]
-        : [];
+    const flatMsgs = flattenBeamTurns(batches);
+    if (flatMsgs.length === 0) {
+      console.warn(`[build-beam-canonical] skipping ${convDir}: 0 messages after flatten`);
+      skipStats.noTurns++;
+      continue;
+    }
+    const context = buildContext(flatMsgs);
 
-    if (recordArray.length === 0) {
-      console.warn(`[build-beam-canonical] no records found in ${filePath}`);
-      skipStats.unknownSchema++;
+    // ── Load probing_questions/probing_questions.json ───────────────
+    const pqPath = path.join(convDir, 'probing_questions', 'probing_questions.json');
+    if (!fs.existsSync(pqPath)) {
+      console.warn(`[build-beam-canonical] skipping ${convDir}: no probing_questions.json`);
+      skipStats.missingProbing++;
       continue;
     }
 
-    for (const record of recordArray) {
-      const convRawId = normaliseConversationId(record, fileIndex);
-      const conversationId = `beam_${convRawId}`;
-      fileIndex++;
+    let pqData: Record<string, BeamProbingQuestion[]>;
+    try {
+      pqData = JSON.parse(fs.readFileSync(pqPath, 'utf-8')) as Record<string, BeamProbingQuestion[]>;
+    } catch (err) {
+      console.warn(`[build-beam-canonical] skipping ${pqPath}: ${String(err)}`);
+      skipStats.missingProbing++;
+      continue;
+    }
 
-      const turns = normaliseTurns(record);
-      if (!turns) {
-        skipStats.noTurns++;
-        continue;
-      }
-      const context = buildContext(turns);
+    const conversationId = `beam_${convId}`;
+    const safeChatSize = chatSize.replace(/[^a-zA-Z0-9]/g, '');
 
-      const questions = normaliseQuestions(record);
-      if (!questions) {
-        // No probing questions on this record — skip silently (might be a
-        // conversation-only file; questions may be in a companion file).
-        skipStats.unknownSchema++;
-        continue;
-      }
+    // ── Iterate categories ──────────────────────────────────────────
+    for (const [category, questions] of Object.entries(pqData)) {
+      if (!Array.isArray(questions)) continue;
 
       for (let qi = 0; qi < questions.length; qi++) {
         const pq = questions[qi];
-        const questionText = normaliseQuestion(pq);
+        const questionText = pq.question ?? null;
         if (!questionText) {
           skipStats.missingQuestion++;
           continue;
@@ -411,9 +435,8 @@ function main(): void {
           skipStats.missingAnswer++;
           continue;
         }
-        const memAbility = normaliseMemoryAbility(pq, 'unknown');
-        const safeChatSize = chatSize.replace(/[^a-zA-Z0-9]/g, '');
-        const instanceId = `beam_${safeChatSize}_${convRawId}_${memAbility}_q${qi}`;
+
+        const instanceId = `beam_${safeChatSize}_${convId}_${category}_q${qi}`;
 
         all.push({
           instance_id: instanceId,
@@ -421,32 +444,21 @@ function main(): void {
           question: questionText,
           expected: [answerText],
           context,
-          memory_ability: memAbility,
+          memory_ability: category,
           chat_size: chatSize,
-          conversation_index: fileIndex - 1,
+          conversation_index: convIdx,
         });
       }
     }
   }
 
   // ------------------------------------------------------------------
-  // Step 3: validate schema assumptions — emit actionable error if needed
+  // Step 3: validate
   // ------------------------------------------------------------------
 
   if (all.length === 0) {
-    console.error('[build-beam-canonical] extracted 0 instances. Schema mismatch.');
-    console.error('');
-    console.error('Expected each conversation record to have:');
-    console.error('  - turns/messages/conversation: [{role, content}, ...]');
-    console.error('  - questions/probing_questions: [{question, answer, memory_ability}, ...]');
-    console.error('');
-    console.error('Please inspect a sample file and update the normalisation helpers in this');
-    console.error('script to match the actual field names.');
-    console.error('');
-    console.error(`Sample file: ${jsonFiles[0]}`);
-    console.error(
-      `First 500 chars: ${fs.readFileSync(jsonFiles[0], 'utf-8').slice(0, 500)}`,
-    );
+    console.error('[build-beam-canonical] extracted 0 instances.');
+    console.error(`Scanned ${convDirs.length} conversation dirs. Skip stats: ${JSON.stringify(skipStats)}`);
     process.exit(2);
   }
 
@@ -484,9 +496,11 @@ function main(): void {
     built_at: new Date().toISOString(),
     source: 'mohammadtavakoli78/BEAM (GitHub)',
     source_reference:
-      'Tavakoli, Salemi, Ye, Abdalla, Zamani, Mitchell 2024, "Beyond a Million Tokens: Benchmarking and Enhancing Long-Term Memory in LLMs" (arXiv:2510.27246, ICLR 2026)',
-    beam_data_path: beamDataPath,
-    json_files_processed: jsonFiles.length,
+      'Tavakoli, Salemi, Ye, Abdalla, Zamani, Mitchell 2024, "Beyond a Million Tokens: ' +
+      'Benchmarking and Enhancing Long-Term Memory in LLMs" (arXiv:2510.27246, ICLR 2026)',
+    beam_chats_path: beamChatsPath,
+    conversations_processed: convDirs.length,
+    chat_size_dir_alias: CHAT_SIZE_DIR_MAP[chatSize]?.[0] ?? chatSize,
     canonicalisation: {
       sort_order: 'instance_id ascending',
       field_order: FIELD_ORDER,
@@ -505,8 +519,10 @@ function main(): void {
   // ------------------------------------------------------------------
 
   console.log('[build-beam-canonical] distribution by memory_ability:');
-  for (const [k, v] of Object.entries(byAbility)) console.log(`  ${k}: ${v}`);
-  console.log('[build-beam-canonical] skipped:', skipStats);
+  for (const [k, v] of Object.entries(byAbility)) {
+    console.log(`  ${k}: ${v}`);
+  }
+  console.log('[build-beam-canonical] skip_stats:', skipStats);
   console.log(`[build-beam-canonical] wrote ${jsonlPath} (${all.length} instances)`);
   console.log(`[build-beam-canonical] wrote ${metaPath}`);
   console.log(`[build-beam-canonical] dataset_version (SHA-256): ${hash}`);
