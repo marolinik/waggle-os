@@ -13,8 +13,20 @@
   },
   "longmemeval": {
     "id": "longmemeval",
-    "displayName": "LongMemEval",
+    "displayName": "LongMemEval V1 S-variant (xiaowu0162/longmemeval-cleaned, 500 questions, 115K tokens)",
     "dataPath": "longmemeval/longmemeval.jsonl",
+    "source": "external"
+  },
+  "beam-128k": {
+    "id": "beam-128k",
+    "displayName": "BEAM 128K (mohammadtavakoli78/BEAM, ICLR 2026, 20 conversations ~128K tokens)",
+    "dataPath": "beam/beam-128K.jsonl",
+    "source": "external"
+  },
+  "beam-1m": {
+    "id": "beam-1m",
+    "displayName": "BEAM 1M (mohammadtavakoli78/BEAM, ICLR 2026, 35 conversations ~1M tokens)",
+    "dataPath": "beam/beam-1M.jsonl",
     "source": "external"
   }
 }
