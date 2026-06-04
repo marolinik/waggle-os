@@ -63,11 +63,10 @@
  * same `formatRecalledMemories` block format, same system-prompt builder.
  */
 
-import type { DatasetInstance, ModelSpec, CellName } from './benchmarks/harness/src/types.js';
-import type { LlmClient, LlmCallResult } from './benchmarks/harness/src/llm.js';
-import type { Substrate } from './benchmarks/harness/src/substrate.js';
-import type { SearchResult } from '@waggle/core';
-import type { MemoryFrame } from '@waggle/core';
+import type { DatasetInstance, ModelSpec, CellName } from './types.js';
+import type { LlmClient, LlmCallResult } from './llm.js';
+import type { Substrate } from './substrate.js';
+import type { SearchResult, MemoryFrame } from '@waggle/core';
 
 // ── CellName extension ────────────────────────────────────────────────────────
 
