@@ -1,0 +1,42 @@
+{
+  "dataset_version": "a8a99545d77a236e3c7aa1f5d0ccfd94d4bcc5c2d5adbd19f938aba844586c56",
+  "instance_count": 500,
+  "variant": "s",
+  "built_at": "2026-06-04T17:25:36.563Z",
+  "source": "https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned/resolve/main/longmemeval_s_cleaned.json",
+  "source_reference": "Wu et al. 2024, \"LongMemEval: Benchmarking Chat Assistants on Long-Term Interactive Memory\" (arXiv:2410.10813)",
+  "hf_repo": "xiaowu0162/longmemeval-cleaned",
+  "canonicalisation": {
+    "abstention_included": true,
+    "no_sessions_excluded": true,
+    "sort_order": "instance_id ascending",
+    "field_order": [
+      "instance_id",
+      "conversation_id",
+      "question",
+      "expected",
+      "context",
+      "question_type",
+      "is_abstention"
+    ],
+    "line_terminator": "\\n",
+    "trailing_newline": true,
+    "encoding": "utf-8",
+    "no_bom": true
+  },
+  "distribution_by_question_type": {
+    "single-session-user": 70,
+    "single-session-assistant": 56,
+    "single-session-preference": 30,
+    "temporal-reasoning": 133,
+    "knowledge-update": 78,
+    "multi-session": 133
+  },
+  "abstention_count": 30,
+  "skip_stats": {
+    "missingFields": 0,
+    "noSessions": 0
+  },
+  "expected_count": 500,
+  "count_matches_expected": true
+}

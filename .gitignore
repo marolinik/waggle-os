@@ -49,6 +49,13 @@ benchmarks/data/*
 !benchmarks/data/locomo/
 !benchmarks/data/locomo/locomo-1540.jsonl
 !benchmarks/data/locomo/locomo-1540.meta.json
+# LME V1 canonical outputs — meta.json is tracked; large JSONL + raw JSON are not
+!benchmarks/data/longmemeval/
+!benchmarks/data/longmemeval/longmemeval.meta.json
+# BEAM canonical meta — same pattern
+!benchmarks/data/beam/
+!benchmarks/data/beam/beam-128K.meta.json
+!benchmarks/data/beam/beam-1M.meta.json
 benchmarks/results/*
 !benchmarks/results/.gitkeep
 # Sprint 12 Task 2.5 Stage 3 — per-stage manifest-adjacent audit artefacts:
@@ -112,6 +119,11 @@ benchmarks/results/*
 !**/benchmarks/data/locomo/
 !**/benchmarks/data/locomo/locomo-1540.jsonl
 !**/benchmarks/data/locomo/locomo-1540.meta.json
+!**/benchmarks/data/longmemeval/
+!**/benchmarks/data/longmemeval/longmemeval.meta.json
+!**/benchmarks/data/beam/
+!**/benchmarks/data/beam/beam-128K.meta.json
+!**/benchmarks/data/beam/beam-1M.meta.json
 !**/benchmarks/data/.gitkeep
 !**/benchmarks/results/.gitkeep
 !**/benchmarks/results/manifest-*.md

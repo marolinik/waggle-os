@@ -288,7 +288,10 @@ function main(): void {
   const { beamDataPath, chatSize } = parseArgs();
 
   const here = url.fileURLToPath(import.meta.url);
-  const repoRoot = path.resolve(path.dirname(here));
+  // Script lives at benchmarks/harness/scripts/build-beam-canonical.ts
+  // Resolve repo root by going 3 levels up: scripts/ -> harness/ -> benchmarks/ -> repo root
+  const scriptDir = path.dirname(here);
+  const repoRoot = path.resolve(scriptDir, '..', '..', '..');
   const dataDir = path.resolve(repoRoot, 'benchmarks', 'data');
 
   // ------------------------------------------------------------------

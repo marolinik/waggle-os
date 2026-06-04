@@ -85,7 +85,15 @@ interface LongMemEvalQuestion {
   answer: string;
   question_type: QuestionType;
   // Abstention variant: question_id ends with '_abs'
-  sessions: LongMemEvalSession[];
+  // Primary schema (cleaned HuggingFace variant):
+  sessions?: LongMemEvalSession[];
+  // Actual cleaned-variant schema:
+  // haystack_sessions: list[list[{role, content}]]
+  // haystack_dates: list[str]
+  // haystack_session_ids: list[str]
+  haystack_sessions?: LongMemEvalMessage[][];
+  haystack_dates?: string[];
+  haystack_session_ids?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -242,9 +250,10 @@ async function main(): Promise<void> {
   const { variant, skipDownload } = parseArgs();
 
   const here = url.fileURLToPath(import.meta.url);
-  // Resolve relative to script location or cwd — support both repo-root invocation
-  // (tsx build-longmemeval-canonical.ts) and harness-internal invocation.
-  const repoRoot = path.resolve(path.dirname(here));
+  // Script lives at benchmarks/harness/scripts/build-longmemeval-canonical.ts
+  // Resolve repo root by going 3 levels up: scripts/ → harness/ → benchmarks/ → repo root
+  const scriptDir = path.dirname(here);
+  const repoRoot = path.resolve(scriptDir, '..', '..', '..');
   const dataDir = path.resolve(repoRoot, 'benchmarks', 'data');
 
   const rawFilename = `longmemeval_${variant}_cleaned.json`;
@@ -310,13 +319,30 @@ async function main(): Promise<void> {
       skipStats.missingFields++;
       continue;
     }
-    if (!Array.isArray(q.sessions) || q.sessions.length === 0) {
+
+    // Normalise to LongMemEvalSession[]: handle both schema variants.
+    // Variant A (original): sessions: [{session_id, date?, messages: [{role, content}]}]
+    // Variant B (cleaned HF): haystack_sessions: list[list[{role,content}]],
+    //                         haystack_dates: list[str], haystack_session_ids: list[str]
+    let normalisedSessions: LongMemEvalSession[] | null = null;
+
+    if (Array.isArray(q.sessions) && q.sessions.length > 0) {
+      normalisedSessions = q.sessions;
+    } else if (Array.isArray(q.haystack_sessions) && q.haystack_sessions.length > 0) {
+      normalisedSessions = q.haystack_sessions.map((msgs, i) => ({
+        session_id: q.haystack_session_ids?.[i] ?? `session_${i}`,
+        date: q.haystack_dates?.[i],
+        messages: msgs.filter(m => m && typeof m.content === 'string'),
+      }));
+    }
+
+    if (!normalisedSessions || normalisedSessions.length === 0) {
       skipStats.noSessions++;
       continue;
     }
 
     const isAbstention = q.question_id.endsWith('_abs');
-    const context = buildContext(q.sessions);
+    const context = buildContext(normalisedSessions);
 
     all.push({
       instance_id: `longmemeval_${q.question_id}`,
