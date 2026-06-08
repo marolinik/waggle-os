@@ -1,0 +1,1552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Waggle OS — Backend Map (Visual One-Pager)</title>
+<style>
+  :root {
+    --bg: #08090c;
+    --bg-soft: #0e1015;
+    --panel: #11141b;
+    --panel-edge: #1c2230;
+    --honey: #e5a000;
+    --violet: #a78bfa;
+    --sky: #7dd3fc;
+    --mint: #34d399;
+    --text: #e8e8ef;
+    --text-dim: #9aa3b2;
+    --text-faint: #6b7280;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; scroll-padding-top: 84px; }
+
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(167,139,250,0.08), transparent 60%),
+      radial-gradient(1000px 500px at 0% 0%, rgba(229,160,0,0.07), transparent 55%),
+      var(--bg);
+    color: var(--text);
+    font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---- Sticky top nav ---- */
+  nav.topnav {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: rgba(8,9,12,0.86);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--panel-edge);
+  }
+  .nav-inner {
+    max-width: 1180px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 12px 22px;
+    flex-wrap: wrap;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    white-space: nowrap;
+  }
+  .brand .dot {
+    width: 12px; height: 12px; border-radius: 3px;
+    background: linear-gradient(135deg, var(--honey), var(--violet));
+    box-shadow: 0 0 12px rgba(229,160,0,0.5);
+  }
+  .brand .sub { color: var(--text-faint); font-weight: 500; font-size: 12px; }
+  .nav-links {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-left: auto;
+  }
+  .nav-links a {
+    color: var(--text-dim);
+    text-decoration: none;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 6px 10px;
+    border-radius: 7px;
+    border: 1px solid transparent;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+  .nav-links a:hover {
+    color: var(--text);
+    background: var(--panel);
+    border-color: var(--panel-edge);
+  }
+  .nav-links a .n { color: var(--honey); margin-right: 5px; }
+
+  /* ---- Layout ---- */
+  main {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 22px 100px;
+  }
+
+  header.hero {
+    padding: 56px 4px 26px;
+    border-bottom: 1px solid var(--panel-edge);
+    margin-bottom: 14px;
+  }
+  header.hero h1 {
+    margin: 0 0 10px;
+    font-size: 34px;
+    line-height: 1.15;
+    font-weight: 800;
+    background: linear-gradient(120deg, #fff 10%, var(--honey) 60%, var(--violet) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  header.hero p {
+    margin: 0;
+    max-width: 880px;
+    color: var(--text-dim);
+    font-size: 15px;
+  }
+  header.hero .pills {
+    margin-top: 18px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .pill {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text-dim);
+    border: 1px solid var(--panel-edge);
+    background: var(--panel);
+    padding: 4px 10px;
+    border-radius: 999px;
+  }
+  .pill b { color: var(--honey); font-weight: 700; }
+
+  section.diagram {
+    margin: 40px 0 0;
+    padding-top: 14px;
+  }
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+  }
+  .sec-head .num {
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--bg);
+    background: var(--honey);
+    border-radius: 6px;
+    padding: 2px 9px;
+    letter-spacing: 0.5px;
+  }
+  .sec-head h2 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .sec-head .file {
+    font-size: 12px;
+    color: var(--text-faint);
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    margin-left: auto;
+  }
+  .sec-desc {
+    color: var(--text-dim);
+    font-size: 14px;
+    max-width: 980px;
+    margin: 4px 0 18px;
+  }
+
+  .sub-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--violet);
+    margin: 26px 0 10px;
+    letter-spacing: 0.3px;
+  }
+
+  .card {
+    background: linear-gradient(180deg, var(--panel), var(--bg-soft));
+    border: 1px solid var(--panel-edge);
+    border-radius: 14px;
+    padding: 18px 16px;
+    margin-bottom: 18px;
+    overflow-x: auto;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+  }
+  .card pre.mermaid {
+    margin: 0;
+    background: transparent;
+    text-align: center;
+    min-height: 40px;
+  }
+
+  /* ---- Matrix tables (from tier section) ---- */
+  .tbl-wrap { overflow-x: auto; margin-bottom: 18px; }
+  table.matrix {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 12.5px;
+    min-width: 640px;
+  }
+  table.matrix th, table.matrix td {
+    border: 1px solid var(--panel-edge);
+    padding: 7px 10px;
+    text-align: left;
+  }
+  table.matrix thead th {
+    background: var(--panel);
+    color: var(--honey);
+    font-weight: 700;
+    position: sticky;
+    top: 0;
+  }
+  table.matrix td:first-child, table.matrix th:first-child {
+    font-family: ui-monospace, Consolas, monospace;
+    color: var(--sky);
+  }
+  table.matrix tbody tr:nth-child(odd) { background: rgba(255,255,255,0.012); }
+  table.matrix .no { color: #f87171; font-weight: 700; }
+  table.matrix .yes { color: var(--mint); }
+  table.matrix code {
+    color: var(--text);
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 11.5px;
+  }
+
+  footer {
+    margin-top: 60px;
+    padding-top: 22px;
+    border-top: 1px solid var(--panel-edge);
+    color: var(--text-faint);
+    font-size: 12.5px;
+  }
+  footer b { color: var(--honey); }
+
+  .loading-note {
+    color: var(--text-faint);
+    font-size: 12px;
+    text-align: center;
+    padding: 8px;
+  }
+  a.anchor-spacer { display:block; position:relative; top:-80px; visibility:hidden; }
+</style>
+</head>
+<body>
+
+<nav class="topnav">
+  <div class="nav-inner">
+    <div class="brand">
+      <span class="dot"></span>
+      Waggle&nbsp;OS <span class="sub">· Backend Map</span>
+    </div>
+    <div class="nav-links">
+      <a href="#d1"><span class="n">01</span>Architecture</a>
+      <a href="#d2"><span class="n">02</span>Data Model</a>
+      <a href="#d3"><span class="n">03</span>Chat Turn</a>
+      <a href="#d4"><span class="n">04</span>Feature → API</a>
+      <a href="#d5"><span class="n">05</span>Tier Gating</a>
+      <a href="#d6"><span class="n">06</span>API Domains</a>
+    </div>
+  </div>
+</nav>
+
+<main>
+
+  <header class="hero">
+    <h1>Waggle OS — Backend Map</h1>
+    <p>
+      Six cross-cutting diagrams tracing the Waggle OS runtime: from the Tauri shell through the
+      <code>apps/web</code> React SPA into the Fastify local sidecar (:3333), down through the workspace
+      packages and per-workspace SQLite <code>*.mind</code> stores, out to the LiteLLM router and LLM
+      providers — plus the data model, the chat-turn lifecycle, the feature→endpoint contract, and the
+      tier × trust gating model.
+    </p>
+    <div class="pills">
+      <span class="pill"><b>6</b> diagram sources</span>
+      <span class="pill"><b>15</b> rendered diagrams</span>
+      <span class="pill">Local Sidecar <b>:3333</b></span>
+      <span class="pill">Cloud Server <b>:3100</b></span>
+      <span class="pill">SQLite <b>*.mind</b> + Postgres</span>
+    </div>
+  </header>
+
+  <!-- ============ DIAGRAM 01 ============ -->
+  <section class="diagram" id="d1">
+    <span class="anchor-spacer"></span>
+    <div class="sec-head">
+      <span class="num">01</span>
+      <h2>System Architecture (Layers)</h2>
+      <span class="file">01-system-architecture.md</span>
+    </div>
+    <p class="sec-desc">
+      The cross-cutting runtime map for one request: from the Tauri Rust shell, through the
+      <code>apps/web</code> React SPA, into the Fastify Local Sidecar (port 3333) that serves the SPA and
+      exposes all <code>/api/*</code> routes, down into the workspace packages, into the per-workspace
+      SQLite <code>*.mind</code> stores (plus optional team/cloud Postgres + Redis on the :3100 Cloud
+      Server), and out to the LiteLLM router and LLM providers. The frontend origin <em>is</em> the
+      sidecar (same-origin, two-step Bearer auth); the memory substrate (<code>mind</code> +
+      <code>harvest</code>) lives in <code>@waggle/hive-mind-core</code>, not <code>@waggle/core</code>.
+    </p>
+
+    <div class="sub-title">Full Runtime Stack</div>
+    <div class="card">
+<pre class="mermaid">
+flowchart TD
+  subgraph Shell["Desktop shell — app/ (Tauri 2.0, Rust)"]
+    TAURI["Tauri WebView\nloads apps/web dist from sidecar\norigin = tauri://localhost"]
+  end
+
+  subgraph Web["Frontend — apps/web (React 19 + Vite + Tailwind 4)"]
+    SPA["SPA shell + assets\nauth-exempt GET"]
+    AUTH2["Two-step auth\n1. GET /api/auth/session-token\n2. Authorization Bearer on every /api/*"]
+    APPS["OS apps + overlays\nChat · Memory{Harvest,Evolution,Wiki}\nMarketplace · Connectors · Launcher\nWaggleDance · Room · Mission Control"]
+    WS["WebSocket client\nGET /ws?token="]
+  end
+
+  subgraph Sidecar["Local Sidecar :3333 — packages/server (Fastify, Node, bundled in Tauri)"]
+    SEC["securityMiddleware\nHost allowlist · Bearer · CORS · RateLimit · CSP"]
+    STATIC["@fastify/static + SPA fallback\nserves apps/web dist"]
+    ROUTES["62 route plugins, flat /api/* paths\nchat · memory · harvest · evolution · skills\nmarketplace · connectors · wiki · tools\nwaggle-dance · stripe · vault · personas"]
+    WSL["/ws event-bus relay\napprovals · steps · tools · notifications"]
+  end
+
+  subgraph Packages["Workspace packages (responsibilities)"]
+    AGENT["@waggle/agent\nrunAgentLoop · Orchestrator · personas\ntool-executor · completion gates · cost-tracker\nconnectors · capability/trust · KVARK tools"]
+    HMC["@waggle/hive-mind-core\nmind: Identity·Awareness·Frames·KnowledgeGraph\nHybridSearch·Cognify·embeddings\nharvest: source adapters + 4-pass pipeline"]
+    SHARED["@waggle/shared\ntypes · zod schemas · TIERS\nmcp-catalog · tool-detection"]
+    DANCE["@waggle/waggle-dance\nWaggleMessage protocol\ndispatcher · SignalBus"]
+    MKT["@waggle/marketplace\ncatalog · installer · SecurityGate · sync"]
+    WIKI["@waggle/wiki-compiler\nentity/concept/synthesis/index/health pages"]
+    OPT["@waggle/optimizer\nself-evolution: GEPA + EvolveSchema\njudge · gates · evolution runs"]
+  end
+
+  subgraph LocalData["Per-workspace local data (better-sqlite3 + sqlite-vec)"]
+    MIND[("*.mind SQLite per workspace\nmemory_frames + _fts + _vec float[1024]\nknowledge_entities/relations · sessions\nharvest_runs · evolution_runs · wiki_pages")]
+    CFG[("~/.waggle/config.json\ntier · stripe_customer_id")]
+    VAULT[("Vault\napi keys · connector creds · kvark:connection")]
+    MKTDB[("marketplace.db SQLite")]
+    SKILLS[("~/.waggle/skills/*.md\nplugins · hooks.json")]
+  end
+
+  subgraph Cloud["Optional Cloud Server :3100 — packages/server (team/SaaS only)"]
+    AUTHP["authPlugin — Clerk JWT verify"]
+    CROUTES["teams · agents · jobs · scout\nsuggestions · messages · audit · analytics"]
+    WSG["/ws gateway — team chat"]
+    PG[("Postgres via drizzle\nDATABASE_URL")]
+    REDIS[("Redis pub/sub\nteam:*:waggle · job:*:progress")]
+  end
+
+  LITELLM["LiteLLM router\nlitellm-config.yaml\nPOST /chat/completions"]
+  PROVIDERS["LLM providers\nAnthropic · OpenAI · Ollama (local)\nVoyage · others"]
+  STRIPEAPI["Stripe API"]
+  KVARK["KVARK sovereign FastAPI\nsearch · ask · actions (TEAMS/ENTERPRISE)"]
+
+  TAURI --> SPA
+  SPA --> AUTH2
+  AUTH2 --> APPS
+  APPS -->|"Bearer /api/*"| SEC
+  WS -->|"?token="| WSL
+  SPA -.->|"shell + assets"| STATIC
+
+  SEC --> ROUTES
+  ROUTES --> AGENT
+  ROUTES --> HMC
+  ROUTES --> DANCE
+  ROUTES --> MKT
+  ROUTES --> WIKI
+  ROUTES --> OPT
+  ROUTES --> SHARED
+  WSL --> AGENT
+
+  AGENT --> SHARED
+  HMC --> SHARED
+  OPT --> AGENT
+  WIKI --> HMC
+  MKT --> SKILLS
+
+  AGENT -->|"recall/write memory"| HMC
+  HMC --> MIND
+  AGENT --> VAULT
+  ROUTES --> CFG
+  MKT --> MKTDB
+  AGENT --> SKILLS
+
+  AGENT -->|"POST /chat/completions"| LITELLM
+  OPT -->|"judge + mutate (Haiku)"| LITELLM
+  HMC -->|"embeddings (litellm/ollama)"| LITELLM
+  WIKI -->|"synthesize (Haiku/Ollama)"| LITELLM
+  LITELLM --> PROVIDERS
+
+  ROUTES -->|"stripeRoutes"| STRIPEAPI
+  STRIPEAPI -->|"webhook -> write tier"| CFG
+  VAULT -->|"KvarkClient"| KVARK
+
+  APPS -. "team mode only" .-> AUTHP
+  AUTHP --> CROUTES
+  CROUTES --> PG
+  CROUTES --> REDIS
+  WSG <--> REDIS
+</pre>
+    </div>
+
+    <div class="sub-title">Request / Auth Path (Local Sidecar)</div>
+    <div class="card">
+<pre class="mermaid">
+flowchart LR
+  A["1. Load shell\nauth-exempt GET"] --> B["2. GET /api/auth/session-token\nsame-origin gated"]
+  B --> C["token"]
+  C --> D["3. Authorization Bearer token\non every /api/* call"]
+  C --> E["4. GET /ws?token=\nWebSocket relay"]
+  D --> F["Sidecar route plugins\nrate-limited, tier-gated"]
+  F -->|"403 TIER_INSUFFICIENT"| G["render upgrade prompt\nrequired + upgradeUrl"]
+  F -->|"429 + Retry-After"| H["backoff and retry"]
+</pre>
+    </div>
+
+    <div class="sub-title">Package Ownership Map</div>
+    <div class="card">
+<pre class="mermaid">
+flowchart TD
+  R["Fastify sidecar routes\npackages/server"] --> A
+  R --> H
+  R --> D
+  R --> M
+  R --> W
+  R --> O
+
+  A["@waggle/agent\nagent loop · orchestrator · 22 personas\ntool execution + 11-step chain\ncompletion gates D3/D4/D1\nconnectors (30) · capability + trust\nautonomy gating · KVARK tools · cost"]
+  H["@waggle/hive-mind-core\nMIND: identity · awareness · frames\nknowledge graph · hybrid search\nrelevance scoring · cognify · embeddings\nHARVEST: adapters · 4-pass pipeline · dedup"]
+  D["@waggle/waggle-dance\nWaggleMessage protocol\ndispatcher + combo validation\nSignalBus ring buffer · AI-OS signals"]
+  M["@waggle/marketplace\nSQLite catalog · installer\nSecurityGate (4 layers) · 9 sync adapters"]
+  W["@waggle/wiki-compiler\n5 page types from memory\nincremental compile · Obsidian/Notion export"]
+  O["@waggle/optimizer\nGEPA + EvolveSchema + judge\nevolution gates · run store · deploy"]
+  S["@waggle/shared\nwire types · zod schemas\n5-tier model + capabilities\nMCP catalog · tool detection"]
+
+  A --> S
+  H --> S
+  D --> S
+  M --> S
+  W --> S
+  O --> S
+</pre>
+    </div>
+  </section>
+
+  <!-- ============ DIAGRAM 02 ============ -->
+  <section class="diagram" id="d2">
+    <span class="anchor-spacer"></span>
+    <div class="sec-head">
+      <span class="num">02</span>
+      <h2>Master Data Model (two ER diagrams)</h2>
+      <span class="file">02-master-er.md</span>
+    </div>
+    <p class="sec-desc">
+      Data lives in two physically separate stores. The <strong>per-workspace memory layer</strong> is a
+      single SQLite file (<code>*.mind</code>) per workspace — 14 base tables plus 2 virtual search tables
+      (FTS5 + vec0). The <strong>team/cloud relational layer</strong> is a shared PostgreSQL database (20
+      tables, Drizzle ORM). There are <strong>no cross-database foreign keys</strong>: the only bridge is
+      the <code>users.mind_path</code> text column in Postgres, pointing at where a user's local SQLite
+      <code>*.mind</code> file lives.
+    </p>
+
+    <div class="sub-title">Diagram 1 — Per-workspace memory layer (SQLite, one *.mind file)</div>
+    <div class="card">
+<pre class="mermaid">
+erDiagram
+    sessions ||--o{ memory_frames : "gop_id FK"
+    memory_frames ||--o{ memory_frames : "base_frame_id self-FK"
+    memory_frames ||--|| memory_frames_fts : "rowid=id FTS5"
+    memory_frames ||--|| memory_frames_vec : "rowid=id vec0"
+    knowledge_entities ||--o{ knowledge_relations : "source_id FK"
+    knowledge_entities ||--o{ knowledge_relations : "target_id FK"
+
+    meta {
+        TEXT key PK
+        TEXT value
+    }
+    identity {
+        INTEGER id PK "CHECK id=1, single row"
+        TEXT name
+        TEXT role
+        TEXT department
+        TEXT personality
+        TEXT capabilities
+        TEXT system_prompt
+        TEXT created_at
+        TEXT updated_at
+    }
+    awareness {
+        INTEGER id PK
+        TEXT category "task action pending flag"
+        TEXT content
+        INTEGER priority
+        TEXT metadata "JSON"
+        TEXT created_at
+        TEXT expires_at "nullable"
+    }
+    sessions {
+        INTEGER id PK
+        TEXT gop_id UK "join key for frames"
+        TEXT project_id "nullable"
+        TEXT status "active closed archived"
+        TEXT started_at
+        TEXT ended_at "nullable"
+        TEXT summary "nullable"
+    }
+    memory_frames {
+        INTEGER id PK
+        TEXT frame_type "I P B"
+        TEXT gop_id FK
+        INTEGER t "per-gop ordinal"
+        INTEGER base_frame_id FK "nullable self"
+        TEXT content "JSON for B-frames"
+        TEXT importance "critical..deprecated"
+        TEXT source "user_stated..system"
+        INTEGER access_count
+        TEXT created_at
+        TEXT last_accessed
+    }
+    memory_frames_fts {
+        TEXT content "FTS5 rowid=id"
+    }
+    memory_frames_vec {
+        FLOAT embedding "float 1024 rowid=id"
+    }
+    knowledge_entities {
+        INTEGER id PK
+        TEXT entity_type
+        TEXT name
+        TEXT properties "JSON"
+        TEXT valid_from
+        TEXT valid_to "nullable=active"
+        TEXT recorded_at
+    }
+    knowledge_relations {
+        INTEGER id PK
+        INTEGER source_id FK
+        INTEGER target_id FK
+        TEXT relation_type
+        REAL confidence
+        TEXT properties "JSON"
+        TEXT valid_from
+        TEXT valid_to "nullable=active"
+        TEXT recorded_at
+    }
+    procedures {
+        INTEGER id PK
+        TEXT name
+        TEXT model
+        TEXT template
+        INTEGER version
+        REAL success_rate
+        REAL avg_cost
+        TEXT created_at
+        TEXT updated_at
+    }
+    improvement_signals {
+        INTEGER id PK
+        TEXT category "capability_gap..skill_promotion"
+        TEXT pattern_key
+        TEXT detail
+        INTEGER count
+        TEXT first_seen
+        TEXT last_seen
+        INTEGER surfaced "0 or 1"
+        TEXT surfaced_at "nullable"
+        TEXT metadata "JSON"
+    }
+    install_audit {
+        INTEGER id PK
+        TEXT timestamp
+        TEXT capability_name
+        TEXT capability_type "native..marketplace"
+        TEXT source
+        TEXT version "nullable"
+        TEXT risk_level "low medium high"
+        TEXT trust_source
+        TEXT approval_class
+        TEXT action
+        TEXT initiator "agent user system"
+        TEXT detail
+    }
+    ai_interactions {
+        INTEGER id PK "APPEND-ONLY"
+        TEXT timestamp
+        TEXT workspace_id "nullable"
+        TEXT session_id "nullable"
+        TEXT model
+        TEXT provider
+        INTEGER input_tokens
+        INTEGER output_tokens
+        REAL cost_usd
+        TEXT tools_called "JSON"
+        TEXT human_action "nullable"
+        TEXT risk_context "nullable"
+        TEXT imported_from "nullable"
+        TEXT persona "nullable"
+        TEXT input_text "nullable"
+        TEXT output_text "nullable"
+    }
+    execution_traces {
+        INTEGER id PK
+        TEXT session_id "nullable"
+        TEXT persona_id "nullable"
+        TEXT workspace_id "nullable"
+        TEXT model "nullable"
+        TEXT task_shape "nullable"
+        TEXT outcome "success..pending"
+        TEXT trace_json "JSON"
+        REAL cost_usd
+        INTEGER duration_ms
+        TEXT created_at
+        TEXT finalized_at "nullable"
+    }
+    evolution_runs {
+        INTEGER id PK
+        TEXT run_uuid UK
+        TEXT target_kind
+        TEXT target_name "nullable"
+        TEXT baseline_text
+        TEXT winner_text
+        TEXT winner_schema_json "nullable"
+        REAL delta_accuracy
+        TEXT gate_verdict "pass fail"
+        TEXT gate_reasons_json "JSON"
+        TEXT status "proposed..failed"
+        TEXT artifacts_json "nullable"
+        TEXT user_note "nullable"
+        TEXT failure_reason "nullable"
+        TEXT created_at
+        TEXT decided_at "nullable"
+        TEXT deployed_at "nullable"
+    }
+    harvest_sources {
+        INTEGER id PK
+        TEXT source UK
+        TEXT display_name
+        TEXT source_path "nullable"
+        TEXT last_synced_at "nullable"
+        INTEGER items_imported
+        INTEGER frames_created
+        INTEGER auto_sync "0 or 1"
+        INTEGER sync_interval_hours
+        TEXT last_content_hash "nullable"
+        TEXT created_at
+    }
+</pre>
+    </div>
+
+    <div class="sub-title">Diagram 2 — Team/cloud relational layer (PostgreSQL + Drizzle)</div>
+    <div class="card">
+<pre class="mermaid">
+erDiagram
+    users ||--o{ teams : "owns owner_id"
+    users ||--o{ team_members : "is"
+    teams ||--o{ team_members : "has"
+    users ||--o{ agents : "owns user_id"
+    teams ||--o{ agents : "scopes team_id"
+    users ||--o{ agent_groups : "owns"
+    agent_groups ||--o{ agent_group_members : "contains"
+    agents ||--o{ agent_group_members : "joins"
+    teams ||--o{ tasks : "has"
+    users ||--o{ tasks : "creates created_by"
+    users ||--o{ tasks : "assigned assigned_to"
+    teams ||--o{ messages : "channel"
+    users ||--o{ messages : "sends sender_id"
+    teams ||--o{ team_entities : "owns"
+    users ||--o{ team_entities : "shares shared_by"
+    teams ||--o{ team_relations : "owns"
+    team_entities ||--o{ team_relations : "source_id"
+    team_entities ||--o{ team_relations : "target_id"
+    teams ||--o{ team_resources : "owns"
+    users ||--o{ team_resources : "shares"
+    teams ||--o{ team_capability_policies : "governs"
+    users ||--o{ team_capability_policies : "updates"
+    teams ||--o{ team_capability_overrides : "governs"
+    users ||--o{ team_capability_overrides : "decides"
+    teams ||--o{ team_capability_requests : "scopes"
+    users ||--o{ team_capability_requests : "requests-decides"
+    teams ||--o{ agent_jobs : "owns"
+    users ||--o{ agent_jobs : "runs"
+    teams ||--o{ cron_schedules : "owns"
+    users ||--o{ cron_schedules : "creates"
+    users ||--o{ scout_findings : "for-user"
+    teams ||--o{ scout_findings : "for-team"
+    proactive_patterns ||--o{ suggestions_log : "fires"
+    users ||--o{ suggestions_log : "receives"
+    users ||--o{ agent_audit_log : "acts"
+    teams ||--o{ agent_audit_log : "scopes"
+
+    users {
+        uuid id PK
+        text clerk_id UK
+        text display_name
+        text email UK
+        text avatar_url "nullable"
+        text mind_path "nullable to SQLite mind"
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    teams {
+        uuid id PK
+        text name
+        text slug UK
+        uuid owner_id FK
+        timestamptz created_at
+    }
+    team_members {
+        uuid team_id PK_FK
+        uuid user_id PK_FK
+        text role "default member"
+        text role_description "nullable"
+        jsonb interests "nullable"
+        timestamptz joined_at
+    }
+    agents {
+        uuid id PK
+        uuid user_id FK
+        uuid team_id FK "nullable"
+        text name
+        text role "nullable"
+        text system_prompt "nullable"
+        text model "default claude-haiku-4-5"
+        jsonb tools "default empty"
+        jsonb config "default empty"
+        timestamptz created_at
+    }
+    agent_groups {
+        uuid id PK
+        uuid user_id FK
+        text name
+        text description "nullable"
+        text strategy "default parallel"
+        timestamptz created_at
+    }
+    agent_group_members {
+        uuid group_id PK_FK
+        uuid agent_id PK_FK
+        text role_in_group "default worker"
+        integer execution_order "default 0"
+    }
+    tasks {
+        uuid id PK
+        uuid team_id FK
+        text title
+        text description "nullable"
+        text status "default open"
+        text priority "default normal"
+        uuid created_by FK
+        uuid assigned_to FK "nullable"
+        uuid parent_task_id "no FK logical self-ref"
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    messages {
+        uuid id PK
+        uuid team_id FK
+        uuid sender_id FK
+        text type
+        text subtype
+        jsonb content
+        uuid reference_id "no FK"
+        jsonb routing "nullable"
+        timestamptz created_at
+    }
+    team_entities {
+        uuid id PK
+        uuid team_id FK
+        text entity_type
+        text name
+        jsonb properties "default empty"
+        uuid shared_by FK
+        timestamptz valid_from
+        timestamptz valid_to "nullable open-ended"
+        timestamptz created_at
+    }
+    team_relations {
+        uuid id PK
+        uuid team_id FK
+        uuid source_id FK
+        uuid target_id FK
+        text relation_type
+        real confidence "default 1.0"
+        jsonb properties "default empty"
+        timestamptz created_at
+    }
+    team_resources {
+        uuid id PK
+        uuid team_id FK
+        text resource_type
+        text name
+        text description "nullable"
+        jsonb config
+        uuid shared_by FK
+        real rating "default 0"
+        integer use_count "default 0"
+        timestamptz created_at
+    }
+    team_capability_policies {
+        uuid id PK
+        uuid team_id FK
+        text role
+        jsonb allowed_sources "default empty"
+        jsonb blocked_tools "default empty"
+        text approval_threshold "default none"
+        uuid updated_by FK "nullable"
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    team_capability_overrides {
+        uuid id PK
+        uuid team_id FK
+        text capability_name
+        text capability_type
+        text decision
+        text reason "default empty"
+        uuid decided_by FK
+        timestamptz created_at
+        timestamptz decided_at
+    }
+    team_capability_requests {
+        uuid id PK
+        uuid team_id FK
+        uuid requested_by FK
+        text capability_name
+        text capability_type
+        text justification
+        text status "default pending"
+        uuid decided_by FK "nullable"
+        text decision_reason "nullable"
+        timestamptz created_at
+        timestamptz decided_at "nullable"
+    }
+    agent_jobs {
+        uuid id PK
+        uuid team_id FK
+        uuid user_id FK
+        text job_type
+        text status "default queued"
+        jsonb input
+        jsonb output "nullable"
+        timestamptz started_at "nullable"
+        timestamptz completed_at "nullable"
+        timestamptz created_at
+    }
+    cron_schedules {
+        uuid id PK
+        uuid team_id FK
+        uuid created_by FK
+        text name
+        text cron_expr
+        text job_type
+        jsonb job_config "default empty"
+        boolean enabled "default true"
+        timestamptz last_run_at "nullable"
+        timestamptz next_run_at "nullable"
+        timestamptz created_at
+    }
+    scout_findings {
+        uuid id PK
+        uuid user_id FK "nullable"
+        uuid team_id FK "nullable"
+        text source
+        text category
+        text title
+        text summary "nullable"
+        real relevance_score "default 0"
+        text url "nullable"
+        text status "default new"
+        timestamptz created_at
+    }
+    proactive_patterns {
+        uuid id PK "config-only no FK"
+        text name
+        jsonb trigger
+        text suggestion_type
+        text template
+        boolean enabled "default true"
+    }
+    suggestions_log {
+        uuid id PK
+        uuid user_id FK
+        uuid pattern_id FK
+        jsonb context
+        text status "default pending"
+        timestamptz created_at
+    }
+    agent_audit_log {
+        uuid id PK
+        uuid user_id FK
+        uuid team_id FK "nullable"
+        text agent_name
+        text action_type
+        text description
+        jsonb before_state "nullable"
+        jsonb after_state "nullable"
+        boolean requires_approval "default false"
+        boolean approved "nullable tri-state"
+        uuid approved_by FK "nullable"
+        timestamptz created_at
+    }
+</pre>
+    </div>
+  </section>
+
+  <!-- ============ DIAGRAM 03 ============ -->
+  <section class="diagram" id="d3">
+    <span class="anchor-spacer"></span>
+    <div class="sec-head">
+      <span class="num">03</span>
+      <h2>Chat Turn Sequence</h2>
+      <span class="file">03-chat-turn-sequence.md</span>
+    </div>
+    <p class="sec-desc">
+      One conversational chat turn, end to end. The frontend POSTs to <code>POST /api/chat</code> (an SSE
+      stream — the server validates, then <code>reply.hijack()</code> and writes a raw
+      <code>text/event-stream</code>). The handler assembles the layered system prompt via the per-session
+      <code>Orchestrator</code> (<code>buildSystemPrompt</code> + <code>recallMemory</code> over
+      <code>HybridSearch</code>), filters tools by persona/context, then calls <code>runAgentLoop</code>,
+      which POSTs to LiteLLM. Tool calls pass the 11-step <code>executeToolCall</code> chain; after the
+      loop, <code>autoSaveFromExchange</code> runs the <code>CognifyPipeline</code> to write new memory
+      frames.
+    </p>
+    <div class="card">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant UI as "Frontend (chat UI)"
+    participant Route as "POST /api/chat\nchat.ts (SSE)"
+    participant Orch as "Orchestrator\nbuildSystemPrompt + recallMemory"
+    participant Search as "HybridSearch\n(workspace mind)"
+    participant AL as "runAgentLoop\nagent-loop.ts"
+    participant LLM as "LiteLLM\n/chat/completions"
+    participant Tools as "executeToolCall\n11-step chain"
+    participant Trace as "TraceRecorder"
+    participant Cog as "CognifyPipeline\nautoSaveFromExchange"
+    participant Disk as "session .jsonl"
+
+    UI->>Route: "POST { message, workspace, session, model?, persona?, autonomy? }"
+    Note over Route: "validate · injection scan score < 0.7 · RBAC · path guard (all pre-hijack)"
+    alt rejected
+        Route-->>UI: "400 / 403 JSON error (MESSAGE_TOO_LONG, INJECTION_DETECTED, ...)"
+    else accepted
+        Note over Route: "reply.hijack() · write SSE headers · wire AbortController to client close"
+        Route->>Disk: "persistMessage user turn (append .jsonl)"
+        Route->>Route: "generateTurnId UUID v4 · resolve model fallback chain"
+
+        Route->>Orch: "recallMemory(query, turnId)"
+        Note over Orch: "catch-up vs semantic · drop temporary/deprecated · injection scan"
+        Orch->>Search: "search(query) keyword + vector"
+        Search-->>Orch: "SearchResult[] ranked by finalScore = rrfScore * relevanceScore"
+        Orch-->>Route: "recalledContext text"
+        Route-->>UI: "event: step  Recalling relevant memories..."
+        Route-->>UI: "event: tool / tool_result  (auto_recall)"
+
+        Route->>Orch: "buildSystemPrompt()"
+        Orch-->>Route: "identity + self-awareness + preloaded context"
+        Note over Route: "layer profile + runtime facts + activeSpec.rules + skills + Workspace Now + corrections, then composePersonaPrompt"
+        Note over Route: "filterToolsForContext + filterAvailableTools + persona allow/deny"
+
+        Route->>AL: "runAgentLoop { systemPrompt, tools, messages, stream:true, maxTurns:200, turnId, traceRecording }"
+
+        loop "each turn up to maxTurns"
+            AL->>LLM: "POST /chat/completions { model, messages, tools, stream }"
+            Note over AL,LLM: "signal = client-abort + 300s timeout · 429/5xx -> backoff, turn--, retry"
+            LLM-->>AL: "stream chunks: content + tool_calls + usage"
+            AL-->>UI: "event: token  xN assistant text"
+
+            alt "tool_calls present"
+                AL-->>UI: "event: tool { name, input }"
+                AL->>Tools: "executeToolCall(name, args)"
+                Note over Tools: "parse args -> onToolUse -> governance blockedTools -> pre:tool -> pre:memory-write -> LoopGuard.check -> execute -> scanForInjection -> onToolResult -> post hooks"
+                opt "gated tool"
+                    AL-->>UI: "event: approval_required { requestId, toolName, input }"
+                    UI->>Route: "POST /api/approval/:requestId { approved, always? }"
+                    Route-->>AL: "resolve(approved)  (auto-deny after 5 min)"
+                end
+                Tools->>Trace: "record tool call + sanitized result"
+                Tools-->>AL: "role:tool result message (sanitized)"
+                AL-->>UI: "event: tool_result { name, result, isError }"
+            else "no tool_calls (final answer)"
+                Note over AL: "maybeFireCompletionGate: D3 verification -> D4 phantom-write -> D1 skill-distillation"
+                alt "a gate fired"
+                    Note over AL: "push corrective directive, continue one more turn"
+                else "none fired"
+                    AL-->>Trace: "finalize trace"
+                    AL-->>Route: "AgentResponse { content, toolsUsed, usage }"
+                end
+            end
+        end
+
+        Note over Route: "cost tracking · KG entity extraction · disclaimers"
+        Route->>Cog: "autoSaveFromExchange(message, result.content)"
+        Cog->>Disk: "cognify writes new memory frame (I/P) + FTS + vec index + entities"
+        Route->>Orch: "commitSurfacedSignals()"
+        Route->>Disk: "persistMessage assistant turn"
+        Route-->>UI: "event: done { content, usage, toolsUsed, model, cost? }"
+    end
+    Note over Route: "on failure -> event: error { message }  (raw turn still persisted) · finally: raw.end()"
+</pre>
+    </div>
+  </section>
+
+  <!-- ============ DIAGRAM 04 ============ -->
+  <section class="diagram" id="d4">
+    <span class="anchor-spacer"></span>
+    <div class="sec-head">
+      <span class="num">04</span>
+      <h2>Feature → API Map (rebuild blueprint)</h2>
+      <span class="file">04-feature-api-map.md</span>
+    </div>
+    <p class="sec-desc">
+      The rebuild contract. The left column lists every implemented OS app and overlay; the right column
+      lists the backend endpoint GROUPS each one depends on, grouped exactly as the section files split
+      them (03a–03g). Every app first goes through the shared <code>adapter</code> singleton and
+      <code>ServiceProvider</code>; auth and tier-gating are cross-cutting. Apps with no backend calls
+      (Voice, Team Governance, Keyboard Shortcuts) are wired only to the shared layer.
+    </p>
+
+    <div class="sub-title">1. Apps and overlays mapped to endpoint groups</div>
+    <div class="card">
+<pre class="mermaid">
+flowchart LR
+  classDef app fill:#1b2330,stroke:#a78bfa,color:#e8e8ef
+  classDef ovl fill:#23202e,stroke:#e5a000,color:#f3ead0
+  classDef shared fill:#0f1622,stroke:#7dd3fc,color:#dff1ff
+  classDef grp fill:#10271b,stroke:#34d399,color:#d7f7e6
+
+  %% Shared layer every feature passes through
+  ADAPTER["adapter singleton\nlib/adapter.ts\n127.0.0.1:3333"]:::shared
+  SVC["ServiceProvider\nadapter.connect"]:::shared
+  AUTH["Auth + Health\nGET /api/auth/session-token\nGET /health"]:::shared
+  TIER["Tier gating bus\n403 TIER_INSUFFICIENT\nwaggle:tier-insufficient"]:::shared
+  SVC --> ADAPTER
+  ADAPTER --> AUTH
+  ADAPTER --> TIER
+
+  %% Endpoint GROUPS (right side)
+  G_CHAT["03a Chat + Agents\n/api/chat SSE\n/api/history /api/agent/*\n/api/sessions/* /api/jobs/*"]:::grp
+  G_MEM["03b Memory + Knowledge\n/api/memory/* /api/identity\n/api/mind/* /api/documents"]:::grp
+  G_WIKI["03b Wiki + Harvest + Import\n/api/wiki/* /api/harvest/*\n/api/import/*"]:::grp
+  G_WS["03c Workspace + Templates\n/api/workspaces/* /api/files/*\n/api/workspace-templates/* /api/browse"]:::grp
+  G_TEAM["03c Team + Persona + Settings + Profile + Pins\n/api/personas/* /api/agent-groups/*\n/api/team/* /api/settings/* /api/profile/* /api/pins"]:::grp
+  G_MKT["03d Marketplace + Skills + Capabilities\n/api/marketplace/* /api/skills/*\n/api/capabilities/status"]:::grp
+  G_CONN["03d Connectors + Vault\n/api/connectors/* /api/vault/*"]:::grp
+  G_TOOLS["03d AI-OS Tool Launcher\n/api/tools/detect|launch|processes|kill|hooks"]:::grp
+  G_EVO["03e Evolution + Compliance + Costs + Feedback + Approvals\n/api/evolution/* /api/compliance/*\n/api/cost*|/api/costs /api/feedback /api/approval/*"]:::grp
+  G_RT["03f Realtime + Ops\n/api/events* SSE /api/notifications/*\n/api/cron/* /api/fleet/* /api/litellm/* /api/local-inference/* /api/backup|restore"]:::grp
+  G_WD["03f WaggleDance signals\n/api/waggle/signals\n/api/waggle/stream SSE"]:::grp
+  G_BILL["03g Billing + Tier + GDPR\n/api/tier /api/tier/start-trial\n/api/stripe/* /api/data/erase"]:::grp
+  G_TEL["03e Telemetry\n/api/telemetry/*"]:::grp
+
+  %% ---- Dock apps (left) ----
+  A_CHAT["Chat"]:::app
+  A_DASH["Dashboard / Home"]:::app
+  A_MEM["Memory\nframes/KG/harvest/wiki/evolution"]:::app
+  A_EVT["Events and Logs"]:::app
+  A_CAP["Skills and Apps"]:::app
+  A_CONN["Connectors"]:::app
+  A_COCK["Cockpit / Command Center"]:::app
+  A_MC["Mission Control"]:::app
+  A_WD["Waggle Dance"]:::app
+  A_AGT["Personas / Agents"]:::app
+  A_FILE["Files"]:::app
+  A_CRON["Scheduled Jobs"]:::app
+  A_MKT["Marketplace"]:::app
+  A_LAUN["AI Tools / Launcher"]:::app
+  A_VOICE["Voice\nstatic placeholder"]:::app
+  A_ROOM["Room\nsub-agent canvas"]:::app
+  A_APPR["Approvals"]:::app
+  A_TL["Timeline"]:::app
+  A_BAK["Backup and Restore"]:::app
+  A_TEL["Usage and Telemetry"]:::app
+  A_GOV["Team Governance\nTEAMS tier"]:::app
+  A_SET["Settings"]:::app
+  A_VAULT["Vault"]:::app
+  A_PROF["My Profile"]:::app
+
+  %% All apps go through the shared adapter
+  A_CHAT & A_DASH & A_MEM & A_EVT & A_CAP & A_CONN & A_COCK & A_MC & A_WD & A_AGT & A_FILE & A_CRON & A_MKT & A_LAUN & A_VOICE & A_ROOM & A_APPR & A_TL & A_BAK & A_TEL & A_GOV & A_SET & A_VAULT & A_PROF --> ADAPTER
+
+  %% Chat
+  A_CHAT --> G_CHAT
+  A_CHAT --> G_MEM
+  A_CHAT --> G_TEAM
+  A_CHAT --> G_WIKI
+
+  %% Dashboard
+  A_DASH --> G_MEM
+  A_DASH --> G_CHAT
+
+  %% Memory app
+  A_MEM --> G_MEM
+  A_MEM --> G_WIKI
+  A_MEM --> G_EVO
+  A_MEM --> G_RT
+
+  %% Events
+  A_EVT --> G_RT
+
+  %% Skills and Apps
+  A_CAP --> G_MKT
+
+  %% Connectors
+  A_CONN --> G_CONN
+
+  %% Cockpit + Compliance
+  A_COCK --> G_RT
+  A_COCK --> G_EVO
+  A_COCK --> G_CONN
+  A_COCK --> G_MKT
+  A_COCK --> G_WIKI
+
+  %% Mission Control
+  A_MC --> G_RT
+  A_MC --> G_TEAM
+  A_MC --> G_TOOLS
+
+  %% Waggle Dance
+  A_WD --> G_WD
+
+  %% Personas / Agents
+  A_AGT --> G_TEAM
+  A_AGT --> G_CHAT
+  A_AGT --> G_MKT
+
+  %% Files
+  A_FILE --> G_WS
+
+  %% Scheduled Jobs
+  A_CRON --> G_RT
+
+  %% Marketplace
+  A_MKT --> G_MKT
+
+  %% Launcher
+  A_LAUN --> G_TOOLS
+
+  %% Room
+  A_ROOM --> G_RT
+
+  %% Approvals
+  A_APPR --> G_EVO
+
+  %% Timeline
+  A_TL --> G_RT
+
+  %% Backup
+  A_BAK --> G_RT
+
+  %% Telemetry
+  A_TEL --> G_EVO
+  A_TEL --> G_TEL
+
+  %% Settings
+  A_SET --> G_TEAM
+  A_SET --> G_TEL
+  A_SET --> G_RT
+
+  %% Vault
+  A_VAULT --> G_CONN
+
+  %% Profile
+  A_PROF --> G_TEAM
+</pre>
+    </div>
+
+    <div class="sub-title">2. Overlays mapped to endpoint groups</div>
+    <div class="card">
+<pre class="mermaid">
+flowchart LR
+  classDef ovl fill:#23202e,stroke:#e5a000,color:#f3ead0
+  classDef grp fill:#10271b,stroke:#34d399,color:#d7f7e6
+  classDef shared fill:#0f1622,stroke:#7dd3fc,color:#dff1ff
+
+  ADAPTER["adapter singleton\nlib/adapter.ts"]:::shared
+
+  GO_WS["03c Workspace + Templates\n/api/workspaces/* /api/workspace-templates/*\n/api/browse"]:::grp
+  GO_TEAM["03c Persona + Settings + Profile\n/api/personas/* /api/agent-groups/*\n/api/settings /api/profile"]:::grp
+  GO_MEM["03b Memory + Identity\n/api/memory/search /api/memory/stats\n/api/identity"]:::grp
+  GO_HARV["03b Harvest + Import\n/api/harvest/* /api/import/*"]:::grp
+  GO_PROV["03d Vault + Providers + Skills\n/api/vault /api/providers\n/api/skills /v1/models"]:::grp
+  GO_FLEET["03f Fleet + LiteLLM\n/api/fleet/spawn /api/litellm/models"]:::grp
+  GO_NOTIF["03f Notifications\n/api/notifications/*"]:::grp
+  GO_BILL["03g Billing + GDPR\n/api/tier/start-trial\n/api/stripe/* /api/data/erase"]:::grp
+  GO_TEL["03e Telemetry\n/api/telemetry/track"]:::grp
+  GO_SVC["Connect + Health\n/api/auth/session-token /health"]:::shared
+
+  O_ONB["Onboarding wizard\n8 steps"]:::ovl
+  O_LOGIN["Login briefing"]:::ovl
+  O_SEARCH["Global search Cmd+K"]:::ovl
+  O_CWS["Create workspace dialog"]:::ovl
+  O_PSW["Persona switcher"]:::ovl
+  O_SPAWN["Spawn agent dialog"]:::ovl
+  O_WSW["Workspace switcher\nprops-driven"]:::ovl
+  O_NINBOX["Notification inbox"]:::ovl
+  O_CRAIL["Context rail"]:::ovl
+  O_ERASE["Erase data dialog GDPR"]:::ovl
+  O_UPG["Upgrade modal"]:::ovl
+  O_TRIAL["Trial expired modal"]:::ovl
+  O_KB["Keyboard shortcuts help\nno calls"]:::ovl
+  O_TOUR["Onboarding tooltips\nno calls"]:::ovl
+
+  O_ONB & O_LOGIN & O_SEARCH & O_CWS & O_PSW & O_SPAWN & O_ERASE & O_UPG & O_TRIAL & O_NINBOX & O_CRAIL --> ADAPTER
+
+  O_ONB --> GO_SVC
+  O_ONB --> GO_PROV
+  O_ONB --> GO_HARV
+  O_ONB --> GO_TEAM
+  O_ONB --> GO_WS
+  O_ONB --> GO_TEL
+
+  O_LOGIN --> GO_MEM
+  O_LOGIN --> GO_WS
+
+  O_SEARCH --> GO_WS
+  O_SEARCH --> GO_MEM
+  O_SEARCH --> GO_PROV
+
+  O_CWS --> GO_WS
+  O_CWS --> GO_TEAM
+
+  O_PSW --> GO_TEAM
+
+  O_SPAWN --> GO_FLEET
+  O_SPAWN --> GO_PROV
+  O_SPAWN --> GO_WS
+
+  O_NINBOX --> GO_NOTIF
+  O_CRAIL --> GO_MEM
+  O_ERASE --> GO_BILL
+  O_UPG --> GO_BILL
+  O_TRIAL --> GO_BILL
+</pre>
+    </div>
+  </section>
+
+  <!-- ============ DIAGRAM 05 ============ -->
+  <section class="diagram" id="d5">
+    <span class="anchor-spacer"></span>
+    <div class="sec-head">
+      <span class="num">05</span>
+      <h2>Tier + Trust Gating</h2>
+      <span class="file">05-tier-gating.md</span>
+    </div>
+    <p class="sec-desc">
+      Waggle gates every action on <strong>two orthogonal axes</strong>. The <strong>subscription tier</strong>
+      (TRIAL / FREE / PRO / TEAMS / ENTERPRISE) decides whether a feature exists — enforced via
+      <code>requireTier()</code> returning <code>403 TIER_INSUFFICIENT</code>. The
+      <strong>autonomy / trust level</strong> (Normal / Trusted / YOLO) decides, per tool call, whether the
+      UI must show an approval prompt. Rule of thumb: <em>tier decides whether the door exists; trust
+      decides whether it needs a key turn each time you walk through.</em>
+    </p>
+
+    <div class="sub-title">1. The two gating axes (overview)</div>
+    <div class="card">
+<pre class="mermaid">
+flowchart TD
+  USER["User stored tier plus trialStartedAt"] --> EFF["getEffectiveTier\nTRIAL expired collapses to FREE"]
+  EFF --> CAPS["getCapabilities\nTierCapabilities flag set"]
+
+  CAPS --> AXIS1["AXIS 1 — Tier gate\nfeature exists for this plan?"]
+  SESSION["Session AutonomyLevel\nnormal / trusted / yolo"] --> AXIS2["AXIS 2 — Trust gate\nclick needed for this call?"]
+
+  AXIS1 --> ROUTES["requireTier preHandler\n403 TIER_INSUFFICIENT on fail"]
+  AXIS1 --> KREG["KVARK tools registered\nonly when KVARK configured"]
+  AXIS2 --> CONF["needsConfirmationWithAutonomy\nper tool call"]
+
+  ROUTES --> GATED["Marketplace, Personas, Admin,\nTeam, Cloud-sync, Enterprise packs"]
+  KREG --> KVARK["kvark_search, kvark_feedback,\nkvark_action, kvark_ask_document"]
+  CONF --> TOOLS["Tools, connectors, bash,\ninstall_capability"]
+</pre>
+    </div>
+
+    <div class="sub-title">2. The 5 tiers and what each unlocks</div>
+    <div class="card">
+<pre class="mermaid">
+flowchart LR
+  subgraph TRIAL["TRIAL — 0 USD / 15 days"]
+    T1["All features unlocked\nmirrors TEAMS plus ENTERPRISE\nselfHosted OFF\ndecays to FREE after 15 days"]
+  end
+  subgraph FREE["FREE — 0 USD forever"]
+    F1["5 workspaces, 5 connectors\nspawnAgents ON, memory free\nbuilt-in skills only\nexport txt and md\nauditLog none, kvarkCta subtle"]
+  end
+  subgraph PRO["PRO — 19 USD / mo (solo)"]
+    P1["Unlimited workspaces plus connectors\ncustomSkills ON, marketplace\nexport txt md pdf json\nteamMembersLimit 1, auditLog basic\nno sharedWorkspaces, no cloudSync"]
+  end
+  subgraph TEAMS["TEAMS — 49 USD / seat"]
+    M1["sharedWorkspaces, teamSkillLibrary\ncloudSync, adminPanel\nauditLog full, selfHosted\nmanagedModelPool, priorityModels\nWaggleDance, kvarkCta active"]
+  end
+  subgraph ENT["ENTERPRISE — consultative"]
+    E1["KVARK sovereign on-prem\nall TEAMS capabilities\nselfHosted ON, kvarkCta none\ngovernance permissions route"]
+  end
+
+  TRIAL -->|"trial expires"| FREE
+  FREE -->|"upgrade 19/mo"| PRO
+  PRO -->|"upgrade 49/seat"| TEAMS
+  TEAMS -->|"sales contact"| ENT
+</pre>
+    </div>
+
+    <div class="sub-title">3. Tier × Capability matrix (verbatim from TIER_CAPABILITIES)</div>
+    <div class="tbl-wrap">
+      <table class="matrix">
+        <thead>
+          <tr><th>Capability</th><th>TRIAL</th><th>FREE</th><th>PRO</th><th>TEAMS</th><th>ENTERPRISE</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>connectorLimit</td><td>-1</td><td><span class="no">5</span></td><td>-1</td><td>-1</td><td>-1</td></tr>
+          <tr><td>workspaceLimit</td><td>-1</td><td><span class="no">5</span></td><td>-1</td><td>-1</td><td>-1</td></tr>
+          <tr><td>embeddingProviders</td><td>all 6</td><td>inprocess, mock, ollama</td><td>+ voyage, openai</td><td>all 6</td><td>all 6</td></tr>
+          <tr><td>embeddingQuotaPerMonth</td><td>-1</td><td>-1</td><td>-1</td><td>-1</td><td>-1</td></tr>
+          <tr><td>messageHistoryLimit</td><td>-1</td><td>-1</td><td>-1</td><td>-1</td><td>-1</td></tr>
+          <tr><td>spawnAgents</td><td class="yes">yes</td><td class="yes">yes</td><td class="yes">yes</td><td class="yes">yes</td><td class="yes">yes</td></tr>
+          <tr><td>customSkills</td><td class="yes">yes</td><td><span class="no">no</span></td><td class="yes">yes</td><td class="yes">yes</td><td class="yes">yes</td></tr>
+          <tr><td>teamSkillLibrary</td><td class="yes">yes</td><td><span class="no">no</span></td><td><span class="no">no</span></td><td class="yes">yes</td><td class="yes">yes</td></tr>
+          <tr><td>cloudSync</td><td class="yes">yes</td><td><span class="no">no</span></td><td><span class="no">no</span></td><td class="yes">yes</td><td class="yes">yes</td></tr>
+          <tr><td>exportFormats</td><td>txt md pdf json</td><td><span class="no">txt md</span></td><td>txt md pdf json</td><td>txt md pdf json</td><td>txt md pdf json</td></tr>
+          <tr><td>teamMembersLimit</td><td>-1</td><td><span class="no">1</span></td><td><span class="no">1</span></td><td>-1</td><td>-1</td></tr>
+          <tr><td>sharedWorkspaces</td><td class="yes">yes</td><td><span class="no">no</span></td><td><span class="no">no</span></td><td class="yes">yes</td><td class="yes">yes</td></tr>
+          <tr><td>adminPanel</td><td class="yes">yes</td><td><span class="no">no</span></td><td><span class="no">no</span></td><td class="yes">yes</td><td class="yes">yes</td></tr>
+          <tr><td>auditLog</td><td>full</td><td><span class="no">none</span></td><td><span class="no">basic</span></td><td>full</td><td>full</td></tr>
+          <tr><td>selfHosted</td><td><span class="no">no</span></td><td><span class="no">no</span></td><td><span class="no">no</span></td><td class="yes">yes</td><td class="yes">yes</td></tr>
+          <tr><td>managedModelPool</td><td class="yes">yes</td><td><span class="no">no</span></td><td><span class="no">no</span></td><td class="yes">yes</td><td class="yes">yes</td></tr>
+          <tr><td>priorityModels</td><td class="yes">yes</td><td><span class="no">no</span></td><td><span class="no">no</span></td><td class="yes">yes</td><td class="yes">yes</td></tr>
+          <tr><td>kvarkCta</td><td>subtle</td><td>subtle</td><td>subtle</td><td><span class="no">active</span></td><td><span class="no">none</span></td></tr>
+          <tr><td>stripePriceId</td><td>null</td><td>null</td><td><code>STRIPE_PRICE_PRO</code></td><td><code>STRIPE_PRICE_TEAMS</code></td><td>null</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="sec-desc" style="margin-top:-4px">
+      <code>-1</code> means <strong>unlimited</strong>. <code>all 6</code> embedding providers =
+      <code>inprocess, mock, ollama, voyage, openai, litellm</code>. Tier ordering
+      (<code>TIER_ORDER</code>): <code>FREE 0, PRO 1, TEAMS 2, ENTERPRISE 3, TRIAL 3</code> — TRIAL ties
+      ENTERPRISE for capabilities but is time-limited.
+    </p>
+
+    <div class="sub-title">5. The Normal / Trusted / YOLO autonomy gate (Axis 2)</div>
+    <div class="card">
+<pre class="mermaid">
+flowchart TD
+  CALL["Tool call name plus args"] --> NC{"needsConfirmation?\nALWAYS_CONFIRM, connector write,\ndestructive bash"}
+  NC -- no --> RUN["Run silently"]
+  NC -- yes --> LVL{"AutonomyLevel"}
+
+  LVL -- normal --> PROMPT["Show approval prompt"]
+  LVL -- "trusted or yolo" --> CRIT{"isCriticalNeverAutopass?"}
+
+  CRIT -- yes --> PROMPT
+  CRIT -- no --> WHICH{"which level?"}
+
+  WHICH -- yolo --> AUTO["Auto-approve plus audit step"]
+  WHICH -- trusted --> TAP{"in TRUSTED_AUTOPASS\nor safe bash?"}
+  TAP -- yes --> AUTO
+  TAP -- no --> PROMPT
+</pre>
+    </div>
+
+    <div class="sub-title">6. How tier + trust combine (worked examples)</div>
+    <div class="card">
+<pre class="mermaid">
+flowchart TD
+  A["FREE user — connector_github_create_issue"] --> A1["Tier: no route gate"] --> A2["Trust: write so Normal prompts,\nTrusted gates, YOLO auto-passes"] --> A3["Runs after approval if connected"]
+  B["FREE user — Install marketplace pack"] --> B1["Tier: 403 needs PRO"] --> B3["Blocked, upgrade prompt"]
+  C["ENTERPRISE user — kvark_action"] --> C1["Tier: KVARK configured so registered"] --> C2["Trust: requires approval"] --> C3["Governed action runs with audit ref"]
+  D["Any tier, YOLO — bash sudo rm -rf /"] --> D1["Tier: none"] --> D2["Trust: isCriticalNeverAutopass"] --> D3["Still prompts even at YOLO"]
+  E["PRO user — install_capability starter-pack"] --> E1["Tier: none"] --> E2["Trust: ALWAYS_CONFIRM,\nclass from _riskLevel"] --> E3["Prompts, critical if high-risk"]
+</pre>
+    </div>
+  </section>
+
+  <!-- ============ DIAGRAM 06 ============ -->
+  <section class="diagram" id="d6">
+    <span class="anchor-spacer"></span>
+    <div class="sec-head">
+      <span class="num">06</span>
+      <h2>API Domain Overview</h2>
+      <span class="file">06-api-domains.md</span>
+    </div>
+    <p class="sec-desc">
+      The cross-cutting map of every HTTP/SSE/WebSocket surface the frontend talks to. Almost everything
+      lives in the <strong>Local Fastify Sidecar</strong> (loopback <code>:3333</code>, flat
+      <code>/api/*</code> paths, Bearer session-token + same-origin guards); a smaller set of
+      Clerk-authenticated routes live in the separate <strong>Cloud Server</strong> (<code>:3100</code>,
+      SaaS/team only). KVARK has no Fastify routes — it is reached only through the in-process
+      <code>KvarkClient</code>.
+    </p>
+
+    <div class="sub-title">Domains (mindmap, endpoint counts)</div>
+    <div class="card">
+<pre class="mermaid">
+mindmap
+  root(("Waggle API\n7 domains"))
+    ("Chat / Agents / Sessions\n~29 endpoints\nsec 03a")
+      ("POST /api/chat SSE + DELETE history\n2")
+      ("GET /api/history\n1")
+      ("Agent status / cost / model / active\n6")
+      ("Slash commands /api/commands/execute\n1")
+      ("Sessions CRUD + search + export + timeline\n8")
+      ("Agent groups CRUD + run\n5")
+      ("POST /api/agent/run one-shot SSE\n1")
+      ("Approvals SSE-paused gate\nshared with 03e")
+    ("Memory / Wiki / Harvest\n~38 endpoints\nsec 03b")
+      ("Memory frames search/CRUD/stats\n7")
+      ("Knowledge graph read /api/memory/graph\n1")
+      ("Wiki pages / compile / export\n8")
+      ("Harvest preview/commit/sources/runs SSE\n11")
+      ("Legacy import preview/commit\n2")
+      ("Identity record + mind context\n5")
+      ("Document version registry\n3")
+      ("GDPR data erase\n1")
+    ("Workspace / Team / Personas\n~76 endpoints\nsec 03c")
+      ("Workspaces lifecycle + storage + context\n16")
+      ("Workspace templates 15 built-in\n5")
+      ("Team remote-proxy + local CRUD\n25")
+      ("Personas catalog + create + generate\n5")
+      ("Settings / tier / cloud-sync / admin\n14")
+      ("User profile + style + brand\n7")
+      ("Pins per workspace\n4")
+    ("Marketplace / Skills / Connectors\n~60 endpoints\nsec 03d")
+      ("Marketplace search/install/sources PRO\n15")
+      ("Skills + plugins + hooks\n28")
+      ("Connectors connect/disconnect/health\n4")
+      ("AI-OS tool launcher detect/launch/hooks\n5")
+      ("OAuth 5 providers\n3")
+      ("Vault list/add/delete/reveal\n4")
+      ("LLM + search providers catalog\n1")
+    ("Evolution / Governance\n~39 endpoints\nsec 03e")
+      ("Evolution runs accept/reject/run SSE\n8")
+      ("Feedback thumbs + stats\n2")
+      ("Telemetry local-only\n6")
+      ("Compliance EU AI Act + templates + PDF\n12")
+      ("Cost dashboard + by-workspace TEAMS\n3")
+      ("Capabilities status + plugin toggles\n3")
+      ("Approvals inbox + grants\n5")
+    ("Real-time / Ops\n~52 endpoints\nsec 03f")
+      ("WaggleDance UI signals + stream SSE\n4")
+      ("WaggleDance v2 protocol bus\n2")
+      ("Audit events + stats + stream SSE\n3")
+      ("Cron schedules + trigger + history\n7")
+      ("Notifications stream SSE + store\n6")
+      ("Offline message queue\n5")
+      ("Backup / restore / metadata\n3")
+      ("Agent fleet spawn/pause/resume/kill\n5")
+      ("LiteLLM control + pricing\n4")
+      ("Local inference hardware/models/pull\n4")
+      ("Anthropic proxy /v1/chat/completions SSE\n2")
+      ("Filesystem browse local-only\n2")
+      ("Browser extension health\n1")
+      ("Telegram outbound push\n4")
+    ("Cloud / Billing / KVARK\n~35 surfaces\nsec 03g")
+      ("Sidecar inline auth/docs/health/ws\n6")
+      ("Stripe checkout/webhook/sync/portal\n4")
+      ("Cloud agents + groups Clerk\n10")
+      ("Cloud jobs queue Clerk\n4")
+      ("Cloud scout findings Clerk\n2")
+      ("Cloud suggestions Clerk\n2")
+      ("KVARK client methods no routes\n5")
+      ("WebSocket sidecar + cloud\n2")
+</pre>
+    </div>
+
+    <div class="sub-title">Domains as a graph (server split + auth model)</div>
+    <div class="card">
+<pre class="mermaid">
+graph LR
+  FE["Frontend SPA\napps/web served by sidecar"]
+
+  subgraph SIDECAR["Local Sidecar :3333 - Bearer session-token + same-origin"]
+    D1["Chat / Agents / Sessions\n~29"]
+    D2["Memory / Wiki / Harvest\n~38"]
+    D3["Workspace / Team / Personas\n~76"]
+    D4["Marketplace / Skills / Connectors\n~60"]
+    D5["Evolution / Governance\n~39"]
+    D6["Real-time / Ops SSE+WS\n~52"]
+    BILL["Stripe billing\n4"]
+    BOOT["Auth token / docs / health / ws\n6"]
+  end
+
+  subgraph CLOUD["Cloud Server :3100 - Clerk JWT - optional SaaS"]
+    C1["Agents + Groups\n10"]
+    C2["Jobs queue\n4"]
+    C3["Scout findings\n2"]
+    C4["Suggestions\n2"]
+    C5["Team WebSocket gateway\n1"]
+  end
+
+  KVARK["KVARK client\nno routes - vault-credentialed\n5 methods - TEAMS/ENTERPRISE"]
+
+  FE -->|"same-origin Bearer"| SIDECAR
+  FE -.->|"team mode Clerk JWT"| CLOUD
+  D5 -->|"agent tools"| KVARK
+  D3 -->|"teamServerUrl proxy"| CLOUD
+  BILL -->|"writes tier to config.json"| D3
+</pre>
+    </div>
+  </section>
+
+  <footer>
+    <p>
+      <b>Waggle OS</b> — Backend Map · Generated from the six diagram sources in
+      <code>docs/backend-map/DIAGRAMS/</code>. Mermaid renders client-side after the CDN loads;
+      if a diagram does not appear, allow the script at
+      <code>cdn.jsdelivr.net</code> and reload.
+    </p>
+    <p class="loading-note" id="render-status">Loading Mermaid from CDN…</p>
+  </footer>
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: "dark",
+    securityLevel: "loose",
+    themeVariables: {
+      darkMode: true,
+      background: "#08090c",
+      primaryColor: "#11141b",
+      primaryTextColor: "#e8e8ef",
+      primaryBorderColor: "#a78bfa",
+      lineColor: "#e5a000",
+      secondaryColor: "#1b2330",
+      tertiaryColor: "#0e1015",
+      fontFamily: "Inter, Segoe UI, system-ui, sans-serif",
+      fontSize: "14px"
+    },
+    flowchart: { useMaxWidth: true, htmlLabels: true, curve: "basis" },
+    sequence: { useMaxWidth: true, mirrorActors: false },
+    er: { useMaxWidth: true }
+  });
+
+  const status = document.getElementById("render-status");
+  mermaid.run()
+    .then(() => { if (status) status.textContent = "All diagrams rendered."; })
+    .catch((e) => {
+      if (status) status.textContent = "Mermaid render error: " + (e && e.message ? e.message : e);
+      console.error(e);
+    });
+</script>
+
+</body>
+</html>
