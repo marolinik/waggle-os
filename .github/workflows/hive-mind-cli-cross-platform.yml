@@ -72,11 +72,18 @@ jobs:
       - name: Run postinstall (bundles fix on win32, no-op POSIX)
         run: node packages/hive-mind-cli/postinstall.cjs
 
+      - name: Init hive-mind data dir (scaffold personal.mind for the smoke)
+        run: node packages/hive-mind-cli/dist/index.js init
+        env:
+          HIVE_MIND_DATA_DIR: ${{ runner.temp }}/waggle-ci-home
+
       - name: Smoke test — hive-mind-cli doctor (independent of upstream hook)
         run: node packages/hive-mind-cli/dist/index.js doctor
         env:
-          # Doctor command honors a custom WAGGLE_HOME for CI isolation.
-          WAGGLE_HOME: ${{ runner.temp }}/waggle-ci-home
+          # doctor + init resolve the mind via HIVE_MIND_DATA_DIR (the CLI never
+          # reads WAGGLE_HOME — that prior env was a no-op). Isolate to a CI temp
+          # dir; init above scaffolds personal.mind there so doctor finds it.
+          HIVE_MIND_DATA_DIR: ${{ runner.temp }}/waggle-ci-home
 
       - name: Doctor smoke result must be green (no quarantine, no ENOENT)
         run: |
