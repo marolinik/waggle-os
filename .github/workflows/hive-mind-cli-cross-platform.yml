@@ -70,7 +70,7 @@ jobs:
         run: cd packages/hive-mind-cli && npx tsc --build
 
       - name: Run postinstall (bundles fix on win32, no-op POSIX)
-        run: node packages/hive-mind-cli/postinstall.js
+        run: node packages/hive-mind-cli/postinstall.cjs
 
       - name: Smoke test — hive-mind-cli doctor (independent of upstream hook)
         run: node packages/hive-mind-cli/dist/index.js doctor
