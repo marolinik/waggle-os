@@ -310,3 +310,59 @@ export interface ConnectorHealth {
   error?: string;
   tokenExpiresAt?: string;
 }
+
+// === UX-Refactor vocabulary (PRD §15.2) ===
+// Domain literal unions for the workspace-first Agent Desktop refactor.
+// Single source of truth — the sidecar route layer and apps/web both import these
+// (no per-file union duplication; see docs/ux-refactor/deltas/shared-types-delta.md §0).
+export type WorkspaceType =
+  | 'project' | 'client' | 'research' | 'personal' | 'team' | 'organization';
+export type Scope = 'personal' | 'workspace' | 'team' | 'organization';
+/** 0-100 confidence score for a memory / provenance signal. */
+export type Confidence = number;
+
+export type MemoryKind =
+  | 'fact' | 'decision' | 'task' | 'preference'
+  | 'strategy' | 'learning' | 'goal' | 'entity';
+export type ArtifactKind =
+  | 'document' | 'presentation' | 'spreadsheet' | 'dashboard'
+  | 'research' | 'code' | 'media' | 'design' | 'other';
+export type AgentType = 'personal' | 'workspace' | 'team' | 'autonomous';
+export type AutonomyLevel = 'manual' | 'guided' | 'medium' | 'high';
+export type ExtensionType =
+  | 'skill' | 'connector' | 'mcp' | 'model' | 'template' | 'external_tool';
+
+/**
+ * PRD §15.3 workspace contract — the normalized shape the sidecar route layer
+ * exposes to the new UI. The PERSISTED struct lives in `@waggle/hive-mind-core`
+ * (`workspace-manager.ts` `WorkspaceConfig`, a superset carrying legacy fields).
+ * A route-layer normalizer (Phase 1) bridges the struct to this contract, filling
+ * defaults for pre-V2 workspaces (type from templateId/group, status 'active',
+ * updatedAt from created). Kept separate (not `extends`) so the additive fields on
+ * the persistence struct stay optional and existing workspace literals don't break.
+ */
+export interface WorkspaceConfigV2 {
+  id: string;
+  name: string;
+  description?: string;
+  type: WorkspaceType;
+  group: string;
+  icon?: string;
+  status: 'active' | 'paused' | 'archived';
+  model?: string;
+  personaId?: string;
+  templateId?: string;
+  tools?: string[];
+  skills?: string[];
+  agentIds?: string[];
+  connectorIds?: string[];
+  mcpIds?: string[];
+  storageType?: 'virtual' | 'local' | 'team';
+  storagePath?: string;
+  teamId?: string;
+  teamRole?: 'owner' | 'admin' | 'member' | 'viewer';
+  riskLevel?: 'minimal' | 'limited' | 'high-risk' | 'unacceptable';
+  created: string;
+  updatedAt: string;
+  lastActiveAt?: string;
+}

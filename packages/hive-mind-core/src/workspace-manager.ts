@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import type { WorkspaceType } from '@waggle/shared';
 type AIActRiskLevel = 'minimal' | 'limited' | 'high-risk' | 'unacceptable';
 
 export interface WorkspaceConfig {
@@ -55,6 +56,24 @@ export interface WorkspaceConfig {
   riskLevel?: AIActRiskLevel;
   /** ISO timestamp of the last risk classification change. Auto-stamped by WorkspaceManager. */
   riskClassifiedAt?: string;
+
+  // --- UX-Refactor V2 fields (PRD §15.3; additive + optional for back-compat) ---
+  /** Free-text description shown in the workspace header/cards. */
+  description?: string;
+  /** Workspace classification. Defaults derivable from templateId/group when absent. */
+  type?: WorkspaceType;
+  /** Lifecycle status. Treated as 'active' when absent. */
+  status?: 'active' | 'paused' | 'archived';
+  /** Agents bound to this workspace (ids). */
+  agentIds?: string[];
+  /** Connectors scoped to this workspace (ids). */
+  connectorIds?: string[];
+  /** MCP servers scoped to this workspace (ids). */
+  mcpIds?: string[];
+  /** ISO timestamp of the last config update. Auto-stamped by update(). */
+  updatedAt?: string;
+  /** ISO timestamp of the last activity (chat/agent run) in this workspace. */
+  lastActiveAt?: string;
 }
 
 export interface CreateWorkspaceOptions {
@@ -92,6 +111,12 @@ export interface CreateWorkspaceOptions {
   // --- Optimization fields (GEPA/Ax) ---
   optimizationEnabled?: boolean;
   optimizationBudget?: number;
+
+  // --- UX-Refactor V2 fields (PRD §15.3) ---
+  /** Free-text description shown in the workspace header/cards. */
+  description?: string;
+  /** Workspace classification (defaults derivable from templateId/group). */
+  type?: WorkspaceType;
 }
 
 interface WorkspacesMeta {
@@ -223,10 +248,11 @@ export class WorkspaceManager {
     const existing = this.get(id);
     if (!existing) throw new Error(`Workspace not found: ${id}`);
 
+    const now = new Date().toISOString();
     const stamped: Partial<WorkspaceConfig> =
       'riskLevel' in updates && updates.riskLevel !== existing.riskLevel
-        ? { ...updates, riskClassifiedAt: new Date().toISOString() }
-        : updates;
+        ? { ...updates, riskClassifiedAt: now, updatedAt: now }
+        : { ...updates, updatedAt: now };
 
     const updated = { ...existing, ...stamped };
     const configPath = path.join(this.workspacesDir, id, 'workspace.json');
