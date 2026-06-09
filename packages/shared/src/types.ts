@@ -423,3 +423,85 @@ export interface Command {
   workspaceId?: string;
   payload?: Record<string, unknown>;
 }
+
+// === UX-Refactor Memory entity (PRD §15.4 / shared-types-delta §3b) ===
+// The normalized contract the sidecar `memory.ts` route layer exposes to the
+// Memory Center. The PERSISTED row lives in `@waggle/hive-mind-core`
+// (`memory_frames`); a route-layer normalizer (Phase 2B) projects the row +
+// its JSON `metadata` blob into this shape. `kind/confidence/scope/status/
+// sourceId/tags/evidence/related*` ride `memory_frames.metadata` (added by the
+// idempotent ADD-COLUMN migration M1 in Phase 2B); the base columns map 1:1
+// (`content`, `created_at`, `last_accessed`, `importance`, `source`).
+
+/**
+ * Memory lifecycle state (PRD §12.4 / §14.4), reconciled with the Phase-2 gate
+ * ratifications (2026-06-09):
+ *  - `unreviewed` — freshly imported, pending non-blocking review (C33: import
+ *    commits immediately but lands unreviewed; Memory Center "needs review" filter).
+ *  - `archived`   — reversible soft-status (A8 Archive).
+ *  - `deprecated` — superseded (A8 Deprecate; mirrors the existing `importance`).
+ *  - `low_confidence` / `conflict` — surfaced for review; may be derived at
+ *    recall-time (S04 C10) rather than persisted.
+ *  - Delete is a HARD delete (A8) — there is no `trash`/tombstone state in v1.
+ */
+export type MemoryStatus =
+  | 'active' | 'unreviewed' | 'low_confidence' | 'conflict' | 'deprecated' | 'archived';
+
+export interface Memory {
+  id: string;
+  kind: MemoryKind;
+  title: string;
+  content: string;
+  scope: Scope;
+  workspaceId?: string;
+  teamId?: string | null;
+  /** Provenance class — maps from `memory_frames.source` (FrameSource). */
+  source: string;
+  sourceId?: string | null;
+  sourceUrl?: string | null;
+  /** 0-100; B2 heuristic at import (source-trust × adapter × dedup). */
+  confidence?: Confidence;
+  /** Reuses the substrate `Importance` union (`frames.ts`). */
+  importance: 'critical' | 'important' | 'normal' | 'temporary' | 'deprecated';
+  evidence?: string[];
+  tags?: string[];
+  relatedMemoryIds?: string[];
+  relatedArtifactIds?: string[];
+  status: MemoryStatus;
+  createdAt: string;
+  updatedAt?: string;
+  lastAccessedAt?: string;
+}
+
+// === UX-Refactor Artifact entity (PRD §15.6 / shared-types-delta §4a) ===
+// Artifacts are first-class produced OUTCOMES (decks/docs/sheets/dashboards/
+// research), NOT raw file attachments. Per the Phase-2 gate ratification (A6),
+// the backing store is a per-workspace `artifacts.json` index over the existing
+// StorageProvider (NO new SQLite table) — assigned a stable id + status/tags/
+// relations. Classification rule: an artifact is an EXPLICIT produced output
+// (generated doc or user-promoted file), not every ingested input.
+
+export type ArtifactStatus = 'draft' | 'ready' | 'in_review' | 'final' | 'archived';
+
+export interface Artifact {
+  id: string;
+  title: string;
+  kind: ArtifactKind;
+  workspaceId: string;
+  teamId?: string | null;
+  createdBy: string;
+  /** agent | user | import | automation */
+  source: string;
+  status: ArtifactStatus;
+  mimeType?: string;
+  /** StorageProvider path (virtual | local | team). */
+  storagePath?: string;
+  previewUrl?: string;
+  tags?: string[];
+  relatedMemoryIds?: string[];
+  relatedSessionIds?: string[];
+  relatedTaskIds?: string[];
+  relatedAgentIds?: string[];
+  createdAt: string;
+  updatedAt: string;
+}

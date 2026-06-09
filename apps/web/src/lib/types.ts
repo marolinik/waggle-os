@@ -6,11 +6,26 @@ import type {
   CommandResultType,
   CommandResult,
   CommandAction,
+  Memory as SharedMemory,
 } from '@waggle/shared';
 
 // Re-export the shared Command vocabulary so command-palette FE code can import
 // the whole contract from one place (lib/types) alongside the FE view-models.
 export type { CommandCategory, CommandResultType, CommandResult, CommandAction };
+
+// Re-export the UX-Refactor Memory/Artifact entity vocabulary (PRD §15.4/§15.6)
+// so Memory Center / Artifact Center FE code imports the contract from lib/types
+// alongside the view-models. The Artifact view-model is the shared shape verbatim
+// in v1 (no FE-derived fields yet); Memory adds a derived `relevance` below.
+export type {
+  Artifact,
+  ArtifactStatus,
+  ArtifactKind,
+  MemoryKind,
+  MemoryStatus,
+  Scope,
+  Confidence,
+} from '@waggle/shared';
 
 // NOTE: the stale `AppView` union (superseded by `AppId` in lib/dock-tiers.ts)
 // was removed in the UX-refactor Phase 0 IA cleanup — it had zero references.
@@ -241,6 +256,19 @@ export interface MemoryFrame {
   timestamp: string;
   workspaceId: string;
   metadata?: Record<string, unknown>;
+}
+
+/**
+ * Memory Center FE view-model (S04) — the shared `Memory` entity (PRD §15.4,
+ * carrying kind/confidence/scope/source/evidence/status) plus FE-derived display
+ * fields. The legacy `MemoryFrame` above is kept for back-compat with existing
+ * `/api/memory/frames` consumers; Memory Center components migrate onto `Memory`
+ * in Phase 2B. `MemoryKind` (PRD §15.2) is the canonical type vocabulary (B6) —
+ * do NOT widen `MemoryFrame.type`; map it via `lib/harvest-kind-map.ts`.
+ */
+export interface Memory extends SharedMemory {
+  /** FE-derived recall relevance for ranked lists (0-1); not persisted. */
+  relevance?: number;
 }
 
 export interface AgentStep {
