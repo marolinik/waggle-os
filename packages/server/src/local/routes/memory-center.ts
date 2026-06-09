@@ -32,6 +32,18 @@ const VALID_IMPORTANCE: readonly Importance[] = [
   'critical', 'important', 'normal', 'temporary', 'deprecated',
 ];
 
+// Defense-in-depth caps on free-form metadata (S04 review LOW). The 1 MiB Fastify
+// body limit already bounds the request, but capping here keeps the metadata blob
+// small and coerces non-string array members to strings (matching read-back).
+const MAX_TITLE_LEN = 500;
+const MAX_TAGS = 30;
+const MAX_TAG_LEN = 80;
+const MAX_EVIDENCE_ITEMS = 20;
+const MAX_EVIDENCE_ITEM_LEN = 2000;
+const clampStr = (s: unknown, max: number): string => String(s ?? '').slice(0, max);
+const clampStrArray = (a: unknown, maxItems: number, maxLen: number): string[] =>
+  Array.isArray(a) ? a.slice(0, maxItems).map((x) => clampStr(x, maxLen)) : [];
+
 const asKind = (v: unknown): MemoryKind | undefined =>
   MEMORY_KINDS.includes(v as MemoryKind) ? (v as MemoryKind) : undefined;
 const asStatus = (v: unknown): MemoryStatus | undefined =>
@@ -214,8 +226,8 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
       kind: asKind(b.kind) ?? 'fact',
       scope: asScope(b.scope) ?? (mind === 'workspace' ? 'workspace' : 'personal'),
       status: 'active' satisfies MemoryStatus,
-      ...(b.title ? { title: b.title } : {}),
-      ...(Array.isArray(b.tags) ? { tags: b.tags } : {}),
+      ...(b.title ? { title: clampStr(b.title, MAX_TITLE_LEN) } : {}),
+      ...(Array.isArray(b.tags) ? { tags: clampStrArray(b.tags, MAX_TAGS, MAX_TAG_LEN) } : {}),
       ...(typeof b.confidence === 'number' ? { confidence: b.confidence } : {}),
     };
     frames.setMetadata(frame.id, JSON.stringify(meta));
@@ -268,10 +280,10 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
       const merged = parseFrameMetadata(c.store.getById(frameId)?.metadata);
       if (b.kind !== undefined) merged.kind = b.kind;
       if (b.scope !== undefined) merged.scope = b.scope;
-      if (b.tags !== undefined) merged.tags = b.tags;
+      if (b.tags !== undefined) merged.tags = clampStrArray(b.tags, MAX_TAGS, MAX_TAG_LEN);
       if (b.status !== undefined) merged.status = b.status;
-      if (b.title !== undefined) merged.title = b.title;
-      if (b.evidence !== undefined) merged.evidence = b.evidence;
+      if (b.title !== undefined) merged.title = clampStr(b.title, MAX_TITLE_LEN);
+      if (b.evidence !== undefined) merged.evidence = clampStrArray(b.evidence, MAX_EVIDENCE_ITEMS, MAX_EVIDENCE_ITEM_LEN);
       merged.updatedAt = new Date().toISOString();
       c.store.setMetadata(frameId, JSON.stringify(merged));
 

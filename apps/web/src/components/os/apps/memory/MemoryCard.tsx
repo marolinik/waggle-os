@@ -45,7 +45,11 @@ export function MemoryCard({ memory, onClick, selected, onSelect, className }: M
         className,
       )}
       onClick={onClick}
-      role={onClick ? 'button' : undefined}
+      // No role="button": the card contains a focusable select-checkbox, and
+      // ARIA forbids focusable descendants inside a button. Keep it keyboard-
+      // operable (tabIndex + Enter/Space) with an explicit aria-label so AT
+      // announces a clean name, not the concatenated card text (S04 review MED).
+      aria-label={onClick ? (memory.title || memory.content.slice(0, 80)) : undefined}
       tabIndex={onClick ? 0 : undefined}
       onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
     >

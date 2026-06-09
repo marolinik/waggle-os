@@ -541,7 +541,11 @@ class LocalAdapter {
     if (typeof opts.limit === 'number') p.set('limit', String(opts.limit));
     const qs = p.toString();
     const res = await this.fetch(`/api/memory${qs ? `?${qs}` : ''}`);
-    const body = await res.json() as { results?: Memory[] };
+    // Surface HTTP errors to the caller's catch (MemoryCenterTab.load) instead
+    // of masking a backend failure as a clean empty list — this.fetch does not
+    // throw on non-2xx (S04 review MED).
+    if (!res.ok) throw new Error(`listMemories failed: ${res.status}`);
+    const body = await res.json() as { results?: Memory[]; count?: number };
     return body.results ?? [];
   }
 

@@ -157,6 +157,7 @@ export default function MemoryCenterTab() {
             <button
               key={s.value || 'all'}
               onClick={() => setStatus(s.value)}
+              aria-pressed={status === s.value}
               className={cn(
                 'px-2 py-0.5 rounded-full text-[11px] transition-colors border',
                 status === s.value ? 'border-primary/40 bg-primary/15 text-primary' : 'border-transparent bg-muted/50 text-muted-foreground hover:text-foreground',
@@ -170,6 +171,7 @@ export default function MemoryCenterTab() {
         <div className="flex flex-wrap gap-1">
           <button
             onClick={() => setKind('')}
+            aria-pressed={kind === ''}
             className={cn('px-1.5 py-0.5 rounded text-[11px] transition-colors', kind === '' ? 'bg-primary/20 text-primary' : 'bg-muted/50 text-muted-foreground hover:text-foreground')}
           >
             All kinds
@@ -178,6 +180,7 @@ export default function MemoryCenterTab() {
             <button
               key={k}
               onClick={() => setKind(kind === k ? '' : k)}
+              aria-pressed={kind === k}
               className={cn('px-1.5 py-0.5 rounded text-[11px] transition-colors', kind === k ? 'bg-primary/20 text-primary' : 'bg-muted/50 text-muted-foreground hover:text-foreground')}
             >
               {memoryKindLabel(k)}
@@ -199,14 +202,14 @@ export default function MemoryCenterTab() {
       {/* List */}
       <div className="flex-1 overflow-auto p-2.5">
         {loading && memories.length === 0 ? (
-          <div className="text-center py-12"><Loader2 className="w-6 h-6 text-muted-foreground/40 mx-auto mb-2 animate-spin" /><p className="text-xs text-muted-foreground">Loading memories…</p></div>
+          <div role="status" aria-live="polite" className="text-center py-12"><Loader2 className="w-6 h-6 text-muted-foreground/40 mx-auto mb-2 animate-spin" /><p className="text-xs text-muted-foreground">Loading memories…</p></div>
         ) : error ? (
-          <div className="text-center py-12">
+          <div role="alert" className="text-center py-12">
             <p className="text-xs text-destructive mb-2">{error}</p>
-            <button onClick={load} className="text-xs text-primary hover:underline">Retry</button>
+            <button onClick={() => load()} className="text-xs text-primary hover:underline">Retry</button>
           </div>
         ) : memories.length === 0 ? (
-          <div className="text-center py-12">
+          <div role="status" aria-live="polite" className="text-center py-12">
             <Brain className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
             <p className="text-xs text-muted-foreground">
               {q || kind || status || minConfidence ? 'No memories match these filters.' : 'No memories yet — import or capture some to get started.'}
@@ -270,8 +273,9 @@ export default function MemoryCenterTab() {
             </div>
 
             <div>
-              <label className="text-[11px] font-display font-semibold uppercase tracking-wide text-muted-foreground">Kind</label>
+              <label htmlFor="mc-draft-kind" className="text-[11px] font-display font-semibold uppercase tracking-wide text-muted-foreground">Kind</label>
               <select
+                id="mc-draft-kind"
                 value={draftKind}
                 onChange={(e) => setDraftKind(e.target.value as MemoryKind)}
                 className="mt-1 block w-full text-xs rounded-md border border-border bg-muted/40 px-2 py-1"
@@ -281,8 +285,9 @@ export default function MemoryCenterTab() {
             </div>
 
             <div>
-              <label className="text-[11px] font-display font-semibold uppercase tracking-wide text-muted-foreground">Content</label>
+              <label htmlFor="mc-draft-content" className="text-[11px] font-display font-semibold uppercase tracking-wide text-muted-foreground">Content</label>
               <textarea
+                id="mc-draft-content"
                 value={draftContent}
                 onChange={(e) => setDraftContent(e.target.value)}
                 rows={6}
