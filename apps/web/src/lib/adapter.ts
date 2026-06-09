@@ -754,6 +754,17 @@ class LocalAdapter {
     }
   }
 
+  /** Upsert the per-mind identity record (B8) — onboarding seeds this so the Home
+   *  cockpit greets the user by name. POST /api/identity is a single-row upsert. */
+  async setIdentity(body: {
+    name?: string; role?: string; department?: string;
+    personality?: string; capabilities?: string; system_prompt?: string;
+    workspace?: string;
+  }): Promise<IdentityResponse> {
+    const res = await this.fetch('/api/identity', { method: 'POST', body: JSON.stringify(body) });
+    return res.json();
+  }
+
   // --- Events ---
   async getEvents(workspaceId?: string): Promise<AgentStep[]> {
     const qs = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : '';
@@ -1895,8 +1906,15 @@ class LocalAdapter {
     return res.json();
   }
 
-  async harvestCommit(data: unknown, source: string): Promise<any> {
-    const res = await this.fetch('/api/harvest/commit', { method: 'POST', body: JSON.stringify({ data, source }) });
+  async harvestCommit(
+    data: unknown,
+    source: string,
+    opts?: { selectedIds?: Array<string | number>; resumeFromRun?: number },
+  ): Promise<any> {
+    const res = await this.fetch('/api/harvest/commit', {
+      method: 'POST',
+      body: JSON.stringify({ data, source, ...(opts ?? {}) }),
+    });
     return res.json();
   }
 
