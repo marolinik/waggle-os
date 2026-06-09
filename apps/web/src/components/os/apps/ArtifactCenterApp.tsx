@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Search, Loader2, FileText, Presentation, Table2, LayoutDashboard, Microscope,
   Code2, Image as ImageIcon, Palette, File, Archive, Trash2, RotateCcw, Save, Plus, Link2,
@@ -68,6 +68,9 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
   const [draftKind, setDraftKind] = useState<ArtifactKind>('document');
   const [related, setRelated] = useState<RelatedSearchResult | null>(null);
   const [relatedLoading, setRelatedLoading] = useState(false);
+  // Monotonic token so an out-of-order search-related response (artifact A
+  // resolving after B was opened) cannot render under the wrong artifact (F2).
+  const relatedReqRef = useRef(0);
 
   const [newTitle, setNewTitle] = useState('');
   const [newKind, setNewKind] = useState<ArtifactKind>('document');
@@ -101,11 +104,12 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
     setDraftKind(a.kind);
     setRelated(null);
     setRelatedLoading(true);
+    const reqId = ++relatedReqRef.current;
     adapter
       .searchRelatedArtifacts(a.title, a.workspaceId)
-      .then(setRelated)
-      .catch(() => setRelated(null))
-      .finally(() => setRelatedLoading(false));
+      .then((r) => { if (relatedReqRef.current === reqId) setRelated(r); })
+      .catch(() => { if (relatedReqRef.current === reqId) setRelated(null); })
+      .finally(() => { if (relatedReqRef.current === reqId) setRelatedLoading(false); });
   };
 
   const mutate = async (fn: () => Promise<unknown>, closeDrawer = false) => {
@@ -139,7 +143,9 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
   };
 
   const archive = (a: Artifact) => void mutate(() => adapter.archiveArtifact(a.id, a.workspaceId), true);
-  const unarchive = (a: Artifact) => void mutate(() => adapter.patchArtifact(a.id, { status: 'draft' }, a.workspaceId), true);
+  // Restore the pre-archive status the server stashed in prevStatus (A8 faithful
+  // reversibility), falling back to 'draft' only when none was recorded (F3).
+  const unarchive = (a: Artifact) => void mutate(() => adapter.patchArtifact(a.id, { status: a.prevStatus ?? 'draft' }, a.workspaceId), true);
   const remove = (a: Artifact) => {
     if (!window.confirm(`Delete this artifact permanently?\n\n"${a.title}"\n\nThis removes the record (the backing file, if any, is left in place). To keep it but hide it, use Archive instead.`)) return;
     void mutate(() => adapter.deleteArtifact(a.id, a.workspaceId), true);
@@ -233,7 +239,7 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
       <div className="flex-1 overflow-auto p-2.5">
         {loading && artifacts.length === 0 ? (
           <div role="status" aria-live="polite" className="text-center py-12"><Loader2 className="w-6 h-6 text-muted-foreground/40 mx-auto mb-2 animate-spin" /><p className="text-xs text-muted-foreground">Loading artifacts…</p></div>
-        ) : error ? (
+        ) : error && artifacts.length === 0 ? (
           <div role="alert" className="text-center py-12">
             <p className="text-xs text-destructive mb-2">{error}</p>
             <button onClick={() => load()} className="text-xs text-primary hover:underline">Retry</button>
@@ -246,7 +252,16 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
             </p>
           </div>
         ) : (
-          <ul className="space-y-1">
+          <>
+            {/* A transient refetch error must not wipe an already-populated list
+                (F5): show it as an inline banner instead of the full-pane error. */}
+            {error && (
+              <div role="alert" className="mb-2 flex items-center justify-between gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-1.5">
+                <span className="text-[11px] text-destructive">{error}</span>
+                <button onClick={() => load()} className="text-[11px] text-primary hover:underline shrink-0">Retry</button>
+              </div>
+            )}
+            <ul className="space-y-1">
             {artifacts.map((a) => {
               const { Icon, label } = KIND_META[a.kind];
               return (
@@ -267,7 +282,8 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
                 </li>
               );
             })}
-          </ul>
+            </ul>
+          </>
         )}
       </div>
 

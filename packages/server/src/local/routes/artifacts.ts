@@ -73,9 +73,14 @@ export const artifactRoutes: FastifyPluginAsync = async (server) => {
   const dataDir = server.localConfig.dataDir;
 
   /** Workspace ids to scan: the single requested one, else every workspace
-   *  (bounded). Never throws — a failed workspace list degrades to []. */
+   *  (bounded). A user-supplied `only` is path-segment-validated (it becomes a
+   *  directory component in the artifacts.json path) to block traversal; the
+   *  fan-out ids come from the trusted workspace manager. */
   function workspaceIds(only?: string): string[] {
-    if (only) return [only];
+    if (only) {
+      assertSafeSegment(only, 'workspaceId');
+      return [only];
+    }
     try {
       return server.workspaceManager.list().slice(0, MAX_WORKSPACE_FANOUT).map((w) => w.id);
     } catch {
@@ -113,7 +118,10 @@ export const artifactRoutes: FastifyPluginAsync = async (server) => {
     };
   }>('/api/artifacts', async (request) => {
     const { workspaceId, kind, status, tag, q, limit } = request.query;
-    const max = Math.min(limit ? parseInt(limit, 10) || MAX_LIST : MAX_LIST, MAX_LIST);
+    // Floor the lower bound too: a negative limit would otherwise reach
+    // slice(0, -n) and silently drop the newest n rows (review F1).
+    const parsedLimit = limit ? parseInt(limit, 10) : MAX_LIST;
+    const max = Math.min(Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : MAX_LIST, MAX_LIST);
 
     let results = collectArtifacts(workspaceId);
     if (kind) results = results.filter((a) => a.kind === kind);
@@ -126,7 +134,7 @@ export const artifactRoutes: FastifyPluginAsync = async (server) => {
       const ql = q.toLowerCase();
       results = results.filter((a) => artifactMatches(a, ql));
     }
-    results.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    results.sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''));
     const page = results.slice(0, max);
     return { results: page, count: page.length };
   });
@@ -148,7 +156,7 @@ export const artifactRoutes: FastifyPluginAsync = async (server) => {
     // artifacts
     const artifacts = collectArtifacts(only)
       .filter((a) => artifactMatches(a, ql))
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
       .slice(0, PER_SOURCE_CAP);
 
     // memories — personal + (scoped|all) workspace minds, via the shared normalizer.
@@ -321,6 +329,13 @@ export const artifactRoutes: FastifyPluginAsync = async (server) => {
       ...(b.relatedTaskIds !== undefined ? { relatedTaskIds: clampStrArray(b.relatedTaskIds, MAX_RELATED, MAX_REL_ID_LEN) } : {}),
       ...(b.relatedAgentIds !== undefined ? { relatedAgentIds: clampStrArray(b.relatedAgentIds, MAX_RELATED, MAX_REL_ID_LEN) } : {}),
     };
+    // A8 reversibility: on Archive, stash the pre-archive status so Unarchive can
+    // restore the real prior lifecycle state; clear it when leaving the archive.
+    if (b.status !== undefined) {
+      const cur = owner.artifact.status;
+      if (b.status === 'archived' && cur !== 'archived') patch.prevStatus = cur;
+      else if (b.status !== 'archived' && cur === 'archived') patch.prevStatus = undefined;
+    }
     const updated = patchArtifactInWorkspace(dataDir, owner.workspaceId, request.params.id, patch);
     if (!updated) return reply.status(404).send({ error: 'Artifact not found' });
 

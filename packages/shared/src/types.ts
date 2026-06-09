@@ -493,6 +493,9 @@ export interface Artifact {
   /** agent | user | import | automation */
   source: string;
   status: ArtifactStatus;
+  /** Pre-archive status, stashed by the server on Archive so Unarchive restores
+   *  the prior lifecycle state faithfully (A8 reversibility), not a flat 'draft'. */
+  prevStatus?: ArtifactStatus;
   mimeType?: string;
   /** StorageProvider path (virtual | local | team). */
   storagePath?: string;

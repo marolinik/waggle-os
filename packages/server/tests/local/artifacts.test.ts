@@ -153,6 +153,30 @@ describe('Artifact Center routes (Phase 2C)', () => {
     expect((await server.inject({ method: 'GET', url: '/api/artifacts/art_unknown' })).statusCode).toBe(404);
   });
 
+  it('clamps a negative limit instead of dropping the newest rows (F1)', async () => {
+    await createArtifact({ title: 'A1', kind: 'document', workspaceId: 'ws-test' });
+    await createArtifact({ title: 'A2', kind: 'document', workspaceId: 'ws-test' });
+    const res = await server.inject({ method: 'GET', url: '/api/artifacts?limit=-1' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().count).toBe(2); // not 1 — slice(0,-1) would drop the newest
+  });
+
+  it('Archive stashes prevStatus so the prior status is restorable (A8, F3)', async () => {
+    const a = await createArtifact({ title: 'Final deck', kind: 'presentation', workspaceId: 'ws-test', status: 'final' });
+    expect(a.status).toBe('final');
+    const arch = await server.inject({ method: 'PATCH', url: `/api/artifacts/${a.id}`, payload: { status: 'archived' } });
+    expect(arch.json().status).toBe('archived');
+    expect(arch.json().prevStatus).toBe('final');
+    const restore = await server.inject({ method: 'PATCH', url: `/api/artifacts/${a.id}`, payload: { status: 'final' } });
+    expect(restore.json().status).toBe('final');
+    expect(restore.json().prevStatus).toBeUndefined(); // cleared on leaving archive
+  });
+
+  it('rejects a path-traversal workspaceId on list (assertSafeSegment → 400)', async () => {
+    const url = '/api/artifacts?workspaceId=' + encodeURIComponent('../../etc');
+    expect((await server.inject({ method: 'GET', url })).statusCode).toBe(400);
+  });
+
   it('search-related requires q', async () => {
     expect((await server.inject({ method: 'GET', url: '/api/artifacts/search-related' })).statusCode).toBe(400);
   });
