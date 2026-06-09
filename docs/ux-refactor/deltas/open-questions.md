@@ -26,7 +26,35 @@ unblocked; these are now locked decisions alongside the execution-model + full-s
 - **B4** `/api/*` → alias PRD vocabulary onto existing routes (command / automations / connector-revoke); do not rename.
 - **B8** Identity → onboarding writes profile **and** seeds the `identity` table.
 
-Phase-2 blockers (A6, A8, B2, B6, A3, C33) and Phase 3+ items remain **pending** founder ratification.
+## ✅ Founder Ratifications — Phase 2 gate (2026-06-09 S2)
+
+The **Phase-2 blockers are RATIFIED as recommended** (founder, 2026-06-09), except **C33** which is
+**held for discussion** (see note below). Locked Phase-2 decisions:
+
+- **A6** Artifact storage → per-workspace `artifacts.json` index over the existing StorageProvider;
+  artifact = explicit produced output (not every ingested input). No `.mind` migration.
+- **A8** Memory retention → soft-status in `metadata` (Archive = reversible; Deprecate = existing
+  `importance`); **Delete = hard delete behind a scope-and-consequence confirmation** (PRD J20).
+  ≤1 additive migration.
+- **B2** Confidence → cheap heuristic at preview (source-trust × adapter-type × dedup), persisted in
+  `metadata` only if it becomes a queryable filter; LLM scoring reserved for the standing J08 queue.
+- **B6** `MemoryKind` → PRD §15.2 canonical in `@waggle/shared`; pure harvest + display-category mapping
+  helpers. Drop FE `event`/`insight` drift.
+- **A3** Memory graph tab → **ship in v1** (substrate already renders).
+
+- **C33** Import↔Review commit split → **RESOLVED to the middle path** (founder, 2026-06-09 S2, after
+  discussion). **Commit-as-unreviewed, non-blocking review:** onboarding Import commits immediately (memory
+  feels alive on first run), but frames land with `status:'unreviewed'` + the B2 confidence score; Review is
+  a **non-blocking** curation surface (Memory Center "needs review" filter + the standing J08 queue), NOT a
+  blocking onboarding step. Reads PRD "nothing imports without review/approval" (646/1207) as *nothing is
+  trusted/surfaced until reviewed*, not *nothing is written*. Rationale: importing one's own memories is
+  additive + reversible (A8 archive/delete), so a blocking first-run gate would be friction in the wrong
+  place (founder principle: friction reserved for irreversible/destructive actions). Reuses A8 soft-status
+  + B2 confidence — no extra migration. Supersedes the original §C C33 "blocking split" recommendation.
+
+---
+
+Phase 3+ items remain **pending** founder ratification.
 
 ## §A — PRD §23 Open Questions (the canonical 8)
 
