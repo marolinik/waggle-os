@@ -17,7 +17,10 @@ import type {
   Connector, Settings, StreamEvent, KGNode, KGEdge,
   ModelPricing, WaggleSignal, FileEntry, WorkspaceTemplate,
   TimelineEvent,
+  HomeBriefing, OvernightSummary, QuickCaptureInput,
+  WorkspaceStateView, WorkspaceActivityEvent,
 } from './types';
+import type { Command, CommandResult } from '@waggle/shared';
 
 /**
  * CC Sesija A §2.2 — map adapter `MemoryFrame.importance` (number 1-4) to the
@@ -276,6 +279,38 @@ class LocalAdapter {
 
   async getWorkspaceFiles(workspaceId: string): Promise<unknown[]> {
     const res = await this.fetch(`/api/workspaces/${workspaceId}/files`);
+    return res.json();
+  }
+
+  // --- Workspace Desktop (UX-Refactor Phase 1, S02) ---
+  // Thin typed wrappers over the new sidecar routes. The routes do not exist
+  // yet (built by S02's backend leaf); these compile as fetch wrappers.
+  async getWorkspaceState(id: string): Promise<WorkspaceStateView> {
+    const res = await this.fetch(`/api/workspaces/${id}/state`);
+    return res.json();
+  }
+
+  async getWorkspaceActivity(id: string, limit = 50): Promise<{ events: WorkspaceActivityEvent[] }> {
+    const res = await this.fetch(`/api/workspaces/${id}/activity?limit=${limit}`);
+    return res.json();
+  }
+
+  // --- Home Cockpit (UX-Refactor Phase 1, S01) ---
+  async getHomeBriefing(): Promise<HomeBriefing> {
+    const res = await this.fetch('/api/home/briefing');
+    return res.json();
+  }
+
+  async getHomeOvernight(since?: string): Promise<OvernightSummary> {
+    const qs = since ? `?since=${encodeURIComponent(since)}` : '';
+    const res = await this.fetch(`/api/home/overnight${qs}`);
+    return res.json();
+  }
+
+  async quickCapture(input: QuickCaptureInput): Promise<{ frameId: string }> {
+    const res = await this.fetch('/api/quick-capture', {
+      method: 'POST', body: JSON.stringify(input),
+    });
     return res.json();
   }
 
@@ -1345,6 +1380,34 @@ class LocalAdapter {
   async executeCommand(command: string, workspaceId: string): Promise<unknown> {
     const res = await this.fetch('/api/commands/execute', {
       method: 'POST', body: JSON.stringify({ command, workspaceId }),
+    });
+    return res.json();
+  }
+
+  // --- Command Center / Win+K (UX-Refactor Phase 1, S03) ---
+  // `/api/command/*` (singular) is net-new and federates over existing
+  // substrate. `commandExecute` posts to the singular execute alias (B4:
+  // alias onto the existing handler — the plural /api/commands/execute is
+  // NOT renamed). Routes built by S03's backend leaf; thin wrappers here.
+  async commandSearch(q: string, scope?: string): Promise<{ results: CommandResult[] }> {
+    const qs = scope ? `?q=${encodeURIComponent(q)}&scope=${encodeURIComponent(scope)}` : `?q=${encodeURIComponent(q)}`;
+    const res = await this.fetch(`/api/command/search${qs}`);
+    return res.json();
+  }
+
+  async commandRecent(): Promise<{ recent: CommandResult[] }> {
+    const res = await this.fetch('/api/command/recent');
+    return res.json();
+  }
+
+  async commandSuggestions(): Promise<{ suggestions: CommandResult[] }> {
+    const res = await this.fetch('/api/command/suggestions');
+    return res.json();
+  }
+
+  async commandExecute(payload: Command): Promise<{ ok: boolean; result?: unknown }> {
+    const res = await this.fetch('/api/command/execute', {
+      method: 'POST', body: JSON.stringify(payload),
     });
     return res.json();
   }

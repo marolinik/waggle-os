@@ -1,6 +1,16 @@
 // Waggle core types matching the architecture document
 
-import type { WorkspaceType } from '@waggle/shared';
+import type {
+  WorkspaceType,
+  CommandCategory,
+  CommandResultType,
+  CommandResult,
+  CommandAction,
+} from '@waggle/shared';
+
+// Re-export the shared Command vocabulary so command-palette FE code can import
+// the whole contract from one place (lib/types) alongside the FE view-models.
+export type { CommandCategory, CommandResultType, CommandResult, CommandAction };
 
 // NOTE: the stale `AppView` union (superseded by `AppId` in lib/dock-tiers.ts)
 // was removed in the UX-refactor Phase 0 IA cleanup — it had zero references.
@@ -85,6 +95,110 @@ export interface WorkspaceContext {
   welcomeMessage?: string;
   crossWorkspaceHints?: string[];
   stats?: { memoryCount: number; sessionCount: number; fileCount: number };
+}
+
+// ── UX-Refactor Phase 1 view-models ──────────────────────────────────────
+// FE return shapes for the new Home Cockpit (S01), Workspace Desktop (S02),
+// and Command Center (S03) adapter methods. Net-new vs the current types
+// (no Home/Overnight/QuickCapture/WorkspaceState mirror existed).
+// Sources: gap-cards/S01 §6, S02 §6, S03 §6; backend-api-delta Phase 1.
+
+/** One ranked workspace card in the Home "You were working on" panel (S01 §6). */
+export interface RecentWorkspaceCard {
+  id: string;
+  name: string;
+  group: string;
+  summary?: string;
+  lastActive: string;
+  pendingCount: number;
+  continueSessionId?: string;
+}
+
+/** A Home "Suggested next action" — routes into its workspace (S01 §6). */
+export interface SuggestedAction {
+  label: string;
+  workspaceId: string;
+  sessionId?: string;
+  kind: string;
+}
+
+/** A Home "Up next" row (upcoming event/task/schedule) (S01 §6). */
+export interface UpNextItem {
+  id: string;
+  label: string;
+  workspaceId?: string;
+  at?: string;
+  kind: 'event' | 'task' | 'schedule';
+}
+
+/** `GET /api/home/briefing` — the daily cross-workspace briefing (S01 §6). */
+export interface HomeBriefing {
+  greeting: string;
+  userName?: string;
+  date: string;
+  recentWorkspaces: RecentWorkspaceCard[];
+  suggestedActions: SuggestedAction[];
+  upNext: UpNextItem[];
+  activeModels?: string[];
+  isFirstRun: boolean;
+}
+
+/** One overnight failure row, expandable to the Automation Center (S01 §6). */
+export interface OvernightFailure {
+  id: string;
+  label: string;
+  automationId?: string;
+  error: string;
+  at: string;
+}
+
+/** `GET /api/home/overnight` — since-last-login activity summary (S01 §6). */
+export interface OvernightSummary {
+  consolidated: number;
+  artifactsCreated: number;
+  automationsCompleted: number;
+  failures: OvernightFailure[];
+  window?: { from: string; to: string };
+}
+
+/** `POST /api/quick-capture` request body (S01 §6, backend-api-delta 1a). */
+export interface QuickCaptureInput {
+  kind: 'note' | 'task' | 'link' | 'file';
+  content: string;
+  workspaceId?: string;
+}
+
+/** One classified work item in a WorkspaceState bucket (S02 §6). */
+export interface WorkspaceStateItem {
+  id: string;
+  content: string;
+  date?: string;
+  freshness?: 'fresh' | 'aging' | 'stale';
+}
+
+/**
+ * FE mirror of the server `WorkspaceState` (workspace-state.ts:38-55), the
+ * `GET /api/workspaces/:id/state` body that feeds the Overview + Tasks tabs
+ * (S02 §6). `pending` + `blocked` seed the Tasks list.
+ */
+export interface WorkspaceStateView {
+  active: WorkspaceStateItem[];
+  openQuestions: WorkspaceStateItem[];
+  pending: WorkspaceStateItem[];
+  blocked: WorkspaceStateItem[];
+  completed: WorkspaceStateItem[];
+  stale: WorkspaceStateItem[];
+  recentDecisions: WorkspaceStateItem[];
+  nextActions: SuggestedAction[];
+}
+
+/** One row in the per-workspace activity feed (S02 §5, `/activity`). */
+export interface WorkspaceActivityEvent {
+  id: string | number;
+  ts: string;
+  type: string;
+  actor?: string;
+  summary: string;
 }
 
 export interface ChatMessage {

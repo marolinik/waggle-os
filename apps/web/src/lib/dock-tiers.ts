@@ -10,7 +10,10 @@ export type AppId =
   | 'settings' | 'vault' | 'profile'
   | 'waggle-dance' | 'files' | 'agents'
   | 'scheduled-jobs' | 'marketplace' | 'voice' | 'room' | 'approvals' | 'timeline'
-  | 'backup' | 'telemetry' | 'governance' | 'launcher';
+  | 'backup' | 'telemetry' | 'governance' | 'launcher'
+  // UX-Refactor Phase 1 (S02): single-workspace runtime surface, opened from
+  // Home / workspace selection (not a dock entry — A1 fixed-layout window).
+  | 'workspace-desktop';
 
 export type UserTier = 'simple' | 'professional' | 'power' | 'admin';
 

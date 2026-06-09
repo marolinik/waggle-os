@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   MessageSquare, LayoutDashboard, Settings, Brain,
   Activity, Package, Radio, Zap, FolderOpen, Bot, Lock, UserCircle, Plug,
-  Clock, Store, Mic, Users, Shield,
+  Clock, Store, Mic, Users, Shield, Sparkles,
 } from "lucide-react";
 import type { UserTier } from "@/lib/dock-tiers";
 import type { AppId } from "@/lib/dock-tiers";
@@ -19,6 +19,8 @@ import AppWindow from "./AppWindow";
 import AppErrorBoundary from "./ErrorBoundary";
 import ChatWindowInstance from "./apps/ChatWindowInstance";
 import DashboardApp from "./apps/DashboardApp";
+import HomeCockpit from "./apps/HomeCockpit";
+import WorkspaceDesktopApp from "./apps/WorkspaceDesktopApp";
 import SettingsApp from "./apps/SettingsApp";
 import VaultApp from "./apps/VaultApp";
 import UserProfileApp from "./apps/UserProfileApp";
@@ -41,7 +43,7 @@ import TimelineApp from "./apps/TimelineApp";
 import BackupApp from "./apps/BackupApp";
 import TelemetryApp from "./apps/TelemetryApp";
 import TeamGovernanceApp from "./apps/TeamGovernanceApp";
-import GlobalSearch from "./overlays/GlobalSearch";
+import CommandCenter from "./overlays/CommandCenter";
 import CreateWorkspaceDialog from "./overlays/CreateWorkspaceDialog";
 import PersonaSwitcher from "./overlays/PersonaSwitcher";
 import SpawnAgentDialog from "./overlays/SpawnAgentDialog";
@@ -79,6 +81,9 @@ const appConfig: Record<string, { title: string; icon: React.ReactNode; pos: { x
   // UX-Refactor: 'home' is the canonical launch surface (interim → DashboardApp; S01 swaps in HomeCockpit).
   "home": { title: "Home", icon: <LayoutDashboard className="w-3.5 h-3.5 text-sky-400" />, pos: { x: 100, y: 60 }, size: { w: "640px", h: "520px" } },
   "dashboard": { title: "Dashboard", icon: <LayoutDashboard className="w-3.5 h-3.5 text-sky-400" />, pos: { x: 100, y: 60 }, size: { w: "560px", h: "440px" } },
+  // UX-Refactor Phase 1 (S02): the single-workspace runtime. Sized large (A1
+  // fixed layout for a maximized window — header + tab bar + canvas + right rail).
+  "workspace-desktop": { title: "Workspace", icon: <Sparkles className="w-3.5 h-3.5 text-primary" />, pos: { x: 80, y: 40 }, size: { w: "960px", h: "640px" } },
   "settings": { title: "Settings", icon: <Settings className="w-3.5 h-3.5 text-muted-foreground" />, pos: { x: 250, y: 80 }, size: { w: "560px", h: "460px" } },
   "memory": { title: "Memory", icon: <Brain className="w-3.5 h-3.5 text-amber-300" />, pos: { x: 120, y: 50 }, size: { w: "640px", h: "460px" } },
   "events": { title: "Events", icon: <Activity className="w-3.5 h-3.5 text-cyan-400" />, pos: { x: 200, y: 70 }, size: { w: "580px", h: "420px" } },
@@ -309,16 +314,53 @@ const Desktop = () => {
           />
         );
       }
-      // 'home' is the canonical launch route; renders the interim Home surface
-      // (DashboardApp) until S01 builds HomeCockpit. 'dashboard' kept for
+      // UX-Refactor Phase 1 (S01): 'home' is the canonical launch route and now
+      // renders the HomeCockpit. 'dashboard' is kept on DashboardApp for
       // back-compat with persisted window state.
       case 'home':
+        return (
+          <HomeCockpit
+            onContinue={(workspaceId, sessionId) => {
+              selectWorkspace(workspaceId);
+              const ws = workspaces.find(w => w.id === workspaceId);
+              // sessionId currently resumes via the workspace's existing chat
+              // window (openChatForWorkspace reuses it); a session-targeted
+              // restore lands when the chat runtime accepts a sessionId seed.
+              void sessionId;
+              wm.openChatForWorkspace(workspaceId, ws?.name);
+            }}
+            onOpenWorkspaceDesktop={(workspaceId) => {
+              selectWorkspace(workspaceId);
+              const ws = workspaces.find(w => w.id === workspaceId);
+              wm.openWorkspaceDesktop(workspaceId, ws?.name);
+            }}
+            onCreateWorkspace={() => ov.setShowCreateWorkspace(true)}
+          />
+        );
       case 'dashboard':
         return (
           <DashboardApp workspaces={workspaces} activeWorkspaceId={activeWorkspaceId}
             onSelectWorkspace={(id) => { selectWorkspace(id); const ws = workspaces.find(w => w.id === id); wm.openChatForWorkspace(id, ws?.name); }}
             onCreateWorkspace={() => ov.setShowCreateWorkspace(true)} />
         );
+      // UX-Refactor Phase 1 (S02): the per-workspace runtime. The window carries
+      // the target workspaceId/Name (stamped by wm.openWorkspaceDesktop); fall
+      // back to the active workspace if a restored window lost its binding.
+      case 'workspace-desktop': {
+        const wsId = win.workspaceId || activeWorkspaceId || 'local-default';
+        const ws = workspaces.find(w => w.id === wsId);
+        return (
+          <WorkspaceDesktopApp
+            workspaceId={wsId}
+            workspaceName={win.workspaceName ?? ws?.name ?? 'Workspace'}
+            onOpenChat={(workspaceId) => {
+              selectWorkspace(workspaceId);
+              const target = workspaces.find(w => w.id === workspaceId);
+              wm.openChatForWorkspace(workspaceId, target?.name);
+            }}
+          />
+        );
+      }
       case 'settings': return <SettingsApp />;
       case 'vault': return <VaultApp />;
       case 'profile': return <UserProfileApp />;
@@ -480,7 +522,18 @@ const Desktop = () => {
         onSpawnAgent={() => ov.setShowSpawnAgent(true)} waggleBadgeCount={waggleUnacknowledged} />
 
       {/* Overlays */}
-      <GlobalSearch open={ov.showGlobalSearch} onClose={() => ov.setShowGlobalSearch(false)} onNavigate={handleSearchNavigate} />
+      {/* UX-Refactor Phase 1 (S00/S03): the Win+K palette is now the Command
+          Center. Open/close + Win+K toggle reuse the same useOverlayState +
+          useKeyboardShortcuts wiring (showGlobalSearch). GlobalSearch.tsx is
+          retained on disk for rollback. onNavigate keeps the deep-link path;
+          execute/permission flow is handled inside the overlay (C9). */}
+      <CommandCenter
+        open={ov.showGlobalSearch}
+        onClose={() => ov.setShowGlobalSearch(false)}
+        onNavigate={handleSearchNavigate}
+        onExecute={() => { /* post-success hook — overlay closes itself; refresh feeds lazily */ }}
+        workspaceId={activeWorkspaceId ?? undefined}
+      />
       <CreateWorkspaceDialog open={ov.showCreateWorkspace} onClose={() => ov.setShowCreateWorkspace(false)} onCreate={createWorkspace} />
       {(() => {
         // Phase A.2: PersonaSwitcher operates on the focused chat window's
