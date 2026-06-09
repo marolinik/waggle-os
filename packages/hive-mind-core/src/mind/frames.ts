@@ -32,6 +32,11 @@ export interface MemoryFrame {
   access_count: number;
   created_at: string;
   last_accessed: string;
+  /** UX-Refactor Phase 2B: JSON blob for Memory Center provenance/classification
+   *  (kind/confidence/scope/status/sourceId/sourceUrl/tags/evidence/related*).
+   *  Always present at the column level (NOT NULL DEFAULT '{}'); typed optional
+   *  so pre-migration callers and literal constructions stay back-compatible. */
+  metadata?: string;
 }
 
 export interface ReconstructedState {
@@ -312,6 +317,21 @@ export class FrameStore {
     // Update vector index if exists
     try { raw.prepare('DELETE FROM memory_frames_vec WHERE rowid = ?').run(id); } catch { /* vec table may not exist */ }
 
+    return this.getById(id);
+  }
+
+  /**
+   * UX-Refactor Phase 2B: replace a frame's `metadata` JSON blob (Memory Center
+   * kind/confidence/scope/status/tags/evidence/related*). Low-level writer — the
+   * caller passes a fully-formed JSON string; parse/merge semantics live in the
+   * route layer (`memory.ts`). Does NOT touch FTS/vector indexes (metadata is not
+   * full-text searchable). Returns the updated frame, or undefined if the id is
+   * unknown.
+   */
+  setMetadata(id: number, metadata: string): MemoryFrame | undefined {
+    const raw = this.db.getDatabase();
+    if (!this.getById(id)) return undefined;
+    raw.prepare('UPDATE memory_frames SET metadata = ? WHERE id = ?').run(metadata, id);
     return this.getById(id);
   }
 

@@ -268,6 +268,47 @@ export function useWindowManager(workspaces: Workspace[], opts: UseWindowManager
   }, [workspaces, defaultAutonomy]);
 
   /**
+   * UX-Refactor Phase 1 (S02): open the Workspace Desktop for a workspace.
+   *
+   * A single fixed-layout desktop window is the model (A1) — there is one
+   * 'workspace-desktop' window at a time. If it is already open, it is
+   * retargeted to the requested workspace and re-focused rather than spawning
+   * a second window; otherwise a new one is created stamped with the workspace
+   * context the WorkspaceDesktopApp reads (workspaceId + workspaceName).
+   */
+  const openWorkspaceDesktop = useCallback((
+    workspaceId: string,
+    workspaceName?: string,
+  ) => {
+    const ws = workspaces.find(w => w.id === workspaceId);
+    const name = workspaceName ?? ws?.name;
+    // React 19: capture the chosen instanceId and focus it AFTER the updater
+    // returns, rather than calling setFocusedInstanceId inside setWindows.
+    let focusId = '';
+    setWindows(prev => {
+      const existing = prev.find(w => w.appId === 'workspace-desktop');
+      if (existing) {
+        const z = nextZ();
+        focusId = existing.instanceId;
+        return prev.map(w => w.instanceId === existing.instanceId
+          ? { ...w, workspaceId, workspaceName: name, zIndex: z, minimized: false }
+          : w);
+      }
+      const offset = cascadeCounter.current;
+      cascadeCounter.current = (cascadeCounter.current + 1) % 10;
+      const z = nextZ();
+      const instanceId = `workspace-desktop-${Date.now()}`;
+      focusId = instanceId;
+      return [...prev, {
+        instanceId, appId: 'workspace-desktop' as AppId,
+        workspaceId, workspaceName: name,
+        zIndex: z, minimized: false, cascadeOffset: offset,
+      }];
+    });
+    if (focusId) setFocusedInstanceId(focusId);
+  }, [workspaces]);
+
+  /**
    * Phase A.2: update the persona on a specific window without touching
    * the underlying workspace record. Used by PersonaSwitcher and by
    * ChatWindowInstance's inline persona picker.
@@ -411,7 +452,7 @@ export function useWindowManager(workspaces: Workspace[], opts: UseWindowManager
 
   return {
     windows, focusedInstanceId,
-    openApp, openChatForWorkspace, closeApp, minimizeApp, focusWindow,
+    openApp, openChatForWorkspace, openWorkspaceDesktop, closeApp, minimizeApp, focusWindow,
     setWindowPersona, setWindowAutonomy,
     closeTopWindow, minimizeTopWindow,
     openAppIds, minimizedAppIds, getWindowTitle,

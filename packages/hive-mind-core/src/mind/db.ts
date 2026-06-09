@@ -123,6 +123,22 @@ export class MindDB {
       );
     }
 
+    // UX-Refactor Phase 2B: Add 'metadata' column to memory_frames. JSON blob
+    // backing the Memory Center (kind/confidence/scope/status/sourceId/tags/
+    // evidence/related*; PRD §15.4). Required by the Phase-2 gate ratifications
+    // A8 (reversible Archive status) + C33 (persisted 'unreviewed' status) +
+    // B2 (heuristic confidence) — all need per-frame state that survives a
+    // restart. Idempotent ADD COLUMN, same pattern as 'source' above; existing
+    // rows default to '{}'.
+    const hasMetadataCol = this.db.prepare(
+      "SELECT COUNT(*) as cnt FROM pragma_table_info('memory_frames') WHERE name='metadata'"
+    ).get() as { cnt: number };
+    if (hasMetadataCol.cnt === 0) {
+      this.db.exec(
+        "ALTER TABLE memory_frames ADD COLUMN metadata TEXT NOT NULL DEFAULT '{}'"
+      );
+    }
+
     // 2026-04-15: EU AI Act Art. 12.1(a) — record inputs and outputs, not just
     // token counts (review Critical #3 from cowork/Code-Review_Compliance).
     const hasInputText = this.db.prepare(

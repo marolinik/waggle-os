@@ -58,6 +58,11 @@ CREATE TABLE IF NOT EXISTS memory_frames (
   access_count INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   last_accessed TEXT NOT NULL DEFAULT (datetime('now')),
+  -- UX-Refactor Phase 2B: JSON blob for Memory Center provenance/classification
+  -- (kind/confidence/scope/status/sourceId/sourceUrl/tags/evidence/related*).
+  -- See PRD §15.4 + docs/ux-refactor/deltas/shared-types-delta.md §3a. Existing
+  -- DBs get this via the idempotent ADD COLUMN in db.ts runMigrations().
+  metadata TEXT NOT NULL DEFAULT '{}',
   FOREIGN KEY (gop_id) REFERENCES sessions(gop_id)
 );
 CREATE INDEX IF NOT EXISTS idx_frames_gop_t ON memory_frames (gop_id, t);

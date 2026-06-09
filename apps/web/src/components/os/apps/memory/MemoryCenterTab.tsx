@@ -1,0 +1,314 @@
+import { useState, useEffect, useCallback } from 'react';
+import { Search, Loader2, Brain, Archive, Trash2, GitMerge, RotateCcw, Check, Save } from 'lucide-react';
+import { adapter } from '@/lib/adapter';
+import type { Memory, MemoryKind, MemoryStatus } from '@/lib/types';
+import { MEMORY_KIND_META, memoryKindLabel } from '@/lib/harvest-kind-map';
+import { MemoryCard } from './MemoryCard';
+import { DetailDrawer } from '@/components/ui/detail-drawer';
+import { ConfidenceBadge } from '@/components/ui/confidence-badge';
+import { StatusBadge } from '@/components/ui/status-badge';
+import { EvidencePanel } from '@/components/ui/evidence-panel';
+import { Input } from '@/components/ui/input';
+import { renderSimpleMarkdown } from '@/lib/render-markdown';
+import { cn } from '@/lib/utils';
+
+/**
+ * Memory Center (UX-Refactor Phase 2, S04). Self-contained tab (like HarvestTab):
+ * fetches the shared Memory entity via the new /api/memory* adapter methods and
+ * exposes source / confidence / evidence / scope + edit / archive / delete / merge
+ * (PRD §12.4, DoD #4; C11 merge). Personal mind by default, matching the sibling
+ * memory tabs. The 'Needs review' filter surfaces C33 imports (status=unreviewed).
+ */
+
+const KINDS = Object.keys(MEMORY_KIND_META) as MemoryKind[];
+
+const STATUS_FILTERS: { value: '' | MemoryStatus; label: string }[] = [
+  { value: '', label: 'All' },
+  { value: 'unreviewed', label: 'Needs review' },
+  { value: 'active', label: 'Active' },
+  { value: 'archived', label: 'Archived' },
+  { value: 'deprecated', label: 'Deprecated' },
+];
+
+const CONFIDENCE_FILTERS: { value: number; label: string }[] = [
+  { value: 0, label: 'Any confidence' },
+  { value: 40, label: 'Medium+' },
+  { value: 75, label: 'High only' },
+];
+
+export default function MemoryCenterTab() {
+  const [memories, setMemories] = useState<Memory[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [q, setQ] = useState('');
+  const [kind, setKind] = useState<'' | MemoryKind>('');
+  const [status, setStatus] = useState<'' | MemoryStatus>('');
+  const [minConfidence, setMinConfidence] = useState(0);
+
+  const [selected, setSelected] = useState<Memory | null>(null);
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [draftContent, setDraftContent] = useState('');
+  const [draftKind, setDraftKind] = useState<MemoryKind>('fact');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await adapter.listMemories({
+        q: q.trim() || undefined,
+        kind: kind || undefined,
+        status: status || undefined,
+        minConfidence: minConfidence || undefined,
+        limit: 200,
+      });
+      setMemories(res);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load memories');
+    } finally {
+      setLoading(false);
+    }
+  }, [q, kind, status, minConfidence]);
+
+  useEffect(() => {
+    const t = setTimeout(load, q ? 250 : 0); // debounce text search only
+    return () => clearTimeout(t);
+  }, [load, q]);
+
+  const openDetail = (m: Memory) => {
+    setSelected(m);
+    setDraftContent(m.content);
+    setDraftKind(m.kind);
+  };
+
+  const toggleChecked = (id: string, on: boolean) => {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id); else next.delete(id);
+      return next;
+    });
+  };
+
+  const mutate = async (fn: () => Promise<unknown>, closeDrawer = false) => {
+    setBusy(true);
+    try {
+      await fn();
+      if (closeDrawer) setSelected(null);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Action failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveEdits = () => {
+    if (!selected) return;
+    const patch: { content?: string; kind?: string } = {};
+    if (draftContent !== selected.content) patch.content = draftContent;
+    if (draftKind !== selected.kind) patch.kind = draftKind;
+    if (Object.keys(patch).length === 0) { setSelected(null); return; }
+    void mutate(() => adapter.patchMemory(selected.id, patch), true);
+  };
+
+  const archive = (m: Memory) => void mutate(() => adapter.archiveMemory(m.id), true);
+  const unarchive = (m: Memory) => void mutate(() => adapter.patchMemory(m.id, { status: 'active' }), true);
+  const markReviewed = (m: Memory) => void mutate(() => adapter.patchMemory(m.id, { status: 'active' }), true);
+  const remove = (m: Memory) => {
+    if (!window.confirm(`Delete this memory permanently?\n\n"${m.title}"\n\nThis cannot be undone. To keep it but hide it, use Archive instead.`)) return;
+    void mutate(() => adapter.deleteMemoryById(m.id), true);
+  };
+  const mergeSelected = () => {
+    const ids = [...checked];
+    if (ids.length < 2) return;
+    void mutate(async () => {
+      await adapter.mergeMemories(ids);
+      setChecked(new Set());
+    });
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Filter bar */}
+      <div className="border-b border-border/50 p-2.5 space-y-2 bg-background/60">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg px-2 py-1 flex-1">
+            <Search className="w-3.5 h-3.5 text-muted-foreground" />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search memories..."
+              className="flex-1 bg-transparent text-xs h-auto border-0 p-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+            />
+          </div>
+          <select
+            value={minConfidence}
+            onChange={(e) => setMinConfidence(Number(e.target.value))}
+            className="text-[11px] rounded-md border border-border bg-muted/40 px-2 py-1 text-muted-foreground"
+            aria-label="Filter by confidence"
+          >
+            {CONFIDENCE_FILTERS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+          </select>
+        </div>
+
+        <div className="flex flex-wrap gap-1">
+          {STATUS_FILTERS.map((s) => (
+            <button
+              key={s.value || 'all'}
+              onClick={() => setStatus(s.value)}
+              aria-pressed={status === s.value}
+              className={cn(
+                'px-2 py-0.5 rounded-full text-[11px] transition-colors border',
+                status === s.value ? 'border-primary/40 bg-primary/15 text-primary' : 'border-transparent bg-muted/50 text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap gap-1">
+          <button
+            onClick={() => setKind('')}
+            aria-pressed={kind === ''}
+            className={cn('px-1.5 py-0.5 rounded text-[11px] transition-colors', kind === '' ? 'bg-primary/20 text-primary' : 'bg-muted/50 text-muted-foreground hover:text-foreground')}
+          >
+            All kinds
+          </button>
+          {KINDS.map((k) => (
+            <button
+              key={k}
+              onClick={() => setKind(kind === k ? '' : k)}
+              aria-pressed={kind === k}
+              className={cn('px-1.5 py-0.5 rounded text-[11px] transition-colors', kind === k ? 'bg-primary/20 text-primary' : 'bg-muted/50 text-muted-foreground hover:text-foreground')}
+            >
+              {memoryKindLabel(k)}
+            </button>
+          ))}
+        </div>
+
+        {checked.size >= 2 && (
+          <button
+            onClick={mergeSelected}
+            disabled={busy}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary text-primary-foreground text-[11px] font-medium hover:bg-primary/90 disabled:opacity-50"
+          >
+            <GitMerge className="w-3 h-3" /> Merge {checked.size} memories
+          </button>
+        )}
+      </div>
+
+      {/* List */}
+      <div className="flex-1 overflow-auto p-2.5">
+        {loading && memories.length === 0 ? (
+          <div role="status" aria-live="polite" className="text-center py-12"><Loader2 className="w-6 h-6 text-muted-foreground/40 mx-auto mb-2 animate-spin" /><p className="text-xs text-muted-foreground">Loading memories…</p></div>
+        ) : error ? (
+          <div role="alert" className="text-center py-12">
+            <p className="text-xs text-destructive mb-2">{error}</p>
+            <button onClick={() => load()} className="text-xs text-primary hover:underline">Retry</button>
+          </div>
+        ) : memories.length === 0 ? (
+          <div role="status" aria-live="polite" className="text-center py-12">
+            <Brain className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+            <p className="text-xs text-muted-foreground">
+              {q || kind || status || minConfidence ? 'No memories match these filters.' : 'No memories yet — import or capture some to get started.'}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+            {memories.map((m) => (
+              <MemoryCard
+                key={m.id}
+                memory={m}
+                onClick={() => openDetail(m)}
+                selected={checked.has(m.id)}
+                onSelect={(on) => toggleChecked(m.id, on)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Detail drawer */}
+      <DetailDrawer
+        open={!!selected}
+        onOpenChange={(o) => { if (!o) setSelected(null); }}
+        title={selected?.title ?? 'Memory'}
+        subtitle={selected ? `${memoryKindLabel(selected.kind)} · ${selected.scope}` : undefined}
+        headerExtra={selected ? <ConfidenceBadge value={selected.confidence} compact /> : undefined}
+        footer={selected ? (
+          <div className="flex items-center gap-2 w-full">
+            <button onClick={saveEdits} disabled={busy} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-50">
+              <Save className="w-3 h-3" /> Save
+            </button>
+            {selected.status === 'unreviewed' && (
+              <button onClick={() => markReviewed(selected)} disabled={busy} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-border text-xs hover:bg-muted">
+                <Check className="w-3 h-3" /> Mark reviewed
+              </button>
+            )}
+            {selected.status === 'archived' ? (
+              <button onClick={() => unarchive(selected)} disabled={busy} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-border text-xs hover:bg-muted">
+                <RotateCcw className="w-3 h-3" /> Unarchive
+              </button>
+            ) : (
+              <button onClick={() => archive(selected)} disabled={busy} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-border text-xs hover:bg-muted">
+                <Archive className="w-3 h-3" /> Archive
+              </button>
+            )}
+            <button onClick={() => remove(selected)} disabled={busy} className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs text-destructive hover:bg-destructive/10">
+              <Trash2 className="w-3 h-3" /> Delete
+            </button>
+          </div>
+        ) : undefined}
+      >
+        {selected && (
+          <>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <StatusBadge
+                tone={selected.status === 'archived' || selected.status === 'deprecated' ? 'neutral' : selected.status === 'conflict' ? 'risk' : selected.status === 'active' ? 'healthy' : 'attention'}
+                label={selected.status}
+              />
+              {selected.tags?.map((t) => <span key={t} className="text-[11px] text-muted-foreground">#{t}</span>)}
+            </div>
+
+            <div>
+              <label htmlFor="mc-draft-kind" className="text-[11px] font-display font-semibold uppercase tracking-wide text-muted-foreground">Kind</label>
+              <select
+                id="mc-draft-kind"
+                value={draftKind}
+                onChange={(e) => setDraftKind(e.target.value as MemoryKind)}
+                className="mt-1 block w-full text-xs rounded-md border border-border bg-muted/40 px-2 py-1"
+              >
+                {KINDS.map((k) => <option key={k} value={k}>{memoryKindLabel(k)}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="mc-draft-content" className="text-[11px] font-display font-semibold uppercase tracking-wide text-muted-foreground">Content</label>
+              <textarea
+                id="mc-draft-content"
+                value={draftContent}
+                onChange={(e) => setDraftContent(e.target.value)}
+                rows={6}
+                className="mt-1 block w-full text-sm rounded-md border border-border bg-background px-2 py-1.5 leading-relaxed resize-y"
+              />
+              {/* Read-only rendered preview below the editor for markdown context.
+                  Safe: renderSimpleMarkdown escapes &/</> before formatting (same
+                  established escaper MemoryApp uses), so harvested content can't
+                  inject markup. */}
+              <div className="mt-2 text-xs text-muted-foreground/80 max-h-32 overflow-auto" dangerouslySetInnerHTML={{ __html: renderSimpleMarkdown(draftContent) }} />
+            </div>
+
+            <EvidencePanel source={selected.source} sourceId={selected.sourceId} sourceUrl={selected.sourceUrl} evidence={selected.evidence} />
+
+            <p className="text-[11px] text-muted-foreground">
+              Created {new Date(selected.createdAt).toLocaleString()}
+              {selected.updatedAt && ` · updated ${new Date(selected.updatedAt).toLocaleString()}`}
+            </p>
+          </>
+        )}
+      </DetailDrawer>
+    </div>
+  );
+}

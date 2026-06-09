@@ -87,6 +87,11 @@ export interface UserProfile {
   language: string;
   timezone: string;
 
+  // Onboarding personalization (S13 / B8) — a distinct signal from the template (C30)
+  workType: string;   // e.g. engineering, sales, research, operations
+  teamSize: string;   // e.g. solo, 2-10, 11-50, 50+
+  goals: string[];    // what the user wants Waggle to help accomplish
+
   // Meta
   questionnaireCompleted: boolean;
   createdAt: string;
@@ -129,6 +134,9 @@ const DEFAULT_PROFILE: UserProfile = {
   communicationStyle: 'balanced',
   language: 'en',
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  workType: '',
+  teamSize: '',
+  goals: [],
   questionnaireCompleted: false,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
@@ -179,6 +187,9 @@ export const profileRoutes: FastifyPluginAsync = async (fastify) => {
     if (updates.communicationStyle != null) profile.communicationStyle = updates.communicationStyle;
     if (updates.language != null) profile.language = updates.language;
     if (updates.timezone != null) profile.timezone = updates.timezone;
+    if (updates.workType != null) profile.workType = updates.workType;
+    if (updates.teamSize != null) profile.teamSize = updates.teamSize;
+    if (updates.goals != null) profile.goals = updates.goals;
     if (updates.questionnaireCompleted != null) profile.questionnaireCompleted = updates.questionnaireCompleted;
     if (updates.identitySuggestions != null) profile.identitySuggestions = updates.identitySuggestions;
 

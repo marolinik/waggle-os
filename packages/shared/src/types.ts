@@ -310,3 +310,226 @@ export interface ConnectorHealth {
   error?: string;
   tokenExpiresAt?: string;
 }
+
+// === UX-Refactor vocabulary (PRD §15.2) ===
+// Domain literal unions for the workspace-first Agent Desktop refactor.
+// Single source of truth — the sidecar route layer and apps/web both import these
+// (no per-file union duplication; see docs/ux-refactor/deltas/shared-types-delta.md §0).
+export type WorkspaceType =
+  | 'project' | 'client' | 'research' | 'personal' | 'team' | 'organization';
+export type Scope = 'personal' | 'workspace' | 'team' | 'organization';
+/** 0-100 confidence score for a memory / provenance signal. */
+export type Confidence = number;
+
+export type MemoryKind =
+  | 'fact' | 'decision' | 'task' | 'preference'
+  | 'strategy' | 'learning' | 'goal' | 'entity';
+export type ArtifactKind =
+  | 'document' | 'presentation' | 'spreadsheet' | 'dashboard'
+  | 'research' | 'code' | 'media' | 'design' | 'other';
+export type AgentType = 'personal' | 'workspace' | 'team' | 'autonomous';
+export type AutonomyLevel = 'manual' | 'guided' | 'medium' | 'high';
+export type ExtensionType =
+  | 'skill' | 'connector' | 'mcp' | 'model' | 'template' | 'external_tool';
+
+/**
+ * PRD §15.3 workspace contract — the normalized shape the sidecar route layer
+ * exposes to the new UI. The PERSISTED struct lives in `@waggle/hive-mind-core`
+ * (`workspace-manager.ts` `WorkspaceConfig`, a superset carrying legacy fields).
+ * A route-layer normalizer (Phase 1) bridges the struct to this contract, filling
+ * defaults for pre-V2 workspaces (type from templateId/group, status 'active',
+ * updatedAt from created). Kept separate (not `extends`) so the additive fields on
+ * the persistence struct stay optional and existing workspace literals don't break.
+ */
+export interface WorkspaceConfigV2 {
+  id: string;
+  name: string;
+  description?: string;
+  type: WorkspaceType;
+  group: string;
+  icon?: string;
+  status: 'active' | 'paused' | 'archived';
+  model?: string;
+  personaId?: string;
+  templateId?: string;
+  tools?: string[];
+  skills?: string[];
+  agentIds?: string[];
+  connectorIds?: string[];
+  mcpIds?: string[];
+  storageType?: 'virtual' | 'local' | 'team';
+  storagePath?: string;
+  teamId?: string;
+  teamRole?: 'owner' | 'admin' | 'member' | 'viewer';
+  riskLevel?: 'minimal' | 'limited' | 'high-risk' | 'unacceptable';
+  created: string;
+  updatedAt: string;
+  lastActiveAt?: string;
+}
+
+// === UX-Refactor Command vocabulary (PRD §12.3 / shared-types-delta §9) ===
+// Win+K Command Center result/command shapes. Single source of truth — the
+// sidecar `command.ts` route layer and apps/web both import these. See
+// docs/ux-refactor/deltas/shared-types-delta.md §9.
+
+/** The six verb sections of the Command Center (PRD §12.3). */
+export type CommandCategory =
+  | 'search' | 'launch' | 'create' | 'run' | 'navigate' | 'extend';
+
+/**
+ * Every searchable object class the palette federates over (PRD §12.3 FR:
+ * "search across workspaces, memory, artifacts, sessions, people, agents,
+ * skills, commands, connectors, MCPs"). Artifact/agent rows are gated until
+ * those screens (S05/S09) land — the type carries them so the union is stable.
+ */
+export type CommandResultType =
+  | 'workspace' | 'memory' | 'artifact' | 'session' | 'person'
+  | 'agent' | 'skill' | 'command' | 'connector' | 'mcp' | 'automation';
+
+/**
+ * What a `run`/`create`/`navigate`/`extend` result does when executed. A
+ * Navigate result carries a `route`; a server-dispatched action carries an
+ * `endpoint` + `payload`. All optional so a pure Search result needs none.
+ */
+export interface CommandAction {
+  route?: string;
+  endpoint?: string;
+  payload?: Record<string, unknown>;
+}
+
+/** One row in the Command Center result list. */
+export interface CommandResult {
+  id: string;
+  type: CommandResultType;
+  title: string;
+  subtitle?: string;
+  category: CommandCategory;
+  icon?: string;
+  /** §12.3 permission-gated → renders the approval prompt before execution. */
+  requiresApproval?: boolean;
+  action?: CommandAction;
+}
+
+/**
+ * The execute request the palette posts to `POST /api/command/execute`. A
+ * structured command resolves via `id`; a natural-language command rides in
+ * `input` (PRD §12.3 "natural-language command input").
+ */
+export interface Command {
+  id?: string;
+  input?: string;
+  category?: CommandCategory;
+  type?: CommandResultType;
+  workspaceId?: string;
+  payload?: Record<string, unknown>;
+}
+
+// === UX-Refactor Memory entity (PRD §15.4 / shared-types-delta §3b) ===
+// The normalized contract the sidecar `memory.ts` route layer exposes to the
+// Memory Center. The PERSISTED row lives in `@waggle/hive-mind-core`
+// (`memory_frames`); a route-layer normalizer (Phase 2B) projects the row +
+// its JSON `metadata` blob into this shape. `kind/confidence/scope/status/
+// sourceId/tags/evidence/related*` ride `memory_frames.metadata` (added by the
+// idempotent ADD-COLUMN migration M1 in Phase 2B); the base columns map 1:1
+// (`content`, `created_at`, `last_accessed`, `importance`, `source`).
+
+/**
+ * Memory lifecycle state (PRD §12.4 / §14.4), reconciled with the Phase-2 gate
+ * ratifications (2026-06-09):
+ *  - `unreviewed` — freshly imported, pending non-blocking review (C33: import
+ *    commits immediately but lands unreviewed; Memory Center "needs review" filter).
+ *  - `archived`   — reversible soft-status (A8 Archive).
+ *  - `deprecated` — superseded (A8 Deprecate; mirrors the existing `importance`).
+ *  - `low_confidence` / `conflict` — surfaced for review; may be derived at
+ *    recall-time (S04 C10) rather than persisted.
+ *  - Delete is a HARD delete (A8) — there is no `trash`/tombstone state in v1.
+ */
+export type MemoryStatus =
+  | 'active' | 'unreviewed' | 'low_confidence' | 'conflict' | 'deprecated' | 'archived';
+
+export interface Memory {
+  id: string;
+  kind: MemoryKind;
+  title: string;
+  content: string;
+  scope: Scope;
+  workspaceId?: string;
+  teamId?: string | null;
+  /** Provenance class — maps from `memory_frames.source` (FrameSource). */
+  source: string;
+  sourceId?: string | null;
+  sourceUrl?: string | null;
+  /** 0-100; B2 heuristic at import (source-trust × adapter × dedup). */
+  confidence?: Confidence;
+  /** Reuses the substrate `Importance` union (`frames.ts`). */
+  importance: 'critical' | 'important' | 'normal' | 'temporary' | 'deprecated';
+  evidence?: string[];
+  tags?: string[];
+  relatedMemoryIds?: string[];
+  relatedArtifactIds?: string[];
+  status: MemoryStatus;
+  createdAt: string;
+  updatedAt?: string;
+  lastAccessedAt?: string;
+}
+
+// === UX-Refactor Artifact entity (PRD §15.6 / shared-types-delta §4a) ===
+// Artifacts are first-class produced OUTCOMES (decks/docs/sheets/dashboards/
+// research), NOT raw file attachments. Per the Phase-2 gate ratification (A6),
+// the backing store is a per-workspace `artifacts.json` index over the existing
+// StorageProvider (NO new SQLite table) — assigned a stable id + status/tags/
+// relations. Classification rule: an artifact is an EXPLICIT produced output
+// (generated doc or user-promoted file), not every ingested input.
+
+export type ArtifactStatus = 'draft' | 'ready' | 'in_review' | 'final' | 'archived';
+
+export interface Artifact {
+  id: string;
+  title: string;
+  kind: ArtifactKind;
+  workspaceId: string;
+  teamId?: string | null;
+  createdBy: string;
+  /** agent | user | import | automation */
+  source: string;
+  status: ArtifactStatus;
+  /** Pre-archive status, stashed by the server on Archive so Unarchive restores
+   *  the prior lifecycle state faithfully (A8 reversibility), not a flat 'draft'. */
+  prevStatus?: ArtifactStatus;
+  mimeType?: string;
+  /** StorageProvider path (virtual | local | team). */
+  storagePath?: string;
+  previewUrl?: string;
+  tags?: string[];
+  relatedMemoryIds?: string[];
+  relatedSessionIds?: string[];
+  relatedTaskIds?: string[];
+  relatedAgentIds?: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// === Federated "search-related" envelope (S05 headline, PRD §16.6 / line 532) ===
+// The Artifact Center's defining endpoint returns an artifact PLUS its related
+// memories/sessions/tasks/agents — "outcomes with relations, not files". Memories
+// reuse the canonical `Memory` shape; the other three are lightweight references
+// (the full Session/Task/Agent contracts are not part of this envelope on purpose).
+
+export interface RelatedRef {
+  id: string;
+  title: string;
+  /** Owning workspace, when the item is workspace-scoped. */
+  workspaceId?: string;
+  /** Short text excerpt for display, when available. */
+  snippet?: string;
+  /** Sub-classification (e.g. session status, task state, agent type). */
+  kind?: string;
+}
+
+export interface RelatedSearchResult {
+  artifacts: Artifact[];
+  memories: Memory[];
+  sessions: RelatedRef[];
+  tasks: RelatedRef[];
+  agents: RelatedRef[];
+}

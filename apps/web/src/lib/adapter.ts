@@ -11,13 +11,17 @@ import {
   type IdentityResponse,
 } from './tauri-bindings';
 import type {
-  Workspace, WorkspaceContext, ChatMessage, MemoryFrame,
+  Workspace, WorkspaceContext, ChatMessage, MemoryFrame, Memory,
   AgentStep, Session, SkillPack, FleetSession, CronJob,
   Notification, AgentStatus, Persona, SystemHealth,
   Connector, Settings, StreamEvent, KGNode, KGEdge,
   ModelPricing, WaggleSignal, FileEntry, WorkspaceTemplate,
   TimelineEvent,
+  HomeBriefing, OvernightSummary, QuickCaptureInput,
+  WorkspaceStateView, WorkspaceActivityEvent,
+  Artifact, RelatedSearchResult,
 } from './types';
+import type { Command, CommandResult, WorkspaceType } from '@waggle/shared';
 
 /**
  * CC Sesija A §2.2 — map adapter `MemoryFrame.importance` (number 1-4) to the
@@ -246,7 +250,7 @@ class LocalAdapter {
     await this.fetch(`/api/workspace-templates/${id}`, { method: 'DELETE' });
   }
 
-  async createWorkspace(data: { name: string; group: string; persona?: string; agentGroupId?: string; templateId?: string; shared?: boolean; model?: string; personaId?: string }): Promise<Workspace> {
+  async createWorkspace(data: { name: string; group: string; persona?: string; agentGroupId?: string; templateId?: string; shared?: boolean; model?: string; personaId?: string; description?: string; type?: WorkspaceType; connectorIds?: string[]; mcpIds?: string[] }): Promise<Workspace> {
     // P1 (PDF 2026-04-17): server expects `personaId` (see packages/core/src/workspace-config.ts),
     // but onboarding + older call sites pass `persona`. Bridge both so the selected
     // persona is actually persisted on the workspace record.
@@ -276,6 +280,38 @@ class LocalAdapter {
 
   async getWorkspaceFiles(workspaceId: string): Promise<unknown[]> {
     const res = await this.fetch(`/api/workspaces/${workspaceId}/files`);
+    return res.json();
+  }
+
+  // --- Workspace Desktop (UX-Refactor Phase 1, S02) ---
+  // Thin typed wrappers over the new sidecar routes. The routes do not exist
+  // yet (built by S02's backend leaf); these compile as fetch wrappers.
+  async getWorkspaceState(id: string): Promise<WorkspaceStateView> {
+    const res = await this.fetch(`/api/workspaces/${id}/state`);
+    return res.json();
+  }
+
+  async getWorkspaceActivity(id: string, limit = 50): Promise<{ events: WorkspaceActivityEvent[] }> {
+    const res = await this.fetch(`/api/workspaces/${id}/activity?limit=${limit}`);
+    return res.json();
+  }
+
+  // --- Home Cockpit (UX-Refactor Phase 1, S01) ---
+  async getHomeBriefing(): Promise<HomeBriefing> {
+    const res = await this.fetch('/api/home/briefing');
+    return res.json();
+  }
+
+  async getHomeOvernight(since?: string): Promise<OvernightSummary> {
+    const qs = since ? `?since=${encodeURIComponent(since)}` : '';
+    const res = await this.fetch(`/api/home/overnight${qs}`);
+    return res.json();
+  }
+
+  async quickCapture(input: QuickCaptureInput): Promise<{ frameId: string }> {
+    const res = await this.fetch('/api/quick-capture', {
+      method: 'POST', body: JSON.stringify(input),
+    });
     return res.json();
   }
 
@@ -486,6 +522,151 @@ class LocalAdapter {
     return unwrapArray(await res.json()).map(normalizeFrame);
   }
 
+  // --- Memory Center (UX-Refactor Phase 2 — shared Memory entity, S04) ---
+  // These hit the new bare /api/memory* routes (memory-center.ts) and return the
+  // shared `Memory` shape (kind/confidence/scope/status/evidence/...), distinct
+  // from the legacy frame methods above. HTTP path works in web + desktop (the
+  // sidecar is bundled), so no Tauri IPC branch is needed.
+
+  async listMemories(opts: {
+    workspaceId?: string; kind?: string; status?: string; scope?: string;
+    q?: string; minConfidence?: number; limit?: number;
+  } = {}): Promise<Memory[]> {
+    const p = new URLSearchParams();
+    if (opts.workspaceId) p.set('workspace', opts.workspaceId);
+    if (opts.kind) p.set('kind', opts.kind);
+    if (opts.status) p.set('status', opts.status);
+    if (opts.scope) p.set('scope', opts.scope);
+    if (opts.q) p.set('q', opts.q);
+    if (typeof opts.minConfidence === 'number') p.set('minConfidence', String(opts.minConfidence));
+    if (typeof opts.limit === 'number') p.set('limit', String(opts.limit));
+    const qs = p.toString();
+    const res = await this.fetch(`/api/memory${qs ? `?${qs}` : ''}`);
+    // Surface HTTP errors to the caller's catch (MemoryCenterTab.load) instead
+    // of masking a backend failure as a clean empty list — this.fetch does not
+    // throw on non-2xx (S04 review MED).
+    if (!res.ok) throw new Error(`listMemories failed: ${res.status}`);
+    const body = await res.json() as { results?: Memory[]; count?: number };
+    return body.results ?? [];
+  }
+
+  async getMemory(id: string, workspaceId?: string): Promise<Memory | null> {
+    const qs = workspaceId ? `?workspace=${encodeURIComponent(workspaceId)}` : '';
+    const res = await this.fetch(`/api/memory/${encodeURIComponent(id)}${qs}`);
+    if (res.status === 404) return null;
+    return res.json();
+  }
+
+  async createMemory(input: {
+    content: string; kind?: string; scope?: string; tags?: string[];
+    importance?: string; title?: string; confidence?: number; workspaceId?: string;
+  }): Promise<Memory> {
+    const res = await this.fetch('/api/memory', { method: 'POST', body: JSON.stringify(input) });
+    return res.json();
+  }
+
+  async patchMemory(
+    id: string,
+    patch: { content?: string; importance?: string; kind?: string; scope?: string; tags?: string[]; status?: string; title?: string; evidence?: string[] },
+    workspaceId?: string,
+  ): Promise<Memory> {
+    const qs = workspaceId ? `?workspace=${encodeURIComponent(workspaceId)}` : '';
+    const res = await this.fetch(`/api/memory/${encodeURIComponent(id)}${qs}`, { method: 'PATCH', body: JSON.stringify(patch) });
+    return res.json();
+  }
+
+  async archiveMemory(id: string, workspaceId?: string): Promise<Memory> {
+    const qs = workspaceId ? `?workspace=${encodeURIComponent(workspaceId)}` : '';
+    const res = await this.fetch(`/api/memory/${encodeURIComponent(id)}/archive${qs}`, { method: 'POST' });
+    return res.json();
+  }
+
+  /** Hard delete (A8) via the bare-id route — distinct from deleteMemoryFrame. */
+  async deleteMemoryById(id: string, workspaceId?: string): Promise<void> {
+    const qs = workspaceId ? `?workspace=${encodeURIComponent(workspaceId)}` : '';
+    await this.fetch(`/api/memory/${encodeURIComponent(id)}${qs}`, { method: 'DELETE' });
+  }
+
+  async mergeMemories(ids: string[], opts: { workspaceId?: string; title?: string } = {}): Promise<Memory> {
+    const res = await this.fetch('/api/memory/merge', {
+      method: 'POST',
+      body: JSON.stringify({ ids, workspaceId: opts.workspaceId, title: opts.title }),
+    });
+    return res.json();
+  }
+
+  // --- Artifact Center (UX-Refactor Phase 2C — shared Artifact entity, S05) ---
+  // Hit the new /api/artifacts* routes (artifacts.ts). Artifacts are produced
+  // OUTCOMES (decks/docs/sheets/...), backed by the per-workspace artifacts.json
+  // index (A6). HTTP path works in web + desktop (the sidecar is bundled).
+
+  async listArtifacts(opts: {
+    workspaceId?: string; kind?: string; status?: string; tag?: string; q?: string; limit?: number;
+  } = {}): Promise<Artifact[]> {
+    const p = new URLSearchParams();
+    if (opts.workspaceId) p.set('workspaceId', opts.workspaceId);
+    if (opts.kind) p.set('kind', opts.kind);
+    if (opts.status) p.set('status', opts.status);
+    if (opts.tag) p.set('tag', opts.tag);
+    if (opts.q) p.set('q', opts.q);
+    if (typeof opts.limit === 'number') p.set('limit', String(opts.limit));
+    const qs = p.toString();
+    const res = await this.fetch(`/api/artifacts${qs ? `?${qs}` : ''}`);
+    if (!res.ok) throw new Error(`listArtifacts failed: ${res.status}`);
+    const body = await res.json() as { results?: Artifact[]; count?: number };
+    return body.results ?? [];
+  }
+
+  async getArtifact(id: string, workspaceId?: string): Promise<Artifact | null> {
+    const qs = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : '';
+    const res = await this.fetch(`/api/artifacts/${encodeURIComponent(id)}${qs}`);
+    if (res.status === 404) return null;
+    return res.json();
+  }
+
+  async createArtifact(input: {
+    title: string; kind: string; workspaceId: string; source?: string; status?: string;
+    mimeType?: string; storagePath?: string; previewUrl?: string; tags?: string[];
+    relatedMemoryIds?: string[]; relatedSessionIds?: string[];
+    relatedTaskIds?: string[]; relatedAgentIds?: string[];
+  }): Promise<Artifact> {
+    const res = await this.fetch('/api/artifacts', { method: 'POST', body: JSON.stringify(input) });
+    if (!res.ok) throw new Error(`createArtifact failed: ${res.status}`);
+    return res.json();
+  }
+
+  async patchArtifact(
+    id: string,
+    patch: Partial<Pick<Artifact,
+      'title' | 'kind' | 'status' | 'mimeType' | 'storagePath' | 'previewUrl' | 'source' |
+      'tags' | 'relatedMemoryIds' | 'relatedSessionIds' | 'relatedTaskIds' | 'relatedAgentIds'>>,
+    workspaceId?: string,
+  ): Promise<Artifact> {
+    const qs = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : '';
+    const res = await this.fetch(`/api/artifacts/${encodeURIComponent(id)}${qs}`, { method: 'PATCH', body: JSON.stringify(patch) });
+    if (!res.ok) throw new Error(`patchArtifact failed: ${res.status}`);
+    return res.json();
+  }
+
+  /** Reversible Archive (A8) — status:'archived' via PATCH (no separate route). */
+  async archiveArtifact(id: string, workspaceId?: string): Promise<Artifact> {
+    return this.patchArtifact(id, { status: 'archived' }, workspaceId);
+  }
+
+  /** Hard delete (A8 — no tombstone). Removes the index entry. */
+  async deleteArtifact(id: string, workspaceId?: string): Promise<void> {
+    const qs = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : '';
+    await this.fetch(`/api/artifacts/${encodeURIComponent(id)}${qs}`, { method: 'DELETE' });
+  }
+
+  async searchRelatedArtifacts(q: string, workspaceId?: string): Promise<RelatedSearchResult> {
+    const p = new URLSearchParams({ q });
+    if (workspaceId) p.set('workspaceId', workspaceId);
+    const res = await this.fetch(`/api/artifacts/search-related?${p.toString()}`);
+    if (!res.ok) throw new Error(`searchRelatedArtifacts failed: ${res.status}`);
+    return res.json();
+  }
+
   async searchTeamMemory(query: string, limit = 20): Promise<Array<{ id: string; content: string; authorId: string; authorName: string; importance: string; timestamp: string }>> {
     try {
       const res = await this.fetch(`/api/team/memory/search?q=${encodeURIComponent(query)}&limit=${limit}`);
@@ -571,6 +752,17 @@ class LocalAdapter {
     } catch {
       return { configured: false, name: null, _note: 'identity fetch failed' };
     }
+  }
+
+  /** Upsert the per-mind identity record (B8) — onboarding seeds this so the Home
+   *  cockpit greets the user by name. POST /api/identity is a single-row upsert. */
+  async setIdentity(body: {
+    name?: string; role?: string; department?: string;
+    personality?: string; capabilities?: string; system_prompt?: string;
+    workspace?: string;
+  }): Promise<IdentityResponse> {
+    const res = await this.fetch('/api/identity', { method: 'POST', body: JSON.stringify(body) });
+    return res.json();
   }
 
   // --- Events ---
@@ -1349,6 +1541,34 @@ class LocalAdapter {
     return res.json();
   }
 
+  // --- Command Center / Win+K (UX-Refactor Phase 1, S03) ---
+  // `/api/command/*` (singular) is net-new and federates over existing
+  // substrate. `commandExecute` posts to the singular execute alias (B4:
+  // alias onto the existing handler — the plural /api/commands/execute is
+  // NOT renamed). Routes built by S03's backend leaf; thin wrappers here.
+  async commandSearch(q: string, scope?: string): Promise<{ results: CommandResult[] }> {
+    const qs = scope ? `?q=${encodeURIComponent(q)}&scope=${encodeURIComponent(scope)}` : `?q=${encodeURIComponent(q)}`;
+    const res = await this.fetch(`/api/command/search${qs}`);
+    return res.json();
+  }
+
+  async commandRecent(): Promise<{ recent: CommandResult[] }> {
+    const res = await this.fetch('/api/command/recent');
+    return res.json();
+  }
+
+  async commandSuggestions(): Promise<{ suggestions: CommandResult[] }> {
+    const res = await this.fetch('/api/command/suggestions');
+    return res.json();
+  }
+
+  async commandExecute(payload: Command): Promise<{ ok: boolean; result?: unknown }> {
+    const res = await this.fetch('/api/command/execute', {
+      method: 'POST', body: JSON.stringify(payload),
+    });
+    return res.json();
+  }
+
   // --- Pins ---
   async getPins(workspaceId: string): Promise<{ id: string; messageContent: string; messageRole: string; pinnedAt: string; label?: string; status?: string }[]> {
     try {
@@ -1686,8 +1906,15 @@ class LocalAdapter {
     return res.json();
   }
 
-  async harvestCommit(data: unknown, source: string): Promise<any> {
-    const res = await this.fetch('/api/harvest/commit', { method: 'POST', body: JSON.stringify({ data, source }) });
+  async harvestCommit(
+    data: unknown,
+    source: string,
+    opts?: { selectedIds?: Array<string | number>; resumeFromRun?: number },
+  ): Promise<any> {
+    const res = await this.fetch('/api/harvest/commit', {
+      method: 'POST',
+      body: JSON.stringify({ data, source, ...(opts ?? {}) }),
+    });
     return res.json();
   }
 

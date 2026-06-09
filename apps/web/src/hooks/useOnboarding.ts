@@ -16,6 +16,11 @@ export interface OnboardingState {
   templateId?: string;
   personaId?: string;
   tooltipsDismissed?: boolean;
+  // --- Phase 2D additive fields (localStorage only, back-compat) ---
+  /** Set once the Who-Are-You step has written profile + seeded identity (B8). */
+  profileSeeded?: boolean;
+  /** Tool/connector ids the user said they use (S14, deferred; reserved). */
+  toolsUsed?: string[];
 }
 
 const STORAGE_KEY = 'waggle:onboarding';

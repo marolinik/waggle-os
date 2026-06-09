@@ -65,6 +65,8 @@ import { MarketplaceDB, MarketplaceSync, seedMcpServers, seedNewSources } from '
 import { workspaceRoutes } from './routes/workspaces.js';
 import { chatRoutes, type AgentRunner } from './routes/chat.js';
 import { memoryRoutes } from './routes/memory.js';
+import { memoryCenterRoutes } from './routes/memory-center.js';
+import { artifactRoutes } from './routes/artifacts.js';
 import { settingsRoutes } from './routes/settings.js';
 import { sessionRoutes, findUndistilledSessions, markSessionDistilled } from './routes/sessions.js';
 import { knowledgeRoutes } from './routes/knowledge.js';
@@ -81,6 +83,8 @@ import { capabilitiesRoutes } from './routes/capabilities.js';
 import { toolsRoutes } from './routes/tools.js';
 import { waggleDanceRoutes } from './routes/waggle-dance.js';
 import { commandRoutes } from './routes/commands.js';
+import { commandRoutes as commandCenterRoutes } from './routes/command.js';
+import { homeRoutes } from './routes/home.js';
 import { cronRoutes } from './routes/cron.js';
 import { notificationRoutes, emitNotification, emitSubagentStatus } from './routes/notifications.js';
 import { marketplaceDevRoutes } from './routes/marketplace-dev.js';
@@ -1974,6 +1978,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(workspaceRoutes);
   await server.register(chatRoutes);
   await server.register(memoryRoutes);
+  await server.register(memoryCenterRoutes);
   await server.register(settingsRoutes);
   await server.register(sessionRoutes);
   await server.register(knowledgeRoutes);
@@ -1990,6 +1995,11 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(toolsRoutes);
   await server.register(waggleDanceRoutes);
   await server.register(commandRoutes);
+  // UX-Refactor Phase 1: Home Cockpit (S01) + Command Center (S00/S03) surfaces.
+  // commandCenterRoutes registers the singular /api/command/* aliases (B4) — it
+  // is distinct from the plural commandRoutes (/api/commands/execute) above.
+  await server.register(homeRoutes);
+  await server.register(commandCenterRoutes);
   await server.register(cronRoutes);
   await server.register(notificationRoutes);
   await server.register(marketplaceDevRoutes);
@@ -2012,6 +2022,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(workflowRoutes);
   await server.register(pinRoutes);
   await server.register(documentRoutes);
+  await server.register(artifactRoutes);
   await server.register(fileRoutes);
   await server.register(waggleSignalRoutes);
   await server.register(providerRoutes);

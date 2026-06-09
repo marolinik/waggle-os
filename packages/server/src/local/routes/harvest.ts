@@ -20,6 +20,12 @@ import {
   type SourceAdapter, type FilesystemAdapter,
 } from '@waggle/core';
 import { loadProfile, saveProfile, type IdentitySuggestion } from './profile.js';
+import { importItemTypeToMemoryKind, harvestConfidence } from './harvest-classify.js';
+
+/** Phase 2B.3: cap the per-item classified list returned by /preview so the
+ *  Memory Import review UI gets every item without a pathological payload.
+ *  itemCount always carries the true total; `itemsTruncated` flags the cap. */
+const PREVIEW_ITEM_CAP = 5000;
 
 /** Strict ISO-8601 validator used to gate `item.timestamp` before we
  *  forward it to `FrameStore.createIFrame` as the `created_at` override.
@@ -227,11 +233,27 @@ export async function harvestRoutes(fastify: FastifyInstance) {
     const adapter = getAdapter(source);
     const items = adapter.parse(data);
 
+    // Phase 2B.3: classify every item with the canonical MemoryKind (B6) + the
+    // heuristic confidence (B2) so the Memory Import review UI can show kind
+    // chips + a confidence signal and let the user deselect before commit.
+    const classified = items.map(i => ({
+      id: i.id,
+      title: i.title,
+      type: i.type,
+      source: i.source,
+      kind: importItemTypeToMemoryKind(i.type),
+      confidence: harvestConfidence(i),
+    }));
+
     return {
       source,
       itemCount: items.length,
       types: countByField(items, 'type'),
-      preview: items.slice(0, 10).map(i => ({ id: i.id, title: i.title, type: i.type, source: i.source })),
+      // Back-compat: existing callers read `preview` (first 10).
+      preview: classified.slice(0, 10),
+      // New: the full (capped) classified list for the review surface.
+      items: classified.slice(0, PREVIEW_ITEM_CAP),
+      itemsTruncated: items.length > PREVIEW_ITEM_CAP,
     };
   });
 
@@ -246,6 +268,10 @@ export async function harvestRoutes(fastify: FastifyInstance) {
       source?: ImportSourceType;
       /** M-08: resume an existing interrupted run (replays its cached input). */
       resumeFromRun?: number;
+      /** Phase 2B.3: optional subset of preview item ids to commit. Absent →
+       *  commit ALL parsed items (onboarding C33 default: import lands the whole
+       *  set as 'unreviewed', review is non-blocking afterwards). */
+      selectedIds?: Array<string | number>;
     };
 
     const personalDb = fastify.multiMind?.personal;
@@ -310,6 +336,14 @@ export async function harvestRoutes(fastify: FastifyInstance) {
       items = adapter.scan(dir);
     } else {
       items = adapter.parse(data);
+    }
+
+    // Phase 2B.3: honor an optional per-item selection (the Memory Import UI may
+    // post a subset of preview ids). Absent/empty → commit all (C33 default).
+    // Applied before the change-hash so re-selecting the same subset still skips.
+    if (Array.isArray(body.selectedIds) && body.selectedIds.length > 0) {
+      const selected = new Set(body.selectedIds.map(String));
+      items = items.filter(i => selected.has(String(i.id)));
     }
 
     if (items.length === 0) {
@@ -400,13 +434,26 @@ export async function harvestRoutes(fastify: FastifyInstance) {
             '[harvest] missing timestamp — falling back to NOW()',
           );
         }
-        frameStore.createIFrame(
+        const frame = frameStore.createIFrame(
           'harvest',
           `${label}\n\n${content}`,
           'normal',
           'import',
           useProvidedTs ? providedTimestamp : null,
         );
+        // Phase 2B.3 (C33 + B2 + B6): stamp classification so the imported frame
+        // lands as 'unreviewed' with a heuristic confidence + canonical kind,
+        // surfacing in the Memory Center "needs review" filter. Guarded: only
+        // stamp a freshly-classified frame ('{}' / empty metadata) so re-import
+        // of a dedup'd frame never clobbers a status the user already reviewed.
+        if (!frame.metadata || frame.metadata === '{}') {
+          frameStore.setMetadata(frame.id, JSON.stringify({
+            kind: importItemTypeToMemoryKind(item.type),
+            confidence: harvestConfidence(item),
+            status: 'unreviewed',
+            sourceId: item.id,
+          }));
+        }
         saved++;
         if (saved % 10 === 0 || saved === items.length) {
           emitHarvestProgress({ phase: 'saving', current: saved, total: items.length, source });

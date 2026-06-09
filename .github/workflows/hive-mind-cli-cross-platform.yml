@@ -49,6 +49,14 @@ jobs:
       - name: Install workspace deps
         run: npm install
 
+      # hive-mind-core imports @waggle/shared, whose dist/ is gitignored and so
+      # absent on a clean checkout. hive-mind-core/tsconfig declares no project
+      # reference to it (the OSS subtree-split mirrors that tsconfig, so a
+      # ../shared reference would dangle in the export root), so `tsc --build`
+      # won't bootstrap it. Build shared first — same as ci.yml/tauri-build-pr.yml.
+      - name: Build @waggle/shared (hive-mind-core dep)
+        run: cd packages/shared && npx tsc --build
+
       - name: Build hive-mind-core (substrate)
         run: cd packages/hive-mind-core && npx tsc --build
 
@@ -62,13 +70,20 @@ jobs:
         run: cd packages/hive-mind-cli && npx tsc --build
 
       - name: Run postinstall (bundles fix on win32, no-op POSIX)
-        run: node packages/hive-mind-cli/postinstall.js
+        run: node packages/hive-mind-cli/postinstall.cjs
+
+      - name: Init hive-mind data dir (scaffold personal.mind for the smoke)
+        run: node packages/hive-mind-cli/dist/index.js init
+        env:
+          HIVE_MIND_DATA_DIR: ${{ runner.temp }}/waggle-ci-home
 
       - name: Smoke test — hive-mind-cli doctor (independent of upstream hook)
         run: node packages/hive-mind-cli/dist/index.js doctor
         env:
-          # Doctor command honors a custom WAGGLE_HOME for CI isolation.
-          WAGGLE_HOME: ${{ runner.temp }}/waggle-ci-home
+          # doctor + init resolve the mind via HIVE_MIND_DATA_DIR (the CLI never
+          # reads WAGGLE_HOME — that prior env was a no-op). Isolate to a CI temp
+          # dir; init above scaffolds personal.mind there so doctor finds it.
+          HIVE_MIND_DATA_DIR: ${{ runner.temp }}/waggle-ci-home
 
       - name: Doctor smoke result must be green (no quarantine, no ENOENT)
         run: |

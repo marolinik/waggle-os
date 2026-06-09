@@ -100,6 +100,18 @@
     --status-info: #60a5fa;
     --status-ai: #a78bfa;
 
+    /* ── UX-Refactor IA color semantics (PRD §19 / Blueprint design system) ──
+       Aliases to the status palette above so the new IA surfaces speak one
+       vocabulary: blue=work, purple=intelligence, green=healthy/complete,
+       orange=attention/automation, red=risk/failure. Defined as var()
+       indirections — they resolve lazily, so the light-theme --status-*
+       overrides flow through automatically (no per-theme duplication). */
+    --sem-work: var(--status-info);
+    --sem-intelligence: var(--status-ai);
+    --sem-healthy: var(--status-healthy);
+    --sem-attention: var(--status-warning);
+    --sem-risk: var(--status-error);
+
     /* ── Knowledge-graph node colors ──────────────────────────────────────
        Referenced via var(--kg-*, <fallback>) in KnowledgeGraphViewer.tsx /
        kg-export.ts. Defined here (dark) so the token — not the inline fallback

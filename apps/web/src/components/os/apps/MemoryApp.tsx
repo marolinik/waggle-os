@@ -11,6 +11,7 @@ import HarvestTab from './memory/HarvestTab';
 import WeaverPanel from './memory/WeaverPanel';
 import WikiTab from './memory/WikiTab';
 import EvolutionTab from './memory/EvolutionTab';
+import MemoryCenterTab from './memory/MemoryCenterTab';
 import ImportReminderBanner from './memory/ImportReminderBanner';
 import { useOnboarding } from '@/hooks/useOnboarding';
 
@@ -42,8 +43,9 @@ function readFrameProvenanceTool(frame: { metadata?: Record<string, unknown> }):
 // QW-2: labeled tab bar for Memory app. Replaces the cramped icon-only
 // toggles in the sidebar. Each tab is icon + short label + tooltip for the
 // longer description.
-type MemoryView = 'timeline' | 'graph' | 'harvest' | 'weaver' | 'wiki' | 'evolution';
+type MemoryView = 'memories' | 'timeline' | 'graph' | 'harvest' | 'weaver' | 'wiki' | 'evolution';
 const MEMORY_TABS: { id: MemoryView; label: string; icon: React.ComponentType<{ className?: string }>; tooltip: string }[] = [
+  { id: 'memories', label: 'Memories', icon: Brain, tooltip: 'Memory Center — inspect, edit, review, merge' },
   { id: 'timeline', label: 'Timeline', icon: Clock, tooltip: 'Chronological frame list' },
   { id: 'graph', label: 'Graph', icon: Network, tooltip: 'Knowledge Graph — entities and relations' },
   { id: 'harvest', label: 'Harvest', icon: Download, tooltip: 'Import conversations from other AIs' },
@@ -83,7 +85,7 @@ const MemoryApp = ({
   knowledgeGraph, onRefreshKG, kgScope, onKGScopeChange,
   kgLoading = false, kgError = null, onContextRail,
 }: MemoryAppProps) => {
-  const [view, setView] = useState<'timeline' | 'graph' | 'harvest' | 'weaver' | 'wiki' | 'evolution'>('timeline');
+  const [view, setView] = useState<MemoryView>('memories');
   const [showFilters, setShowFilters] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ position: { x: number; y: number }; items: ContextMenuItem[] } | null>(null);
   // Phase 1 #7 — onboarding flag controls reminder-banner eligibility. Pull
@@ -115,8 +117,9 @@ const MemoryApp = ({
 
   return (
     <div className="flex h-full">
-      {/* Timeline sidebar */}
-      <div className="w-56 border-r border-border/50 flex flex-col shrink-0">
+      {/* Timeline sidebar — hidden for the Memory Center view (S04), which has
+          its own list + filters; kept for the other tabs (existing behaviour). */}
+      <div className={`w-56 border-r border-border/50 flex flex-col shrink-0 ${view === 'memories' ? 'hidden' : ''}`}>
         <div className="p-2 border-b border-border/30">
           <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg px-2 py-1">
             <Search className="w-3 h-3 text-muted-foreground" />
@@ -262,7 +265,9 @@ const MemoryApp = ({
           })}
         </div>
         <div className="flex-1 overflow-auto">
-        {view === 'evolution' ? (
+        {view === 'memories' ? (
+          <MemoryCenterTab />
+        ) : view === 'evolution' ? (
           <EvolutionTab />
         ) : view === 'wiki' ? (
           <WikiTab />
