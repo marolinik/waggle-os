@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { useOfflineStatus } from '@/hooks/useOfflineStatus';
+import { useService } from '@/providers/ServiceProvider';
 import type {
   HomeBriefing,
   OvernightSummary,
@@ -425,6 +426,10 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
   const [loadError, setLoadError] = useState(false);
   const [permissionDenied, setPermissionDenied] = useState(false);
   const offline = useOfflineStatus();
+  // Cold-load race guard: the adapter attaches the session token during its
+  // initial connect(); firing authed briefing/overnight calls before that 401s
+  // and yields malformed data. Defer load() until the attempt has settled.
+  const { connecting } = useService();
   // Guards every async set* against firing after unmount (mirrors
   // WorkspaceDesktopApp's `cancelled` flag — but ref-scoped since `load` is a
   // reusable callback driven by both the effect and the Retry button).
@@ -463,10 +468,14 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
   }, []);
 
   useEffect(() => {
+    // Defer until the adapter's initial connect attempt has settled. Gates on
+    // `connecting` (settled), NOT `connected`, so a failed connect still runs
+    // load() → the existing offline/retry UI rather than a permanent skeleton.
+    if (connecting) return;
     cancelled.current = false;
     void load();
     return () => { cancelled.current = true; };
-  }, [load]);
+  }, [load, connecting]);
 
   if (loading) return <CockpitSkeleton />;
 
@@ -526,7 +535,7 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
   // ATTENTION-REQUIRED (PRD §12.1): overnight failures get a visible top banner
   // regardless of the OvernightPanel — which is suppressed when offline and
   // hidden when there's no activity, so failures would otherwise go unseen.
-  const failureCount = overnight?.failures.length ?? 0;
+  const failureCount = overnight?.failures?.length ?? 0;
 
   return (
     <div className="h-full overflow-auto p-6 max-w-3xl mx-auto" data-testid="home-cockpit">
