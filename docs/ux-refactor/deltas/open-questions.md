@@ -52,9 +52,31 @@ The **Phase-2 blockers are RATIFIED as recommended** (founder, 2026-06-09), exce
   place (founder principle: friction reserved for irreversible/destructive actions). Reuses A8 soft-status
   + B2 confidence — no extra migration. Supersedes the original §C C33 "blocking split" recommendation.
 
+## ✅ Founder Ratifications — Phase 3 gate (2026-06-10)
+
+The **Phase-3 (Intelligence) items are RATIFIED as recommended** (founder, 2026-06-10). Locked:
+
+- **B3** Agent entity → real Agent object in `{dataDir}/agents.json` referencing `personaId`; persona =
+  behavioral template field. `successRate`/`lastRun` derived at read from `execution_traces`. No `.mind`
+  migration (M3 not shipped).
+- **C24** Automation triggers → schedule-only v1 (cron cadence); Event trigger deferred (no event→automation
+  dispatch substrate).
+- **C26** Builder test-run → NET-NEW no-persist dry-run route (`POST /api/automations/test`); do NOT reuse
+  `cron/:id/trigger` (executes + auto-enables).
+- **C13** Skill Builder publishes create-to-local (`POST /api/skills/create`); marketplace publish lives in S06/S21.
+- **C14** Skill inputs/outputs → body markdown v1; no `SkillFrontmatter` extension.
+- **C22** Agent Center tabs = All/Personal/Workspace/Team/Autonomous/Archive; Templates = side affordance.
+- **C23** Agent `/run` → one-shot fleet-spawn into a chosen workspace (picker if multiple `workspaceIds`);
+  persistent always-running agents deferred.
+- **C25** Automation condition step → advisory `jobConfig.condition` string, no evaluation engine v1.
+- **C27** Analytics tiles → keep success-rate (from `cron_execution_history`); drop "hours saved" or label
+  it an explicit heuristic estimate.
+- **C36** Skill scope vocabulary → PRD `organization` (align §15.2 `Scope` union).
+- **C37** Skill test-run fidelity → preview-only (injected-prompt + parsed metadata) v1; live LLM dry-run deferred.
+
 ---
 
-Phase 3+ items remain **pending** founder ratification.
+Phase 4+ items (A4, A5, A7, B5, B7, C15–C21, C34-adjacent) remain **pending** founder ratification.
 
 ## §A — PRD §23 Open Questions (the canonical 8)
 
