@@ -98,7 +98,7 @@ const appConfig: Record<string, { title: string; icon: React.ReactNode; pos: { x
   "vault": { title: "Vault", icon: <Lock className="w-3.5 h-3.5 text-amber-400" />, pos: { x: 240, y: 70 }, size: { w: "560px", h: "480px" } },
   "profile": { title: "My Profile", icon: <UserCircle className="w-3.5 h-3.5 text-sky-400" />, pos: { x: 200, y: 60 }, size: { w: "560px", h: "520px" } },
   "connectors": { title: "Connectors", icon: <Plug className="w-3.5 h-3.5 text-emerald-400" />, pos: { x: 220, y: 80 }, size: { w: "580px", h: "500px" } },
-  "scheduled-jobs": { title: "Scheduled Jobs", icon: <Clock className="w-3.5 h-3.5 text-amber-400" />, pos: { x: 200, y: 70 }, size: { w: "600px", h: "460px" } },
+  "scheduled-jobs": { title: "Automations", icon: <Clock className="w-3.5 h-3.5 text-amber-400" />, pos: { x: 200, y: 70 }, size: { w: "600px", h: "460px" } },
   "marketplace": { title: "Marketplace", icon: <Store className="w-3.5 h-3.5 text-orange-400" />, pos: { x: 250, y: 80 }, size: { w: "640px", h: "500px" } },
   "voice": { title: "Voice", icon: <Mic className="w-3.5 h-3.5 text-rose-400" />, pos: { x: 300, y: 90 }, size: { w: "480px", h: "400px" } },
   "room": { title: "Room", icon: <Users className="w-3.5 h-3.5 text-violet-400" />, pos: { x: 260, y: 75 }, size: { w: "640px", h: "520px" } },
