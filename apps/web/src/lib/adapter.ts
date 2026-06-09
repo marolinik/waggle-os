@@ -19,6 +19,7 @@ import type {
   TimelineEvent,
   HomeBriefing, OvernightSummary, QuickCaptureInput,
   WorkspaceStateView, WorkspaceActivityEvent,
+  Artifact, RelatedSearchResult,
 } from './types';
 import type { Command, CommandResult } from '@waggle/shared';
 
@@ -591,6 +592,78 @@ class LocalAdapter {
       method: 'POST',
       body: JSON.stringify({ ids, workspaceId: opts.workspaceId, title: opts.title }),
     });
+    return res.json();
+  }
+
+  // --- Artifact Center (UX-Refactor Phase 2C — shared Artifact entity, S05) ---
+  // Hit the new /api/artifacts* routes (artifacts.ts). Artifacts are produced
+  // OUTCOMES (decks/docs/sheets/...), backed by the per-workspace artifacts.json
+  // index (A6). HTTP path works in web + desktop (the sidecar is bundled).
+
+  async listArtifacts(opts: {
+    workspaceId?: string; kind?: string; status?: string; tag?: string; q?: string; limit?: number;
+  } = {}): Promise<Artifact[]> {
+    const p = new URLSearchParams();
+    if (opts.workspaceId) p.set('workspaceId', opts.workspaceId);
+    if (opts.kind) p.set('kind', opts.kind);
+    if (opts.status) p.set('status', opts.status);
+    if (opts.tag) p.set('tag', opts.tag);
+    if (opts.q) p.set('q', opts.q);
+    if (typeof opts.limit === 'number') p.set('limit', String(opts.limit));
+    const qs = p.toString();
+    const res = await this.fetch(`/api/artifacts${qs ? `?${qs}` : ''}`);
+    if (!res.ok) throw new Error(`listArtifacts failed: ${res.status}`);
+    const body = await res.json() as { results?: Artifact[]; count?: number };
+    return body.results ?? [];
+  }
+
+  async getArtifact(id: string, workspaceId?: string): Promise<Artifact | null> {
+    const qs = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : '';
+    const res = await this.fetch(`/api/artifacts/${encodeURIComponent(id)}${qs}`);
+    if (res.status === 404) return null;
+    return res.json();
+  }
+
+  async createArtifact(input: {
+    title: string; kind: string; workspaceId: string; source?: string; status?: string;
+    mimeType?: string; storagePath?: string; previewUrl?: string; tags?: string[];
+    relatedMemoryIds?: string[]; relatedSessionIds?: string[];
+    relatedTaskIds?: string[]; relatedAgentIds?: string[];
+  }): Promise<Artifact> {
+    const res = await this.fetch('/api/artifacts', { method: 'POST', body: JSON.stringify(input) });
+    if (!res.ok) throw new Error(`createArtifact failed: ${res.status}`);
+    return res.json();
+  }
+
+  async patchArtifact(
+    id: string,
+    patch: Partial<Pick<Artifact,
+      'title' | 'kind' | 'status' | 'mimeType' | 'storagePath' | 'previewUrl' | 'source' |
+      'tags' | 'relatedMemoryIds' | 'relatedSessionIds' | 'relatedTaskIds' | 'relatedAgentIds'>>,
+    workspaceId?: string,
+  ): Promise<Artifact> {
+    const qs = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : '';
+    const res = await this.fetch(`/api/artifacts/${encodeURIComponent(id)}${qs}`, { method: 'PATCH', body: JSON.stringify(patch) });
+    if (!res.ok) throw new Error(`patchArtifact failed: ${res.status}`);
+    return res.json();
+  }
+
+  /** Reversible Archive (A8) — status:'archived' via PATCH (no separate route). */
+  async archiveArtifact(id: string, workspaceId?: string): Promise<Artifact> {
+    return this.patchArtifact(id, { status: 'archived' }, workspaceId);
+  }
+
+  /** Hard delete (A8 — no tombstone). Removes the index entry. */
+  async deleteArtifact(id: string, workspaceId?: string): Promise<void> {
+    const qs = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : '';
+    await this.fetch(`/api/artifacts/${encodeURIComponent(id)}${qs}`, { method: 'DELETE' });
+  }
+
+  async searchRelatedArtifacts(q: string, workspaceId?: string): Promise<RelatedSearchResult> {
+    const p = new URLSearchParams({ q });
+    if (workspaceId) p.set('workspaceId', workspaceId);
+    const res = await this.fetch(`/api/artifacts/search-related?${p.toString()}`);
+    if (!res.ok) throw new Error(`searchRelatedArtifacts failed: ${res.status}`);
     return res.json();
   }
 

@@ -21,6 +21,8 @@ export type {
   Artifact,
   ArtifactStatus,
   ArtifactKind,
+  RelatedSearchResult,
+  RelatedRef,
   MemoryKind,
   MemoryStatus,
   Scope,

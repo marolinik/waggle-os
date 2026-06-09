@@ -1,14 +1,14 @@
 import type { ElementType } from 'react';
 import {
   LayoutDashboard, MessageSquare, FolderOpen, Settings, Bot, Brain,
-  Zap, Activity, Radio, Clock, Package, Plug, Store, Lock, Users, Shield, Rocket,
+  Zap, Activity, Radio, Clock, Package, Plug, Store, Lock, Users, Shield, Rocket, FileStack,
 } from 'lucide-react';
 
 export type AppId =
   | 'home' | 'chat' | 'dashboard' | 'memory' | 'events'
   | 'capabilities' | 'connectors' | 'cockpit' | 'mission-control'
   | 'settings' | 'vault' | 'profile'
-  | 'waggle-dance' | 'files' | 'agents'
+  | 'waggle-dance' | 'files' | 'artifacts' | 'agents'
   | 'scheduled-jobs' | 'marketplace' | 'voice' | 'room' | 'approvals' | 'timeline'
   | 'backup' | 'telemetry' | 'governance' | 'launcher'
   // UX-Refactor Phase 1 (S02): single-workspace runtime surface, opened from
@@ -51,6 +51,7 @@ const POWER_CONFIG: DockEntry[] = [
   { type: 'app', key: 'chat', appId: 'chat', icon: MessageSquare, label: 'Chat', color: 'text-primary' },
   { type: 'app', key: 'memory', appId: 'memory', icon: Brain, label: 'Memory', color: 'text-amber-300' },
   { type: 'app', key: 'files', appId: 'files', icon: FolderOpen, label: 'Files', color: 'text-amber-300' },
+  { type: 'app', key: 'artifacts', appId: 'artifacts', icon: FileStack, label: 'Artifacts', color: 'text-amber-300' },
   { type: 'separator', key: 'sep-work', label: '' },
   // ── Intelligence ──
   {
