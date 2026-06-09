@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   MessageSquare, LayoutDashboard, Settings, Brain,
@@ -76,6 +76,8 @@ import { useOverlayState } from "@/hooks/useOverlayState";
 /* ── App config: position, size, title, icon per AppId ── */
 const appConfig: Record<string, { title: string; icon: React.ReactNode; pos: { x: number; y: number }; size: { w: string; h: string } }> = {
   "chat": { title: "Waggle Chat", icon: <MessageSquare className="w-3.5 h-3.5 text-primary" />, pos: { x: 180, y: 40 }, size: { w: "520px", h: "520px" } },
+  // UX-Refactor: 'home' is the canonical launch surface (interim → DashboardApp; S01 swaps in HomeCockpit).
+  "home": { title: "Home", icon: <LayoutDashboard className="w-3.5 h-3.5 text-sky-400" />, pos: { x: 100, y: 60 }, size: { w: "640px", h: "520px" } },
   "dashboard": { title: "Dashboard", icon: <LayoutDashboard className="w-3.5 h-3.5 text-sky-400" />, pos: { x: 100, y: 60 }, size: { w: "560px", h: "440px" } },
   "settings": { title: "Settings", icon: <Settings className="w-3.5 h-3.5 text-muted-foreground" />, pos: { x: 250, y: 80 }, size: { w: "560px", h: "460px" } },
   "memory": { title: "Memory", icon: <Brain className="w-3.5 h-3.5 text-amber-300" />, pos: { x: 120, y: 50 }, size: { w: "640px", h: "460px" } },
@@ -167,6 +169,19 @@ const Desktop = () => {
     window.addEventListener('waggle:open-app', handler);
     return () => window.removeEventListener('waggle:open-app', handler);
   }, [wm.openApp]);
+
+  // UX-Refactor Phase 0 launch-flip (DoD #1): a returning user whose desktop has
+  // no restored windows lands on Home, not an empty desktop / blank chat. Runs
+  // once after onboarding is known-complete. (First-run onboarding still finishes
+  // into chat via its starter-prompt flow; S01's HomeCockpit replaces that per
+  // PRD Journey 1.)
+  const didDefaultOpenRef = useRef(false);
+  useEffect(() => {
+    if (didDefaultOpenRef.current) return;
+    if (!onboardingState.completed) return;
+    didDefaultOpenRef.current = true;
+    if (wm.windows.length === 0) wm.openApp('home');
+  }, [onboardingState.completed, wm.windows.length, wm.openApp]);
 
   // Phase B.1: the Files app has its own "active" workspace separate from
   // the global activeWorkspace, so browsing another workspace's files
@@ -294,6 +309,10 @@ const Desktop = () => {
           />
         );
       }
+      // 'home' is the canonical launch route; renders the interim Home surface
+      // (DashboardApp) until S01 builds HomeCockpit. 'dashboard' kept for
+      // back-compat with persisted window state.
+      case 'home':
       case 'dashboard':
         return (
           <DashboardApp workspaces={workspaces} activeWorkspaceId={activeWorkspaceId}
