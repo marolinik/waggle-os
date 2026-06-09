@@ -21,7 +21,7 @@ import type {
   WorkspaceStateView, WorkspaceActivityEvent,
   Artifact, RelatedSearchResult,
 } from './types';
-import type { Command, CommandResult } from '@waggle/shared';
+import type { Command, CommandResult, WorkspaceType } from '@waggle/shared';
 
 /**
  * CC Sesija A §2.2 — map adapter `MemoryFrame.importance` (number 1-4) to the
@@ -250,7 +250,7 @@ class LocalAdapter {
     await this.fetch(`/api/workspace-templates/${id}`, { method: 'DELETE' });
   }
 
-  async createWorkspace(data: { name: string; group: string; persona?: string; agentGroupId?: string; templateId?: string; shared?: boolean; model?: string; personaId?: string }): Promise<Workspace> {
+  async createWorkspace(data: { name: string; group: string; persona?: string; agentGroupId?: string; templateId?: string; shared?: boolean; model?: string; personaId?: string; description?: string; type?: WorkspaceType; connectorIds?: string[]; mcpIds?: string[] }): Promise<Workspace> {
     // P1 (PDF 2026-04-17): server expects `personaId` (see packages/core/src/workspace-config.ts),
     // but onboarding + older call sites pass `persona`. Bridge both so the selected
     // persona is actually persisted on the workspace record.

@@ -1,21 +1,27 @@
 import { motion } from 'framer-motion';
+import { ShieldCheck, Lock } from 'lucide-react';
 import waggleLogoDark from '@/assets/waggle-logo.jpeg';
 import waggleLogoLight from '@/assets/waggle-logo.png';
 import { useIsLightTheme } from '@/hooks/useIsLightTheme';
 import { fadeSlide } from './constants';
 import type { WelcomeStepProps } from './types';
 
-const WelcomeStep = ({ onClickAnywhere }: WelcomeStepProps) => {
+/**
+ * S12 — First Launch. Manual "Continue" only (C29: the 3s auto-advance was
+ * dropped). Carries a static disabled `English (US)` chip (C28 — no i18n exists
+ * yet, so the selector is a non-interactive placeholder) and a one-line
+ * local-first / privacy note so the user sees the trust signal up front. When
+ * the sidecar is unreachable an "offline-ready" note reassures that setup still
+ * works locally.
+ */
+const WelcomeStep = ({ onClickAnywhere, offline }: WelcomeStepProps) => {
   const isLight = useIsLightTheme();
   const waggleLogo = isLight ? waggleLogoLight : waggleLogoDark;
   return (
   <motion.div
-    key="step-0"
+    key="step-first-launch"
     {...fadeSlide}
     className="text-center"
-    onClick={onClickAnywhere}
-    /* Click-anywhere preserved for mouse users, but no longer the sole path —
-       the explicit Continue button below is keyboard-reachable (A11y audit #11, WCAG 2.2.1). */
   >
     <div className="relative w-24 h-24 mx-auto mb-6">
       <img
@@ -33,9 +39,24 @@ const WelcomeStep = ({ onClickAnywhere }: WelcomeStepProps) => {
     <h1 className="text-4xl font-display font-bold text-foreground mb-3">
       Welcome to the Hive
     </h1>
-    <p className="text-muted-foreground text-sm max-w-md mx-auto mb-8">
+    <p className="text-muted-foreground text-sm max-w-md mx-auto mb-6">
       Persistent memory. Workspace-native. Built for knowledge work.
     </p>
+
+    {/* C28: static, disabled language chip — no i18n exists yet, so this is a
+        non-interactive placeholder signalling the (sole) current language. */}
+    <div className="mb-5">
+      <button
+        type="button"
+        disabled
+        aria-disabled="true"
+        title="More languages coming soon"
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border/50 bg-muted/30 text-xs font-display text-muted-foreground cursor-not-allowed"
+      >
+        🌐 English (US)
+      </button>
+    </div>
+
     <button
       onClick={(e) => { e.stopPropagation(); onClickAnywhere(); }}
       autoFocus
@@ -43,9 +64,18 @@ const WelcomeStep = ({ onClickAnywhere }: WelcomeStepProps) => {
     >
       Continue →
     </button>
-    <p className="text-xs text-muted-foreground/60 mt-4">
-      or click anywhere
+
+    {/* Local-first / privacy note (C28 companion). */}
+    <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground/70 mt-5 max-w-md mx-auto">
+      <ShieldCheck className="w-3.5 h-3.5 text-primary/70 shrink-0" />
+      Your memory and data stay on your device. Nothing leaves without your say-so.
     </p>
+    {offline && (
+      <p className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground/60 mt-2">
+        <Lock className="w-3 h-3 shrink-0" />
+        Offline-ready — setup works locally even without a connection.
+      </p>
+    )}
   </motion.div>
   );
 };

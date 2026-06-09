@@ -2,6 +2,7 @@
 
 import type {
   WorkspaceType,
+  MemoryKind,
   CommandCategory,
   CommandResultType,
   CommandResult,
@@ -33,6 +34,61 @@ export type {
 // was removed in the UX-refactor Phase 0 IA cleanup — it had zero references.
 
 export type StorageType = 'virtual' | 'local' | 'team';
+
+/**
+ * FE mirror of the server `UserProfile` (profile.ts). Carries the day-0
+ * onboarding signals `workType/teamSize/goals` (Phase 2D.1) alongside the
+ * existing identity/brand/style fields. Kept partial-friendly — every field is
+ * optional so a freshly-loaded or half-filled profile typechecks. `PUT
+ * /api/profile` merges a partial of this shape (see `adapter.updateProfile`).
+ */
+export interface UserProfile {
+  name?: string;
+  role?: string;
+  company?: string;
+  industry?: string;
+  bio?: string;
+  /** Day-0 onboarding personalization signals (S13 / B8). */
+  workType?: string;
+  teamSize?: string;
+  goals?: string[];
+  communicationStyle?: string;
+  language?: string;
+  interests?: string[];
+  questionnaireCompleted?: boolean;
+  brand?: {
+    primaryColor?: string;
+    secondaryColor?: string;
+    accentColor?: string;
+    fontHeading?: string;
+    fontBody?: string;
+    description?: string;
+  };
+  writingStyle?: {
+    tone?: string;
+    vocabulary?: string;
+    structurePreference?: string;
+    examples?: string[];
+    analyzed?: boolean;
+    sentenceLength?: string;
+    structure?: string;
+  };
+}
+
+/**
+ * One classified harvest item from `POST /api/harvest/preview` `items[]`
+ * (harvest.ts — Phase 2B.3). Carries the canonical `kind` (B6) + heuristic
+ * `confidence` (B2, 0-100) so the onboarding Import surface can show kind chips
+ * + a ConfidenceBadge before commit-as-unreviewed (C33).
+ */
+export interface ClassifiedHarvestItem {
+  id: string | number;
+  title: string;
+  type: string;
+  source: string;
+  kind: MemoryKind;
+  confidence: number;
+}
 
 export interface StorageConfig {
   endpoint?: string;
