@@ -66,6 +66,7 @@ import { workspaceRoutes } from './routes/workspaces.js';
 import { chatRoutes, type AgentRunner } from './routes/chat.js';
 import { memoryRoutes } from './routes/memory.js';
 import { memoryCenterRoutes } from './routes/memory-center.js';
+import { artifactRoutes } from './routes/artifacts.js';
 import { settingsRoutes } from './routes/settings.js';
 import { sessionRoutes, findUndistilledSessions, markSessionDistilled } from './routes/sessions.js';
 import { knowledgeRoutes } from './routes/knowledge.js';
@@ -2021,6 +2022,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(workflowRoutes);
   await server.register(pinRoutes);
   await server.register(documentRoutes);
+  await server.register(artifactRoutes);
   await server.register(fileRoutes);
   await server.register(waggleSignalRoutes);
   await server.register(providerRoutes);

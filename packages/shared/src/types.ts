@@ -505,3 +505,28 @@ export interface Artifact {
   createdAt: string;
   updatedAt: string;
 }
+
+// === Federated "search-related" envelope (S05 headline, PRD §16.6 / line 532) ===
+// The Artifact Center's defining endpoint returns an artifact PLUS its related
+// memories/sessions/tasks/agents — "outcomes with relations, not files". Memories
+// reuse the canonical `Memory` shape; the other three are lightweight references
+// (the full Session/Task/Agent contracts are not part of this envelope on purpose).
+
+export interface RelatedRef {
+  id: string;
+  title: string;
+  /** Owning workspace, when the item is workspace-scoped. */
+  workspaceId?: string;
+  /** Short text excerpt for display, when available. */
+  snippet?: string;
+  /** Sub-classification (e.g. session status, task state, agent type). */
+  kind?: string;
+}
+
+export interface RelatedSearchResult {
+  artifacts: Artifact[];
+  memories: Memory[];
+  sessions: RelatedRef[];
+  tasks: RelatedRef[];
+  agents: RelatedRef[];
+}

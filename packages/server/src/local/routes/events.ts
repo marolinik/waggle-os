@@ -23,6 +23,8 @@ export type AuditEventType =
   | 'tool_result'
   | 'memory_write'
   | 'memory_delete'
+  | 'artifact_write'
+  | 'artifact_delete'
   | 'workspace_create'
   | 'workspace_update'
   | 'workspace_delete'

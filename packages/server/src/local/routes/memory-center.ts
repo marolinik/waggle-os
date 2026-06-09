@@ -74,8 +74,10 @@ function deriveTitle(content: string): string {
 const stringArray = (v: unknown): string[] | undefined =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : undefined;
 
-/** Project a DB frame row + its metadata blob into the shared `Memory` shape. */
-function normalizeToMemory(frame: MemoryFrame, mind: string, workspaceId?: string): Memory {
+/** Project a DB frame row + its metadata blob into the shared `Memory` shape.
+ *  Exported so the federated artifact `search-related` route (2C) can reuse the
+ *  single normalization path rather than fork a second projection. */
+export function normalizeToMemory(frame: MemoryFrame, mind: string, workspaceId?: string): Memory {
   const meta = parseFrameMetadata(frame.metadata);
   const content = frame.content ?? '';
   const importance: Memory['importance'] = frame.importance ?? 'normal';
