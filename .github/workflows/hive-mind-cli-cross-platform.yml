@@ -49,6 +49,14 @@ jobs:
       - name: Install workspace deps
         run: npm install
 
+      # hive-mind-core imports @waggle/shared, whose dist/ is gitignored and so
+      # absent on a clean checkout. hive-mind-core/tsconfig declares no project
+      # reference to it (the OSS subtree-split mirrors that tsconfig, so a
+      # ../shared reference would dangle in the export root), so `tsc --build`
+      # won't bootstrap it. Build shared first — same as ci.yml/tauri-build-pr.yml.
+      - name: Build @waggle/shared (hive-mind-core dep)
+        run: cd packages/shared && npx tsc --build
+
       - name: Build hive-mind-core (substrate)
         run: cd packages/hive-mind-core && npx tsc --build
 
