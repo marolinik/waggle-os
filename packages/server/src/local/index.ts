@@ -65,6 +65,7 @@ import { MarketplaceDB, MarketplaceSync, seedMcpServers, seedNewSources } from '
 import { workspaceRoutes } from './routes/workspaces.js';
 import { chatRoutes, type AgentRunner } from './routes/chat.js';
 import { memoryRoutes } from './routes/memory.js';
+import { memoryCenterRoutes } from './routes/memory-center.js';
 import { settingsRoutes } from './routes/settings.js';
 import { sessionRoutes, findUndistilledSessions, markSessionDistilled } from './routes/sessions.js';
 import { knowledgeRoutes } from './routes/knowledge.js';
@@ -1976,6 +1977,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(workspaceRoutes);
   await server.register(chatRoutes);
   await server.register(memoryRoutes);
+  await server.register(memoryCenterRoutes);
   await server.register(settingsRoutes);
   await server.register(sessionRoutes);
   await server.register(knowledgeRoutes);

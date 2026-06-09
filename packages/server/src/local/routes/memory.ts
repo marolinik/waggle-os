@@ -12,8 +12,12 @@ const QUICK_CAPTURE_KINDS: readonly QuickCaptureKind[] = ['note', 'task', 'link'
  * M4: Sanitize memory frame content to prevent stored XSS.
  * Strips script tags, event handlers, and dangerous URI schemes.
  * Preserves normal text and markdown formatting.
+ *
+ * Exported so the Memory-Center route plugin (`memory-center.ts`) reuses the
+ * SAME filter — duplicating a security primitive across two files is a drift
+ * risk (a fix to one would silently miss the other).
  */
-function sanitizeFrameContent(content: string): string {
+export function sanitizeFrameContent(content: string): string {
   return content
     // Remove <script> tags and their content
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
