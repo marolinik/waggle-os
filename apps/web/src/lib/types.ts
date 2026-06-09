@@ -1,14 +1,9 @@
 // Waggle core types matching the architecture document
 
-export type AppView =
-  | 'chat'
-  | 'dashboard'
-  | 'memory'
-  | 'events'
-  | 'capabilities'
-  | 'cockpit'
-  | 'mission-control'
-  | 'settings';
+import type { WorkspaceType } from '@waggle/shared';
+
+// NOTE: the stale `AppView` union (superseded by `AppId` in lib/dock-tiers.ts)
+// was removed in the UX-refactor Phase 0 IA cleanup — it had zero references.
 
 export type StorageType = 'virtual' | 'local' | 'team';
 
@@ -37,6 +32,14 @@ export interface Workspace {
   storageType?: StorageType;
   storagePath?: string;
   storageConfig?: StorageConfig;
+  // --- UX-Refactor V2 view-model fields (PRD §15.3; optional, back-compat) ---
+  description?: string;
+  type?: WorkspaceType;
+  status?: 'active' | 'paused' | 'archived';
+  agentIds?: string[];
+  connectorIds?: string[];
+  mcpIds?: string[];
+  updatedAt?: string;
 }
 
 export interface FileEntry {
