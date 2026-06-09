@@ -11,7 +11,7 @@ import {
   type IdentityResponse,
 } from './tauri-bindings';
 import type {
-  Workspace, WorkspaceContext, ChatMessage, MemoryFrame,
+  Workspace, WorkspaceContext, ChatMessage, MemoryFrame, Memory,
   AgentStep, Session, SkillPack, FleetSession, CronJob,
   Notification, AgentStatus, Persona, SystemHealth,
   Connector, Settings, StreamEvent, KGNode, KGEdge,
@@ -519,6 +519,75 @@ class LocalAdapter {
     }
     const res = await this.fetch(`/api/memory/search?q=${encodeURIComponent(query)}${scope ? `&scope=${scope}` : ''}`);
     return unwrapArray(await res.json()).map(normalizeFrame);
+  }
+
+  // --- Memory Center (UX-Refactor Phase 2 — shared Memory entity, S04) ---
+  // These hit the new bare /api/memory* routes (memory-center.ts) and return the
+  // shared `Memory` shape (kind/confidence/scope/status/evidence/...), distinct
+  // from the legacy frame methods above. HTTP path works in web + desktop (the
+  // sidecar is bundled), so no Tauri IPC branch is needed.
+
+  async listMemories(opts: {
+    workspaceId?: string; kind?: string; status?: string; scope?: string;
+    q?: string; minConfidence?: number; limit?: number;
+  } = {}): Promise<Memory[]> {
+    const p = new URLSearchParams();
+    if (opts.workspaceId) p.set('workspace', opts.workspaceId);
+    if (opts.kind) p.set('kind', opts.kind);
+    if (opts.status) p.set('status', opts.status);
+    if (opts.scope) p.set('scope', opts.scope);
+    if (opts.q) p.set('q', opts.q);
+    if (typeof opts.minConfidence === 'number') p.set('minConfidence', String(opts.minConfidence));
+    if (typeof opts.limit === 'number') p.set('limit', String(opts.limit));
+    const qs = p.toString();
+    const res = await this.fetch(`/api/memory${qs ? `?${qs}` : ''}`);
+    const body = await res.json() as { results?: Memory[] };
+    return body.results ?? [];
+  }
+
+  async getMemory(id: string, workspaceId?: string): Promise<Memory | null> {
+    const qs = workspaceId ? `?workspace=${encodeURIComponent(workspaceId)}` : '';
+    const res = await this.fetch(`/api/memory/${encodeURIComponent(id)}${qs}`);
+    if (res.status === 404) return null;
+    return res.json();
+  }
+
+  async createMemory(input: {
+    content: string; kind?: string; scope?: string; tags?: string[];
+    importance?: string; title?: string; confidence?: number; workspaceId?: string;
+  }): Promise<Memory> {
+    const res = await this.fetch('/api/memory', { method: 'POST', body: JSON.stringify(input) });
+    return res.json();
+  }
+
+  async patchMemory(
+    id: string,
+    patch: { content?: string; importance?: string; kind?: string; scope?: string; tags?: string[]; status?: string; title?: string; evidence?: string[] },
+    workspaceId?: string,
+  ): Promise<Memory> {
+    const qs = workspaceId ? `?workspace=${encodeURIComponent(workspaceId)}` : '';
+    const res = await this.fetch(`/api/memory/${encodeURIComponent(id)}${qs}`, { method: 'PATCH', body: JSON.stringify(patch) });
+    return res.json();
+  }
+
+  async archiveMemory(id: string, workspaceId?: string): Promise<Memory> {
+    const qs = workspaceId ? `?workspace=${encodeURIComponent(workspaceId)}` : '';
+    const res = await this.fetch(`/api/memory/${encodeURIComponent(id)}/archive${qs}`, { method: 'POST' });
+    return res.json();
+  }
+
+  /** Hard delete (A8) via the bare-id route — distinct from deleteMemoryFrame. */
+  async deleteMemoryById(id: string, workspaceId?: string): Promise<void> {
+    const qs = workspaceId ? `?workspace=${encodeURIComponent(workspaceId)}` : '';
+    await this.fetch(`/api/memory/${encodeURIComponent(id)}${qs}`, { method: 'DELETE' });
+  }
+
+  async mergeMemories(ids: string[], opts: { workspaceId?: string; title?: string } = {}): Promise<Memory> {
+    const res = await this.fetch('/api/memory/merge', {
+      method: 'POST',
+      body: JSON.stringify({ ids, workspaceId: opts.workspaceId, title: opts.title }),
+    });
+    return res.json();
   }
 
   async searchTeamMemory(query: string, limit = 20): Promise<Array<{ id: string; content: string; authorId: string; authorName: string; importance: string; timestamp: string }>> {
