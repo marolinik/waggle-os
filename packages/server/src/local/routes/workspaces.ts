@@ -7,9 +7,9 @@ import { parseTier, getCapabilities } from '@waggle/shared';
 import { assertSafeSegment } from './validate.js';
 import { extractProgressItems, type ProgressItem } from './sessions.js';
 import { readFileRegistry, type FileRegistryEntry } from './ingest.js';
-import { buildWorkspaceState, type WorkspaceState } from '../workspace-state.js';
+import { buildWorkspaceState, type WorkspaceState, type StateItem } from '../workspace-state.js';
 import { buildTimeAwareGreeting, buildUpcomingSchedules } from './workspace-context.js';
-import { emitAuditEvent } from './events.js';
+import { emitAuditEvent, getAuditDb } from './events.js';
 import { createLogger } from '../logger.js';
 const log = createLogger('workspaces');
 
@@ -69,6 +69,53 @@ function composeWorkspaceSummary(
   // so we omit them from the narrative summary to avoid duplication.
 
   return parts.join(' ');
+}
+
+// ── UX-Refactor Phase 1 (S01/S02) view-model mappers ──────────────────────
+// The FE contract (`_phase1-contract.md` §2) mirrors WorkspaceState as
+// WorkspaceStateView with stable `{ id, content, date?, freshness? }` items and
+// `nextActions` as SuggestedAction[]. Map the server StateItem → that shape.
+
+/** Map a server StateItem list into the contract's `{ id, content, date?, freshness? }` rows. */
+function toStateItemViews(items: StateItem[], prefix: string): Array<{
+  id: string;
+  content: string;
+  date?: string;
+  freshness?: StateItem['freshness'];
+}> {
+  return items.map((item, i) => ({
+    id: item.sourceId ? `${prefix}:${item.sourceId}` : `${prefix}:${i}`,
+    content: item.content,
+    ...(item.dateLastTouched ? { date: item.dateLastTouched } : {}),
+    ...(item.freshness ? { freshness: item.freshness } : {}),
+  }));
+}
+
+/** Project a full WorkspaceState into the FE WorkspaceStateView contract shape. */
+function toWorkspaceStateView(state: WorkspaceState, workspaceId: string): {
+  active: ReturnType<typeof toStateItemViews>;
+  openQuestions: ReturnType<typeof toStateItemViews>;
+  pending: ReturnType<typeof toStateItemViews>;
+  blocked: ReturnType<typeof toStateItemViews>;
+  completed: ReturnType<typeof toStateItemViews>;
+  stale: ReturnType<typeof toStateItemViews>;
+  recentDecisions: ReturnType<typeof toStateItemViews>;
+  nextActions: Array<{ label: string; workspaceId: string; sessionId?: string; kind: string }>;
+} {
+  return {
+    active: toStateItemViews(state.active, 'active'),
+    openQuestions: toStateItemViews(state.openQuestions, 'oq'),
+    pending: toStateItemViews(state.pending, 'pending'),
+    blocked: toStateItemViews(state.blocked, 'blocked'),
+    completed: toStateItemViews(state.completed, 'completed'),
+    stale: toStateItemViews(state.stale, 'stale'),
+    recentDecisions: toStateItemViews(state.recentDecisions, 'decision'),
+    nextActions: state.nextActions.map((label) => ({
+      label,
+      workspaceId,
+      kind: 'next-action',
+    })),
+  };
 }
 
 // IMP-012: Template-to-capability-pack mapping for workspace templates
@@ -589,6 +636,93 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
       workspaceState,
       crossWorkspaceHints: crossWorkspaceHints.length > 0 ? crossWorkspaceHints : undefined,
     };
+  });
+
+  // UX-Refactor Phase 1 (S01/S02): GET /api/workspaces/:id/state — thin route
+  // over the existing buildWorkspaceState() builder, projected into the FE
+  // WorkspaceStateView contract. Returns the bare object (no envelope) per
+  // `_phase1-contract.md` §3. 404 for unknown workspaces; an empty state (no
+  // memory yet) yields all-empty arrays so the Workspace Desktop renders its
+  // empty-state cleanly rather than erroring.
+  server.get<{ Params: { id: string } }>('/api/workspaces/:id/state', async (request, reply) => {
+    const { id } = request.params;
+    assertSafeSegment(id, 'id');
+    const ws = server.workspaceManager.get(id);
+    if (!ws) {
+      return reply.status(404).send({ error: 'Workspace not found' });
+    }
+
+    let state: WorkspaceState | null = null;
+    try {
+      state = buildWorkspaceState({
+        dataDir: server.localConfig.dataDir,
+        workspaceId: id,
+        wsManager: server.workspaceManager,
+        activateWorkspaceMind: server.agentState.activateWorkspaceMind,
+      });
+    } catch (err) {
+      log.warn(`state build failed for ${id}:`, (err as Error).message);
+    }
+
+    if (!state) {
+      // No memory yet (or unreadable) — return the empty view so the FE can
+      // render its empty-state instead of treating the absence as a failure.
+      return {
+        active: [], openQuestions: [], pending: [], blocked: [],
+        completed: [], stale: [], recentDecisions: [], nextActions: [],
+      };
+    }
+
+    return toWorkspaceStateView(state, id);
+  });
+
+  // UX-Refactor Phase 1 (S02): GET /api/workspaces/:id/activity — thin alias
+  // over the audit-event store, scoped to this workspace and shaped into the
+  // FE WorkspaceActivityEvent contract (`{ events: [...] }`). Reuses the same
+  // audit.db the /api/events listing reads; no new store.
+  server.get<{
+    Params: { id: string };
+    Querystring: { limit?: string };
+  }>('/api/workspaces/:id/activity', async (request, reply) => {
+    const { id } = request.params;
+    assertSafeSegment(id, 'id');
+    const ws = server.workspaceManager.get(id);
+    if (!ws) {
+      return reply.status(404).send({ error: 'Workspace not found' });
+    }
+
+    const limit = Math.min(parseInt(request.query.limit ?? '50', 10) || 50, 200);
+
+    let rows: Array<{
+      id: number;
+      timestamp: string;
+      event_type: string;
+      tool_name: string | null;
+      user_id: string | null;
+    }> = [];
+    try {
+      const db = getAuditDb(server.localConfig.dataDir);
+      rows = db
+        .prepare(
+          `SELECT id, timestamp, event_type, tool_name, user_id
+           FROM audit_events WHERE workspace_id = ?
+           ORDER BY id DESC LIMIT ?`,
+        )
+        .all(id, limit) as typeof rows;
+    } catch (err) {
+      // Degrade gracefully — an unreadable audit DB yields an empty feed.
+      log.warn(`activity read failed for ${id}:`, (err as Error).message);
+    }
+
+    const events = rows.map((row) => ({
+      id: row.id,
+      ts: row.timestamp,
+      type: row.event_type,
+      ...(row.user_id ? { actor: row.user_id } : {}),
+      summary: row.tool_name ? `${row.event_type}: ${row.tool_name}` : row.event_type,
+    }));
+
+    return { events };
   });
 
   // F2: GET /api/workspaces/:id/files — list ingested files

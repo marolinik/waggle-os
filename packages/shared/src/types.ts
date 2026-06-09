@@ -366,3 +366,60 @@ export interface WorkspaceConfigV2 {
   updatedAt: string;
   lastActiveAt?: string;
 }
+
+// === UX-Refactor Command vocabulary (PRD §12.3 / shared-types-delta §9) ===
+// Win+K Command Center result/command shapes. Single source of truth — the
+// sidecar `command.ts` route layer and apps/web both import these. See
+// docs/ux-refactor/deltas/shared-types-delta.md §9.
+
+/** The six verb sections of the Command Center (PRD §12.3). */
+export type CommandCategory =
+  | 'search' | 'launch' | 'create' | 'run' | 'navigate' | 'extend';
+
+/**
+ * Every searchable object class the palette federates over (PRD §12.3 FR:
+ * "search across workspaces, memory, artifacts, sessions, people, agents,
+ * skills, commands, connectors, MCPs"). Artifact/agent rows are gated until
+ * those screens (S05/S09) land — the type carries them so the union is stable.
+ */
+export type CommandResultType =
+  | 'workspace' | 'memory' | 'artifact' | 'session' | 'person'
+  | 'agent' | 'skill' | 'command' | 'connector' | 'mcp' | 'automation';
+
+/**
+ * What a `run`/`create`/`navigate`/`extend` result does when executed. A
+ * Navigate result carries a `route`; a server-dispatched action carries an
+ * `endpoint` + `payload`. All optional so a pure Search result needs none.
+ */
+export interface CommandAction {
+  route?: string;
+  endpoint?: string;
+  payload?: Record<string, unknown>;
+}
+
+/** One row in the Command Center result list. */
+export interface CommandResult {
+  id: string;
+  type: CommandResultType;
+  title: string;
+  subtitle?: string;
+  category: CommandCategory;
+  icon?: string;
+  /** §12.3 permission-gated → renders the approval prompt before execution. */
+  requiresApproval?: boolean;
+  action?: CommandAction;
+}
+
+/**
+ * The execute request the palette posts to `POST /api/command/execute`. A
+ * structured command resolves via `id`; a natural-language command rides in
+ * `input` (PRD §12.3 "natural-language command input").
+ */
+export interface Command {
+  id?: string;
+  input?: string;
+  category?: CommandCategory;
+  type?: CommandResultType;
+  workspaceId?: string;
+  payload?: Record<string, unknown>;
+}

@@ -1,8 +1,12 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { SearchScope, Importance, FrameSource, MemoryFrame } from '@waggle/core';
-import { FrameStore, SessionStore, KnowledgeGraph } from '@waggle/core';
+import { FrameStore, SessionStore, KnowledgeGraph, AwarenessLayer } from '@waggle/core';
 import { extractEntities } from '@waggle/agent';
 import { emitAuditEvent } from './events.js';
+
+// ── UX-Refactor Phase 1 (S01) quick-capture kinds ─────────────────────────
+type QuickCaptureKind = 'note' | 'task' | 'link' | 'file';
+const QUICK_CAPTURE_KINDS: readonly QuickCaptureKind[] = ['note', 'task', 'link', 'file'];
 
 /**
  * M4: Sanitize memory frame content to prevent stored XSS.
@@ -581,5 +585,76 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
       input: JSON.stringify({ frameId }),
     });
     return reply.status(200).send({ deleted: true, frameId });
+  });
+
+  // UX-Refactor Phase 1 (S01): POST /api/quick-capture — Home Cockpit quick
+  // capture. Writes a memory frame (the durable record) and, for task-type
+  // captures, an awareness `task` row so the capture surfaces in the workspace
+  // state's active/pending lanes. Returns `{ frameId }` per `_phase1-contract.md`
+  // §3. Reuses the FrameStore/SessionStore frame-write path above (no new store).
+  server.post<{
+    Body: { kind?: string; content?: string; workspaceId?: string };
+  }>('/api/quick-capture', async (request, reply) => {
+    const { kind: rawKind, content: rawContent, workspaceId } = request.body ?? {};
+    if (!rawContent || !rawContent.trim()) {
+      return reply.status(400).send({ error: 'content is required' });
+    }
+    const kind: QuickCaptureKind = QUICK_CAPTURE_KINDS.includes(rawKind as QuickCaptureKind)
+      ? (rawKind as QuickCaptureKind)
+      : 'note';
+
+    // M4: Sanitize content to prevent stored XSS (same path as /memory/frames).
+    const content = sanitizeFrameContent(rawContent.trim());
+
+    // Resolve the target mind — workspace when provided + open, else personal.
+    let targetDb;
+    let mindLabel: string = 'personal';
+    if (workspaceId) {
+      targetDb = server.agentState.getWorkspaceMindDb(workspaceId);
+      if (targetDb) mindLabel = 'workspace';
+    }
+    if (!targetDb) {
+      targetDb = server.multiMind.personal;
+      mindLabel = 'personal';
+    }
+
+    const frames = new FrameStore(targetDb);
+    const sessions = new SessionStore(targetDb);
+    const active = sessions.getActive();
+    const gopId = active.length > 0 ? active[0].gop_id : sessions.create().gop_id;
+
+    // Provenance is user_stated — quick capture is the user speaking directly.
+    const latestI = frames.getLatestIFrame(gopId);
+    const frame = latestI
+      ? frames.createPFrame(gopId, content, latestI.id, 'normal', 'user_stated')
+      : frames.createIFrame(gopId, content, 'normal', 'user_stated');
+
+    // Task captures additionally seed an awareness `task` row so they appear in
+    // the workspace-state active/pending lanes (read by S01/S02 builders).
+    let awarenessId: number | undefined;
+    if (kind === 'task') {
+      try {
+        awarenessId = new AwarenessLayer(targetDb).add('task', content, 0, undefined, {
+          context: 'quick-capture',
+          status: 'open',
+        }).id;
+      } catch {
+        // Non-blocking — the frame is already saved; awareness is best-effort.
+      }
+    }
+
+    emitAuditEvent(server, {
+      workspaceId: workspaceId ?? 'personal',
+      eventType: 'memory_write',
+      input: JSON.stringify({ kind, content: content.slice(0, 500), source: 'quick-capture' }),
+      output: JSON.stringify({ frameId: frame.id, mind: mindLabel }),
+    });
+
+    return {
+      frameId: String(frame.id),
+      mind: mindLabel,
+      kind,
+      ...(awarenessId !== undefined ? { awarenessId } : {}),
+    };
   });
 };
