@@ -17,7 +17,7 @@
  * Hive DS --sem-* semantic tokens (index.css §IA color semantics).
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Sparkles, ChevronRight, Clock, Brain, AlertTriangle, Plus,
   CheckCircle2, Lightbulb, Calendar, ListTodo, Loader2, WifiOff,
@@ -298,7 +298,7 @@ function SuggestedActionsPanel({ actions, onRun }: { actions: SuggestedAction[];
       <div className="flex flex-wrap gap-2">
         {actions.slice(0, 6).map((a, i) => (
           <button
-            key={`${a.workspaceId}-${i}`}
+            key={`${a.workspaceId}-${a.kind}-${a.label}`}
             type="button"
             onClick={() => onRun(a)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
@@ -317,6 +317,8 @@ function QuickCapturePanel() {
   const [kind, setKind] = useState<QuickCaptureInput['kind']>('note');
   const [content, setContent] = useState('');
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  // Track the "saved → idle" reset timer so it can't fire setState after unmount.
+  const resetTimer = useRef<number | null>(null);
 
   const active = CAPTURE_KINDS.find(k => k.kind === kind) ?? CAPTURE_KINDS[0];
 
@@ -328,12 +330,20 @@ function QuickCapturePanel() {
       await adapter.quickCapture({ kind, content: trimmed });
       setContent('');
       setStatus('saved');
-      window.setTimeout(() => setStatus('idle'), 1800);
-    } catch (err: unknown) {
-      console.error('[HomeCockpit] quick capture failed:', err);
+      if (resetTimer.current !== null) window.clearTimeout(resetTimer.current);
+      resetTimer.current = window.setTimeout(() => {
+        resetTimer.current = null;
+        setStatus('idle');
+      }, 1800);
+    } catch {
       setStatus('error');
     }
   }, [content, kind]);
+
+  // Clear any pending reset timer on unmount (avoids setState-on-unmount).
+  useEffect(() => () => {
+    if (resetTimer.current !== null) window.clearTimeout(resetTimer.current);
+  }, []);
 
   return (
     <section className="mb-4 p-3 rounded-xl bg-secondary/20 border border-border/30" data-testid="home-cockpit-quickcapture">
@@ -364,6 +374,7 @@ function QuickCapturePanel() {
           onChange={e => { setContent(e.target.value); if (status === 'error' || status === 'saved') setStatus('idle'); }}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void submit(); } }}
           placeholder={active.placeholder}
+          aria-label={active.placeholder}
           className="flex-1 min-w-0 px-3 py-1.5 text-xs rounded-lg bg-background/60 border border-border/40 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
           data-testid="home-cockpit-capture-input"
         />
@@ -412,34 +423,70 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
   const [overnight, setOvernight] = useState<OvernightSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [permissionDenied, setPermissionDenied] = useState(false);
   const offline = useOfflineStatus();
+  // Guards every async set* against firing after unmount (mirrors
+  // WorkspaceDesktopApp's `cancelled` flag — but ref-scoped since `load` is a
+  // reusable callback driven by both the effect and the Retry button).
+  const cancelled = useRef(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(false);
+    setPermissionDenied(false);
     try {
       const b = await adapter.getHomeBriefing();
+      if (cancelled.current) return;
       setBriefing(b);
       // Overnight is a secondary, best-effort tile — its failure must never
       // blank the whole cockpit (offline/local-only degrades it gracefully).
       try {
-        setOvernight(await adapter.getHomeOvernight());
-      } catch (err: unknown) {
-        console.error('[HomeCockpit] overnight load failed:', err);
-        setOvernight(null);
+        const o = await adapter.getHomeOvernight();
+        if (!cancelled.current) setOvernight(o);
+      } catch {
+        if (!cancelled.current) setOvernight(null);
       }
     } catch (err: unknown) {
-      console.error('[HomeCockpit] briefing load failed:', err);
-      setLoadError(true);
+      if (cancelled.current) return;
       setBriefing(null);
+      // PERMISSION-DENIED (PRD §12.1): a 403 gets a dedicated message rather
+      // than the generic "couldn't load" / offline framing.
+      const msg = err instanceof Error ? err.message.toLowerCase() : '';
+      if (msg.includes('403') || msg.includes('forbid') || msg.includes('denied')) {
+        setPermissionDenied(true);
+      } else {
+        setLoadError(true);
+      }
     } finally {
-      setLoading(false);
+      if (!cancelled.current) setLoading(false);
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    cancelled.current = false;
+    void load();
+    return () => { cancelled.current = true; };
+  }, [load]);
 
   if (loading) return <CockpitSkeleton />;
+
+  // PERMISSION-DENIED (PRD §12.1): the briefing route rejected with 403 — a
+  // distinct, non-retry message so the user understands it's an access gate,
+  // not an outage.
+  if (permissionDenied) {
+    return (
+      <div className="h-full overflow-auto p-6 max-w-3xl mx-auto" data-testid="home-cockpit-permission-denied">
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <AlertTriangle className="w-10 h-10 mb-3" style={{ color: 'var(--sem-attention)' }} />
+          <p className="text-sm font-display font-semibold text-foreground mb-1">Access not permitted</p>
+          <p className="text-sm text-muted-foreground max-w-md">
+            Your account doesn't have permission to view this briefing. Check your workspace
+            access or sign in with an authorized account.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   // Briefing fetch failed entirely (and not first-run): offer a retry rather
   // than a blank screen. Offline-aware copy so local-only isn't read as a crash.
@@ -476,9 +523,32 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
 
   const onOpenFromAction = (a: SuggestedAction) => onContinue(a.workspaceId, a.sessionId);
 
+  // ATTENTION-REQUIRED (PRD §12.1): overnight failures get a visible top banner
+  // regardless of the OvernightPanel — which is suppressed when offline and
+  // hidden when there's no activity, so failures would otherwise go unseen.
+  const failureCount = overnight?.failures.length ?? 0;
+
   return (
     <div className="h-full overflow-auto p-6 max-w-3xl mx-auto" data-testid="home-cockpit">
       <GreetingHeader greeting={greeting} date={briefing.date} offline={offline} />
+
+      {failureCount > 0 && (
+        <div
+          className="mb-4 flex items-start gap-2 rounded-xl px-3 py-2.5"
+          style={{
+            color: 'var(--sem-attention)',
+            backgroundColor: 'color-mix(in srgb, var(--sem-attention) 10%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--sem-attention) 30%, transparent)',
+          }}
+          role="alert"
+          data-testid="home-cockpit-attention-banner"
+        >
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+          <p className="text-xs font-display">
+            {failureCount} overnight {failureCount === 1 ? 'task needs' : 'tasks need'} your attention.
+          </p>
+        </div>
+      )}
 
       <RecentWorkspacesPanel
         cards={briefing.recentWorkspaces}

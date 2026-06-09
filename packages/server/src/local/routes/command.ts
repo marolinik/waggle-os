@@ -29,10 +29,24 @@ import path from 'node:path';
 import fs from 'node:fs';
 import type { FastifyPluginAsync } from 'fastify';
 import type { CommandResult, Command } from '@waggle/shared';
-import type { Orchestrator } from '@waggle/agent';
+import type { Orchestrator, LoadedSkill } from '@waggle/agent';
 import { loadSkills } from '@waggle/agent';
 import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
 import { searchSessions } from './session-utils.js';
+
+/**
+ * Memoized `loadSkills()` — the federated `/search` hot path runs per keystroke,
+ * and `loadSkills` does a `readdirSync` + N `readFileSync` on every call. The
+ * skills dir is stable within a session, so cache once per `waggleHome`.
+ */
+const skillsCache = new Map<string, LoadedSkill[]>();
+function loadSkillsCached(waggleHome: string): LoadedSkill[] {
+  const cached = skillsCache.get(waggleHome);
+  if (cached) return cached;
+  const skills = loadSkills(waggleHome);
+  skillsCache.set(waggleHome, skills);
+  return skills;
+}
 
 /** A federation surface that yields zero rows must never sink the whole search. */
 function safeFederate<T>(label: string, fn: () => T[], log: (m: string) => void): T[] {
@@ -105,7 +119,7 @@ export const commandRoutes: FastifyPluginAsync = async (server) => {
 
     // Skills — name/content substring over authored skills.
     results.push(...safeFederate('skills', () => {
-      const skills = loadSkills(waggleHome)
+      const skills = loadSkillsCached(waggleHome)
         .filter((s) => s.name.toLowerCase().includes(lower) || s.content.toLowerCase().includes(lower))
         .slice(0, perFacet);
       return skills.map((skill): CommandResult => ({

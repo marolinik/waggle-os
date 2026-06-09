@@ -186,7 +186,10 @@ const Desktop = () => {
     if (!onboardingState.completed) return;
     didDefaultOpenRef.current = true;
     if (wm.windows.length === 0) wm.openApp('home');
-  }, [onboardingState.completed, wm.windows.length, wm.openApp]);
+    // didDefaultOpenRef guards re-entry, so wm.windows.length is intentionally
+    // NOT a dependency — including it would re-run the effect as windows open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onboardingState.completed, wm.openApp]);
 
   // Phase B.1: the Files app has its own "active" workspace separate from
   // the global activeWorkspace, so browsing another workspace's files
@@ -234,15 +237,40 @@ const Desktop = () => {
   });
 
   // Navigation handlers
+  // CommandCenter results carry type-prefixed ids (command.ts): `workspace:<id>`,
+  // `memory:<id>`, `skill:<name>`, `session:<wsId>:<sessionId>`, `command:<name>`.
+  // Strip the leading `type:` segment before matching against domain state, and
+  // keep every result type as a live click (no dead rows).
   const handleSearchNavigate = useCallback((type: string, id: string) => {
-    if (type === 'command') wm.openApp(id as AppId);
-    else if (type === 'workspace') {
-      selectWorkspace(id);
-      const ws = workspaces.find(w => w.id === id);
-      wm.openChatForWorkspace(id, ws?.name);
+    // Session ids carry TWO segments after the prefix (`session:<wsId>:<sessionId>`),
+    // so handle them before the generic single-prefix strip below.
+    if (type === 'session') {
+      const [, wsId] = id.split(':');
+      if (wsId) {
+        selectWorkspace(wsId);
+        const ws = workspaces.find(w => w.id === wsId);
+        wm.openChatForWorkspace(wsId, ws?.name);
+      }
+      return;
     }
-    else if (type === 'memory') wm.openApp('memory');
-  }, [wm.openApp, selectWorkspace, wm.openChatForWorkspace, workspaces]);
+    const bareId = id.includes(':') ? id.slice(id.indexOf(':') + 1) : id;
+    if (type === 'command') {
+      wm.openApp(bareId as AppId);
+    } else if (type === 'workspace') {
+      // S02: the workspace runtime is the Workspace Desktop, not a chat window.
+      selectWorkspace(bareId);
+      const ws = workspaces.find(w => w.id === bareId);
+      wm.openWorkspaceDesktop(bareId, ws?.name);
+    } else if (type === 'memory') {
+      wm.openApp('memory');
+    } else if (type === 'skill') {
+      wm.openApp('capabilities');
+    } else if (type === 'connector') {
+      wm.openApp('connectors');
+    } else if (type === 'mcp') {
+      wm.openApp('connectors');
+    }
+  }, [wm.openApp, wm.openWorkspaceDesktop, selectWorkspace, wm.openChatForWorkspace, workspaces]);
 
   const handleOnboardingComplete = useCallback((_serverBaseUrl: string) => {
     completeOnboarding();

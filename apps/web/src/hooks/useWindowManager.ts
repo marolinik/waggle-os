@@ -282,11 +282,14 @@ export function useWindowManager(workspaces: Workspace[], opts: UseWindowManager
   ) => {
     const ws = workspaces.find(w => w.id === workspaceId);
     const name = workspaceName ?? ws?.name;
+    // React 19: capture the chosen instanceId and focus it AFTER the updater
+    // returns, rather than calling setFocusedInstanceId inside setWindows.
+    let focusId = '';
     setWindows(prev => {
       const existing = prev.find(w => w.appId === 'workspace-desktop');
       if (existing) {
         const z = nextZ();
-        setFocusedInstanceId(existing.instanceId);
+        focusId = existing.instanceId;
         return prev.map(w => w.instanceId === existing.instanceId
           ? { ...w, workspaceId, workspaceName: name, zIndex: z, minimized: false }
           : w);
@@ -295,13 +298,14 @@ export function useWindowManager(workspaces: Workspace[], opts: UseWindowManager
       cascadeCounter.current = (cascadeCounter.current + 1) % 10;
       const z = nextZ();
       const instanceId = `workspace-desktop-${Date.now()}`;
-      setFocusedInstanceId(instanceId);
+      focusId = instanceId;
       return [...prev, {
         instanceId, appId: 'workspace-desktop' as AppId,
         workspaceId, workspaceName: name,
         zIndex: z, minimized: false, cascadeOffset: offset,
       }];
     });
+    if (focusId) setFocusedInstanceId(focusId);
   }, [workspaces]);
 
   /**

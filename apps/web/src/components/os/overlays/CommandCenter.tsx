@@ -68,7 +68,7 @@ const NAVIGABLE_TYPES: ReadonlySet<CommandResultType> = new Set<CommandResultTyp
 ]);
 
 const DEBOUNCE_MS = 220;
-const MIN_QUERY = 1;
+const MIN_QUERY = 2;
 
 /* ── Permission prompt (C9 — reuses the chat ApprovalGate visual pattern) ──
  * Command Center does not own its own approval mechanism; gated executes flow
@@ -224,12 +224,14 @@ const CommandCenter = ({ open, onClose, onNavigate, onExecute, workspaceId }: Co
     setPending(null);
     setOutcome(null);
 
+    let alive = true;
     adapter.commandRecent()
-      .then((r) => setRecent(r.recent ?? []))
-      .catch(() => setRecent([]));
+      .then((r) => { if (alive) setRecent(r.recent ?? []); })
+      .catch(() => { if (alive) setRecent([]); });
     adapter.commandSuggestions()
-      .then((s) => setSuggestions(s.suggestions ?? []))
-      .catch(() => setSuggestions([]));
+      .then((s) => { if (alive) setSuggestions(s.suggestions ?? []); })
+      .catch(() => { if (alive) setSuggestions([]); });
+    return () => { alive = false; };
   }, [open]);
 
   // Server-backed search, debounced. Falls back to a client offline filter over
@@ -245,7 +247,7 @@ const CommandCenter = ({ open, onClose, onNavigate, onExecute, workspaceId }: Co
     setSearching(true);
     const handle = setTimeout(async () => {
       try {
-        const res = await adapter.commandSearch(q, workspaceId);
+        const res = await adapter.commandSearch(q, workspaceId ? 'workspace' : undefined);
         setResults(res.results ?? []);
       } catch {
         // Offline fallback: fuzzy-match across recent + suggested.

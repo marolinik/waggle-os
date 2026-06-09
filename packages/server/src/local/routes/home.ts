@@ -151,11 +151,16 @@ function readAuditCounts(
         )
         .get(fromIso, toIso) as { cnt: number }
     ).cnt;
+    // Agent tool calls record the raw tool name into `tool_name` (chat.ts:1150);
+    // the file-producing set is write_file / edit_file / generate_docx
+    // (chat.ts:1181-1185 fileTools map). The manual workspace write endpoint
+    // additionally stamps 'file_write' (workspaces.ts:1087). Cover them all.
     const artifactsCreated = (
       db
         .prepare(
           `SELECT COUNT(*) AS cnt FROM audit_events
-           WHERE event_type = 'tool_call' AND tool_name = 'file_write'
+           WHERE event_type = 'tool_call'
+             AND tool_name IN ('write_file', 'edit_file', 'generate_docx', 'file_write')
              AND timestamp >= ? AND timestamp <= ?`,
         )
         .get(fromIso, toIso) as { cnt: number }
@@ -289,12 +294,15 @@ export const homeRoutes: FastifyPluginAsync = async (server) => {
     }
 
     // Global (workspace-agnostic) schedules fill any remaining up-next slots.
+    // A global schedule can surface both as schedule:<wsId>:<label> (above) and
+    // schedule:global:<label> (here) — de-dup on label so it appears once.
     if (upNext.length < MAX_UP_NEXT) {
+      const seenLabels = new Set(upNext.map((item) => item.label));
       for (const label of buildUpcomingSchedules(cronSchedules)) {
         if (upNext.length >= MAX_UP_NEXT) break;
-        const id = `schedule:global:${label}`;
-        if (upNext.some((item) => item.id === id)) continue;
-        upNext.push({ id, label, kind: 'schedule' });
+        if (seenLabels.has(label)) continue;
+        upNext.push({ id: `schedule:global:${label}`, label, kind: 'schedule' });
+        seenLabels.add(label);
       }
     }
 
@@ -310,7 +318,9 @@ export const homeRoutes: FastifyPluginAsync = async (server) => {
       recentWorkspaces,
       suggestedActions,
       upNext,
-      isFirstRun: !anyMemory,
+      // True first-run = no workspaces at all, distinct from has-workspaces-but-
+      // no-memory (the greeting heuristic above already keys off anyMemory).
+      isFirstRun: ranked.length === 0,
     };
 
     return briefing;
@@ -356,9 +366,16 @@ export const homeRoutes: FastifyPluginAsync = async (server) => {
             continue;
           }
           for (const row of history) {
+            // `executed_at` is SQLite datetime('now') format ("2026-06-09
+            // 14:23:00", space-separated UTC, no 'Z'), NOT a Date.toISOString().
+            // Lexicographic comparison against fromIso/toIso would be wrong, so
+            // normalize to epoch millis before the window check.
+            const execMs = new Date(
+              row.executed_at.replace(' ', 'T') + 'Z',
+            ).getTime();
             // History is newest-first; once we pass the window we can stop.
-            if (row.executed_at < fromIso) break;
-            if (row.executed_at > toIso) continue;
+            if (Number.isFinite(execMs) && execMs < from.getTime()) break;
+            if (Number.isFinite(execMs) && execMs > now.getTime()) continue;
             if (row.success === 1) {
               automationsCompleted += 1;
             } else {

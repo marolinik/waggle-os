@@ -326,8 +326,8 @@ function MemoryHighlightsWidget({ ctx }: { ctx: WorkspaceContext | null }) {
                 <Lightbulb className="w-3 h-3 inline mr-1 text-primary" />Recent decisions
               </p>
               <ul className="space-y-1">
-                {decisions.slice(0, 3).map((d, i) => (
-                  <li key={i} className="text-xs text-foreground">{d.content}</li>
+                {decisions.slice(0, 3).map(d => (
+                  <li key={d.date ?? d.content.slice(0, 32)} className="text-xs text-foreground">{d.content}</li>
                 ))}
               </ul>
             </div>
@@ -338,8 +338,8 @@ function MemoryHighlightsWidget({ ctx }: { ctx: WorkspaceContext | null }) {
                 <Sparkles className="w-3 h-3 inline mr-1 text-amber-400" />I remember
               </p>
               <ul className="space-y-1">
-                {memories.slice(0, 4).map((m, i) => (
-                  <li key={i} className="text-xs text-muted-foreground">
+                {memories.slice(0, 4).map(m => (
+                  <li key={m.date ?? m.content.slice(0, 32)} className="text-xs text-muted-foreground">
                     <span className="text-foreground">
                       {m.content.slice(0, 110)}{m.content.length > 110 ? '…' : ''}
                     </span>
@@ -416,10 +416,10 @@ function WorkspaceInfoPanel({
         </div>
       </div>
 
-      {/* Members */}
+      {/* Team members — global team roster, NOT workspace-scoped (see fetch site). */}
       <div className="p-4 border-b border-border/30">
         <h3 className="text-[10px] font-display uppercase tracking-wide text-muted-foreground mb-2">
-          <Users className="w-3 h-3 inline mr-1" />Members
+          <Users className="w-3 h-3 inline mr-1" />Team members
         </h3>
         {members.length === 0 ? (
           <EmptyHint>Just you for now.</EmptyHint>
@@ -652,6 +652,11 @@ const WorkspaceDesktopApp = ({ workspaceId, workspaceName, onOpenChat }: Workspa
         setErrorKind(msg.includes('403') || msg.includes('forbid') || msg.includes('denied')
           ? 'permission'
           : 'offline');
+        // Context decides the whole-screen error state — bail before the
+        // best-effort feeds fire, so a permission denial doesn't fan out into
+        // four more 403s against the same workspace.
+        setLoading(false);
+        return;
       }
 
       // State / activity / members / artifacts are best-effort — each one
@@ -666,6 +671,9 @@ const WorkspaceDesktopApp = ({ workspaceId, workspaceName, onOpenChat }: Workspa
         if (!cancelled) setActivity(Array.isArray(a?.events) ? a.events : []);
       } catch { if (!cancelled) setActivity([]); }
 
+      // getTeamMembers() returns the GLOBAL team roster, not a per-workspace
+      // membership list — the UI is labelled "Team members" accordingly.
+      // TODO(Phase 5/S10): workspace-scoped members endpoint.
       try {
         const m = await adapter.getTeamMembers();
         if (!cancelled) setMembers(Array.isArray(m) ? m : []);
@@ -779,9 +787,11 @@ const WorkspaceDesktopApp = ({ workspaceId, workspaceName, onOpenChat }: Workspa
           return (
             <button
               key={tab.id}
+              id={`ws-tab-${tab.id}`}
               type="button"
               role="tab"
               aria-selected={isActive}
+              aria-controls="ws-tabpanel"
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-1.5 px-3 py-2 text-xs font-display whitespace-nowrap border-b-2 transition-colors ${
                 isActive
@@ -799,7 +809,13 @@ const WorkspaceDesktopApp = ({ workspaceId, workspaceName, onOpenChat }: Workspa
 
       {/* Body: main canvas + right context panel */}
       <div className="flex-1 min-h-0 flex overflow-hidden">
-        <main className="flex-1 min-w-0 overflow-auto" role="tabpanel" data-testid="ws-tab-panel">
+        <main
+          id="ws-tabpanel"
+          className="flex-1 min-w-0 overflow-auto"
+          role="tabpanel"
+          aria-labelledby={`ws-tab-${activeTab}`}
+          data-testid="ws-tab-panel"
+        >
           {activeTab === 'overview' && (
             !hasMemory && artifacts.length === 0 && activity.length === 0
               && (state?.pending?.length ?? 0) === 0 && (state?.blocked?.length ?? 0) === 0 ? (
@@ -935,7 +951,7 @@ function normalizeArtifacts(files: unknown[]): ArtifactRow[] {
       if (!name) continue;
       const id = typeof rec.path === 'string' ? rec.path
         : typeof rec.id === 'string' ? rec.id
-        : `${name}-${i}`;
+        : `artifact-${i}`;
       const subtitle = typeof rec.mimeType === 'string' ? rec.mimeType
         : typeof rec.modifiedAt === 'string' ? relativeTime(rec.modifiedAt)
         : undefined;
