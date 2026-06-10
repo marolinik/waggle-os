@@ -182,7 +182,12 @@ const AutomationBuilder = ({ initial, busy, onSubmit, onCancel }: AutomationBuil
           ...(outputChannel !== 'log' ? { outputChannel } : {}),
           ...(jobType === 'agent_task' && prompt.trim() ? { prompt: prompt.trim() } : {}),
         },
-        ...(workspaceId ? { workspaceId } : {}),
+        // agent_task REQUIRES a workspace id at the store layer; '*' is the
+        // executor's fan-out-to-all sentinel, so "All workspaces" maps to it.
+        // Other job types keep the omit-when-global convention.
+        ...(workspaceId
+          ? { workspaceId }
+          : jobType === 'agent_task' ? { workspaceId: '*' } : {}),
       }),
   });
 
