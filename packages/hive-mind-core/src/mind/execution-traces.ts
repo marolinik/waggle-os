@@ -128,6 +128,11 @@ export interface TraceQueryFilter {
   taskShape?: string;
   /** Lower bound (inclusive) on created_at — ISO string */
   since?: string;
+  /** Substring pre-filter on trace_json (SQL LIKE), e.g. `"agent:` to scope
+   *  the LIMIT to tagged traces instead of the global recency window. LIKE
+   *  wildcards (%/_) in the value are NOT escaped — callers needing an exact
+   *  match must still filter the parsed payload (tags array) in JS. */
+  tagLike?: string;
   /** Max rows to return (default 100) */
   limit?: number;
 }
@@ -344,6 +349,10 @@ export class ExecutionTraceStore {
     if (filter.since) {
       clauses.push('created_at >= ?');
       params.push(filter.since);
+    }
+    if (filter.tagLike) {
+      clauses.push('trace_json LIKE ?');
+      params.push(`%${filter.tagLike}%`);
     }
 
     const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';

@@ -297,6 +297,18 @@ export class CronStore {
     ).all(scheduleId, limit) as CronExecutionRow[];
   }
 
+  /** Prune execution-history rows older than N days. recordExecution writes a
+   *  row per tick (UX-Refactor Phase 3, Journey 16), so without retention the
+   *  table grows unbounded (a per-minute job ≈ 525k rows/year). Mirrors
+   *  optStore.pruneOlderThan(30). Returns the number of rows deleted. */
+  pruneExecutionHistory(olderThanDays: number): number {
+    const days = Math.max(1, Math.floor(olderThanDays));
+    const result = this.db.getDatabase().prepare(
+      "DELETE FROM cron_execution_history WHERE executed_at < datetime('now', ?)",
+    ).run(`-${days} days`);
+    return result.changes;
+  }
+
   // ── W5.10: Notification Persistence ────────────────────────────────
 
   /** Save a notification. */

@@ -91,8 +91,9 @@ export {
   type AuditApprovalClass, type AuditInitiator, type AuditCapabilityType,
 } from './install-audit.js';
 export {
-  CronStore, CRON_SCHEDULES_TABLE_SQL,
+  CronStore, CRON_SCHEDULES_TABLE_SQL, VALID_JOB_TYPES,
   type CronSchedule, type CreateScheduleInput, type CronJobType,
+  type CronExecutionRow,
 } from './cron-store.js';
 export { VaultStore, type VaultEntry } from './vault.js';
 export { TelemetryStore, TelemetryCollector, TELEMETRY_EVENTS, type TelemetryEvent, type TelemetrySummary } from './telemetry.js';

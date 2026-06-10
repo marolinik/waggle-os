@@ -19,6 +19,25 @@ export type JobExecutor = (schedule: CronSchedule) => Promise<void>;
 /** Q16:C — Optional callback fired after each cron job execution (success or failure). */
 export type JobCompleteCallback = (schedule: CronSchedule, result: { success: boolean; error?: string }) => void;
 
+/**
+ * UX-Refactor Phase 3 (Journey 16): the history-persistence half of the
+ * production onJobComplete wiring (local/index.ts). Exported as a named
+ * factory so tests install the SAME closure the server runs instead of a
+ * hand-copied mirror that can silently drift from the real wire.
+ */
+export function makeRecordExecutionCallback(
+  store: Pick<CronStore, 'recordExecution'>,
+): JobCompleteCallback {
+  return (schedule, result) => {
+    try {
+      store.recordExecution(schedule.id, schedule.name, {
+        success: result.success,
+        ...(result.error ? { error: result.error } : {}),
+      });
+    } catch { /* history is best-effort */ }
+  };
+}
+
 /** Maximum consecutive failures before a job is auto-disabled */
 const MAX_CONSECUTIVE_FAILURES = 5;
 
@@ -96,6 +115,22 @@ export class LocalScheduler {
       });
       throw err;
     }
+  }
+
+  /**
+   * C26 (UX-Refactor Phase 3): run the executor against an AD-HOC (possibly
+   * unsaved) schedule with the CRON BOOKKEEPING suppressed — no markRun
+   * (cron_schedules write), no fail-count mutation, no onJobComplete
+   * (completion notification/history/Telegram side effects). NOTE: the job
+   * handler itself EXECUTES FOR REAL — handlers that persist or notify
+   * in-handler (agent_task LLM calls + success notifications, consolidation
+   * writes, optimization log inserts, ...) still do; that is the action under
+   * test, not cron bookkeeping. Backs the Builder's `POST /api/automations/
+   * test` preview; deliberately NOT executeJob, whose semantics are wrong for
+   * a pre-activation test.
+   */
+  async dryRun(schedule: CronSchedule): Promise<void> {
+    await this.executor(schedule);
   }
 
   /**

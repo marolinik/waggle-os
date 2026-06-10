@@ -119,6 +119,8 @@ import { profileRoutes } from './routes/profile.js';
 import { telemetryRoutes } from './routes/telemetry.js';
 import { stripeRoutes } from '../stripe/index.js';
 import { agentGroupRoutes } from './routes/agent-groups.js';
+import { agentEntityRoutes } from './routes/agents.js';
+import { automationRoutes } from './routes/automations.js';
 import { harvestRoutes } from './routes/harvest.js';
 import { wikiRoutes } from './routes/wiki.js';
 import { identityRoutes } from './routes/identity.js';
@@ -130,7 +132,7 @@ import { log, createLogger } from './logger.js';
 import { seedDefaultCrons } from './setup-crons.js';
 import { registerConnectors } from './setup-connectors.js';
 import { securityMiddleware } from './security-middleware.js';
-import { LocalScheduler } from './cron.js';
+import { LocalScheduler, makeRecordExecutionCallback } from './cron.js';
 import { EvolutionService, isEvolutionAutoEnabled } from './services/evolution-service.js';
 import {
   generateMorningBriefing,
@@ -1380,6 +1382,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   };
 
   // Local scheduler — runs cron jobs in-process (Solo, no Redis/BullMQ)
+  const persistCronHistory = makeRecordExecutionCallback(cronStore);
   const scheduler = new LocalScheduler(cronStore, async (schedule) => {
     switch (schedule.job_type) {
       case 'memory_consolidation': {
@@ -1503,6 +1506,10 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
           // Normal memory consolidation
           try { runPersonalConsolidation(); } catch { /* non-blocking */ }
         }
+        // UX-Refactor Phase 3: cron_execution_history retention. recordExecution
+        // now writes a row per tick (Journey 16), so prune >30-day rows on the
+        // same nightly consolidation cadence (mirrors optStore.pruneOlderThan).
+        try { cronStore.pruneExecutionHistory(30); } catch { /* best-effort */ }
         break;
       }
       case 'workspace_health':
@@ -1825,6 +1832,16 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
       }
     }
   }, (schedule, result) => {
+    // UX-Refactor Phase 3 (Journey 16): persist the execution outcome to
+    // cron_execution_history. Until now recordExecution was never called, so
+    // GET /api/cron/:id/history, /api/automations/:id/logs and the Home
+    // overnight failure feed all read an empty table. Fires for scheduler
+    // ticks AND manual triggers (executeJob); the C26 dry-run path
+    // (scheduler.dryRun) deliberately bypasses this callback. The persistence
+    // closure is the shared makeRecordExecutionCallback (cron.ts) so
+    // automations.test.ts exercises the SAME code, not a hand-copied mirror.
+    persistCronHistory(schedule, result);
+
     // Q16:C — Emit notification after every cron job tick (success or failure)
     if (result.success) {
       emitNotification(server, {
@@ -2001,6 +2018,13 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(homeRoutes);
   await server.register(commandCenterRoutes);
   await server.register(cronRoutes);
+  // UX-Refactor Phase 3: Agent entity (S09/S18, B3 agents.json) + the
+  // /api/automations/* PRD-vocabulary alias over cron (S11/S20, B4).
+  // agentEntityRoutes is distinct from agentRoutes (/api/agent/* + /api/agents/
+  // active) and agentGroupRoutes; the static /api/agents/active keeps precedence
+  // over the new /:id param route (find-my-way prefers static segments).
+  await server.register(agentEntityRoutes);
+  await server.register(automationRoutes);
   await server.register(notificationRoutes);
   await server.register(marketplaceDevRoutes);
   await server.register(marketplaceRoutes);

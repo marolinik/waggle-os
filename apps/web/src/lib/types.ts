@@ -30,6 +30,80 @@ export type {
   Confidence,
 } from '@waggle/shared';
 
+// Re-export the UX-Refactor Phase-3 Intelligence-layer vocabulary (PRD §15.5/
+// §16.8/§16.10) so Agent Center / Skills Hub / Automation Center FE code imports
+// the contract from lib/types alongside the view-models below.
+export type {
+  AgentType,
+  AutonomyLevel,
+  Skill,
+  Automation,
+  AutomationTriggerType,
+} from '@waggle/shared';
+
+/** PRD §14.5 agent lifecycle states (mirrors the sidecar agents-store union —
+ *  distinct from the legacy `AgentStatus` cost/model snapshot below). */
+export type AgentRunState =
+  | 'draft' | 'idle' | 'running' | 'paused' | 'failed'
+  | 'waiting_for_approval' | 'completed' | 'archived';
+
+/**
+ * FE Agent view-model (UX-Refactor Phase 3, S09/S18 / gate B3) — the card shape
+ * `GET /api/agents` returns: the persisted agents.json record PLUS the derived
+ * overlay (`status` from live fleet sessions; `lastRunAt`/`successRate` from
+ * execution_traces — never persisted). Projection of the extended shared
+ * `AgentDef`; runtime session state stays on `FleetSession` (don't duplicate it).
+ */
+export interface Agent {
+  id: string;
+  name: string;
+  goal: string;
+  description?: string;
+  type: import('@waggle/shared').AgentType;
+  personaId?: string;
+  avatar?: string;
+  model: string;
+  autonomyLevel: import('@waggle/shared').AutonomyLevel;
+  workspaceIds?: string[];
+  teamId?: string;
+  memoryScopes: import('@waggle/shared').Scope[];
+  skillIds?: string[];
+  connectorIds?: string[];
+  mcpIds?: string[];
+  permissions?: Record<string, unknown>;
+  status: AgentRunState;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+  /** Derived at read (B3): newest tagged execution trace. */
+  lastRunAt?: string;
+  /** Derived at read (B3): (success+verified)/finalized over tagged traces, 0-1. */
+  successRate?: number;
+}
+
+/** One row of `GET /api/agents/:id/traces` (read over execution_traces). */
+export interface AgentTrace {
+  id: number;
+  ts: string;
+  sessionId: string | null;
+  workspaceId: string | null;
+  model: string | null;
+  outcome: 'success' | 'corrected' | 'abandoned' | 'verified' | 'pending';
+  cost: number;
+  durationMs: number;
+  tools: string[];
+}
+
+/** One row of `GET /api/automations/:id/logs` (cron_execution_history). */
+export interface AutomationLog {
+  id: number;
+  executedAt: string;
+  durationMs: number | null;
+  success: boolean;
+  resultSummary: string | null;
+  error: string | null;
+}
+
 // NOTE: the stale `AppView` union (superseded by `AppId` in lib/dock-tiers.ts)
 // was removed in the UX-refactor Phase 0 IA cleanup — it had zero references.
 
@@ -438,6 +512,10 @@ export interface CronJob {
   enabled: boolean;
   lastRun?: string;
   nextRun?: string;
+  /** Round-trip fields (Phase 3): kept so the Automation Builder can edit a job
+   *  without losing its type/config (normalizeCronJob used to drop them). */
+  jobType?: string;
+  jobConfig?: Record<string, unknown>;
 }
 
 export interface Notification {
