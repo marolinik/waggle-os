@@ -504,3 +504,69 @@ commits).
 **Phase 3+ (intelligence/extend/team), not blocking P1–P2:** **A4, A5, A7, B3, B5, B7** + all remaining
 §C items. Note **A7** (RBAC) must be ratified before S10 coding specifically, and **C15** (install-audit
 `critical` CHECK bug) should be fixed before any install-audit write path ships in Phase 4.
+
+
+---
+
+# UX Refactor v2.1 — Ratification of Decision Register D1–D15 (2026-06-10)
+
+**Ratifies:** `docs/UX_REFACTOR_STATE_AUDIT.md` §8.3 · **Ratified by:** Marko Marković (founder)
+**Authority chain (declared by this register, D10):** this ratification > Brief v2.1 > `docs/UX_REFACTOR_STATE_AUDIT.md` > blueprint handoff package > prior-plan docs (`docs/ux-refactor/`).
+This document + Brief v2.1 + the audit **supersede all prior conflicting ratifications, explicitly including B1 (2026-06-09)**. This file is the **single decision log** going forward — no parallel ratification tracks.
+
+## Structural (D1–D5)
+
+### D1 — Shell topology: RATIFIED option (b) — AppShell via in-place conversion. **B1 is explicitly superseded.**
+Convert to AppShell + left nav + single canvas + URL routes, reusing every shipped screen component as a route surface. Conditions:
+1. **Zero screen-component rewrites during conversion**; screens mount under routes as-is. Divergences are phase work, not conversion work.
+2. Brief route groups become **canonical addresses**; Ctrl+K command index and `handleSearchNavigate` retarget to routes; `waggle:open-app` CustomEvent deep links convert to URL navigation (the event bus may remain as an internal shim during transition, but **URLs are the contract**).
+3. **No window z-order code ships** (`useWindowManager` z-order/focus/minimize/cascade retired). `waggle-window-state-v1` localStorage migrates or clears cleanly.
+4. **Chat multi-instance:** chat becomes the widget inside Workspace Desktop (one per workspace, per blueprint "chat is one widget"). If conversion design surfaces a hard requirement for detached chat, propose it as a scoped exception ("D1-c lite") — do not silently keep windowing.
+5. **B4 ("alias, don't rename" for `/api/*`) survives** — orthogonal to the shell and correct.
+
+### D2 — Memory Center: RATIFIED — rework AND promote to standalone.
+Standalone `MemoryCenterApp` (same shape as `ArtifactCenterApp`; audit §7.9 inconsistency resolved in favor of the standalone pattern). Top-level structure = **two-mind split**: "About you" (Personal Mind) / "About this work" (Workspace Mind, per workspace). Reuse `MemoryCenterTab` internals as the per-mind list. Confidence/metadata (B2, M1) carry over. Legacy MemoryApp tabs (Graph/Timeline/etc.) remain accessible from within the new surface or as secondary tabs — **do not delete capability, restructure the entry**.
+
+### D3 — Auth gate: RATIFIED — full structural scope. All four audit conflicts in scope:
+1. **Adapter-level pre-token deferral** (structural gate, not per-component convention).
+2. **Throw-on-`!ok` mandated adapter-wide** — convert all silent-empty getters (`getMarketplace`, `getMcps`, `getPersonas`, `getModels`, `getWorkspaceTemplates`, `getTier`).
+3. **401 → silent token refresh → single retry** (sidecar-restart recovery) — in scope.
+4. **Boot-path surfaces in scope:** `Desktop.refreshTier` and `LoginBriefing` must never render silent-FREE / silent-empty on auth failure. **Tier resolution failing open to a rendered FREE state is classified as a monetization defect, severity-critical.**
+Plus: error states never cache as valid-empty; focus/visibility revalidation on errored surfaces.
+
+### D4 — Skill-write governance: RATIFIED — autonomy-aware gating, four bindings:
+- **(i) Policy:** `create_skill` — normal autonomy = ask (in-chat approval card), trusted/yolo = auto-execute. `delete_skill` — **always ask, every autonomy level** (add to `isCriticalNeverAutopass`); destructive actions do not inherit autonomy. `read_skill` ungated. **Always-audit all three** outcomes with `initiator:'agent'`.
+- **(ii) Surface:** the **in-chat SSE approval card is canonical** for agent skill writes. Brief §2.3's "same modal" is hereby interpreted as **same policy and risk taxonomy, not same component**. Align the card's risk display with the `ui/approval-modal.tsx` taxonomy (D15 work).
+- **(iii) One write path — AMENDED ruling: do NOT route the agent tool through HTTP.** Extract a **shared skill-write service module** (create/update/delete + redaction + audit write inside the service) consumed by both `routes/skills.ts` and `skill-tools.ts`. One module, one audit trail, two callers.
+- **(iv) Endpoint consolidation (absorbs D14):** raw `POST /api/skills` delegates to the audited service (or is deprecated in favor of `/api/skills/create`); `PUT` and `DELETE /api/skills/:name` enter the audit trail. **Provenance:** skill frontmatter `initiator`/`source` + `GET /api/skills` returns it + Skills Hub badge ("created by agent — review"), replacing the name-heuristic "Custom" classification for agent-created skills.
+- **Persona exception RATIFIED:** read-only personas (planner/verifier) keep losing `create_skill`/`delete_skill` while retaining `read_skill`.
+- **PM residual ruled (PRO-gate on skill creation):** skill creation — human and agent — **stays available at FREE for launch**. The self-evolving loop is the differentiator and must demo at the free tier. Marketplace installs remain PRO-gated. Reversible post-launch with data.
+
+### D5 — Team zone: RATIFIED — keep tier-hidden. No stripping, no new work. Approvals-inbox PRO visibility: post-launch consideration, not launch scope.
+
+## Scope clarifications (D6–D10) — defaults ratified, with notes
+
+- **D6 — RATIFIED.** S14-in-Launcher and S16-as-needs-review-filter satisfy the launch cut. Consent is given at import initiation; review is quality control, not consent. **Verification item:** Home Cockpit must surface a "N memories need review" alert (journey J08); if absent, add as a small Phase-2 item.
+- **D7 — RATIFIED.** `UpgradeModal` satisfies §2.2; no rename, no rebuild — tests pin it. Brief language amended to "Upgrade surface."
+- **D8 — RATIFIED.** Relabel dock `cockpit` entry ("Mission Control"); **"Command Center" is reserved for the Ctrl+K palette.**
+- **D9 — RATIFIED.** Sweep: code (the `HomeCockpit.tsx:145` user-visible "Win+K" pill is the must-fix; comments included) + `docs/ux-refactor/` prose. Handoff-package PDFs/docx get a one-page annotation (naming erratum), not regeneration.
+- **D10 — RATIFIED, extended.** Commit the package's text files; gitignore (or LFS) the binaries. Authority chain declared (header above). Prune merged worktrees (`waggle-os-ux-refactor`, `waggle-os-ga`) and the 5 merged branches. Brief path corrections from audit §7 accepted (workspace-manager in hive-mind-core; state/context in server/local).
+
+## Launch integrity (D11–D15) — all confirmed
+
+- **D11 — RATIFIED.** Honor `WAGGLE_DATA_DIR` in `service.ts` with the same default; **one startup log line: resolved dataDir + tier**. Fix the stale "default to SOLO" comment while in there. Closes the split-brain with installer/launcher.
+- **D12 — RATIFIED, launch-blocking for the desktop binary.** Refresh `app/src-tauri/resources/service.js` now; prefer build-time generation + untracking; CI staleness/hash gate is the minimum acceptable. **A binary shipping an April server is a release-stopping defect class.**
+- **D13 — RATIFIED, both halves.** Document `build:packages` in the boot recipe AND alias `@waggle/shared`→src on the dev path so the class dies.
+- **D14 — Folded into D4(iv). Closed.**
+- **D15 — RATIFIED.** Launch-blocking from prior-plan P6: **per-screen state grid** (brief rule 10) + **approval/audit taxonomy consolidation** (brief rule 7, includes D4-ii alignment). Post-launch: connector `/sync` real implementation (stub stands), MCP logs.
+
+## Additional items (no decision letter — just do)
+
+- **Backlog flag:** investigate the teams-server boot error from the live probe (`Build failed: Fastify instance is already listening` when `CLERK_SECRET_KEY` is set) — classify noise vs defect. Post-launch unless it affects the solo boot path.
+- **memory-mcp duplication (audit §7):** out of launch scope. Mark `packages/memory-mcp` dormant; canonical-package decision (vs `hive-mind-mcp-server`) deferred post-launch.
+- **`WorkspaceBriefing.tsx`:** keep as ChatApp empty state; no merge into Home. Brief's keep-list note corrected.
+- **Audit process rule going forward:** audits report, they don't mutate (no fast-forwards, no pid overwrites mid-audit; disclose if unavoidable).
+
+## Phase sequence (unblocked)
+
+**Phase 0** = D1 conversion plan + route map, naming sweep (D8/D9), doc authority (D10). Then **P1**=D3, **P2**=verify + J08 alert, **P3**=D2, **P4**=D11/D12 + FREE→Upgrade e2e re-run, **P5**=D4, **P7**=D15 scope. **Nothing from prior Phases 0–4 is rebuilt.**

@@ -1,0 +1,739 @@
+===== PAGE 1 =====
+Waggle OS UX Refactor Master Blueprint
+Architecture, UX specification, implementation plan, and Claude Code handoff
+This is the master handoff artifact for rebuilding Waggle OS into a workspace-first Agent Desktop. It consolidates the handwritten brainstorming, generated boards, screen concepts, 
+repo exploration, and implementation guidance. Generated images are included as visual direction; the written blueprint is the source of truth for implementation.
+Deliverable area Included here
+Architecture Package Mental model, information architecture, data model, workspace model, memory model, agent model, 
+MCP model, security model.
+UX Package Every agreed screen, required states, interactions, and acceptance criteria.
+User Journeys 26 primary journeys including first-time, returning, memory, agent, MCP, automation, team, offline and 
+audit flows.
+Developer Handoff Component hierarchy, state management, API structure, RBAC, schemas, repo refactor map, roadmap.
+Asset Pack Boards, mental model, consolidated poster, 21 screens and original notes collected in a single ZIP.
+0. Executive Decision
+Waggle should move from an app-oriented UI to a Work Intelligence OS. The new product spine is Home Cockpit, Workspace Desktop, Win+K Command Center, visible Memory, 
+Artifacts, and an Extend layer for Skills, Connectors, MCPs, Agents and Automations.
+• Primary object: Workspace.
+• Primary daily surface: Home Cockpit.
+• Primary interaction: Win+K.
+• Primary differentiator: visible, inspectable memory.
+• Primary extension model: Skills + Connectors + MCPs + Agents + Automations.
+• Backend strategy: reuse workspace/memory/session/audit foundations and add missing normalized APIs.
+
+===== PAGE 2 =====
+1. Repo-Grounded Findings
+Repo area Evidence Refactor implication
+Workspace Manager WorkspaceConfig already contains model, personaId, templateId, 
+tools, skills, team fields, storage, budget, tone, optimization and risk 
+fields. Workspaces live as workspace.json, workspace.mind and 
+sessions/.
+Workspace is already the correct physical and logical container. 
+Make it the UX container.
+Mind schema identity, awareness, sessions, memory_frames, FTS, 
+knowledge_entities, knowledge_relations, improvement_signals, 
+procedures, ai_interactions, execution_traces, evolution_runs, 
+harvest_sources.
+Use existing memory substrate. Expose it visibly rather than 
+rebuilding.
+Workspace state builder Builds active, openQuestions, pending, blocked, completed, stale, 
+recentDecisions and nextActions from memory, sessions and 
+awareness.
+Best basis for Home Cockpit and Workspace Desktop.
+Install audit Supports native, skill, plugin, mcp, connector and marketplace 
+capabilities with risk, trust, approval and action.
+Best basis for Extend governance.
+AI interactions Append-only AI logs with model/provider, tokens, tools, human 
+action, risk context, source, persona, input and output.
+Use for audit, security and compliance UX.
+
+===== PAGE 3 =====
+Architecture Package 1: Mental Model
+Waggle OS is a Work Intelligence OS: Capture -> Understand -> Remember -> Act -> Produce -> Learn.
+Layer / entity Definition UX / implementation consequence
+Capture Signals from external tools, local files, chats, sessions and imports. Tool discovery and harvest are core onboarding steps.
+Understand Classify, deduplicate, extract entities, map relationships and score 
+confidence.
+Memory Review shows categories, source and confidence.
+Remember Store raw, working, workspace, long-term, team and future org 
+memory.
+Memory Center is visible and editable.
+Act Agents, skills, automations and MCPs operate within workspace 
+scope.
+Workspace Desktop is the runtime surface.
+Produce Artifacts: docs, decks, sheets, dashboards, code, media and decisions. Artifact Center is first-class.
+Learn Feedback, traces, audit and improvement signals refine behavior. Waggle recommends skills, agents and automations.
+
+===== PAGE 4 =====
+Architecture Package 2: Information Architecture
+Win+K is the global layer; the sidebar is secondary. The IA is Global / Work / Intelligence / Extend / Team / System.
+Layer / entity Definition UX / implementation consequence
+Global Win+K, universal search, launch, create, run, navigate and extend. Everything reachable from keyboard.
+Work Home, Workspaces, Memory, Artifacts, Sessions. Daily work and outcomes.
+Intelligence Agents, Skills, Automations. Delegation and reusable capabilities.
+Extend Connectors, MCPs, Models, External Tools, Marketplace. Power-user extensibility outside Settings.
+Team Team Workspaces, Shared Memory, Members, Roles, Permissions, 
+Activity.
+Shared intelligence, not chat.
+System Settings, Security, Audit Logs, Storage, Billing, Diagnostics. Governance and control.
+• Do not bury Connectors/MCPs inside Settings.
+• Command Center data source must span all major object types.
+• Use route groups: /home, /workspaces, /memory, /artifacts, /agents, /automations, /skills, /connectors, /mcps, /team, /settings.
+
+===== PAGE 5 =====
+Architecture Package 3: Data Model
+The current repo already has most core entities. The refactor should compose and expose them rather than replacing them.
+Layer / entity Definition UX / implementation consequence
+Workspace Container for memory, sessions, agents, skills and artifacts. Primary scope.
+MemoryFrame Atomic or consolidated knowledge item with source and importance. Visible memory item.
+AwarenessItem Active task/action/pending/flag. Feeds Home and Workspace Now.
+Session Work session mapped to GOP/project/workspace. Session history and context.
+KnowledgeEntity/Relation Graph nodes and edges. Related memories and graph view.
+AIInteraction Append-only model/tool interaction log. Audit and compliance.
+ExecutionTrace Agent run history. Agent logs and performance.
+HarvestSource Import/sync tracking. Onboarding and memory import.
+InstallAudit Trust trail for skills/MCPs/connectors/marketplace. Extend governance.
+Artifact Target normalized object for outputs. Artifact Center and outcome memory.
+
+===== PAGE 6 =====
+Architecture Package 4: Workspace Model
+Workspace is the bounded context that makes Waggle useful.
+Layer / entity Definition UX / implementation consequence
+Identity Name, type, owner, team, icon, description. Workspace header and cards.
+Context Goals, scope, constraints, rules, metrics. Context Snapshot.
+Memory Decisions, learnings, references, insights. Memory Highlights.
+Sessions Chats, meetings, work sessions, activities. Recent Sessions.
+Artifacts Docs, decks, sheets, dashboards, code, media. Key Artifacts.
+Execution Agents, skills, tools, MCPs, automations. Workspace runtime controls.
+Team Members, roles, shared memory and artifacts. Team Workspace.
+
+===== PAGE 7 =====
+Architecture Package 5: Memory Model
+Memory must be visible, inspectable and governable.
+Layer / entity Definition UX / implementation consequence
+Raw Memory Unprocessed imported/captured content. Review before import.
+Working Memory Fresh active context. Feeds Home and active workspace.
+Workspace Memory Project/client/domain-specific knowledge. Default workspace retrieval.
+Long-Term Memory Stable cross-work knowledge. Reusable personal context.
+Team Memory Shared permissioned knowledge. Team Intelligence.
+Org Memory Future governed enterprise corpus. Admin policy and compliance.
+• Add confidence and provenance to the user-facing memory API, even if stored in metadata initially.
+• Every memory detail screen must show source/evidence and edit/archive/delete/merge actions.
+• Memory import must always have preview and approval.
+
+===== PAGE 8 =====
+Architecture Package 6: Agent Model
+Agents are scoped workers with memory, skills, tools, permissions, model and autonomy.
+Layer / entity Definition UX / implementation consequence
+Personal Agent Owned by the user. Personal helper and tasks.
+Workspace Agent Bound to project/workspace memory and tools. Main execution unit.
+Team Agent Shared under team permissions. Shared workflows.
+Autonomous Agent Scheduled/event-driven with guardrails. Overnight automations.
+Agent Config Goal, model, autonomy, memory scopes, skills, tools, MCPs. Agent Builder.
+Agent Trace Outcome, trace JSON, cost, duration, logs. Debugging and audit.
+• Agent Builder must require model, goal, memory scope, skills/tools/MCPs and autonomy level.
+• Agent run logs should link to execution_traces and ai_interactions.
+• Autonomous agents require explicit schedule/trigger and stop/pause controls.
+
+===== PAGE 9 =====
+Architecture Package 7: MCP Model
+MCPs are auditable capability providers for power users and agents.
+Layer / entity Definition UX / implementation consequence
+MCP Server Filesystem, Postgres, GitHub, Stripe, Jira, custom, remote. MCP Hub.
+Connection Endpoint, credentials, health, version. Diagnostics.
+Capability Tools exposed by server. Agent/skill/automation selection.
+Scope Global, workspace, team or agent-specific. Permission safety.
+Risk Risk level, trust source, approval class. Install approval.
+Audit Proposed/approved/installed/rejected/failed/blocked. Governance.
+
+===== PAGE 10 =====
+Architecture Package 8: Security Model
+Local-first, explicit, permissioned, auditable and reversible.
+Layer / entity Definition UX / implementation consequence
+Local-first Local .mind and local files by default. Privacy promise.
+User Control User chooses imports, sync, sharing and connectors. Consent and review gates.
+Workspace Isolation Data and memory scoped by workspace/team. No accidental leakage.
+RBAC Owner/admin/member/viewer/guest. Team permissions.
+Capability Approval Risk-based approvals for extensions. MCP/connector governance.
+Append-only Audit AI interaction logs and install trail. Compliance and trust.
+Risk Classification AI Act risk fields and timestamps. Enterprise readiness.
+• Local-first is the default story.
+• Elevated connectors/MCPs and autonomous actions require approval.
+• Team access must obey RBAC at the API layer and the UI layer.
+
+===== PAGE 11 =====
+User Journey Specification
+These journeys define the intended product behavior beyond static screens. Claude Code should use them as end-to-end acceptance flows.
+Journeys 1-9
+ID Journey Flow Success outcome
+J01 First-time setup Launch -> Welcome -> Who are you -> Tool Discovery 
+-> Memory Import -> Memory Review -> Workspace 
+Creation -> Home Cockpit
+User has a populated, trusted starting context.
+J02 Skip import Launch -> Welcome -> Profile -> Tool Discovery -> Skip 
+Import -> Create Workspace -> Home Cockpit empty 
+state
+User can start without data.
+J03 Returning morning Open Waggle -> Home Cockpit -> Review overnight -> 
+Continue workspace -> Workspace Desktop
+User knows what changed and continues work.
+J04 Continue project Home -> Continue Germany GTM -> Workspace 
+Desktop -> Memory Highlights -> Ask agent -> Artifact 
+created
+Workspace keeps continuity.
+J05 Search anything Win+K -> query -> grouped results -> open 
+memory/artifact/session/tool
+Keyboard-first recall.
+J06 Create from command Win+K -> Create 
+document/task/workspace/agent/automation -> builder 
+-> created object
+Create flow reachable from anywhere.
+J07 Memory correction Memory Center -> open memory -> inspect source -> 
+edit/archive/merge -> audit update
+User controls memory quality.
+J08 Low-confidence review Home alert -> Memory Review queue -> inspect 
+evidence -> approve/edit/reject
+Uncertain memory does not silently influence work.
+J09 Artifact outcome Workspace -> Artifact created -> related 
+memories/sessions/tasks linked -> Artifact Center 
+search
+Outcomes become first-class.
+Journeys 10-18
+ID Journey Flow Success outcome
+J10 Install connector Connector Hub -> select connector -> auth -> sync -> 
+status visible -> data appears in memory review
+Data import is explicit and healthy.
+J11 Add MCP MCP Hub -> add custom/marketplace MCP -> risk 
+approval -> test -> scope to workspace/agent
+Power-user capabilities are governed.
+J12 Create agent Agent Builder -> goal/model/autonomy -> 
+memory/tools/MCPs -> permissions -> test -> create
+Agent is scoped and auditable.
+J13 Run agent Workspace -> Run agent -> trace visible -> output 
+artifact -> memory updated after review
+Agent work is explainable.
+J14 Create skill Skill Builder -> instructions -> inputs/outputs -> 
+tools/data -> test -> publish
+Reusable capability created safely.
+J15 Use skill inline Workspace chat/command -> run skill -> output 
+generated -> save artifact/memory
+Skills are accessible without leaving flow.
+J16 Create automation Automation Builder -> trigger -> condition -> actions -> 
+agent -> schedule -> test -> activate
+Overnight work starts with guardrails.
+J17 Automation failure Home alert -> Automation Center logs -> inspect error 
+-> retry/pause/edit
+Failures are actionable.
+J18 Team invite Team Workspace -> Invite -> role selected -> user 
+accepts -> permissions applied
+Team access is explicit.
+
+===== PAGE 12 =====
+Journeys 19-26
+ID Journey Flow Success outcome
+J19 Share memory Memory Center -> share to team -> choose scope -> 
+audit -> appears in team memory
+Knowledge sharing is controlled.
+J20 Share artifact Artifact Center -> share -> team/workspace/member -> 
+permissions -> activity feed
+Outcomes move safely.
+J21 Permission denied User opens restricted memory/MCP/agent -> 
+permission message -> request access
+No silent failures or data leakage.
+J22 Offline local work Open app offline -> local workspaces available -> 
+connectors disabled -> sync later
+Local-first promise is preserved.
+J23 Delete/forget memory Memory detail -> delete/archive -> confirm -> 
+tombstone/audit -> removed from retrieval
+User can control memory.
+J24 Export audit Settings/Security -> audit export -> select scope -> 
+generate PDF/CSV
+Enterprise trust and compliance.
+J25 Marketplace update Marketplace -> updates -> review changelog/risk -> 
+update -> install audit
+Extensions stay maintainable.
+J26 Workspace archive Workspace settings -> archive -> memory/artifacts 
+retained per policy -> hidden from active home
+Work lifecycle has closure.
+
+===== PAGE 13 =====
+UX Package - Screen Specifications
+The 21-screen inventory below is complete enough for implementation. Screens 1-3 define the runtime spine. Screens 4-11 define work/intelligence/extension/team. Screens 12-16 
+define onboarding. Screens 17-21 define creation and power-user extension.
+Core runtime screens
+# Screen Purpose Interactions States Acceptance
+1 Home Cockpit Executive briefing after launch. Continue work, inspect overnight 
+activity, act on priorities, quick 
+capture.
+Loading; first-run empty; normal; 
+attention required; offline/local-only; 
+overnight failure.
+User can understand the day in under 
+30 seconds and take an action without 
+opening chat.
+2 Workspace Desktop Primary runtime for one bounded 
+context.
+Ask agent, open artifact, inspect 
+memory, start automation, run skill, 
+manage agents.
+No memory; active work; agent 
+running; task blocked; artifact ready; 
+permission denied; sync conflict.
+Chat is one widget; workspace context 
+is always visible.
+3 Win+K Command Center Universal 
+search/launch/create/run/navigate/ext
+end.
+Search, launch, create object, run 
+command, install extension, navigate.
+Idle; query; grouped results; no 
+results; permission prompt; command 
+success/fail.
+Every major object/action is reachable 
+from keyboard.
+Work, intelligence, extension and team screens
+# Screen Purpose Interactions States Acceptance
+4 Memory Center Visible memory with provenance and 
+editability.
+Search, filter, inspect source, edit, 
+merge, archive, delete, add to 
+workspace/team.
+Empty; imported; active; stale; 
+deprecated; low confidence; 
+conflicting; source unavailable.
+Every memory explains why Waggle 
+knows it.
+5 Artifact Center Outcome layer for docs, decks, sheets, 
+dashboards, research, code and 
+media.
+Search related objects, 
+open/share/duplicate/move, relate to 
+memory/session/task.
+Draft; final; shared; archived; 
+generated; external missing; 
+permission denied.
+Search for a topic returns artifacts 
+plus related 
+memories/sessions/tasks/agents.
+6 Skills Hub Reusable capabilities across users, 
+workspaces and agents.
+Install, create, test, assign to 
+agent/workspace, archive.
+Installed; marketplace; custom; 
+workspace; draft; needs approval.
+Users can understand what a skill 
+does and where it is used.
+7 Connector Hub Connect external tools and data. Connect, sync now, refresh token, 
+revoke, inspect health.
+Connected; disconnected; expired 
+token; syncing; failed; recommended.
+Users see data flow and connection 
+health clearly.
+8 MCP Hub Power-user capability extension. Install, add custom, test, scope, 
+inspect logs, revoke.
+Installed; available; running; stopped; 
+error; risk approval needed.
+MCPs are powerful but auditable and 
+reversible.
+9 Agent Center Manage personal, workspace, team 
+and autonomous agents.
+Create, run, pause, inspect logs, assign 
+skills/tools, change permissions.
+Idle; running; paused; failed; needs 
+approval; archived.
+Agents have clear scope, goal, model, 
+tools and memory access.
+10 Team Workspace Shared intelligence for teams. Invite, share 
+memory/artifact/skill/MCP, assign 
+role, view audit/activity.
+Owner/admin/member/viewer; invite 
+pending; private/shared; conflicting 
+permissions.
+Team means shared knowledge and 
+outcomes, not just chat.
+11 Automation Center Scheduled and event-driven work. Create, run now, pause, inspect logs, 
+edit schedule, handle failure.
+Running; scheduled; trigger fired; 
+paused; failed; awaiting approval.
+Overnight work is visible, reviewable 
+and stoppable.
+
+===== PAGE 14 =====
+UX Package - Screen Specifications (continued)
+Onboarding screens
+# Screen Purpose Interactions States Acceptance
+12 First Launch Minimal promise and privacy 
+reassurance.
+Continue, change language, view 
+privacy note.
+Fresh install; resumed setup; offline; 
+local-only.
+No infrastructure overload before 
+user intent.
+13 Who Are You Capture role, industry, work type, 
+team size and goals.
+Enter profile, select goals, 
+continue/back.
+Empty; partially complete; validation; 
+saved.
+Profile drives recommendations but 
+can be edited later.
+14 Tool Discovery Ask what tools the user uses. Select tools, add other, continue/back. No selection; selected; recommended; 
+unsupported tool.
+User-oriented language, not infra 
+setup.
+15 Memory Import Connect/import from AI tools, files 
+and work tools.
+Connect source, import file, 
+continue/back.
+No sources; connecting; connected; 
+failed; skipped.
+Nothing imports without consent.
+16 Memory Review Review found memories, decisions, 
+tasks, artifacts and projects.
+Filter, expand, edit selection, approve 
+import, skip.
+Empty; preview found; low 
+confidence; source error; approved.
+Trust gate before memory becomes 
+active.
+Builder and marketplace screens
+# Screen Purpose Interactions States Acceptance
+17 Workspace Creation Create a workspace with suggested 
+capabilities.
+Enter name/type, add suggestions, 
+review, create.
+Empty; recommended; validation 
+error; created.
+Workspace becomes first useful 
+context after onboarding.
+18 Agent Builder Create an agent with goal, model, 
+autonomy, memory, skills and 
+permissions.
+Configure, test, review, create. Draft; validation; approval needed; 
+created.
+No agent has hidden memory/tool 
+access.
+19 Skill Builder Create reusable capability. Define prompt, inputs/outputs, tools, 
+memory access, test.
+Draft; test pass/fail; published; 
+archived.
+Skills are inspectable and reusable by 
+agents/automations.
+20 Automation Builder Create scheduled or event-driven 
+workflow.
+Choose 
+trigger/condition/actions/agent/notific
+ation, test, activate.
+Draft; test fail; active; scheduled; 
+approval needed.
+Autonomous work has clear trigger 
+and rollback.
+21 Marketplace / Extend Install skills, agents, connectors, 
+MCPs, models and templates.
+Search, filter, install, update, approve 
+risk, open detail.
+Available; installed; update available; 
+risk approval; failed install.
+Power-user extension is discoverable 
+and governed.
+
+===== PAGE 15 =====
+State Model
+Domain Universal states Domain-specific states Required recovery
+App shell Loading, ready, error, offline, sync degraded. Command palette open/closed, active workspace 
+set/unset.
+Retry, reload, switch workspace, open diagnostics.
+Home Loading, empty, populated, error. Overnight complete, attention required, jobs failed, no 
+workspaces.
+Open details, dismiss, retry, create workspace.
+Workspace Loading, active, archived, permission denied, sync 
+conflict.
+Agent running, automation active, task blocked, 
+artifact ready.
+Request access, resolve conflict, pause agent, archive.
+Memory Loading, empty, populated, error. Low confidence, conflicting, stale, deprecated, source 
+missing.
+Edit, merge, archive, delete, request source reconnect.
+Artifacts Loading, empty, populated, error. Draft, final, shared, generated, missing source, 
+external-only.
+Open, regenerate, relink, duplicate, move.
+Agents Loading, empty, populated, error. Idle, running, paused, failed, approval required, 
+autonomous.
+Pause, retry, inspect trace, edit permissions.
+Skills Loading, empty, populated, error. Installed, draft, custom, workspace, marketplace, 
+update available.
+Test, install, publish, archive, rollback.
+Connectors/MCPs Loading, empty, populated, error. Connected, disconnected, token expired, syncing, 
+failed, risk approval.
+Reconnect, revoke, sync now, test, inspect logs.
+Team Loading, empty, populated, permission denied. Invite pending, role conflict, shared/private, audit 
+event.
+Request access, change role, resend invite, export 
+audit.
+Onboarding Fresh, in-progress, complete, skipped, failed. Connector auth failed, import partial, review required, 
+local-only.
+Back, retry source, skip, approve import.
+
+===== PAGE 16 =====
+Design System Direction
+System part Specification
+Tone Calm, direct, executive, action-oriented. Avoid AI hype language. Say what happened, what matters, what 
+can be done.
+Layout Desktop-first, left navigation, central workspace canvas, optional right context rail, Win+K overlay.
+Theme Dark default for desktop agent feel; light variant acceptable for data-heavy Memory/Artifact tables.
+Color semantics Blue = command/work, purple = intelligence, green = healthy/complete, orange = attention/automation, 
+red = risk/failure.
+Components AppShell, CommandCenter, ContextCard, MemoryCard, ArtifactRow, AgentCard, SkillCard, 
+ConnectorCard, MCPRow, AutomationRunRow, Timeline, EvidencePanel, ApprovalModal.
+Accessibility Keyboard-first. Win+K, tab navigation, visible focus, no color-only status. Provide text labels for all 
+badges.
+Density Powerful but not cramped. Use cards for Home/Workspace, tables for 
+Memory/Artifacts/Agents/Automations.
+
+===== PAGE 17 =====
+Developer Handoff
+Component hierarchy
+Component Responsibility
+AppShell Global route layout, sidebar, active workspace, top status, command palette provider.
+CommandCenter Win+K overlay, query parsing, grouped results, command execution and permission prompts.
+HomeCockpit Daily briefing, overnight results, recent workspaces, suggested actions, up next, quick capture.
+WorkspaceDesktop Workspace header, tabs, chat/work widget, memory/artifacts/tasks/agents/automations panels.
+MemoryCenter Memory list, filters, detail, source/evidence, graph, edit/archive/delete/merge.
+ArtifactCenter Outcome search, artifact table, detail panel, related objects.
+SkillHub/SkillBuilder Skill library, marketplace and creation/test/publish flow.
+ConnectorHub Connected/available/recommended connectors, health, sync and auth flows.
+MCPHub Installed/available/custom MCPs, health, logs, risk/approval and scope.
+AgentCenter/AgentBuilder Agent inventory, creation, permissions, model/autonomy, traces.
+AutomationCenter/Builder Running/scheduled/triggers/history/logs and create/test/activate flow.
+TeamWorkspace Shared memory/artifacts/skills/MCPs/automations, members and RBAC.
+OnboardingWizard First launch, profile, tool discovery, memory import, review, workspace creation handoff.
+State management rules
+• Global store: route, activeWorkspaceId, command palette state, user profile, connection/offline status, feature flags.
+• Server-derived state: Home Cockpit and Workspace Desktop must use server workspace-state/context APIs.
+• Cache invalidation triggers: memory import, artifact update, agent run completion, connector sync, automation completion, RBAC change.
+• Command index should unify workspaces, memory, artifacts, sessions, agents, skills, connectors, MCPs, actions and recent commands.
+• Offline mode should degrade connectors/MCPs gracefully while keeping local workspace and memory available.
+API structure
+API group Candidate endpoints
+Home GET /home/briefing, GET /home/overnight, POST /quick-capture
+Workspace GET /workspaces, POST /workspaces, GET/PATCH /workspaces/:id, GET /workspaces/:id/state, GET 
+/workspaces/:id/context
+Command GET /command/search?q=, POST /command/execute
+Memory GET /memory, GET/PATCH /memory/:id, POST /memory/:id/archive, POST /memory/merge, POST 
+/harvest/preview, POST /harvest/commit
+Artifacts GET /artifacts, POST /artifacts, GET/PATCH /artifacts/:id, POST /artifacts/:id/share
+Agents GET/POST/PATCH /agents, POST /agents/:id/run, GET /agents/:id/traces
+Skills GET/POST/PATCH /skills, POST /skills/:id/test, POST /skills/:id/install
+Automations GET/POST/PATCH /automations, POST /automations/:id/run, GET /automations/:id/logs
+Connectors GET /connectors, POST /connectors/:id/connect, POST /connectors/:id/sync, DELETE /connectors/:id
+MCPs GET/POST /mcps, POST /mcps/:id/test, PATCH /mcps/:id/permissions, DELETE /mcps/:id
+Team/RBAC GET /teams/:id, POST /teams/:id/invites, PATCH /teams/:id/members/:userId, GET /audit
+RBAC model
+Role Default capabilities
+
+===== PAGE 18 =====
+Owner Full workspace/team control, billing, delete/export, approve critical extensions.
+Admin Manage members, shared memory/artifacts, agents, automations, connectors/MCPs within policy.
+Member Create/edit work, use approved agents/skills/tools, contribute memory and artifacts.
+Viewer Read permitted memory/artifacts/activity; no create/run/install by default.
+Guest Limited shared artifacts/memory; no agents/MCP access by default.
+Target schemas
+Schema Fields
+Workspace id, name, type, group, description, icon, ownerId, model, personaId, templateId, tools, skills, teamId, storageType, 
+storagePath, riskLevel, createdAt, updatedAt.
+Memory id, workspaceId, scope, type, content, summary, source, sourceId, sourceUrl/path, confidence, importance, tags, 
+relatedIds, createdAt, updatedAt, lastAccessed, status.
+Artifact id, workspaceId, type, title, summary, filePath/url, status, createdBy, generatedByAgentId, relatedMemoryIds, 
+relatedSessionIds, tags, createdAt, updatedAt.
+Agent id, scope, workspaceId, teamId, name, goal, personaId, model, autonomyLevel, memoryScopes, skillIds, toolIds, 
+mcpIds, permissions, status, createdAt, updatedAt.
+Skill id, scope, name, description, category, instructions, inputs, outputs, requiredTools, requiredMemoryScopes, 
+status, version, ownerId.
+Automation id, scope, trigger, condition, actions, agentId, schedule, notificationTargets, status, lastRunAt, nextRunAt.
+Extension/MCP id, type, name, source, version, endpoint, capabilities, riskLevel, approvalClass, status, health, installedAt, 
+approvedBy.
+Technical refactor map
+Current file / area Action Instruction
+apps/web/src/components/os/WorkspaceBriefing.tsx Keep and promote Use as seed for Home Cockpit. Split logic into HomeCockpit widgets and 
+reusable WorkspaceNow panels.
+packages/server/src/local/workspace-state.ts Keep and extend This is the best backend basis for Home/Workspace state. Add 
+artifacts/agents/automations fields.
+packages/server/src/local/routes/workspace-context.ts Modify Return richer WorkspaceNow/WorkspaceHome contract for new UI.
+packages/hive-mind-core/src/workspace-manager.ts Keep Workspace config model already supports many target fields. Add 
+type/description/updatedAt if needed.
+packages/hive-mind-core/src/mind/schema.ts Keep and migrate carefully Memory/audit/trace substrate exists. Add confidence/provenance fields 
+via metadata or migration if needed.
+apps/web/src/lib/types.ts Modify Update AppView, WorkspaceContext, MemoryFrame, Agent, Skill, 
+Connector/MCP types.
+apps/web/src/components/os/overlays/OnboardingWizard.tsx Keep shell, redesign steps Map existing onboarding shell to the 5-step setup flow plus workspace 
+creation handoff.
+apps/web/src/components/os/apps/MemoryApp.tsx Rework Turn into Memory Center with source/confidence/evidence/edit actions.
+apps/web/src/components/os/apps/* Rename/reframe Apps become Work, Intelligence or Extend surfaces. Avoid app-launcher 
+mental model.
+packages/core/src/install-audit.ts Keep and expose Use for extension trust trail in Connectors/MCP/Marketplace.
+packages/agent/src/tools.ts Keep and normalize Tool permissions should be scoped through agent/skill/MCP model.
+packages/memory-mcp/* Keep Treat as built-in MCP/extension and demo of memory operations.
+
+===== PAGE 19 =====
+Implementation Roadmap
+Phase Scope Exit criterion
+0. Freeze UX spine Route names, screen inventory, navigation, naming, data scopes. No more major UX ambiguity.
+1. Shell + Win+K AppShell, route map, command provider, command search 
+aggregator.
+User can navigate and run/search/create from anywhere.
+2. Home + Workspace Home Cockpit and Workspace Desktop driven by workspace 
+state/context.
+Returning user can continue work in under 30 seconds.
+3. Memory + Artifacts Memory Center and Artifact Center with detail panels and relations. Memory and outcomes are visible and actionable.
+4. Extend layer Skills, Connectors, MCP Hub, Marketplace and install audit surfaces. Capabilities are discoverable, installable and governed.
+5. Builders Workspace, Agent, Skill and Automation builders. Users can create core objects with validation and review.
+6. Team + Governance Team Workspace, shared memory/artifacts, RBAC and audit. Team workflows are permissioned and auditable.
+7. Polish/Dogfood A11y, empty/error/offline states, performance, real data dogfood. Ready for beta implementation review.
+
+===== PAGE 20 =====
+Acceptance Criteria
+• A user can open Waggle and understand what to do next without starting a chat.
+• A user can open Win+K from anywhere and find/run/create/navigate/extend across all major object types.
+• A user can inspect any surfaced memory and see scope, source, confidence and actions.
+• A user can search Germany GTM and receive related memories, artifacts, sessions, tasks and agents together.
+• A workspace agent cannot run with hidden memory/tool/MCP access.
+• Connector and MCP installs are visible, permissioned, health-checked and auditable.
+• Automation failures surface in Home Cockpit and Automation Center with logs and recovery actions.
+• Team memory/artifacts/skills/MCPs obey Owner/Admin/Member/Viewer/Guest permissions.
+• All core screens have loading, empty, populated, error, offline and permission-denied states.
+• The implementation reuses current workspace, memory, session, harvest and audit substrate unless a missing normalized schema is necessary.
+
+===== PAGE 21 =====
+Claude Code Instruction Prompt
+Use the following prompt as the first message/instruction for Claude Code when starting the UX refactor branch.
+You are refactoring Waggle OS into a workspace-first Agent Desktop. Do not redesign the backend from scratch. First inspect the existing workspace, memory, workspace-state, 
+workspace-context, onboarding, memory app, install-audit, agent tools and types files. Implement the new UX spine incrementally: AppShell, Win+K, Home Cockpit, Workspace 
+Desktop, Memory Center, Artifact Center, Extend layer, builders, Team Workspace. The written blueprint is the source of truth; generated images are visual direction only. Preserve 
+local-first behavior, explicit import consent, visible memory provenance, and auditable extension approvals. Every agent must declare memory scope, skills, tools/MCPs, model and 
+autonomy. Every screen needs loading, empty, error, offline and permission-denied states.
+
+===== PAGE 22 =====
+Visual Reference Index
+The following visual references are included for orientation. They are deliberately consolidated so the implementation team has one place to inspect the screens and boards.
+Asset name Meaning File
+00_brainstorm_notes_01 Board / screen / note reference 57152.jpg
+00_brainstorm_notes_02 Board / screen / note reference 57151.jpg
+00_brainstorm_notes_03 Board / screen / note reference 57150.jpg
+00_brainstorm_notes_04 Board / screen / note reference 57149.jpg
+01_board_executive_vision Board / screen / note reference a_large_multi_panel_product_design_information_arc.png
+02_board_deep_mental_model Board / screen / note reference a_high_detail_infographic_system_architecture_di.png
+03_board_navigation_workspace_home Board / screen / note reference a_wide_high_resolution_infographic_diagram_image.png
+04_board_complete_architecture_4x3 Board / screen / note reference a_high_resolution_infographic_whiteboard_style_pro.png
+05_board_operations_memory_mcp_agents_team Board / screen / note reference a_high_resolution_infographic_poster_slide_layou.png
+06_board_all_in_one Board / screen / note reference a_wide_high_resolution_product_design_poster_ui.png
+07_board_builders_and_marketplace Board / screen / note reference a_dark_themed_ui_design_presentation_screenshot_co.png
+screen_01_home_cockpit Board / screen / note reference a_wide_screenshot_of_a_dark_sleek_desktop_app_das.png
+screen_02_workspace_desktop Board / screen / note reference a_wide_desktop_app_ui_screenshot_dark_modern_prod.png
+screen_03_win_k_command_center Board / screen / note reference a_dark_themed_computer_ui_screenshot_of_a_command.png
+screen_04_memory_center Board / screen / note reference a_clean_high_resolution_dark_light_ui_dashboard_s.png
+screen_05_artifact_center Board / screen / note reference a_high_resolution_screenshot_of_a_dark_themed_clea.png
+screen_06_skills_hub Board / screen / note reference a_clean_high_resolution_ui_dashboard_screenshot.png
+screen_07_connector_hub Board / screen / note reference a_clean_high_resolution_ui_dashboard_screenshot_o.png
+screen_08_mcp_hub Board / screen / note reference a_wide_dark_themed_desktop_application_ui_screensh.png
+screen_09_agent_center Board / screen / note reference a_dark_themed_sleek_ui_dashboard_screenshot_of_an.png
+screen_10_team_workspace Board / screen / note reference a_high_resolution_ui_screenshot_of_a_dark_themed.png
+screen_11_automation_center Board / screen / note reference a_wide_dark_themed_desktop_ui_screenshot_of_a_sof.png
+screen_12_first_launch Board / screen / note reference a_clean_modern_software_welcome_onboarding_screen.png
+screen_13_who_are_you Board / screen / note reference a_widescreen_dark_ui_screenshot_of_a_setup_onboard.png
+screen_14_tool_discovery Board / screen / note reference a_dark_modern_desktop_app_ui_screenshot_waggle_o.png
+screen_15_memory_import Board / screen / note reference a_crisp_dark_themed_desktop_application_ui_screen.png
+screen_16_memory_review Board / screen / note reference a_dark_modern_ui_dashboard_screenshot_app_revie.png
+screen_17_create_workspace Board / screen / note reference a_dark_themed_desktop_ui_screenshot_overall_scene.png
+screens_18_21_builders_and_marketplace Board / screen / note reference a_dark_themed_ui_design_presentation_screenshot_co.png
+
+===== PAGE 23 =====
+Visual - All-in-One Architecture and Screens
+
+
+===== PAGE 24 =====
+Visual - Deep Mental Model
+
+
+===== PAGE 25 =====
+Visual - Navigation / Workspace / Home Architecture
+
+
+===== PAGE 26 =====
+Visual - Complete Architecture 4:3 Board
+
+
+===== PAGE 27 =====
+Visual - Builders and Marketplace Board
+
+
+===== PAGE 28 =====
+Screen 1 - Home Cockpit
+
+
+===== PAGE 29 =====
+Screen 2 - Workspace Desktop
+
+
+===== PAGE 30 =====
+Screen 3 - Win+K Command Center
+
+
+===== PAGE 31 =====
+Screen 4 - Memory Center
+
+
+===== PAGE 32 =====
+Screen 5 - Artifact Center
+
+
+===== PAGE 33 =====
+Screen 6 - Skills Hub
+
+
+===== PAGE 34 =====
+Screen 7 - Connector Hub
+
+
+===== PAGE 35 =====
+Screen 8 - MCP Hub
+
+
+===== PAGE 36 =====
+Screen 9 - Agent Center
+
+
+===== PAGE 37 =====
+Screen 10 - Team Workspace
+
+
+===== PAGE 38 =====
+Screen 11 - Automation Center
+
+
+===== PAGE 39 =====
+Screen 12 - First Launch
+
+
+===== PAGE 40 =====
+Screen 13 - Who Are You
+
+
+===== PAGE 41 =====
+Screen 14 - Tool Discovery
+
+
+===== PAGE 42 =====
+Screen 15 - Memory Import
+
+
+===== PAGE 43 =====
+Screen 16 - Memory Review
+
+
+===== PAGE 44 =====
+Screen 17 - Create Workspace
+
+
+===== PAGE 45 =====
+Screens 18-21 - Builders + Marketplace

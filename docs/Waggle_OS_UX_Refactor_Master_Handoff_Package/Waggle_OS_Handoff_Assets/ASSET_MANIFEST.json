@@ -1,0 +1,176 @@
+[
+  {
+    "name": "00_brainstorm_notes_01",
+    "file": "00_brainstorm_notes_01.jpg",
+    "source_file": "57152.jpg",
+    "size": "659x1536"
+  },
+  {
+    "name": "00_brainstorm_notes_02",
+    "file": "00_brainstorm_notes_02.jpg",
+    "source_file": "57151.jpg",
+    "size": "659x1536"
+  },
+  {
+    "name": "00_brainstorm_notes_03",
+    "file": "00_brainstorm_notes_03.jpg",
+    "source_file": "57150.jpg",
+    "size": "659x1536"
+  },
+  {
+    "name": "00_brainstorm_notes_04",
+    "file": "00_brainstorm_notes_04.jpg",
+    "source_file": "57149.jpg",
+    "size": "659x1536"
+  },
+  {
+    "name": "01_board_executive_vision",
+    "file": "01_board_executive_vision.png",
+    "source_file": "a_large_multi_panel_product_design_information_arc.png",
+    "size": "1536x1024"
+  },
+  {
+    "name": "02_board_deep_mental_model",
+    "file": "02_board_deep_mental_model.png",
+    "source_file": "a_high_detail_infographic_system_architecture_di.png",
+    "size": "1536x1024"
+  },
+  {
+    "name": "03_board_navigation_workspace_home",
+    "file": "03_board_navigation_workspace_home.png",
+    "source_file": "a_wide_high_resolution_infographic_diagram_image.png",
+    "size": "1536x1024"
+  },
+  {
+    "name": "04_board_complete_architecture_4x3",
+    "file": "04_board_complete_architecture_4x3.png",
+    "source_file": "a_high_resolution_infographic_whiteboard_style_pro.png",
+    "size": "1448x1086"
+  },
+  {
+    "name": "05_board_operations_memory_mcp_agents_team",
+    "file": "05_board_operations_memory_mcp_agents_team.png",
+    "source_file": "a_high_resolution_infographic_poster_slide_layou.png",
+    "size": "1536x1024"
+  },
+  {
+    "name": "06_board_all_in_one",
+    "file": "06_board_all_in_one.png",
+    "source_file": "a_wide_high_resolution_product_design_poster_ui.png",
+    "size": "1536x1024"
+  },
+  {
+    "name": "07_board_builders_and_marketplace",
+    "file": "07_board_builders_and_marketplace.png",
+    "source_file": "a_dark_themed_ui_design_presentation_screenshot_co.png",
+    "size": "1536x1024"
+  },
+  {
+    "name": "screen_01_home_cockpit",
+    "file": "screen_01_home_cockpit.png",
+    "source_file": "a_wide_screenshot_of_a_dark_sleek_desktop_app_das.png",
+    "size": "1672x941"
+  },
+  {
+    "name": "screen_02_workspace_desktop",
+    "file": "screen_02_workspace_desktop.png",
+    "source_file": "a_wide_desktop_app_ui_screenshot_dark_modern_prod.png",
+    "size": "1672x941"
+  },
+  {
+    "name": "screen_03_win_k_command_center",
+    "file": "screen_03_win_k_command_center.png",
+    "source_file": "a_dark_themed_computer_ui_screenshot_of_a_command.png",
+    "size": "1672x941"
+  },
+  {
+    "name": "screen_04_memory_center",
+    "file": "screen_04_memory_center.png",
+    "source_file": "a_clean_high_resolution_dark_light_ui_dashboard_s.png",
+    "size": "1536x1024"
+  },
+  {
+    "name": "screen_05_artifact_center",
+    "file": "screen_05_artifact_center.png",
+    "source_file": "a_high_resolution_screenshot_of_a_dark_themed_clea.png",
+    "size": "1536x1024"
+  },
+  {
+    "name": "screen_06_skills_hub",
+    "file": "screen_06_skills_hub.png",
+    "source_file": "a_clean_high_resolution_ui_dashboard_screenshot.png",
+    "size": "1536x1024"
+  },
+  {
+    "name": "screen_07_connector_hub",
+    "file": "screen_07_connector_hub.png",
+    "source_file": "a_clean_high_resolution_ui_dashboard_screenshot_o.png",
+    "size": "1536x1024"
+  },
+  {
+    "name": "screen_08_mcp_hub",
+    "file": "screen_08_mcp_hub.png",
+    "source_file": "a_wide_dark_themed_desktop_application_ui_screensh.png",
+    "size": "1536x1024"
+  },
+  {
+    "name": "screen_09_agent_center",
+    "file": "screen_09_agent_center.png",
+    "source_file": "a_dark_themed_sleek_ui_dashboard_screenshot_of_an.png",
+    "size": "1536x1024"
+  },
+  {
+    "name": "screen_10_team_workspace",
+    "file": "screen_10_team_workspace.png",
+    "source_file": "a_high_resolution_ui_screenshot_of_a_dark_themed.png",
+    "size": "1536x1024"
+  },
+  {
+    "name": "screen_11_automation_center",
+    "file": "screen_11_automation_center.png",
+    "source_file": "a_wide_dark_themed_desktop_ui_screenshot_of_a_sof.png",
+    "size": "1536x1024"
+  },
+  {
+    "name": "screen_12_first_launch",
+    "file": "screen_12_first_launch.png",
+    "source_file": "a_clean_modern_software_welcome_onboarding_screen.png",
+    "size": "1672x941"
+  },
+  {
+    "name": "screen_13_who_are_you",
+    "file": "screen_13_who_are_you.png",
+    "source_file": "a_widescreen_dark_ui_screenshot_of_a_setup_onboard.png",
+    "size": "1672x941"
+  },
+  {
+    "name": "screen_14_tool_discovery",
+    "file": "screen_14_tool_discovery.png",
+    "source_file": "a_dark_modern_desktop_app_ui_screenshot_waggle_o.png",
+    "size": "1672x941"
+  },
+  {
+    "name": "screen_15_memory_import",
+    "file": "screen_15_memory_import.png",
+    "source_file": "a_crisp_dark_themed_desktop_application_ui_screen.png",
+    "size": "1672x941"
+  },
+  {
+    "name": "screen_16_memory_review",
+    "file": "screen_16_memory_review.png",
+    "source_file": "a_dark_modern_ui_dashboard_screenshot_app_revie.png",
+    "size": "1672x941"
+  },
+  {
+    "name": "screen_17_create_workspace",
+    "file": "screen_17_create_workspace.png",
+    "source_file": "a_dark_themed_desktop_ui_screenshot_overall_scene.png",
+    "size": "1672x941"
+  },
+  {
+    "name": "screens_18_21_builders_and_marketplace",
+    "file": "screens_18_21_builders_and_marketplace.png",
+    "source_file": "a_dark_themed_ui_design_presentation_screenshot_co.png",
+    "size": "1536x1024"
+  }
+]

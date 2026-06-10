@@ -221,3 +221,18 @@ apps/www/lighthouse-report.json
 
 # Vision-harness capture output (regenerated per run)
 tests/vision/artifacts/
+
+# UX Refactor v2.1 handoff package — D10 doc-authority ruling (ratified
+# 2026-06-10; register: docs/ux-refactor/deltas/open-questions.md, section
+# "UX Refactor v2.1 — Ratification of Decision Register D1–D15").
+# Text sources stay TRACKED: PRD .md, Implementation Handoff .md,
+# _blueprint_extracted.txt, NAMING-ERRATUM.md, and
+# Waggle_OS_Handoff_Assets/{README.md,ASSET_MANIFEST.json}.
+# Binary exports stay LOCAL-ONLY (~85 MB: pdf/docx/pptx + generated mockup
+# png/jpg — mockups are visual direction, not authority; see the package's
+# NAMING-ERRATUM.md for the authority chain).
+docs/Waggle_OS_UX_Refactor_Master_Handoff_Package/*.pdf
+docs/Waggle_OS_UX_Refactor_Master_Handoff_Package/*.docx
+docs/Waggle_OS_UX_Refactor_Master_Handoff_Package/*.pptx
+docs/Waggle_OS_UX_Refactor_Master_Handoff_Package/Waggle_OS_Handoff_Assets/*.png
+docs/Waggle_OS_UX_Refactor_Master_Handoff_Package/Waggle_OS_Handoff_Assets/*.jpg
