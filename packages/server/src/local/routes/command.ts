@@ -1,5 +1,5 @@
 /**
- * Command Center / Win+K routes (PRD §16.3, gap cards S00 + S03).
+ * Command Center (Ctrl+K) routes (PRD §16.3, gap cards S00 + S03).
  *
  * SINGULAR `/api/command/*` surface that powers the global command palette.
  * Federates read-only search over the substrates that exist today, and exposes

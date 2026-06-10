@@ -236,7 +236,8 @@ const CommandCenter = ({ open, onClose, onNavigate, onExecute, workspaceId }: Co
 
   // Server-backed search, debounced. Falls back to a client offline filter over
   // the already-loaded recent + suggested pools when the endpoint is unreachable
-  // (reuses lib/fuzzy-match — same matcher the legacy Win+K used).
+  // (reuses lib/fuzzy-match — same matcher the legacy Command Center (Ctrl+K)
+  // predecessor, GlobalSearch, used).
   useEffect(() => {
     const q = query.trim();
     if (q.length < MIN_QUERY) {

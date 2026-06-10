@@ -567,8 +567,8 @@ const Desktop = () => {
         onSpawnAgent={() => ov.setShowSpawnAgent(true)} waggleBadgeCount={waggleUnacknowledged} />
 
       {/* Overlays */}
-      {/* UX-Refactor Phase 1 (S00/S03): the Win+K palette is now the Command
-          Center. Open/close + Win+K toggle reuse the same useOverlayState +
+      {/* UX-Refactor Phase 1 (S00/S03): the global palette is now the Command
+          Center (Ctrl+K). Open/close + Ctrl+K toggle reuse the same useOverlayState +
           useKeyboardShortcuts wiring (showGlobalSearch). GlobalSearch.tsx is
           retained on disk for rollback. onNavigate keeps the deep-link path;
           execute/permission flow is handled inside the overlay (C9). */}

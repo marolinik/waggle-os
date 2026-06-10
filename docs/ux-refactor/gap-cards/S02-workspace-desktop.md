@@ -173,7 +173,7 @@ DB migration**.
 
 ## 7. Dependencies (screens / phases first)
 
-- **Phase 1 (Shell + Win+K)** — `_blueprint_extracted.txt:582` — must land first: this screen is
+- **Phase 1 (Shell + Ctrl+K)** — `_blueprint_extracted.txt:582` — must land first: this screen is
   opened *from* the shell/route map and the left nav. S02 needs the new `route`/`activeWorkspaceId`
   global state + the `case 'workspace'` shell wiring.
 - **Phase 2 (Home + Workspace)** — `_blueprint_extracted.txt:585` — S02 ships **with** S01 (Home
@@ -184,7 +184,7 @@ DB migration**.
   if S05 is not ready.
 - **S04 Memory Center** — the Memory tab embeds `MemoryApp`; richer confidence/kind filters (and the
   `memory_frames` metadata migration) live there, not in S02.
-- **S03 Win+K** — the header search + quick actions route through the command provider.
+- **S03 Command Center (Ctrl+K)** — the header search + quick actions route through the command provider.
 
 ---
 

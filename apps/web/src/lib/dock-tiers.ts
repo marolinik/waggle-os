@@ -45,7 +45,7 @@ export const DEFAULT_TIER: UserTier = 'simple';
 
 // UX-Refactor Phase 0 (S00 §4b): the power dock expresses the PRD §10 IA layers —
 // Work (flat primary spine) + Intelligence / Extend / Team / System zone-parents.
-// Win+K (Global) lives in the StatusBar, not the dock. Grouping is data-only; the
+// The Command Center (Ctrl+K) lives in the StatusBar, not the dock. Grouping is data-only; the
 // Dock renders zone-parents generically off entry.type/entry.key.
 const POWER_CONFIG: DockEntry[] = [
   // ── Work (primary spine, always visible) ──
@@ -93,7 +93,8 @@ const POWER_CONFIG: DockEntry[] = [
     children: [
       { type: 'app', key: 'settings', appId: 'settings', icon: Settings, label: 'Settings', color: 'text-muted-foreground' },
       { type: 'app', key: 'vault', appId: 'vault', icon: Lock, label: 'Vault', color: 'text-amber-400' },
-      { type: 'app', key: 'cockpit', appId: 'cockpit', icon: Activity, label: 'Command Center', color: 'text-emerald-400' },
+      // D8 (v2.1): "Command Center" is reserved for the Ctrl+K palette.
+      { type: 'app', key: 'cockpit', appId: 'cockpit', icon: Activity, label: 'Mission Control', color: 'text-emerald-400' },
       { type: 'app', key: 'timeline', appId: 'timeline', icon: Clock, label: 'Timeline', color: 'text-cyan-400' },
       { type: 'app', key: 'events', appId: 'events', icon: Radio, label: 'Events & Logs', color: 'text-cyan-400' },
       { type: 'app', key: 'telemetry', appId: 'telemetry', icon: Activity, label: 'Usage & Cost', color: 'text-sky-400' },

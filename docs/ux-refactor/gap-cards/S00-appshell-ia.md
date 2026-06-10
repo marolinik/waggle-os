@@ -11,7 +11,7 @@
 
 S00 is the **application chrome and navigation spine** that every other screen mounts inside — it is
 not a "screen" the user opens, it is the frame they always see. PRD §1 names the spine: Home Cockpit,
-Workspace Desktop, Win+K Command Center, visible Memory, Extend layer, Team. S00 is the layer that
+Workspace Desktop, Command Center (Ctrl+K), visible Memory, Extend layer, Team. S00 is the layer that
 makes that spine reachable.
 
 Per the blueprint Developer Handoff (`_blueprint_extracted.txt:498`), **AppShell** = "Global route
@@ -20,7 +20,7 @@ layout, sidebar, active workspace, top status, command palette provider." Its re
 - Persistent top status bar (workspace, model, memory trophy, trial, search, notifications, clock).
 - Primary navigation expressing the six IA layers (PRD §10: Global / Work / Intelligence / Extend /
   Team / System) — blueprint `_blueprint_extracted.txt:68-81` + page-3 `06_board_all_in_one.png`.
-- Global, always-available command layer (Win+K / Ctrl+K) — PRD §12.3, §6.3.
+- Global, always-available command layer (Ctrl+K) — PRD §12.3, §6.3.
 - Active-workspace context held in a global store and threaded to every surface
   (`_blueprint_extracted.txt:512`).
 - The container for empty / loading / error / offline / permission-denied states (PRD §14.1).
@@ -47,11 +47,11 @@ S00 itself is mostly stateless chrome, but it **hosts** the global states and mu
   gracefully while keeping local workspace + memory reachable; offline badge in status bar.
 - **First-run vs returning:** onboarding wizard replaces the shell entirely on first launch
   (current behavior, see §3); returning users land in the populated shell.
-- **Accessibility (PRD §19.3, blueprint `:489`):** keyboard-first, Win+K + tab nav, visible focus,
+- **Accessibility (PRD §19.3, blueprint `:489`):** keyboard-first, Ctrl+K + tab nav, visible focus,
   non-color status, text labels on all badges.
 
 Layout direction (blueprint `:483`, directional only): "Desktop-first, **left navigation**, central
-workspace canvas, optional right context rail, Win+K overlay." Note this conflicts with the current
+workspace canvas, optional right context rail, Ctrl+K overlay." Note this conflicts with the current
 **bottom-dock** shell — see Open Questions Q1 (the PRD acceptance criteria, not the mock, win:
 PRD §24 risk row "Visual mocks overfit implementation").
 
@@ -71,7 +71,7 @@ across these real files:
 | `apps/web/src/components/os/AppWindow.tsx` | Draggable/resizable/snappable window chrome (one per open app). The "windowed runtime" — orthogonal to IA but the thing the IA must keep. |
 | `apps/web/src/hooks/useWindowManager.ts` | Window state machine (`WindowState[]`, persisted to `localStorage waggle-window-state-v1`), `openApp(AppId)` / `openChatForWorkspace(...)`, focus/minimize/cycle. **Navigation == window ops, keyed by `AppId`, NOT by URL.** |
 | `apps/web/src/hooks/useOverlayState.ts` | All overlay open/close flags (global search, switchers, notifications, etc.) — the global "command palette state / overlay state" store. |
-| `apps/web/src/components/os/overlays/GlobalSearch.tsx` | **The de-facto Command Center (Win+K).** Ctrl+K palette, 5 categories (`command\|workspace\|memory\|session\|skill`, `:15`), but built on a **static `COMMANDS[]` array (`:40-64`)** that is hand-synced to `appConfig` (drift warning in-file `:33-39`) — no Create/Run/Extend categories, no backend command index. |
+| `apps/web/src/components/os/overlays/GlobalSearch.tsx` | **The de-facto Command Center (Ctrl+K).** Ctrl+K palette, 5 categories (`command\|workspace\|memory\|session\|skill`, `:15`), but built on a **static `COMMANDS[]` array (`:40-64`)** that is hand-synced to `appConfig` (drift warning in-file `:33-39`) — no Create/Run/Extend categories, no backend command index. |
 | `apps/web/src/hooks/useKeyboardShortcuts.ts` | Binds global hotkeys (Ctrl+K search, persona/workspace switchers, new chat, window cycle). |
 | `apps/web/src/lib/types.ts` | Holds the **stale** `AppView` union (8 ids, `:3-11`). |
 | `apps/web/src/pages/Index.tsx` (route `/`) + `App.tsx` | Single-route app: `BrowserRouter` → `/` → `BootScreen` → `Desktop`. **No per-app routes exist** (frontend inventory `frontend.md:9-13`). |
@@ -137,7 +137,7 @@ test-covered, and PRD §20.1 explicitly says keep+promote the substrate. The del
   This is the component the blueprint names (`:498`). **Not required for behavior** — flag as a clean-up
   the plan can sequence late.
 
-### 4d. Command Center upgrade (Win+K) — depends on backend §16.3 (see §5)
+### 4d. Command Center upgrade (Ctrl+K) — depends on backend §16.3 (see §5)
 - **Rework `GlobalSearch.tsx`** from static-list + client fuzzy-match into a backend-fed command index:
   add the PRD §12.3 category sections **Search / Launch / Create / Run / Navigate / Extend** (today only
   command/workspace/memory/session/skill exist), federated over `/api/command/search` when present.
@@ -172,7 +172,7 @@ the backend routes (§5) land.
 
 **S00 as pure shell/IA/navigation needs NO new backend** — it is frontend chrome + client-side
 window routing. The dependency is the **Command Center (4d)**, which the IA spine requires
-(PRD §6.3 "Win+K always available"; blueprint `:515` "command index should unify workspaces, memory,
+(PRD §6.3 "Ctrl+K always available"; blueprint `:515` "command index should unify workspaces, memory,
 artifacts, sessions, agents, skills, connectors, MCPs, actions and recent commands").
 
 PRD §16.3 Command Center endpoints (cross-ref `backend-routes.md:444-451`):
@@ -230,7 +230,7 @@ S00 responsibility (blueprint Phase 0 "Define shared frontend types", PRD §8 Ph
   and consumes the app catalog + IA layering + global store defined here.
 - **Internal ordering:** 4a (app catalog / union dedup) → 4b (dock IA reframe) → 4e (global store)
   can all ship **frontend-only, no backend**. 4d (Command Center upgrade) is gated on backend §5
-  `/api/command/*` (PRD §21 Sprint 3) — ship the Win+K **skeleton + static/offline fallback** in
+  `/api/command/*` (PRD §21 Sprint 3) — ship the Ctrl+K **skeleton + static/offline fallback** in
   Phase 0/Sprint 1 (matches "command provider skeleton", PRD §21 Sprint 1), then wire the backend
   index in Sprint 3.
 - **Depends on no other screen.** Consumes only existing substrate (`GET /api/tier`,
@@ -262,7 +262,7 @@ union/tier-vocabulary consolidation that requires exhaustive grep (CLAUDE.md §3
 3. **Tier-vocabulary unification.** Three tiers (`UserTier`/`BillingTier`/`PlanTier`) gate the dock,
    billing, and features independently. Should S00 unify them into one model now (clean but
    cross-cutting), or just document the mapping and defer? PRD §17 RBAC roles add a 4th axis.
-4. **Command Center scope for v1 (PRD §23 Q-implied).** Which object types ship in the Win+K index
+4. **Command Center scope for v1 (PRD §23 Q-implied).** Which object types ship in the Ctrl+K index
    first? Artifacts/Agents/Automations are blocked on their domains (§5 note). Propose:
    workspaces + memory + sessions + skills + commands at launch, add the rest as screens land.
 5. **AppShell extraction now or later?** Pull the shell out of `Desktop.tsx` (4c) up front for a

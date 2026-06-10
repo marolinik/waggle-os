@@ -1,4 +1,4 @@
-# Gap Card — S03 · Win+K Command Center
+# Gap Card — S03 · Command Center (Ctrl+K)
 
 > Execution model is the LOCKED **in-place incremental refactor** of `apps/web` + targeted
 > backend extensions. Mockup (`Waggle_OS_Handoff_Assets/screen_03_win_k_command_center.png`) is
@@ -8,10 +8,10 @@
 
 ## 1. Screen & purpose
 
-The universal command layer — opens from anywhere with Win+K / Cmd+K — for **search, launch,
+The universal command layer — opens from anywhere with Ctrl+K / Cmd+K — for **search, launch,
 create, run, navigate, and extend** across every major object type. PRD §12.3 (lines 449-482),
 blueprint screen 3 (`_blueprint_extracted.txt:284-290, 633, 679`). It is the product's "primary
-interaction" per blueprint line 19 ("Primary interaction: Win+K") and the IA spine item #3
+interaction" per blueprint line 19 ("Primary interaction: Ctrl+K") and the IA spine item #3
 (PRD line 19). Goal: "No user needs to know where a feature lives to use it" (PRD line 482).
 
 The mockup shows a centered modal titled "What do you want to do?" with: a search input
@@ -25,7 +25,7 @@ and a footer "Type a natural-language command…". A second "Open in new window"
 ## 2. Required states (PRD/Blueprint)
 
 PRD §12.3 functional requirements (lines 461-467):
-- Opens from anywhere via Win+K / Cmd+K.
+- Opens from anywhere via Ctrl+K / Cmd+K.
 - Searches across **workspaces, memory, artifacts, sessions, people, agents, skills, commands, connectors, MCPs**.
 - Category sections: **Search, Launch, Create, Run, Navigate, Extend**.
 - Supports **natural-language command input**.
@@ -46,7 +46,7 @@ Acceptance (lines 479-482): every major object and action is reachable; no user 
 categories to Search/Launch/Create/Run/Navigate/Extend; add execute + permission-prompt + recent/suggested;
 back it with the net-new `/api/command/*` provider).
 
-- **`apps/web/src/components/os/overlays/GlobalSearch.tsx`** (362 lines) — the existing Win+K/Cmd+K
+- **`apps/web/src/components/os/overlays/GlobalSearch.tsx`** (362 lines) — the existing Ctrl+K/Cmd+K
   overlay. Today it does **client-side federated search only** across 5 categories
   (`SearchCategory = 'command' | 'workspace' | 'memory' | 'session' | 'skill'`, line 15):
   - `command` = a **hardcoded static `COMMANDS` array** of 23 app ids (lines 40-64) that must be
@@ -67,7 +67,7 @@ back it with the net-new `/api/command/*` provider).
   navigation, no execute.**
 - **`apps/web/src/components/os/overlays/KeyboardShortcutsHelp.tsx`** (92 lines) — static cheat-sheet
   modal (`shortcuts` array, lines 9-32). Lists "⌘K → Global Search" (line 21). **Disposition `keep`** —
-  it is the separate `Cmd+?` help overlay, not the command center; only update its label if Win+K is
+  it is the separate `Cmd+?` help overlay, not the command center; only update its label if Ctrl+K is
   rebranded "Command Center".
 - **`adapter.executeCommand(command, workspaceId)`** (`lib/adapter.ts:1345-1350`) → `POST /api/commands/execute`
   (note **plural** `commands`). Runs **slash commands only** (`/catchup`, `/status`, `/memory`, `/skills`);
@@ -144,7 +144,7 @@ PRD §15 defines no dedicated Command type, but the palette needs a result/comma
 ## 7. Dependencies (screens/phases first)
 
 - **PRD Sprint 3 = Command Center** (PRD lines 1321-1326: indexed search provider, result groups,
-  command execution, recent/suggested) — this card IS Sprint 3. Depends on **Sprint 1 (Shell + Win+K**,
+  command execution, recent/suggested) — this card IS Sprint 3. Depends on **Sprint 1 (Shell + Ctrl+K**,
   blueprint `:582`) being the home of the command provider.
 - **Search breadth is gated by other screens' substrate.** "artifacts" and "agents/people" facets need:
   Artifacts (S05, PRD §16.6 — entirely net-new, substrate-types §e: no Artifact entity exists) and

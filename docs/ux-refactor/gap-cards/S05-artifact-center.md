@@ -202,8 +202,8 @@ FE↔BE `MemoryFrame` drift the inventory flags (`_inventory/substrate-types.md:
   `search-related` federated endpoint is the binding dependency on Memory (FTS) + Sessions + Tasks.
 - **AppShell / dock IA (Phase 0/1)** must exist first so `artifacts` registers as a Work-bucket dock
   entry (consolidate on `AppId`, retire stale `AppView`).
-- **Win+K Command Center (Phase 1)** should index artifacts (`_blueprint_extracted.txt:515` — command
-  index unifies artifacts) — soft dependency; Artifact Center can ship before Win+K wires it in.
+- **Command Center (Ctrl+K) (Phase 1)** should index artifacts (`_blueprint_extracted.txt:515` — command
+  index unifies artifacts) — soft dependency; Artifact Center can ship before Ctrl+K wires it in.
 - **`WorkspaceConfigV2` `type`/`status` fields** (S-workspace cards) help facet labels but are not
   blocking.
 - **Team Workspace / RBAC (Phase 5)** gates `POST /api/artifacts/:id/share` + permission-denied state.

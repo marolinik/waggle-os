@@ -85,7 +85,7 @@ phases write through. Land these first because Phase 1–5 write paths depend on
 > client-side; an aggregate `/status` route is optional and deferred). Artifacts tab is **S05's**
 > scope; S02 ships an interim file-registry view via existing `GET /api/workspaces/:id/files`.
 
-### 1c. Command Center / Win+K (S00, S03) — new `command.ts`
+### 1c. Command Center (Ctrl+K) (S00, S03) — new `command.ts`
 
 | Method + Path | Disposition | Build target | Substrate | Shape | Screens |
 |---|---|---|---|---|---|

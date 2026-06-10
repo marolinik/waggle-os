@@ -27,7 +27,7 @@ Mapping below merges both lists.
 | **AppShell** | BUILD-NEW (composes EXISTS) | new `components/os/AppShell.tsx`; compose `ui/sidebar.tsx` + `ui/scroll-area.tsx` | No single AppShell today; current shell is `os/Desktop.tsx` (windowing). PRD §20.3 lists AppShell as Create. Reuse `ui/sidebar.tsx` for left nav. |
 | **Primary navigation** | EXISTS (extend) | `ui/sidebar.tsx`, `ui/navigation-menu.tsx` | Full sidebar primitive present (collapsible, rail, groups). Re-label to Work/Intelligence/Extend/Team IA (PRD §3.2). |
 | **Workspace switcher** | BUILD-NEW (compose EXISTS) | new; compose `ui/command.tsx` + `ui/dropdown-menu.tsx` | Pattern exists in `sidebar.tsx` docs; assemble against workspace list. |
-| **Command Center modal** | EXISTS (primitive) → BUILD-NEW (Win+K shell) | primitive `ui/command.tsx` (cmdk: CommandDialog/Input/Group/Item); new `CommandCenter.tsx` | `ui/command.tsx` is full cmdk wrapper. PRD §20.3 + Blueprint require a global Win+K provider/overlay on top — build the provider, reuse the primitive. Existing `overlays/GlobalSearch.tsx` is a prior, narrower attempt to fold in. |
+| **Command Center modal** | EXISTS (primitive) → BUILD-NEW (Ctrl+K shell) | primitive `ui/command.tsx` (cmdk: CommandDialog/Input/Group/Item); new `CommandCenter.tsx` | `ui/command.tsx` is full cmdk wrapper. PRD §20.3 + Blueprint require a global Ctrl+K provider/overlay on top — build the provider, reuse the primitive. Existing `overlays/GlobalSearch.tsx` is a prior, narrower attempt to fold in. |
 | **Card: workspace** (ContextCard/MemoryCard/AgentCard/SkillCard/ConnectorCard) | EXISTS (base) → BUILD-NEW (typed variants) | base `ui/card.tsx`; new per-object cards under `components/os/cards/` | `ui/card.tsx` is the generic shadcn card (Header/Title/Content/Footer). Build typed object cards on top (each renders StatusBadge + actions). `.direction-d-card` / `.waggle-card-lift` utilities (`waggle-theme.css`) give the hover/lift treatment. |
 | **ArtifactRow / MCPRow / AutomationRunRow** (table rows) | EXISTS (base) | `ui/table.tsx` | Blueprint density rule (line 491): cards for Home/Workspace, **tables** for Memory/Artifacts/Agents/Automations. Use `ui/table.tsx`; build row cell formatters only. |
 | **Status badges** | EXISTS (base) → BUILD-NEW (StatusBadge variant) | base `ui/badge.tsx`; new `components/os/StatusBadge.tsx` | `ui/badge.tsx` has only default/secondary/destructive/outline — **no semantic status variants** and no icon/dot. Build `StatusBadge` mapping the state enums (PRD §14: running/paused/failed/healthy/...) to the color semantics in (b), with a **non-color dot + text label** (a11y §19.3). |
@@ -124,7 +124,7 @@ and inherits both dark and light themes automatically.
 PRD §19.3 (lines 1254-1261) + Blueprint "Keyboard-first... no color-only status, text labels
 for all badges." Per-component obligations for the new/extended DS components:
 
-1. **Full keyboard support.** Win+K (`CommandCenter`) opens from anywhere via global key
+1. **Full keyboard support.** Ctrl+K (`CommandCenter`) opens from anywhere via global key
    handler; builders, drawers, modals are fully tab-navigable. cmdk (`ui/command.tsx`) and
    Radix bases (`alert-dialog`, `sheet`, `dialog`, `toggle-group`) provide focus trap +
    arrow-key nav out of the box — preserve, don't override.

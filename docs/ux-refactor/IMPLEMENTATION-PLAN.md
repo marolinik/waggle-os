@@ -16,7 +16,7 @@
 Waggle OS is today a single-route windowed desktop OS (`apps/web/src/components/os/Desktop.tsx` +
 `Dock.tsx`; 27 `AppId` window types; no react-router) sitting on a deep, mostly-built backend substrate.
 The refactor converts it into a **workspace-first Agent Desktop** whose spine is **Home Cockpit →
-Workspace Desktop → Win+K → visible Memory/Artifacts → Agents/Skills/Automations → governed Extend →
+Workspace Desktop → Ctrl+K → visible Memory/Artifacts → Agents/Skills/Automations → governed Extend →
 Team**. We deliver this as an **in-place incremental refactor** of `apps/web` + **targeted local-sidecar
 extensions** — reusing `workspace-manager`, the `workspace-state` builder, the `.mind` schema, the
 harvest pipeline, `install-audit`, and the approval/trust runtime. The total backend work resolves to
@@ -36,7 +36,7 @@ SQLite migration** (`memory_frames.metadata`). All 21 numbered screens + the App
 ### The 8 non-negotiable product rules (condensed handoff §"Non-negotiable product rules"; PRD §6)
 
 1. **Workspace is the primary object.** Everything happens inside or across workspaces.
-2. **Win+K is always available** — search, launch, run, create, navigate, extend, from anywhere.
+2. **Ctrl+K is always available** — search, launch, run, create, navigate, extend, from anywhere.
 3. **Memory is visible, inspectable and editable** — source, confidence, scope, evidence, edit/delete.
 4. **Artifacts are outcomes, not attachments** — documents/decks/sheets/dashboards/research are first-class.
 5. **Connectors and MCPs live in Extend, not hidden Settings.**
@@ -102,14 +102,14 @@ Build order matters (CLAUDE.md §2 / MEMORY 0601 S3): **shared → hive-mind-cor
 - **Goal:** freeze the IA + route/vocabulary names; establish the shared-type spine + DS token layer that
   every later write-path depends on. No new endpoints. (PRD §8 Phase 0 / §21 Sprint 1 / Blueprint P0.)
 - **Screens delivered:** **S00 (AppShell + IA + Navigation)** — partial: the shell reframe + nav labels +
-  Win+K provider skeleton. (Full Win+K UX lands in P1/S03.)
+  Ctrl+K provider skeleton. (Full Ctrl+K UX lands in P1/S03.)
 - **Frontend tasks**
   - *Keep-promote:* `Dock.tsx` + `lib/dock-tiers.ts` zone-parent model → regroup dock entries into
     **Work / Intelligence / Extend / Team / System** zones (PRD §10 IA) — no react-router (see open-question
     **B1**, recommended: in-place dock reframe, keep windowed `AppId` navigation). `Desktop.tsx`
     `appConfig` + `renderAppContent` switch stays the navigation engine.
   - *Rework:* consolidate the dual app-id union onto `AppId`; delete stale `AppView` + dead ids
-    (`terminal/calculator/notes`) (`_inventory/frontend.md` §b). Add the **global Win+K provider** shell
+    (`terminal/calculator/notes`) (`_inventory/frontend.md` §b). Add the **global Ctrl+K provider** shell
     (compose `ui/command.tsx`; absorb `overlays/GlobalSearch.tsx`).
   - *Create:* `components/os/AppShell.tsx` (compose `ui/sidebar.tsx` + `ui/scroll-area.tsx`),
     `WorkspaceSwitcher` (compose `ui/command.tsx` + `ui/dropdown-menu.tsx`), the `--sem-*` token alias layer.
@@ -136,12 +136,12 @@ Build order matters (CLAUDE.md §2 / MEMORY 0601 S3): **shared → hive-mind-cor
 
 ---
 
-### Phase 1 — Core runtime: Home Cockpit, Workspace Desktop, Win+K
+### Phase 1 — Core runtime: Home Cockpit, Workspace Desktop, Command Center (Ctrl+K)
 
 - **Goal:** the daily spine. A returning user "can continue work in under 30 seconds" (Blueprint P2 exit).
   (PRD §8 Phase 1 / §21 Sprints 2-3 / Blueprint P1-P2.)
-- **Screens delivered:** **S01 Home Cockpit**, **S02 Workspace Desktop**, **S03 Win+K Command Center**
-  (S00 Win+K provider completed here).
+- **Screens delivered:** **S01 Home Cockpit**, **S02 Workspace Desktop**, **S03 Command Center (Ctrl+K)**
+  (S00 Ctrl+K provider completed here).
 - **Frontend tasks**
   - *Keep-promote:* `components/os/WorkspaceBriefing.tsx` → **Home Cockpit** widgets (PRD §20.1 named seed);
     `DashboardApp.tsx` (workspaces grid) folds into Home. `ChatWindowInstance` `WorkspaceBriefing` home
@@ -152,8 +152,8 @@ Build order matters (CLAUDE.md §2 / MEMORY 0601 S3): **shared → hive-mind-cor
   - *Create (S02):* `WorkspaceDesktop` as a **maximized `AppWindow`** (open-question **C4/A1** — fixed
     layout v1, no parallel grid engine) with the **8 §12.2 tabs** incl. the **Settings tab** (coverage-check
     G1) and a Tasks tab seeded from `WorkspaceState` (open-question **C7**). Sessions surface via Timeline +
-    Win+K (coverage-check G2 — document this, do not build a separate Sessions screen v1).
-  - *Create (S03):* `CommandCenter` Win+K overlay on the P0 provider; result groups for the 6 verbs
+    Ctrl+K (coverage-check G2 — document this, do not build a separate Sessions screen v1).
+  - *Create (S03):* `CommandCenter` Ctrl+K overlay on the P0 provider; result groups for the 6 verbs
     (search/launch/create/run/navigate/extend). Reuse the chat approvals pipeline for gated commands
     (open-question **C9**).
 - **Backend tasks** (`backend-api-delta.md` Phase 1)
@@ -171,11 +171,11 @@ Build order matters (CLAUDE.md §2 / MEMORY 0601 S3): **shared → hive-mind-cor
   §2b); NEW shared `Command`/`CommandResult` (`shared-types-delta` §9); seed identity on the greeting path
   (open-question **B8** — onboarding writes profile AND identity so Home greets by name).
 - **Design-system pieces:** `WorkspaceCard`, `EmptyState`, `ErrorState`, `Skeleton` compositions,
-  `ActivityFeed`, `Timeline` (extract from `TimelineApp.tsx` + `lib/timeline-events.ts`), the Win+K
+  `ActivityFeed`, `Timeline` (extract from `TimelineApp.tsx` + `lib/timeline-events.ts`), the Ctrl+K
   `CommandCenter` shell with a11y (`aria-label`, focus trap from cmdk).
 - **Exit criteria → PRD acceptance:** PRD §22.1 "land in Home Cockpit and continue useful work" +
-  "use Win+K to find and run all major actions"; DoD #1/#2/#3. Home renders first-run-empty + daily +
-  attention + overnight-failure states (PRD §14.2); Win+K covers all 6 verbs (PRD §12.3).
+  "use Ctrl+K to find and run all major actions"; DoD #1/#2/#3. Home renders first-run-empty + daily +
+  attention + overnight-failure states (PRD §14.2); Ctrl+K covers all 6 verbs (PRD §12.3).
 - **Verify:** full gate; `tsc` on `server` (new `home.ts`/`command.ts`) + `apps/web`.
 
 ---
@@ -395,10 +395,10 @@ Build order matters (CLAUDE.md §2 / MEMORY 0601 S3): **shared → hive-mind-cor
 ```
 P0 (IA freeze + shared types + V2 fields + --sem-* tokens)
    └─ blocks EVERYTHING (every write-path uses V2 fields; every component uses the token layer & unions)
-P1 (Home, Workspace, Win+K)
-   ├─ S01 Home depends on workspace-state builder (exists) + S03 Win+K (greeting depends on identity seed, B8)
-   ├─ S03 Win+K provider skeleton starts in P0, completes in P1; S01/S02 consume it
-   └─ blocks P2 (Memory/Artifact detail surfaces are reached via Workspace tabs + Win+K)
+P1 (Home, Workspace, Ctrl+K)
+   ├─ S01 Home depends on workspace-state builder (exists) + S03 Ctrl+K (greeting depends on identity seed, B8)
+   ├─ S03 Ctrl+K provider skeleton starts in P0, completes in P1; S01/S02 consume it
+   └─ blocks P2 (Memory/Artifact detail surfaces are reached via Workspace tabs + Ctrl+K)
 P2 (Memory, Artifacts, Onboarding, Workspace Creation)
    ├─ Artifact entity (artifacts.json) is the single largest net-new domain; gates artifact-share in P5
    ├─ Memory metadata decision (M1) shared by S04 + S16; resolve B2/A8 BEFORE coding
@@ -456,7 +456,7 @@ PRD §24 risks + risks surfaced by the coverage-check / deltas:
 
 | # | Risk | Source | Impact | Mitigation (in this plan) |
 |---|---|---|---|---|
-| R1 | UX becomes too complex | PRD §24 | High | Keep Home/Workspace/Win+K as the spine (P0-P1); hide power features behind the IA zones until needed. |
+| R1 | UX becomes too complex | PRD §24 | High | Keep Home/Workspace/Ctrl+K as the spine (P0-P1); hide power features behind the IA zones until needed. |
 | R2 | Backend not ready for all screens | PRD §24 | Med | In-place reuse + thin adapters; mock catalog only where safe (PRD §22.2); **A4** = real-where-substrate-exists. |
 | R3 | Memory trust issues | PRD §24 | High | Source/confidence/evidence/review/edit/delete (P2); ConfidenceBadge + EvidencePanel; heuristic-then-LLM (**B2**). |
 | R4 | Agent safety | PRD §24 | High | Explicit permissions + approval prompts + audit (rule #6/#7); reuse `confirmation.ts` + approval SSE. |
@@ -470,7 +470,7 @@ PRD §24 risks + risks surfaced by the coverage-check / deltas:
 | R12 | RBAC role-vocabulary divergence (3 enums, no Guest, PUT/PATCH gate bug) | rbac-delta §1 | Med | Unify enum in `@waggle/shared` (P5); fix the gate; ratify **A7** before S10. |
 | R13 | install-audit `critical` CHECK throws on write | coverage-check C15 / rbac §3.2 | Med | **M2** fix before any Extend install write (pre-P4). |
 | R14 | Connector `/sync` is a cosmetic stub vs §12.7 "data flowing" | coverage-check C1 | Med | Flag v1 partial; schedule real connector-SDK pull (Phase 6/post-v1). |
-| R15 | Sessions not a first-class browsable object | coverage-check G2 | Low | Document Timeline+Win+K as the v1 session UX; soften the §11 "navigable" claim. |
+| R15 | Sessions not a first-class browsable object | coverage-check G2 | Low | Document Timeline+Ctrl+K as the v1 session UX; soften the §11 "navigable" claim. |
 | R16 | Sidecar type errors ship undetected (`tsx` transpile-only) | CLAUDE.md §2 | Med | Run `tsc --project packages/server` in every phase gate (not just `npm run build`). |
 | R17 | Build-order/stale-dist hides breakage behind green CI | MEMORY 0601 S3 | Med | Enforce shared→hive-mind-core→core→agent→server; nuclear-clean before release verify. |
 
@@ -517,7 +517,7 @@ The refactor is done when all 11 hold. Mapped to the phase that delivers each (c
 
 - [ ] **1. Home Cockpit replaces blank-chat launch behavior.** — P0 (routing flip, GAP-D1) + P1 (screen).
 - [ ] **2. Workspace Desktop is the default runtime for workspace work.** — P0 (route) + P1 (S02).
-- [ ] **3. Win+K can search, launch, create, run, navigate, and extend.** — P0 (provider) + P1 (S03; all 6 verbs).
+- [ ] **3. Ctrl+K can search, launch, create, run, navigate, and extend.** — P0 (provider) + P1 (S03; all 6 verbs).
 - [ ] **4. Memory Center exposes source, confidence, evidence, scope, and edit/delete.** — P2 (S04/S16; M1 if filterable).
 - [ ] **5. Artifact Center supports outcome search and related objects.** — P2 (S05; `/search-related`).
 - [ ] **6. Onboarding leads profile → tool-discovery → import → review → first workspace.** — P2 (S12-S17 chain).

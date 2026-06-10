@@ -65,7 +65,7 @@ export type ExtensionType =
 tabs/filters, MCP scope, Team sharing (§12.4, §12.8, §12.11, §17.1). `Confidence` → Memory confidence badge
 (§12.4, §19.1). `MemoryKind` → Memory Center type filter (§12.4). `ArtifactKind` → Artifact Center categories
 (§12.5). `AgentType` → Agent Center categories (§12.9). `AutonomyLevel` → Agent Builder (§12.9). `ExtensionType`
-→ Win+K "Extend" section + Extend/Marketplace (§12.3, §12.7-12.8).
+→ Ctrl+K "Extend" section + Extend/Marketplace (§12.3, §12.7-12.8).
 
 > **Drift watch:** `MemoryKind` OVERLAPS but does not match the existing FE `MemoryFrame.type`
 > (`apps/web/src/lib/types.ts:120` = `'fact'|'event'|'insight'|'decision'|'task'|'entity'`) and the DB `frame_type`
@@ -207,7 +207,7 @@ discipline noted for `install_audit`, `_inventory/substrate-types.md:171-172`) +
 ### 4b. FE — NEW `Artifact` view-model → `apps/web/src/lib/types.ts`
 Import or re-shape the shared `Artifact`. **Consumed by:** Artifact Center grid/detail panel + cross-object
 "Germany GTM" search (§12.5, acceptance criteria PRD:532); Workspace Desktop "key artifacts" widget (§12.2);
-Win+K Search results (§12.3); `relatedArtifactIds` on Memory (§3) and Agent (§5).
+Ctrl+K Search results (§12.3); `relatedArtifactIds` on Memory (§3) and Agent (§5).
 
 ---
 
@@ -282,7 +282,7 @@ export interface Skill {
 }
 ```
 Keep `SkillPack` for the marketplace-pack grouping; relate via `SkillPack.skills: string[]` → `Skill.id`.
-**Consumed by:** Skills Hub tabs + Skill Builder (§12.6); Agent Builder skill assignment (§12.9); Win+K "Run"
+**Consumed by:** Skills Hub tabs + Skill Builder (§12.6); Agent Builder skill assignment (§12.9); Ctrl+K "Run"
 (§12.3); Workspace `skills[]` (§2).
 
 ---
@@ -334,7 +334,7 @@ Action: MODIFY the FE Connector Hub to consume the shared `ConnectorDefinition`/
 (the FE already imports `@waggle/shared`), rather than the 4-field `Connector`. Optionally add `lastSyncAt?`,
 `scope?: Scope` to `ConnectorHealth` for §12.7 "last sync" + §17.3 connector scope. **No new connector type
 needed** — this is a consumption switch, not a new shape.
-**Consumed by:** Connector Hub (§12.7), Win+K Extend (§12.3), Workspace `connectorIds[]` (§2).
+**Consumed by:** Connector Hub (§12.7), Ctrl+K Extend (§12.3), Workspace `connectorIds[]` (§2).
 
 ### 8b. MCP — NEW FE `McpInstance`, reuse shared `McpServer` catalog
 **Current:** `McpServer` catalog entry in `packages/shared/src/mcp-catalog.ts:17-28` (`id, name, description,
@@ -359,7 +359,7 @@ export interface McpInstance {
 Install governance/audit already exists via `InstallAuditStore` + `AuditCapabilityType`
 (`packages/core/src/install-audit.ts:22` includes `mcp|connector|skill|marketplace`) — the Extend view needs a
 NEW `GET /api/extend/audit` read route (no write change; `_inventory/substrate-types.md:196-201`).
-**Consumed by:** MCP Hub (§12.8), Win+K Extend (§12.3), Workspace `mcpIds[]` (§2).
+**Consumed by:** MCP Hub (§12.8), Ctrl+K Extend (§12.3), Workspace `mcpIds[]` (§2).
 
 > **Flag (latent, pre-existing):** `AuditRiskLevel` TS includes `'critical'` but both DDL CHECKs allow only
 > `low|medium|high` (`install-audit.ts:65`, `schema.ts:130`) — a `record({riskLevel:'critical'})` throws.
@@ -370,7 +370,7 @@ NEW `GET /api/extend/audit` read route (no write change; `_inventory/substrate-t
 
 ## 9. §12.3 Command — NEW everywhere → `packages/shared` + FE
 
-Win+K Command Center needs a result/command shape (§12.3, §16.3 `/api/command/*` all net-new,
+Command Center (Ctrl+K) needs a result/command shape (§12.3, §16.3 `/api/command/*` all net-new,
 `_inventory/substrate-types.md:282`). No existing type.
 
 NEW shared `Command` + `CommandResult`:
@@ -394,7 +394,7 @@ export interface CommandResult {
 `CommandResultType` deliberately spans every searchable object class (§12.3 FR "search across workspaces,
 memory, artifacts, sessions, people, agents, skills, commands, connectors, MCPs"). FE imports these for the
 command palette and result grouping.
-**Consumed by:** Win+K Command Center (§12.3) — the only consumer, but cross-cutting (it indexes every entity).
+**Consumed by:** Command Center (Ctrl+K) (§12.3) — the only consumer, but cross-cutting (it indexes every entity).
 
 ---
 

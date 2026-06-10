@@ -71,7 +71,7 @@ describe('dock label ↔ Desktop appConfig title parity', () => {
         const allowed: Array<[string, string, string]> = [
           ['Home', 'Dashboard', 'dock: short nav name; title: canonical app name'],
           ['Chat', 'Waggle Chat', 'title adds the brand prefix to disambiguate chat windows'],
-          ['Command Center', 'Cockpit', 'friendly nav label; legacy window title'],
+          ['Mission Control', 'Cockpit', 'D8: "Command Center" reserved for the Ctrl+K palette; legacy window title'],
           ['Usage & Cost', 'Usage & Telemetry', 'dock emphasises cost; title emphasises telemetry scope'],
           ['Events & Logs', 'Events', 'dock bundles logs + events; window lives as Events only'],
           // AI-OS Phase 2B: dock surfaces "AI Tools" as the user-facing
