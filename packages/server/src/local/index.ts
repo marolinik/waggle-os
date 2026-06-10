@@ -75,6 +75,7 @@ import { ingestRoutes, readFileRegistry } from './routes/ingest.js';
 import { mindRoutes } from './routes/mind.js';
 import { agentRoutes } from './routes/agent.js';
 import { skillRoutes } from './routes/skills.js';
+import { skillsAliasRoutes } from './routes/skills-aliases.js';
 import { approvalRoutes } from './routes/approval.js';
 import { anthropicProxyRoutes } from './routes/anthropic-proxy.js';
 import { teamRoutes } from './routes/team.js';
@@ -1836,10 +1837,10 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
     // cron_execution_history. Until now recordExecution was never called, so
     // GET /api/cron/:id/history, /api/automations/:id/logs and the Home
     // overnight failure feed all read an empty table. Fires for scheduler
-    // ticks AND manual triggers (executeJob); the C26 dry-run path
-    // (scheduler.dryRun) deliberately bypasses this callback. The persistence
-    // closure is the shared makeRecordExecutionCallback (cron.ts) so
-    // automations.test.ts exercises the SAME code, not a hand-copied mirror.
+    // ticks AND manual triggers (executeJob); the C26 /api/automations/test
+    // preview is validation-only and never reaches the executor. The
+    // persistence closure is the shared makeRecordExecutionCallback (cron.ts)
+    // so automations.test.ts exercises the SAME code, not a hand-copied mirror.
     persistCronHistory(schedule, result);
 
     // Q16:C — Emit notification after every cron job tick (success or failure)
@@ -2004,6 +2005,9 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(mindRoutes);
   await server.register(agentRoutes);
   await server.register(skillRoutes);
+  // UX-Refactor Phase 3: /api/skills/:id aliases (S06/S19) — delegates into
+  // skillRoutes handlers, so it registers right after them.
+  await server.register(skillsAliasRoutes);
   await server.register(approvalRoutes);
   await server.register(anthropicProxyRoutes);
   await server.register(teamRoutes);

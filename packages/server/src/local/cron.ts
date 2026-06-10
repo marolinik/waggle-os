@@ -118,22 +118,6 @@ export class LocalScheduler {
   }
 
   /**
-   * C26 (UX-Refactor Phase 3): run the executor against an AD-HOC (possibly
-   * unsaved) schedule with the CRON BOOKKEEPING suppressed — no markRun
-   * (cron_schedules write), no fail-count mutation, no onJobComplete
-   * (completion notification/history/Telegram side effects). NOTE: the job
-   * handler itself EXECUTES FOR REAL — handlers that persist or notify
-   * in-handler (agent_task LLM calls + success notifications, consolidation
-   * writes, optimization log inserts, ...) still do; that is the action under
-   * test, not cron bookkeeping. Backs the Builder's `POST /api/automations/
-   * test` preview; deliberately NOT executeJob, whose semantics are wrong for
-   * a pre-activation test.
-   */
-  async dryRun(schedule: CronSchedule): Promise<void> {
-    await this.executor(schedule);
-  }
-
-  /**
    * Execute one tick: find all due schedules and run them.
    * Returns the count of successfully executed jobs.
    *

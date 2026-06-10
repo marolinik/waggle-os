@@ -155,4 +155,23 @@ describe('CronStore', () => {
     // next_run_at should be in the future
     expect(new Date(updated.next_run_at!).getTime()).toBeGreaterThan(Date.now());
   });
+
+  it('pruneExecutionHistory deletes only rows older than the cutoff', () => {
+    const created = store.create(makeInput());
+    // A fresh row (executed_at = now) must survive the prune.
+    store.recordExecution(created.id, created.name, { success: true });
+    // A back-dated row beyond the 30-day retention must go.
+    db.getDatabase().prepare(`
+      INSERT INTO cron_execution_history (schedule_id, schedule_name, executed_at, success)
+      VALUES (?, ?, datetime('now', '-40 days'), 1)
+    `).run(created.id, created.name);
+    expect(store.getExecutionHistory(created.id)).toHaveLength(2);
+
+    const deleted = store.pruneExecutionHistory(30);
+    expect(deleted).toBe(1);
+
+    const remaining = store.getExecutionHistory(created.id);
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].success).toBe(1);
+  });
 });

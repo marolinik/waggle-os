@@ -1,6 +1,7 @@
 // @waggle/shared — Zod validation schemas for API requests
 
 import { z } from 'zod';
+import { AGENT_RUN_STATES } from './types.js';
 
 export const createTeamSchema = z.object({
   name: z.string().min(1).max(100),
@@ -47,15 +48,12 @@ export const sendMessageSchema = z.object({
 // UX-Refactor Phase 3 (PRD §15.5): shared enum fragments for the Agent entity.
 // Ref-id arrays use plain min(1) strings — workspace/agent ids in this repo are
 // NOT all UUIDs (cron ids are numeric, artifact ids are `art_${uuid}`).
-// status mirrors the §14.5 AgentRunState union in types.ts (the vocabulary the
-// sidecar agents-store actually persists) — keep the two in sync.
+// status derives from the §14.5 AGENT_RUN_STATES tuple in types.ts (the
+// vocabulary the sidecar agents-store actually persists) — single source.
 const agentTypeEnum = z.enum(['personal', 'workspace', 'team', 'autonomous']);
 const autonomyLevelEnum = z.enum(['manual', 'guided', 'medium', 'high']);
 const scopeEnum = z.enum(['personal', 'workspace', 'team', 'organization']);
-const agentStatusEnum = z.enum([
-  'draft', 'idle', 'running', 'paused', 'failed',
-  'waiting_for_approval', 'completed', 'archived',
-]);
+const agentStatusEnum = z.enum(AGENT_RUN_STATES);
 
 // NOTE: this schema is consumed by the Clerk-gated CLOUD route
 // (packages/server/src/routes/agents.ts). The cloud AgentService persists only

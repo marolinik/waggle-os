@@ -882,7 +882,12 @@ class LocalAdapter {
     return res.json();
   }
 
-  /** Thin install dispatcher — resolves to the starter/pack/marketplace installer. */
+  /** Thin install dispatcher — resolves to the starter/pack/marketplace
+   *  installer. The `id` means a DIFFERENT thing per source: 'starter' = a
+   *  starter-skill id; 'pack' = a CAPABILITY-PACK id (installs the pack's
+   *  skills, not a skill named `id`); 'marketplace' IGNORES `id` — the numeric
+   *  `packageId` rules. A pack install with per-skill failures throws with
+   *  status 422 and `body.result` carrying installed/skipped/errors. */
   async installSkill(
     id: string,
     source: 'starter' | 'pack' | 'marketplace',
@@ -1188,29 +1193,9 @@ class LocalAdapter {
     return res.json();
   }
 
-  /** Execution history for one schedule (route lives in notifications.ts). */
-  async getCronHistory(id: string, limit?: number): Promise<AutomationLog[]> {
-    const qs = typeof limit === 'number' ? `?limit=${limit}` : '';
-    const res = await this.fetch(`/api/cron/${encodeURIComponent(id)}/history${qs}`);
-    if (!res.ok) throw new Error(`getCronHistory failed: ${res.status}`);
-    const body = await res.json() as { history?: Array<Record<string, unknown>> };
-    return (body.history ?? []).map((h) => ({
-      id: Number(h.id),
-      executedAt: String(h.executed_at ?? ''),
-      durationMs: (h.duration_ms as number | null) ?? null,
-      success: h.success === 1 || h.success === true,
-      resultSummary: (h.result_summary as string | null) ?? null,
-      error: (h.error as string | null) ?? null,
-    }));
-  }
-
-  /** Pause = dedicated route (sets enabled:false + resets failure state). */
-  async pauseCronJob(id: string): Promise<void> {
-    const res = await this.fetch(`/api/automations/${encodeURIComponent(id)}/pause`, { method: 'POST' });
-    if (!res.ok) throw new Error(`pauseCronJob failed: ${res.status}`);
-  }
-
   // --- Automations (UX-Refactor Phase 3 — PRD-vocabulary alias over cron, S11/S20) ---
+  // (Use pauseAutomation / getAutomationLogs below — the PRD vocabulary; the
+  // duplicate pauseCronJob/getCronHistory pair was removed in the 3A review.)
 
   async listAutomations(): Promise<Automation[]> {
     const res = await this.fetch('/api/automations');
@@ -1272,7 +1257,12 @@ class LocalAdapter {
     return body.logs ?? [];
   }
 
-  /** C26 no-persist dry-run of a DRAFT automation (Builder test-run). */
+  /** C26 VALIDATION-ONLY preview of a DRAFT automation (Builder test-run).
+   *  The server never calls the executor — it statically checks the trigger
+   *  (schedule needs a parseable cron), jobType, config completeness
+   *  (agent_task needs jobConfig.prompt) and workspaceId, and echoes
+   *  `condition` as advisory (C25). `executed` is always false; nothing is
+   *  persisted, enabled, recorded or notified. */
   async testAutomation(draft: {
     name?: string;
     trigger?: { type: 'schedule' | 'manual'; cron?: string };
@@ -1281,7 +1271,15 @@ class LocalAdapter {
     jobType?: string;
     jobConfig?: Record<string, unknown>;
     workspaceId?: string;
-  }): Promise<{ previewResult: { ok: boolean; jobType: string; durationMs: number; error?: string } }> {
+  }): Promise<{ previewResult: {
+    ok: boolean;
+    jobType: string;
+    triggerType: string;
+    issues: string[];
+    executed: false;
+    wouldRun: string;
+    condition?: string;
+  } }> {
     const res = await this.fetch('/api/automations/test', { method: 'POST', body: JSON.stringify(draft) });
     if (!res.ok) throw new Error(`testAutomation failed: ${res.status}`);
     return res.json();

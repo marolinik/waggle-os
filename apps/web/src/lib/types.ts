@@ -8,6 +8,7 @@ import type {
   CommandResult,
   CommandAction,
   Memory as SharedMemory,
+  AgentRunState,
 } from '@waggle/shared';
 
 // Re-export the shared Command vocabulary so command-palette FE code can import
@@ -36,16 +37,14 @@ export type {
 export type {
   AgentType,
   AutonomyLevel,
-  Skill,
   Automation,
   AutomationTriggerType,
 } from '@waggle/shared';
 
-/** PRD §14.5 agent lifecycle states (mirrors the sidecar agents-store union —
- *  distinct from the legacy `AgentStatus` cost/model snapshot below). */
-export type AgentRunState =
-  | 'draft' | 'idle' | 'running' | 'paused' | 'failed'
-  | 'waiting_for_approval' | 'completed' | 'archived';
+/** PRD §14.5 agent lifecycle states — re-exported from the @waggle/shared
+ *  single source (distinct from the legacy `AgentStatus` cost/model snapshot
+ *  below); do not redeclare the union here. */
+export type { AgentRunState };
 
 /**
  * FE Agent view-model (UX-Refactor Phase 3, S09/S18 / gate B3) — the card shape

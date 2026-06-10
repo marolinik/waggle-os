@@ -122,6 +122,21 @@ function computeNextRun(cronExpr: string): string {
   return interval.next().toISOString();
 }
 
+/**
+ * Validate a cron expression with the SAME parser create()/update() use.
+ * Returns null when parseable, else the parser's error message. Lets route
+ * layers (e.g. the automations /test preview) reject an expression the store
+ * would refuse to persist, without duplicating the parser dependency.
+ */
+export function cronExprError(cronExpr: string): string | null {
+  try {
+    parseExpression(cronExpr);
+    return null;
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
+}
+
 // ── Store ──────────────────────────────────────────────────────────────
 
 export class CronStore {

@@ -2,28 +2,31 @@
  * Automations alias REST API Route Tests (UX-Refactor Phase 3, S11/S20 / B4).
  *
  * Covers the 7 routes in routes/automations.ts, asserting alias delegation onto
- * the REAL cron handlers (cronRoutes + the history route from notifications.ts
- * are registered on the test server, backed by a real CronStore + a real
- * LocalScheduler with a recording fake executor):
+ * the REAL cron handlers (cronRoutes + the history route from the REAL
+ * notificationRoutes are registered on the test server, backed by a real
+ * CronStore + a real LocalScheduler with a recording fake executor):
  *   GET    /api/automations            alias GET /api/cron, reshaped
  *   POST   /api/automations            alias POST /api/cron (C24/C25 in job_config)
- *   PATCH  /api/automations/:id        alias PATCH /api/cron/:id (jobConfig merge)
- *   POST   /api/automations/:id/run    alias /api/cron/:id/trigger (auto-enable kept)
+ *   PATCH  /api/automations/:id        alias PATCH /api/cron/:id (jobConfig merge,
+ *                                      stored trigger type preserved)
+ *   POST   /api/automations/:id/run    alias /api/cron/:id/trigger (auto-enable
+ *                                      kept for schedules; manual rows re-disable)
  *   POST   /api/automations/:id/pause  NET-NEW thin (enabled=0 + failure reset)
  *   GET    /api/automations/:id/logs   alias /api/cron/:id/history, camelCased
- *   POST   /api/automations/test       C26 no-persist dry-run via scheduler.dryRun
+ *   POST   /api/automations/test       C26 VALIDATION-ONLY preview (no execution)
  *
- * The onJobComplete callback mirrors the prod wiring in local/index.ts
- * (recordExecution into cron_execution_history) so the logs alias is tested
- * end-to-end — and so the dry-run test can prove it does NOT write history.
+ * The onJobComplete callback IS the prod wiring: makeRecordExecutionCallback
+ * (cron.ts) — the same closure local/index.ts installs — so the logs alias is
+ * tested against the real persistence path, not a hand-copied mirror.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Fastify from 'fastify';
 import { EventEmitter } from 'node:events';
 import { MindDB, CronStore, type CronSchedule } from '@waggle/core';
-import { LocalScheduler } from '../../src/local/cron.js';
+import { LocalScheduler, makeRecordExecutionCallback } from '../../src/local/cron.js';
 import { cronRoutes } from '../../src/local/routes/cron.js';
+import { notificationRoutes } from '../../src/local/routes/notifications.js';
 import { automationRoutes } from '../../src/local/routes/automations.js';
 
 describe('Automations alias routes (Phase 3)', () => {
@@ -45,13 +48,9 @@ describe('Automations alias routes (Phase 3)', () => {
         executed.push(schedule);
         if (failNext) throw new Error('boom: executor failed');
       },
-      // Mirrors the prod onJobComplete wiring (local/index.ts): persist outcome.
-      (schedule, result) => {
-        cronStore.recordExecution(schedule.id, schedule.name, {
-          success: result.success,
-          ...(result.error ? { error: result.error } : {}),
-        });
-      },
+      // F2: the REAL prod history-persistence closure (also installed by
+      // local/index.ts) — not a hand-copied mirror.
+      makeRecordExecutionCallback(cronStore),
     );
 
     server = Fastify({ logger: false });
@@ -59,19 +58,15 @@ describe('Automations alias routes (Phase 3)', () => {
     server.decorate('cronStore', cronStore);
     server.decorate('scheduler', scheduler);
     server.decorate('eventBus', new EventEmitter());
-    // The history route lives in notifications.ts in prod; a same-shape stub
-    // keeps this harness narrow (the alias only needs the route to exist).
-    server.get<{ Params: { id: string }; Querystring: { limit?: string } }>(
-      '/api/cron/:id/history',
-      async (request, reply) => {
-        const id = parseInt(request.params.id, 10);
-        if (isNaN(id)) return reply.status(400).send({ error: 'Invalid ID' });
-        const limit = request.query.limit ? parseInt(request.query.limit, 10) : 20;
-        const history = cronStore.getExecutionHistory(id, limit);
-        return { history, count: history.length };
-      },
-    );
+    // Minimal workspace index for the /test workspaceId validation: 'ws-test'
+    // is the only known workspace.
+    server.decorate('workspaceManager', {
+      get: (id: string) => (id === 'ws-test' ? { id, name: 'Test WS' } : undefined),
+    });
     await server.register(cronRoutes);
+    // F4: the real /api/cron/:id/history route (notifications.ts) — its only
+    // decoration needs are cronStore + eventBus, both provided above.
+    await server.register(notificationRoutes);
     await server.register(automationRoutes);
   });
 
@@ -163,7 +158,35 @@ describe('Automations alias routes (Phase 3)', () => {
     expect((await server.inject({ method: 'PATCH', url: '/api/automations/9999', payload: { name: 'X' } })).statusCode).toBe(404);
   });
 
-  it('run aliases the trigger (executes + auto-enables a disabled job, by design)', async () => {
+  it('PATCH without trigger keeps a manual automation manual + disabled (no clobber)', async () => {
+    const automation = await createAutomation({ name: 'Manual job', trigger: { type: 'manual' }, actions: ['workspace_health'] });
+    // An unrelated PATCH (condition only) used to flip trigger → 'schedule'.
+    const res = await server.inject({
+      method: 'PATCH', url: `/api/automations/${automation.id}`,
+      payload: { condition: 'only weekdays' },
+    });
+    expect(res.statusCode).toBe(200);
+    const updated = res.json().automation;
+    expect(updated.triggerType).toBe('manual');
+    expect(updated.status).toBe('paused');
+    expect(updated.condition).toBe('only weekdays');
+    expect(cronStore.getById(parseInt(automation.id, 10))!.enabled).toBe(0);
+  });
+
+  it('PATCH trigger to manual on an enabled schedule disables it (mirrors the POST rule)', async () => {
+    const automation = await createAutomation(SCHEDULE_BODY);
+    expect(automation.status).toBe('active');
+    const res = await server.inject({
+      method: 'PATCH', url: `/api/automations/${automation.id}`,
+      payload: { trigger: { type: 'manual' } },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().automation.triggerType).toBe('manual');
+    expect(res.json().automation.status).toBe('paused');
+    expect(cronStore.getById(parseInt(automation.id, 10))!.enabled).toBe(0);
+  });
+
+  it('run aliases the trigger (executes + auto-enables a disabled SCHEDULE job, by design)', async () => {
     const automation = await createAutomation({ ...SCHEDULE_BODY, enabled: false });
     const res = await server.inject({ method: 'POST', url: `/api/automations/${automation.id}/run` });
     expect(res.statusCode).toBe(200);
@@ -172,6 +195,23 @@ describe('Automations alias routes (Phase 3)', () => {
     expect(res.json().autoEnabled).toBe(true);
     expect(executed).toHaveLength(1);
     expect(cronStore.getById(parseInt(automation.id, 10))!.enabled).toBe(1);
+  });
+
+  it('run on a MANUAL automation executes but re-disables it (placeholder cron never goes live)', async () => {
+    const automation = await createAutomation({ name: 'On demand', trigger: { type: 'manual' }, actions: ['workspace_health'] });
+    const res = await server.inject({ method: 'POST', url: `/api/automations/${automation.id}/run` });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().triggered).toBe(true);
+    expect(res.json().autoEnabled).toBe(false); // never reported as enabled
+    expect(executed).toHaveLength(1);           // the run DID execute
+
+    // The row stays disabled — its '0 0 1 1 *' placeholder must not become a
+    // live yearly Jan-1 schedule after "Run now" (the M-43 auto-enable is
+    // reverted for manual rows).
+    expect(cronStore.getById(parseInt(automation.id, 10))!.enabled).toBe(0);
+    const list = (await server.inject({ method: 'GET', url: '/api/automations' })).json();
+    const row = list.automations.find((a: { id: string }) => a.id === automation.id);
+    expect(row.status).toBe('paused');
   });
 
   it('pause disables the schedule without the enabled-flag trick', async () => {
@@ -203,7 +243,7 @@ describe('Automations alias routes (Phase 3)', () => {
     expect(typeof logs[0].executedAt).toBe('string');
   });
 
-  it('C26: test dry-runs a DRAFT through the executor with ZERO persistence', async () => {
+  it('C26: test is a VALIDATION-ONLY preview — ok draft, zero execution, zero persistence', async () => {
     // A pre-existing disabled job proves the enable flag is untouched too.
     const disabled = cronStore.create({ name: 'sleepy', cronExpr: '0 4 * * *', jobType: 'workspace_health', enabled: false });
 
@@ -214,44 +254,75 @@ describe('Automations alias routes (Phase 3)', () => {
         trigger: { type: 'schedule', cron: '0 5 * * *' },
         actions: ['workspace_health'],
         condition: 'advisory only',
+        workspaceId: 'ws-test',
       },
     });
     expect(res.statusCode).toBe(200);
     const { previewResult } = res.json();
-    expect(previewResult.ok).toBe(true);
-    expect(previewResult.jobType).toBe('workspace_health');
-    expect(typeof previewResult.durationMs).toBe('number');
+    expect(previewResult).toMatchObject({
+      ok: true,
+      jobType: 'workspace_health',
+      triggerType: 'schedule',
+      issues: [],
+      executed: false,
+      condition: 'advisory only', // echoed as advisory (C25), never evaluated
+    });
+    expect(previewResult.wouldRun).toContain('workspace_health');
+    expect(previewResult.wouldRun).toContain('0 5 * * *');
 
-    // The executor really ran, against an AD-HOC (unsaved) schedule object.
-    expect(executed).toHaveLength(1);
-    expect(executed[0].id).toBe(-1);
-    const jc = JSON.parse(executed[0].job_config);
-    expect(jc.actions).toEqual(['workspace_health']);
-    expect(jc.condition).toBe('advisory only');
-
-    // NO persistence: no schedule row, no history row, no enable-flag mutation.
+    // NOTHING ran or persisted: executor untouched, no schedule row, no
+    // history row, no notification row, no enable-flag mutation.
+    expect(executed).toHaveLength(0);
     expect(cronStore.list()).toHaveLength(1); // only the pre-existing disabled job
-    expect(cronStore.getExecutionHistory(-1)).toHaveLength(0);
+    expect(cronStore.getExecutionHistory(disabled.id)).toHaveLength(0);
+    expect(cronStore.getNotifications()).toHaveLength(0);
     expect(cronStore.getById(disabled.id)!.enabled).toBe(0);
   });
 
-  it('C26: a failing dry-run returns the error inline (test-fail, still 200) with zero persistence', async () => {
-    failNext = true;
-    const res = await server.inject({
+  it('C26: bad cron / missing agent_task prompt / unknown workspace surface as issues (ok:false)', async () => {
+    const badCron = await server.inject({
       method: 'POST', url: '/api/automations/test',
-      payload: { name: 'Bad draft', trigger: { type: 'schedule', cron: '0 5 * * *' }, actions: ['workspace_health'] },
+      payload: { trigger: { type: 'schedule', cron: 'not-cron' }, actions: ['workspace_health'] },
     });
-    expect(res.statusCode).toBe(200);
-    expect(res.json().previewResult.ok).toBe(false);
-    expect(res.json().previewResult.error).toMatch(/boom/);
+    expect(badCron.statusCode).toBe(200);
+    expect(badCron.json().previewResult.ok).toBe(false);
+    expect(badCron.json().previewResult.issues.join(' ')).toMatch(/cron/i);
+
+    // agent_task with no jobConfig.prompt — the executor would skip the run.
+    const noPrompt = await server.inject({
+      method: 'POST', url: '/api/automations/test',
+      payload: { trigger: { type: 'schedule', cron: '0 5 * * *' }, jobType: 'agent_task' },
+    });
+    expect(noPrompt.json().previewResult.ok).toBe(false);
+    expect(noPrompt.json().previewResult.issues.join(' ')).toMatch(/prompt/);
+    // ...and WITH a prompt the same draft previews clean.
+    const withPrompt = await server.inject({
+      method: 'POST', url: '/api/automations/test',
+      payload: { trigger: { type: 'schedule', cron: '0 5 * * *' }, jobType: 'agent_task', jobConfig: { prompt: 'Summarize the day' } },
+    });
+    expect(withPrompt.json().previewResult.ok).toBe(true);
+
+    const badWs = await server.inject({
+      method: 'POST', url: '/api/automations/test',
+      payload: { trigger: { type: 'schedule', cron: '0 5 * * *' }, actions: ['workspace_health'], workspaceId: 'ws-nope' },
+    });
+    expect(badWs.json().previewResult.ok).toBe(false);
+    expect(badWs.json().previewResult.issues.join(' ')).toMatch(/workspaceId/);
+
+    // An empty draft resolves to agent_task with no prompt → issues, not a 400.
+    const empty = await server.inject({ method: 'POST', url: '/api/automations/test', payload: {} });
+    expect(empty.statusCode).toBe(200);
+    expect(empty.json().previewResult.ok).toBe(false);
+
+    // Across ALL previews: nothing executed, nothing persisted.
+    expect(executed).toHaveLength(0);
     expect(cronStore.list()).toHaveLength(0);
   });
 
-  it('C24: test rejects event triggers; empty drafts 400', async () => {
+  it('C24: test rejects event triggers (contract-level 400)', async () => {
     expect((await server.inject({
       method: 'POST', url: '/api/automations/test',
       payload: { trigger: { type: 'event' }, actions: ['workspace_health'] },
     })).statusCode).toBe(400);
-    expect((await server.inject({ method: 'POST', url: '/api/automations/test', payload: {} })).statusCode).toBe(400);
   });
 });

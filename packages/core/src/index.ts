@@ -91,7 +91,7 @@ export {
   type AuditApprovalClass, type AuditInitiator, type AuditCapabilityType,
 } from './install-audit.js';
 export {
-  CronStore, CRON_SCHEDULES_TABLE_SQL, VALID_JOB_TYPES,
+  CronStore, CRON_SCHEDULES_TABLE_SQL, VALID_JOB_TYPES, cronExprError,
   type CronSchedule, type CreateScheduleInput, type CronJobType,
   type CronExecutionRow,
 } from './cron-store.js';

@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { Automation, AutomationTriggerType } from '@waggle/shared';
-import type { CronSchedule, CronExecutionRow, CronJobType } from '@waggle/core';
-import { VALID_JOB_TYPES } from '@waggle/core';
+import type { CronExecutionRow, CronJobType } from '@waggle/core';
+import { VALID_JOB_TYPES, cronExprError } from '@waggle/core';
 import { authHeaders, clampStr } from './validate.js';
 
 /**
@@ -21,18 +21,18 @@ import { authHeaders, clampStr } from './validate.js';
  *          a DISABLED schedule that only fires via /run.
  *  - C25 — `condition` is stored as an ADVISORY `jobConfig.condition` string;
  *          no evaluation engine.
- *  - C26 — `POST /api/automations/test` is a NET-NEW dry-run through
- *          `scheduler.dryRun()` that suppresses CRON BOOKKEEPING only (no
- *          cron_schedules write, no execution-history record, no completion
- *          notification, no enable-flag mutation). The ACTION ITSELF EXECUTES
- *          FOR REAL: job handlers persist and notify in-handler (agent_task
- *          makes real LLM calls + persists a success notification; consolidation
- *          variants write memory/marketplace stores; prompt_optimization inserts
- *          AND prunes optimization-log rows; monthly_assessment writes the
- *          personal mind) — that is the action under test. The response carries
- *          an explicit `sideEffects: true` so the FE never sells this as
- *          zero-impact. It does NOT reuse `/api/cron/:id/trigger`, which
- *          requires a persisted row, auto-enables, records history and notifies.
+ *  - C26 — `POST /api/automations/test` is a VALIDATION-ONLY preview. It never
+ *          calls the executor (the production job handlers persist and notify
+ *          in-handler — agent_task makes real LLM calls, consolidation variants
+ *          write stores — so a "dry run" through them is not dry). The preview
+ *          checks what CAN be checked statically: trigger resolution (schedule
+ *          needs a cron expression the store's parser accepts; manual is fine),
+ *          jobType resolution against VALID_JOB_TYPES, config completeness
+ *          (agent_task without a jobConfig.prompt would be skipped by the
+ *          executor; an unknown workspaceId would have no target), and echoes
+ *          `condition` as advisory (C25). Nothing is persisted, enabled,
+ *          recorded, notified or executed — `executed: false` in the response
+ *          is the contract.
  *  - C27 — success-rate derives from cron_execution_history (via /:id/logs);
  *          "hours saved" is dropped (no backing store).
  */
@@ -209,6 +209,16 @@ export const automationRoutes: FastifyPluginAsync = async (server) => {
         || b.jobConfig !== undefined;
       const cronExpr = resolveCronExpr(b);
 
+      // When the patch does not touch `trigger`, KEEP the stored trigger type —
+      // resolveTriggerType(undefined) defaults to 'schedule' and would silently
+      // flip a manual automation live on an unrelated PATCH (e.g. condition).
+      const storedTrigger = (row.jobConfig?.trigger as { type?: string } | undefined)?.type;
+      const effectiveTrigger: AutomationTriggerType = b.trigger !== undefined
+        ? resolveTriggerType(b.trigger)
+        : (storedTrigger === 'manual' ? 'manual' : 'schedule');
+      // Patching the trigger TO manual mirrors the POST rule: manual = disabled.
+      const patchedToManual = b.trigger !== undefined && effectiveTrigger === 'manual';
+
       const res = await server.inject({
         method: 'PATCH',
         url: `/api/cron/${encodeURIComponent(request.params.id)}`,
@@ -217,10 +227,12 @@ export const automationRoutes: FastifyPluginAsync = async (server) => {
           ...(b.name !== undefined ? { name: clampStr(b.name, MAX_NAME_LEN) } : {}),
           ...(cronExpr !== undefined ? { cronExpr } : {}),
           ...(touchesConfig
-            ? { jobConfig: { ...row.jobConfig, ...buildJobConfig(b, resolveTriggerType(b.trigger)) } }
+            ? { jobConfig: { ...row.jobConfig, ...buildJobConfig(b, effectiveTrigger) } }
             : {}),
           ...(b.workspaceId !== undefined ? { workspaceId: b.workspaceId } : {}),
-          ...(b.enabled !== undefined ? { enabled: b.enabled } : {}),
+          ...(patchedToManual
+            ? { enabled: false }
+            : (b.enabled !== undefined ? { enabled: b.enabled } : {})),
         },
       });
       const body = res.json() as CronRowResponse | { error: string };
@@ -231,8 +243,22 @@ export const automationRoutes: FastifyPluginAsync = async (server) => {
 
   // POST /api/automations/:id/run — alias over POST /api/cron/:id/trigger.
   // Inherits the trigger semantics on purpose (explicit "Run now"): auto-enables
-  // a disabled job, executes via scheduler.executeJob, emits a notification.
+  // a disabled job (M-43), executes via scheduler.executeJob, emits a
+  // notification. EXCEPT for 'manual' automations: their placeholder cron
+  // ('0 0 1 1 *') must never go live, so after a successful run the row is
+  // re-disabled and the response reports autoEnabled:false — "Run now" on a
+  // manual automation runs NOW, it does not schedule a yearly Jan-1 job.
   server.post<{ Params: { id: string } }>('/api/automations/:id/run', async (request, reply) => {
+    // Read the stored trigger type BEFORE delegating (the trigger mutates the row).
+    const numericId = parseInt(request.params.id, 10);
+    const stored = Number.isNaN(numericId) ? undefined : server.cronStore.getById(numericId);
+    let storedTrigger: string | undefined;
+    if (stored) {
+      try {
+        storedTrigger = (JSON.parse(stored.job_config || '{}') as { trigger?: { type?: string } }).trigger?.type;
+      } catch { /* corrupt job_config — treat as plain schedule */ }
+    }
+
     const res = await server.inject({
       method: 'POST',
       url: `/api/cron/${encodeURIComponent(request.params.id)}/trigger`,
@@ -240,10 +266,17 @@ export const automationRoutes: FastifyPluginAsync = async (server) => {
     });
     const body = res.json() as Record<string, unknown>;
     if (res.statusCode >= 400) return reply.status(res.statusCode).send(body);
+
+    let autoEnabled = body.autoEnabled === true;
+    if (storedTrigger === 'manual' && autoEnabled) {
+      server.cronStore.update(numericId, { enabled: false });
+      autoEnabled = false;
+    }
+
     return {
       runId: String(body.id),
       triggered: body.triggered === true,
-      ...(body.autoEnabled !== undefined ? { autoEnabled: body.autoEnabled === true } : {}),
+      autoEnabled,
       ...(body.nextRunAt !== undefined ? { nextRunAt: body.nextRunAt } : {}),
     };
   });
@@ -278,12 +311,7 @@ export const automationRoutes: FastifyPluginAsync = async (server) => {
         headers: authHeaders(request),
       });
       if (res.statusCode >= 400) return reply.status(res.statusCode).send(res.json());
-      const body = res.json() as {
-        history: Array<{
-          id: number; executed_at: string; duration_ms: number | null;
-          success: number; result_summary: string | null; error: string | null;
-        }>;
-      };
+      const body = res.json() as { history: CronExecutionRow[] };
       const logs = (body.history ?? []).map((h) => ({
         id: h.id,
         executedAt: h.executed_at,
@@ -296,52 +324,76 @@ export const automationRoutes: FastifyPluginAsync = async (server) => {
     },
   );
 
-  // POST /api/automations/test — C26 NET-NEW no-persist dry-run. Runs a DRAFT
-  // automation body through the real executor dispatch via scheduler.dryRun()
-  // with an ad-hoc (unsaved) schedule object. Nothing is persisted, enabled,
-  // recorded or notified. Result/error returns inline as { previewResult }.
+  // POST /api/automations/test — C26 VALIDATION-ONLY preview of a DRAFT
+  // automation body. NEVER calls the executor (job handlers persist/notify/
+  // spend in-handler — there is no side-effect-free execution path), so
+  // nothing is persisted, enabled, recorded, notified or executed. Returns
+  // { previewResult } with the resolved jobType/trigger, every issue found,
+  // and a one-line description of what activating the draft would do.
   server.post<{ Body: AutomationBody }>('/api/automations/test', async (request, reply) => {
     const b = request.body ?? {};
     const eventErr = rejectEventTrigger(b);
     if (eventErr) return reply.status(400).send({ error: eventErr });
-    if (!Array.isArray(b.actions) && !b.jobType && !b.jobConfig) {
-      return reply.status(400).send({ error: 'actions (or jobType/jobConfig) are required for a test run' });
-    }
 
     const triggerType = resolveTriggerType(b.trigger);
-    const adHoc: CronSchedule = {
-      id: -1,
-      name: clampStr(b.name ?? 'automation-test', MAX_NAME_LEN),
-      cron_expr: resolveCronExpr(b) ?? '* * * * *',
-      job_type: resolveJobType(b),
-      job_config: JSON.stringify(buildJobConfig(b, triggerType)),
-      workspace_id: b.workspaceId ?? null,
-      enabled: 1,
-      last_run_at: null,
-      next_run_at: null,
-      created_at: new Date().toISOString(),
-    };
+    const jobType = resolveJobType(b);
+    const jobConfig = buildJobConfig(b, triggerType);
+    const cronExpr = resolveCronExpr(b);
+    const issues: string[] = [];
 
-    const startedAt = Date.now();
-    try {
-      await server.scheduler.dryRun(adHoc);
-      return {
-        previewResult: {
-          ok: true,
-          jobType: adHoc.job_type,
-          durationMs: Date.now() - startedAt,
-        },
-      };
-    } catch (err) {
-      // Test FAILED — still a successful test run; the failure is the result.
-      return {
-        previewResult: {
-          ok: false,
-          jobType: adHoc.job_type,
-          durationMs: Date.now() - startedAt,
-          error: err instanceof Error ? err.message : String(err),
-        },
-      };
+    // Trigger resolution — a schedule trigger needs a cron expression the
+    // store's parser (cron-parser, via @waggle/core) would accept on create.
+    if (triggerType === 'schedule') {
+      if (!cronExpr) {
+        issues.push('schedule trigger requires a cron expression');
+      } else {
+        const parseErr = cronExprError(cronExpr);
+        if (parseErr) issues.push(`invalid cron expression "${cronExpr}": ${parseErr}`);
+      }
     }
+
+    // jobType resolution — an EXPLICIT unknown jobType would 400 on create
+    // (resolveJobType silently falls back to agent_task; say so here).
+    if (b.jobType && !VALID_JOB_TYPES.has(b.jobType)) {
+      issues.push(`unknown jobType "${b.jobType}" — must be one of: ${[...VALID_JOB_TYPES].join(', ')}`);
+    }
+
+    // Config completeness — the agent_task executor skips runs that carry no
+    // jobConfig.prompt (it logs a warning and does nothing).
+    if (jobType === 'agent_task') {
+      const prompt = jobConfig.prompt;
+      if (typeof prompt !== 'string' || !prompt.trim()) {
+        issues.push('agent_task requires jobConfig.prompt — the executor skips runs without one');
+      }
+    }
+
+    // Workspace resolution — an unknown workspaceId means no run target.
+    if (b.workspaceId && b.workspaceId !== '*' && b.workspaceId !== 'global') {
+      try {
+        if (!server.workspaceManager.get(b.workspaceId)) {
+          issues.push(`unknown workspaceId "${b.workspaceId}"`);
+        }
+      } catch { /* workspace manager unavailable — cannot validate, no issue */ }
+    }
+
+    const target = b.workspaceId ? ` in workspace "${b.workspaceId}"` : '';
+    const wouldRun = triggerType === 'manual'
+      ? `Would run job "${jobType}"${target} only when triggered manually (Run now)`
+      : `Would run job "${jobType}" on schedule "${cronExpr ?? ''}"${target}`;
+
+    return {
+      previewResult: {
+        ok: issues.length === 0,
+        jobType,
+        triggerType,
+        issues,
+        executed: false,
+        wouldRun,
+        // C25: condition is advisory — echoed, never evaluated.
+        ...(typeof jobConfig.condition === 'string' && jobConfig.condition
+          ? { condition: jobConfig.condition }
+          : {}),
+      },
+    };
   });
 };

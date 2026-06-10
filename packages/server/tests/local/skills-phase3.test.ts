@@ -1,10 +1,12 @@
 /**
  * Skills Phase-3 alias/dispatcher Route Tests (UX-Refactor, S06/S19).
  *
- * Covers the 3 routes added to routes/skills.ts:
+ * Covers the 3 routes in routes/skills-aliases.ts (split out of skills.ts,
+ * registered right after it — same order as local/index.ts):
  *   PATCH /api/skills/:id          alias over PUT /api/skills/:name (redaction kept)
  *   POST  /api/skills/:id/test     :id variant of POST /api/skills/test (C37 preview-only)
  *   POST  /api/skills/:id/install  thin dispatcher → starter / pack / marketplace
+ *                                  (:id = skill id / CAPABILITY-PACK id / ignored)
  *
  * Skills are flat markdown files in {dataDir}/skills — the NAME IS THE ID.
  * skillRoutes auto-installs the starter pack on first run (empty dir), which the
@@ -17,16 +19,19 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { listStarterSkills } from '@waggle/sdk';
+import { listStarterSkills, listCapabilityPacks } from '@waggle/sdk';
 import { skillRoutes } from '../../src/local/routes/skills.js';
+import { skillsAliasRoutes } from '../../src/local/routes/skills-aliases.js';
 
 describe('Skills Phase-3 routes', () => {
   let dataDir: string;
   let server: ReturnType<typeof Fastify>;
+  let marketplaceCalls: Array<Record<string, unknown>>;
 
   beforeEach(async () => {
     dataDir = path.join(os.tmpdir(), `waggle-skills-${randomUUID()}`);
     fs.mkdirSync(dataDir, { recursive: true });
+    marketplaceCalls = [];
     server = Fastify({ logger: false });
     server.decorate('localConfig', { dataDir });
     server.decorate('agentState', { skills: [] });
@@ -36,7 +41,14 @@ describe('Skills Phase-3 routes', () => {
       checkAll: () => ({ changed: [], unchanged: [], missing: [] }),
     });
     server.decorate('auditStore', { record: () => ({}), getRecent: () => [] });
+    // Stub of the marketplace installer target — asserts the dispatcher's
+    // delegated payload ({ packageId }) reaches it.
+    server.post('/api/marketplace/install', async (request) => {
+      marketplaceCalls.push(request.body as Record<string, unknown>);
+      return { ok: true, installed: 'stub-package' };
+    });
     await server.register(skillRoutes);
+    await server.register(skillsAliasRoutes);
     await server.ready();
   });
 
@@ -140,5 +152,69 @@ describe('Skills Phase-3 routes', () => {
       method: 'POST', url: `/api/skills/${id}/install`, payload: { source: 'starter' },
     });
     expect(again.statusCode).toBe(409);
+  });
+
+  it('install dispatcher source=pack: the :id is a CAPABILITY-PACK id — its skills land', async () => {
+    const packs = listCapabilityPacks();
+    if (packs.length === 0) return; // packs unavailable in this build — nothing to dispatch
+    const pack = packs[0];
+    // The register-time starter auto-install copied them; remove the pack's
+    // skills so this install actually has work to do.
+    for (const skillId of pack.skills) {
+      fs.rmSync(path.join(dataDir, 'skills', `${skillId}.md`), { force: true });
+    }
+
+    const res = await server.inject({
+      method: 'POST', url: `/api/skills/${pack.id}/install`, payload: { source: 'pack' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.installed).toBe(true);
+    expect(body.source).toBe('pack');
+    expect(body.result.ok).toBe(true);
+    expect(body.result.installed).toEqual(pack.skills);
+    for (const skillId of pack.skills) {
+      expect(fs.existsSync(path.join(dataDir, 'skills', `${skillId}.md`))).toBe(true);
+    }
+  });
+
+  it('install dispatcher source=pack: per-skill failures surface as 422 installed:false (not a false success)', async () => {
+    // The pack installer reports failures as HTTP 200 + ok:false — drive the
+    // dispatcher against a stub delegate to pin its 422 mapping (the real
+    // installer only fails when a pack skill is missing from the starter dir,
+    // which is not reproducible hermetically).
+    const failServer = Fastify({ logger: false });
+    failServer.post('/api/skills/capability-packs/:id', async () => ({
+      ok: false,
+      pack: { id: 'broken-pack', name: 'Broken Pack' },
+      installed: [],
+      skipped: [],
+      errors: ['Skill "ghost-skill" not found in starter pack'],
+    }));
+    await failServer.register(skillsAliasRoutes);
+    try {
+      const res = await failServer.inject({
+        method: 'POST', url: '/api/skills/broken-pack/install', payload: { source: 'pack' },
+      });
+      expect(res.statusCode).toBe(422);
+      const body = res.json();
+      expect(body.installed).toBe(false);
+      expect(body.source).toBe('pack');
+      expect(body.result.errors).toHaveLength(1);
+    } finally {
+      await failServer.close();
+    }
+  });
+
+  it('install dispatcher source=marketplace: :id is ignored, { packageId } reaches the installer', async () => {
+    const res = await server.inject({
+      method: 'POST', url: '/api/skills/whatever-id/install',
+      payload: { source: 'marketplace', packageId: 42 },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().installed).toBe(true);
+    expect(res.json().source).toBe('marketplace');
+    // The delegated payload is exactly { packageId } — the :id plays no part.
+    expect(marketplaceCalls).toEqual([{ packageId: 42 }]);
   });
 });

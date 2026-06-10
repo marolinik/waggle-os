@@ -680,89 +680,9 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
   });
 
   // ── UX-Refactor Phase 3 :id aliases (S06/S19) ─────────────────────
-  // A skill's NAME IS ITS ID (flat markdown files — there is no numeric id), so
-  // the `:id`↔`:name` mapping is identity. These thin aliases delegate to the
-  // existing handlers via internal inject so the write path (redactSkillContent +
-  // traversal guard + hash + hot-reload) is never bypassed. The caller's bearer
-  // token is forwarded so the global security middleware sees an authed request.
-
-  /** Forward the caller's bearer token on internal delegation injects. */
-  const authHeaders = (request: { headers: { authorization?: string } }): Record<string, string> =>
-    request.headers.authorization ? { authorization: request.headers.authorization } : {};
-
-  // PATCH /api/skills/:id — alias over PUT /api/skills/:name (content update).
-  server.patch<{
-    Params: { id: string };
-    Body: { content?: string };
-  }>('/api/skills/:id', async (request, reply) => {
-    const { content } = request.body ?? {};
-    if (!content) {
-      // content is the only patchable field of a markdown skill — an empty
-      // PATCH has nothing to do, so fail loudly instead of no-op "ok".
-      return reply.status(400).send({ error: 'content is required' });
-    }
-    const res = await server.inject({
-      method: 'PUT',
-      url: `/api/skills/${encodeURIComponent(request.params.id)}`,
-      headers: authHeaders(request),
-      payload: { content },
-    });
-    return reply.status(res.statusCode).send(res.json());
-  });
-
-  // POST /api/skills/:id/test — :id variant of the body-driven POST /api/skills/test.
-  // C37: preview-only — injected-prompt preview + parsed metadata; NO execution,
-  // NO LLM call (live dry-run deferred).
-  server.post<{
-    Params: { id: string };
-    Body: { testInput?: string };
-  }>('/api/skills/:id/test', async (request, reply) => {
-    const res = await server.inject({
-      method: 'POST',
-      url: '/api/skills/test',
-      headers: authHeaders(request),
-      payload: { skillName: request.params.id, testInput: request.body?.testInput },
-    });
-    return reply.status(res.statusCode).send(res.json());
-  });
-
-  // POST /api/skills/:id/install — thin dispatcher resolving the skill's source
-  // to the existing installer (starter / capability pack / marketplace). All
-  // writes flow through those installers, so install_audit + trust assessment +
-  // (for marketplace) the PRO tier gate and SecurityGate ride along unchanged.
-  server.post<{
-    Params: { id: string };
-    Body: { source?: string; packageId?: number };
-  }>('/api/skills/:id/install', async (request, reply) => {
-    const { source, packageId } = request.body ?? {};
-    const id = request.params.id;
-    if (id.includes('..') || id.includes('/') || id.includes('\\')) {
-      return reply.status(400).send({ error: 'Invalid skill ID' });
-    }
-
-    let target: { method: 'POST'; url: string; payload?: Record<string, unknown> };
-    switch (source) {
-      case 'starter':
-        target = { method: 'POST', url: `/api/skills/starter-pack/${encodeURIComponent(id)}` };
-        break;
-      case 'pack':
-        target = { method: 'POST', url: `/api/skills/capability-packs/${encodeURIComponent(id)}` };
-        break;
-      case 'marketplace':
-        if (typeof packageId !== 'number') {
-          return reply.status(400).send({ error: 'packageId is required for a marketplace install' });
-        }
-        target = { method: 'POST', url: '/api/marketplace/install', payload: { packageId } };
-        break;
-      default:
-        return reply.status(400).send({ error: 'source must be one of: starter, pack, marketplace' });
-    }
-
-    const res = await server.inject({ ...target, headers: authHeaders(request) });
-    const body = res.json();
-    if (res.statusCode >= 400) return reply.status(res.statusCode).send(body);
-    return { installed: true, source, result: body };
-  });
+  // PATCH /api/skills/:id, POST /api/skills/:id/test and POST /api/skills/
+  // :id/install live in skills-aliases.ts (registered right after this
+  // plugin) — this file is over the 800-LOC cap.
 
   // ── Audit Trail ─────────────────────────────────────────────────
 

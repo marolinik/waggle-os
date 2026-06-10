@@ -354,14 +354,14 @@ export type AgentType = 'personal' | 'workspace' | 'team' | 'autonomous';
 export type AutonomyLevel = 'manual' | 'guided' | 'medium' | 'high';
 /** PRD §14.5 agent lifecycle states — SINGLE source of truth. The sidecar
  *  store (packages/server/src/local/agents-store.ts) and the FE view-model
- *  (apps/web/src/lib/types.ts) re-export this union; do not redeclare it. */
-export type AgentRunState =
-  | 'draft' | 'idle' | 'running' | 'paused' | 'failed'
-  | 'waiting_for_approval' | 'completed' | 'archived';
-export const AGENT_RUN_STATES: readonly AgentRunState[] = [
+ *  (apps/web/src/lib/types.ts) re-export this union; do not redeclare it.
+ *  Declared as a const tuple so schemas.ts derives `agentStatusEnum` from it
+ *  (z.enum) — the type and the runtime list cannot drift. */
+export const AGENT_RUN_STATES = [
   'draft', 'idle', 'running', 'paused', 'failed',
   'waiting_for_approval', 'completed', 'archived',
-];
+] as const;
+export type AgentRunState = (typeof AGENT_RUN_STATES)[number];
 export type ExtensionType =
   | 'skill' | 'connector' | 'mcp' | 'model' | 'template' | 'external_tool';
 
