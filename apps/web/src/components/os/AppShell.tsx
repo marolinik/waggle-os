@@ -11,9 +11,10 @@
  * shell until the Stage-C flip swaps App.tsx's route tree to:
  *   <Route path="/" element={<AppShell/>}> …route wrappers… </Route>
  *
- * TODO(stage-B): ChatHost keep-alive mounts inside <main> (§4.2) — one hidden
- * ChatWindowInstance per visited workspace so route navigation cannot kill
- * in-flight agent SSE streams. The chat seed API (seedChat) lands with it.
+ * TODO(stage-C): mount <ChatHost /> (components/os/ChatHost.tsx, built in
+ * Stage B) inside <main> — one keep-alive ChatWindowInstance per visited
+ * workspace so route navigation cannot kill in-flight agent SSE streams
+ * (§4.2). Mounting is the Stage-C flip's one-liner.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
@@ -42,6 +43,7 @@ import { writeLoginBriefingDismissed } from '@/lib/login-briefing';
 import { matchNavRoute, queryString, routeFor, routeForSearchResult } from '@/lib/routes';
 import { getDockForTier, type AppId, type DockEntry } from '@/lib/dock-tiers';
 import { ShellProvider, useShell } from '@/providers/ShellContext';
+import { seedChat } from '@/hooks/useChatWidgetState';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useWaggleDance } from '@/hooks/useWaggleDance';
 import { useDockNudge } from '@/hooks/useDockNudge';
@@ -161,11 +163,14 @@ const ShellLayout = () => {
 
   const handleOnboardingFinish = useCallback((workspaceId: string, workspaceName: string, firstMessage?: string, personaId?: string) => {
     selectWorkspace(workspaceId);
-    // TODO(stage-B): seedChat(workspaceId, { personaId, initialMessage: firstMessage })
-    // via the ChatHost seed API (§4.2) so the wizard-chosen persona + QW-1
-    // starter prompt land in the widget (acceptance check 8). Until ChatHost
-    // exists there is no widget to seed — navigation alone keeps the flow alive.
-    void workspaceName; void firstMessage; void personaId;
+    // §2.2/§4.2: seed the workspace's chat widget with the wizard-chosen
+    // persona + QW-1 starter prompt, then land on the chat tab — behavioral
+    // parity with Desktop's handleOnboardingFinish (Desktop.tsx:309-313,
+    // acceptance check 8). ChatHost consumes the seed on the widget's first
+    // mount. The name is resolved live from the workspaces list (refresh
+    // below), so the wizard's workspaceName arg is no longer needed.
+    void workspaceName;
+    seedChat(workspaceId, { personaId, initialMessage: firstMessage });
     navigate(`/workspaces/${workspaceId}/chat`);
     refreshWorkspaces();
   }, [selectWorkspace, navigate, refreshWorkspaces]);
@@ -271,8 +276,9 @@ const ShellLayout = () => {
         {/* Single canvas (§2.1 rule 1). Route wrappers bring their own
             AppErrorBoundary, mirroring Desktop.tsx:556-558. */}
         <main className="relative z-10 flex-1 min-w-0 overflow-hidden">
-          {/* TODO(stage-B): <ChatHost/> mounts here (§4.2) — keep-alive
-              ChatWindowInstance per visited workspace, hidden off-route. */}
+          {/* TODO(stage-C): <ChatHost /> mounts here (§4.2) — built in Stage B
+              (components/os/ChatHost.tsx); portals keep every visited
+              workspace's chat widget alive off-route. */}
           <Outlet />
         </main>
       </div>

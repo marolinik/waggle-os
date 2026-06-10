@@ -58,7 +58,11 @@ const KNOWN_APP_IDS: ReadonlySet<string> = new Set([
   'workspace-desktop',
 ]);
 
-function isAppId(value: string): value is AppId {
+/**
+ * Runtime AppId guard — used by the §2.2 `command:` fallback below and by the
+ * §3.3 window-state migration's appId salvage (lib/window-state-migration.ts).
+ */
+export function isAppId(value: string): value is AppId {
   return KNOWN_APP_IDS.has(value);
 }
 

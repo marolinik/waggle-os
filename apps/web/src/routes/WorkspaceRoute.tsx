@@ -2,16 +2,23 @@
  * P1a route wrapper — `/workspaces/:workspaceId/:tab?` → WorkspaceDesktopApp
  * (§1.1 /workspaces row; props from Desktop.tsx:392-406).
  *
- * Stage-A stub for the param plumbing: `:tab?` is read but not yet passed —
- * the controlled activeTab/onTabChange seam is the founder-ratified two-seam
- * WorkspaceDesktopApp edit (§5.2) and lands in Stage B, together with the
- * chat-tab ChatWindowInstance embed (until then the chat tab keeps its
- * deep-link placeholder). `?session=` stays reserved (§5.3 #5).
+ * Stage B: `:tab?` drives the founder-ratified controlled-tab seam (§5.2a) —
+ * the URL is the tab state, tab clicks navigate (overview is the canonical
+ * bare `/workspaces/:id`). The chat tab body receives the ChatSlot (§5.2b)
+ * that ChatHost portals the live per-workspace ChatWindowInstance into
+ * (§4.2). `?session=` stays reserved (§5.3 #5).
  */
 import { useNavigate, useParams } from 'react-router-dom';
-import WorkspaceDesktopApp from '@/components/os/apps/WorkspaceDesktopApp';
+import WorkspaceDesktopApp, { type WorkspaceTabId } from '@/components/os/apps/WorkspaceDesktopApp';
+import { ChatSlot } from '@/components/os/ChatHost';
 import SurfaceBoundary from './SurfaceBoundary';
 import { useShell } from '@/providers/ShellContext';
+
+// The 8 PRD §12.2 tabs, pinned to WorkspaceDesktopApp's TABS. Unknown `:tab?`
+// values fall back to the overview default instead of an empty panel.
+const WS_TABS: readonly WorkspaceTabId[] = [
+  'overview', 'chat', 'research', 'artifacts', 'memory', 'tasks', 'timeline', 'settings',
+];
 
 const WorkspaceRoute = () => {
   const navigate = useNavigate();
@@ -21,14 +28,21 @@ const WorkspaceRoute = () => {
   // restored-window fallback, Desktop.tsx:393).
   const wsId = workspaceId || activeWorkspaceId || 'local-default';
   const ws = workspaces.find(w => w.id === wsId);
-  // TODO(stage-B): pass `tab` as controlled activeTab + onTabChange→navigate
-  // once the §5.2 seam lands.
-  void tab;
+  const activeTab: WorkspaceTabId = WS_TABS.includes(tab as WorkspaceTabId)
+    ? (tab as WorkspaceTabId)
+    : 'overview';
   return (
     <SurfaceBoundary appName="Workspace">
       <WorkspaceDesktopApp
         workspaceId={wsId}
         workspaceName={ws?.name ?? 'Workspace'}
+        activeTab={activeTab}
+        onTabChange={(next) => navigate(
+          next === 'overview' ? `/workspaces/${wsId}` : `/workspaces/${wsId}/${next}`,
+        )}
+        // The pre-fetch placeholder id never gets a live widget (§3.3/§4.2);
+        // it keeps the deep-link placeholder body instead.
+        chatSlot={wsId !== 'local-default' ? <ChatSlot workspaceId={wsId} /> : undefined}
         onOpenChat={(id) => {
           selectWorkspace(id);
           navigate(`/workspaces/${id}/chat`);
