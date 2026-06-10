@@ -542,6 +542,8 @@ Plus: error states never cache as valid-empty; focus/visibility revalidation on 
 - **Persona exception RATIFIED:** read-only personas (planner/verifier) keep losing `create_skill`/`delete_skill` while retaining `read_skill`.
 - **PM residual ruled (PRO-gate on skill creation):** skill creation — human and agent — **stays available at FREE for launch**. The self-evolving loop is the differentiator and must demo at the free tier. Marketplace installs remain PRO-gated. Reversible post-launch with data.
 
+- **Two-seam WorkspaceDesktopApp edit RATIFIED (founder "go", 2026-06-10):** the derived edit from plan §5.2 — (a) controlled activeTab/onTabChange for URL-driven tabs, (b) chat widget embedded in the chat tab body — is signed off, scoped to exactly those two seams, test-pinned. P1a unblocked.
+
 ### D5 — Team zone: RATIFIED — keep tier-hidden. No stripping, no new work. Approvals-inbox PRO visibility: post-launch consideration, not launch scope.
 
 ## Scope clarifications (D6–D10) — defaults ratified, with notes
