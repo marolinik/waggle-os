@@ -35,6 +35,14 @@ export interface DockEntry {
    * Undefined = always visible.
    */
   minBillingTier?: BillingTier;
+  /**
+   * UX Refactor v2.1 P1a (conversion plan §1.3): the entry's canonical URL —
+   * the appId→route table the AppShell left nav navigates by and prefix-matches
+   * active state against (§2.1.2). Additive; the windowed Dock ignores it.
+   * `chat` carries its prefix family ('/workspaces') because its real route is
+   * parameterized — clicks resolve through routeFor('chat', ctx) (§2.3).
+   */
+  route?: string;
 }
 
 const BILLING_TIER_ORDER: Record<BillingTier, number> = {
@@ -49,41 +57,41 @@ export const DEFAULT_TIER: UserTier = 'simple';
 // Dock renders zone-parents generically off entry.type/entry.key.
 const POWER_CONFIG: DockEntry[] = [
   // ── Work (primary spine, always visible) ──
-  { type: 'app', key: 'home', appId: 'home', icon: LayoutDashboard, label: 'Home', color: 'text-sky-400' },
-  { type: 'app', key: 'chat', appId: 'chat', icon: MessageSquare, label: 'Chat', color: 'text-primary' },
-  { type: 'app', key: 'memory', appId: 'memory', icon: Brain, label: 'Memory', color: 'text-amber-300' },
-  { type: 'app', key: 'files', appId: 'files', icon: FolderOpen, label: 'Files', color: 'text-amber-300' },
-  { type: 'app', key: 'artifacts', appId: 'artifacts', icon: FileStack, label: 'Artifacts', color: 'text-amber-300' },
+  { type: 'app', key: 'home', appId: 'home', icon: LayoutDashboard, label: 'Home', color: 'text-sky-400', route: '/home' },
+  { type: 'app', key: 'chat', appId: 'chat', icon: MessageSquare, label: 'Chat', color: 'text-primary', route: '/workspaces' },
+  { type: 'app', key: 'memory', appId: 'memory', icon: Brain, label: 'Memory', color: 'text-amber-300', route: '/memory' },
+  { type: 'app', key: 'files', appId: 'files', icon: FolderOpen, label: 'Files', color: 'text-amber-300', route: '/files' },
+  { type: 'app', key: 'artifacts', appId: 'artifacts', icon: FileStack, label: 'Artifacts', color: 'text-amber-300', route: '/artifacts' },
   { type: 'separator', key: 'sep-work', label: '' },
   // ── Intelligence ──
   {
     type: 'zone-parent', key: 'intelligence', icon: Bot, label: 'Intelligence', color: 'text-violet-400',
     children: [
-      { type: 'app', key: 'agents', appId: 'agents', icon: Bot, label: 'Agent Center', color: 'text-orange-400' },
-      { type: 'app', key: 'skills', appId: 'capabilities', icon: Package, label: 'Skills Hub', color: 'text-violet-400' },
-      { type: 'app', key: 'jobs', appId: 'scheduled-jobs', icon: Clock, label: 'Automation Center', color: 'text-amber-400' },
-      { type: 'app', key: 'room', appId: 'room', icon: Users, label: 'Room', color: 'text-violet-400' },
-      { type: 'app', key: 'dance', appId: 'waggle-dance', icon: Zap, label: 'Waggle Dance', color: 'text-amber-400' },
+      { type: 'app', key: 'agents', appId: 'agents', icon: Bot, label: 'Agent Center', color: 'text-orange-400', route: '/agents' },
+      { type: 'app', key: 'skills', appId: 'capabilities', icon: Package, label: 'Skills Hub', color: 'text-violet-400', route: '/skills' },
+      { type: 'app', key: 'jobs', appId: 'scheduled-jobs', icon: Clock, label: 'Automation Center', color: 'text-amber-400', route: '/automations' },
+      { type: 'app', key: 'room', appId: 'room', icon: Users, label: 'Room', color: 'text-violet-400', route: '/room' },
+      { type: 'app', key: 'dance', appId: 'waggle-dance', icon: Zap, label: 'Waggle Dance', color: 'text-amber-400', route: '/waggle-dance' },
       // Approvals: TEAMS-tier trust/audit surface (Pro gets inline chat approvals).
-      { type: 'app', key: 'approvals', appId: 'approvals', icon: Shield, label: 'Approvals', color: 'text-amber-400', minBillingTier: 'TEAMS' },
+      { type: 'app', key: 'approvals', appId: 'approvals', icon: Shield, label: 'Approvals', color: 'text-amber-400', minBillingTier: 'TEAMS', route: '/approvals' },
     ],
   },
   // ── Extend ──
   {
     type: 'zone-parent', key: 'extend', icon: Package, label: 'Extend', color: 'text-emerald-400',
     children: [
-      { type: 'app', key: 'connect', appId: 'connectors', icon: Plug, label: 'Connector Hub', color: 'text-emerald-400' },
+      { type: 'app', key: 'connect', appId: 'connectors', icon: Plug, label: 'Connector Hub', color: 'text-emerald-400', route: '/connectors' },
       // Phase 4B (S08/S21): the dedicated Extend entries landed.
-      { type: 'app', key: 'mcp-hub', appId: 'mcp-hub', icon: Server, label: 'MCP Hub', color: 'text-emerald-400' },
-      { type: 'app', key: 'marketplace', appId: 'marketplace', icon: Store, label: 'Marketplace', color: 'text-orange-400' },
-      { type: 'app', key: 'launcher', appId: 'launcher', icon: Rocket, label: 'AI Tools', color: 'text-amber-400' },
+      { type: 'app', key: 'mcp-hub', appId: 'mcp-hub', icon: Server, label: 'MCP Hub', color: 'text-emerald-400', route: '/mcps' },
+      { type: 'app', key: 'marketplace', appId: 'marketplace', icon: Store, label: 'Marketplace', color: 'text-orange-400', route: '/marketplace' },
+      { type: 'app', key: 'launcher', appId: 'launcher', icon: Rocket, label: 'AI Tools', color: 'text-amber-400', route: '/launcher' },
     ],
   },
   // ── Team (TEAMS-tier; whole zone hidden below TEAMS) ──
   {
     type: 'zone-parent', key: 'team', icon: Users, label: 'Team', color: 'text-violet-400', minBillingTier: 'TEAMS',
     children: [
-      { type: 'app', key: 'governance', appId: 'governance', icon: Shield, label: 'Team Governance', color: 'text-violet-400', minBillingTier: 'TEAMS' },
+      { type: 'app', key: 'governance', appId: 'governance', icon: Shield, label: 'Team Governance', color: 'text-violet-400', minBillingTier: 'TEAMS', route: '/team' },
     ],
   },
   { type: 'separator', key: 'sep-system', label: '' },
@@ -91,13 +99,13 @@ const POWER_CONFIG: DockEntry[] = [
   {
     type: 'zone-parent', key: 'system', icon: Settings, label: 'System', color: 'text-muted-foreground',
     children: [
-      { type: 'app', key: 'settings', appId: 'settings', icon: Settings, label: 'Settings', color: 'text-muted-foreground' },
-      { type: 'app', key: 'vault', appId: 'vault', icon: Lock, label: 'Vault', color: 'text-amber-400' },
+      { type: 'app', key: 'settings', appId: 'settings', icon: Settings, label: 'Settings', color: 'text-muted-foreground', route: '/settings' },
+      { type: 'app', key: 'vault', appId: 'vault', icon: Lock, label: 'Vault', color: 'text-amber-400', route: '/settings/vault' },
       // D8 (v2.1): "Command Center" is reserved for the Ctrl+K palette.
-      { type: 'app', key: 'cockpit', appId: 'cockpit', icon: Activity, label: 'Mission Control', color: 'text-emerald-400' },
-      { type: 'app', key: 'timeline', appId: 'timeline', icon: Clock, label: 'Timeline', color: 'text-cyan-400' },
-      { type: 'app', key: 'events', appId: 'events', icon: Radio, label: 'Events & Logs', color: 'text-cyan-400' },
-      { type: 'app', key: 'telemetry', appId: 'telemetry', icon: Activity, label: 'Usage & Cost', color: 'text-sky-400' },
+      { type: 'app', key: 'cockpit', appId: 'cockpit', icon: Activity, label: 'Mission Control', color: 'text-emerald-400', route: '/settings/mission-control' },
+      { type: 'app', key: 'timeline', appId: 'timeline', icon: Clock, label: 'Timeline', color: 'text-cyan-400', route: '/settings/timeline' },
+      { type: 'app', key: 'events', appId: 'events', icon: Radio, label: 'Events & Logs', color: 'text-cyan-400', route: '/settings/events' },
+      { type: 'app', key: 'telemetry', appId: 'telemetry', icon: Activity, label: 'Usage & Cost', color: 'text-sky-400', route: '/settings/usage' },
       // P23: Backup stays in Settings → Backup (not a dock entry).
     ],
   },
@@ -105,23 +113,23 @@ const POWER_CONFIG: DockEntry[] = [
 
 export const TIER_DOCK_CONFIG: Record<UserTier, DockEntry[]> = {
   simple: [
-    { type: 'app', key: 'home', appId: 'home', icon: LayoutDashboard, label: 'Home', color: 'text-sky-400' },
-    { type: 'app', key: 'chat', appId: 'chat', icon: MessageSquare, label: 'Chat', color: 'text-primary' },
-    { type: 'app', key: 'files', appId: 'files', icon: FolderOpen, label: 'Files', color: 'text-amber-300' },
+    { type: 'app', key: 'home', appId: 'home', icon: LayoutDashboard, label: 'Home', color: 'text-sky-400', route: '/home' },
+    { type: 'app', key: 'chat', appId: 'chat', icon: MessageSquare, label: 'Chat', color: 'text-primary', route: '/workspaces' },
+    { type: 'app', key: 'files', appId: 'files', icon: FolderOpen, label: 'Files', color: 'text-amber-300', route: '/files' },
     { type: 'separator', key: 'sep-1', label: '' },
-    { type: 'app', key: 'vault', appId: 'vault', icon: Lock, label: 'Vault', color: 'text-amber-400' },
-    { type: 'app', key: 'system', appId: 'settings', icon: Settings, label: 'Settings', color: 'text-muted-foreground' },
+    { type: 'app', key: 'vault', appId: 'vault', icon: Lock, label: 'Vault', color: 'text-amber-400', route: '/settings/vault' },
+    { type: 'app', key: 'system', appId: 'settings', icon: Settings, label: 'Settings', color: 'text-muted-foreground', route: '/settings' },
   ],
 
   professional: [
-    { type: 'app', key: 'home', appId: 'home', icon: LayoutDashboard, label: 'Home', color: 'text-sky-400' },
-    { type: 'app', key: 'chat', appId: 'chat', icon: MessageSquare, label: 'Chat', color: 'text-primary' },
-    { type: 'app', key: 'agents', appId: 'agents', icon: Bot, label: 'Agent Center', color: 'text-orange-400' },
-    { type: 'app', key: 'files', appId: 'files', icon: FolderOpen, label: 'Files', color: 'text-amber-300' },
+    { type: 'app', key: 'home', appId: 'home', icon: LayoutDashboard, label: 'Home', color: 'text-sky-400', route: '/home' },
+    { type: 'app', key: 'chat', appId: 'chat', icon: MessageSquare, label: 'Chat', color: 'text-primary', route: '/workspaces' },
+    { type: 'app', key: 'agents', appId: 'agents', icon: Bot, label: 'Agent Center', color: 'text-orange-400', route: '/agents' },
+    { type: 'app', key: 'files', appId: 'files', icon: FolderOpen, label: 'Files', color: 'text-amber-300', route: '/files' },
     { type: 'separator', key: 'sep-1', label: '' },
-    { type: 'app', key: 'memory', appId: 'memory', icon: Brain, label: 'Memory', color: 'text-amber-300' },
-    { type: 'app', key: 'vault', appId: 'vault', icon: Lock, label: 'Vault', color: 'text-amber-400' },
-    { type: 'app', key: 'system', appId: 'settings', icon: Settings, label: 'Settings', color: 'text-muted-foreground' },
+    { type: 'app', key: 'memory', appId: 'memory', icon: Brain, label: 'Memory', color: 'text-amber-300', route: '/memory' },
+    { type: 'app', key: 'vault', appId: 'vault', icon: Lock, label: 'Vault', color: 'text-amber-400', route: '/settings/vault' },
+    { type: 'app', key: 'system', appId: 'settings', icon: Settings, label: 'Settings', color: 'text-muted-foreground', route: '/settings' },
   ],
 
   power: POWER_CONFIG,
