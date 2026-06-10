@@ -6,6 +6,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import fs from 'node:fs';
+import { resolveRelativeDate } from '@waggle/hive-mind-core';
 import {
   getFrameStore,
   getSessions,
@@ -107,12 +108,23 @@ export function registerHarvestTools(server: McpServer): void {
           ? `[${item.source}] ${item.title}: ${item.content.slice(0, 2000)}`
           : `[${item.source}] ${item.content.slice(0, 2000)}`;
 
+        // Write-time temporal anchoring. The frame's created_at should reflect WHEN the
+        // event happened, not the ingest wall-clock. Start from the source timestamp; if
+        // the content carries a relative cue ("yesterday", "last week"), resolve it
+        // against that source date to the true event date. Benchmark-validated: this is
+        // the production counterpart of the LoCoMo Phase-4 win (temporal parity vs Memori
+        // — see benchmarks/results/memori-phase22-RESULT.md). createIFrame validates the
+        // ISO string and falls back to datetime('now') if it's unusable.
+        const resolved = resolveRelativeDate(content, item.timestamp);
+        const createdAt = resolved ? `${resolved.iso}T00:00:00Z` : (item.timestamp || undefined);
+
         // createIFrame handles dedup internally — returns existing frame if content matches
         const frame = frameStore.createIFrame(
           session.gop_id,
           content,
           'normal',
           'import',
+          createdAt,
         );
 
         // Frames created during this batch have id > maxBefore.
