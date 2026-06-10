@@ -120,12 +120,17 @@ export class McpServerInstance extends EventEmitter {
         this.processBuffer();
       });
 
-      // Handle process exit
+      // Handle process exit. Guard on process identity: a listener left
+      // attached by an abandoned/replaced process must not clobber the state
+      // (and pending requests) of a newer process on the same instance.
+      const spawned = this.process;
       this.process.on('exit', () => {
+        if (this.process !== spawned) return;
         this.handleProcessExit();
       });
 
       this.process.on('error', (err: unknown) => {
+        if (this.process !== spawned) return;
         this.setState('error');
         this.rejectAllPending(new Error(`Process error: ${(err as Error).message}`));
       });
@@ -146,9 +151,39 @@ export class McpServerInstance extends EventEmitter {
 
       this.setState('ready');
     } catch (err) {
-      this.setState('error');
+      // A deliberate stop() may have raced this start (it rejects the pending
+      // initialize) — in that case the instance is already cleaned up; don't
+      // resurrect 'error' over 'stopped'. Otherwise kill the spawned child
+      // here: leaving it running leaked a zombie stdio process on every
+      // failed/timed-out start.
+      if (this.state !== 'stopped') {
+        if (this.process) {
+          this.process.stdout?.removeAllListeners('data');
+          this.process.removeAllListeners('exit');
+          this.process.removeAllListeners('error');
+          this.process.kill();
+          this.process = null;
+        }
+        this.tools = [];
+        this.stdoutBuffer = '';
+        this.setState('error');
+      }
       throw err;
     }
+  }
+
+  /**
+   * Re-issue a live `tools/list` round-trip against an already-running server
+   * (C21: a health "test" of a ready server must do real I/O, never report
+   * cached state). Refreshes the cached tool list on success.
+   */
+  async refreshTools(): Promise<McpToolInfo[]> {
+    if (this.state !== 'ready') {
+      throw new Error(`Server "${this.config.name}" is not ready (state: ${this.state})`);
+    }
+    const result = await this.sendRequest('tools/list', {}) as { tools?: McpToolInfo[] };
+    this.tools = result?.tools ?? [];
+    return this.getTools();
   }
 
   async stop(): Promise<void> {

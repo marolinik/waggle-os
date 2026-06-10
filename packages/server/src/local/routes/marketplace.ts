@@ -18,6 +18,7 @@ import { validateSkillMd } from '@waggle/sdk';
 import { getKvarkConfig } from '../../kvark/kvark-config.js';
 import { emitNotification } from './notifications.js';
 import { requireTier } from '../../middleware/assert-tier.js';
+import { removeMcpServerEntry } from '../mcp-config.js';
 
 type ScanStatus = 'passed' | 'failed' | 'not_scanned' | 'unavailable';
 
@@ -232,7 +233,12 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
             initiator: 'system',
             detail: `SecurityGate blocked: ${scanResult.findings.length} finding(s), severity=${severity}, score=${score}`,
           });
-        } catch { /* audit failure is non-blocking */ }
+        } catch (err) {
+          // M2 (Phase 4): this write was silently rejected for months because
+          // the install_audit risk_level CHECK lacked 'critical' — never
+          // swallow it invisibly again. Still non-blocking.
+          fastify.log.warn({ err, pkg: pkg.name }, 'CRITICAL-block install audit write failed');
+        }
 
         return reply.code(403).send({
           blocked: true,
@@ -335,8 +341,12 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
       forceInsecure: body.forceInsecure,
     });
 
-    // Update security status in DB after successful install
-    if (result.success && scanResult) {
+    // Update security status in DB after successful install. Prefer the
+    // installer-level scan (it had the package CONTENT; the route pre-scan is
+    // content-less and returns CLEAN in practice) — otherwise a forced install
+    // would clobber the recorded CRITICAL status with a clean one.
+    const effectiveScan = result.scanResult ?? scanResult;
+    if (result.success && effectiveScan) {
       try {
         const rawDb = db.getRawDb();
         if (rawDb?.prepare) {
@@ -346,12 +356,62 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
               security_score = ?
             WHERE id = ?
           `).run(
-            scanResult.overall_severity.toLowerCase(),
-            scanResult.security_score,
+            effectiveScan.overall_severity.toLowerCase(),
+            effectiveScan.security_score,
             body.packageId,
           );
         }
       } catch { /* non-blocking */ }
+    }
+
+    // M2 follow-through (Phase 4): the pre-scan above runs WITHOUT package
+    // content (the heuristics layer needs content), so in practice it returns
+    // CLEAN and blocking happens inside installer.install() — a path that
+    // previously left NO audit trail. Record blocked installs here so the
+    // §22.1 "install with audit trail" exit criterion holds for every caller
+    // (direct marketplace installs AND the /api/mcps/install delegation).
+    if (!result.success && result.scanResult?.blocked) {
+      const sev = result.scanResult.overall_severity;
+      try {
+        fastify.auditStore?.record({
+          capabilityName: pkg.name,
+          capabilityType: pkg.waggle_install_type,
+          source: 'marketplace',
+          riskLevel: sev === 'CRITICAL' ? 'critical' : sev === 'HIGH' ? 'high' : 'medium',
+          trustSource: 'security-gate',
+          approvalClass: 'blocked',
+          action: 'blocked',
+          initiator: 'system',
+          detail: `Installer blocked: ${result.scanResult.findings.length} finding(s), severity=${sev}`,
+        });
+      } catch (err) {
+        fastify.log.warn({ err, pkg: pkg.name }, 'blocked-install audit write failed');
+      }
+    }
+
+    // forceInsecure override: success WITH a blocked scan is the one path
+    // where the user deliberately overrode a HIGH/CRITICAL block at the
+    // installer level. Without this row, the single most dangerous action in
+    // the surface would leave a cleaner audit trail than a clean install
+    // (mirrors the route-level HIGH+force override audit above).
+    if (result.success && result.scanResult?.blocked) {
+      const sev = result.scanResult.overall_severity;
+      try {
+        fastify.auditStore?.record({
+          capabilityName: pkg.name,
+          capabilityType: pkg.waggle_install_type,
+          source: 'marketplace',
+          riskLevel: sev === 'CRITICAL' ? 'critical' : sev === 'HIGH' ? 'high' : 'medium',
+          trustSource: 'security-gate',
+          approvalClass: 'elevated',
+          action: 'approved',
+          initiator: 'user',
+          detail: `User forceInsecure override — installed despite blocked scan (severity=${sev}): `
+            + result.scanResult.findings.map(f => f.title).join('; '),
+        });
+      } catch (err) {
+        fastify.log.warn({ err, pkg: pkg.name }, 'forceInsecure-override audit write failed');
+      }
     }
 
     // Attach security scan info to the response
@@ -386,6 +446,25 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
 
     const installer = new MarketplaceInstaller(db);
     const result = await installer.uninstall(body.packageId);
+
+    // Phase 4 (S08): an MCP uninstall must ALSO leave the live runtime and the
+    // server's persisted <dataDir>/.mcp.json — the installer only edits its
+    // own WAGGLE_DATA_DIR/~/.waggle copy, so without this the "uninstalled"
+    // server keeps running and resurrects at every boot via the C4 loader.
+    if (result.success) {
+      try {
+        const pkg = db.getPackage(body.packageId);
+        if (pkg?.waggle_install_type === 'mcp') {
+          const manifest = pkg.install_manifest as { mcp_config?: { name?: string } } | null;
+          const serverName = manifest?.mcp_config?.name || pkg.name;
+          const runtime = (fastify.agentState as { mcpRuntime?: { getServer(n: string): unknown; removeServer(n: string): Promise<void> } } | undefined)?.mcpRuntime;
+          if (runtime?.getServer(serverName)) await runtime.removeServer(serverName);
+          removeMcpServerEntry(fastify.localConfig?.dataDir ?? '', serverName);
+        }
+      } catch (err) {
+        fastify.log.warn({ err, packageId: body.packageId }, 'MCP runtime/config cleanup on uninstall failed (non-blocking)');
+      }
+    }
 
     return reply.code(result.success ? 200 : 422).send(result);
   });

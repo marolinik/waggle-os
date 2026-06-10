@@ -77,6 +77,41 @@ export class MindDB {
     // SCHEMA_SQL uses CREATE TABLE/INDEX IF NOT EXISTS throughout, so re-running it
     // is safe and idempotent — it only creates what's missing.
     //
+    // CRASH RECOVERY (must run before the rebuild below): a pre-transactional
+    // build of the FIX-3/M2 rebuild could die mid-sequence, stranding every
+    // audit row in install_audit__mig_old while install_audit is missing or
+    // freshly recreated empty — and the next rebuild's DROP would then destroy
+    // them permanently. Restore before anything else touches the table.
+    const migOldExists = !!this.db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='install_audit__mig_old'"
+    ).get();
+    if (migOldExists) {
+      const auditExists = !!this.db.prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='install_audit'"
+      ).get();
+      if (!auditExists) {
+        // Crash landed between RENAME and recreate — rename back wholesale;
+        // the sentinel check below re-runs the (now transactional) rebuild.
+        this.db.prepare('ALTER TABLE install_audit__mig_old RENAME TO install_audit').run();
+      } else {
+        // Crash landed between recreate and copy-back: copy the stranded rows
+        // home if nothing new was written, then retire the stale table.
+        const cnt = (this.db.prepare('SELECT COUNT(*) AS cnt FROM install_audit')
+          .get() as { cnt: number }).cnt;
+        if (cnt === 0) {
+          this.db.prepare(
+            `INSERT INTO install_audit
+               (id, timestamp, capability_name, capability_type, source, version,
+                risk_level, trust_source, approval_class, action, initiator, detail)
+             SELECT id, timestamp, capability_name, capability_type, source, version,
+                    risk_level, trust_source, approval_class, action, initiator, detail
+             FROM install_audit__mig_old`
+          ).run();
+        }
+        this.db.prepare('DROP TABLE install_audit__mig_old').run();
+      }
+    }
+
     // FIX-3 (2026-05-17): install_audit's capability_type / approval_class /
     // action CHECK lists drifted behind their TS type unions
     // (connector/marketplace/blocked). Because the CREATE below is
@@ -85,32 +120,48 @@ export class MindDB {
     // marketplace/connector capability. Rename the stale table aside so the
     // corrected SCHEMA_SQL DDL (single source of truth) recreates it; rows
     // are copied back below. Idempotent: keyed on whether the stored DDL
-    // already lists 'marketplace'. A leftover __mig_old from a crashed prior
-    // run is handled too (rename is skipped, copy/drop still completes).
+    // already lists 'marketplace'.
+    //
+    // M2 (UX-Refactor Phase 4, 2026-06-10): risk_level's CHECK drifted the same
+    // way — TS AuditRiskLevel gained 'critical' but the DDL allowed only
+    // low/medium/high, so marketplace.ts's CRITICAL-block audit write was
+    // silently rejected. Same rebuild mechanism, keyed on the widened
+    // risk_level list literal ("'low', 'medium', 'high', 'critical'" — note
+    // 'critical' alone is NOT a safe sentinel: it already appears in the
+    // approval_class CHECK).
+    //
+    // The whole rename→recreate→copy-back→drop sequence runs in ONE
+    // transaction: a process death mid-rebuild rolls back to the pre-rebuild
+    // state instead of silently orphaning the audit trail (this is the EU AI
+    // Act compliance table — partial loss here is not acceptable).
     const auditTableSql = (this.db.prepare(
       "SELECT sql FROM sqlite_master WHERE type='table' AND name='install_audit'"
     ).get() as { sql: string } | undefined)?.sql;
-    const auditNeedsRebuild = auditTableSql !== undefined && !auditTableSql.includes("'marketplace'");
+    const auditNeedsRebuild = auditTableSql !== undefined && (
+      !auditTableSql.includes("'marketplace'")
+      || !auditTableSql.includes("'low', 'medium', 'high', 'critical'")
+    );
     if (auditNeedsRebuild) {
-      this.db.prepare('DROP TABLE IF EXISTS install_audit__mig_old').run();
-      this.db.prepare('ALTER TABLE install_audit RENAME TO install_audit__mig_old').run();
-      this.db.prepare('DROP INDEX IF EXISTS idx_audit_capability').run();
-      this.db.prepare('DROP INDEX IF EXISTS idx_audit_timestamp').run();
-    }
-    this.db.exec(SCHEMA_SQL);
-
-    // FIX-3 cont.: SCHEMA_SQL above just recreated install_audit with the
-    // widened CHECK. Copy the legacy rows back and drop the stale table.
-    if (auditNeedsRebuild) {
-      this.db.prepare(
-        `INSERT INTO install_audit
-           (id, timestamp, capability_name, capability_type, source, version,
-            risk_level, trust_source, approval_class, action, initiator, detail)
-         SELECT id, timestamp, capability_name, capability_type, source, version,
-                risk_level, trust_source, approval_class, action, initiator, detail
-         FROM install_audit__mig_old`
-      ).run();
-      this.db.prepare('DROP TABLE install_audit__mig_old').run();
+      this.db.transaction(() => {
+        this.db.prepare('DROP TABLE IF EXISTS install_audit__mig_old').run();
+        this.db.prepare('ALTER TABLE install_audit RENAME TO install_audit__mig_old').run();
+        this.db.prepare('DROP INDEX IF EXISTS idx_audit_capability').run();
+        this.db.prepare('DROP INDEX IF EXISTS idx_audit_timestamp').run();
+        // SCHEMA_SQL recreates install_audit with the widened CHECK (and is
+        // idempotent for every other table — see the comment block above).
+        this.db.exec(SCHEMA_SQL);
+        this.db.prepare(
+          `INSERT INTO install_audit
+             (id, timestamp, capability_name, capability_type, source, version,
+              risk_level, trust_source, approval_class, action, initiator, detail)
+           SELECT id, timestamp, capability_name, capability_type, source, version,
+                  risk_level, trust_source, approval_class, action, initiator, detail
+           FROM install_audit__mig_old`
+        ).run();
+        this.db.prepare('DROP TABLE install_audit__mig_old').run();
+      })();
+    } else {
+      this.db.exec(SCHEMA_SQL);
     }
 
     // W2.1: Add 'source' column to memory_frames (provenance tracking)

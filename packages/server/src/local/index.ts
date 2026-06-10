@@ -91,6 +91,9 @@ import { notificationRoutes, emitNotification, emitSubagentStatus } from './rout
 import { marketplaceDevRoutes } from './routes/marketplace-dev.js';
 import { marketplaceRoutes } from './routes/marketplace.js';
 import { connectorRoutes } from './routes/connectors.js';
+import { mcpRoutes } from './routes/mcps.js';
+import { extendRoutes } from './routes/extend.js';
+import { populateMcpRuntimeFromConfig } from './mcp-config.js';
 import { fleetRoutes } from './routes/fleet.js';
 import { importRoutes } from './routes/import.js';
 import { vaultRoutes } from './routes/vault.js';
@@ -914,8 +917,13 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     } catch { /* non-blocking — plugin scan failure must not prevent startup */ }
   }
 
-  // MCP server runtime — stdio servers, health, tools (empty by default)
+  // MCP server runtime — stdio servers, health, tools.
+  // UX-Refactor Phase 4 (C4): populated at boot from the persisted
+  // <dataDir>/.mcp.json (written by the marketplace installer + /api/mcps).
+  // Register-only — servers stay 'stopped' until started via
+  // POST /api/mcps/:id/start, so boot never spawns surprise processes.
   const mcpRuntime = new McpRuntime();
+  populateMcpRuntimeFromConfig(mcpRuntime, fullConfig.dataDir, log);
 
   // Session histories (server-side, like CLI)
   const sessionHistories = new Map<string, Array<{ role: string; content: string }>>();
@@ -2033,6 +2041,11 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(marketplaceDevRoutes);
   await server.register(marketplaceRoutes);
   await server.register(connectorRoutes);
+  // UX-Refactor Phase 4 (Extend layer): MCP Hub (S08) + the marketplace
+  // bare-path alias / shared install-audit read (S21, C18). extendRoutes
+  // delegates onto marketplaceRoutes via inject — register after it.
+  await server.register(mcpRoutes);
+  await server.register(extendRoutes);
   await server.register(fleetRoutes);
   await server.register(importRoutes);
   await server.register(vaultRoutes);

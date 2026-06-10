@@ -22,7 +22,10 @@ import type {
   Artifact, RelatedSearchResult,
   Agent, AgentTrace, Automation, AutomationLog,
 } from './types';
-import type { Command, CommandResult, WorkspaceType } from '@waggle/shared';
+import type {
+  Command, CommandResult, WorkspaceType,
+  ConnectorHealth, McpInstance, ExtensionType,
+} from '@waggle/shared';
 
 /**
  * CC Sesija A §2.2 — map adapter `MemoryFrame.importance` (number 1-4) to the
@@ -1618,17 +1621,121 @@ class LocalAdapter {
     return unwrapArray(await res.json());
   }
 
-  async getConnectorHealth(id: string): Promise<unknown> {
+  async getConnectorHealth(id: string): Promise<ConnectorHealth> {
     const res = await this.fetch(`/api/connectors/${id}/health`);
     return res.json();
   }
 
-  async connectConnector(id: string): Promise<void> {
-    await this.fetch(`/api/connectors/${id}/connect`, { method: 'POST' });
+  async connectConnector(id: string, credentials?: {
+    token?: string; apiKey?: string; refreshToken?: string;
+    expiresAt?: string; scopes?: string[]; email?: string;
+  }): Promise<void> {
+    await this.fetch(`/api/connectors/${id}/connect`, {
+      method: 'POST',
+      body: JSON.stringify(credentials ?? {}),
+    });
   }
 
   async disconnectConnector(id: string): Promise<void> {
     await this.fetch(`/api/connectors/${id}/disconnect`, { method: 'POST' });
+  }
+
+  /** C16: sync-now = health re-probe + lastSyncAt stamp (no data re-pull v1). */
+  async syncConnector(id: string): Promise<{ ok: boolean; connectorId: string; lastSyncAt?: string; status?: string }> {
+    const res = await this.fetch(`/api/connectors/${id}/sync`, { method: 'POST' });
+    return res.json();
+  }
+
+  /** C17: the strong disconnect — purges OAuth tokens + writes a revoke audit entry. */
+  async revokeConnector(id: string): Promise<{ ok: boolean; connectorId: string; revoked: boolean }> {
+    const res = await this.fetch(`/api/connectors/${id}/revoke`, { method: 'POST' });
+    return res.json();
+  }
+
+  // --- MCP Hub (Phase 4, S08) ---
+  async getMcps(): Promise<Array<Partial<McpInstance> & {
+    id: string; name: string; description: string; category: string;
+    official: boolean; installCmd: string; source: 'catalog' | 'custom';
+    installed: boolean; tools: string[];
+  }>> {
+    const res = await this.fetch('/api/mcps');
+    return unwrapArray(await res.json());
+  }
+
+  /** PRO+ (B5); delegates to the marketplace installer (SecurityGate + audit). */
+  async installMcp(mcpId: string, opts?: { settings?: Record<string, string>; force?: boolean }): Promise<{
+    installed: boolean; server?: string; status?: string; requiresApproval?: boolean;
+  }> {
+    const res = await this.fetch('/api/mcps/install', {
+      method: 'POST',
+      body: JSON.stringify({ mcpId, ...opts }),
+    });
+    return res.json();
+  }
+
+  async addCustomMcp(config: {
+    name: string; command: string; args?: string[];
+    env?: Record<string, string>; workspaceId?: string;
+  }): Promise<{ id: string; registered: boolean }> {
+    const res = await this.fetch('/api/mcps', { method: 'POST', body: JSON.stringify(config) });
+    return res.json();
+  }
+
+  /** C21: mode 'live' = real spawn + handshake; 'static' = manifest validation. */
+  async testMcp(id: string): Promise<{ ok: boolean; mode: 'live' | 'static'; tools: string[]; error?: string }> {
+    const res = await this.fetch(`/api/mcps/${id}/test`, { method: 'POST' });
+    return res.json();
+  }
+
+  async startMcp(id: string): Promise<{ status: string; error?: string }> {
+    const res = await this.fetch(`/api/mcps/${id}/start`, { method: 'POST' });
+    return res.json();
+  }
+
+  async stopMcp(id: string): Promise<{ status: string }> {
+    const res = await this.fetch(`/api/mcps/${id}/stop`, { method: 'POST' });
+    return res.json();
+  }
+
+  async revokeMcp(id: string): Promise<{ ok: boolean; stoppedInstance: boolean; removedConfig: boolean }> {
+    const res = await this.fetch(`/api/mcps/${id}/revoke`, { method: 'POST' });
+    return res.json();
+  }
+
+  /** C19: single-workspace scoping v1 — pass workspaceId, or scope:'personal' to clear. */
+  async updateMcpPermissions(id: string, body: { scope?: 'personal' | 'workspace'; workspaceId?: string }): Promise<{
+    ok: boolean; scope: string; workspaceId?: string;
+  }> {
+    const res = await this.fetch(`/api/mcps/${id}/permissions`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+    return res.json();
+  }
+
+  // --- Extend layer (Phase 4, S21) ---
+  /** Bare marketplace read; `type` takes the six-domain ExtensionType facet (B7/A5). */
+  async getMarketplace(params?: { query?: string; type?: ExtensionType; limit?: number }): Promise<{
+    packages: unknown[]; total: number; federated?: boolean;
+  }> {
+    const qs = new URLSearchParams();
+    if (params?.query) qs.set('query', params.query);
+    if (params?.type) qs.set('type', params.type);
+    if (params?.limit) qs.set('limit', String(params.limit));
+    const s = qs.toString();
+    const res = await this.fetch(`/api/marketplace${s ? `?${s}` : ''}`);
+    return res.json();
+  }
+
+  /** C18: ONE shared install-audit feed for S06/S07/S08/S21. */
+  async getExtendAudit(params?: { type?: 'skill' | 'plugin' | 'mcp' | 'connector' | 'marketplace' | 'native'; capability?: string; limit?: number }): Promise<unknown[]> {
+    const qs = new URLSearchParams();
+    if (params?.type) qs.set('type', params.type);
+    if (params?.capability) qs.set('capability', params.capability);
+    if (params?.limit) qs.set('limit', String(params.limit));
+    const s = qs.toString();
+    const res = await this.fetch(`/api/extend/audit${s ? `?${s}` : ''}`);
+    return unwrapArray(await res.json());
   }
 
   // --- Vault ---
