@@ -203,7 +203,7 @@ test.describe('2. Desktop Shell', () => {
 const DIRECT_APPS = [
   { label: 'Chat', expect: /persona|message|waggle/i },
   { label: 'Room', expect: /room|agent|specialist|no.*running|empty/i },
-  { label: 'Agents', expect: /agent|persona|group/i },
+  { label: 'Agent Center', expect: /agent|persona|group/i },
   { label: 'Files', expect: /file|folder|workspace|document/i },
   { label: 'Approvals', expect: /approval|pending|no.*pending|history/i },
 ];
@@ -215,7 +215,7 @@ const ZONE_APPS = [
   { label: 'Backup & Restore', zone: 'Ops', expect: /backup|restore|no.*backup/i },
   { label: 'Events & Logs', zone: 'Ops', expect: /event|log|step|filter/i },
   { label: 'Governance', zone: 'Extend', expect: /governance|role|team|permission/i },
-  { label: 'Skills & Apps', zone: 'Extend', expect: /skill|installed|marketplace|starter/i },
+  { label: 'Skills Hub', zone: 'Extend', expect: /skill|installed|marketplace|starter/i },
   { label: 'Connectors', zone: 'Extend', expect: /connector|connect|service|integration/i },
   { label: 'Marketplace', zone: 'Extend', expect: /marketplace|browse|pack|install/i },
 ];

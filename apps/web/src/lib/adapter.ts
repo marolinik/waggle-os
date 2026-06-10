@@ -20,6 +20,7 @@ import type {
   HomeBriefing, OvernightSummary, QuickCaptureInput,
   WorkspaceStateView, WorkspaceActivityEvent,
   Artifact, RelatedSearchResult,
+  Agent, AgentTrace, Automation, AutomationLog,
 } from './types';
 import type { Command, CommandResult, WorkspaceType } from '@waggle/shared';
 
@@ -63,6 +64,10 @@ function normalizeCronJob(raw: Record<string, unknown>): CronJob {
     enabled: raw.enabled === true || raw.enabled === 1,
     lastRun: (raw.lastRun as string) ?? (raw.lastRunAt as string) ?? undefined,
     nextRun: (raw.nextRun as string) ?? (raw.nextRunAt as string) ?? undefined,
+    // Phase 3: keep jobType/jobConfig so the Automation Builder can round-trip
+    // edits (previously dropped here, which made PATCH-based editing lossy).
+    jobType: (raw.jobType as string) ?? undefined,
+    jobConfig: (raw.jobConfig as Record<string, unknown>) ?? undefined,
   };
 }
 
@@ -834,6 +839,10 @@ class LocalAdapter {
   // --- Skills ---
   async getSkills(): Promise<SkillPack[]> {
     const res = await this.fetch('/api/skills');
+    // Phase-3B review: an HTTP error body (401 boot-race, 500) piped through
+    // unwrapArray comes back as [] — a silent empty Skills Hub. Throw so the
+    // caller's allSettled/error paths see the failure.
+    if (!res.ok) throw new Error(`getSkills failed: ${res.status}`);
     return unwrapArray(await res.json()).map((s: any) => ({
       ...s,
       id: s.id || s.name || s.slug,
@@ -841,12 +850,77 @@ class LocalAdapter {
     }));
   }
 
-  async createSkill(data: { name: string; description: string }): Promise<void> {
-    await this.fetch('/api/skills/create', { method: 'POST', body: JSON.stringify(data) });
+  async createSkill(data: {
+    name: string;
+    description: string;
+    /** Required by the server — POST /api/skills/create 400s on an empty array. */
+    steps: string[];
+    tools?: string[];
+    category?: string;
+  }): Promise<void> {
+    // Phase-3 fix: this used to send only { name, description }, which the
+    // route rejects (steps is mandatory) — the call could never succeed.
+    const res = await this.fetch('/api/skills/create', { method: 'POST', body: JSON.stringify(data) });
+    if (!res.ok) {
+      // Rich error (mirrors installSkill): callers branch on .status (e.g.
+      // SkillBuilder routes a 403 to the UpgradeModal tier event).
+      const body = await res.json().catch(() => ({} as Record<string, unknown>));
+      const err = new Error((body as { error?: string }).error ?? `createSkill failed: ${res.status}`) as Error & { status?: number; body?: unknown };
+      err.status = res.status;
+      err.body = body;
+      throw err;
+    }
+  }
+
+  /** Update a skill's markdown body. The skill NAME is its id. */
+  async updateSkill(id: string, content: string): Promise<void> {
+    const res = await this.fetch(`/api/skills/${encodeURIComponent(id)}`, {
+      method: 'PATCH', body: JSON.stringify({ content }),
+    });
+    if (!res.ok) throw new Error(`updateSkill failed: ${res.status}`);
+  }
+
+  /** C37 preview-only test: injected-prompt + parsed metadata, no LLM call. */
+  async testSkill(id: string, testInput?: string): Promise<{
+    skill: Record<string, unknown>;
+    wouldInject: string;
+    wouldInjectLength: number;
+    testPreview?: { input: string; combinedContext: string; note: string };
+  }> {
+    const res = await this.fetch(`/api/skills/${encodeURIComponent(id)}/test`, {
+      method: 'POST', body: JSON.stringify({ testInput }),
+    });
+    if (!res.ok) throw new Error(`testSkill failed: ${res.status}`);
+    return res.json();
+  }
+
+  /** Thin install dispatcher — resolves to the starter/pack/marketplace
+   *  installer. The `id` means a DIFFERENT thing per source: 'starter' = a
+   *  starter-skill id; 'pack' = a CAPABILITY-PACK id (installs the pack's
+   *  skills, not a skill named `id`); 'marketplace' IGNORES `id` — the numeric
+   *  `packageId` rules. A pack install with per-skill failures throws with
+   *  status 422 and `body.result` carrying installed/skipped/errors. */
+  async installSkill(
+    id: string,
+    source: 'starter' | 'pack' | 'marketplace',
+    packageId?: number,
+  ): Promise<{ installed: boolean; source: string; result: unknown }> {
+    const res = await this.fetch(`/api/skills/${encodeURIComponent(id)}/install`, {
+      method: 'POST', body: JSON.stringify({ source, ...(packageId !== undefined ? { packageId } : {}) }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({} as Record<string, unknown>));
+      const err = new Error((body as { error?: string }).error ?? `installSkill failed (${res.status})`) as Error & { status?: number; body?: unknown };
+      err.status = res.status;
+      err.body = body;
+      throw err;
+    }
+    return res.json();
   }
 
   async getStarterPacks(): Promise<SkillPack[]> {
     const res = await this.fetch('/api/skills/starter-pack/catalog');
+    if (!res.ok) throw new Error(`getStarterPacks failed: ${res.status}`);
     // Server emits { skills: [{ id, name, description, family, familyLabel, state, isWorkflow }], families }.
     // SkillPack contract uses { category, trust, installed } — map server shape so
     // CapabilitiesApp renders category badges + trust icons correctly.
@@ -864,6 +938,7 @@ class LocalAdapter {
 
   async getCapabilityPacks(): Promise<SkillPack[]> {
     const res = await this.fetch('/api/skills/capability-packs/catalog');
+    if (!res.ok) throw new Error(`getCapabilityPacks failed: ${res.status}`);
     // Server emits { packs: [{ id, name, description, skills:[ids], skillStates, packState, installedCount, totalCount }] }.
     const items = unwrapArray<Record<string, unknown>>(await res.json());
     return items.map((p) => ({
@@ -896,6 +971,7 @@ class LocalAdapter {
   // --- Marketplace ---
   async getMarketplacePacks(): Promise<SkillPack[]> {
     const res = await this.fetch('/api/marketplace/packs');
+    if (!res.ok) throw new Error(`getMarketplacePacks failed: ${res.status}`);
     return unwrapArray(await res.json());
   }
 
@@ -1000,12 +1076,100 @@ class LocalAdapter {
     return res.json();
   }
 
+  // --- Agent entity (UX-Refactor Phase 3 — S09/S18, B3 agents.json store) ---
+  // Distinct from the legacy persona/fleet surfaces: these hit the new
+  // /api/agents CRUD on the sidecar. `status/lastRunAt/successRate` on the
+  // returned Agent are derived server-side at read (B3).
+
+  async listAgents(): Promise<Agent[]> {
+    const res = await this.fetch('/api/agents');
+    if (!res.ok) throw new Error(`listAgents failed: ${res.status}`);
+    const body = await res.json() as { agents?: Agent[] };
+    return body.agents ?? [];
+  }
+
+  async createAgent(input: {
+    name: string; goal: string; model: string;
+    autonomyLevel: 'manual' | 'guided' | 'medium' | 'high';
+    memoryScopes: Array<'personal' | 'workspace' | 'team' | 'organization'>;
+    type?: 'personal' | 'workspace' | 'team' | 'autonomous';
+    description?: string; personaId?: string; avatar?: string;
+    workspaceIds?: string[]; teamId?: string;
+    skillIds?: string[]; connectorIds?: string[]; mcpIds?: string[];
+    permissions?: Record<string, unknown>;
+  }): Promise<Agent> {
+    const res = await this.fetch('/api/agents', { method: 'POST', body: JSON.stringify(input) });
+    if (!res.ok) throw new Error(`createAgent failed: ${res.status}`);
+    const body = await res.json() as { agent: Agent };
+    return body.agent;
+  }
+
+  async getAgent(id: string): Promise<Agent | null> {
+    const res = await this.fetch(`/api/agents/${encodeURIComponent(id)}`);
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`getAgent failed: ${res.status}`);
+    const body = await res.json() as { agent: Agent };
+    return body.agent;
+  }
+
+  async patchAgent(id: string, patch: Partial<Omit<Agent, 'id' | 'createdAt' | 'updatedAt' | 'lastRunAt' | 'successRate'>>): Promise<Agent> {
+    const res = await this.fetch(`/api/agents/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) });
+    if (!res.ok) throw new Error(`patchAgent failed: ${res.status}`);
+    const body = await res.json() as { agent: Agent };
+    return body.agent;
+  }
+
+  /** C23: one-shot fleet-spawn into a chosen workspace. The server 400s with
+   *  `error: 'workspace_ambiguous'` (+ workspaceIds) when the agent has several
+   *  workspaces and none was picked — the FE shows a picker then retries. */
+  async runAgent(id: string, opts: { input?: string; workspaceId?: string } = {}): Promise<{
+    sessionId: string; workspaceId: string; status: string; task: string;
+  }> {
+    const res = await this.fetch(`/api/agents/${encodeURIComponent(id)}/run`, {
+      method: 'POST', body: JSON.stringify(opts),
+    });
+    if (!res.ok) {
+      let detail: string | undefined;
+      let errBody: unknown;
+      try {
+        errBody = await res.clone().json();
+        const eb = errBody as { message?: string; error?: string };
+        detail = eb.message ?? eb.error;
+      } catch { /* not JSON */ }
+      const err = new Error(`runAgent failed (${res.status}): ${detail ?? res.statusText}`) as Error & { status?: number; body?: unknown };
+      err.status = res.status;
+      err.body = errBody;
+      throw err;
+    }
+    return res.json();
+  }
+
+  /** NOTE: fleet pause ABORTS the in-flight one-shot run (stop, not suspend). */
+  async pauseAgent(id: string): Promise<{ ok: boolean; paused: number }> {
+    const res = await this.fetch(`/api/agents/${encodeURIComponent(id)}/pause`, { method: 'POST' });
+    if (!res.ok) throw new Error(`pauseAgent failed: ${res.status}`);
+    return res.json();
+  }
+
+  async getAgentTraces(id: string, limit?: number): Promise<AgentTrace[]> {
+    const qs = typeof limit === 'number' ? `?limit=${limit}` : '';
+    const res = await this.fetch(`/api/agents/${encodeURIComponent(id)}/traces${qs}`);
+    if (!res.ok) throw new Error(`getAgentTraces failed: ${res.status}`);
+    const body = await res.json() as { traces?: AgentTrace[] };
+    return body.traces ?? [];
+  }
+
   // --- Cron ---
   // Server emits { cronExpr, lastRunAt, nextRunAt, jobType, ... } but the
   // UI reads legacy field names (`schedule`, `lastRun`, `nextRun`). Keep
   // the client contract stable by remapping on read.
   async getCronJobs(): Promise<CronJob[]> {
     const res = await this.fetch('/api/cron');
+    // Phase-3C review: an HTTP error body (401 boot-race, 500) piped through
+    // unwrapArray comes back as [] — the AutomationBuilder edit-mode read
+    // would silently degrade into "configuration unavailable". Throw so
+    // callers see the failure (mirrors the getSkills fix from the 3B review).
+    if (!res.ok) throw new Error(`getCronJobs failed: ${res.status}`);
     const rows = unwrapArray(await res.json()) as Array<Record<string, unknown>>;
     return rows.map(normalizeCronJob);
   }
@@ -1026,12 +1190,23 @@ class LocalAdapter {
   }
 
   async updateCronJob(id: string, data: Partial<CronJob>): Promise<CronJob> {
-    const res = await this.fetch(`/api/cron/${id}`, { method: 'PUT', body: JSON.stringify(data) });
-    return res.json();
+    // Phase-3 bug fix: the server registers only PATCH /api/cron/:id — the
+    // previous PUT 404'd, which silently broke the enable/disable toggle in
+    // ScheduledJobsApp.handleToggle. Map the legacy `schedule` field name back
+    // to the server's `cronExpr` while we're at it.
+    const { schedule, ...rest } = data;
+    const payload = { ...rest, ...(schedule !== undefined ? { cronExpr: schedule } : {}) };
+    const res = await this.fetch(`/api/cron/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+    if (!res.ok) throw new Error(`updateCronJob failed: ${res.status}`);
+    return normalizeCronJob(await res.json() as Record<string, unknown>);
   }
 
   async deleteCronJob(id: string): Promise<void> {
-    await this.fetch(`/api/cron/${id}`, { method: 'DELETE' });
+    // Phase-3B review: this was the one cron mutation with no res.ok check —
+    // a 404/500 resolved normally and the Automation Center toasted a false
+    // "Automation deleted" while the row survived the refresh.
+    const res = await this.fetch(`/api/cron/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(`deleteCronJob failed: ${res.status}`);
   }
 
   async triggerCronJob(id: string): Promise<{ triggered: boolean; autoEnabled?: boolean; schedule?: CronJob }> {
@@ -1039,6 +1214,104 @@ class LocalAdapter {
     // response carries the post-trigger `schedule` so callers can sync
     // local state without a round-trip refetch.
     const res = await this.fetch(`/api/cron/${id}/trigger`, { method: 'POST' });
+    return res.json();
+  }
+
+  // --- Automations (UX-Refactor Phase 3 — PRD-vocabulary alias over cron, S11/S20) ---
+  // (Use pauseAutomation / getAutomationLogs below — the PRD vocabulary; the
+  // duplicate pauseCronJob/getCronHistory pair was removed in the 3A review.)
+
+  async listAutomations(): Promise<Automation[]> {
+    const res = await this.fetch('/api/automations');
+    if (!res.ok) throw new Error(`listAutomations failed: ${res.status}`);
+    const body = await res.json() as { automations?: Automation[] };
+    return body.automations ?? [];
+  }
+
+  async createAutomation(input: {
+    name: string;
+    trigger?: { type: 'schedule' | 'manual'; cron?: string };
+    schedule?: string;
+    condition?: string;
+    actions?: string[];
+    agentId?: string;
+    notify?: boolean;
+    jobType?: string;
+    jobConfig?: Record<string, unknown>;
+    workspaceId?: string;
+    enabled?: boolean;
+  }): Promise<Automation> {
+    const res = await this.fetch('/api/automations', { method: 'POST', body: JSON.stringify(input) });
+    if (!res.ok) throw new Error(`createAutomation failed: ${res.status}`);
+    const body = await res.json() as { automation: Automation };
+    return body.automation;
+  }
+
+  async updateAutomation(
+    id: string,
+    patch: {
+      name?: string; schedule?: string; condition?: string; actions?: string[];
+      agentId?: string; notify?: boolean; workspaceId?: string; enabled?: boolean;
+      jobConfig?: Record<string, unknown>;
+      /** C24 trigger patch (schedule ↔ manual); server maps manual → disabled. */
+      trigger?: { type: 'schedule' | 'manual'; cron?: string };
+    },
+  ): Promise<Automation> {
+    const res = await this.fetch(`/api/automations/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) });
+    if (!res.ok) throw new Error(`updateAutomation failed: ${res.status}`);
+    const body = await res.json() as { automation: Automation };
+    return body.automation;
+  }
+
+  /** Explicit "Run now" — inherits trigger semantics (auto-enables a disabled job). */
+  async runAutomation(id: string): Promise<{ runId: string; triggered: boolean; autoEnabled?: boolean }> {
+    const res = await this.fetch(`/api/automations/${encodeURIComponent(id)}/run`, { method: 'POST' });
+    if (!res.ok) throw new Error(`runAutomation failed: ${res.status}`);
+    return res.json();
+  }
+
+  async pauseAutomation(id: string): Promise<void> {
+    const res = await this.fetch(`/api/automations/${encodeURIComponent(id)}/pause`, { method: 'POST' });
+    if (!res.ok) throw new Error(`pauseAutomation failed: ${res.status}`);
+  }
+
+  async getAutomationLogs(id: string, limit?: number): Promise<AutomationLog[]> {
+    const qs = typeof limit === 'number' ? `?limit=${limit}` : '';
+    const res = await this.fetch(`/api/automations/${encodeURIComponent(id)}/logs${qs}`);
+    if (!res.ok) throw new Error(`getAutomationLogs failed: ${res.status}`);
+    const body = await res.json() as { logs?: AutomationLog[] };
+    return body.logs ?? [];
+  }
+
+  /** C26 VALIDATION-ONLY preview of a DRAFT automation (Builder test-run).
+   *  The server never calls the executor — it statically checks the trigger
+   *  (schedule needs a parseable cron), jobType, config completeness
+   *  (agent_task needs jobConfig.prompt) and workspaceId, and echoes
+   *  `condition` as advisory (C25). `executed` is always false; nothing is
+   *  persisted, enabled, recorded or notified. */
+  async testAutomation(draft: {
+    /** Edit-mode (C26): the stored row's id — the server merges the draft
+     *  over the stored jobType/jobConfig so the preview judges the REAL job
+     *  instead of the agent_task fallback. */
+    id?: string;
+    name?: string;
+    trigger?: { type: 'schedule' | 'manual'; cron?: string };
+    actions?: string[];
+    condition?: string;
+    jobType?: string;
+    jobConfig?: Record<string, unknown>;
+    workspaceId?: string;
+  }): Promise<{ previewResult: {
+    ok: boolean;
+    jobType: string;
+    triggerType: string;
+    issues: string[];
+    executed: false;
+    wouldRun: string;
+    condition?: string;
+  } }> {
+    const res = await this.fetch('/api/automations/test', { method: 'POST', body: JSON.stringify(draft) });
+    if (!res.ok) throw new Error(`testAutomation failed: ${res.status}`);
     return res.json();
   }
 

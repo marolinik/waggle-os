@@ -122,6 +122,21 @@ function computeNextRun(cronExpr: string): string {
   return interval.next().toISOString();
 }
 
+/**
+ * Validate a cron expression with the SAME parser create()/update() use.
+ * Returns null when parseable, else the parser's error message. Lets route
+ * layers (e.g. the automations /test preview) reject an expression the store
+ * would refuse to persist, without duplicating the parser dependency.
+ */
+export function cronExprError(cronExpr: string): string | null {
+  try {
+    parseExpression(cronExpr);
+    return null;
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
+}
+
 // ── Store ──────────────────────────────────────────────────────────────
 
 export class CronStore {
@@ -295,6 +310,18 @@ export class CronStore {
     return this.db.getDatabase().prepare(
       'SELECT * FROM cron_execution_history WHERE schedule_id = ? ORDER BY executed_at DESC LIMIT ?',
     ).all(scheduleId, limit) as CronExecutionRow[];
+  }
+
+  /** Prune execution-history rows older than N days. recordExecution writes a
+   *  row per tick (UX-Refactor Phase 3, Journey 16), so without retention the
+   *  table grows unbounded (a per-minute job ≈ 525k rows/year). Mirrors
+   *  optStore.pruneOlderThan(30). Returns the number of rows deleted. */
+  pruneExecutionHistory(olderThanDays: number): number {
+    const days = Math.max(1, Math.floor(olderThanDays));
+    const result = this.db.getDatabase().prepare(
+      "DELETE FROM cron_execution_history WHERE executed_at < datetime('now', ?)",
+    ).run(`-${days} days`);
+    return result.changes;
   }
 
   // ── W5.10: Notification Persistence ────────────────────────────────

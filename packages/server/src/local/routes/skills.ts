@@ -679,6 +679,11 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
     return response;
   });
 
+  // ── UX-Refactor Phase 3 :id aliases (S06/S19) ─────────────────────
+  // PATCH /api/skills/:id, POST /api/skills/:id/test and POST /api/skills/
+  // :id/install live in skills-aliases.ts (registered right after this
+  // plugin) — this file is over the 800-LOC cap.
+
   // ── Audit Trail ─────────────────────────────────────────────────
 
   // GET /api/audit/installs — recent install audit trail

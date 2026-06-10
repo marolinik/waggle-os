@@ -90,10 +90,13 @@ describe('dock label ↔ Desktop appConfig title parity', () => {
     expect(mismatches, `label/title mismatches:\n${mismatches.join('\n')}`).toEqual([]);
   });
 
-  it('the agents appId canonicalises to "Personas" (M-35 / P8)', () => {
-    // Explicit regression pin: this is the specific rename the backlog
-    // item closed. A future silent revert to "Agents" breaks here first.
-    expect(appTitles.get('agents')).toBe('Personas');
-    expect([...(dockLabels.get('agents') ?? [])]).toEqual(['Personas']);
+  it('the agents appId canonicalises to "Agent Center" (UX-Refactor Phase 3B, S09)', () => {
+    // Explicit regression pin. History: M-35/P8 renamed Agents→Personas
+    // (the app managed persona definitions); Phase 3B reworked the app into
+    // the Agent Center over the B3 /api/agents entity, with the persona
+    // catalog kept as its Templates side affordance (C22). A silent revert
+    // to "Personas" or "Agents" breaks here first.
+    expect(appTitles.get('agents')).toBe('Agent Center');
+    expect([...(dockLabels.get('agents') ?? [])]).toEqual(['Agent Center']);
   });
 });

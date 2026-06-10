@@ -19,6 +19,25 @@ export type JobExecutor = (schedule: CronSchedule) => Promise<void>;
 /** Q16:C — Optional callback fired after each cron job execution (success or failure). */
 export type JobCompleteCallback = (schedule: CronSchedule, result: { success: boolean; error?: string }) => void;
 
+/**
+ * UX-Refactor Phase 3 (Journey 16): the history-persistence half of the
+ * production onJobComplete wiring (local/index.ts). Exported as a named
+ * factory so tests install the SAME closure the server runs instead of a
+ * hand-copied mirror that can silently drift from the real wire.
+ */
+export function makeRecordExecutionCallback(
+  store: Pick<CronStore, 'recordExecution'>,
+): JobCompleteCallback {
+  return (schedule, result) => {
+    try {
+      store.recordExecution(schedule.id, schedule.name, {
+        success: result.success,
+        ...(result.error ? { error: result.error } : {}),
+      });
+    } catch { /* history is best-effort */ }
+  };
+}
+
 /** Maximum consecutive failures before a job is auto-disabled */
 const MAX_CONSECUTIVE_FAILURES = 5;
 

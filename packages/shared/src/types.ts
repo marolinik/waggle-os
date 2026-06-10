@@ -33,6 +33,13 @@ export interface TeamMember {
 }
 
 // === Agent Configuration ===
+// UX-Refactor Phase 3 (PRD §15.5, gate B3): the legacy 10 members stay untouched
+// (cloud callers depend on userId/role/systemPrompt/config); the optional fields
+// below carry the Agent-entity vocabulary. Semantics: `tools` remains the raw
+// tool allowlist while skillIds/connectorIds/mcpIds are entity references;
+// `role` stays the free-text display label while `personaId` is the canonical
+// persona reference. lastRunAt/successRate are DERIVED at read from
+// execution_traces (B3) — route layers must not persist them.
 export interface AgentDef {
   id: string;
   userId: string;
@@ -44,6 +51,22 @@ export interface AgentDef {
   tools: string[];
   config: Record<string, unknown>;
   createdAt: Date;
+  type?: AgentType;
+  goal?: string;
+  description?: string;
+  personaId?: string;
+  autonomyLevel?: AutonomyLevel;
+  workspaceIds?: string[];
+  memoryScopes?: Scope[];
+  skillIds?: string[];
+  connectorIds?: string[];
+  mcpIds?: string[];
+  permissions?: Record<string, unknown>;
+  status?: AgentRunState;
+  /** ISO timestamp — derived at read, never persisted (B3). */
+  lastRunAt?: string;
+  /** 0-1 — derived at read from execution_traces outcomes (B3). */
+  successRate?: number;
 }
 
 export type AgentGroupStrategy = 'parallel' | 'sequential' | 'coordinator';
@@ -329,6 +352,16 @@ export type ArtifactKind =
   | 'research' | 'code' | 'media' | 'design' | 'other';
 export type AgentType = 'personal' | 'workspace' | 'team' | 'autonomous';
 export type AutonomyLevel = 'manual' | 'guided' | 'medium' | 'high';
+/** PRD §14.5 agent lifecycle states — SINGLE source of truth. The sidecar
+ *  store (packages/server/src/local/agents-store.ts) and the FE view-model
+ *  (apps/web/src/lib/types.ts) re-export this union; do not redeclare it.
+ *  Declared as a const tuple so schemas.ts derives `agentStatusEnum` from it
+ *  (z.enum) — the type and the runtime list cannot drift. */
+export const AGENT_RUN_STATES = [
+  'draft', 'idle', 'running', 'paused', 'failed',
+  'waiting_for_approval', 'completed', 'archived',
+] as const;
+export type AgentRunState = (typeof AGENT_RUN_STATES)[number];
 export type ExtensionType =
   | 'skill' | 'connector' | 'mcp' | 'model' | 'template' | 'external_tool';
 
@@ -532,4 +565,36 @@ export interface RelatedSearchResult {
   sessions: RelatedRef[];
   tasks: RelatedRef[];
   agents: RelatedRef[];
+}
+
+// NOTE (Phase 3A review): a speculative shared `Skill` interface was removed
+// here — no route produces it (GET /api/skills returns {name,length,preview};
+// POST /api/skills/create takes {name,description,steps[],tools,category}).
+// Re-introduce a Skill contract only together with a route that emits it.
+
+// === UX-Refactor Automation entity (PRD §16.10 / shared-types-delta §7, Phase 3) ===
+// "Automations" is the PRD-vocabulary alias over the existing cron substrate
+// (B4 — alias, never rename; `/api/cron/*` callers keep working). Trigger/
+// condition/actions ride the existing `cron_schedules.job_config` TEXT blob —
+// NO migration. C24: schedule-only triggers v1 ('event' stays in the union but
+// is rejected by the route layer). C25: `condition` is an ADVISORY string —
+// no evaluation engine in v1.
+
+export type AutomationTriggerType = 'schedule' | 'event' | 'manual';
+
+export interface Automation {
+  id: string;
+  name: string;
+  triggerType: AutomationTriggerType;
+  /** Cron expression when triggerType === 'schedule'. */
+  schedule?: string;
+  /** Advisory only (C25) — stored, surfaced, never evaluated in v1. */
+  condition?: string;
+  actions: string[];
+  agentId?: string;
+  notify?: boolean;
+  workspaceId: string;
+  status: 'active' | 'paused' | 'running' | 'failed';
+  lastRun?: string;
+  nextRun?: string;
 }

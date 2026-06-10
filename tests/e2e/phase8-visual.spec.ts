@@ -178,7 +178,7 @@ const VIEWS = [
   { name: 'Chat',            sidebar: 'Chat' },
   { name: 'Memory',          sidebar: 'Memory' },
   { name: 'Events',          sidebar: 'Events' },
-  { name: 'Capabilities',    sidebar: 'Skills & Apps' },
+  { name: 'Capabilities',    sidebar: 'Skills Hub' },
   { name: 'Cockpit',         sidebar: 'Cockpit' },
   { name: 'MissionControl',  sidebar: 'Mission Control' },
   { name: 'Settings',        sidebar: 'Settings' },
@@ -317,7 +317,7 @@ test.describe('View structural smoke tests', () => {
     const hasOverlay = await page.locator('.fixed.inset-0.z-\\[9999\\]').isVisible().catch(() => false);
     if (hasOverlay) { test.skip(true, 'Onboarding overlay still active'); return; }
 
-    await navigateTo(page, 'Skills & Apps');
+    await navigateTo(page, 'Skills Hub');
     await page.waitForTimeout(1000);
 
     const content = page.locator('text=Browse')

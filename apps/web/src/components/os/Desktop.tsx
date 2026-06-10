@@ -14,6 +14,7 @@ import waggleLogoLight from "@/assets/waggle-logo.png";
 import StatusBar from "./StatusBar";
 import { buildStatusBarFocus } from "@/lib/status-bar-focus";
 import { computeCascadePosition } from "@/lib/window-cascade";
+import { stashDeepLink } from "@/lib/app-deeplink";
 import Dock from "./Dock";
 import AppWindow from "./AppWindow";
 import AppErrorBoundary from "./ErrorBoundary";
@@ -34,7 +35,7 @@ import WaggleDanceApp from "./apps/WaggleDanceApp";
 import AgentsApp from "./apps/AgentsApp";
 import FilesAppTabs from "./apps/FilesAppTabs";
 import ArtifactCenterApp from "./apps/ArtifactCenterApp";
-import ScheduledJobsApp from "./apps/ScheduledJobsApp";
+import AutomationCenterApp from "./apps/AutomationCenterApp";
 import MarketplaceApp from "./apps/MarketplaceApp";
 import LauncherApp from "./apps/LauncherApp";
 import VoiceApp from "./apps/VoiceApp";
@@ -90,15 +91,15 @@ const appConfig: Record<string, { title: string; icon: React.ReactNode; pos: { x
   "events": { title: "Events", icon: <Activity className="w-3.5 h-3.5 text-cyan-400" />, pos: { x: 200, y: 70 }, size: { w: "580px", h: "420px" } },
   "cockpit": { title: "Cockpit", icon: <Activity className="w-3.5 h-3.5 text-emerald-400" />, pos: { x: 300, y: 60 }, size: { w: "520px", h: "520px" } },
   "mission-control": { title: "Mission Control", icon: <Radio className="w-3.5 h-3.5 text-rose-400" />, pos: { x: 220, y: 90 }, size: { w: "520px", h: "440px" } },
-  "capabilities": { title: "Skills & Apps", icon: <Package className="w-3.5 h-3.5 text-violet-400" />, pos: { x: 150, y: 80 }, size: { w: "560px", h: "480px" } },
+  "capabilities": { title: "Skills Hub", icon: <Package className="w-3.5 h-3.5 text-violet-400" />, pos: { x: 150, y: 80 }, size: { w: "560px", h: "480px" } },
   "waggle-dance": { title: "Waggle Dance", icon: <Zap className="w-3.5 h-3.5 text-amber-400" />, pos: { x: 160, y: 50 }, size: { w: "580px", h: "460px" } },
   "files": { title: "Files", icon: <FolderOpen className="w-3.5 h-3.5 text-amber-300" />, pos: { x: 140, y: 55 }, size: { w: "620px", h: "440px" } },
   "artifacts": { title: "Artifacts", icon: <FileStack className="w-3.5 h-3.5 text-amber-300" />, pos: { x: 160, y: 60 }, size: { w: "660px", h: "500px" } },
-  "agents": { title: "Personas", icon: <Bot className="w-3.5 h-3.5 text-orange-400" />, pos: { x: 170, y: 65 }, size: { w: "640px", h: "480px" } },
+  "agents": { title: "Agent Center", icon: <Bot className="w-3.5 h-3.5 text-orange-400" />, pos: { x: 170, y: 65 }, size: { w: "640px", h: "480px" } },
   "vault": { title: "Vault", icon: <Lock className="w-3.5 h-3.5 text-amber-400" />, pos: { x: 240, y: 70 }, size: { w: "560px", h: "480px" } },
   "profile": { title: "My Profile", icon: <UserCircle className="w-3.5 h-3.5 text-sky-400" />, pos: { x: 200, y: 60 }, size: { w: "560px", h: "520px" } },
   "connectors": { title: "Connectors", icon: <Plug className="w-3.5 h-3.5 text-emerald-400" />, pos: { x: 220, y: 80 }, size: { w: "580px", h: "500px" } },
-  "scheduled-jobs": { title: "Automations", icon: <Clock className="w-3.5 h-3.5 text-amber-400" />, pos: { x: 200, y: 70 }, size: { w: "600px", h: "460px" } },
+  "scheduled-jobs": { title: "Automation Center", icon: <Clock className="w-3.5 h-3.5 text-amber-400" />, pos: { x: 200, y: 70 }, size: { w: "600px", h: "460px" } },
   "marketplace": { title: "Marketplace", icon: <Store className="w-3.5 h-3.5 text-orange-400" />, pos: { x: 250, y: 80 }, size: { w: "640px", h: "500px" } },
   "voice": { title: "Voice", icon: <Mic className="w-3.5 h-3.5 text-rose-400" />, pos: { x: 300, y: 90 }, size: { w: "480px", h: "400px" } },
   "room": { title: "Room", icon: <Users className="w-3.5 h-3.5 text-violet-400" />, pos: { x: 260, y: 75 }, size: { w: "640px", h: "520px" } },
@@ -165,13 +166,21 @@ const Desktop = () => {
   // Window management (extracted hook)
   const wm = useWindowManager(workspaces, { defaultAutonomy });
 
-  // M-09: cross-component "open me" channel. HarvestTab (and other sources)
-  // can dispatch `waggle:open-app` with { appId, tab? } to raise a window.
-  // Tab switching is handled inside the target app via the same event.
+  // M-09 / Journey 16: cross-component "open me" channel. HarvestTab, Home
+  // Cockpit failure items (and other sources) dispatch `waggle:open-app` with
+  // { appId, tab?, automationId? } to raise a window. A mounted target app
+  // handles the tab switch via its own live listener — but on COLD open the
+  // app only mounts on the next render, after this synchronous event is gone,
+  // so the intent is also stashed for the app to consume in its mount effect.
   useEffect(() => {
     const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { appId?: AppId } | undefined;
-      if (detail?.appId) wm.openApp(detail.appId);
+      const detail = (e as CustomEvent).detail as
+        | { appId?: AppId; tab?: string; automationId?: string }
+        | undefined;
+      if (detail?.appId) {
+        stashDeepLink({ appId: detail.appId, tab: detail.tab, automationId: detail.automationId });
+        wm.openApp(detail.appId);
+      }
     };
     window.addEventListener('waggle:open-app', handler);
     return () => window.removeEventListener('waggle:open-app', handler);
@@ -417,7 +426,7 @@ const Desktop = () => {
       case 'mission-control': return <MissionControlApp onSpawnOpen={() => ov.setShowSpawnAgent(true)} />;
       case 'capabilities': return <CapabilitiesApp />;
       case 'waggle-dance': return <WaggleDanceApp />;
-      case 'agents': return <AgentsApp />;
+      case 'agents': return <AgentsApp workspaces={workspaces} />;
       case 'artifacts': return <ArtifactCenterApp activeWorkspaceId={activeWorkspaceId ?? undefined} workspaceName={activeWorkspace?.name} />;
       case 'files': {
         // Phase B.1: prefer the files-view's locally-chosen workspace,
@@ -435,7 +444,7 @@ const Desktop = () => {
           />
         );
       }
-      case 'scheduled-jobs': return <ScheduledJobsApp />;
+      case 'scheduled-jobs': return <AutomationCenterApp />;
       case 'marketplace': return <MarketplaceApp />;
       case 'launcher': return <LauncherApp activeWorkspaceId={activeWorkspaceId ?? undefined} />;
       case 'voice': return <VoiceApp />;

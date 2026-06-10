@@ -45,7 +45,7 @@ interface Surface {
 const SURFACES: Surface[] = [
   { key: 'chat', label: 'Chat', expectation: 'AI chat: a persona/model header, a message thread area, and a message input box at the bottom.' },
   { key: 'room', label: 'Room', expectation: 'The Room: a canvas for running agents, or a clean empty state ("no agents running").' },
-  { key: 'agents', label: 'Agents', expectation: 'Agents/Personas: a list or grid of agent personas to choose from.' },
+  { key: 'agents', label: 'Agent Center', expectation: 'Agent Center: a list of agents with status badges and category tabs, or an empty "no agents yet" state.' },
   { key: 'files', label: 'Files', expectation: 'Files: a workspace file/folder browser, or an empty state.' },
   { key: 'approvals', label: 'Approvals', expectation: 'Approvals inbox: pending approval requests or a clean "no pending approvals" state.' },
   { key: 'cockpit', label: 'Command Center', expectation: 'Command Center / cockpit: KPI cards for health, cost, and activity.' },
@@ -54,7 +54,7 @@ const SURFACES: Surface[] = [
   { key: 'backup', label: 'Backup & Restore', expectation: 'Backup & Restore: backup list/controls, or a "no backups" empty state.' },
   { key: 'events', label: 'Events & Logs', expectation: 'Events & Logs: a filterable list of agent steps/events.' },
   { key: 'governance', label: 'Governance', expectation: 'Governance: team roles, permissions, or policy controls.' },
-  { key: 'capabilities', label: 'Skills & Apps', expectation: 'Skills & Apps: installed skills and a marketplace/starter affordance.' },
+  { key: 'capabilities', label: 'Skills Hub', expectation: 'Skills Hub: installed skills and a marketplace/starter affordance.' },
   { key: 'connectors', label: 'Connectors', expectation: 'Connectors: a catalog of services/integrations to connect.' },
   { key: 'marketplace', label: 'Marketplace', expectation: 'Marketplace: browsable skill/connector packs with install affordances.' },
   { key: 'settings', label: 'Settings', expectation: 'Settings: tabbed config (General/Models/Vault/Permissions/Team/Advanced).' },

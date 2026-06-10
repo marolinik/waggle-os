@@ -1,6 +1,7 @@
 // @waggle/shared — Zod validation schemas for API requests
 
 import { z } from 'zod';
+import { AGENT_RUN_STATES } from './types.js';
 
 export const createTeamSchema = z.object({
   name: z.string().min(1).max(100),
@@ -44,6 +45,21 @@ export const sendMessageSchema = z.object({
   routing: z.array(z.object({ userId: z.string().uuid(), reason: z.string() })).optional(),
 });
 
+// UX-Refactor Phase 3 (PRD §15.5): shared enum fragments for the Agent entity.
+// Ref-id arrays use plain min(1) strings — workspace/agent ids in this repo are
+// NOT all UUIDs (cron ids are numeric, artifact ids are `art_${uuid}`).
+// status derives from the §14.5 AGENT_RUN_STATES tuple in types.ts (the
+// vocabulary the sidecar agents-store actually persists) — single source.
+const agentTypeEnum = z.enum(['personal', 'workspace', 'team', 'autonomous']);
+const autonomyLevelEnum = z.enum(['manual', 'guided', 'medium', 'high']);
+const scopeEnum = z.enum(['personal', 'workspace', 'team', 'organization']);
+const agentStatusEnum = z.enum(AGENT_RUN_STATES);
+
+// NOTE: this schema is consumed by the Clerk-gated CLOUD route
+// (packages/server/src/routes/agents.ts). The cloud AgentService persists only
+// the legacy fields (name/role/systemPrompt/model/tools/config/teamId) — the
+// §15.5 fields below validate but are NOT stored there yet. The local sidecar
+// surface (local/routes/agents.ts) is the §15.5 system of record.
 export const createAgentSchema = z.object({
   name: z.string().min(1).max(100),
   role: z.string().max(500).optional(),
@@ -52,7 +68,27 @@ export const createAgentSchema = z.object({
   tools: z.array(z.string()).default([]),
   config: z.record(z.unknown()).default({}),
   teamId: z.string().uuid().optional(),
+  // §15.5 optional Agent-entity fields (Phase 3) — all optional for back-compat.
+  type: agentTypeEnum.optional(),
+  goal: z.string().max(4000).optional(),
+  description: z.string().max(2000).optional(),
+  personaId: z.string().min(1).max(200).optional(),
+  autonomyLevel: autonomyLevelEnum.optional(),
+  workspaceIds: z.array(z.string().min(1)).optional(),
+  memoryScopes: z.array(scopeEnum).optional(),
+  skillIds: z.array(z.string().min(1)).optional(),
+  connectorIds: z.array(z.string().min(1)).optional(),
+  mcpIds: z.array(z.string().min(1)).optional(),
+  permissions: z.record(z.unknown()).optional(),
+  status: agentStatusEnum.optional(),
 });
+
+// NOTE (Phase 3A review): speculative updateAgent/createSkill/updateSkill/
+// createAutomation/updateAutomation schemas were removed here — no route
+// consumed them and their shapes contradicted the implemented wire contracts
+// (the local routes validate inline; skills mandate steps[]; automations use a
+// nested trigger object). Re-add a schema only together with a route that
+// parses with it.
 
 export const createAgentGroupSchema = z.object({
   name: z.string().min(1).max(100),
