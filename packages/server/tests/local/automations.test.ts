@@ -129,6 +129,16 @@ describe('Automations alias routes (Phase 3)', () => {
     expect(cronStore.getById(parseInt(automation.id, 10))!.enabled).toBe(0);
   });
 
+  it('agent_task create accepts the "*" fan-out workspace sentinel (Builder "All workspaces")', async () => {
+    // The store REQUIRES a workspaceId for agent_task; '*' is the executor's
+    // fan-out-to-all sentinel the Builder sends (2026-06-10 live-smoke fix).
+    const automation = await createAutomation({
+      name: 'Smoke parity', trigger: { type: 'manual' },
+      jobType: 'agent_task', jobConfig: { prompt: 'do the thing' }, workspaceId: '*',
+    });
+    expect(cronStore.getById(parseInt(automation.id, 10))!.workspace_id).toBe('*');
+  });
+
   it('GET reshapes existing cron rows onto the Automation contract', async () => {
     await createAutomation(SCHEDULE_BODY);
     // A pre-existing plain cron job (no automation vocabulary) still projects.
@@ -295,10 +305,19 @@ describe('Automations alias routes (Phase 3)', () => {
     });
     expect(noPrompt.json().previewResult.ok).toBe(false);
     expect(noPrompt.json().previewResult.issues.join(' ')).toMatch(/prompt/);
-    // ...and WITH a prompt the same draft previews clean.
-    const withPrompt = await server.inject({
+    // agent_task with a prompt but NO workspaceId — CronStore.create would
+    // throw ('agent_task jobs require a workspace ID'), so the preview must
+    // flag it instead of saying "valid" (2026-06-10 live-smoke regression).
+    const noWs = await server.inject({
       method: 'POST', url: '/api/automations/test',
       payload: { trigger: { type: 'schedule', cron: '0 5 * * *' }, jobType: 'agent_task', jobConfig: { prompt: 'Summarize the day' } },
+    });
+    expect(noWs.json().previewResult.ok).toBe(false);
+    expect(noWs.json().previewResult.issues.join(' ')).toMatch(/workspaceId/);
+    // ...and WITH a prompt + the '*' fan-out sentinel the draft previews clean.
+    const withPrompt = await server.inject({
+      method: 'POST', url: '/api/automations/test',
+      payload: { trigger: { type: 'schedule', cron: '0 5 * * *' }, jobType: 'agent_task', jobConfig: { prompt: 'Summarize the day' }, workspaceId: '*' },
     });
     expect(withPrompt.json().previewResult.ok).toBe(true);
 

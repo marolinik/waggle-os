@@ -362,6 +362,7 @@ export const automationRoutes: FastifyPluginAsync = async (server) => {
           ...raw,
           jobType: raw.jobType ?? stored.job_type,
           jobConfig: { ...storedConfig, ...(raw.jobConfig ?? {}) },
+          workspaceId: raw.workspaceId ?? stored.workspace_id ?? undefined,
         };
       }
     }
@@ -397,6 +398,13 @@ export const automationRoutes: FastifyPluginAsync = async (server) => {
       const prompt = jobConfig.prompt;
       if (typeof prompt !== 'string' || !prompt.trim()) {
         issues.push('agent_task requires jobConfig.prompt — the executor skips runs without one');
+      }
+      // Store-level parity — CronStore.create throws for agent_task without a
+      // workspaceId ('*' is the fan-out-to-all sentinel the Builder sends for
+      // "All workspaces"); without this check the preview says "valid" for a
+      // draft that create would 400. (Caught by the 2026-06-10 live smoke.)
+      if (!b.workspaceId) {
+        issues.push('agent_task requires a workspaceId — use "*" to target all workspaces');
       }
     }
 

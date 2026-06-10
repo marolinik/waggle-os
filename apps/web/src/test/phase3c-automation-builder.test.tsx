@@ -101,6 +101,34 @@ describe('AutomationBuilder — S20', () => {
     });
   });
 
+  it('agent_task + "All workspaces" sends the "*" fan-out sentinel (store requires a workspaceId)', async () => {
+    // Without this mapping the create 400s: CronStore.create throws
+    // 'agent_task jobs require a workspace ID' (2026-06-10 live-smoke fix).
+    mocks.adapter.listAutomations.mockResolvedValue([]);
+    mocks.adapter.createAutomation.mockResolvedValue(makeAutomation());
+    renderApp();
+    await screen.findByTestId('automation-overview-tiles');
+
+    fireEvent.click(screen.getByRole('button', { name: /New/ }));
+    await screen.findByTestId('automation-builder');
+    fireEvent.change(screen.getByLabelText('Automation name'), { target: { value: 'All-ws agent task' } });
+    // Workspace scope left at the default "All workspaces" ('' value).
+    fireEvent.click(screen.getByTestId('automation-builder-next')); // → Action
+    fireEvent.change(screen.getByTestId('automation-job-type'), { target: { value: 'agent_task' } });
+    fireEvent.change(screen.getByTestId('automation-prompt'), { target: { value: 'Summarise the day' } });
+    fireEvent.click(screen.getByTestId('automation-builder-next')); // → Condition
+    fireEvent.click(screen.getByTestId('automation-builder-next')); // → Review
+    fireEvent.click(screen.getByTestId('automation-builder-finish'));
+    // agent_task gates on approval before submitting.
+    fireEvent.click(await screen.findByTestId('approval-modal-approve'));
+
+    await waitFor(() => expect(mocks.adapter.createAutomation).toHaveBeenCalledTimes(1));
+    expect(mocks.adapter.createAutomation.mock.calls[0][0]).toMatchObject({
+      jobType: 'agent_task',
+      workspaceId: '*',
+    });
+  });
+
   it('edit round-trip: reads stored jobConfig off the cron row, edits the prompt, gates on approval, PATCHes the merge', async () => {
     mocks.adapter.listAutomations.mockResolvedValue([makeAutomation()]);
     mocks.adapter.getCronJobs.mockResolvedValue([

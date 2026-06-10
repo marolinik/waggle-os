@@ -4,6 +4,8 @@ import path from "path";
 import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
+const sidecarTarget = process.env.SIDECAR_TARGET ?? "http://127.0.0.1:3333";
+
 export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
@@ -13,15 +15,15 @@ export default defineConfig(({ mode }) => ({
     },
     proxy: {
       "/api": {
-        target: "http://127.0.0.1:3333",
+        target: sidecarTarget,
         changeOrigin: true,
       },
       "/health": {
-        target: "http://127.0.0.1:3333",
+        target: sidecarTarget,
         changeOrigin: true,
       },
       "/ws": {
-        target: "ws://127.0.0.1:3333",
+        target: sidecarTarget.replace(/^http/, "ws"),
         ws: true,
       },
     },

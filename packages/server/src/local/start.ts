@@ -7,7 +7,7 @@ const skipLiteLLM = process.argv.includes('--skip-litellm') || process.env.WAGGL
 
 log.info('Starting Waggle service...', { skipLiteLLM });
 
-startService({ skipLiteLLM })
+startService({ skipLiteLLM, port: parseInt(process.env.WAGGLE_PORT ?? '', 10) || undefined })
   .then(({ server }) => {
     const addr = server.server.address();
     const port = typeof addr === 'object' && addr ? addr.port : '?';
