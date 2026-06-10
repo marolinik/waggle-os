@@ -74,9 +74,36 @@ The **Phase-3 (Intelligence) items are RATIFIED as recommended** (founder, 2026-
 - **C36** Skill scope vocabulary → PRD `organization` (align §15.2 `Scope` union).
 - **C37** Skill test-run fidelity → preview-only (injected-prompt + parsed metadata) v1; live LLM dry-run deferred.
 
+## ✅ Founder Ratifications — Phase 4 gate (2026-06-10)
+
+The **Phase-4 (Extend) items are RATIFIED as recommended** (founder, 2026-06-10). Locked:
+
+- **A4** Real-where-substrate-exists, catalog-for-the-rest: connectors connect + health-probe +
+  `lastSyncAt` stamp (background data re-pull deferred); MCPs install/start/stop/test via the existing
+  marketplace installer + stdio runtime; static catalog renders honest "available / not installed"
+  states — never fake entries (PRD §22.2).
+- **A5** Marketplace → federate-at-read over the six local domains; no `marketplace.db` migration;
+  remote registry / public marketplace deferred (PRD §4.4 + §22).
+- **B5** Tier vocabulary → document the mapping; all new gates route through `@waggle/shared tiers.ts`
+  (`TierCapabilities`); MCP Hub + Marketplace install gated **PRO+**.
+- **B7** `ExtensionType` → `skill | agent | connector | mcp | model | template` (drop `external_tool`;
+  external tools surface via connectors/MCPs). Defined once in `@waggle/shared`.
+- **C15 / M2** install-audit `critical` CHECK → ship the additive migration (live sighting:
+  `marketplace.ts:228` writes `critical`, silently rejected by the DDL CHECK today).
+- **C16** Connector "sync now" v1 = re-probe health + stamp `lastSyncAt`.
+- **C17** `revoke` purges OAuth tokens + writes the stronger audit entry (PRD §17.3); `disconnect`
+  stays the lighter alias.
+- **C18** One shared `GET /api/extend/audit?type=` serving connectors + MCPs + marketplace.
+- **C19** MCP scope = single-`workspaceId` config v1 (matches stdio runtime); N:N deferred.
+- **C20** "Remote Registry" tab deferred (runtime is stdio-only); v1 points at the static catalog.
+- **C21** MCP `test` = live spawn-and-`isHealthy()`/`tools/list` round-trip where cheap; static
+  manifest validation fallback.
+- Foundational task (coverage-check C4): populate `mcpRuntime` at boot from persisted config
+  (`local/index.ts` registers none today) — explicit Phase-4 work item gating all MCP routes.
+
 ---
 
-Phase 4+ items (A4, A5, A7, B5, B7, C15–C21, C34-adjacent) remain **pending** founder ratification.
+Remaining pending: **A7** (RBAC — ratify before S10/Phase 5) + Phase-5/6 screen-local items.
 
 ## §A — PRD §23 Open Questions (the canonical 8)
 
