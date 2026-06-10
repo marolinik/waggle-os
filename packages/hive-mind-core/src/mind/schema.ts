@@ -132,7 +132,7 @@ CREATE TABLE IF NOT EXISTS install_audit (
   capability_type TEXT NOT NULL CHECK (capability_type IN ('native', 'skill', 'plugin', 'mcp', 'connector', 'marketplace')),
   source TEXT NOT NULL,
   version TEXT,
-  risk_level TEXT NOT NULL CHECK (risk_level IN ('low', 'medium', 'high')),
+  risk_level TEXT NOT NULL CHECK (risk_level IN ('low', 'medium', 'high', 'critical')),
   trust_source TEXT NOT NULL,
   approval_class TEXT NOT NULL CHECK (approval_class IN ('standard', 'elevated', 'critical', 'blocked')),
   action TEXT NOT NULL CHECK (action IN ('proposed', 'approved', 'installed', 'rejected', 'failed', 'blocked')),

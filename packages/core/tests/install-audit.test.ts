@@ -184,6 +184,37 @@ describe('InstallAuditStore', () => {
     expect(entry.action).toBe('blocked');
     expect(entry.approval_class).toBe('blocked');
   });
+
+  // M2 (UX-Refactor Phase 4 / C15): risk_level CHECK lacked 'critical' while
+  // the TS union had it — marketplace.ts's CRITICAL-block audit write was
+  // silently rejected (throw swallowed by `catch {}`). This locks the widened
+  // CHECK on fresh databases.
+  it("records riskLevel 'critical' (M2: risk_level CHECK widened)", () => {
+    const entry = store.record(makeInput({
+      riskLevel: 'critical',
+      approvalClass: 'blocked',
+      action: 'blocked',
+      trustSource: 'security-gate',
+      detail: 'SecurityGate blocked: CRITICAL findings',
+    }));
+    expect(entry.risk_level).toBe('critical');
+    expect(entry.action).toBe('blocked');
+  });
+
+  // C18: type-filtered read backing GET /api/extend/audit?type=
+  it('getRecentByType filters by capability_type, most recent first', () => {
+    store.record(makeInput({ capabilityName: 'a-skill', capabilityType: 'skill' }));
+    store.record(makeInput({ capabilityName: 'a-server', capabilityType: 'mcp' }));
+    store.record(makeInput({ capabilityName: 'b-server', capabilityType: 'mcp' }));
+    store.record(makeInput({ capabilityName: 'a-conn', capabilityType: 'connector' }));
+
+    const mcps = store.getRecentByType('mcp');
+    expect(mcps).toHaveLength(2);
+    expect(mcps[0].capability_name).toBe('b-server');
+    expect(mcps[1].capability_name).toBe('a-server');
+    expect(store.getRecentByType('mcp', 1)).toHaveLength(1);
+    expect(store.getRecentByType('native')).toHaveLength(0);
+  });
 });
 
 describe('InstallAuditStore — legacy CHECK migration', () => {
@@ -245,6 +276,137 @@ describe('InstallAuditStore — legacy CHECK migration', () => {
     const fs2 = store.getByCapability('filesystem');
     expect(fs2[0].capability_type).toBe('marketplace');
 
+    db.close();
+  });
+
+  // M2 (UX-Refactor Phase 4 / C15): the FIX-3-era DDL had every list widened
+  // EXCEPT risk_level — the exact shape real .minds created between FIX-3
+  // (2026-05-17) and Phase 4 are in. Only the new "'low', 'medium', 'high',
+  // 'critical'" sentinel triggers this rebuild ('critical' alone appears in
+  // approval_class, so it is NOT the key).
+  const FIX3_ERA_DDL = `CREATE TABLE install_audit (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+    capability_name TEXT NOT NULL,
+    capability_type TEXT NOT NULL CHECK (capability_type IN ('native', 'skill', 'plugin', 'mcp', 'connector', 'marketplace')),
+    source TEXT NOT NULL,
+    version TEXT,
+    risk_level TEXT NOT NULL CHECK (risk_level IN ('low', 'medium', 'high')),
+    trust_source TEXT NOT NULL,
+    approval_class TEXT NOT NULL CHECK (approval_class IN ('standard', 'elevated', 'critical', 'blocked')),
+    action TEXT NOT NULL CHECK (action IN ('proposed', 'approved', 'installed', 'rejected', 'failed', 'blocked')),
+    initiator TEXT NOT NULL CHECK (initiator IN ('agent', 'user', 'system')),
+    detail TEXT NOT NULL DEFAULT ''
+  )`;
+
+  it("M2: rebuilds a FIX-3-era table (risk_level missing 'critical') and preserves rows", () => {
+    {
+      const seed = new MindDB(dbPath);
+      const raw = seed.getDatabase();
+      raw.prepare('DROP TABLE IF EXISTS install_audit').run();
+      raw.prepare(FIX3_ERA_DDL).run();
+      raw.prepare(`INSERT INTO install_audit
+        (capability_name, capability_type, source, risk_level, trust_source, approval_class, action, initiator, detail)
+        VALUES ('legacy-mcp','mcp','marketplace','high','security-gate','blocked','blocked','system','pre-M2 row')`).run();
+      // Sanity: the legacy CHECK really rejects 'critical' (the live bug)
+      expect(() => raw.prepare(`INSERT INTO install_audit
+        (capability_name, capability_type, source, risk_level, trust_source, approval_class, action, initiator, detail)
+        VALUES ('x','mcp','marketplace','critical','security-gate','blocked','blocked','system','')`).run()
+      ).toThrow(/CHECK/);
+      seed.close();
+    }
+
+    // Reopen — runMigrations() must rebuild keyed on the M2 sentinel.
+    const db = new MindDB(dbPath);
+    const store = new InstallAuditStore(db);
+
+    const legacy = store.getByCapability('legacy-mcp');
+    expect(legacy).toHaveLength(1);
+    expect(legacy[0].detail).toBe('pre-M2 row');
+    expect(legacy[0].risk_level).toBe('high');
+
+    const critical = store.record({
+      capabilityName: 'evil-pkg', capabilityType: 'marketplace', source: 'marketplace',
+      riskLevel: 'critical', trustSource: 'security-gate', approvalClass: 'blocked',
+      action: 'blocked', initiator: 'system', detail: 'SecurityGate blocked: CRITICAL',
+    });
+    expect(critical.risk_level).toBe('critical');
+    db.close();
+
+    // Idempotence: a second reopen must NOT rebuild again (rows + ids stable).
+    const db2 = new MindDB(dbPath);
+    const store2 = new InstallAuditStore(db2);
+    const all = store2.getAll();
+    expect(all).toHaveLength(2);
+    expect(all.map((e) => e.capability_name)).toEqual(['legacy-mcp', 'evil-pkg']);
+    // The rebuilt DDL carries the sentinel, so a third store write still works.
+    expect(() => store2.record({
+      capabilityName: 'again', capabilityType: 'mcp', source: 'mcp',
+      riskLevel: 'critical', trustSource: 'security-gate', approvalClass: 'blocked',
+      action: 'blocked', initiator: 'system',
+    })).not.toThrow();
+    db2.close();
+  });
+
+  // The rebuild now runs in ONE transaction, so a crash mid-rebuild rolls
+  // back — but DBs damaged by a PRE-transactional crashed rebuild exist in the
+  // wild with all rows stranded in install_audit__mig_old. These lock the
+  // recovery the FIX-3 comment always promised but never performed.
+  const LEGACY_ROW_INSERT = (table: string) => `INSERT INTO ${table}
+    (capability_name, capability_type, source, risk_level, trust_source, approval_class, action, initiator, detail)
+    VALUES ('stranded','mcp','marketplace','high','security-gate','blocked','blocked','system','pre-crash row')`;
+
+  it('recovers rows stranded by a crash between RENAME and recreate (install_audit missing)', () => {
+    {
+      const seed = new MindDB(dbPath);
+      const raw = seed.getDatabase();
+      raw.prepare('DROP TABLE IF EXISTS install_audit').run();
+      raw.prepare(FIX3_ERA_DDL).run();
+      raw.prepare(LEGACY_ROW_INSERT('install_audit')).run();
+      // Simulate the pre-transactional crash: renamed aside, then process died
+      // before SCHEMA_SQL recreated install_audit.
+      raw.prepare('ALTER TABLE install_audit RENAME TO install_audit__mig_old').run();
+      seed.close();
+    }
+
+    const db = new MindDB(dbPath);
+    const store = new InstallAuditStore(db);
+    // Rows restored AND the rebuild completed (the restored table had the
+    // FIX-3-era DDL, so the M2 sentinel re-triggered the rebuild)
+    const rows = store.getByCapability('stranded');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].detail).toBe('pre-crash row');
+    expect(() => store.record({
+      capabilityName: 'post-recovery', capabilityType: 'mcp', source: 'mcp',
+      riskLevel: 'critical', trustSource: 'security-gate', approvalClass: 'blocked',
+      action: 'blocked', initiator: 'system',
+    })).not.toThrow();
+    // No stale __mig_old left to be destroyed by a future rebuild
+    const leftover = db.getDatabase().prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='install_audit__mig_old'",
+    ).get();
+    expect(leftover).toBeUndefined();
+    db.close();
+  });
+
+  it('recovers rows stranded by a crash between recreate and copy-back (fresh empty install_audit)', () => {
+    {
+      const seed = new MindDB(dbPath); // creates the CURRENT empty install_audit
+      const raw = seed.getDatabase();
+      raw.prepare(FIX3_ERA_DDL.replace('CREATE TABLE install_audit', 'CREATE TABLE install_audit__mig_old')).run();
+      raw.prepare(LEGACY_ROW_INSERT('install_audit__mig_old')).run();
+      seed.close();
+    }
+
+    const db = new MindDB(dbPath);
+    const store = new InstallAuditStore(db);
+    const rows = store.getByCapability('stranded');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].detail).toBe('pre-crash row');
+    const leftover = db.getDatabase().prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='install_audit__mig_old'",
+    ).get();
+    expect(leftover).toBeUndefined();
     db.close();
   });
 });

@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   MessageSquare, LayoutDashboard, Settings, Brain,
   Activity, Package, Radio, Zap, FolderOpen, Bot, Lock, UserCircle, Plug,
-  Clock, Store, Mic, Users, Shield, Sparkles, FileStack,
+  Clock, Store, Mic, Users, Shield, Sparkles, FileStack, Server,
 } from "lucide-react";
 import type { UserTier } from "@/lib/dock-tiers";
 import type { AppId } from "@/lib/dock-tiers";
@@ -26,6 +26,7 @@ import SettingsApp from "./apps/SettingsApp";
 import VaultApp from "./apps/VaultApp";
 import UserProfileApp from "./apps/UserProfileApp";
 import ConnectorsApp from "./apps/ConnectorsApp";
+import MCPHubApp from "./apps/MCPHubApp";
 import MemoryApp from "./apps/MemoryApp";
 import EventsApp from "./apps/EventsApp";
 import CockpitApp from "./apps/CockpitApp";
@@ -98,7 +99,9 @@ const appConfig: Record<string, { title: string; icon: React.ReactNode; pos: { x
   "agents": { title: "Agent Center", icon: <Bot className="w-3.5 h-3.5 text-orange-400" />, pos: { x: 170, y: 65 }, size: { w: "640px", h: "480px" } },
   "vault": { title: "Vault", icon: <Lock className="w-3.5 h-3.5 text-amber-400" />, pos: { x: 240, y: 70 }, size: { w: "560px", h: "480px" } },
   "profile": { title: "My Profile", icon: <UserCircle className="w-3.5 h-3.5 text-sky-400" />, pos: { x: 200, y: 60 }, size: { w: "560px", h: "520px" } },
-  "connectors": { title: "Connectors", icon: <Plug className="w-3.5 h-3.5 text-emerald-400" />, pos: { x: 220, y: 80 }, size: { w: "580px", h: "500px" } },
+  "connectors": { title: "Connector Hub", icon: <Plug className="w-3.5 h-3.5 text-emerald-400" />, pos: { x: 220, y: 80 }, size: { w: "580px", h: "500px" } },
+  // UX-Refactor Phase 4B (S08): standalone MCP Hub (Extend zone).
+  "mcp-hub": { title: "MCP Hub", icon: <Server className="w-3.5 h-3.5 text-emerald-400" />, pos: { x: 240, y: 70 }, size: { w: "640px", h: "520px" } },
   "scheduled-jobs": { title: "Automation Center", icon: <Clock className="w-3.5 h-3.5 text-amber-400" />, pos: { x: 200, y: 70 }, size: { w: "600px", h: "460px" } },
   "marketplace": { title: "Marketplace", icon: <Store className="w-3.5 h-3.5 text-orange-400" />, pos: { x: 250, y: 80 }, size: { w: "640px", h: "500px" } },
   "voice": { title: "Voice", icon: <Mic className="w-3.5 h-3.5 text-rose-400" />, pos: { x: 300, y: 90 }, size: { w: "480px", h: "400px" } },
@@ -279,7 +282,8 @@ const Desktop = () => {
     } else if (type === 'connector') {
       wm.openApp('connectors');
     } else if (type === 'mcp') {
-      wm.openApp('connectors');
+      // Phase 4B (S08): MCP results land in the standalone MCP Hub now.
+      wm.openApp('mcp-hub');
     }
   }, [wm.openApp, wm.openWorkspaceDesktop, selectWorkspace, wm.openChatForWorkspace, workspaces]);
 
@@ -404,6 +408,7 @@ const Desktop = () => {
       case 'vault': return <VaultApp />;
       case 'profile': return <UserProfileApp />;
       case 'connectors': return <ConnectorsApp personaId={activeWorkspace?.persona} />;
+      case 'mcp-hub': return <MCPHubApp personaId={activeWorkspace?.persona} />;
       case 'memory':
         return (
           <MemoryApp frames={memory.frames} selectedFrame={memory.selectedFrame} onSelectFrame={memory.setSelectedFrame}

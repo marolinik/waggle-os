@@ -208,16 +208,20 @@ const DIRECT_APPS = [
   { label: 'Approvals', expect: /approval|pending|no.*pending|history/i },
 ];
 
+// Phase 4B sweep: zone names/membership match dock-tiers.ts (System zone, not
+// "Ops"; Skills Hub lives under Intelligence; Governance under Team; the
+// Extend zone now carries Connector Hub + MCP Hub + Marketplace; Backup left
+// the dock — it lives in Settings → Backup, P23).
 const ZONE_APPS = [
-  { label: 'Command Center', zone: 'Ops', expect: /cockpit|health|cost|command/i },
-  { label: 'Timeline', zone: 'Ops', expect: /timeline|activity|no.*activity|last/i },
-  { label: 'Usage & Cost', zone: 'Ops', expect: /usage|telemetry|token|cost/i },
-  { label: 'Backup & Restore', zone: 'Ops', expect: /backup|restore|no.*backup/i },
-  { label: 'Events & Logs', zone: 'Ops', expect: /event|log|step|filter/i },
-  { label: 'Governance', zone: 'Extend', expect: /governance|role|team|permission/i },
-  { label: 'Skills Hub', zone: 'Extend', expect: /skill|installed|marketplace|starter/i },
-  { label: 'Connectors', zone: 'Extend', expect: /connector|connect|service|integration/i },
-  { label: 'Marketplace', zone: 'Extend', expect: /marketplace|browse|pack|install/i },
+  { label: 'Command Center', zone: 'System', expect: /cockpit|health|cost|command/i },
+  { label: 'Timeline', zone: 'System', expect: /timeline|activity|no.*activity|last/i },
+  { label: 'Usage & Cost', zone: 'System', expect: /usage|telemetry|token|cost/i },
+  { label: 'Events & Logs', zone: 'System', expect: /event|log|step|filter/i },
+  { label: 'Team Governance', zone: 'Team', expect: /governance|role|team|permission/i },
+  { label: 'Skills Hub', zone: 'Intelligence', expect: /skill|installed|marketplace|starter/i },
+  { label: 'Connector Hub', zone: 'Extend', expect: /connector|connect|service|integration/i },
+  { label: 'MCP Hub', zone: 'Extend', expect: /mcp|installed|catalog|server/i },
+  { label: 'Marketplace', zone: 'Extend', expect: /marketplace|browse|extension|install/i },
 ];
 
 test.describe('3. Direct Dock Apps', () => {
@@ -252,9 +256,9 @@ test.describe('5. Standalone Apps', () => {
     expect(text).toMatch(/setting|general|model|billing/i);
   });
 
-  test('API Keys (Vault) opens', async ({ page }) => {
+  test('Vault opens', async ({ page }) => {
     await gotoDesktop(page);
-    await openAppViaDock(page, 'API Keys');
+    await openAppViaDock(page, 'Vault');
     const text = await getVisibleText(page);
     expect(text).toMatch(/vault|key|api|secret|provider/i);
   });

@@ -14,7 +14,7 @@ import type {
   Workspace, WorkspaceContext, ChatMessage, MemoryFrame, Memory,
   AgentStep, Session, SkillPack, FleetSession, CronJob,
   Notification, AgentStatus, Persona, SystemHealth,
-  Connector, Settings, StreamEvent, KGNode, KGEdge,
+  Settings, StreamEvent, KGNode, KGEdge,
   ModelPricing, WaggleSignal, FileEntry, WorkspaceTemplate,
   TimelineEvent,
   HomeBriefing, OvernightSummary, QuickCaptureInput,
@@ -22,7 +22,10 @@ import type {
   Artifact, RelatedSearchResult,
   Agent, AgentTrace, Automation, AutomationLog,
 } from './types';
-import type { Command, CommandResult, WorkspaceType } from '@waggle/shared';
+import type {
+  Command, CommandResult, WorkspaceType,
+  ConnectorDefinition, ConnectorHealth, McpInstance, ExtensionType,
+} from '@waggle/shared';
 
 /**
  * CC Sesija A §2.2 — map adapter `MemoryFrame.importance` (number 1-4) to the
@@ -976,20 +979,22 @@ class LocalAdapter {
   }
 
   /**
-   * BUG #7 (marketplace boot-race): these four endpoints back MarketplaceApp's
-   * Browse/Installed tabs and install/uninstall actions. They MUST go through
-   * the authenticated `this.fetch()` (which attaches the bearer token) — a raw
-   * fetch() returns 401 before the session token has bootstrapped, and the UI
-   * was silently caching the empty 401 body as an empty catalog. The install/
-   * uninstall variants return the raw Response so the caller can keep its
-   * existing status-aware handling (403 → UpgradeModal, scan-blocked toasts).
+   * BUG #7 (marketplace boot-race): these endpoints back the S21 Marketplace
+   * install/uninstall actions and the chat CapabilityRequestCard search. They
+   * MUST go through the authenticated `this.fetch()` (which attaches the
+   * bearer token) — a raw fetch() returns 401 before the session token has
+   * bootstrapped, and the UI was silently caching the empty 401 body as an
+   * empty catalog. The install/uninstall variants return the raw Response so
+   * the caller can keep its existing status-aware handling (403 →
+   * UpgradeModal, scan-blocked toasts).
+   *
+   * NOTE: there is deliberately NO installMarketplacePack — POST
+   * /api/marketplace/install resolves PACKAGE ids only; posting a pack id
+   * installs an unrelated entity (or 404s). Packs render browse-only in S21
+   * until a real install-pack route exists.
    */
   async searchMarketplace(query: string, limit = 20): Promise<Response> {
     return this.fetch(`/api/marketplace/search?query=${encodeURIComponent(query)}&limit=${limit}`);
-  }
-
-  async getMarketplaceInstalled(): Promise<Response> {
-    return this.fetch('/api/marketplace/installed');
   }
 
   async installMarketplacePackage(packageId: number): Promise<Response> {
@@ -1004,24 +1009,6 @@ class LocalAdapter {
       method: 'POST',
       body: JSON.stringify({ packageId }),
     });
-  }
-
-  async installMarketplacePack(packId: string): Promise<void> {
-    const res = await this.fetch('/api/marketplace/install', {
-      method: 'POST',
-      body: JSON.stringify({ packageId: packId }),
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({} as Record<string, unknown>));
-      const err = new Error(
-        (body as { error?: string; message?: string }).error
-          ?? (body as { message?: string }).message
-          ?? `Install failed (${res.status})`,
-      ) as Error & { status?: number; body?: unknown };
-      err.status = res.status;
-      err.body = body;
-      throw err;
-    }
   }
 
   async uninstallMarketplacePack(packId: string): Promise<void> {
@@ -1613,22 +1600,141 @@ class LocalAdapter {
   }
 
   // --- Connectors ---
-  async getConnectors(): Promise<Connector[]> {
+  /** §8a consumption switch: the shared ConnectorDefinition (incl. the C16
+   *  lastSyncAt enrichment) replaces the deleted thin FE `Connector` type. */
+  async getConnectors(): Promise<ConnectorDefinition[]> {
     const res = await this.fetch('/api/connectors');
+    // Throw on auth/server errors instead of unwrapping the error body to []
+    // (the 401 boot-race → silent "0 of 0 connected" hub failure mode).
+    if (!res.ok) throw new Error(`getConnectors failed: ${res.status}`);
     return unwrapArray(await res.json());
   }
 
-  async getConnectorHealth(id: string): Promise<unknown> {
+  async getConnectorHealth(id: string): Promise<ConnectorHealth> {
     const res = await this.fetch(`/api/connectors/${id}/health`);
     return res.json();
   }
 
-  async connectConnector(id: string): Promise<void> {
-    await this.fetch(`/api/connectors/${id}/connect`, { method: 'POST' });
+  async connectConnector(id: string, credentials?: {
+    token?: string; apiKey?: string; refreshToken?: string;
+    expiresAt?: string; scopes?: string[]; email?: string;
+  }): Promise<void> {
+    await this.fetch(`/api/connectors/${id}/connect`, {
+      method: 'POST',
+      body: JSON.stringify(credentials ?? {}),
+    });
   }
 
   async disconnectConnector(id: string): Promise<void> {
     await this.fetch(`/api/connectors/${id}/disconnect`, { method: 'POST' });
+  }
+
+  /** C16: sync-now = health re-probe + lastSyncAt stamp (no data re-pull v1). */
+  async syncConnector(id: string): Promise<{ ok: boolean; connectorId: string; lastSyncAt?: string; status?: string }> {
+    const res = await this.fetch(`/api/connectors/${id}/sync`, { method: 'POST' });
+    return res.json();
+  }
+
+  /** C17: the strong disconnect — purges OAuth tokens + writes a revoke audit
+   *  entry. 404/503 error bodies resolve as data (`ok` absent, `error` set) —
+   *  callers MUST branch on `ok` before claiming success. */
+  async revokeConnector(id: string): Promise<{
+    ok?: boolean; connectorId?: string; revoked?: boolean;
+    cleanedKeys?: number; oauthPurged?: number; error?: string;
+  }> {
+    const res = await this.fetch(`/api/connectors/${id}/revoke`, { method: 'POST' });
+    return res.json();
+  }
+
+  // --- MCP Hub (Phase 4, S08) ---
+  async getMcps(): Promise<Array<Partial<McpInstance> & {
+    id: string; name: string; description: string; category: string;
+    official: boolean; installCmd: string; source: 'catalog' | 'custom';
+    installed: boolean; tools: string[];
+  }>> {
+    const res = await this.fetch('/api/mcps');
+    return unwrapArray(await res.json());
+  }
+
+  /** PRO+ (B5); delegates to the marketplace installer (SecurityGate + audit).
+   *  `force` = reinstall over an existing install; `forceInsecure` = the
+   *  audited override for an installer-level HIGH scan block (the block that
+   *  actually fires — `force` alone does NOT override it). */
+  async installMcp(mcpId: string, opts?: { settings?: Record<string, string>; force?: boolean; forceInsecure?: boolean }): Promise<{
+    installed: boolean; server?: string; status?: string; requiresApproval?: boolean;
+  }> {
+    const res = await this.fetch('/api/mcps/install', {
+      method: 'POST',
+      body: JSON.stringify({ mcpId, ...opts }),
+    });
+    return res.json();
+  }
+
+  async addCustomMcp(config: {
+    name: string; command: string; args?: string[];
+    env?: Record<string, string>; workspaceId?: string;
+  }): Promise<{ id: string; registered: boolean }> {
+    const res = await this.fetch('/api/mcps', { method: 'POST', body: JSON.stringify(config) });
+    return res.json();
+  }
+
+  /** C21: mode 'live' = real spawn + handshake; 'static' = manifest validation. */
+  async testMcp(id: string): Promise<{ ok: boolean; mode: 'live' | 'static'; tools: string[]; error?: string }> {
+    const res = await this.fetch(`/api/mcps/${id}/test`, { method: 'POST' });
+    return res.json();
+  }
+
+  async startMcp(id: string): Promise<{ status: string; error?: string }> {
+    const res = await this.fetch(`/api/mcps/${id}/start`, { method: 'POST' });
+    return res.json();
+  }
+
+  async stopMcp(id: string): Promise<{ status: string; error?: string }> {
+    const res = await this.fetch(`/api/mcps/${id}/stop`, { method: 'POST' });
+    return res.json();
+  }
+
+  async revokeMcp(id: string): Promise<{ ok: boolean; stoppedInstance: boolean; removedConfig: boolean }> {
+    const res = await this.fetch(`/api/mcps/${id}/revoke`, { method: 'POST' });
+    return res.json();
+  }
+
+  /** C19: single-workspace scoping v1 — pass workspaceId, or scope:'personal'
+   *  to clear. 400/404 error bodies resolve as data (`ok` absent, `error`
+   *  set) — callers MUST branch on `ok`. */
+  async updateMcpPermissions(id: string, body: { scope?: 'personal' | 'workspace'; workspaceId?: string }): Promise<{
+    ok?: boolean; scope?: string; workspaceId?: string; error?: string;
+  }> {
+    const res = await this.fetch(`/api/mcps/${id}/permissions`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+    return res.json();
+  }
+
+  // --- Extend layer (Phase 4, S21) ---
+  /** Bare marketplace read; `type` takes the six-domain ExtensionType facet (B7/A5). */
+  async getMarketplace(params?: { query?: string; type?: ExtensionType; limit?: number }): Promise<{
+    packages: unknown[]; total: number; federated?: boolean;
+  }> {
+    const qs = new URLSearchParams();
+    if (params?.query) qs.set('query', params.query);
+    if (params?.type) qs.set('type', params.type);
+    if (params?.limit) qs.set('limit', String(params.limit));
+    const s = qs.toString();
+    const res = await this.fetch(`/api/marketplace${s ? `?${s}` : ''}`);
+    return res.json();
+  }
+
+  /** C18: ONE shared install-audit feed for S06/S07/S08/S21. */
+  async getExtendAudit(params?: { type?: 'skill' | 'plugin' | 'mcp' | 'connector' | 'marketplace' | 'native'; capability?: string; limit?: number }): Promise<unknown[]> {
+    const qs = new URLSearchParams();
+    if (params?.type) qs.set('type', params.type);
+    if (params?.capability) qs.set('capability', params.capability);
+    if (params?.limit) qs.set('limit', String(params.limit));
+    const s = qs.toString();
+    const res = await this.fetch(`/api/extend/audit${s ? `?${s}` : ''}`);
+    return unwrapArray(await res.json());
   }
 
   // --- Vault ---

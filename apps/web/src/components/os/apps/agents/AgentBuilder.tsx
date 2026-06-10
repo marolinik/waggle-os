@@ -6,8 +6,8 @@ import { ApprovalModal, type ApprovalRequest } from '@/components/ui/approval-mo
 import ModelSelector from '@/components/os/ModelSelector';
 import { useProviders } from '@/hooks/useProviders';
 import { adapter } from '@/lib/adapter';
-import type { Connector, Persona, Workspace } from '@/lib/types';
-import type { AgentType, AutonomyLevel, Scope } from '@waggle/shared';
+import type { Persona, Workspace } from '@/lib/types';
+import type { AgentType, AutonomyLevel, ConnectorDefinition, Scope } from '@waggle/shared';
 
 /**
  * Agent Builder (UX-Refactor Phase 3C, S18 — PRD §12.9). Replaces the 3B
@@ -121,7 +121,7 @@ const AgentBuilder = ({ busy, initial, workspaces, onCreate, onCancel }: AgentBu
   // Catalogs
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [skills, setSkills] = useState<string[]>([]);
-  const [connectors, setConnectors] = useState<Connector[]>([]);
+  const [connectors, setConnectors] = useState<ConnectorDefinition[]>([]);
   const [mcpServers, setMcpServers] = useState<string[]>([]);
   const [catalogNote, setCatalogNote] = useState<string | null>(null);
   const { providers } = useProviders();

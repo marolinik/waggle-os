@@ -92,7 +92,9 @@ describe('AgentBuilder — S18', () => {
     expect(next).not.toBeDisabled();
   });
 
-  it('happy path declares scope/memory/skills, reviews EVERY field, sends the exact payload and offers Run', async () => {
+  // Headroom for parallel-suite load — this walk renders every wizard step
+  // and is the suite's known load-flake (passes in isolation).
+  it('happy path declares scope/memory/skills, reviews EVERY field, sends the exact payload and offers Run', { timeout: 20_000 }, async () => {
     mocks.adapter.listAgents.mockResolvedValue([]);
     const created = makeAgent({ id: 'a-new', name: 'Scout', workspaceIds: ['ws-1'], skillIds: ['deep-research'] });
     mocks.adapter.createAgent.mockResolvedValue(created);

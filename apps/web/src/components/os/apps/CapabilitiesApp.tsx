@@ -13,6 +13,7 @@ import { HintTooltip } from '@/components/ui/hint-tooltip';
 import SkillRow from './skills/SkillRow';
 import SkillEditorDrawer from './skills/SkillEditorDrawer';
 import SkillBuilder from './skills/SkillBuilder';
+import InstallAuditPanel from './extend/InstallAuditPanel';
 
 /**
  * Skills Hub (UX-Refactor Phase 3B, S06). Browse / install / author / test
@@ -25,53 +26,6 @@ import SkillBuilder from './skills/SkillBuilder';
  *  - The PRO tier gate stays load-bearing: 403 → 'waggle:tier-insufficient'
  *    → UpgradeModal.
  */
-
-interface AuditEntry { id: number; name: string; source: string; outcome: string; timestamp: string }
-
-const AuditTab = ({ log, onLoad }: { log: AuditEntry[]; onLoad: (entries: AuditEntry[]) => void }) => {
-  const [loading, setLoading] = useState(log.length === 0);
-
-  useEffect(() => {
-    if (log.length > 0) return;
-    adapter.fetch('/api/audit/installs').then(r => r.json())
-      .then(data => {
-        // Server emits { entries: [{ id, timestamp, capabilityName, source, action, ... }] }.
-        // The older /audit/installs shape returned data.installs — keep both for resilience.
-        const rows = Array.isArray(data)
-          ? data
-          : (data.entries ?? data.installs ?? []);
-        const normalized: AuditEntry[] = rows.map((e: Record<string, unknown>) => ({
-          id: Number(e.id ?? 0),
-          name: String(e.name ?? e.capabilityName ?? 'unknown'),
-          source: String(e.source ?? 'unknown'),
-          outcome: String(e.outcome ?? e.action ?? 'unknown'),
-          timestamp: String(e.timestamp ?? new Date().toISOString()),
-        }));
-        onLoad(normalized);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, []);
-
-  if (loading) return <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>;
-  if (log.length === 0) return <p className="text-sm text-muted-foreground text-center py-8">No install history yet.</p>;
-
-  return (
-    <div className="space-y-1.5">
-      <p className="text-[11px] text-muted-foreground mb-2">Recent skill and pack installations with trust source and outcome.</p>
-      {log.map(entry => (
-        <div key={entry.id} className="flex items-center gap-3 p-2 rounded-lg bg-secondary/30 border border-border/30">
-          {entry.outcome === 'success' ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> : <X className="w-3.5 h-3.5 text-destructive shrink-0" />}
-          <div className="flex-1 min-w-0">
-            <span className="text-xs text-foreground font-display truncate block">{entry.name}</span>
-            <span className="text-[11px] text-muted-foreground">{entry.source}</span>
-          </div>
-          <span className="text-[10px] text-muted-foreground shrink-0">{new Date(entry.timestamp).toLocaleDateString()}</span>
-        </div>
-      ))}
-    </div>
-  );
-};
 
 const trustBadges: Record<string, { color: string; icon: React.ElementType }> = {
   verified: { color: 'text-emerald-400', icon: CheckCircle2 },
@@ -104,7 +58,7 @@ const TAB_LABELS: Record<HubTab, string> = {
 
 const TAB_HINTS: Record<HubTab, string> = {
   'my-skills': 'Every skill installed on this machine — test or edit any of them',
-  marketplace: 'Browse community + official packs (skills, plugins, connectors). Synced from registry periodically.',
+  marketplace: 'The Marketplace is now ONE consolidated surface in the Extend zone — this tab points there.',
   custom: 'Skills you authored locally (not from any catalog)',
   workspace: 'Workspace-scoped skills (scope metadata lands with the backend ?scope= filter)',
   starter: 'Curated skill packs that ship with Waggle — starter packs + capability packs',
@@ -118,7 +72,6 @@ const CapabilitiesApp = () => {
   // catalog calls before the session token exists.
   const { connecting } = useService();
   const [packs, setPacks] = useState<CatalogPack[]>([]);
-  const [marketplacePacks, setMarketplacePacks] = useState<SkillPack[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -126,7 +79,6 @@ const CapabilitiesApp = () => {
   const [installing, setInstalling] = useState<string | null>(null);
   const [installError, setInstallError] = useState<string | null>(null);
   const [tab, setTab] = useState<HubTab>('my-skills');
-  const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [testResult, setTestResult] = useState<{ name: string; preview: string; metadata?: Record<string, unknown> } | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
@@ -192,7 +144,8 @@ const CapabilitiesApp = () => {
         // L-17 C4 — de-dup by id||name (the catalogs can overlap).
         setPacks(dedupePacks(all) as CatalogPack[]);
         if (marketplace.status === 'fulfilled') {
-          setMarketplacePacks(dedupePacks(marketplace.value));
+          // Phase 4B: the marketplace pack GRID moved to the consolidated S21
+          // surface; the catalog stays load-bearing here for classification.
           marketplace.value.forEach(p => {
             marketplaceNames.add(p.id || p.name);
             (p.skills ?? []).forEach(n => marketplaceNames.add(n));
@@ -271,24 +224,11 @@ const CapabilitiesApp = () => {
     } finally { setInstalling(null); }
   };
 
-  const handleMarketplaceInstall = async (packId: string) => {
-    setInstalling(packId);
-    setInstallError(null);
-    try {
-      await adapter.installMarketplacePack(packId);
-      setMarketplacePacks(prev => prev.map(p => p.id === packId ? { ...p, installed: true } : p));
-      // Same reconcile as handleInstall — surface the new skills immediately.
-      load();
-    } catch (err) {
-      if (!handleInstallError(err, packId)) {
-        setInstallError(err instanceof Error ? err.message : `Failed to install "${packId}"`);
-      }
-    } finally { setInstalling(null); }
-  };
-
   const q = search.toLowerCase();
-  const displayPacks = tab === 'marketplace' ? marketplacePacks : packs;
-  const filtered = displayPacks.filter(p =>
+  // Phase 4B (S21 consolidation): the Marketplace tab no longer renders its
+  // own pack grid — it points at the single Marketplace surface. The
+  // getMarketplacePacks read above stays load-bearing for skill classification.
+  const filtered = packs.filter(p =>
     (p.name ?? '').toLowerCase().includes(q) ||
     (p.description ?? '').toLowerCase().includes(q)
   );
@@ -296,7 +236,7 @@ const CapabilitiesApp = () => {
     .filter(s => !q || s.name.toLowerCase().includes(q) || (s.preview ?? '').toLowerCase().includes(q));
 
   const isSkillTab = tab === 'my-skills' || tab === 'custom' || tab === 'workspace';
-  const isPackTab = tab === 'marketplace' || tab === 'starter';
+  const isPackTab = tab === 'starter';
 
   const PackCard = ({ pack, onInstall }: { pack: CatalogPack; onInstall: (pack: CatalogPack) => void }) => {
     const trust = trustBadges[pack.trust] || trustBadges.community;
@@ -426,10 +366,8 @@ const CapabilitiesApp = () => {
               <button
                 type="button"
                 onClick={() => {
-                  const id = pack.id || pack.name;
                   setSelectedPack(null);
-                  if (tab === 'marketplace') handleMarketplaceInstall(id);
-                  else handleInstall(pack);
+                  void handleInstall(pack);
                 }}
                 disabled={installing === (pack.id || pack.name)}
                 className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-50 transition-colors font-display"
@@ -556,7 +494,27 @@ const CapabilitiesApp = () => {
         )
       )}
 
-      {/* Pack tabs: Packs (starter + capability) / Marketplace */}
+      {/* Marketplace tab — Phase 4B (S21): points at the ONE consolidated
+          Marketplace surface instead of duplicating its grid here. */}
+      {tab === 'marketplace' && (
+        <div className="text-center py-10 max-w-sm mx-auto" data-testid="marketplace-pointer">
+          <Store className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+          <p className="text-xs text-foreground font-display font-medium mb-1">The Marketplace has moved</p>
+          <p className="text-[11px] text-muted-foreground mb-3">
+            Skills, agents, connectors, MCPs, models and templates now live in one consolidated
+            Marketplace under the dock&rsquo;s Extend zone.
+          </p>
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('waggle:open-app', { detail: { appId: 'marketplace' } }))}
+            className="px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 transition-colors font-display"
+          >
+            Open Marketplace
+          </button>
+        </div>
+      )}
+
+      {/* Pack tab: starter + capability packs */}
       {isPackTab && (
         <>
           <div className={viewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 gap-2' : 'space-y-2'}>
@@ -564,16 +522,14 @@ const CapabilitiesApp = () => {
               <PackCard
                 key={`${pack.id || pack.name}-${pack.category || 'uncategorized'}-${index}`}
                 pack={pack}
-                onInstall={tab === 'marketplace'
-                  ? (p) => handleMarketplaceInstall(p.id || p.name)
-                  : (p) => void handleInstall(p)}
+                onInstall={(p) => void handleInstall(p)}
               />
             ))}
           </div>
           {!loading && filtered.length === 0 && (
             <div className="text-center py-8">
               <Package className="w-8 h-8 text-muted-foreground/20 mx-auto mb-2" />
-              <p className="text-xs text-muted-foreground">No {tab === 'marketplace' ? 'marketplace' : 'catalog'} packs found</p>
+              <p className="text-xs text-muted-foreground">No catalog packs found</p>
             </div>
           )}
         </>
@@ -612,9 +568,15 @@ const CapabilitiesApp = () => {
           ))}
         </div>
       )}
-      {/* Audit tab — install history */}
+      {/* Audit tab — the C18 shared install-audit feed (Phase 4B). The feed
+          spans EVERY capability type, so the copy says so and the type
+          filter is exposed (claiming "skills and packs" over a mixed feed
+          would be dishonest). */}
       {tab === 'audit' && (
-        <AuditTab log={auditLog} onLoad={setAuditLog} />
+        <div className="space-y-2">
+          <p className="text-[11px] text-muted-foreground">Capability install history — skills, packs, MCPs, connectors and marketplace packages. Filter by type.</p>
+          <InstallAuditPanel showFilter limit={25} />
+        </div>
       )}
 
       {/* M-45 / P29 — pack detail drawer */}

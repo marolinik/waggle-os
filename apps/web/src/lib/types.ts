@@ -574,12 +574,9 @@ export interface SystemHealth {
   services: { name: string; status: string }[];
 }
 
-export interface Connector {
-  id: string;
-  name: string;
-  type: string;
-  status: 'connected' | 'disconnected' | 'error';
-}
+// §8a (UX-Refactor Phase 4B): the thin local `Connector` duplicate was deleted —
+// consume `ConnectorDefinition` / `ConnectorHealth` / `ConnectorStatus` from
+// `@waggle/shared` instead (richer status union incl. 'expired', category, authType).
 
 export interface StreamEvent {
   type: 'token' | 'step' | 'tool_start' | 'tool_end' | 'done' | 'error' | 'approval_request' | 'approval_required' | 'model_switch' | 'notification';

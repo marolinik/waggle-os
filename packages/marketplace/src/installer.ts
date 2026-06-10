@@ -39,7 +39,14 @@ const WAGGLE_DIR = join(homedir(), '.waggle');
 const SKILLS_DIR = join(WAGGLE_DIR, 'skills');
 const PLUGINS_DIR = join(WAGGLE_DIR, 'plugins');
 const REGISTRY_PATH = join(PLUGINS_DIR, 'registry.json');
-const MCP_CONFIG_PATH = join(process.cwd(), '.mcp.json');
+// UX-Refactor Phase 4 (C4): the sidecar boot loader reads <dataDir>/.mcp.json
+// (dataDir = WAGGLE_DATA_DIR or ~/.waggle — see server local/mcp-config.ts).
+// This previously wrote to process.cwd(), a file nothing ever read.
+// Resolved at CALL time (not module import) so a host that sets
+// WAGGLE_DATA_DIR after this module loads still writes to the right place.
+function mcpConfigPath(): string {
+  return join(process.env.WAGGLE_DATA_DIR || WAGGLE_DIR, '.mcp.json');
+}
 
 /** Waggle server API base URL (when running locally) */
 const API_BASE = process.env.WAGGLE_API_URL || 'http://localhost:3000';
@@ -149,13 +156,20 @@ export class MarketplaceInstaller {
         };
     }
 
-    // Record in installations table if successful
+    // Record in installations table if successful. Settings VALUES are
+    // typically API keys (§7.1 vault-only secrets) — persist only the keys so
+    // the row still documents WHICH settings were supplied without duplicating
+    // the secrets into a third plaintext store (.mcp.json already carries the
+    // resolved env; see server local/mcp-config.ts for the accepted exposure).
     if (result.success) {
+      const settingKeys = Object.fromEntries(
+        Object.keys(request.settings ?? {}).map((k) => [k, '[redacted]']),
+      );
       this.db.recordInstallation(
         pkg.id,
         pkg.version,
         result.installPath,
-        request.settings || {},
+        settingKeys,
       );
       // Attach scan result to install result
       result.scanResult = scanResult;
@@ -482,7 +496,7 @@ export class MarketplaceInstaller {
         packageId: pkg.id,
         packageName: pkg.name,
         installType: 'mcp',
-        installPath: MCP_CONFIG_PATH,
+        installPath: mcpConfigPath(),
         message: 'No MCP server configuration found in package manifest.',
         errors: ['Missing mcp_config in install_manifest'],
       };
@@ -518,8 +532,8 @@ export class MarketplaceInstaller {
         packageId: pkg.id,
         packageName: pkg.name,
         installType: 'mcp',
-        installPath: MCP_CONFIG_PATH,
-        message: `MCP server "${pkg.display_name}" added to ${MCP_CONFIG_PATH}`,
+        installPath: mcpConfigPath(),
+        message: `MCP server "${pkg.display_name}" added to ${mcpConfigPath()}`,
       };
     } catch (err) {
       return {
@@ -527,7 +541,7 @@ export class MarketplaceInstaller {
         packageId: pkg.id,
         packageName: pkg.name,
         installType: 'mcp',
-        installPath: MCP_CONFIG_PATH,
+        installPath: mcpConfigPath(),
         message: `Failed to install MCP server: ${(err as Error).message}`,
         errors: [(err as Error).message],
       };
@@ -709,22 +723,22 @@ This skill was installed from the marketplace. Configure or extend it as needed 
 
   private updateMcpConfig(serverConfig: McpServerConfig): void {
     let mcpJson: McpConfigFile = { mcpServers: {} };
-    if (existsSync(MCP_CONFIG_PATH)) {
-      mcpJson = JSON.parse(readFileSync(MCP_CONFIG_PATH, 'utf-8')) as McpConfigFile;
+    if (existsSync(mcpConfigPath())) {
+      mcpJson = JSON.parse(readFileSync(mcpConfigPath(), 'utf-8')) as McpConfigFile;
     }
     mcpJson.mcpServers[serverConfig.name] = {
       command: serverConfig.command,
       args: serverConfig.args,
       ...(serverConfig.env && { env: serverConfig.env }),
     };
-    writeFileSync(MCP_CONFIG_PATH, JSON.stringify(mcpJson, null, 2), 'utf-8');
+    writeFileSync(mcpConfigPath(), JSON.stringify(mcpJson, null, 2), 'utf-8');
   }
 
   private removeMcpConfig(serverName: string): void {
-    if (!existsSync(MCP_CONFIG_PATH)) return;
-    const mcpJson = JSON.parse(readFileSync(MCP_CONFIG_PATH, 'utf-8')) as McpConfigFile;
+    if (!existsSync(mcpConfigPath())) return;
+    const mcpJson = JSON.parse(readFileSync(mcpConfigPath(), 'utf-8')) as McpConfigFile;
     delete mcpJson.mcpServers[serverName];
-    writeFileSync(MCP_CONFIG_PATH, JSON.stringify(mcpJson, null, 2), 'utf-8');
+    writeFileSync(mcpConfigPath(), JSON.stringify(mcpJson, null, 2), 'utf-8');
   }
 
   private async runPostInstallHook(hook: PostInstallHook, cwd: string): Promise<void> {

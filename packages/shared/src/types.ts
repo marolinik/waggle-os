@@ -322,6 +322,9 @@ export interface ConnectorDefinition {
   category?: 'productivity' | 'development' | 'crm' | 'data' | 'communication' | 'storage' | 'integration';
   /** 1-2 sentences: what credential is needed and where to get it */
   setupGuide?: string;
+  /** When the connector was last manually synced (C16). GET /api/connectors
+   *  enriches each definition with this from the vault stamp. */
+  lastSyncAt?: string;
 }
 
 /** Connector health for cockpit display */
@@ -332,6 +335,10 @@ export interface ConnectorHealth {
   lastChecked: string;
   error?: string;
   tokenExpiresAt?: string;
+  /** When the connector was last manually synced (C16: sync-now = health
+   *  re-probe + stamp). Stamped by POST /api/connectors/:id/sync; merged into
+   *  GET /api/connectors/:id/health (and the fallback path) from the vault. */
+  lastSyncAt?: string;
 }
 
 // === UX-Refactor vocabulary (PRD §15.2) ===
@@ -362,8 +369,35 @@ export const AGENT_RUN_STATES = [
   'waiting_for_approval', 'completed', 'archived',
 ] as const;
 export type AgentRunState = (typeof AGENT_RUN_STATES)[number];
-export type ExtensionType =
-  | 'skill' | 'connector' | 'mcp' | 'model' | 'template' | 'external_tool';
+/** PRD §15.2 / §12.13 extension domains (B7 ratified: drop 'external_tool' —
+ *  external tools surface via connectors/MCPs — and add 'agent'). Const tuple
+ *  so the Extend routes validate the `type` facet against the runtime list. */
+export const EXTENSION_TYPES = [
+  'skill', 'agent', 'connector', 'mcp', 'model', 'template',
+] as const;
+export type ExtensionType = (typeof EXTENSION_TYPES)[number];
+
+/**
+ * Installed MCP-server instance state (shared-types-delta §8b). The CATALOG
+ * entry stays `McpServer` (mcp-catalog.ts) — `McpInstance.id` references
+ * `McpServer.id` for catalog installs, or the custom server name for
+ * user-added servers (POST /api/mcps). Produced by GET /api/mcps.
+ *
+ * v1 carries ONLY fields the route actually emits. The delta's
+ * version/riskLevel/permissions/lastUsedAt fields are deferred (no producer
+ * yet); per-tool `permissions` granularity is deferred together with C19's
+ * single-workspaceId scope model — PATCH /api/mcps/:id/permissions accepts
+ * `{ workspaceId }` or `{ scope: 'personal' }` only.
+ */
+export interface McpInstance {
+  id: string;
+  name: string;
+  status: 'installed' | 'running' | 'stopped' | 'error';
+  /** Locality (§17.3): 'workspace' when pinned to a workspaceId, else 'personal'. */
+  scope: Scope;
+  /** Workspace/agent ids this server is pinned to (C19: single workspaceId v1). */
+  connectedTo?: string[];
+}
 
 /**
  * PRD §15.3 workspace contract — the normalized shape the sidecar route layer

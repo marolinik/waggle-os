@@ -1,7 +1,7 @@
 import type { ElementType } from 'react';
 import {
   LayoutDashboard, MessageSquare, FolderOpen, Settings, Bot, Brain,
-  Zap, Activity, Radio, Clock, Package, Plug, Store, Lock, Users, Shield, Rocket, FileStack,
+  Zap, Activity, Radio, Clock, Package, Plug, Store, Lock, Users, Shield, Rocket, FileStack, Server,
 } from 'lucide-react';
 
 export type AppId =
@@ -13,7 +13,9 @@ export type AppId =
   | 'backup' | 'telemetry' | 'governance' | 'launcher'
   // UX-Refactor Phase 1 (S02): single-workspace runtime surface, opened from
   // Home / workspace selection (not a dock entry — A1 fixed-layout window).
-  | 'workspace-desktop';
+  | 'workspace-desktop'
+  // UX-Refactor Phase 4B (S08): standalone MCP Hub under the Extend zone.
+  | 'mcp-hub';
 
 export type UserTier = 'simple' | 'professional' | 'power' | 'admin';
 
@@ -70,9 +72,11 @@ const POWER_CONFIG: DockEntry[] = [
   {
     type: 'zone-parent', key: 'extend', icon: Package, label: 'Extend', color: 'text-emerald-400',
     children: [
-      { type: 'app', key: 'connect', appId: 'connectors', icon: Plug, label: 'Connectors', color: 'text-emerald-400' },
+      { type: 'app', key: 'connect', appId: 'connectors', icon: Plug, label: 'Connector Hub', color: 'text-emerald-400' },
+      // Phase 4B (S08/S21): the dedicated Extend entries landed.
+      { type: 'app', key: 'mcp-hub', appId: 'mcp-hub', icon: Server, label: 'MCP Hub', color: 'text-emerald-400' },
+      { type: 'app', key: 'marketplace', appId: 'marketplace', icon: Store, label: 'Marketplace', color: 'text-orange-400' },
       { type: 'app', key: 'launcher', appId: 'launcher', icon: Rocket, label: 'AI Tools', color: 'text-amber-400' },
-      // Marketplace + MCP Hub gain dedicated Extend entries in Phase 4 (S08/S21).
     ],
   },
   // ── Team (TEAMS-tier; whole zone hidden below TEAMS) ──

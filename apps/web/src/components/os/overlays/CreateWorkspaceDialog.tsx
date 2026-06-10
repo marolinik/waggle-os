@@ -16,7 +16,8 @@ import { useFeatureGate } from '@/hooks/useFeatureGate';
 import { useWorkspaces } from '@/hooks/useWorkspaces';
 import LockedFeature from '@/components/os/LockedFeature';
 import { buildBreadcrumbs } from '@/lib/browse-breadcrumbs';
-import type { StorageType, WorkspaceTemplate, Connector, TemplateCategory } from '@/lib/types';
+import type { StorageType, WorkspaceTemplate, TemplateCategory } from '@/lib/types';
+import type { ConnectorDefinition } from '@waggle/shared';
 
 /** Use native OS folder picker when running inside Tauri, falls back to custom browse modal. */
 async function pickFolderNative(): Promise<string | null> {
@@ -645,7 +646,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
   const [templateSearch, setTemplateSearch] = useState('');
 
   // Connectors from backend
-  const [connectors, setConnectors] = useState<Connector[]>([]);
+  const [connectors, setConnectors] = useState<ConnectorDefinition[]>([]);
 
   // Agent groups
   const [agentGroups, setAgentGroups] = useState<AgentGroupOption[]>([]);
@@ -658,7 +659,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
     setLoadingTemplates(true);
     Promise.all([
       adapter.getWorkspaceTemplates().catch(() => ({ templates: [] as WorkspaceTemplate[] })),
-      adapter.getConnectors().catch(() => [] as Connector[]),
+      adapter.getConnectors().catch(() => [] as ConnectorDefinition[]),
       adapter.getAgentGroups().catch(() => [] as unknown[]),
     ]).then(([tmplData, connData, groupsData]) => {
       setTemplates(tmplData.templates);

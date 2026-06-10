@@ -3,7 +3,7 @@ import {
   Search, MessageSquare, Brain, Clock, Settings, Loader2,
   LayoutDashboard, Bot, FolderOpen, Activity, Package, Plug,
   Store, Mic, Sparkles, Shield, Users, FileText, Globe,
-  Radio, Zap, Lock, UserCircle,
+  Radio, Zap, Lock, UserCircle, Server,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
@@ -47,7 +47,8 @@ const COMMANDS: SearchResult[] = [
   { category: 'command', id: 'mission-control', title: 'Mission Control', subtitle: 'Multi-agent overview', icon: Radio, score: 0 },
   { category: 'command', id: 'capabilities', title: 'Skills & Apps', subtitle: 'Installed capabilities', icon: Package, score: 0 },
   { category: 'command', id: 'waggle-dance', title: 'Waggle Dance', subtitle: 'Cross-workspace signals', icon: Zap, score: 0 },
-  { category: 'command', id: 'connectors', title: 'Connectors', subtitle: 'Service integrations', icon: Plug, score: 0 },
+  { category: 'command', id: 'connectors', title: 'Connector Hub', subtitle: 'Service integrations', icon: Plug, score: 0 },
+  { category: 'command', id: 'mcp-hub', title: 'MCP Hub', subtitle: 'MCP servers — install, scope, test', icon: Server, score: 0 },
   { category: 'command', id: 'scheduled-jobs', title: 'Scheduled Jobs', subtitle: 'Recurring tasks', icon: Clock, score: 0 },
   { category: 'command', id: 'marketplace', title: 'Marketplace', subtitle: 'Browse extensions', icon: Store, score: 0 },
   { category: 'command', id: 'voice', title: 'Voice', subtitle: 'Voice interface', icon: Mic, score: 0 },

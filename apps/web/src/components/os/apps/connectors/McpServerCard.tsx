@@ -12,7 +12,7 @@
  */
 
 import { useState } from 'react';
-import { ExternalLink, Check, Copy, Info } from 'lucide-react';
+import { ExternalLink, Check, CheckCircle2, Copy, Download, Info, Loader2 } from 'lucide-react';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 import BrandTile from './BrandTile';
 import { getBrandIdentity } from './brand-identity';
@@ -21,9 +21,15 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 
 interface McpServerCardProps {
   server: McpServer;
+  /** Phase 4B (S08): live install wiring. When `onInstall` is provided the
+   *  card renders a real Install button (copy-command stays as the offline
+   *  fallback); `installed` renders the honest installed marker (A4). */
+  installed?: boolean;
+  installing?: boolean;
+  onInstall?: (id: string) => void;
 }
 
-const McpServerCard = ({ server }: McpServerCardProps) => {
+const McpServerCard = ({ server, installed, installing, onInstall }: McpServerCardProps) => {
   const [copied, setCopied] = useState(false);
   const identity = getBrandIdentity(server.id, server.name, server.category);
 
@@ -94,6 +100,28 @@ const McpServerCard = ({ server }: McpServerCardProps) => {
           )}
         </div>
       </div>
+
+      {/* Live install action (S08) — honest installed / not-installed states */}
+      {(onInstall || installed) && (
+        <div className="flex items-center justify-end gap-2">
+          {installed ? (
+            <span className="flex items-center gap-1 text-[11px] text-emerald-400">
+              <CheckCircle2 className="h-3 w-3" /> Installed
+            </span>
+          ) : onInstall ? (
+            <button
+              type="button"
+              onClick={() => onInstall(server.id)}
+              disabled={installing}
+              data-testid={`mcp-install-${server.id}`}
+              className="flex items-center gap-1 rounded-lg bg-primary/20 px-2.5 py-1 text-[11px] font-display text-primary transition-colors hover:bg-primary/30 disabled:opacity-50"
+            >
+              {installing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+              Install
+            </button>
+          ) : null}
+        </div>
+      )}
 
       {/* Install command strip */}
       <div className="flex items-center gap-2 rounded-lg border border-border/30 bg-background/60 px-2 py-1.5">

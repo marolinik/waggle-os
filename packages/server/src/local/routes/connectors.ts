@@ -1,12 +1,48 @@
 import type { FastifyInstance } from 'fastify';
 import type { ConnectorHealth } from '@waggle/shared';
+import type { RecordAuditInput } from '@waggle/core';
+
+/** Vault sub-key holding the C16 manual-sync stamp. Matches the
+ *  `connector:{id}:*` prefix so disconnect/revoke auto-clean it. */
+const lastSyncKey = (id: string) => `connector:${id}:lastSync`;
+
+/**
+ * Connector id → oauth.ts provider key. oauth.ts stores tokens under
+ * `${provider}_oauth_token` / `${provider}_oauth_refresh_token` keyed by the
+ * OAUTH PROVIDER (github | slack | google | notion | jira), NOT the connector
+ * id — the Google provider serves five connectors whose ids all differ from
+ * the provider key. Every other connector id equals its provider key.
+ */
+const OAUTH_PROVIDER_FOR_CONNECTOR: Record<string, string> = {
+  gcal: 'google',
+  gdrive: 'google',
+  gdocs: 'google',
+  gmail: 'google',
+  gsheets: 'google',
+};
+const oauthProviderFor = (id: string) => OAUTH_PROVIDER_FOR_CONNECTOR[id] ?? id;
 
 export async function connectorRoutes(fastify: FastifyInstance) {
-  // GET /api/connectors — list all connectors with live status from registry
+  /** Install-audit write — non-blocking like every other auditStore caller. */
+  function recordConnectorAudit(input: Omit<RecordAuditInput, 'capabilityType' | 'source'>): void {
+    try {
+      fastify.auditStore?.record({ ...input, capabilityType: 'connector', source: 'connector' });
+    } catch (err) {
+      fastify.log.warn({ err, capability: input.capabilityName }, 'connector install-audit write failed');
+    }
+  }
+
+  // GET /api/connectors — list all connectors with live status from registry.
+  // Phase 4 (S07): payload enriched with lastSyncAt (category/tools/etc. are
+  // already emitted by toDefinition()).
   fastify.get('/api/connectors', async () => {
     const registry = fastify.connectorRegistry;
     if (registry) {
-      return { connectors: registry.getDefinitions() };
+      const connectors = registry.getDefinitions().map((def) => {
+        const lastSyncAt = fastify.vault?.get(lastSyncKey(def.id))?.value;
+        return lastSyncAt ? { ...def, lastSyncAt } : def;
+      });
+      return { connectors };
     }
     // Fallback: no registry (shouldn't happen in production)
     return { connectors: [] };
@@ -21,7 +57,10 @@ export async function connectorRoutes(fastify: FastifyInstance) {
       try {
         const health = await registry.healthCheck(id);
         if (!health) return reply.code(404).send({ error: 'Connector not found' });
-        return health;
+        // Merge the C16 manual-sync stamp so the typed ConnectorHealth field
+        // is real on the route the adapter's getConnectorHealth() calls.
+        const lastSyncAt = fastify.vault?.get(lastSyncKey(id))?.value;
+        return lastSyncAt ? { ...health, lastSyncAt } : health;
       } catch (err) {
         // A throwing connector probe must degrade gracefully — never an
         // unhandled 500 that echoes the raw error (which can leak secrets,
@@ -41,12 +80,14 @@ export async function connectorRoutes(fastify: FastifyInstance) {
 
     // Fallback: basic health without registry
     const cred = fastify.vault?.getConnectorCredential(id);
+    const lastSyncAt = fastify.vault?.get(lastSyncKey(id))?.value;
     const health: ConnectorHealth = {
       id,
       name: id,
       status: cred ? (cred.isExpired ? 'expired' : 'connected') : 'disconnected',
       lastChecked: new Date().toISOString(),
       tokenExpiresAt: cred?.expiresAt,
+      ...(lastSyncAt ? { lastSyncAt } : {}),
     };
     return health;
   });
@@ -100,22 +141,139 @@ export async function connectorRoutes(fastify: FastifyInstance) {
       }
     }
 
+    // Phase 4 (S07): connect now leaves an install-audit trail entry.
+    recordConnectorAudit({
+      capabilityName: id,
+      riskLevel: 'low',
+      trustSource: 'local_user',
+      approvalClass: 'standard',
+      action: 'installed',
+      initiator: 'user',
+      detail: `Connector credentials stored (authType=${authType})`,
+    });
+
     return { connected: true, connectorId: id };
   });
+
+  /** Shared credential cleanup for disconnect (light) and revoke (C17). */
+  function deleteConnectorCredentials(id: string): { deleted: boolean; cleanedKeys: number } {
+    // Delete primary credential and all sub-keys (email, base_url, client_id,
+    // client_secret, lastSync)
+    const deleted = fastify.vault!.delete(`connector:${id}`);
+    const subKeys = fastify.vault!.list()
+      .filter((e: { name: string }) => e.name.startsWith(`connector:${id}:`))
+      .map((e: { name: string }) => e.name);
+    for (const key of subKeys) {
+      fastify.vault!.delete(key);
+    }
+    return { deleted, cleanedKeys: subKeys.length };
+  }
 
   // POST /api/connectors/:id/disconnect — remove credentials from vault
   fastify.post('/api/connectors/:id/disconnect', async (request, reply) => {
     const { id } = request.params as { id: string };
     if (!fastify.vault) return reply.code(503).send({ error: 'Vault not available' });
 
-    // Delete primary credential and all sub-keys (email, base_url, client_id, client_secret)
-    const deleted = fastify.vault.delete(`connector:${id}`);
-    const subKeys = fastify.vault.list()
-      .filter((e: { name: string }) => e.name.startsWith(`connector:${id}:`))
-      .map((e: { name: string }) => e.name);
-    for (const key of subKeys) {
-      fastify.vault.delete(key);
+    const { deleted, cleanedKeys } = deleteConnectorCredentials(id);
+    return { disconnected: deleted, connectorId: id, cleanedKeys };
+  });
+
+  // POST /api/connectors/:id/sync — C16 ratified v1: re-probe health + stamp
+  // lastSyncAt. NO background data re-pull (the connector SDK has no sync();
+  // the real data-pull is a scheduled SDK addition — see Phase-4 plan caveat C1).
+  fastify.post('/api/connectors/:id/sync', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const registry = fastify.connectorRegistry;
+    if (!fastify.vault) return reply.code(503).send({ error: 'Vault not available' });
+    if (registry && !registry.get(id)) {
+      return reply.code(404).send({ error: 'Connector not found' });
     }
-    return { disconnected: deleted, connectorId: id, cleanedKeys: subKeys.length };
+
+    let health: ConnectorHealth | null = null;
+    if (registry) {
+      try {
+        health = await registry.healthCheck(id);
+      } catch (err) {
+        fastify.log.error({ err, connectorId: id }, 'Connector sync health probe threw');
+        return reply.code(502).send({ ok: false, connectorId: id, error: 'Health check failed' });
+      }
+    }
+
+    // An unhealthy probe is NOT a successful sync: no lastSyncAt stamp (a dead
+    // connector must not show "synced just now"), audit as 'failed', ok:false.
+    if (health && health.status !== 'connected') {
+      recordConnectorAudit({
+        capabilityName: id,
+        riskLevel: 'low',
+        trustSource: 'local_user',
+        approvalClass: 'standard',
+        action: 'failed',
+        initiator: 'user',
+        detail: `Manual sync failed — health status: ${health.status}`,
+      });
+      return { ok: false, connectorId: id, status: health.status };
+    }
+
+    const lastSyncAt = new Date().toISOString();
+    fastify.vault.set(lastSyncKey(id), lastSyncAt);
+
+    // Activity trail: the shared Extend audit feed (GET /api/extend/audit
+    // ?type=connector) is backed by install_audit, whose action vocabulary has
+    // no "synced" — 'approved' is the closest in-vocabulary verb (flagged in
+    // the Phase-4 handoff; widening AuditAction is a contract change we did
+    // not ratify).
+    recordConnectorAudit({
+      capabilityName: id,
+      riskLevel: 'low',
+      trustSource: 'local_user',
+      approvalClass: 'standard',
+      action: 'approved',
+      initiator: 'user',
+      detail: `Manual sync — health status: ${health?.status ?? 'unknown'}`,
+    });
+
+    return { ok: true, connectorId: id, lastSyncAt, status: health?.status ?? 'unknown' };
+  });
+
+  // POST /api/connectors/:id/revoke — C17 ratified: the STRONG variant of
+  // disconnect. Purges the connector credential, every connector:{id}:* sub-key
+  // AND the OAuth token entries the oauth.ts callback stores under
+  // `${provider}_oauth_token` (which the connector keyspace never covered),
+  // then writes a stronger audit entry. disconnect stays the lighter alias.
+  fastify.post('/api/connectors/:id/revoke', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    if (!fastify.vault) return reply.code(503).send({ error: 'Vault not available' });
+
+    const { deleted, cleanedKeys } = deleteConnectorCredentials(id);
+
+    // OAuth token purge (oauth.ts stores these outside the connector keyspace,
+    // keyed by PROVIDER — see oauthProviderFor). Shared-provider semantics:
+    // revoking ANY Google-family connector purges the shared google token pair
+    // even if sibling connectors (gcal/gdrive/...) are still connected —
+    // revoke is the deliberate strong path; siblings just need a reconnect.
+    const provider = oauthProviderFor(id);
+    let oauthPurged = 0;
+    for (const key of [`${provider}_oauth_token`, `${provider}_oauth_refresh_token`]) {
+      if (fastify.vault.delete(key)) oauthPurged++;
+    }
+
+    // Nothing existed under this id (or its provider): no audit row for a
+    // revocation that revoked nothing, and an honest 404.
+    if (!deleted && cleanedKeys === 0 && oauthPurged === 0) {
+      return reply.code(404).send({ error: `No credentials found for connector "${id}"` });
+    }
+
+    recordConnectorAudit({
+      capabilityName: id,
+      riskLevel: 'low',
+      trustSource: 'local_user',
+      approvalClass: 'standard',
+      action: 'rejected',
+      initiator: 'user',
+      detail: `Access revoked — credentials purged (${cleanedKeys} sub-key(s), ${oauthPurged} OAuth token(s)`
+        + `${provider !== id ? ` via provider "${provider}"` : ''})`,
+    });
+
+    return { ok: true, connectorId: id, revoked: deleted || oauthPurged > 0, cleanedKeys, oauthPurged };
   });
 }
