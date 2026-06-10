@@ -60,6 +60,14 @@ export {
   ConceptTracker, CONCEPT_MASTERY_TABLE_SQL,
   type ConceptEntry, type ConceptUpdate,
 } from './mind/concept-tracker.js';
+export {
+  TEMPORAL_GUIDANCE,
+  toDatePrefix,
+  renderDatedSnippet,
+  referenceDate,
+  renderReferenceDateLine,
+} from './mind/recall-context.js';
+export { resolveRelativeDate, type ResolvedDate } from './mind/resolve-relative-date.js';
 
 // ── harvest/ — universal memory ingestion pipeline ──
 export { HarvestSourceStore } from './harvest/source-store.js';
