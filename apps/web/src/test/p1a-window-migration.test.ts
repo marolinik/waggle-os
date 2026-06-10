@@ -6,7 +6,10 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
+  bootWindowStateMigration,
   computeWindowStateMigration,
+  indexLandingRoute,
+  resetWindowStateMigrationForTests,
   runWindowStateMigration,
   WINDOW_STATE_KEY,
   type LegacyWindowState,
@@ -31,6 +34,7 @@ function setLegacy(windows: LegacyWindowState[]): void {
 
 beforeEach(() => {
   localStorage.clear();
+  resetWindowStateMigrationForTests();
 });
 
 describe('runWindowStateMigration (§3.3)', () => {
@@ -146,5 +150,46 @@ describe('computeWindowStateMigration (pure)', () => {
     ]);
     expect(chatState).toHaveProperty('ws-plain');
     expect(chatState['ws-plain']).toEqual({});
+  });
+});
+
+describe('bootWindowStateMigration + indexLandingRoute (Stage C boot wrapper)', () => {
+  it('index entry: the salvaged route is served exactly once, /home after', () => {
+    setLegacy([win({ appId: 'memory', zIndex: 5 })]);
+
+    bootWindowStateMigration('/');
+    // Side effects ran at boot regardless of route consumption.
+    expect(localStorage.getItem(WINDOW_STATE_KEY)).toBeNull();
+
+    expect(indexLandingRoute()).toBe('/memory');
+    // Typing '/' again mid-session must not replay the salvage.
+    expect(indexLandingRoute()).toBe('/home');
+  });
+
+  it('deep-link entry wins: salvage side effects still run but the route is never applied (acceptance check 2)', () => {
+    setLegacy([
+      win({ appId: 'chat', workspaceId: 'ws-1', personaId: 'coder', zIndex: 9 }),
+    ]);
+
+    bootWindowStateMigration('/skills');
+
+    // §3.3 steps 3-4 ran (chat salvage + key removal)…
+    expect(localStorage.getItem(WINDOW_STATE_KEY)).toBeNull();
+    expect(loadChatEntries()['ws-1']).toMatchObject({ personaId: 'coder' });
+    // …but a later visit to '/' lands on /home, not the salvaged chat route.
+    expect(indexLandingRoute()).toBe('/home');
+  });
+
+  it('boot is idempotent — a second call does not re-run the migration', () => {
+    bootWindowStateMigration('/');
+    // A key written AFTER boot must not be consumed by a re-entrant call.
+    setLegacy([win({ appId: 'memory', zIndex: 5 })]);
+    bootWindowStateMigration('/');
+    expect(localStorage.getItem(WINDOW_STATE_KEY)).not.toBeNull();
+    expect(indexLandingRoute()).toBe('/home');
+  });
+
+  it('indexLandingRoute before boot degrades to /home', () => {
+    expect(indexLandingRoute()).toBe('/home');
   });
 });

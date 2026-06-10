@@ -3,8 +3,9 @@
  *
  * Fires a one-time toast when the user's session counter reaches each
  * milestone in DOCK_NUDGE_MILESTONES. The nudge points the user at
- * dock zones they may not have explored yet — at 10 sessions we point
- * at the Ops zone, at 50 we point at Memory.
+ * left-nav zones they may not have explored yet — at 10 sessions we point
+ * at the Ops zone, at 50 we point at Memory. (P1a AppShell conversion §3.2:
+ * the IA zones survive as nav zones; copy retargeted "dock" → left nav.)
  *
  * Persistent storage contract:
  *   - waggle:session-count         (owned by useDockLabels; incremented per mount)
@@ -22,7 +23,7 @@ export interface DockNudgeCopy {
 export const DOCK_NUDGE_COPY: Record<number, DockNudgeCopy> = {
   10: {
     title: "You've logged 10 sessions",
-    description: 'Open the Ops zone in the dock to see workflows, timelines, and scheduled jobs.',
+    description: 'Open the Ops zone in the left nav to see workflows, timelines, and scheduled jobs.',
   },
   50: {
     title: '50 sessions in — nicely done',
@@ -57,8 +58,8 @@ export function findPendingMilestone(
 export function copyForMilestone(milestone: number): DockNudgeCopy {
   return (
     DOCK_NUDGE_COPY[milestone] ?? {
-      title: `${milestone} sessions — explore the dock`,
-      description: 'New zones and apps are available — check the dock for what\u2019s there.',
+      title: `${milestone} sessions — explore the left nav`,
+      description: 'New zones and apps are available — check the left nav for what\u2019s there.',
     }
   );
 }

@@ -9,7 +9,11 @@ import { adapter } from "@/lib/adapter";
 
 interface StatusBarProps {
   workspaceName?: string;
-  /** P39: label of the currently focused window — Chat title, Files, etc. */
+  /**
+   * P39 → P1a: the active surface's breadcrumb label. Derived by AppShell
+   * from the matched route's nav title (replaces the old status-bar focus
+   * builder, which died with the window manager — conversion plan §3.1).
+   */
   focusedWindowLabel?: string | null;
   model?: string;
   tokensUsed?: number;

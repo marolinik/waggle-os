@@ -1,12 +1,15 @@
 /**
- * M-35 / P8 — guard that the dock label for an appId matches the
- * AppWindow title rendered when that app opens.
+ * M-35 / P8 — guard the canonical user-facing app names in the nav config.
  *
  * The Agents↔Personas inconsistency existed for months because the
- * dock said "Agents", the window title said "Agents", but the app
- * actually managed persona definitions. This test extracts both
- * surfaces and asserts they agree for every app the dock references
- * — so renaming just one side in the future fails loudly.
+ * dock said "Agents" while the app actually managed persona definitions.
+ * Originally this test cross-checked dock labels against Desktop.tsx's
+ * window-title appConfig; the P1a AppShell conversion (plan §3.1) deleted
+ * Desktop.tsx and the window manager, so labels now have ONE source of
+ * truth — `dock-tiers.ts`, rendered by the AppShell left nav. What remains
+ * load-bearing is the set of canonical-name regression pins below: a silent
+ * rename in the nav config breaks here first. (Label↔route agreement is
+ * pinned separately in apps/web/src/test/p1a-routes.test.ts.)
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -14,9 +17,8 @@ import { resolve } from 'node:path';
 
 const REPO_ROOT = resolve(__dirname, '..');
 const DOCK_PATH = resolve(REPO_ROOT, 'apps/web/src/lib/dock-tiers.ts');
-const DESKTOP_PATH = resolve(REPO_ROOT, 'apps/web/src/components/os/Desktop.tsx');
 
-/** Extract `{ appId: 'x', ..., label: 'Y' }` occurrences from dock config. */
+/** Extract `{ appId: 'x', ..., label: 'Y' }` occurrences from the nav config. */
 function extractDockLabels(source: string): Map<string, Set<string>> {
   const out = new Map<string, Set<string>>();
   const re = /appId:\s*'([^']+)'[^{}]*?label:\s*'([^']+)'/g;
@@ -28,78 +30,31 @@ function extractDockLabels(source: string): Map<string, Set<string>> {
   return out;
 }
 
-/** Extract `"appId": { title: "Y" }` entries from Desktop.tsx appConfig. */
-function extractAppTitles(source: string): Map<string, string> {
-  const out = new Map<string, string>();
-  const re = /"([a-z][a-z-]*)":\s*\{\s*title:\s*"([^"]+)"/g;
-  for (const match of source.matchAll(re)) {
-    const [, appId, title] = match;
-    out.set(appId, title);
-  }
-  return out;
-}
-
-describe('dock label ↔ Desktop appConfig title parity', () => {
+describe('nav (dock-tiers) canonical label pins', () => {
   const dockSource = readFileSync(DOCK_PATH, 'utf-8');
-  const desktopSource = readFileSync(DESKTOP_PATH, 'utf-8');
   const dockLabels = extractDockLabels(dockSource);
-  const appTitles = extractAppTitles(desktopSource);
 
-  it('extracted non-trivial counts from both files (guards against regex drift)', () => {
+  it('extracted a non-trivial entry count (guards against regex drift)', () => {
     expect(dockLabels.size).toBeGreaterThan(5);
-    expect(appTitles.size).toBeGreaterThan(5);
   });
 
-  it('every appId referenced by the dock has a matching appConfig title', () => {
-    const missingTitle: string[] = [];
-    for (const appId of dockLabels.keys()) {
-      if (!appTitles.has(appId)) missingTitle.push(appId);
-    }
-    expect(missingTitle, `dock appIds with no appConfig title: ${missingTitle.join(', ')}`).toEqual([]);
-  });
-
-  it('label and title agree for every dock-referenced appId', () => {
-    const mismatches: string[] = [];
+  it('every appId labels consistently across tier configs (no per-tier rename drift)', () => {
+    const inconsistent: string[] = [];
     for (const [appId, labels] of dockLabels) {
-      const title = appTitles.get(appId);
-      if (!title) continue;
-      for (const label of labels) {
-        // Intentional divergences — the dock uses short / friendly
-        // names while the window title carries a more formal wording.
-        // New entries must match by default; document the reason in
-        // the tuple comment when adding.
-        const allowed: Array<[string, string, string]> = [
-          ['Home', 'Dashboard', 'dock: short nav name; title: canonical app name'],
-          ['Chat', 'Waggle Chat', 'title adds the brand prefix to disambiguate chat windows'],
-          ['Mission Control', 'Cockpit', 'D8: "Command Center" reserved for the Ctrl+K palette; legacy window title'],
-          ['Usage & Cost', 'Usage & Telemetry', 'dock emphasises cost; title emphasises telemetry scope'],
-          ['Events & Logs', 'Events', 'dock bundles logs + events; window lives as Events only'],
-          // AI-OS Phase 2B: dock surfaces "AI Tools" as the user-facing
-          // entry point (matches Cursor/Codex/Claude Code branding the
-          // user already recognises); the window title says "Tool
-          // Launcher" because that's what the app *does* (launches +
-          // hook-manages external tools), not what its content is.
-          ['AI Tools', 'Tool Launcher', 'dock: user-facing category; title: functional description'],
-        ];
-        const isAllowed = allowed.some(([l, t]) => l === label && t === title);
-        if (label !== title && !isAllowed) {
-          mismatches.push(`${appId}: dock=${JSON.stringify(label)} vs title=${JSON.stringify(title)}`);
-        }
+      if (labels.size > 1) {
+        inconsistent.push(`${appId}: ${[...labels].map(l => JSON.stringify(l)).join(' vs ')}`);
       }
     }
-    expect(mismatches, `label/title mismatches:\n${mismatches.join('\n')}`).toEqual([]);
+    expect(inconsistent, `appIds labelled differently across tiers:\n${inconsistent.join('\n')}`).toEqual([]);
   });
 
   it('the Extend zone apps canonicalise to "Connector Hub" / "MCP Hub" / "Marketplace" (UX-Refactor Phase 4B, S07/S08/S21)', () => {
     // Phase 4B pins: the Connector Hub rename (S07), the new standalone MCP
-    // Hub (S08), and Marketplace's first real dock entry (S21). A silent
+    // Hub (S08), and Marketplace's first real nav entry (S21). A silent
     // revert to "Connectors", a re-merge of MCPs into the connectors app, or
-    // Marketplace dropping off the dock breaks here first.
-    expect(appTitles.get('connectors')).toBe('Connector Hub');
+    // Marketplace dropping off the nav breaks here first.
     expect([...(dockLabels.get('connectors') ?? [])]).toEqual(['Connector Hub']);
-    expect(appTitles.get('mcp-hub')).toBe('MCP Hub');
     expect([...(dockLabels.get('mcp-hub') ?? [])]).toEqual(['MCP Hub']);
-    expect(appTitles.get('marketplace')).toBe('Marketplace');
     expect([...(dockLabels.get('marketplace') ?? [])]).toEqual(['Marketplace']);
   });
 
@@ -109,7 +64,10 @@ describe('dock label ↔ Desktop appConfig title parity', () => {
     // the Agent Center over the B3 /api/agents entity, with the persona
     // catalog kept as its Templates side affordance (C22). A silent revert
     // to "Personas" or "Agents" breaks here first.
-    expect(appTitles.get('agents')).toBe('Agent Center');
     expect([...(dockLabels.get('agents') ?? [])]).toEqual(['Agent Center']);
+  });
+
+  it('the cockpit appId canonicalises to "Mission Control" (D8: "Command Center" reserved for the Ctrl+K palette)', () => {
+    expect([...(dockLabels.get('cockpit') ?? [])]).toEqual(['Mission Control']);
   });
 });

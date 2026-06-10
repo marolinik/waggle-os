@@ -1,29 +1,26 @@
 /**
  * UX Refactor v2.1 P1a — AppShell layout route (conversion plan §2.1 rule 1).
  *
- * Owns: BootScreen gate (FR #23 sequencing ported from pages/Index.tsx:14-36),
- * onboarding takeover (§1.2 — wizard renders INSTEAD of nav+canvas), left nav
- * (same getDockForTier/filterByBillingTier data the dock consumes, §1.3),
- * StatusBar, global overlays (Desktop.tsx:569-663 mount block relocated),
- * the `waggle:open-app` shim (§2.3), and `<Outlet/>` as the single canvas.
+ * Owns: BootScreen gate (FR #23 sequencing ported from the retired
+ * pages/Index.tsx), the §3.3 window-state migration boot (one-shot, before the
+ * first canvas render), onboarding takeover (§1.2 — wizard renders INSTEAD of
+ * nav+canvas), left nav (same getDockForTier/filterByBillingTier data the dock
+ * consumed, §1.3), StatusBar, global overlays (the old Desktop.tsx mount block
+ * relocated), the `waggle:open-app` shim (§2.3), the keep-alive ChatHost
+ * (§4.2), and `<Outlet/>` as the single canvas.
  *
- * Stage A: ADDITIVE — not mounted anywhere yet. Desktop.tsx remains the live
- * shell until the Stage-C flip swaps App.tsx's route tree to:
- *   <Route path="/" element={<AppShell/>}> …route wrappers… </Route>
- *
- * TODO(stage-C): mount <ChatHost /> (components/os/ChatHost.tsx, built in
- * Stage B) inside <main> — one keep-alive ChatWindowInstance per visited
- * workspace so route navigation cannot kill in-flight agent SSE streams
- * (§4.2). Mounting is the Stage-C flip's one-liner.
+ * Stage C (the flip): this IS the live shell — App.tsx mounts it as the `/`
+ * layout route; Desktop.tsx and the window manager are deleted (§3.1).
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Rocket } from 'lucide-react';
 import wallpaperDark from '@/assets/wallpaper.jpg';
 import wallpaperLight from '@/assets/wallpaper-light.jpg';
 import BootScreen from './BootScreen';
 import StatusBar from './StatusBar';
+import ChatHost from './ChatHost';
 import CommandCenter from './overlays/CommandCenter';
 import CreateWorkspaceDialog from './overlays/CreateWorkspaceDialog';
 import PersonaSwitcher from './overlays/PersonaSwitcher';
@@ -41,11 +38,13 @@ import { adapter } from '@/lib/adapter';
 import { stashDeepLink } from '@/lib/app-deeplink';
 import { writeLoginBriefingDismissed } from '@/lib/login-briefing';
 import { matchNavRoute, queryString, routeFor, routeForSearchResult } from '@/lib/routes';
+import { bootWindowStateMigration, indexLandingRoute } from '@/lib/window-state-migration';
 import { getDockForTier, type AppId, type DockEntry } from '@/lib/dock-tiers';
 import { ShellProvider, useShell } from '@/providers/ShellContext';
-import { seedChat } from '@/hooks/useChatWidgetState';
+import { seedChat, useChatWidgetState } from '@/hooks/useChatWidgetState';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useWaggleDance } from '@/hooks/useWaggleDance';
+import { useBumpSessionCount } from '@/hooks/useDockLabels';
 import { useDockNudge } from '@/hooks/useDockNudge';
 import { useToast } from '@/hooks/use-toast';
 
@@ -80,6 +79,15 @@ const ShellLayout = () => {
   const { allSignals: waggleSignals } = useWaggleDance();
   const waggleUnacknowledged = waggleSignals.filter(s => !s.acknowledged).length;
 
+  // §4.2/§1.2: PersonaSwitcher (Ctrl+Shift+P) targets the ACTIVE workspace's
+  // chat widget (focused-window resolution died with focus tracking, §4.3);
+  // the patch-the-workspace-record fallback (Desktop.tsx:595-601) stays for
+  // the no-real-workspace case. No defaultAutonomy option here — P4
+  // inheritance is stamped only when ChatHost actually mounts the widget.
+  const hasRealActiveWorkspace = !!activeWorkspaceId && activeWorkspaceId !== 'local-default';
+  const { entry: activeChatEntry, setPersona: setActiveChatPersona } =
+    useChatWidgetState(activeWorkspaceId ?? 'local-default');
+
   // Theme reactivity — watch for data-theme mutations on <html>
   // (relocated from Desktop.tsx:131-139).
   const [theme, setTheme] = useState(() => document.documentElement.getAttribute('data-theme') ?? 'dark');
@@ -90,6 +98,12 @@ const ShellLayout = () => {
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     return () => observer.disconnect();
   }, []);
+
+  // Session counter (waggle:session-count) — bumped once per page load. The
+  // retired Dock did this via its useDockLabels mount; the bump relocates here
+  // so the M-24/ENG-3 milestones below keep ticking. Called BEFORE useDockNudge
+  // so the bump effect runs first (Dock-child-before-Desktop-parent parity).
+  useBumpSessionCount();
 
   // M-24 / ENG-3 zone nudges (relocated verbatim from Desktop.tsx:218-223 —
   // the IA zones it points at survive as nav zones, §3.2).
@@ -183,7 +197,8 @@ const ShellLayout = () => {
     [location.pathname, appEntries],
   );
   // §3.1: the StatusBar breadcrumb derives from the matched route's title
-  // (buildStatusBarFocus + focused-window state die with the window manager).
+  // (the old status-bar focus builder + focused-window state died with the
+  // window manager).
   const surfaceLabel = appEntries.find(e => e.route === activeRoute)?.label ?? null;
 
   const renderNavItem = (entry: DockEntry, indent: boolean) => {
@@ -276,9 +291,10 @@ const ShellLayout = () => {
         {/* Single canvas (§2.1 rule 1). Route wrappers bring their own
             AppErrorBoundary, mirroring Desktop.tsx:556-558. */}
         <main className="relative z-10 flex-1 min-w-0 overflow-hidden">
-          {/* TODO(stage-C): <ChatHost /> mounts here (§4.2) — built in Stage B
-              (components/os/ChatHost.tsx); portals keep every visited
-              workspace's chat widget alive off-route. */}
+          {/* §4.2 keep-alive: ChatHost portals one live ChatWindowInstance per
+              visited workspace, so navigation can't kill in-flight SSE
+              streams. It renders no layout DOM of its own. */}
+          <ChatHost />
           <Outlet />
         </main>
       </div>
@@ -293,16 +309,17 @@ const ShellLayout = () => {
         workspaceId={activeWorkspaceId ?? undefined}
       />
       <CreateWorkspaceDialog open={ov.showCreateWorkspace} onClose={() => ov.setShowCreateWorkspace(false)} onCreate={createWorkspace} />
-      {/* TODO(stage-C): retarget PersonaSwitcher to the ACTIVE WORKSPACE's chat
-          widget via useChatWidgetState (§1.2/§4.2) once ChatHost exists. Until
-          then only the no-focused-window fallback branch (patch the workspace
-          record, Desktop.tsx:595-601) is wired — focused-window resolution died
-          with focus tracking (§4.3). */}
+      {/* §1.2/§4.2: PersonaSwitcher acts on the active workspace's chat widget
+          (widget state, NOT the workspace record — acceptance check 7); the
+          workspace-record patch survives as the no-real-workspace fallback. */}
       <PersonaSwitcher open={ov.showPersonaSwitcher} onClose={() => ov.setShowPersonaSwitcher(false)}
-        currentPersona={activeWorkspace?.persona} currentGroupId={activeWorkspace?.agentGroupId}
+        currentPersona={(hasRealActiveWorkspace ? activeChatEntry.personaId : undefined) ?? activeWorkspace?.persona}
+        currentGroupId={activeWorkspace?.agentGroupId}
         currentTemplateId={activeWorkspace?.templateId}
         onSelect={(personaId) => {
-          if (activeWorkspaceId) {
+          if (hasRealActiveWorkspace) {
+            setActiveChatPersona(personaId);
+          } else if (activeWorkspaceId) {
             patchWorkspace(activeWorkspaceId, { persona: personaId, agentGroupId: undefined });
           }
         }}
@@ -369,6 +386,14 @@ const ShellLayout = () => {
  * start fetching post-boot, exactly when Desktop's hooks start today.
  */
 const AppShell = () => {
+  // §3.3: one-shot `waggle-window-state-v1` migration, run on the first shell
+  // render — BEFORE the first canvas render (the Outlet only mounts inside
+  // ShellLayout below). The salvage side effects (chat-state merge + key
+  // removal) run on every entry path; the salvaged initialRoute is applied
+  // only via IndexRedirect when the app ENTERED on '/' (a typed deep link
+  // always wins — acceptance check 2).
+  useState(() => bootWindowStateMigration(window.location.pathname));
+
   const initialBooted = localStorage.getItem(BOOT_KEY) !== null;
   const [booted, setBooted] = useState(initialBooted);
   const [showShell, setShowShell] = useState(initialBooted);
@@ -390,6 +415,16 @@ const AppShell = () => {
       )}
     </>
   );
+};
+
+/**
+ * Index-route element (`/`): redirects to the §3.3 salvaged route exactly
+ * once (the boot entry), '/home' on every later visit. Replaces the old
+ * Desktop.tsx:192-206 launch-flip (§2.2 — the index redirect subsumes it).
+ */
+export const IndexRedirect = () => {
+  const [to] = useState(() => indexLandingRoute());
+  return <Navigate to={to} replace />;
 };
 
 export default AppShell;

@@ -141,3 +141,40 @@ export function runWindowStateMigration(): WindowStateMigrationResult {
 
   return result;
 }
+
+// ── Stage C boot wrapper ───────────────────────────────────────────────────
+// The migration's side effects (chat-state salvage + key removal) run on
+// EVERY boot path, but the salvaged initialRoute is applied EXACTLY once and
+// ONLY when the app ENTERED on the index path '/' — a typed deep link always
+// wins (acceptance check 2).
+
+let bootResult: WindowStateMigrationResult | null = null;
+let initialRouteConsumed = false;
+
+/**
+ * Idempotent boot entry — AppShell calls this on its first render (before the
+ * first canvas render). A deep-link entry (`entryPathname !== '/'`) marks the
+ * salvaged route consumed so a later visit to '/' lands on /home as normal.
+ */
+export function bootWindowStateMigration(entryPathname: string): void {
+  if (bootResult) return;
+  bootResult = runWindowStateMigration();
+  if (entryPathname !== '/') initialRouteConsumed = true;
+}
+
+/**
+ * The index route's landing target: the salvaged §3.3 route on its first
+ * (entry) use, '/home' on every use after — typing '/' mid-session must not
+ * replay the salvage.
+ */
+export function indexLandingRoute(): string {
+  if (!bootResult || initialRouteConsumed) return '/home';
+  initialRouteConsumed = true;
+  return bootResult.initialRoute;
+}
+
+/** Test-only reset for the boot singleton above. */
+export function resetWindowStateMigrationForTests(): void {
+  bootResult = null;
+  initialRouteConsumed = false;
+}

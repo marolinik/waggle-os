@@ -7,9 +7,12 @@ interface UseKeyboardShortcutsOptions {
   onTogglePersonaSwitcher: () => void;
   onToggleWorkspaceSwitcher: () => void;
   onToggleKeyboardHelp: () => void;
-  onCloseTopWindow?: () => void;
-  onMinimizeTopWindow?: () => void;
-  /** Phase A.3 — open a new chat window on the active workspace. */
+  /**
+   * Phase A.3 — originally "new chat window on the active workspace"; since
+   * the P1a AppShell conversion (§4.2) this navigates to the active
+   * workspace's chat tab instead (Ctrl+W / Ctrl+Shift+M window handlers
+   * retired with the window manager, plan §3.1).
+   */
   onNewChatWindow?: () => void;
 }
 
@@ -29,7 +32,7 @@ const APP_SHORTCUTS: Record<string, AppId> = {
 /** Shortcuts that work even when an input/textarea is focused */
 function isGlobalShortcut(e: KeyboardEvent): boolean {
   const ctrl = e.ctrlKey || e.metaKey;
-  return (ctrl && e.key === 'k') || e.key === 'Escape' || (ctrl && e.shiftKey && (e.key === 'M' || e.key === 'm'));
+  return (ctrl && e.key === 'k') || e.key === 'Escape';
 }
 
 function isInputFocused(): boolean {
@@ -51,20 +54,6 @@ export const useKeyboardShortcuts = (options: UseKeyboardShortcutsOptions) => {
 
       // Skip non-global shortcuts when typing in an input
       if (isInputFocused() && !isGlobalShortcut(e)) return;
-
-      // Ctrl+W: Close focused window
-      if (ctrl && e.key === 'w' && !e.shiftKey) {
-        e.preventDefault();
-        opts.onCloseTopWindow?.();
-        return;
-      }
-
-      // Ctrl+Shift+M: Minimize focused window
-      if (ctrl && e.shiftKey && (e.key === 'M' || e.key === 'm')) {
-        e.preventDefault();
-        opts.onMinimizeTopWindow?.();
-        return;
-      }
 
       // Ctrl+Shift+R: Open the Room (Phase A.3 — sub-agent visibility canvas)
       if (ctrl && e.shiftKey && (e.key === 'R' || e.key === 'r')) {
