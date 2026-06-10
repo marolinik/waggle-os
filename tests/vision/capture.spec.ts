@@ -51,14 +51,16 @@ const SURFACES: Surface[] = [
   { key: 'cockpit', label: 'Command Center', expectation: 'Command Center / cockpit: KPI cards for health, cost, and activity.' },
   { key: 'timeline', label: 'Timeline', expectation: 'Timeline: a chronological activity feed, or an empty "no activity" state.' },
   { key: 'telemetry', label: 'Usage & Cost', expectation: 'Usage & Cost: token/cost telemetry charts or numbers.' },
-  { key: 'backup', label: 'Backup & Restore', expectation: 'Backup & Restore: backup list/controls, or a "no backups" empty state.' },
+  // Backup left the dock (P23 — it lives in Settings → Backup), so it has no
+  // dock-driven surface here anymore.
   { key: 'events', label: 'Events & Logs', expectation: 'Events & Logs: a filterable list of agent steps/events.' },
-  { key: 'governance', label: 'Governance', expectation: 'Governance: team roles, permissions, or policy controls.' },
+  { key: 'governance', label: 'Team Governance', expectation: 'Governance: team roles, permissions, or policy controls.' },
   { key: 'capabilities', label: 'Skills Hub', expectation: 'Skills Hub: installed skills and a marketplace/starter affordance.' },
-  { key: 'connectors', label: 'Connectors', expectation: 'Connectors: a catalog of services/integrations to connect.' },
-  { key: 'marketplace', label: 'Marketplace', expectation: 'Marketplace: browsable skill/connector packs with install affordances.' },
+  { key: 'connectors', label: 'Connector Hub', expectation: 'Connector Hub: a catalog of services/integrations to connect, with status badges.' },
+  { key: 'mcp-hub', label: 'MCP Hub', expectation: 'MCP Hub: installed MCP servers with state badges, or an empty installed state, plus Catalog/Custom tabs.' },
+  { key: 'marketplace', label: 'Marketplace', expectation: 'Marketplace: a faceted extension browser (skills/agents/connectors/MCPs/models/templates) with install or open-in affordances.' },
   { key: 'settings', label: 'Settings', expectation: 'Settings: tabbed config (General/Models/Vault/Permissions/Team/Advanced).' },
-  { key: 'vault', label: 'API Keys', expectation: 'Vault / API Keys: per-provider key management rows.' },
+  { key: 'vault', label: 'Vault', expectation: 'Vault / API Keys: per-provider key management rows.' },
   { key: 'dashboard', label: 'Home', expectation: 'Home/dashboard: workspace overview, welcome, or create-workspace affordance.' },
 ];
 

@@ -90,6 +90,19 @@ describe('dock label ↔ Desktop appConfig title parity', () => {
     expect(mismatches, `label/title mismatches:\n${mismatches.join('\n')}`).toEqual([]);
   });
 
+  it('the Extend zone apps canonicalise to "Connector Hub" / "MCP Hub" / "Marketplace" (UX-Refactor Phase 4B, S07/S08/S21)', () => {
+    // Phase 4B pins: the Connector Hub rename (S07), the new standalone MCP
+    // Hub (S08), and Marketplace's first real dock entry (S21). A silent
+    // revert to "Connectors", a re-merge of MCPs into the connectors app, or
+    // Marketplace dropping off the dock breaks here first.
+    expect(appTitles.get('connectors')).toBe('Connector Hub');
+    expect([...(dockLabels.get('connectors') ?? [])]).toEqual(['Connector Hub']);
+    expect(appTitles.get('mcp-hub')).toBe('MCP Hub');
+    expect([...(dockLabels.get('mcp-hub') ?? [])]).toEqual(['MCP Hub']);
+    expect(appTitles.get('marketplace')).toBe('Marketplace');
+    expect([...(dockLabels.get('marketplace') ?? [])]).toEqual(['Marketplace']);
+  });
+
   it('the agents appId canonicalises to "Agent Center" (UX-Refactor Phase 3B, S09)', () => {
     // Explicit regression pin. History: M-35/P8 renamed Agents→Personas
     // (the app managed persona definitions); Phase 3B reworked the app into

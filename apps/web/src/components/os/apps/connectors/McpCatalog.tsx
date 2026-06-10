@@ -32,9 +32,17 @@ interface McpCatalogProps {
    * discoverability without removing capability.
    */
   personaId?: string;
+  /** Phase 4B (S08): live install wiring forwarded to every card. */
+  installedIds?: ReadonlySet<string>;
+  /** Catalog ids that actually resolve in the marketplace installer (A4):
+   *  when provided, only these cards get the Install button — the rest keep
+   *  the copy-command strip as their honest install path. Omit to allow all. */
+  installableIds?: ReadonlySet<string>;
+  installingId?: string | null;
+  onInstall?: (id: string) => void;
 }
 
-const McpCatalog = ({ personaId }: McpCatalogProps = {}) => {
+const McpCatalog = ({ personaId, installedIds, installableIds, installingId, onInstall }: McpCatalogProps = {}) => {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
@@ -71,6 +79,11 @@ const McpCatalog = ({ personaId }: McpCatalogProps = {}) => {
     const cards = rec.primary.map(id => byId.get(id)).filter((s): s is NonNullable<typeof s> => s != null);
     return cards.length > 0 ? { name: formatPersonaName(personaId), cards } : null;
   }, [personaId]);
+
+  // Install renders only where the marketplace installer can actually
+  // resolve the id (A4 honest affordance) — see installableIds above.
+  const installFor = (id: string) =>
+    !installableIds || installableIds.has(id) ? onInstall : undefined;
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -158,7 +171,10 @@ const McpCatalog = ({ personaId }: McpCatalogProps = {}) => {
           </div>
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
             {recommended.cards.map((server) => (
-              <McpServerCard key={`rec-${server.id}`} server={server} />
+              <McpServerCard key={`rec-${server.id}`} server={server}
+                installed={installedIds?.has(server.id)}
+                installing={installingId === server.id}
+                onInstall={installFor(server.id)} />
             ))}
           </div>
         </div>
@@ -249,7 +265,10 @@ const McpCatalog = ({ personaId }: McpCatalogProps = {}) => {
       {/* ── Grid ─────────────────────────────────────────────────────── */}
       <div className="grid max-h-[58vh] grid-cols-1 gap-2 overflow-auto pr-1 md:grid-cols-2">
         {filtered.map((server) => (
-          <McpServerCard key={server.id} server={server} />
+          <McpServerCard key={server.id} server={server}
+            installed={installedIds?.has(server.id)}
+            installing={installingId === server.id}
+            onInstall={installFor(server.id)} />
         ))}
 
         {filtered.length === 0 && (
