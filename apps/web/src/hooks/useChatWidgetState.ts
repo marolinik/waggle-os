@@ -221,11 +221,13 @@ export interface UseChatWidgetStateOptions {
   /**
    * P4 (relocated from useWindowManager.ts:107-115 + openChatForWorkspace's
    * inheritAutonomy stamp, :249-264): default autonomy inherited the FIRST
-   * time a workspace gets a chat widget (no persisted entry yet). 'normal'
-   * is treated as "no inheritance"; any elevated level is stamped with
-   * expiresAt:null so it sticks until explicitly lowered (the widget-world
-   * equivalent of the per-window "Until I close" TTL choice — restored
-   * windows persisted their elevated grants the same way).
+   * time a workspace gets a chat widget (no persisted autonomy level yet —
+   * a persona-only entry does NOT count as "seen"). 'normal' is treated as
+   * "no inheritance"; any elevated level is stamped with expiresAt:null so
+   * it sticks until explicitly lowered (the widget-world equivalent of the
+   * per-window "Until I close" TTL choice — restored windows persisted their
+   * elevated grants the same way; the §3.3 migration stamps them with an
+   * explicit autonomyLevel:'normal' marker so they never retro-inherit).
    */
   defaultAutonomy?: AutonomyLevel;
 }
@@ -237,16 +239,21 @@ export function useChatWidgetState(workspaceId: string, opts: UseChatWidgetState
   const chats = useSyncExternalStore(subscribeChatState, loadChatEntries);
   const entry = chats[workspaceId] ?? EMPTY_ENTRY;
 
-  // P4 inheritance on first mount for a never-seen workspace (option doc
-  // above). Mount-only per workspace, mirroring window creation — a
-  // mid-session defaultAutonomy flip only affects the NEXT fresh widget
-  // (Desktop.tsx:160-167 semantics).
+  // P4 inheritance for a workspace that has never carried an autonomy level
+  // (option doc above). The gate is autonomy-specific, NOT entry-existence:
+  // a persona-only entry (PersonaSwitcher can write one for a never-visited
+  // workspace, AppShell §1.2) must not count as "seen" and permanently skip
+  // inheritance — migrated chats carry an explicit 'normal' marker instead
+  // (§3.3). defaultAutonomy is in the deps because ShellContext fetches it
+  // asynchronously (getPermissions): a widget mounted before the fetch
+  // resolves (deep-link boot) receives the stamp when the elevated value
+  // arrives; the autonomy-exists guard keeps that late stamp from overriding
+  // migrated or user-set state.
   useEffect(() => {
     if (defaultAutonomy === 'normal') return;
-    if (loadChatEntries()[workspaceId]) return;
+    if (loadChatEntries()[workspaceId]?.autonomyLevel !== undefined) return;
     writeChatEntry(workspaceId, { autonomyLevel: defaultAutonomy, autonomyExpiresAt: null });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId]);
+  }, [workspaceId, defaultAutonomy]);
 
   /**
    * Phase A.2 (relocated verbatim from setWindowPersona,

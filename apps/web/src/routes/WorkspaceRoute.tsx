@@ -8,6 +8,7 @@
  * that ChatHost portals the live per-workspace ChatWindowInstance into
  * (§4.2). `?session=` stays reserved (§5.3 #5).
  */
+import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import WorkspaceDesktopApp, { type WorkspaceTabId } from '@/components/os/apps/WorkspaceDesktopApp';
 import { ChatSlot } from '@/components/os/ChatHost';
@@ -24,6 +25,17 @@ const WorkspaceRoute = () => {
   const navigate = useNavigate();
   const { workspaceId, tab } = useParams();
   const { workspaces, activeWorkspaceId, selectWorkspace } = useShell();
+  // §2.1: the URL is the single source of truth — sync the routed workspace
+  // into shell state, so shell-global surfaces (StatusBar, PersonaSwitcher,
+  // Ctrl+Shift+N / nav-Chat) track what is on screen. Covers the two
+  // navigation paths that bypass every explicit selectWorkspace call site:
+  // typed deep links (useWorkspaces auto-selects data[0]) and browser
+  // Back/Forward. The pre-fetch placeholder never syncs (§3.3/§4.2 rule).
+  useEffect(() => {
+    if (workspaceId && workspaceId !== 'local-default' && workspaceId !== activeWorkspaceId) {
+      selectWorkspace(workspaceId);
+    }
+  }, [workspaceId, activeWorkspaceId, selectWorkspace]);
   // Fall back to the active workspace if the param is missing (parity with the
   // restored-window fallback, Desktop.tsx:393).
   const wsId = workspaceId || activeWorkspaceId || 'local-default';

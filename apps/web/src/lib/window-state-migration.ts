@@ -96,9 +96,12 @@ export function computeWindowStateMigration(
 
   // §3.3 step 3 — chat-state salvage keyed by workspaceId. Iteration order is
   // array order, so the LAST window on a workspace wins (the multi-instance
-  // case collapses per §4). An entry is written even when it carries neither
-  // persona nor autonomy, so a migrated normal-autonomy chat doesn't later
-  // inherit an elevated P4 default the way a brand-new widget would.
+  // case collapses per §4). A migrated chat without an elevated grant is
+  // stamped with an EXPLICIT autonomyLevel:'normal' marker — the P4
+  // inheritance gate (useChatWidgetState) is autonomy-specific, so the
+  // marker is what keeps a migrated normal-autonomy chat from later
+  // inheriting an elevated default the way a brand-new widget would, while a
+  // persona-only live write (PersonaSwitcher pre-visit) stays inheritable.
   const chatState: Record<string, ChatWidgetEntry> = {};
   for (const w of windows) {
     if (w.appId !== 'chat') continue;
@@ -111,6 +114,9 @@ export function computeWindowStateMigration(
     if (typeof w.autonomyLevel === 'string' && AUTONOMY_LEVELS.has(w.autonomyLevel)) {
       entry.autonomyLevel = w.autonomyLevel;
       entry.autonomyExpiresAt = typeof w.autonomyExpiresAt === 'number' ? w.autonomyExpiresAt : null;
+    } else {
+      entry.autonomyLevel = 'normal';
+      entry.autonomyExpiresAt = null;
     }
     chatState[w.workspaceId] = entry;
   }

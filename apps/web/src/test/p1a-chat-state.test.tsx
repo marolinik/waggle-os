@@ -105,12 +105,51 @@ describe('useChatWidgetState (§3.2 relocation)', () => {
     expect(result.current.entry).toMatchObject({ autonomyLevel: 'trusted', autonomyExpiresAt: null });
   });
 
-  it('P4: an existing entry is NOT overridden by defaultAutonomy (restored-window parity)', () => {
-    writeChatEntry('ws-old', { personaId: 'analyst' });
+  it('P4: an entry with an autonomy level is NOT overridden by defaultAutonomy (restored-window parity via the §3.3 normal marker)', () => {
+    writeChatEntry('ws-old', { personaId: 'analyst', autonomyLevel: 'normal', autonomyExpiresAt: null });
     const { result } = renderHook(() =>
       useChatWidgetState('ws-old', { defaultAutonomy: 'yolo' }));
-    expect(result.current.entry.autonomyLevel).toBeUndefined();
+    expect(result.current.entry.autonomyLevel).toBe('normal');
     expect(result.current.entry.personaId).toBe('analyst');
+  });
+
+  it('P4: a persona-only entry (PersonaSwitcher pre-visit) does NOT block inheritance (review finding)', () => {
+    // PersonaSwitcher can write {personaId} for a never-visited workspace via
+    // setActiveChatPersona — that must not count as "seen" for P4.
+    writeChatEntry('ws-persona-only', { personaId: 'analyst' });
+    const { result } = renderHook(() =>
+      useChatWidgetState('ws-persona-only', { defaultAutonomy: 'trusted' }));
+    expect(result.current.entry).toMatchObject({
+      personaId: 'analyst', autonomyLevel: 'trusted', autonomyExpiresAt: null,
+    });
+  });
+
+  it('P4: a defaultAutonomy arriving AFTER mount (async getPermissions) still stamps the widget (review finding)', () => {
+    // ShellContext fetches defaultAutonomy asynchronously; a deep-link-mounted
+    // widget first renders with the 'normal' initial value. The effect must
+    // re-fire when the elevated value arrives — the keep-alive instance never
+    // remounts.
+    const { result, rerender } = renderHook(
+      ({ level }: { level: 'normal' | 'trusted' | 'yolo' }) =>
+        useChatWidgetState('ws-late', { defaultAutonomy: level }),
+      { initialProps: { level: 'normal' as const } },
+    );
+    expect(result.current.entry.autonomyLevel).toBeUndefined();
+
+    rerender({ level: 'trusted' });
+    expect(result.current.entry).toMatchObject({ autonomyLevel: 'trusted', autonomyExpiresAt: null });
+  });
+
+  it('P4: a late defaultAutonomy never overrides an autonomy level the user already set', () => {
+    const { result, rerender } = renderHook(
+      ({ level }: { level: 'normal' | 'trusted' | 'yolo' }) =>
+        useChatWidgetState('ws-late-set', { defaultAutonomy: level }),
+      { initialProps: { level: 'normal' as const } },
+    );
+    // User explicitly chooses 'normal' before the permissions fetch resolves.
+    act(() => result.current.setAutonomy('normal'));
+    rerender({ level: 'yolo' });
+    expect(result.current.entry.autonomyLevel).toBe('normal');
   });
 
   it('rekeyLocalDefaultChatState moves the placeholder entry; an existing real entry wins', () => {

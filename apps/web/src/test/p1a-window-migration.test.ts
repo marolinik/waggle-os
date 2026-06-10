@@ -129,8 +129,12 @@ describe('runWindowStateMigration (§3.3)', () => {
     ]);
 
     const { chatState } = runWindowStateMigration();
-    expect(chatState['ws-1']).toEqual({ personaId: 'writer', personaLabel: 'Writer' });
-    expect(loadChatEntries()['ws-1']).toEqual({ personaId: 'writer', personaLabel: 'Writer' });
+    const expected = {
+      personaId: 'writer', personaLabel: 'Writer',
+      autonomyLevel: 'normal', autonomyExpiresAt: null,
+    };
+    expect(chatState['ws-1']).toEqual(expected);
+    expect(loadChatEntries()['ws-1']).toEqual(expected);
   });
 });
 
@@ -144,12 +148,15 @@ describe('computeWindowStateMigration (pure)', () => {
     expect(chatState).toEqual({});
   });
 
-  it('writes an empty entry for a plain chat window so P4 inheritance treats it as seen', () => {
+  it("stamps a plain chat window with an explicit autonomyLevel:'normal' marker so P4 inheritance treats it as seen (restored-window parity)", () => {
     const { chatState } = computeWindowStateMigration([
       win({ appId: 'chat', workspaceId: 'ws-plain' }),
     ]);
     expect(chatState).toHaveProperty('ws-plain');
-    expect(chatState['ws-plain']).toEqual({});
+    // The marker (NOT a bare empty entry) is what blocks P4 retro-inheritance:
+    // the inheritance gate is autonomy-specific, so a persona-only live write
+    // stays inheritable while migrated chats do not (review finding).
+    expect(chatState['ws-plain']).toEqual({ autonomyLevel: 'normal', autonomyExpiresAt: null });
   });
 });
 
