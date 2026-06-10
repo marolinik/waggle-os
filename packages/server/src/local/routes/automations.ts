@@ -78,6 +78,17 @@ interface CronRowResponse {
   createdAt: string;
 }
 
+/** cron_execution_history / cron_schedules timestamps default to SQLite
+ *  `YYYY-MM-DD HH:MM:SS` (UTC, no zone marker) — browsers parse that as LOCAL
+ *  time, shifting every rendered run time by the UTC offset. Normalize to
+ *  ISO-8601 UTC at the route boundary (same fix as agents.ts). nextRunAt is
+ *  already ISO (cron-parser toISOString) and passes through unchanged. */
+function sqliteUtcToIso(ts: string): string {
+  if (ts.includes('T')) return ts; // already ISO
+  const ms = Date.parse(`${ts.replace(' ', 'T')}Z`);
+  return Number.isNaN(ms) ? ts : new Date(ms).toISOString();
+}
+
 function resolveTriggerType(trigger?: TriggerBody): AutomationTriggerType {
   if (trigger?.type === 'manual') return 'manual';
   if (trigger?.type === 'event') return 'event';
@@ -130,7 +141,7 @@ function toAutomation(row: CronRowResponse): Automation {
     ...(typeof jc.notify === 'boolean' ? { notify: jc.notify } : {}),
     workspaceId: row.workspaceId ?? '*',
     status: row.enabled ? 'active' : 'paused',
-    ...(row.lastRunAt ? { lastRun: row.lastRunAt } : {}),
+    ...(row.lastRunAt ? { lastRun: sqliteUtcToIso(row.lastRunAt) } : {}),
     ...(row.nextRunAt ? { nextRun: row.nextRunAt } : {}),
   };
 }
@@ -314,7 +325,7 @@ export const automationRoutes: FastifyPluginAsync = async (server) => {
       const body = res.json() as { history: CronExecutionRow[] };
       const logs = (body.history ?? []).map((h) => ({
         id: h.id,
-        executedAt: h.executed_at,
+        executedAt: sqliteUtcToIso(h.executed_at),
         durationMs: h.duration_ms,
         success: h.success === 1,
         resultSummary: h.result_summary,
@@ -330,8 +341,30 @@ export const automationRoutes: FastifyPluginAsync = async (server) => {
   // nothing is persisted, enabled, recorded, notified or executed. Returns
   // { previewResult } with the resolved jobType/trigger, every issue found,
   // and a one-line description of what activating the draft would do.
-  server.post<{ Body: AutomationBody }>('/api/automations/test', async (request, reply) => {
-    const b = request.body ?? {};
+  server.post<{ Body: AutomationBody & { id?: string } }>('/api/automations/test', async (request, reply) => {
+    const raw = request.body ?? {};
+    // C26 edit-mode: a draft carrying the stored row's `id` is judged against
+    // the REAL job — the edit form deliberately omits jobType/jobConfig
+    // (Builder territory), and without this merge resolveJobType fell back to
+    // 'agent_task' and phantom-flagged a missing prompt on every edit-mode
+    // check. Draft fields still win over stored ones; an unknown/absent id
+    // degrades to the plain draft preview.
+    let b: AutomationBody = raw;
+    if (raw.id !== undefined) {
+      const numericId = parseInt(String(raw.id), 10);
+      const stored = Number.isNaN(numericId) ? undefined : server.cronStore.getById(numericId);
+      if (stored) {
+        let storedConfig: Record<string, unknown> = {};
+        try {
+          storedConfig = JSON.parse(stored.job_config || '{}') as Record<string, unknown>;
+        } catch { /* corrupt job_config — judge the draft alone */ }
+        b = {
+          ...raw,
+          jobType: raw.jobType ?? stored.job_type,
+          jobConfig: { ...storedConfig, ...(raw.jobConfig ?? {}) },
+        };
+      }
+    }
     const eventErr = rejectEventTrigger(b);
     if (eventErr) return reply.status(400).send({ error: eventErr });
 

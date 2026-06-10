@@ -1,343 +1,317 @@
 import { useState, useEffect, useCallback } from 'react';
-import { AnimatePresence } from 'framer-motion';
-import { Bot, Plus, Search, Loader2, Users, X, AlertCircle, RefreshCw } from 'lucide-react';
+import { Bot, Plus, Search, Loader2, AlertCircle, RefreshCw, LibraryBig } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
-import { PERSONAS } from '@/lib/personas';
-import type { BackendPersona, AgentGroup, ToolDef, GroupExecState, MemberExecState } from './agents/types';
-import AgentCard from './agents/AgentCard';
-import AgentDetail from './agents/AgentDetail';
-import CreateAgentForm from './agents/CreateAgentForm';
-import GroupCard from './agents/GroupCard';
-import GroupDetail from './agents/GroupDetail';
-import CreateGroupForm from './agents/CreateGroupForm';
+import { useService } from '@/providers/ServiceProvider';
+import { useToast } from '@/hooks/use-toast';
+import type { Agent, Workspace } from '@/lib/types';
+import {
+  AGENT_CENTER_TABS,
+  type AgentCenterTab,
+  filterAgentsByTab,
+  agentKpis,
+  formatSuccessRate,
+  workspaceAmbiguityIds,
+} from '@/lib/agent-center-display';
+import AgentCenterRow from './agents/AgentCenterRow';
+import AgentCenterDetail from './agents/AgentCenterDetail';
+import WorkspacePickerDialog from './agents/WorkspacePickerDialog';
+import CreateAgentDialog, { type CreateAgentInput } from './agents/CreateAgentDialog';
+import TemplatesView from './agents/TemplatesView';
+import type { BackendPersona } from './agents/types';
 
-const AgentsApp = () => {
-  const [tab, setTab] = useState<'agents' | 'groups'>('agents');
-  const [agents, setAgents] = useState<BackendPersona[]>([]);
-  const [groups, setGroups] = useState<AgentGroup[]>([]);
-  const [allTools, setAllTools] = useState<ToolDef[]>([]);
+/**
+ * Agent Center (UX-Refactor Phase 3B, S09). Agents as explicit, governed work
+ * actors over the B3 agents.json store (/api/agents). C22: category tabs =
+ * All / Personal / Workspace / Team / Autonomous / Archive; Templates (the
+ * legacy persona catalog + groups) is a SIDE AFFORDANCE, not a tab. C23: Run
+ * is a one-shot fleet-spawn — on `workspace_ambiguous` a picker opens and the
+ * run retries with the chosen workspace. Acceptance (§12.9): a user can
+ * explain what an agent can see and do before enabling it (detail drawer).
+ */
+interface AgentsAppProps {
+  workspaces?: Workspace[];
+}
+
+const AgentsApp = ({ workspaces }: AgentsAppProps) => {
+  const { toast } = useToast();
+  // Cold-load race guard (same fix as HomeCockpit): wait for the adapter's
+  // initial connect() to settle so a restored window doesn't 401 into a
+  // spurious "listAgents failed: 401" panel before the session token exists.
+  const { connecting } = useService();
+  const [view, setView] = useState<'center' | 'templates'>('center');
+  const [tab, setTab] = useState<AgentCenterTab>('all');
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-  const [showCreate, setShowCreate] = useState(false);
-  const [showCreateGroup, setShowCreateGroup] = useState(false);
-  const [editingAgent, setEditingAgent] = useState<BackendPersona | null>(null);
-  const [editingGroup, setEditingGroup] = useState<AgentGroup | null>(null);
-  const [duplicatingGroup, setDuplicatingGroup] = useState<AgentGroup | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState<Agent | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [picker, setPicker] = useState<{ agent: Agent; workspaceIds: string[] } | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createInitial, setCreateInitial] = useState<Partial<CreateAgentInput> | undefined>(undefined);
+  const [creating, setCreating] = useState(false);
 
-  const loadData = useCallback(async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [personasRes, capsRes, groupsRes] = await Promise.allSettled([
-        adapter.getPersonas(),
-        adapter.getCapabilityStatus(),
-        adapter.getAgentGroups(),
-      ]);
-
-      const backendPersonas: BackendPersona[] =
-        personasRes.status === 'fulfilled'
-          ? (personasRes.value as BackendPersona[]).map(p => ({ ...p, custom: false }))
-          : PERSONAS.map(p => ({ id: p.id, name: p.name, description: p.description, icon: undefined, custom: false }));
-      setAgents(backendPersonas);
-
-      if (groupsRes.status === 'fulfilled') setGroups(groupsRes.value as AgentGroup[]);
-
-      if (capsRes.status === 'fulfilled') {
-        const caps = capsRes.value as { commands?: Array<{ name: string; description: string }>; plugins?: Array<{ name: string; tools?: number }>; mcpServers?: Array<{ name: string; tools?: number }> };
-        const tools: ToolDef[] = [];
-        if (caps.commands) caps.commands.forEach(c => tools.push({ name: c.name, description: c.description }));
-        if (caps.plugins) caps.plugins.forEach(p => { for (let i = 0; i < (p.tools ?? 0); i++) tools.push({ name: `${p.name}:tool-${i + 1}`, description: `Plugin tool from ${p.name}` }); });
-        if (caps.mcpServers) caps.mcpServers.forEach(m => { for (let i = 0; i < (m.tools ?? 0); i++) tools.push({ name: `${m.name}:tool-${i + 1}`, description: `MCP tool from ${m.name}` }); });
-        setAllTools(tools);
-      }
-    } catch (err) {
-      console.error('[AgentsApp] load failed:', err);
-      setError('Failed to load data — server may be unreachable');
+      const rows = await adapter.listAgents();
+      setAgents(rows);
+      // Keep an open detail drawer pointing at the FRESH record (a run/pause
+      // reload would otherwise leave it showing the stale pre-action status).
+      setSelected(prev => (prev ? rows.find(a => a.id === prev.id) ?? null : prev));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load agents');
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  // Defer until the adapter's initial connect attempt has settled (gates on
+  // `connecting`, not `connected`, so a failed connect still reaches the
+  // error/Retry UI instead of a permanent skeleton).
+  useEffect(() => {
+    if (connecting) return;
+    void load();
+  }, [load, connecting]);
 
-  const selectedAgent = agents.find(a => a.id === selectedId);
-  const localPersona = selectedAgent ? PERSONAS.find(p => p.id === selectedAgent.id) : undefined;
-  const selectedGroup = groups.find(g => g.id === selectedGroupId);
+  /** busyId is shared by run/pause/archive — clear it only if this action
+   *  still owns it, so overlapping actions on two agents can't re-enable a
+   *  row whose own call is still in flight (double-spawn risk). */
+  const releaseBusy = (id: string) => setBusyId(prev => (prev === id ? null : prev));
 
-  const filtered = agents.filter(a =>
-    a.name.toLowerCase().includes(search.toLowerCase()) || a.description.toLowerCase().includes(search.toLowerCase())
-  );
-  const filteredGroups = groups.filter(g =>
-    g.name.toLowerCase().includes(search.toLowerCase()) || (g.description ?? '').toLowerCase().includes(search.toLowerCase())
-  );
-
-  const handleCreate = async (data: { name: string; description: string; icon: string; tools: string[]; systemPrompt: string }) => {
+  const run = async (agent: Agent, workspaceId?: string) => {
+    setBusyId(agent.id);
     try {
-      await adapter.createPersona({ name: data.name, description: data.description, icon: data.icon, systemPrompt: data.systemPrompt, tools: data.tools });
-      setShowCreate(false);
-      await loadData();
-    } catch (err) { console.error('[AgentsApp] create persona failed:', err); setError('Failed to create persona'); }
-  };
-
-  const handleUpdate = async (data: { name: string; description: string; icon: string; tools: string[]; systemPrompt: string }) => {
-    if (!editingAgent) return;
-    try {
-      await adapter.updatePersona(editingAgent.id, data);
-      setEditingAgent(null);
-      await loadData();
-    } catch (err) { console.error('[AgentsApp] update persona failed:', err); setError('Failed to update persona'); }
-  };
-
-  const handleDelete = async (id: string) => {
-    try {
-      await adapter.deletePersona(id);
-      if (selectedId === id) setSelectedId(null);
-      await loadData();
-    } catch (err) { console.error('[AgentsApp] delete persona failed:', err); setError('Failed to delete persona'); }
-  };
-
-  const handleCreateGroup = async (data: { name: string; description: string; strategy: 'parallel' | 'sequential' | 'coordinator'; members: { agentId: string; roleInGroup: string; executionOrder: number }[] }) => {
-    try {
-      await adapter.createAgentGroup(data);
-      setShowCreateGroup(false);
-      await loadData();
-    } catch (err) { console.error('[AgentsApp] create group failed:', err); setError('Failed to create group'); }
-  };
-
-  const handleUpdateGroup = async (data: { name: string; description: string; strategy: 'parallel' | 'sequential' | 'coordinator'; members: { agentId: string; roleInGroup: string; executionOrder: number }[] }) => {
-    if (!editingGroup) return;
-    try {
-      await adapter.updateAgentGroup(editingGroup.id, data);
-      setEditingGroup(null);
-      await loadData();
-    } catch (err) { console.error('[AgentsApp] update group failed:', err); setError('Failed to update group'); }
-  };
-
-  const handleDeleteGroup = async (id: string) => {
-    try {
-      await adapter.deleteAgentGroup(id);
-      if (selectedGroupId === id) setSelectedGroupId(null);
-      await loadData();
-    } catch (err) { console.error('[AgentsApp] delete group failed:', err); setError('Failed to delete group'); }
-  };
-
-  const handleRunGroup = async (groupId: string, task: string): Promise<GroupExecState | null> => {
-    try {
-      const group = groups.find(g => g.id === groupId);
-      const result = await adapter.runAgentGroup(groupId, task) as { jobId?: string; id?: string };
-      const jobId = result?.jobId ?? result?.id ?? `job-${Date.now()}`;
-      const members: MemberExecState[] = (group?.members ?? [])
-        .sort((a, b) => a.executionOrder - b.executionOrder)
-        .map(m => ({ agentId: m.agentId, status: 'pending' as const }));
-      return { jobId, status: 'queued', task, startedAt: Date.now(), members };
+      const res = await adapter.runAgent(agent.id, workspaceId ? { workspaceId } : {});
+      const wsName = workspaces?.find((w) => w.id === res.workspaceId)?.name ?? res.workspaceId;
+      toast({ title: 'Run started', description: `${agent.name} → ${wsName}` });
+      await load();
     } catch (err) {
-      console.error('[AgentsApp] run group failed:', err);
-      setError('Failed to run group task');
-      return null;
+      // C23: ambiguity → open the workspace picker, then retry with a choice.
+      const ids = workspaceAmbiguityIds(err);
+      if (ids && ids.length > 0) {
+        // Close the detail drawer first: it is a portaled MODAL sheet (z-50 +
+        // pointer-events lock) that would paint over and inert-ify the picker.
+        setSelected(null);
+        setPicker({ agent, workspaceIds: ids });
+      } else {
+        toast({ title: 'Run failed', description: err instanceof Error ? err.message : undefined, variant: 'destructive' });
+      }
+    } finally {
+      releaseBusy(agent.id);
     }
   };
 
-  const handleAiGenerate = async (prompt: string) => {
-    try { return await adapter.generatePersona(prompt); }
-    catch (err) { console.error('[AgentsApp] AI generate failed:', err); setError('AI generation failed'); return null; }
+  const pause = async (agent: Agent) => {
+    setBusyId(agent.id);
+    try {
+      await adapter.pauseAgent(agent.id);
+      toast({ title: 'Paused', description: `${agent.name} — the in-flight run was stopped` });
+      await load();
+    } catch (err) {
+      toast({ title: 'Pause failed', description: err instanceof Error ? err.message : undefined, variant: 'destructive' });
+    } finally {
+      releaseBusy(agent.id);
+    }
   };
 
-  const resetSelections = (newTab: 'agents' | 'groups') => {
-    setTab(newTab);
-    setSelectedId(null);
-    setSelectedGroupId(null);
-    setShowCreate(false);
-    setShowCreateGroup(false);
-    setEditingAgent(null);
-    setEditingGroup(null);
-    setDuplicatingGroup(null);
-    setSearch('');
+  const archiveToggle = async (agent: Agent) => {
+    setBusyId(agent.id);
+    try {
+      await adapter.patchAgent(agent.id, { status: agent.status === 'archived' ? 'idle' : 'archived' });
+      setSelected(null);
+      await load();
+    } catch (err) {
+      toast({ title: 'Update failed', description: err instanceof Error ? err.message : undefined, variant: 'destructive' });
+    } finally {
+      releaseBusy(agent.id);
+    }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-5 h-5 animate-spin text-primary" />
-      </div>
-    );
-  }
+  const create = async (input: CreateAgentInput) => {
+    setCreating(true);
+    try {
+      await adapter.createAgent(input);
+      setCreateOpen(false);
+      setCreateInitial(undefined);
+      toast({ title: 'Agent created', description: input.name });
+      await load();
+    } catch (err) {
+      toast({ title: 'Create failed', description: err instanceof Error ? err.message : undefined, variant: 'destructive' });
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const useTemplate = (persona: BackendPersona) => {
+    setView('center');
+    setCreateInitial({ personaId: persona.id, name: persona.name, goal: persona.description });
+    setCreateOpen(true);
+  };
+
+  const q = search.trim().toLowerCase();
+  const visible = filterAgentsByTab(agents, tab).filter(
+    (a) => !q || a.name.toLowerCase().includes(q) || a.goal.toLowerCase().includes(q),
+  );
+  const kpis = agentKpis(agents);
 
   return (
-    <div className="flex flex-col h-full p-4 gap-3">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Bot className="w-4 h-4 text-primary" />
-          <h2 className="text-sm font-display font-bold text-foreground">Personas</h2>
-          <div className="flex items-center gap-0.5 ml-2 bg-secondary/30 rounded-lg p-0.5" role="tablist" aria-label="Persona sections">
-            <button
-              onClick={() => resetSelections('agents')}
-              role="tab"
-              aria-selected={tab === 'agents'}
-              tabIndex={tab === 'agents' ? 0 : -1}
-              className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors ${
-                tab === 'agents' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Bot className="w-3 h-3 inline mr-1" />Personas ({agents.length})
-            </button>
-            <button
-              onClick={() => resetSelections('groups')}
-              role="tab"
-              aria-selected={tab === 'groups'}
-              tabIndex={tab === 'groups' ? 0 : -1}
-              className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors ${
-                tab === 'groups' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Users className="w-3 h-3 inline mr-1" />Groups ({groups.length})
-            </button>
-          </div>
+    <div className="flex flex-col h-full">
+      {/* Header: title + Templates side affordance + create */}
+      <div className="px-4 py-3 border-b border-border/30 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <Bot className="w-4 h-4 text-primary shrink-0" />
+          <h2 className="text-sm font-display font-bold text-foreground">Agent Center</h2>
         </div>
-        {tab === 'agents' ? (
+        <div className="flex items-center gap-1.5">
           <button
-            onClick={() => { setShowCreate(!showCreate); setSelectedId(null); setEditingAgent(null); }}
-            className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-              showCreate ? 'bg-secondary/50 text-muted-foreground' : 'bg-primary text-primary-foreground hover:bg-primary/90'
+            onClick={() => setView(view === 'templates' ? 'center' : 'templates')}
+            aria-pressed={view === 'templates'}
+            className={`flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium rounded-lg transition-colors ${
+              view === 'templates' ? 'bg-primary/20 text-primary' : 'bg-secondary/30 text-muted-foreground hover:text-foreground'
             }`}
           >
-            {showCreate ? <X className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
-            {showCreate ? 'Cancel' : 'New Persona'}
+            <LibraryBig className="w-3 h-3" /> Templates
           </button>
-        ) : (
           <button
-            onClick={() => { setShowCreateGroup(!showCreateGroup); setSelectedGroupId(null); }}
-            className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-              showCreateGroup ? 'bg-secondary/50 text-muted-foreground' : 'bg-primary text-primary-foreground hover:bg-primary/90'
-            }`}
+            onClick={() => { setCreateInitial(undefined); setCreateOpen(true); }}
+            className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90"
           >
-            {showCreateGroup ? <X className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
-            {showCreateGroup ? 'Cancel' : 'New Group'}
+            <Plus className="w-3 h-3" /> New Agent
           </button>
-        )}
+        </div>
       </div>
 
-      {error && (
-        <div className="flex items-center gap-2 p-2 rounded-lg bg-destructive/10 text-destructive text-xs">
-          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-          {error}
-          <button onClick={() => { setError(null); loadData(); }} className="ml-auto flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 mr-2">
-            <RefreshCw className="w-3 h-3" /> Retry
-          </button>
-          <button onClick={() => setError(null)}><X className="w-3 h-3" /></button>
+      {view === 'templates' ? (
+        <div className="flex-1 min-h-0">
+          <TemplatesView onUseTemplate={useTemplate} />
         </div>
-      )}
-
-      <div className="flex gap-3 flex-1 min-h-0" role="tabpanel">
-        {/* Left sidebar */}
-        <div className="w-60 shrink-0 flex flex-col gap-2">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder={tab === 'agents' ? 'Search personas...' : 'Search groups...'}
-              className="w-full text-xs bg-secondary/30 pl-8 pr-3"
-            />
+      ) : (
+        <>
+          {/* C22 tab strip + search. All tabs stay in the Tab order
+              (FilesAppTabs pattern) — a roving tabIndex without arrow-key
+              handling makes every inactive tab keyboard-unreachable. */}
+          <div className="px-4 pt-2.5 space-y-2">
+            <div className="flex flex-wrap gap-1" role="tablist" aria-label="Agent categories">
+              {AGENT_CENTER_TABS.map((t) => (
+                <button
+                  key={t.id}
+                  id={`agent-center-tab-${t.id}`}
+                  onClick={() => setTab(t.id)}
+                  role="tab"
+                  aria-selected={tab === t.id}
+                  aria-controls="agent-center-tab-panel"
+                  className={`px-2 py-0.5 rounded-full text-[11px] transition-colors border ${
+                    tab === t.id ? 'border-primary/40 bg-primary/15 text-primary' : 'border-transparent bg-muted/50 text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg px-2 py-1 flex-1">
+                <Search className="w-3.5 h-3.5 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search agents..."
+                  className="flex-1 bg-transparent text-xs h-auto border-0 p-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                />
+              </div>
+              {/* KPI strip (C27: success-rate yes, hours-saved no). */}
+              <div className="hidden sm:flex items-center gap-3 text-[11px] text-muted-foreground shrink-0" data-testid="agent-center-kpis">
+                <span><span className="text-foreground font-medium tabular-nums">{kpis.total}</span> agents</span>
+                <span><span className="text-foreground font-medium tabular-nums">{kpis.running}</span> running</span>
+                <span>avg success <span className="text-foreground font-medium tabular-nums">{kpis.avgSuccessRate === null ? '—' : formatSuccessRate(kpis.avgSuccessRate)}</span></span>
+              </div>
+            </div>
           </div>
-          <div className="flex-1 overflow-y-auto scrollbar-thin space-y-1.5">
-            {tab === 'agents' ? (
-              <AnimatePresence>
-                {filtered.map(agent => (
-                  <AgentCard
-                    key={agent.id}
-                    agent={agent}
-                    localPersona={PERSONAS.find(p => p.id === agent.id)}
-                    selected={selectedId === agent.id && !showCreate && !editingAgent}
-                    onSelect={() => { setSelectedId(agent.id); setShowCreate(false); setEditingAgent(null); }}
-                    onDelete={agent.custom ? () => handleDelete(agent.id) : undefined}
-                  />
-                ))}
-                {filtered.length === 0 && <p className="text-[11px] text-muted-foreground text-center py-6">No personas found</p>}
-              </AnimatePresence>
+
+          {/* List */}
+          <div id="agent-center-tab-panel" className="flex-1 overflow-auto p-2.5" role="tabpanel" aria-labelledby={`agent-center-tab-${tab}`}>
+            {/* A post-action reload failure must be visible even when a stale
+                list is still on screen. */}
+            {error && agents.length > 0 && (
+              <div role="alert" className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-2.5 py-1.5">
+                <span className="text-[11px] text-destructive">Refresh failed — this list may be stale. {error}</span>
+                <button onClick={() => void load()} className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline shrink-0">
+                  <RefreshCw className="w-3 h-3" /> Retry
+                </button>
+              </div>
+            )}
+            {loading && agents.length === 0 ? (
+              <div role="status" aria-live="polite" className="text-center py-12">
+                <Loader2 className="w-6 h-6 text-muted-foreground/40 mx-auto mb-2 animate-spin" />
+                <p className="text-xs text-muted-foreground">Loading agents…</p>
+              </div>
+            ) : error && agents.length === 0 ? (
+              <div role="alert" className="text-center py-12">
+                <AlertCircle className="w-6 h-6 text-destructive/60 mx-auto mb-2" />
+                <p className="text-xs text-destructive mb-2">{error}</p>
+                <button onClick={() => load()} className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                  <RefreshCw className="w-3 h-3" /> Retry
+                </button>
+              </div>
+            ) : visible.length === 0 ? (
+              <div role="status" aria-live="polite" className="text-center py-12">
+                <Bot className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+                <p className="text-xs text-muted-foreground">
+                  {q || tab !== 'all'
+                    ? 'No agents match this view.'
+                    : 'No agents yet — create one to put it to work.'}
+                </p>
+              </div>
             ) : (
-              <AnimatePresence>
-                {filteredGroups.map(group => (
-                  <GroupCard
-                    key={group.id}
-                    group={group}
-                    agents={agents}
-                    selected={selectedGroupId === group.id && !showCreateGroup}
-                    onSelect={() => { setSelectedGroupId(group.id); setShowCreateGroup(false); }}
-                    onDelete={() => handleDeleteGroup(group.id)}
+              <ul className="space-y-1">
+                {visible.map((a) => (
+                  <AgentCenterRow
+                    key={a.id}
+                    agent={a}
+                    busy={busyId === a.id}
+                    onOpen={setSelected}
+                    onRun={(agent) => void run(agent)}
+                    onPause={(agent) => void pause(agent)}
                   />
                 ))}
-                {filteredGroups.length === 0 && <p className="text-[11px] text-muted-foreground text-center py-6">No groups yet</p>}
-              </AnimatePresence>
+              </ul>
             )}
           </div>
-        </div>
+        </>
+      )}
 
-        {/* Right panel */}
-        <div className="flex-1 min-w-0 flex flex-col">
-          {tab === 'agents' ? (
-            showCreate ? (
-              <CreateAgentForm allTools={allTools} onSave={handleCreate} onCancel={() => setShowCreate(false)} generating={false} onGenerate={handleAiGenerate} />
-            ) : editingAgent ? (
-              <CreateAgentForm
-                key={`edit-${editingAgent.id}`}
-                allTools={allTools}
-                onSave={handleUpdate}
-                onCancel={() => setEditingAgent(null)}
-                generating={false}
-                onGenerate={handleAiGenerate}
-                editMode
-                initialData={{ name: editingAgent.name, description: editingAgent.description, icon: editingAgent.icon ?? '🤖', tools: editingAgent.tools ?? [], systemPrompt: editingAgent.systemPrompt ?? '' }}
-              />
-            ) : selectedAgent ? (
-              <AgentDetail agent={selectedAgent} localPersona={localPersona} allTools={allTools} onEdit={selectedAgent.custom ? () => setEditingAgent(selectedAgent) : undefined} />
-            ) : (
-              <div className="flex-1 flex items-center justify-center text-muted-foreground">
-                <div className="text-center">
-                  <Bot className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                  <p className="text-xs">Select a persona to view details</p>
-                  <p className="text-[11px] mt-1">or create a new one with AI</p>
-                </div>
-              </div>
-            )
-          ) : (
-            showCreateGroup ? (
-              <CreateGroupForm agents={agents} onSave={handleCreateGroup} onCancel={() => setShowCreateGroup(false)} />
-            ) : editingGroup ? (
-              <CreateGroupForm
-                key={`edit-group-${editingGroup.id}`}
-                agents={agents}
-                onSave={handleUpdateGroup}
-                onCancel={() => setEditingGroup(null)}
-                editMode
-                initialData={{ name: editingGroup.name, description: editingGroup.description ?? '', strategy: editingGroup.strategy, members: editingGroup.members }}
-              />
-            ) : duplicatingGroup ? (
-              <CreateGroupForm
-                key={`dup-group-${duplicatingGroup.id}`}
-                agents={agents}
-                onSave={(data) => { handleCreateGroup(data); setDuplicatingGroup(null); }}
-                onCancel={() => setDuplicatingGroup(null)}
-                initialData={{ name: `${duplicatingGroup.name} (Copy)`, description: duplicatingGroup.description ?? '', strategy: duplicatingGroup.strategy, members: duplicatingGroup.members }}
-              />
-            ) : selectedGroup ? (
-              <GroupDetail group={selectedGroup} agents={agents} onRun={(task) => handleRunGroup(selectedGroup.id, task)} onEdit={() => setEditingGroup(selectedGroup)} onDuplicate={() => setDuplicatingGroup(selectedGroup)} />
-            ) : (
-              <div className="flex-1 flex items-center justify-center text-muted-foreground">
-                <div className="text-center">
-                  <Users className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                  <p className="text-xs">Select a group to view details</p>
-                  <p className="text-[11px] mt-1">or create a new collaborative workflow</p>
-                </div>
-              </div>
-            )
-          )}
-        </div>
-      </div>
+      {/* Detail drawer (§12.9 explicit scope + traces). */}
+      <AgentCenterDetail
+        agent={selected}
+        workspaces={workspaces}
+        busy={!!selected && busyId === selected.id}
+        onOpenChange={(o) => { if (!o) setSelected(null); }}
+        onRun={(agent) => void run(agent)}
+        onPause={(agent) => void pause(agent)}
+        onArchiveToggle={(agent) => void archiveToggle(agent)}
+      />
+
+      {/* C23 ambiguity picker. */}
+      {picker && (
+        <WorkspacePickerDialog
+          agentName={picker.agent.name}
+          workspaceIds={picker.workspaceIds}
+          workspaces={workspaces}
+          onPick={(wsId) => { const target = picker.agent; setPicker(null); void run(target, wsId); }}
+          onCancel={() => setPicker(null)}
+        />
+      )}
+
+      {createOpen && (
+        <CreateAgentDialog
+          busy={creating}
+          initial={createInitial}
+          onCreate={(input) => void create(input)}
+          onCancel={() => { setCreateOpen(false); setCreateInitial(undefined); }}
+        />
+      )}
     </div>
   );
 };

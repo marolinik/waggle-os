@@ -493,6 +493,23 @@ export interface SkillPack {
   trust: 'verified' | 'community' | 'experimental';
 }
 
+/** Per-skill display status (UX-Refactor Phase 3B, S06 — PRD §14.7 subset).
+ *  Only the states derivable from today's backend appear at runtime:
+ *  GET /api/skills carries no scope/usage metadata yet, so 'workspace' /
+ *  'update-available' stay in the union for contract stability but render
+ *  only once the backend exposes them. */
+export type SkillStatus = 'installed' | 'draft' | 'custom' | 'workspace' | 'marketplace' | 'update-available';
+
+/** FE per-skill view-model (S06 Skills Hub). The skill NAME is its id (flat
+ *  markdown files). `preview` is the first 200 chars of the body — the only
+ *  description-ish field GET /api/skills exposes today. */
+export interface Skill {
+  name: string;
+  preview?: string;
+  status: SkillStatus;
+  scope?: import('@waggle/shared').Scope;
+}
+
 export interface FleetSession {
   workspaceId: string;
   workspaceName: string;

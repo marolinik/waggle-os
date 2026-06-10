@@ -839,6 +839,10 @@ class LocalAdapter {
   // --- Skills ---
   async getSkills(): Promise<SkillPack[]> {
     const res = await this.fetch('/api/skills');
+    // Phase-3B review: an HTTP error body (401 boot-race, 500) piped through
+    // unwrapArray comes back as [] — a silent empty Skills Hub. Throw so the
+    // caller's allSettled/error paths see the failure.
+    if (!res.ok) throw new Error(`getSkills failed: ${res.status}`);
     return unwrapArray(await res.json()).map((s: any) => ({
       ...s,
       id: s.id || s.name || s.slug,
@@ -857,7 +861,15 @@ class LocalAdapter {
     // Phase-3 fix: this used to send only { name, description }, which the
     // route rejects (steps is mandatory) — the call could never succeed.
     const res = await this.fetch('/api/skills/create', { method: 'POST', body: JSON.stringify(data) });
-    if (!res.ok) throw new Error(`createSkill failed: ${res.status}`);
+    if (!res.ok) {
+      // Rich error (mirrors installSkill): callers branch on .status (e.g.
+      // CreateSkillDialog routes a 403 to the UpgradeModal tier event).
+      const body = await res.json().catch(() => ({} as Record<string, unknown>));
+      const err = new Error((body as { error?: string }).error ?? `createSkill failed: ${res.status}`) as Error & { status?: number; body?: unknown };
+      err.status = res.status;
+      err.body = body;
+      throw err;
+    }
   }
 
   /** Update a skill's markdown body. The skill NAME is its id. */
@@ -908,6 +920,7 @@ class LocalAdapter {
 
   async getStarterPacks(): Promise<SkillPack[]> {
     const res = await this.fetch('/api/skills/starter-pack/catalog');
+    if (!res.ok) throw new Error(`getStarterPacks failed: ${res.status}`);
     // Server emits { skills: [{ id, name, description, family, familyLabel, state, isWorkflow }], families }.
     // SkillPack contract uses { category, trust, installed } — map server shape so
     // CapabilitiesApp renders category badges + trust icons correctly.
@@ -925,6 +938,7 @@ class LocalAdapter {
 
   async getCapabilityPacks(): Promise<SkillPack[]> {
     const res = await this.fetch('/api/skills/capability-packs/catalog');
+    if (!res.ok) throw new Error(`getCapabilityPacks failed: ${res.status}`);
     // Server emits { packs: [{ id, name, description, skills:[ids], skillStates, packState, installedCount, totalCount }] }.
     const items = unwrapArray<Record<string, unknown>>(await res.json());
     return items.map((p) => ({
@@ -957,6 +971,7 @@ class LocalAdapter {
   // --- Marketplace ---
   async getMarketplacePacks(): Promise<SkillPack[]> {
     const res = await this.fetch('/api/marketplace/packs');
+    if (!res.ok) throw new Error(`getMarketplacePacks failed: ${res.status}`);
     return unwrapArray(await res.json());
   }
 
@@ -1182,7 +1197,11 @@ class LocalAdapter {
   }
 
   async deleteCronJob(id: string): Promise<void> {
-    await this.fetch(`/api/cron/${id}`, { method: 'DELETE' });
+    // Phase-3B review: this was the one cron mutation with no res.ok check —
+    // a 404/500 resolved normally and the Automation Center toasted a false
+    // "Automation deleted" while the row survived the refresh.
+    const res = await this.fetch(`/api/cron/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(`deleteCronJob failed: ${res.status}`);
   }
 
   async triggerCronJob(id: string): Promise<{ triggered: boolean; autoEnabled?: boolean; schedule?: CronJob }> {
@@ -1229,6 +1248,8 @@ class LocalAdapter {
       name?: string; schedule?: string; condition?: string; actions?: string[];
       agentId?: string; notify?: boolean; workspaceId?: string; enabled?: boolean;
       jobConfig?: Record<string, unknown>;
+      /** C24 trigger patch (schedule ↔ manual); server maps manual → disabled. */
+      trigger?: { type: 'schedule' | 'manual'; cron?: string };
     },
   ): Promise<Automation> {
     const res = await this.fetch(`/api/automations/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) });
@@ -1264,6 +1285,10 @@ class LocalAdapter {
    *  `condition` as advisory (C25). `executed` is always false; nothing is
    *  persisted, enabled, recorded or notified. */
   async testAutomation(draft: {
+    /** Edit-mode (C26): the stored row's id — the server merges the draft
+     *  over the stored jobType/jobConfig so the preview judges the REAL job
+     *  instead of the agent_task fallback. */
+    id?: string;
     name?: string;
     trigger?: { type: 'schedule' | 'manual'; cron?: string };
     actions?: string[];

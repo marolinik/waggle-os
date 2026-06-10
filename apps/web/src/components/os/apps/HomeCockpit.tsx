@@ -246,9 +246,20 @@ function OvernightPanel({ summary }: { summary: OvernightSummary | null }) {
           </h3>
           <ul className="space-y-1">
             {summary.failures.slice(0, 4).map(f => (
-              <li key={f.id} className="text-[11px] text-foreground">
-                <span className="font-medium">{f.label}</span>
-                <span className="text-muted-foreground"> — {f.error}</span>
+              <li key={f.id}>
+                {/* Journey 16: a failed automation deep-links into the
+                    Automation Center's Logs tab (retry/pause/edit live there).
+                    automationId preselects the failing automation's log. */}
+                <button
+                  type="button"
+                  onClick={() => window.dispatchEvent(new CustomEvent('waggle:open-app', {
+                    detail: { appId: 'scheduled-jobs', tab: 'logs', automationId: f.automationId },
+                  }))}
+                  className="w-full text-left text-[11px] text-foreground hover:text-primary rounded px-1 py-0.5 hover:bg-muted/40 transition-colors"
+                >
+                  <span className="font-medium">{f.label}</span>
+                  <span className="text-muted-foreground"> — {f.error}</span>
+                </button>
               </li>
             ))}
           </ul>

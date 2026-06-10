@@ -319,6 +319,49 @@ describe('Automations alias routes (Phase 3)', () => {
     expect(cronStore.list()).toHaveLength(0);
   });
 
+  it('C26 (edit mode): a draft carrying the stored row id is judged against the REAL job, not the agent_task fallback', async () => {
+    // A stored agent_task WITH a prompt: the bare edit-mode draft (no jobType/
+    // jobConfig) used to phantom-flag "agent_task requires jobConfig.prompt".
+    const agentTask = await createAutomation({
+      name: 'Daily summary',
+      trigger: { type: 'schedule', cron: '0 6 * * *' },
+      jobType: 'agent_task',
+      jobConfig: { prompt: 'Summarize the day' },
+      workspaceId: 'ws-test', // agent_task creates require a workspace
+    });
+    const res = await server.inject({
+      method: 'POST', url: '/api/automations/test',
+      payload: { id: agentTask.id, name: 'Daily summary', trigger: { type: 'schedule', cron: '0 7 * * *' } },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().previewResult.ok).toBe(true);
+    expect(res.json().previewResult.jobType).toBe('agent_task');
+
+    // Stored non-agent_task rows resolve their real jobType (correct wouldRun).
+    const consolidation = await createAutomation({
+      name: 'Nightly consolidation',
+      trigger: { type: 'schedule', cron: '0 3 * * *' },
+      jobType: 'memory_consolidation',
+    });
+    const res2 = await server.inject({
+      method: 'POST', url: '/api/automations/test',
+      payload: { id: consolidation.id, name: 'Nightly consolidation', trigger: { type: 'schedule', cron: '0 3 * * *' } },
+    });
+    expect(res2.json().previewResult.ok).toBe(true);
+    expect(res2.json().previewResult.jobType).toBe('memory_consolidation');
+
+    // An unknown id degrades to the plain draft preview (agent_task fallback).
+    const res3 = await server.inject({
+      method: 'POST', url: '/api/automations/test',
+      payload: { id: '99999', name: 'ghost', trigger: { type: 'manual' } },
+    });
+    expect(res3.statusCode).toBe(200);
+    expect(res3.json().previewResult.ok).toBe(false);
+
+    // Still validation-only: nothing executed.
+    expect(executed).toHaveLength(0);
+  });
+
   it('C24: test rejects event triggers (contract-level 400)', async () => {
     expect((await server.inject({
       method: 'POST', url: '/api/automations/test',
