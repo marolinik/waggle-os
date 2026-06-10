@@ -43,8 +43,11 @@ import {
 } from '../mcp-config.js';
 import { authHeaders, clampStr, clampStrArray } from './validate.js';
 
-/** Live-test budget — under the instance's own 30s per-request timeout. */
-const TEST_TIMEOUT_MS = 15_000;
+/** Live-test budget. Must answer BEFORE the FE adapter's 10s request timeout
+ *  (15s here meant the route's honest {ok:false} arrived after the client had
+ *  already aborted — caught by the 2026-06-10 Extend live smoke), and stays
+ *  under the instance's own 30s per-request timeout. */
+const TEST_TIMEOUT_MS = 8_000;
 
 /** Clamp env to ≤64 pairs with bounded key/value lengths. Non-record shapes
  *  (and non-string values) pass through untouched so validateMcpEntry still
