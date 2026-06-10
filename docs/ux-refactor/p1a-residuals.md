@@ -36,3 +36,17 @@ Source: adversarial review workflow over 93c7dd0..a6dc2e4 (30 raw findings; 7 co
 - tests/e2e + tests/vision Playwright suites partially retargeted (phase-ab-verification.spec.ts done in 4e1d763); full sweep of remaining dock-era specs = P7.
 - package-lock.json sync deferred to a Linux-side regen (Windows regen drops 20 linux/darwin optional entries) — pre-existing, tracked since 0601_s3.
 - Killed AppId FILES (DashboardApp/VoiceApp/MissionControlApp/BackupApp) still on disk per plan §5.3.4 — separate dead-code commit.
+
+## Live-smoke findings (2026-06-10, vite:8080 + branch sidecar:3501 via SIDECAR_TARGET proxy)
+
+**Acceptance checks live-verified:** #2 (14 routes by typed URL + 404, all render in shell), #3 (both shim consumer styles: /automations?tab=logs stash-preselect AND /settings/profile?tab=identity re-dispatch-preselect), #4 (Ctrl+K on routed surfaces; workspace result click -> URL change; browser Back), #6 (populated salvage -> /memory + chat-state researcher/trusted migrated + key removed; corrupt -> /home + key removed, no crash; deep-link entry wins over salvage while side effects still run), #7 (chat widget at /workspaces/:id/chat, 8 URL-driven tabs both directions, **SSE stream survived navigation**: 3711 chars at nav-away mid-stream -> 5924 complete on return; nav-Chat resolved the active workspace post review-fix). **#8 (wizard onFinish) NOT live-run** — would create a real workspace in ~/.waggle; covered by unit tests + review-verified wiring. Checks #1/#5/#9/#10 verified statically at build+review time.
+
+**D3/P1b-scope confirmations observed live** (pre-existing class, NOT P1a regressions — the old shell had identical mount-time fetch races):
+- [ ] Boot 401 burst pre-token; useWorkspaces fetch-once-no-recovery (hooks/useWorkspaces.ts:25) -> empty workspace list for the session when the race is lost; nav-Chat then falls back to /home
+- [ ] HomeCockpit RecentWorkspacesPanel crashes into boundary on undefined briefing (HomeCockpit.tsx:324, undefined.length) when /api/home/briefing fails — same family as the fixed 0609 cold-load bug, different panel
+- [ ] CockpitApp render error (undefined.totalInteractions) pre-data, recovers on refetch
+- [ ] adapter default base is hardcoded 127.0.0.1:3333 — dev-against-alternate-sidecar requires localStorage waggle:server-url=http://localhost:8080 + SIDECAR_TARGET env on vite (recipe; consider deriving default from window.origin in dev)
+
+**Cosmetic (P7):**
+- [ ] StatusBar breadcrumb shows the matched nav entry ("Chat") on /workspaces/:id overview — consider workspace-name breadcrumb
+- [ ] LoginBriefing re-shows on every hard reload (per-session dismissal) — correct SPA behavior, slightly noisy under multi-tab/hard-reload use
