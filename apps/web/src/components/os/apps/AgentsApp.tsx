@@ -16,7 +16,7 @@ import {
 import AgentCenterRow from './agents/AgentCenterRow';
 import AgentCenterDetail from './agents/AgentCenterDetail';
 import WorkspacePickerDialog from './agents/WorkspacePickerDialog';
-import CreateAgentDialog, { type CreateAgentInput } from './agents/CreateAgentDialog';
+import AgentBuilder, { type AgentBuilderInput } from './agents/AgentBuilder';
 import TemplatesView from './agents/TemplatesView';
 import type { BackendPersona } from './agents/types';
 
@@ -49,7 +49,7 @@ const AgentsApp = ({ workspaces }: AgentsAppProps) => {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [picker, setPicker] = useState<{ agent: Agent; workspaceIds: string[] } | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
-  const [createInitial, setCreateInitial] = useState<Partial<CreateAgentInput> | undefined>(undefined);
+  const [createInitial, setCreateInitial] = useState<Partial<AgentBuilderInput> | undefined>(undefined);
   const [creating, setCreating] = useState(false);
 
   const load = useCallback(async () => {
@@ -130,14 +130,17 @@ const AgentsApp = ({ workspaces }: AgentsAppProps) => {
     }
   };
 
-  const create = async (input: CreateAgentInput) => {
+  const create = async (input: AgentBuilderInput) => {
     setCreating(true);
     try {
-      await adapter.createAgent(input);
+      const created = await adapter.createAgent(input);
       setCreateOpen(false);
       setCreateInitial(undefined);
       toast({ title: 'Agent created', description: input.name });
       await load();
+      // Open the §12.9 detail surface for the new agent — it carries the Run
+      // affordance, so "create → review → run" is one continuous flow.
+      setSelected(created);
     } catch (err) {
       toast({ title: 'Create failed', description: err instanceof Error ? err.message : undefined, variant: 'destructive' });
     } finally {
@@ -304,10 +307,12 @@ const AgentsApp = ({ workspaces }: AgentsAppProps) => {
         />
       )}
 
+      {/* S18 Agent Builder (Phase 3C) — full §12.9 declaration stepper. */}
       {createOpen && (
-        <CreateAgentDialog
+        <AgentBuilder
           busy={creating}
           initial={createInitial}
+          workspaces={workspaces}
           onCreate={(input) => void create(input)}
           onCancel={() => { setCreateOpen(false); setCreateInitial(undefined); }}
         />

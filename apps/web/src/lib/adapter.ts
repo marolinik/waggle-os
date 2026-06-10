@@ -863,7 +863,7 @@ class LocalAdapter {
     const res = await this.fetch('/api/skills/create', { method: 'POST', body: JSON.stringify(data) });
     if (!res.ok) {
       // Rich error (mirrors installSkill): callers branch on .status (e.g.
-      // CreateSkillDialog routes a 403 to the UpgradeModal tier event).
+      // SkillBuilder routes a 403 to the UpgradeModal tier event).
       const body = await res.json().catch(() => ({} as Record<string, unknown>));
       const err = new Error((body as { error?: string }).error ?? `createSkill failed: ${res.status}`) as Error & { status?: number; body?: unknown };
       err.status = res.status;
@@ -1165,6 +1165,11 @@ class LocalAdapter {
   // the client contract stable by remapping on read.
   async getCronJobs(): Promise<CronJob[]> {
     const res = await this.fetch('/api/cron');
+    // Phase-3C review: an HTTP error body (401 boot-race, 500) piped through
+    // unwrapArray comes back as [] — the AutomationBuilder edit-mode read
+    // would silently degrade into "configuration unavailable". Throw so
+    // callers see the failure (mirrors the getSkills fix from the 3B review).
+    if (!res.ok) throw new Error(`getCronJobs failed: ${res.status}`);
     const rows = unwrapArray(await res.json()) as Array<Record<string, unknown>>;
     return rows.map(normalizeCronJob);
   }

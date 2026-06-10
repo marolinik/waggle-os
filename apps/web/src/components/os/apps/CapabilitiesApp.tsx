@@ -12,7 +12,7 @@ import { dedupePacks } from '@/lib/dedupe-packs';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 import SkillRow from './skills/SkillRow';
 import SkillEditorDrawer from './skills/SkillEditorDrawer';
-import CreateSkillDialog from './skills/CreateSkillDialog';
+import SkillBuilder from './skills/SkillBuilder';
 
 /**
  * Skills Hub (UX-Refactor Phase 3B, S06). Browse / install / author / test
@@ -627,11 +627,15 @@ const CapabilitiesApp = () => {
         onSaved={() => load()}
       />
 
-      {/* Minimal create path (full Builder is Phase 3C) */}
+      {/* S19 Skill Builder (Phase 3C) — create lands in My Skills and opens
+          the editor drawer so the new skill is immediately inspectable. */}
       {showCreate && (
-        <CreateSkillDialog
-          onCreated={() => { setShowCreate(false); load(); }}
-          onCancel={() => setShowCreate(false)}
+        <SkillBuilder
+          onCreated={(name) => { setShowCreate(false); load(); setEditingSkill(name); }}
+          // Refresh on close too: the C14 partial-failure path creates the
+          // skill on disk even when the user Escapes/Cancels instead of
+          // pressing Done — the Hub must reflect the file that now exists.
+          onCancel={() => { setShowCreate(false); load(); }}
           onTierError={handleInstallError}
         />
       )}

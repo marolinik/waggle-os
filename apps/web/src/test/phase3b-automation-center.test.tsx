@@ -22,6 +22,10 @@ const mocks = vi.hoisted(() => ({
     createAutomation: vi.fn(),
     deleteCronJob: vi.fn(),
     testAutomation: vi.fn(),
+    // AutomationBuilder (3C) deps: workspace scope picker + edit-mode
+    // jobType/jobConfig read off the cron rows.
+    getWorkspaces: vi.fn(),
+    getCronJobs: vi.fn(),
   },
 }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
@@ -50,6 +54,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.adapter.connect.mockResolvedValue(undefined);
   mocks.adapter.getAutomationLogs.mockResolvedValue([]);
+  mocks.adapter.getWorkspaces.mockResolvedValue([]);
+  mocks.adapter.getCronJobs.mockResolvedValue([]);
 });
 afterEach(cleanup);
 
@@ -92,7 +98,7 @@ describe('AutomationCenterApp', () => {
     expect(mocks.adapter.pauseAutomation).toHaveBeenCalledWith('1');
   });
 
-  it('C26: the form Test renders issues + the nothing-executed framing', async () => {
+  it('C26: the Builder review-step Check renders issues + the nothing-executed framing', async () => {
     mocks.adapter.listAutomations.mockResolvedValue([]);
     mocks.adapter.testAutomation.mockResolvedValue({
       previewResult: {
@@ -108,9 +114,12 @@ describe('AutomationCenterApp', () => {
     await screen.findByTestId('automation-overview-tiles');
 
     fireEvent.click(screen.getByRole('button', { name: /New/ }));
-    const form = await screen.findByTestId('automation-form');
-    fireEvent.change(form.querySelector('input')!, { target: { value: 'Draft check' } });
-    fireEvent.click(screen.getByTestId('automation-form-test'));
+    await screen.findByTestId('automation-builder');
+    fireEvent.change(screen.getByLabelText('Automation name'), { target: { value: 'Draft check' } });
+    fireEvent.click(screen.getByTestId('automation-builder-next')); // → Action
+    fireEvent.click(screen.getByTestId('automation-builder-next')); // → Condition
+    fireEvent.click(screen.getByTestId('automation-builder-next')); // → Review
+    fireEvent.click(screen.getByTestId('automation-builder-check'));
 
     const preview = await screen.findByTestId('automation-test-preview');
     expect(preview).toHaveTextContent('1 issue found');
@@ -130,6 +139,10 @@ describe('AutomationCenterApp', () => {
 
   it('C26 (edit mode): the Check draft carries the stored row id + actions, not a bare agent_task fallback', async () => {
     mocks.adapter.listAutomations.mockResolvedValue([makeAutomation()]);
+    // 3C: the Builder reads the stored jobType/jobConfig off the cron rows.
+    mocks.adapter.getCronJobs.mockResolvedValue([
+      { id: '1', name: 'Nightly consolidation', schedule: '0 9 * * *', workspaceId: '*', enabled: true, jobType: 'memory_consolidation', jobConfig: {} },
+    ]);
     mocks.adapter.testAutomation.mockResolvedValue({
       previewResult: {
         ok: true, jobType: 'memory_consolidation', triggerType: 'schedule',
@@ -142,7 +155,13 @@ describe('AutomationCenterApp', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Scheduled' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Edit Nightly consolidation' }));
-    fireEvent.click(await screen.findByTestId('automation-form-test'));
+    await screen.findByTestId('automation-builder');
+    fireEvent.click(screen.getByTestId('automation-builder-next')); // → Action
+    // Output-channel select rendering = the stored config finished loading.
+    await screen.findByLabelText('Where the result goes');
+    fireEvent.click(screen.getByTestId('automation-builder-next')); // → Condition
+    fireEvent.click(screen.getByTestId('automation-builder-next')); // → Review
+    fireEvent.click(screen.getByTestId('automation-builder-check'));
 
     await screen.findByTestId('automation-test-preview');
     expect(mocks.adapter.testAutomation).toHaveBeenCalledWith(expect.objectContaining({
@@ -150,11 +169,12 @@ describe('AutomationCenterApp', () => {
       actions: ['memory_consolidation'],
       name: 'Nightly consolidation',
     }));
-    // Edit mode still never sends jobType/jobConfig — Builder territory; the
-    // server resolves them from the stored row via the id.
+    // Edit mode never sends jobType (not patchable — the server resolves it
+    // from the stored row via the id). jobConfig IS sent in 3C: the Builder
+    // now edits prompt/output channel, merged server-side over the blob.
     const sent = mocks.adapter.testAutomation.mock.calls[0][0] as Record<string, unknown>;
     expect(sent.jobType).toBeUndefined();
-    expect(sent.jobConfig).toBeUndefined();
+    expect(sent.jobConfig).toEqual({ outputChannel: 'log' });
   });
 
   it('Journey 16 (cold open): a stashed deep-link lands on Logs with the failing automation preselected', async () => {

@@ -9,7 +9,7 @@ import { consumeDeepLink } from '@/lib/app-deeplink';
 import { successRateFromLogs, formatRatePercent, describeTrigger } from '@/lib/automation-display';
 import AutomationRow from './automations/AutomationRow';
 import AutomationLogList, { type NamedLog } from './automations/AutomationLogList';
-import AutomationForm, { type AutomationDraft } from './automations/AutomationForm';
+import AutomationBuilder, { type AutomationDraft } from './automations/AutomationBuilder';
 
 /**
  * Automation Center (UX-Refactor Phase 3B, S11 — rename/extension of the
@@ -164,6 +164,9 @@ const AutomationCenterApp = () => {
           name: draft.name,
           trigger: draft.trigger,
           ...(draft.condition !== undefined ? { condition: draft.condition } : {}),
+          // 3C: the Builder now edits the action config (prompt/output
+          // channel) — the server merges this over the stored job_config blob.
+          ...(draft.jobConfig !== undefined ? { jobConfig: draft.jobConfig } : {}),
           // A manual row is stored disabled; switching it back to a schedule
           // must go live — otherwise the saved schedule silently never fires
           // until a separate Enable toggle.
@@ -187,7 +190,7 @@ const AutomationCenterApp = () => {
   };
 
   const openLogs = (a: Automation) => { setLogsTarget(a.id); setTab('logs'); };
-  const startEdit = (a: Automation) => { setEditing(a); setCreating(false); setTab('scheduled'); };
+  const startEdit = (a: Automation) => { setEditing(a); setCreating(false); };
 
   const lastLog = (id: string): AutomationLog | null => (logsMap[id]?.[0] ?? null);
   const enabledCount = automations.filter(a => a.status === 'active' || a.status === 'running').length;
@@ -227,7 +230,7 @@ const AutomationCenterApp = () => {
           <span className="text-[11px] text-muted-foreground">{automations.length} automation{automations.length === 1 ? '' : 's'}</span>
         </div>
         <button
-          onClick={() => { setCreating(true); setEditing(null); setTab('scheduled'); }}
+          onClick={() => { setCreating(true); setEditing(null); }}
           className="flex items-center gap-1 px-2 py-1 text-[11px] font-display rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-colors"
         >
           <Plus className="w-3 h-3" /> New
@@ -286,17 +289,6 @@ const AutomationCenterApp = () => {
               </p>
             )}
 
-            {/* Create / edit form lives on the Scheduled tab. */}
-            {tab === 'scheduled' && (creating || editing) && (
-              <AutomationForm
-                key={editing?.id ?? 'create'}
-                initial={editing ?? undefined}
-                busy={saving}
-                onSubmit={(d) => void submit(d)}
-                onCancel={() => { setCreating(false); setEditing(null); }}
-              />
-            )}
-
             {tab === 'overview' && (
               <>
                 <div className="grid grid-cols-3 gap-2" data-testid="automation-overview-tiles">
@@ -342,7 +334,7 @@ const AutomationCenterApp = () => {
             )}
 
             {tab === 'scheduled' && (
-              automations.length === 0 && !creating ? (
+              automations.length === 0 ? (
                 <div role="status" className="text-center py-8">
                   <Clock className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
                   <p className="text-xs text-muted-foreground">No automations yet</p>
@@ -419,6 +411,18 @@ const AutomationCenterApp = () => {
           </>
         )}
       </div>
+
+      {/* S20 Automation Builder (Phase 3C) — body-portaled modal stepper for
+          create AND edit (the 3B inline form merged into it). */}
+      {(creating || editing) && (
+        <AutomationBuilder
+          key={editing?.id ?? 'create'}
+          initial={editing ?? undefined}
+          busy={saving}
+          onSubmit={(d) => void submit(d)}
+          onCancel={() => { setCreating(false); setEditing(null); }}
+        />
+      )}
     </div>
   );
 };

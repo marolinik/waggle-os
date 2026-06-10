@@ -29,6 +29,15 @@ export function useFocusTrap<T extends HTMLElement = HTMLDivElement>(
 ) {
   const containerRef = useRef<T | null>(null);
 
+  // Hold the escape callback in a ref so its identity is NOT an effect dep:
+  // consumers pass inline closures, and re-running the trap on every parent
+  // re-render (e.g. a toast anywhere in the app) tears it down (cleanup
+  // refocuses the opener behind the backdrop) and re-runs it (setup refocuses
+  // the first tabbable) — stealing focus from whatever field the user was
+  // typing in. Phase-3C review finding, empirically reproduced.
+  const onEscapeRef = useRef(onEscape);
+  onEscapeRef.current = onEscape;
+
   useEffect(() => {
     if (!active) return;
     const container = containerRef.current;
@@ -47,23 +56,29 @@ export function useFocusTrap<T extends HTMLElement = HTMLDivElement>(
     const tabbables = (): HTMLElement[] =>
       Array.from(container.querySelectorAll<HTMLElement>(TABBABLE)).filter(el => !isHidden(el));
 
-    // Move focus inside. Prefer the dialog container itself when it is
-    // focusable (tabIndex set, incl. the conventional -1 for programmatic
-    // focus) so screen readers announce the dialog and Escape is heard even
-    // with no focusable children; otherwise focus the first tabbable child.
-    const first = tabbables()[0];
-    if (typeof container.focus === 'function' && container.hasAttribute('tabindex')) {
-      container.focus();
-    } else if (first) {
-      first.focus();
-    } else {
-      container.tabIndex = -1;
-      container.focus();
+    // Move focus inside — unless it is ALREADY inside (e.g. an autoFocus
+    // field that React committed before this effect ran; without this guard
+    // the trap would immediately steal focus to the first tabbable, which in
+    // the builder shells is the header Close button).
+    if (!container.contains(document.activeElement)) {
+      // Prefer the dialog container itself when it is focusable (tabIndex
+      // set, incl. the conventional -1 for programmatic focus) so screen
+      // readers announce the dialog and Escape is heard even with no
+      // focusable children; otherwise focus the first tabbable child.
+      const first = tabbables()[0];
+      if (typeof container.focus === 'function' && container.hasAttribute('tabindex')) {
+        container.focus();
+      } else if (first) {
+        first.focus();
+      } else {
+        container.tabIndex = -1;
+        container.focus();
+      }
     }
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onEscape?.();
+        onEscapeRef.current?.();
         return;
       }
       if (e.key !== 'Tab') return;
@@ -96,7 +111,7 @@ export function useFocusTrap<T extends HTMLElement = HTMLDivElement>(
         previouslyFocused.focus();
       }
     };
-  }, [active, onEscape]);
+  }, [active]);
 
   return containerRef;
 }
