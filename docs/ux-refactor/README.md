@@ -14,7 +14,7 @@ Waggle OS today is a **single-route windowed desktop OS** (`apps/web/src/compone
 + `Dock.tsx`, 27 `AppId` window types, no react-router navigation) with a deep, mostly-built backend
 substrate (workspace-manager, workspace-state builder, `.mind` schema, harvest pipeline, install-audit,
 approval/trust runtime). The refactor turns it into a **workspace-first Agent Desktop** whose spine is
-**Home Cockpit + Workspace Desktop + Win+K Command Center + visible Memory + Artifacts + Agents/Skills/
+**Home Cockpit + Workspace Desktop + Command Center (Ctrl+K) + visible Memory + Artifacts + Agents/Skills/
 Automations + a governed Extend layer + Team**. The locked execution model is an **in-place incremental
 refactor** of `apps/web` plus **targeted local-sidecar (Fastify) backend extensions** — not a rebuild —
 because most PRD §16 endpoints either exist or can be aliased/extended over existing handlers; the master
@@ -87,7 +87,7 @@ dependencies · effort · open questions.
 | [S00](./gap-cards/S00-appshell-ia.md) | AppShell + IA + Navigation | §1, §19.1, §20.3 | **0** |
 | [S01](./gap-cards/S01-home-cockpit.md) | Home Cockpit | §12.1 | **1** |
 | [S02](./gap-cards/S02-workspace-desktop.md) | Workspace Desktop | §12.2 | **1** |
-| [S03](./gap-cards/S03-command-center.md) | Win+K Command Center | §12.3 | **1** |
+| [S03](./gap-cards/S03-command-center.md) | Command Center (Ctrl+K) | §12.3 | **1** |
 | [S04](./gap-cards/S04-memory-center.md) | Memory Center | §12.4 | **2** |
 | [S05](./gap-cards/S05-artifact-center.md) | Artifact Center | §12.5 | **2** |
 | [S06](./gap-cards/S06-skills-hub.md) | Skills Hub | §12.6 | **3** |

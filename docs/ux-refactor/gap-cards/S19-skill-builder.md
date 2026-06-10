@@ -129,7 +129,7 @@ and the **adapter method must be widened** to the full template.
 
 **Wiring:**
 - Register the overlay in `Desktop.tsx` (overlays block) + add a flag to `useOverlayState`.
-- Win+K "Create → Skill" command should open it (PRD §12.3 Create category; `GlobalSearch.tsx`
+- Ctrl+K "Create → Skill" command should open it (PRD §12.3 Create category; `GlobalSearch.tsx`
   already loads skills `:129`).
 
 **Props/state:** local stepper state object `{ step, name, description, category, steps[],
@@ -204,7 +204,7 @@ PRD §15.2 declares `ExtensionType = 'skill' | ...` — **MISSING** in `apps/web
 - **Sibling — S06 Skills Hub** (the browse/library half, hosted today by `CapabilitiesApp.tsx`).
   S19 launches *from* the Hub and writes *into* it (created skill → Installed list). They should ship
   together or S06 first.
-- **Soft — Win+K Command Center (S03)** for the "Create → Skill" entry (PRD §12.3); not blocking.
+- **Soft — Command Center (Ctrl+K) (S03)** for the "Create → Skill" entry (PRD §12.3); not blocking.
 - **Soft — Agent Builder (S18) / Automation Builder (S20)** consume skills via `skillIds`
   (PRD §15.5) — they depend on skills *existing*, not on the Builder UI. Skill→agent assignment is a
   downstream wiring concern.

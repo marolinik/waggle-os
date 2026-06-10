@@ -11,7 +11,7 @@
 Home Cockpit is the **daily executive briefing and launch surface** — the first thing the user
 sees after boot, before opening any workspace. PRD §12.1: "Give the user a useful daily briefing
 and immediate next actions." Acceptance bar (§12.1): user understands the day in <30 s, continues a
-workspace in one click, opens Win+K from the keyboard, and captures a note/task/link/file from Home.
+workspace in one click, opens Ctrl+K from the keyboard, and captures a note/task/link/file from Home.
 
 This is a **new top-level surface** in the IA spine (PRD §1: spine item #1). Today there is no Home
 Cockpit; the closest things are the per-workspace `WorkspaceBriefing` (chat home screen) and the
@@ -32,7 +32,7 @@ Functional requirements (§12.1):
 - Suggested next actions (memory/session/task/schedule-derived).
 - Quick capture for note/task/link/file.
 - Active models + current mode, only if relevant (do not clutter).
-- Win+K hint/access.
+- Ctrl+K hint/access.
 
 States to implement (§12.1 "States" + Blueprint line 447):
 `Loading` · `First-run empty` · `Normal populated` · `Attention required` · `Offline/local-only` ·
@@ -77,7 +77,7 @@ engine the Home briefing aggregates over.
 
 **Create** `apps/web/src/components/os/apps/HomeCockpitApp.tsx` (new top-level surface; register in
 `Desktop.tsx` `appConfig` + `renderAppContent`, and make the `home` dock key open it instead of
-`DashboardApp` — `DashboardApp` demotes to a "Workspaces" grid reachable from a Cockpit tile/Win+K).
+`DashboardApp` — `DashboardApp` demotes to a "Workspaces" grid reachable from a Cockpit tile/Ctrl+K).
 
 Widget components (extract from the two briefing files so logic is shared, not copy-pasted — CLAUDE.md
 "many small files"):
@@ -101,7 +101,7 @@ Data layer:
   `quickCapture(payload)`. Per the frontend inventory, all PRD §16 endpoints get added here.
 - First-run empty: reuse `LoginBriefing`'s demo-bubble hook (lines 222-247).
 - Offline/local-only: reuse `useOfflineStatus`; degrade overnight/team tiles, keep local workspaces.
-- Win+K hint: surface the existing `GlobalSearch` (Ctrl/Win+K) — already wired in `useKeyboardShortcuts`.
+- Ctrl+K hint: surface the existing `GlobalSearch` (Ctrl+K) — already wired in `useKeyboardShortcuts`.
 
 **Decision required (Open Q):** does `LoginBriefing` (modal) survive alongside Home Cockpit, or does the
 Cockpit absorb it? They overlap ~80%. Recommend: collapse `LoginBriefing` into the Cockpit's first paint
@@ -159,7 +159,7 @@ current `lib/types.ts` (which has no Home/Overnight/QuickCapture types).
 
 - **AppShell / IA (Sprint 1, PRD §21):** Home Cockpit is the default landing surface — needs the dock
   `home` key repointed and the §10 IA buckets settled first.
-- **Win+K Command Center (S03):** §12.1 acceptance "open Win+K from the keyboard" — `GlobalSearch`
+- **Command Center (Ctrl+K) (S03):** §12.1 acceptance "open Ctrl+K from the keyboard" — `GlobalSearch`
   already exists, so this is a soft dep (hint only).
 - **Workspace Desktop (S02):** "Continue" routes into the per-workspace runtime; needs `openChatForWorkspace`
   (already in `useWindowManager`) — soft dep.
@@ -191,7 +191,7 @@ store, no schema migration, and the ranking/greeting logic already exists.
    checks). Team/shared rows still gate through `approvalGrantStore`/RBAC — confirm the gate boundary.
 4. **`home` vs `cockpit` naming:** `CockpitApp` already owns "Cockpit" (ops). PRD calls S01 "Home Cockpit".
    Final dock/app naming to avoid the collision (proposal: S01 = `home`/"Home"; keep ops as `cockpit`).
-5. **DashboardApp role:** does the Workspaces grid live as a Cockpit tab, a Win+K destination, or stay a
+5. **DashboardApp role:** does the Workspaces grid live as a Cockpit tab, a Ctrl+K destination, or stay a
    separate dock app? (Affects whether `home` dock key fully repoints to HomeCockpit.)
 6. **Quick-capture `file` flow:** does a file capture upload into a default/personal store, or prompt for a
    target workspace? `POST /api/ingest` needs a destination.

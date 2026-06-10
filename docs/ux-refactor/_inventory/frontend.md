@@ -62,7 +62,7 @@ Sub-directories under `apps/`:
 | `OnboardingWizard.tsx` | First-launch wizard (rendered as full-screen early-return from `Desktop` when `!onboardingState.completed`); uses `onboarding/` step components. |
 | `OnboardingTooltips.tsx` | Post-wizard "Tour" overlay (4 slides: commands, dock, memory, closing). |
 | `LoginBriefing.tsx` | Session-start "I remember…" briefing — memory highlights + cross-workspace catch-up with workspace links. |
-| `GlobalSearch.tsx` | Win+K / Ctrl+K command palette + global search; navigates commands/workspaces/memory. |
+| `GlobalSearch.tsx` | Ctrl+K command palette + global search; navigates commands/workspaces/memory. |
 | `PersonaSwitcher.tsx` | Persona picker (two-tier: universal modes + workspace specialists; hover tagline/bestFor/wontDo). Operates on focused chat window's persona or patches workspace. |
 | `WorkspaceSwitcher.tsx` | Workspace quick-switcher list (filters E2E/test artefact names). |
 | `SpawnAgentDialog.tsx` | Spawn a sub-agent (task + persona + model + parent workspace). |
@@ -356,7 +356,7 @@ Extend / Team / System buckets:
 
 | Bucket (PRD) | Existing apps / surfaces |
 |---|---|
-| **Global** (cross-cutting) | `GlobalSearch` (Win+K), `NotificationInbox`, `StatusBar`, `Dock`, `BootScreen`, `LoginBriefing`, `OnboardingWizard`/`Tooltips`. |
+| **Global** (cross-cutting) | `GlobalSearch` (Ctrl+K), `NotificationInbox`, `StatusBar`, `Dock`, `BootScreen`, `LoginBriefing`, `OnboardingWizard`/`Tooltips`. |
 | **Work** | `DashboardApp` (Home Cockpit/Workspaces), `ChatApp`/`ChatWindowInstance` + `WorkspaceBriefing` (Sessions), `MemoryApp` (Memory: Timeline/Graph/Harvest/Weaver/Wiki), `FilesApp(Tabs)` (Artifacts), `TimelineApp`, `EventsApp` (session/agent activity), `WorkspaceSwitcher`/`CreateWorkspaceDialog`. |
 | **Intelligence** | `AgentsApp` (+`agents/` + `PersonaSwitcher` + `SpawnAgentDialog`) = Agents; `CapabilitiesApp` (Skills); `ScheduledJobsApp` (Automations); `RoomApp` + `MissionControlApp` + `WaggleDanceApp` (multi-agent orchestration); `MemoryApp → Evolution tab` (traces/evolutions); `ApprovalsApp` (agent governance/decisions). |
 | **Extend** | `ConnectorsApp` (Connectors + MCP catalog), `MarketplaceApp` + `CapabilitiesApp` marketplace section (Marketplace), `LauncherApp` (External tools), `ModelSelector`/`ModelPilotCard` + Settings→Models (Models). |

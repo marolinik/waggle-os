@@ -48,7 +48,7 @@ const SURFACES: Surface[] = [
   { key: 'agents', label: 'Agent Center', expectation: 'Agent Center: a list of agents with status badges and category tabs, or an empty "no agents yet" state.' },
   { key: 'files', label: 'Files', expectation: 'Files: a workspace file/folder browser, or an empty state.' },
   { key: 'approvals', label: 'Approvals', expectation: 'Approvals inbox: pending approval requests or a clean "no pending approvals" state.' },
-  { key: 'cockpit', label: 'Command Center', expectation: 'Command Center / cockpit: KPI cards for health, cost, and activity.' },
+  { key: 'cockpit', label: 'Mission Control', expectation: 'Mission Control / cockpit: KPI cards for health, cost, and activity.' },
   { key: 'timeline', label: 'Timeline', expectation: 'Timeline: a chronological activity feed, or an empty "no activity" state.' },
   { key: 'telemetry', label: 'Usage & Cost', expectation: 'Usage & Cost: token/cost telemetry charts or numbers.' },
   // Backup left the dock (P23 — it lives in Settings → Backup), so it has no

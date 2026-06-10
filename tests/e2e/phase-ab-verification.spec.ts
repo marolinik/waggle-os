@@ -1,13 +1,18 @@
 /**
- * Phase A/B Verification — E2E tests for the Room + Tiered Autonomy features.
+ * Phase A/B Verification — E2E tests for the Room + Tiered Autonomy features,
+ * RETARGETED to the P1a AppShell route contract (the window manager is
+ * retired — docs/ux-refactor/appshell-conversion-plan.md §3.1):
  *
- * Covers:
  *   Bug #1:  Default model shows sonnet, not opus
  *   Bug #2:  Onboarding auto-skip for returning users
- *   Bug #7:  Ctrl+Shift+N opens new chat window
- *   A.2:     Per-window persona (two chat windows, different personas)
- *   A.3:     Room canvas opens via dock
- *   A.4:     Window restoration across reload
+ *   Bug #7:  Ctrl+Shift+N navigates to the active workspace's chat route
+ *            (window spawning retired, §4.2)
+ *   A.2:     DROPPED — concurrent same-workspace multi-persona chat windows
+ *            were consciously removed (§9.10 / §4.3); per-workspace persona
+ *            survives in the widget header.
+ *   A.3:     Room opens via the left nav (same aria-labels as the old dock)
+ *   A.4:     waggle-window-state-v1 → waggle-chat-state-v1 migration
+ *            (acceptance check 6; the legacy key is deleted, §3.3)
  *   B.4/B.5: Autonomy chip present in chat header
  *
  * Run: npx playwright test tests/e2e/phase-ab-verification.spec.ts --reporter=list
@@ -39,16 +44,13 @@ async function dismissOverlay(page: Page) {
   }
 }
 
+// The AppShell left nav reuses the dock's aria-labels (plan §1.3), so the
+// old dock-driven helper survives as a nav-driven one.
 async function openAppViaDock(page: Page, label: string) {
   const btn = page.locator(`button[aria-label="${label}"]`);
   await btn.waitFor({ state: 'visible', timeout: 5000 });
   await btn.click();
   await page.waitForTimeout(500);
-}
-
-async function countWindows(page: Page): Promise<number> {
-  return page.locator('[class*="app-window"], [class*="AppWindow"]').count()
-    .catch(() => 0);
 }
 
 // ── Bug #2: Onboarding auto-skip ──────────────────────────────────────────
@@ -94,15 +96,16 @@ test.describe('Bug #1 — Default model', () => {
 });
 
 // ── Bug #7: Ctrl+Shift+N ──────────────────────────────────────────────────
+// Retargeted (plan §4.2): the shortcut retired as a window spawner — it now
+// navigates to the active workspace's chat route; no workspace → /home.
 
 test.describe('Bug #7 — Ctrl+Shift+N', () => {
-  test('Ctrl+Shift+N opens a new chat window', async ({ page }) => {
+  test('Ctrl+Shift+N navigates to the active workspace chat route', async ({ page, request }) => {
     await gotoDesktop(page);
-    await openAppViaDock(page, 'Chat');
-    await page.waitForTimeout(1000);
 
-    // Count window title bars before
-    const windowsBefore = await page.locator('[class*="title-bar"], [class*="window-header"], .glass-strong').count();
+    const res = await request.get(`${BASE}/api/workspaces`);
+    const workspaces = await res.json();
+    const hasWorkspace = Array.isArray(workspaces) && workspaces.length > 0;
 
     // Dispatch Ctrl+Shift+N via evaluate — browser intercepts the real shortcut
     await page.evaluate(() => {
@@ -110,38 +113,23 @@ test.describe('Bug #7 — Ctrl+Shift+N', () => {
         key: 'N', code: 'KeyN', ctrlKey: true, shiftKey: true, bubbles: true,
       }));
     });
-    await page.waitForTimeout(1500);
 
-    const windowsAfter = await page.locator('[class*="title-bar"], [class*="window-header"], .glass-strong').count();
-    expect(windowsAfter).toBeGreaterThan(windowsBefore);
+    if (hasWorkspace) {
+      await page.waitForURL(/\/workspaces\/[^/]+\/chat/, { timeout: 5000 });
+    } else {
+      // routeFor('chat') with no active workspace falls back to /home (§1.3).
+      await page.waitForURL(/\/home/, { timeout: 5000 });
+    }
+    // The single-canvas shell never spawns window chrome (§3.1).
+    expect(await page.locator('[class*="AppWindow"], [class*="app-window"]').count()).toBe(0);
   });
 });
 
-// ── A.2: Per-window persona ───────────────────────────────────────────────
-
-test.describe('A.2 — Per-window persona', () => {
-  test('two chat windows can exist simultaneously', async ({ page }) => {
-    await gotoDesktop(page);
-
-    // Open first chat window via dock
-    await openAppViaDock(page, 'Chat');
-    await page.waitForTimeout(1000);
-
-    // Open second chat window via evaluate (browser steals Ctrl+Shift+N)
-    await page.evaluate(() => {
-      window.dispatchEvent(new KeyboardEvent('keydown', {
-        key: 'N', code: 'KeyN', ctrlKey: true, shiftKey: true, bubbles: true,
-      }));
-    });
-    await page.waitForTimeout(1500);
-
-    // Check page content for evidence of multiple windows — look for the
-    // "Persona" dropdown which appears once per chat window header
-    const personaDropdowns = page.locator('text=/Persona/i');
-    const count = await personaDropdowns.count();
-    expect(count).toBeGreaterThanOrEqual(1);
-  });
-});
+// A.2 ("two chat windows can exist simultaneously") DROPPED: concurrent
+// same-workspace multi-persona chat windows were consciously removed with the
+// window manager (plan §9.10 / §4.3 — D1-c lite not invoked). Per-workspace
+// persona switching survives in the chat widget header and is covered by the
+// unit suite (p1a-chat-state.test.tsx).
 
 // ── A.3: Room canvas ─────────────────────────────────────────────────────
 
@@ -157,30 +145,41 @@ test.describe('A.3 — Room canvas', () => {
   });
 });
 
-// ── A.4: Window restoration ──────────────────────────────────────────────
+// ── A.4: Window-state migration (was: window restoration) ────────────────
+// Retargeted to acceptance check 6 (plan §3.3): a populated legacy
+// waggle-window-state-v1 is salvaged into waggle-chat-state-v1 + the initial
+// route, and the legacy key is deleted UNCONDITIONALLY on boot.
 
-test.describe('A.4 — Window restoration', () => {
-  test('window state is persisted to localStorage', async ({ page }) => {
+test.describe('A.4 — Window-state migration', () => {
+  test('legacy window state migrates to waggle-chat-state-v1 and the key is removed', async ({ page }) => {
+    // Seed BEFORE any app code runs (same addInitScript pattern as the
+    // onboarding skip): one persisted chat window with a persona.
+    await page.addInitScript(() => {
+      localStorage.setItem('waggle-booted', 'true');
+      localStorage.setItem('waggle-window-state-v1', JSON.stringify({
+        version: 1,
+        windows: [{
+          instanceId: 'i-e2e', appId: 'chat', workspaceId: 'ws-e2e',
+          personaId: 'coder', zIndex: 5, minimized: false, cascadeOffset: 0,
+        }],
+      }));
+    });
     await gotoDesktop(page);
 
-    // Open a chat window
-    await openAppViaDock(page, 'Chat');
-    await page.waitForTimeout(1500);
+    // §3.3 step 2: the salvaged top window seeds the initial navigation.
+    await page.waitForURL(/\/workspaces\/ws-e2e\/chat/, { timeout: 10000 });
 
-    // Verify window state was written to localStorage
-    const windowState = await page.evaluate(() => {
-      // Check multiple possible keys
-      const keys = ['waggle-window-state-v1', 'waggle:window-positions'];
-      for (const key of keys) {
-        const raw = localStorage.getItem(key);
-        if (raw) return { key, value: JSON.parse(raw) };
-      }
-      // Check all localStorage keys for any window-related state
-      const allKeys = Object.keys(localStorage);
-      const windowKeys = allKeys.filter(k => k.includes('window'));
-      return windowKeys.length > 0 ? { key: 'found-keys', value: windowKeys } : null;
-    });
-    expect(windowState).not.toBeNull();
+    const { legacy, chatState } = await page.evaluate(() => ({
+      legacy: localStorage.getItem('waggle-window-state-v1'),
+      chatState: localStorage.getItem('waggle-chat-state-v1'),
+    }));
+    // §3.3 step 4: the legacy key is gone — no dual-format support, ever.
+    expect(legacy).toBeNull();
+    // §3.3 step 3: persona salvaged + the explicit normal-autonomy marker.
+    expect(chatState).not.toBeNull();
+    const parsed = JSON.parse(chatState!);
+    expect(parsed.version).toBe(1);
+    expect(parsed.chats['ws-e2e']).toMatchObject({ personaId: 'coder', autonomyLevel: 'normal' });
   });
 });
 

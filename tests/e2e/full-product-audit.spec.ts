@@ -213,7 +213,7 @@ const DIRECT_APPS = [
 // Extend zone now carries Connector Hub + MCP Hub + Marketplace; Backup left
 // the dock — it lives in Settings → Backup, P23).
 const ZONE_APPS = [
-  { label: 'Command Center', zone: 'System', expect: /cockpit|health|cost|command/i },
+  { label: 'Mission Control', zone: 'System', expect: /cockpit|health|cost|command/i },
   { label: 'Timeline', zone: 'System', expect: /timeline|activity|no.*activity|last/i },
   { label: 'Usage & Cost', zone: 'System', expect: /usage|telemetry|token|cost/i },
   { label: 'Events & Logs', zone: 'System', expect: /event|log|step|filter/i },

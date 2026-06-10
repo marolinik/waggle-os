@@ -65,8 +65,13 @@ function writeDockLabelsMode(mode: DockLabelsMode): void {
  * Increments session counter + seeds first-launch timestamp exactly
  * once per mount. Separated from the visibility read so tests can
  * exercise each side independently.
+ *
+ * Exported since the P1a AppShell conversion: the Dock (which mounted
+ * useDockLabels once per page load) is retired, so AppShell calls this
+ * directly to keep the per-session counter — the data source for the
+ * M-24/ENG-3 nudges — ticking.
  */
-function useBumpSessionCount(): void {
+export function useBumpSessionCount(): void {
   const bumpedRef = useRef(false);
   useEffect(() => {
     if (bumpedRef.current) return;

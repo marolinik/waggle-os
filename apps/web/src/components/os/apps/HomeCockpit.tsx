@@ -142,7 +142,7 @@ function GreetingHeader({ greeting, date, offline }: { greeting: string; date: s
           </span>
         )}
         <span className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-display text-muted-foreground bg-secondary/40 border border-border/30">
-          <Command className="w-3 h-3" /> Win+K
+          <Command className="w-3 h-3" /> Ctrl+K
         </span>
       </div>
     </div>

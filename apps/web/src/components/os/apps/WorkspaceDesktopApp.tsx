@@ -50,7 +50,7 @@ import type {
 // The 8 PRD §12.2 tabs (Settings included). The shell renders Overview
 // itself; the other tabs are embedded by the integrator (Chat / Memory /
 // Timeline / Settings have hosts; Research / Artifacts are interim panels).
-type WorkspaceTabId =
+export type WorkspaceTabId =
   | 'overview' | 'chat' | 'research' | 'artifacts'
   | 'memory' | 'tasks' | 'timeline' | 'settings';
 
@@ -88,6 +88,23 @@ interface WorkspaceDesktopAppProps {
    * both call this — the shell never embeds a live composer itself.
    */
   onOpenChat?: (workspaceId: string) => void;
+  /**
+   * UX Refactor v2.1 §5.2 seam (a) — controlled tab pair (founder-ratified
+   * two-seam edit, 2026-06-10). When `activeTab` is provided the tab bar is
+   * URL-driven by the integrator (`/workspaces/:id/:tab?`); when omitted the
+   * component keeps its original internal tab state, so existing call sites
+   * behave identically.
+   */
+  activeTab?: WorkspaceTabId;
+  onTabChange?: (tab: WorkspaceTabId) => void;
+  /**
+   * UX Refactor v2.1 §5.2 seam (b) — chat-widget slot (founder-ratified
+   * two-seam edit). When provided, the `chat` tab body renders this node
+   * (ChatHost portals the live per-workspace ChatWindowInstance into it,
+   * plan §4.2) instead of the deep-link placeholder. When omitted the
+   * placeholder is preserved.
+   */
+  chatSlot?: React.ReactNode;
 }
 
 // ── Small presentational helpers ─────────────────────────────────────────
@@ -611,8 +628,18 @@ function TasksTabBody({ state }: { state: WorkspaceStateView | null }) {
 
 // ── Main shell ───────────────────────────────────────────────────────────
 
-const WorkspaceDesktopApp = ({ workspaceId, workspaceName, onOpenChat }: WorkspaceDesktopAppProps) => {
-  const [activeTab, setActiveTab] = useState<WorkspaceTabId>('overview');
+const WorkspaceDesktopApp = ({
+  workspaceId, workspaceName, onOpenChat,
+  activeTab: controlledTab, onTabChange, chatSlot,
+}: WorkspaceDesktopAppProps) => {
+  // §5.2 seam (a): uncontrolled by default (original behavior); controlled
+  // when the integrator passes `activeTab`.
+  const [internalTab, setInternalTab] = useState<WorkspaceTabId>('overview');
+  const activeTab = controlledTab ?? internalTab;
+  const setActiveTab = useCallback((tab: WorkspaceTabId) => {
+    if (controlledTab === undefined) setInternalTab(tab);
+    onTabChange?.(tab);
+  }, [controlledTab, onTabChange]);
   const [ctx, setCtx] = useState<WorkspaceContext | null>(null);
   const [state, setState] = useState<WorkspaceStateView | null>(null);
   const [activity, setActivity] = useState<WorkspaceActivityEvent[]>([]);
@@ -849,21 +876,25 @@ const WorkspaceDesktopApp = ({ workspaceId, workspaceName, onOpenChat }: Workspa
           )}
 
           {activeTab === 'chat' && (
-            <TabPlaceholder
-              icon={MessageSquare}
-              title="Chat"
-              body="The full conversation surface for this workspace opens in the chat runtime."
-              cta={
-                <button
-                  type="button"
-                  onClick={openChat}
-                  className="px-4 py-2 text-xs rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
-                  data-testid="ws-chat-tab-open"
-                >
-                  Open chat
-                </button>
-              }
-            />
+            // §5.2 seam (b): the chat-widget slot when the integrator
+            // provides one; the original deep-link placeholder otherwise.
+            chatSlot ?? (
+              <TabPlaceholder
+                icon={MessageSquare}
+                title="Chat"
+                body="The full conversation surface for this workspace opens in the chat runtime."
+                cta={
+                  <button
+                    type="button"
+                    onClick={openChat}
+                    className="px-4 py-2 text-xs rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
+                    data-testid="ws-chat-tab-open"
+                  >
+                    Open chat
+                  </button>
+                }
+              />
+            )
           )}
 
           {activeTab === 'tasks' && <TasksTabBody state={state} />}

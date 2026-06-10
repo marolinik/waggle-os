@@ -435,7 +435,7 @@ export interface WorkspaceConfigV2 {
 }
 
 // === UX-Refactor Command vocabulary (PRD §12.3 / shared-types-delta §9) ===
-// Win+K Command Center result/command shapes. Single source of truth — the
+// Command Center (Ctrl+K) result/command shapes. Single source of truth — the
 // sidecar `command.ts` route layer and apps/web both import these. See
 // docs/ux-refactor/deltas/shared-types-delta.md §9.
 

@@ -1920,7 +1920,7 @@ class LocalAdapter {
     return res.json();
   }
 
-  // --- Command Center / Win+K (UX-Refactor Phase 1, S03) ---
+  // --- Command Center (Ctrl+K) (UX-Refactor Phase 1, S03) ---
   // `/api/command/*` (singular) is net-new and federates over existing
   // substrate. `commandExecute` posts to the singular execute alias (B4:
   // alias onto the existing handler — the plural /api/commands/execute is

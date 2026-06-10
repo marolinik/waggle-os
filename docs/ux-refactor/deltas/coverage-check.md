@@ -30,7 +30,7 @@ chrome the PRD §1 spine mounts inside (not a §12 screen, but required by §19.
 | — | AppShell / IA / Navigation (§1, §19.1, §20.3) | COVERED | **S00** appshell-ia |
 | 1 | Home Cockpit (§12.1) | COVERED | **S01** home-cockpit |
 | 2 | Workspace Desktop (§12.2) | COVERED (with sub-gaps, see notes) | **S02** workspace-desktop |
-| 3 | Win+K Command Center (§12.3) | COVERED | **S03** command-center |
+| 3 | Command Center (Ctrl+K) (§12.3) | COVERED | **S03** command-center |
 | 4 | Memory Center (§12.4) | COVERED | **S04** memory-center |
 | 5 | Artifact Center (§12.5) | COVERED | **S05** artifact-center |
 | 6 | Skills Hub + Skill Builder (§12.6) | COVERED | **S06** skills-hub (+ **S19** skill-builder) |
@@ -66,10 +66,10 @@ Cockpit," which is S01 (not a separate screen). Correctly folded. ✔
   Sessions list/navigation view; S02 collapses sessions into the **Timeline** tab + Chat. The session
   substrate is rich and unused at the screen level (`GET /api/workspaces/:id/sessions`,
   `/sessions/search`, `/sessions/:id/timeline`, `/sessions/:id/export` all EXIST per
-  `_inventory/backend-routes.md:42–46`). Win+K (S03) does federate session search, so sessions are
+  `_inventory/backend-routes.md:42–46`). Ctrl+K (S03) does federate session search, so sessions are
   *findable* but not *browsable as an object class*. PRD §13 Journey 3 ("user reviews… sessions") and the
   object hierarchy §9.2 imply a Sessions surface. **Decide:** explicit Sessions tab/sub-view in S02, or
-  document that Timeline+Win+K is the intended session UX and amend the §11 "navigable" claim.
+  document that Timeline+Ctrl+K is the intended session UX and amend the §11 "navigable" claim.
 
 ---
 
@@ -185,7 +185,7 @@ screens are covered. Per-item mapping below.
 |---|---|---|---|
 | 1 | Home Cockpit replaces blank-chat launch behavior | COVERED (implicit) | S01 builds Home Cockpit; but **no card/delta states the launch-default flip** (today launch = workspace/chat per `frontend.md`). The *behavioral replacement* (boot route → Home) is an **S00 AppShell routing change** that S00 does not explicitly own. **GAP-D1:** name the default-route change. |
 | 2 | Workspace Desktop is default runtime for workspace work | COVERED | S02 (`create-new` tabbed runtime); S00 routes to it. |
-| 3 | Win+K can search/launch/create/run/navigate/extend | COVERED | S03 + S00 (global provider); `CommandResult.kind` enum covers all 6 verbs (S03 line 136). |
+| 3 | Ctrl+K can search/launch/create/run/navigate/extend | COVERED | S03 + S00 (global provider); `CommandResult.kind` enum covers all 6 verbs (S03 line 136). |
 | 4 | Memory Center exposes source/confidence/evidence/scope/edit/delete | COVERED (1 conditional dep) | S04 + S16; ConfidenceBadge/EvidenceChip/EvidencePanel in design-delta; **depends on M1 `memory_frames.metadata` migration** if confidence/scope become real filter axes (delta §M1). If M1 is skipped, "confidence/scope" is in-app-only — verify against §12.4 AC. |
 | 5 | Artifact Center supports outcome search + related objects | COVERED | S05 + `GET /api/artifacts/search-related` (delta 2b). |
 | 6 | Onboarding leads profile→tool-discovery→import→review→first workspace | COVERED | S12–S17 chain; S00/onboarding shell. |
@@ -226,8 +226,8 @@ screens are covered. Per-item mapping below.
    only partially traced. PRD §20.3 lists `RBAC/Audit components` under Create. **Fix:** confirm S10 owns
    the §17.2 matrix UI, or add an RBAC/Audit card.
 6. **G2 — Sessions has no first-class screen** despite being a §9.2/§11 primary object. Collapsed into
-   S02 Timeline + Win+K search. **Fix:** either add an explicit Sessions sub-view to S02 or document that
-   Timeline+Win+K is the intended UX and soften the §11 "navigable" claim.
+   S02 Timeline + Ctrl+K search. **Fix:** either add an explicit Sessions sub-view to S02 or document that
+   Timeline+Ctrl+K is the intended UX and soften the §11 "navigable" claim.
 7. **C1 — Connector `/sync` MVP is a cosmetic stub** that does not meet §12.7's "whether data is
    flowing" acceptance. **Fix:** flag in the plan that S07's headline AC is only partially met in v1;
    schedule the real connector-SDK data-pull.
