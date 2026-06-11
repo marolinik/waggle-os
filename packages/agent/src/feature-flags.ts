@@ -27,11 +27,15 @@ export const FEATURE_FLAGS = {
 
   /**
    * Enable PromptAssembler — tier-adaptive prompt packaging sixth layer.
-   * Default OFF. When ON, agent-loop uses Orchestrator.buildAssembledPrompt()
-   * instead of the raw buildSystemPrompt() + recallMemory() path.
+   * DEFAULT ON since the W4 real-LLM chat smoke (2026-06-11: two live turns
+   * through LiteLLM, assembler applied on both — shape=draft/research,
+   * 'Recalled memory' section present, grounded answers, zero errors).
+   * Kill switch: WAGGLE_PROMPT_ASSEMBLER=0. When ON, agent-loop uses
+   * Orchestrator.buildAssembledPrompt() instead of the raw
+   * buildSystemPrompt() + recallMemory() path.
    * See docs/specs/PROMPT-ASSEMBLER-V4.md.
    */
-  PROMPT_ASSEMBLER: process.env['WAGGLE_PROMPT_ASSEMBLER'] === '1',
+  PROMPT_ASSEMBLER: process.env['WAGGLE_PROMPT_ASSEMBLER'] !== '0',
 
   /**
    * Phase 5 canary percentage (0-100, integer). Controls fraction of requests

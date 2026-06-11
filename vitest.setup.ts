@@ -22,6 +22,15 @@ if (!process.env.WAGGLE_RERANKER) {
   process.env.WAGGLE_RERANKER = '0';
 }
 
+// W4 (2026-06-11): the PromptAssembler is default-ON in production (kill
+// switch WAGGLE_PROMPT_ASSEMBLER=0) after the live chat smoke. Tests pin it
+// OFF so the broad chat-route suite keeps exercising the stable legacy
+// buildSystemPrompt path (prompt-cache assertions, deterministic shapes);
+// assembler behavior has its own dedicated suites that opt in explicitly.
+if (!process.env.WAGGLE_PROMPT_ASSEMBLER) {
+  process.env.WAGGLE_PROMPT_ASSEMBLER = '0';
+}
+
 // D1: the local sidecar now requires a bearer token even on loopback in production
 // (no localhost-trust). The broad server suite predates this and uses raw inject()
 // without tokens, so default tests to localhost-trust mode. Production keeps the

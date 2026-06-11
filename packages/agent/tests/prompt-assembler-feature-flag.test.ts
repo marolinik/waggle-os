@@ -7,8 +7,10 @@ import { MockEmbedder } from '../../hive-mind-core/tests/mind/helpers/mock-embed
 /**
  * Brief §12.4 — feature-flag snapshot tests. Proves:
  *  - PROMPT_ASSEMBLER flag exists and follows env-var convention.
- *  - Flag defaults to OFF when WAGGLE_PROMPT_ASSEMBLER is unset/non-'1'.
- *  - Default (flag-off) buildSystemPrompt path is stable — regression guard.
+ *  - W4 flip (2026-06-11): flag is DEFAULT ON; WAGGLE_PROMPT_ASSEMBLER=0 is
+ *    the kill switch (vitest.setup.ts pins tests to 0 — legacy-path suites
+ *    stay deterministic; assembler suites opt in explicitly).
+ *  - Flag-off buildSystemPrompt path is stable — regression guard.
  *  - Flag-on path (buildAssembledPrompt) returns well-formed AssembledPrompt.
  */
 describe('PROMPT_ASSEMBLER feature flag', () => {
@@ -16,17 +18,18 @@ describe('PROMPT_ASSEMBLER feature flag', () => {
     expect('PROMPT_ASSEMBLER' in FEATURE_FLAGS).toBe(true);
   });
 
-  it('flag resolves to the env var WAGGLE_PROMPT_ASSEMBLER === "1"', () => {
+  it('flag is default-ON with kill switch WAGGLE_PROMPT_ASSEMBLER=0', () => {
     const envValue = process.env['WAGGLE_PROMPT_ASSEMBLER'];
-    const expectedFlag = envValue === '1';
+    const expectedFlag = envValue !== '0';
     expect(FEATURE_FLAGS.PROMPT_ASSEMBLER).toBe(expectedFlag);
     expect(isEnabled('PROMPT_ASSEMBLER')).toBe(expectedFlag);
   });
 
-  it('defaults to OFF when no opt-in (test-env invariant)', () => {
-    // The eval harness explicitly sets WAGGLE_PROMPT_ASSEMBLER=1 for
-    // conditions C/D/F. At vitest-run time the env var should be unset.
-    if (process.env['WAGGLE_PROMPT_ASSEMBLER'] !== '1') {
+  it('test environment pins the flag OFF (vitest.setup.ts invariant)', () => {
+    // vitest.setup.ts sets WAGGLE_PROMPT_ASSEMBLER=0 unless already set —
+    // the broad suites exercise the legacy path; eval harness conditions
+    // C/D/F override with =1 explicitly.
+    if (process.env['WAGGLE_PROMPT_ASSEMBLER'] === '0') {
       expect(FEATURE_FLAGS.PROMPT_ASSEMBLER).toBe(false);
     }
   });

@@ -2,8 +2,8 @@
  * PromptAssembler — sixth layer between memory retrieval and the LLM call.
  *
  * Produces a tier-adaptive, typed, scaffolded prompt. Wraps the existing
- * buildSystemPrompt path rather than replacing it. Feature-flagged
- * (WAGGLE_PROMPT_ASSEMBLER=1), default off.
+ * buildSystemPrompt path rather than replacing it. DEFAULT ON since the W4
+ * live chat smoke (kill switch: WAGGLE_PROMPT_ASSEMBLER=0).
  *
  * Tier drives:
  *  - frame count (top 3 / 6 / 10 for small / mid / frontier)
