@@ -487,6 +487,104 @@ describe('Bearer Token Authentication', () => {
     }
   });
 
+  // ── P1b-SSE: EventSource cannot send headers, so the four SSE stream paths
+  // accept ?token= (the /ws pattern). Scope: GET-only, allowlist-only,
+  // header-absent-only. ────────────────────────────────────────────────────
+  describe('SSE query-token auth (P1b-SSE)', () => {
+    const SSE_PATHS = [
+      '/api/notifications/stream',
+      '/api/events/stream',
+      '/api/waggle/stream',
+      '/api/harvest/progress',
+    ];
+
+    async function createSseTestServer() {
+      // createTestServer is already .ready() — build a fresh instance so the
+      // SSE routes can register before the listener locks.
+      const server = Fastify({ logger: false });
+      await server.register(securityMiddleware, { sessionToken: TEST_TOKEN });
+      server.get('/api/test', async () => ({ ok: true }));
+      for (const p of SSE_PATHS) {
+        server.get(p, async () => ({ ok: true, stream: p }));
+      }
+      await server.ready();
+      return server;
+    }
+
+    it.each(SSE_PATHS)('%s authenticates via ?token= (no header)', async (path) => {
+      const server = await createSseTestServer();
+      try {
+        const res = await server.inject({ method: 'GET', url: `${path}?token=${TEST_TOKEN}` });
+        expect(res.statusCode).toBe(200);
+      } finally {
+        await server.close();
+      }
+    });
+
+    it('rejects a WRONG query token with INVALID_TOKEN', async () => {
+      const server = await createSseTestServer();
+      try {
+        const res = await server.inject({ method: 'GET', url: `/api/notifications/stream?token=wrong` });
+        expect(res.statusCode).toBe(401);
+        expect(res.json().code).toBe('INVALID_TOKEN');
+      } finally {
+        await server.close();
+      }
+    });
+
+    it('rejects a MISSING query token with MISSING_TOKEN', async () => {
+      const server = await createSseTestServer();
+      try {
+        const res = await server.inject({ method: 'GET', url: '/api/notifications/stream' });
+        expect(res.statusCode).toBe(401);
+        expect(res.json().code).toBe('MISSING_TOKEN');
+      } finally {
+        await server.close();
+      }
+    });
+
+    it('does NOT leak query-token auth to non-allowlisted /api GETs', async () => {
+      const server = await createSseTestServer();
+      try {
+        const res = await server.inject({ method: 'GET', url: `/api/test?token=${TEST_TOKEN}` });
+        expect(res.statusCode).toBe(401);
+        expect(res.json().code).toBe('MISSING_TOKEN');
+      } finally {
+        await server.close();
+      }
+    });
+
+    it('an Authorization header always wins over the query token', async () => {
+      const server = await createSseTestServer();
+      try {
+        // Valid query token + INVALID header → the header is authoritative → 401.
+        const res = await server.inject({
+          method: 'GET',
+          url: `/api/notifications/stream?token=${TEST_TOKEN}`,
+          headers: { authorization: 'Bearer wrong-token' },
+        });
+        expect(res.statusCode).toBe(401);
+        expect(res.json().code).toBe('INVALID_TOKEN');
+      } finally {
+        await server.close();
+      }
+    });
+
+    it('a valid header still works on SSE paths (back-compat for header-capable clients)', async () => {
+      const server = await createSseTestServer();
+      try {
+        const res = await server.inject({
+          method: 'GET',
+          url: '/api/events/stream',
+          headers: { authorization: `Bearer ${TEST_TOKEN}` },
+        });
+        expect(res.statusCode).toBe(200);
+      } finally {
+        await server.close();
+      }
+    });
+  });
+
   it('D1: rejects a malformed authorization header (no Bearer prefix)', async () => {
     const server = await createTestServer({ sessionToken: TEST_TOKEN });
     try {
