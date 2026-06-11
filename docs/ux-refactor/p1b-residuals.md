@@ -29,3 +29,12 @@ Source: adversarial review workflow over `fa3797c..HEAD` (5 lenses, 23 agents; 1
 ## Live-smoke scope notes
 
 Acceptance checks 1–3 (boot 401s / restart recovery / cold-sidecar recovery) are fetch-layer only — the five EventSource SSE channels are 401-dead in default config **pre-existing since D1** (see §1.4 of the plan + decision-log note; founder ruling pending). Chat streaming (POST /api/chat) IS covered — it authenticates via headers.
+
+## Live-smoke RESULTS (2026-06-11, vite:8080 + branch sidecar:3501 via SIDECAR_TARGET; browser base = localhost:8080)
+
+- **✅ Check 1 — boot burst fully gated, ZERO fetch-layer 401s.** Warm-boot network log: `/health` → `/api/auth/session-token` FIRST, then 20+ API requests all 200 (workspaces, tier, permissions, briefing, identity, memory search/stats, per-workspace contexts). Pre-P1b this was a token-less 401 burst.
+- **✅ Check 2 — stale-token recovery without reload.** Live sequence captured: `GET /api/memory/stats → 401` (stale token) → `GET /api/auth/session-token → 200` (silent single-flight refresh) → retried `GET /api/memory/stats → 200`. Same origin, no page reload, no user action.
+- **✅ No crashes under server failure.** Sidecar killed mid-session: surfaces showed errors (vite proxy 500s), `useAgentStatus` logged + kept backing off, NO error-boundary hits, NO undefined-deref crashes (the HomeCockpit/ComplianceDashboard crash classes held). Healthy-path LoginBriefing rendered full real data (brag line, highlights, summaries).
+- **✅ §1.4 SSE defect live-confirmed:** `/api/waggle/stream` + `/api/notifications/stream` EventSource 401s in console — exactly the ledgered pre-existing class.
+- **Dev-env note (not a P1b defect):** with TWO sidecars running (branch:3501-via-proxy + long-running pre-refactor:3333), a kill-window health probe triggers the pre-existing FR#10 auto-discovery fallback to `DEFAULT_SERVER` (3333) and persists it — the smoke's second restart attempt hopped servers this way (then 404'd on post-refactor routes the old sidecar lacks). In production DEFAULT_SERVER == the configured URL, so the fallback is inert and restart recovery is purely the 401-refresh leg (demonstrated). Recipe: re-set `localStorage['waggle:server-url']` after any kill-window.
+- Check 3 (cold-sidecar boot → errored surfaces → recovery on connect-settled/focus) is pinned by unit tests (`p1b-authgate-surfaces.test.tsx` recovery cases ×4 + ServiceProvider backoff); the dual-sidecar fallback magnet makes a clean live repro impractical in this dev env.
