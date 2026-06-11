@@ -38,3 +38,18 @@ Acceptance checks 1–3 (boot 401s / restart recovery / cold-sidecar recovery) a
 - **✅ §1.4 SSE defect live-confirmed:** `/api/waggle/stream` + `/api/notifications/stream` EventSource 401s in console — exactly the ledgered pre-existing class.
 - **Dev-env note (not a P1b defect):** with TWO sidecars running (branch:3501-via-proxy + long-running pre-refactor:3333), a kill-window health probe triggers the pre-existing FR#10 auto-discovery fallback to `DEFAULT_SERVER` (3333) and persists it — the smoke's second restart attempt hopped servers this way (then 404'd on post-refactor routes the old sidecar lacks). In production DEFAULT_SERVER == the configured URL, so the fallback is inert and restart recovery is purely the 401-refresh leg (demonstrated). Recipe: re-set `localStorage['waggle:server-url']` after any kill-window.
 - Check 3 (cold-sidecar boot → errored surfaces → recovery on connect-settled/focus) is pinned by unit tests (`p1b-authgate-surfaces.test.tsx` recovery cases ×4 + ServiceProvider backoff); the dual-sidecar fallback magnet makes a clean live repro impractical in this dev env.
+
+## P1b-SSE follow-up (founder-ratified 2026-06-11) — review residuals
+
+Adversarial review (3 lenses, 8 agents): 5 confirmed (3 HIGH — all fixed: fan-out subscriptions, named-event listeners for audit/signal, handshake filter), 0 refuted, 17 LOWs. Ledgered LOWs:
+
+- [ ] **Flapping server = constant 1s retry** (backoff resets in onopen; an open-then-drop loop never escalates) + each round fires a token refresh; two streams on /api/notifications/stream could brush the 100/min default rate limit in a pathological crash-loop. Acceptable for loopback; revisit if telemetry shows 429s.
+- [ ] **No event replay on any channel** — events emitted during a backoff window are dropped (no `id:`/Last-Event-ID anywhere). Notifications could close the gap for free by refetching history on reopen — P7 candidate.
+- [ ] **/api/harvest/progress is the only SSE route with no heartbeat** and an unguarded write in its listener — P7 server-side polish.
+- [ ] **setServerUrl doesn't tear down live streams** (old-server events keep arriving until natural error; self-heals on next reopen). Zero production setServerUrl callers; fold into the future Settings server-URL flow.
+- [ ] **Socket budget**: realistic ceiling 4 concurrent SSE sockets vs Chromium's 6/host HTTP/1.1 cap (2 fetch slots remain). Multiplexing events/waggle onto the notifications socket's named-event channel would collapse 3 sockets to 1 — P7.
+- [ ] **Auth 401s bypass the rate limiter + non-constant-time token compare** — pre-existing properties of the header path inherited by the query transport; 256-bit CSPRNG token makes both moot on loopback.
+- [ ] `?token=` (empty) reports MISSING_TOKEN instead of INVALID_TOKEN — cosmetic.
+- [ ] Stale `_connected`-gate comments in room-parallel-agents.spec.ts mock + backend-map docs — P7 doc sweep.
+
+Security lens verdict: query-token transport sound — GET-only, allowlist-only, header-absent-only; no leakage sink beyond the existing /ws posture (no server URL logging; EventSource URLs don't enter history/cache/referrer).
