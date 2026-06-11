@@ -84,6 +84,12 @@ export { PlaintextAdapter } from './harvest/plaintext-adapter.js';
 export { UrlAdapter } from './harvest/url-adapter.js';
 export { PdfAdapter } from './harvest/pdf-adapter.js';
 export { HarvestPipeline, type LLMCallFn, type PipelineOptions } from './harvest/pipeline.js';
+export {
+  extractMemoryLanes, writeMemoryLaneFrames,
+  MIND_FACT_PREFIX, MIND_EVENT_PREFIX, MIND_PROFILE_PREFIX,
+  type MemoryLaneExtraction, type ExtractedEvent, type ExtractedFact, type ExtractedProfile,
+  type WriteLaneFramesResult,
+} from './harvest/extract-memory-lanes.js';
 export { dedup, harvestSetHash } from './harvest/dedup.js';
 export type {
   ImportSourceType, ImportItemType, UniversalImportItem, DistilledKnowledge,

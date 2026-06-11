@@ -353,6 +353,26 @@ export class FrameStore {
     return result.changes > 0;
   }
 
+  /**
+   * W4.3: delete every frame whose content starts with `prefix` (exact
+   * literal match — LIKE metacharacters in the prefix are escaped). Used by
+   * replace-on-update lanes (profile cards supersede the prior card for the
+   * same person). Routes through delete(id) so FTS/vec/KG cleanup applies.
+   * Returns the number of frames deleted.
+   */
+  deleteByContentPrefix(prefix: string): number {
+    const raw = this.db.getDatabase();
+    const escaped = prefix.replace(/[\\%_]/g, ch => `\\${ch}`);
+    const rows = raw.prepare(
+      `SELECT id FROM memory_frames WHERE content LIKE ? ESCAPE '\\'`
+    ).all(`${escaped}%`) as Array<{ id: number }>;
+    let deleted = 0;
+    for (const r of rows) {
+      if (this.delete(r.id)) deleted++;
+    }
+    return deleted;
+  }
+
   // ── 9a: Memory Compaction ──────────────────────────────────────────
 
   /**
