@@ -18,6 +18,7 @@ import {
   ClaudeCodeAdapter, GeminiAdapter, UniversalAdapter, harvestSetHash,
   type ImportSourceType, type UniversalImportItem,
   type SourceAdapter, type FilesystemAdapter, resolveRelativeDate, HARVEST_FRAME_CONTENT_CAP,
+  writeRawTurnFrames,
 } from '@waggle/core';
 import { loadProfile, saveProfile, type IdentitySuggestion } from './profile.js';
 import { importItemTypeToMemoryKind, harvestConfidence } from './harvest-classify.js';
@@ -411,6 +412,12 @@ export async function harvestRoutes(fastify: FastifyInstance) {
     const frameStore = new FrameStore(personalDb);
     let saved = 0;
     let timestampFallbacks = 0;
+    let rawTurnsWritten = 0;
+    // W4.6: cognify must see the SUMMARY frames only — collect their ids
+    // explicitly. The previous getRecent(saved) recency window would now
+    // pull the interleaved raw-turn frames instead (and was already fragile
+    // against dedup hits returning old ids).
+    const summaryFrameIds: number[] = [];
 
     try {
       emitHarvestProgress({ phase: 'saving', current: 0, total: items.length, source });
@@ -465,6 +472,16 @@ export async function harvestRoutes(fastify: FastifyInstance) {
             sourceId: item.id,
           }));
         }
+        summaryFrameIds.push(frame.id);
+        // W4.6: per-turn verbatim dialogue storage — source material for the
+        // RAWDETAIL recall lane (the W3.4-attributed single-hop driver).
+        // Adapters that surface item.messages get per-turn frames; items
+        // without messages (pdf/url/markdown) are a no-op. Kill switch
+        // shared with the recall side: WAGGLE_RAWDETAIL=0.
+        if (process.env.WAGGLE_RAWDETAIL !== '0') {
+          const turns = writeRawTurnFrames(frameStore, 'harvest', item);
+          rawTurnsWritten += turns.written;
+        }
         saved++;
         if (saved % 10 === 0 || saved === items.length) {
           emitHarvestProgress({ phase: 'saving', current: saved, total: items.length, source });
@@ -511,8 +528,9 @@ export async function harvestRoutes(fastify: FastifyInstance) {
             knowledge: new KnowledgeGraph(personalDb),
             search: new HybridSearch(personalDb, embedder),
           });
-          const recentFrames = frameStore.getRecent(saved);
-          const frameIds = recentFrames.map(f => f.id);
+          // W4.6: explicit summary-frame ids (NOT a recency window — raw-turn
+          // frames interleave with the summaries now).
+          const frameIds = summaryFrameIds;
           emitHarvestProgress({ phase: 'cognifying', current: 0, total: frameIds.length, source });
           cognifyStats = await cognify.cognifyBatch(frameIds);
           emitHarvestProgress({ phase: 'cognifying', current: frameIds.length, total: frameIds.length, source });
@@ -573,6 +591,7 @@ export async function harvestRoutes(fastify: FastifyInstance) {
         source,
         itemCount: items.length,
         saved,
+        rawTurnsWritten,
         cognified: cognifyStats.processed,
         cognifySkippedReason,
         entitiesExtracted: cognifyStats.entities,

@@ -15,7 +15,7 @@ import {
   getPersonalDb,
   getAdapter,
 } from '../core/setup.js';
-import { resolveRelativeDate, HARVEST_FRAME_CONTENT_CAP} from '@waggle/core';
+import { resolveRelativeDate, HARVEST_FRAME_CONTENT_CAP, writeRawTurnFrames } from '@waggle/core';
 
 export function registerHarvestTools(server: McpServer): void {
 
@@ -93,6 +93,7 @@ export function registerHarvestTools(server: McpServer): void {
       let framesCreated = 0;
       let duplicatesSkipped = 0;
       let entitiesCreated = 0;
+      let rawTurnsWritten = 0;
 
       // Record max frame id before the batch. createIFrame dedups by content,
       // so a "not new" frame returns an older id. id-based detection is
@@ -152,6 +153,13 @@ export function registerHarvestTools(server: McpServer): void {
         } else {
           duplicatesSkipped++;
         }
+
+        // W4.6: per-turn verbatim dialogue storage — source material for the
+        // RAWDETAIL recall lane. Items without messages are a no-op; dedup
+        // inside makes re-imports idempotent. Kill switch: WAGGLE_RAWDETAIL=0.
+        if (process.env.WAGGLE_RAWDETAIL !== '0') {
+          rawTurnsWritten += writeRawTurnFrames(frameStore, session.gop_id, item).written;
+        }
       }
 
       // Record the sync in harvest source store
@@ -175,6 +183,7 @@ export function registerHarvestTools(server: McpServer): void {
             frames_created: framesCreated,
             duplicates_skipped: duplicatesSkipped,
             entities_created: entitiesCreated,
+            raw_turns_written: rawTurnsWritten,
           }, null, 2),
         }],
       };
