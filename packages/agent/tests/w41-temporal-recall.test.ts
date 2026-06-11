@@ -95,6 +95,19 @@ describe('W4.1a — temporal recall surface + unconditional importance lane', ()
       expect(occurrences).toBe(1);
     });
 
+    it('date-windowed query with no in-window frames falls back to unwindowed recall', async () => {
+      // W4.1b graceful degradation: "in May 2019" parses to a window that
+      // matches nothing (frame was created today) — recall must fall back
+      // rather than return empty.
+      await orchestrator.executeTool('save_memory', {
+        content: 'User preference: weekly report goes out on Fridays',
+        importance: 'important',
+      });
+
+      const result = await orchestrator.recallMemory('what did the weekly report say in May 2019');
+      expect(result.text).toContain('weekly report goes out on Fridays');
+    });
+
     it('importance lane respects the temporary/deprecated exclusion', async () => {
       // temporary frames must never re-enter the prompt as authoritative recall
       // (R2 sign-gate) — the lane SQL only selects critical/important, so a

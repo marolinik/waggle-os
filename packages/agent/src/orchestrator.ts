@@ -13,6 +13,7 @@ import {
   type Embedder,
   TEMPORAL_GUIDANCE,
   renderReferenceDateLine,
+  parseDateWindow,
 } from '@waggle/core';
 import { createMindTools, type ToolDefinition } from './tools.js';
 import { buildSelfAwareness, type AgentCapabilities } from './self-awareness.js';
@@ -454,11 +455,30 @@ export class Orchestrator {
         }));
         personalResults = await this.search.search(query, { limit: 2, profile });
       } else {
+        // W4.1b (#3) — deterministic date-window lane: when the query names an
+        // explicit period ("in May 2026", "on 13 October 2025", "in 2024"),
+        // restrict recall to frames created in that window via the substrate's
+        // since/until filter. Graceful degradation: a window that matches
+        // nothing falls back to unwindowed search below — the lane must never
+        // LOSE recall, only sharpen it.
+        const dateWindow = parseDateWindow(query);
+        const windowOpts = dateWindow
+          ? { since: dateWindow.since, until: dateWindow.until }
+          : {};
+
         // Normal semantic search for specific queries
-        personalResults = await this.search.search(query, { limit, profile });
+        personalResults = await this.search.search(query, { limit, profile, ...windowOpts });
         workspaceResults = this.workspaceLayers
-          ? await this.workspaceLayers.search.search(query, { limit, profile })
+          ? await this.workspaceLayers.search.search(query, { limit, profile, ...windowOpts })
           : [];
+
+        if (dateWindow && personalResults.length === 0 && workspaceResults.length === 0) {
+          logTurnEvent(opts?.turnId, { stage: 'orchestrator.recallMemory.dateWindowEmpty', label: dateWindow.label });
+          personalResults = await this.search.search(query, { limit, profile });
+          workspaceResults = this.workspaceLayers
+            ? await this.workspaceLayers.search.search(query, { limit, profile })
+            : [];
+        }
 
         // W4.1 (#2) — unconditional importance lane (benchmark fetchImportantFrames
         // K=5): critical/important frames reach recall on EVERY query, not only on

@@ -59,6 +59,7 @@ export {
   type ConceptEntry, type ConceptUpdate,
   // recall-context — temporal rendering helpers (W4.1 production port)
   TEMPORAL_GUIDANCE, toDatePrefix, renderDatedSnippet, referenceDate, renderReferenceDateLine,
+  parseDateWindow, type DateWindow,
   // harvest/ — universal memory ingestion pipeline
   HarvestSourceStore,
   HarvestRunStore, type HarvestRun, type HarvestRunStatus,

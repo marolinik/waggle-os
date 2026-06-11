@@ -54,10 +54,16 @@ export class HybridSearch {
     const { limit = 20, gopId, profile = 'balanced', context = {}, since, until } = options;
     const weights = SCORING_PROFILES[profile];
 
-    // Run keyword and vector searches in parallel
+    // Run keyword and vector searches in parallel.
+    // W4.1b slot-consumption fix: the since/until filter applies AFTER the
+    // lanes run (as a WHERE over candidate ids), so out-of-window candidates
+    // would otherwise consume lane slots and shrink results below `limit`
+    // even when in-window frames exist deeper in the lanes. Over-fetch the
+    // lanes when a temporal window is active so the post-filter has depth.
+    const laneFetch = (since || until) ? limit * 10 : limit * 2;
     const [keywordResults, vectorResults] = await Promise.all([
-      this.keywordSearch(query, limit * 2, gopId),
-      this.vectorSearch(query, limit * 2, gopId),
+      this.keywordSearch(query, laneFetch, gopId),
+      this.vectorSearch(query, laneFetch, gopId),
     ]);
 
     // RRF fusion
@@ -81,12 +87,26 @@ export class HybridSearch {
     const temporalConditions: string[] = [];
     const temporalParams: unknown[] = [...frameIds];
 
+    // W4.1b fencepost fix: `created_at` carries mixed formats across write
+    // paths — `datetime('now')` ("YYYY-MM-DD HH:MM:SS") vs harvest ISO
+    // ("YYYY-MM-DDT…Z"). A date-only `until` string-compares BELOW any
+    // same-day timestamp ("2026-03-21T10:00" > "2026-03-21"), silently
+    // excluding the whole final day. Compare date-only bounds on the
+    // 10-char date prefix instead — format-agnostic and inclusive.
     if (since) {
-      temporalConditions.push('created_at >= ?');
+      if (since.length === 10) {
+        temporalConditions.push('substr(created_at, 1, 10) >= ?');
+      } else {
+        temporalConditions.push('created_at >= ?');
+      }
       temporalParams.push(since);
     }
     if (until) {
-      temporalConditions.push('created_at <= ?');
+      if (until.length === 10) {
+        temporalConditions.push('substr(created_at, 1, 10) <= ?');
+      } else {
+        temporalConditions.push('created_at <= ?');
+      }
       temporalParams.push(until);
     }
 
