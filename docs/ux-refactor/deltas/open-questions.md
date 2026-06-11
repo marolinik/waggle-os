@@ -606,3 +606,26 @@ Recorded per the single-decision-log rule; full design + verification record in
    WAGGLE_TRUST_LOCALHOST=1. Fix = server auth model (per-route ?token= like /ws, or
    exempt-with-validation) + client reconnect design — one coherent follow-up
    ("SSE auth + reconnect"). **Ask: ratify as P1b follow-up stage or P2 line item.**
+
+---
+
+## P2 implementation notes (verify + J08, 2026-06-11)
+
+Recorded per the single-decision-log rule; full record in
+`docs/ux-refactor/p2-verification-record.md`.
+
+1. **P2 verification CLOSED.** Home (§12.1) + Desktop (§12.2) verified against Brief
+   v2.1 via a 4-lane adversarial workflow: 25/37 met or ratified-divergence, 12
+   confirmed gaps, 2 claims refuted. The HIGH (dead Artifacts feed — envelope
+   unwrap) + all tiny/small verified defects fixed; feature-shaped residuals
+   ledgered in the record (S02 tab embeds → P3/P7; status-bar chips, upNext
+   tasks, activeModels → P7).
+2. **D6 J08 alert SHIPPED.** `needsReviewCount` rides `GET /api/home/briefing`
+   (personal-mind only, 200-frame bound matching the Memory Center's own window);
+   Home banner deep-links via `waggle:open-app {appId:'memory', filter:'unreviewed'}`
+   with a `?filter=` URL carrier + MemoryRoute cold-load re-stash (typed URLs and
+   the §2.3 shim share one mechanism, AutomationsRoute pattern).
+3. **D3-4 extension:** WorkspaceDesktop revalidation arms only for the transient
+   offline state — deterministic 404/403 states do not auto-refetch on focus.
+4. **Note (P1b-SSE follow-up):** the SSE ask above was ratified and SHIPPED as a
+   P1b follow-up (PR #15, main @ 4e3d65d) — closed before P2 started.
