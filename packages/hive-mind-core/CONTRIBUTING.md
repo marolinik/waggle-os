@@ -12,6 +12,15 @@ If you're reading this on **github.com/marolinik/waggle-os** (the canonical mono
 
 The OSS-export filter excludes Waggle-proprietary files documented in `EXTRACTION.md` (when present) — currently `vault.ts`, `evolution-runs.ts`, `execution-traces.ts`, `improvement-signals.ts`, and `compliance/**` stay in `@waggle/core`, not `@waggle/hive-mind-core`. PRs touching those files belong on the waggle-os monorepo only.
 
+## Direction of development (maintainers — ratified 2026-06-11)
+
+**The monorepo is the sole source of truth. Maintainers must not author features directly on the OSS mirror.** This invariant broke once: the cross-encoder reranker was written directly on `marolinik/hive-mind` during a benchmark arc and existed only there until a recon pass found it and reverse-ported it (waggle-os `f47ee8f`). The rules that prevent a repeat:
+
+1. Substrate changes are authored in `waggle-os/packages/hive-mind-core/` first; the mirror is regenerated via `scripts/oss-subtree-split.sh` afterward.
+2. Work done in a scratch `hive-mind` checkout (benchmarks, experiments) must be reverse-ported into the monorepo in the same work arc — never left to accumulate on the mirror.
+3. Run `scripts/oss-drift-check.sh` before every OSS release push and after any arc that touched a hive-mind checkout. It file-diffs the mapped source trees and flags ONLY-IN-OSS files (the reverse-port failure mode), ONLY-IN-MONO files (pending export), and divergent edits.
+4. External contributor PRs against the OSS repo are welcome (see above) — the maintainer merges accepted changes back into the monorepo via subtree-pull, then re-splits.
+
 ## Setting up the dev environment
 
 ```bash

@@ -414,12 +414,28 @@ Target: Two-tier layout — "UNIVERSAL MODES" (8) + "YOUR WORKSPACE SPECIALISTS"
 The memory substrate lives at **`packages/hive-mind-core/src/{mind,harvest}/`** (moved from
 `packages/core/src/` in the 2026-04-30 monorepo migration). The public OSS mirror at
 [`marolinik/hive-mind`](https://github.com/marolinik/hive-mind) is **generated FROM** this monorepo
-via **`git subtree split`** — it is NOT maintained as a parallel codebase, so the export is
-byte-identical to its source and "parity" is definitionally trivial (no cross-repo drift to police).
+via **`git subtree split`**.
+
+=== CRITICAL — sync policy (founder-ratified 2026-06-11) ===
+**The monorepo is the SOLE source of truth for the substrate. Never author substrate features
+directly on the OSS mirror.** Parity is NOT automatic — it broke once: the cross-encoder reranker
+(`inprocess-reranker.ts` + HybridSearch options) was written directly on `marolinik/hive-mind`
+during the LoCoMo benchmark arc and existed ONLY there, discovered by the W4 recon and
+reverse-ported in W4.2 (`f47ee8f`). Rules:
+1. Substrate changes land in `packages/hive-mind-core/` here FIRST; the mirror is regenerated
+   via subtree-split afterward.
+2. Benchmark/experiment work in a `D:/Projects/hive-mind` checkout is throwaway unless
+   reverse-ported here — port it the same arc, don't let it sit.
+3. Run **`scripts/oss-drift-check.sh`** (file-level diff of the mapped src trees) before every
+   OSS release push and after any arc that touched a hive-mind checkout.
+4. External PRs on the OSS repo are fine — the maintainer merges them back here via
+   subtree-pull, then re-splits.
+=== END CRITICAL ===
 
 **To work on the substrate or publish the OSS mirror:** see
-[`packages/hive-mind-core/CONTRIBUTING.md`](./packages/hive-mind-core/CONTRIBUTING.md) and
-[`scripts/oss-subtree-split.sh`](./scripts/oss-subtree-split.sh). Files that must NOT export to the
+[`packages/hive-mind-core/CONTRIBUTING.md`](./packages/hive-mind-core/CONTRIBUTING.md),
+[`scripts/oss-subtree-split.sh`](./scripts/oss-subtree-split.sh), and
+[`scripts/oss-drift-check.sh`](./scripts/oss-drift-check.sh). Files that must NOT export to the
 OSS mirror (vault.ts, evolution-runs.ts, execution-traces.ts, improvement-signals.ts, compliance/**)
 are handled by the subtree-split filter — keep that list in sync there.
 
