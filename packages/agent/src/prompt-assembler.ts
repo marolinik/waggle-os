@@ -28,6 +28,15 @@ export interface RecalledMemory {
   personal: MemoryFrame[];
   /** False if the injection scanner blocked the recall — assembler must ignore. */
   scanSafe: boolean;
+  /**
+   * W4.5: pre-rendered multi-lane recall block (the recallMemory output —
+   * profiles/facts/events/window/snippet sections + temporal guidance +
+   * provenance preamble). When present, the assembler renders it VERBATIM
+   * as the recall section instead of re-rendering raw frames — fixing both
+   * the double-compute (no second search) and the lane-fidelity loss (the
+   * frame renderer knows nothing about the W4.3b lanes).
+   */
+  renderedText?: string;
 }
 
 export interface AssembleInput {
@@ -83,6 +92,12 @@ export interface AssembleOptions {
    * byte-identically when unset or explicitly 'compression'.
    */
   scaffoldStyle?: ScaffoldStyle;
+  /**
+   * W4.5: pre-rendered recall block from recallMemory. When set (even to ''),
+   * buildAssembledPrompt skips its own searches — fixes the double-compute
+   * bug (recall ran twice per turn). '' means recall was empty/blocked.
+   */
+  recalledText?: string;
   /** H-AUDIT-1: per-turn trace ID (UUID v4). Logs prompt-assembly stage. */
   turnId?: string;
 }
@@ -370,7 +385,16 @@ export class PromptAssembler {
     // Brief §8: recallMemory already scans; assembler must not re-scan, and
     // must ignore recall entirely when scanSafe is false.
     const recalledFrames: MemoryFrame[] = [];
-    if (input.recalled.scanSafe) {
+    if (input.recalled.scanSafe && input.recalled.renderedText) {
+      // W4.5: pre-rendered multi-lane block — carries its own header
+      // ('# Recalled Memories' + provenance + temporal guidance). Subject
+      // to the same overall char budget as every other section.
+      sections.push({
+        name: 'Recalled memory',
+        body: input.recalled.renderedText,
+        frameCount: 0,
+      });
+    } else if (input.recalled.scanSafe) {
       recalledFrames.push(
         ...selectFrames(input.recalled.workspace, frameLimit),
         ...selectFrames(input.recalled.personal, frameLimit),

@@ -353,29 +353,43 @@ export class Orchestrator {
     const corePrompt = this.buildSystemPrompt();
     const context = this.loadRecentContextFrames();
 
-    // Direct search for raw frames (recallMemory returns formatted text;
-    // the assembler consumes MemoryFrame[] and applies its own rendering).
-    const personalResults = await this.search.search(query, { limit: 10, profile: 'balanced' });
-    const workspaceResults = this.workspaceLayers
-      ? await this.workspaceLayers.search.search(query, { limit: 10, profile: 'balanced' })
-      : [];
+    let recalled: RecalledMemory;
+    if (opts.recalledText !== undefined) {
+      // W4.5 (plan bug #9-2, double-compute): the caller already ran
+      // recallMemory this turn — reuse its rendered multi-lane block instead
+      // of re-running the searches. recallMemory scans for injection itself
+      // (returns '' on a hit), so scanSafe is true by construction here.
+      recalled = {
+        workspace: [],
+        personal: [],
+        scanSafe: true,
+        renderedText: opts.recalledText,
+      };
+    } else {
+      // Direct search for raw frames (recallMemory returns formatted text;
+      // the assembler consumes MemoryFrame[] and applies its own rendering).
+      const personalResults = await this.search.search(query, { limit: 10, profile: 'balanced' });
+      const workspaceResults = this.workspaceLayers
+        ? await this.workspaceLayers.search.search(query, { limit: 10, profile: 'balanced' })
+        : [];
 
-    // Brief §8: run the injection scan here; assembler trusts scanSafe and
-    // must not re-scan. On a poisoned hit, frames still flow through but
-    // scanSafe=false causes the assembler to ignore the recall section.
-    const joinedContent = [
-      ...workspaceResults.map(r => r.frame.content),
-      ...personalResults.map(r => r.frame.content),
-    ].join('\n');
-    const scanSafe = joinedContent.length === 0
-      ? true
-      : scanForInjection(joinedContent, 'tool_output').safe;
+      // Brief §8: run the injection scan here; assembler trusts scanSafe and
+      // must not re-scan. On a poisoned hit, frames still flow through but
+      // scanSafe=false causes the assembler to ignore the recall section.
+      const joinedContent = [
+        ...workspaceResults.map(r => r.frame.content),
+        ...personalResults.map(r => r.frame.content),
+      ].join('\n');
+      const scanSafe = joinedContent.length === 0
+        ? true
+        : scanForInjection(joinedContent, 'tool_output').safe;
 
-    const recalled: RecalledMemory = {
-      workspace: workspaceResults.map(r => r.frame),
-      personal: personalResults.map(r => r.frame),
-      scanSafe,
-    };
+      recalled = {
+        workspace: workspaceResults.map(r => r.frame),
+        personal: personalResults.map(r => r.frame),
+        scanSafe,
+      };
+    }
 
     return new PromptAssembler().assemble(
       {

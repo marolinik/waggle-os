@@ -484,6 +484,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
     // Declare at handler scope so error handler can surface recalled memories (P1-4)
     let recalledContext = '';
+    // W4.5: unprefixed recall text handed to the PromptAssembler (fixes
+    // double-compute — assembler reuses it instead of re-searching).
+    let recallTextForAssembler = '';
 
     // B1-B7: Rerouted message from slash command processing — scoped to handler
     let reroutedMessage: string | undefined;
@@ -768,6 +771,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 sendEvent('step', { content: 'Recalled memories dropped — suspicious content detected.' });
               } else {
                 recalledContext = '\n\n' + recall.text;
+                recallTextForAssembler = recall.text;
               }
               // B5: Include content snippets so ToolCard can show what was recalled
               const snippets = (recall.recalled ?? []).slice(0, 3);
@@ -861,7 +865,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             const personaIdForAssembler = personaOverride ?? wsConfigForAssembler?.personaId ?? null;
             const personaForAssembler = personaIdForAssembler ? resolvePersona(personaIdForAssembler) : null;
             const taskShape = detectTaskShape(agentMessage);
-            assembled = await sessionOrch.buildAssembledPrompt(agentMessage, personaForAssembler, { taskShape, turnId });
+            assembled = await sessionOrch.buildAssembledPrompt(agentMessage, personaForAssembler, { taskShape, turnId, recalledText: recallTextForAssembler });
             log.info(
               `[prompt-assembler] applied turn=${turnId.slice(0, 8)} `
               + `shape=${taskShape.type ?? 'none'} conf=${taskShape.confidence.toFixed(2)} `
@@ -874,9 +878,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           }
         }
 
+        // W4.5 (plan bug #9-1, double-inject): when the assembler ran, the
+        // recall block is already INSIDE the assembled prompt — appending
+        // recalledContext again injected every recalled memory twice.
         const systemPrompt = hasCustomRunner
           ? 'You are a helpful AI assistant.'
-          : ambiguityPrefix + buildSystemPrompt(sessionOrch, workspacePath, sessionId, history.length, effectiveWorkspace, personaOverride, assembled) + templateContext + recalledContext;
+          : ambiguityPrefix + buildSystemPrompt(sessionOrch, workspacePath, sessionId, history.length, effectiveWorkspace, personaOverride, assembled) + templateContext + (assembled ? '' : recalledContext);
 
         // Register a per-request pre:tool hook for confirmation gates
         // This fires during the agent loop and pauses until user approves/denies
