@@ -40,6 +40,7 @@ import {
 import { adapter } from '@/lib/adapter';
 import { useRoomState } from '@/hooks/useRoomState';
 import { useRevalidateOnError } from '@/hooks/useRevalidateOnError';
+import MemoryCenterTab from './memory/MemoryCenterTab';
 import type {
   WorkspaceContext,
   WorkspaceStateView,
@@ -979,12 +980,13 @@ const WorkspaceDesktopApp = ({
             )
           )}
 
+          {/* P3/D2 (S02-FR2): the workspace-mind list embeds directly — same
+              component as the Memory Center's "About this work" view. Deep-link
+              consumption stays off: the J08 stash belongs to the /memory route. */}
           {activeTab === 'memory' && (
-            <TabPlaceholder
-              icon={Brain}
-              title="Memory"
-              body="The Memory Center for this workspace embeds here."
-            />
+            <div className="h-full overflow-hidden" data-testid="ws-memory-tab">
+              <MemoryCenterTab mind="workspace" workspaceId={workspaceId} consumeDeepLinks={false} />
+            </div>
           )}
 
           {activeTab === 'timeline' && (

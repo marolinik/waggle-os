@@ -116,34 +116,75 @@ export function normalizeToMemory(frame: MemoryFrame, mind: string, workspaceId?
 
 export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
   /** FrameStores to consult for a given workspace, workspace-first then personal
-   *  — mirrors the resolution pattern in `memory.ts`. */
-  function candidateStores(workspace?: string): Array<{ store: FrameStore; mind: string }> {
+   *  — mirrors the resolution pattern in `memory.ts`.
+   *
+   *  P3/D2 mind-strictness: frame ids COLLIDE across the per-mind SQLite DBs
+   *  (separate autoincrements), so the legacy fall-through is a destructive
+   *  cross-mind hazard for mutations — a stale workspace row whose id has since
+   *  vanished from the workspace store would resolve to (and hard-delete/patch)
+   *  an unrelated PERSONAL frame. When the caller declares `mind`, resolution is
+   *  strict: exactly that store, no fallback. Omitting mind keeps the legacy
+   *  ordered fall-through for back-compat. */
+  function candidateStores(
+    workspace?: string,
+    mind?: 'personal' | 'workspace',
+  ): Array<{ store: FrameStore; mind: string }> {
     const stores: Array<{ store: FrameStore; mind: string }> = [];
-    if (workspace) {
+    if (workspace && mind !== 'personal') {
       const wsDb = server.agentState.getWorkspaceMindDb(workspace);
       if (wsDb) stores.push({ store: new FrameStore(wsDb), mind: 'workspace' });
     }
-    stores.push({ store: new FrameStore(server.multiMind.personal), mind: 'personal' });
+    if (mind !== 'workspace') {
+      stores.push({ store: new FrameStore(server.multiMind.personal), mind: 'personal' });
+    }
     return stores;
+  }
+
+  /** Validate an optional `mind` value shared by the routes below. Returns the
+   *  narrowed value, or an Error message when invalid (caller 400s). A typo must
+   *  fail loudly, not silently widen back to the fall-through. */
+  function parseMind(
+    mind: string | undefined,
+    workspace: string | undefined,
+  ): { ok: true; mind?: 'personal' | 'workspace' } | { ok: false; error: string } {
+    if (mind === undefined) return { ok: true };
+    if (mind !== 'personal' && mind !== 'workspace') {
+      return { ok: false, error: "mind must be 'personal' or 'workspace'" };
+    }
+    if (mind === 'workspace' && !workspace) {
+      return { ok: false, error: 'mind=workspace requires a workspace parameter' };
+    }
+    return { ok: true, mind };
   }
 
   // GET /api/memory — list memories as the shared Memory shape, with optional
   // in-memory filters (PRD §12.4: filter by kind/status/scope/confidence/text).
+  // P3/D2: `mind=personal|workspace` selects a single store (the two-mind split
+  // reads exactly one mind per view); omitting it keeps the legacy merge, where
+  // `workspaceId` presence on a result is the mind discriminator. The merge view
+  // can surface colliding frame ids across minds (separate SQLite autoincrements)
+  // — single-mind reads are how the new UI avoids that ambiguity.
   server.get<{
     Querystring: {
-      workspace?: string; workspaceId?: string; limit?: string;
+      workspace?: string; workspaceId?: string; limit?: string; mind?: string;
       kind?: string; status?: string; scope?: string; q?: string; minConfidence?: string;
     };
-  }>('/api/memory', async (request) => {
+  }>('/api/memory', async (request, reply) => {
     const { workspace: ws, workspaceId: wsId, limit, kind, status, scope, q, minConfidence } = request.query;
     const workspace = ws ?? wsId;
     const max = limit ? parseInt(limit, 10) : 100;
 
+    const parsed = parseMind(request.query.mind, workspace);
+    if (!parsed.ok) return reply.status(400).send({ error: parsed.error });
+    const mind = parsed.mind;
+
     const out: Memory[] = [];
-    for (const f of new FrameStore(server.multiMind.personal).getRecent(max)) {
-      out.push(normalizeToMemory(f, 'personal'));
+    if (mind !== 'workspace') {
+      for (const f of new FrameStore(server.multiMind.personal).getRecent(max)) {
+        out.push(normalizeToMemory(f, 'personal'));
+      }
     }
-    if (workspace) {
+    if (workspace && mind !== 'personal') {
       const wsDb = server.agentState.getWorkspaceMindDb(workspace);
       if (wsDb) {
         for (const f of new FrameStore(wsDb).getRecent(max)) {
@@ -173,12 +214,14 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
   // GET /api/memory/:id — one memory in the shared shape.
   server.get<{
     Params: { id: string };
-    Querystring: { workspace?: string; workspaceId?: string };
+    Querystring: { workspace?: string; workspaceId?: string; mind?: string };
   }>('/api/memory/:id', async (request, reply) => {
     const frameId = parseInt(request.params.id, 10);
     if (isNaN(frameId)) return reply.status(400).send({ error: 'Invalid memory id' });
     const workspace = request.query.workspace ?? request.query.workspaceId;
-    for (const c of candidateStores(workspace)) {
+    const parsed = parseMind(request.query.mind, workspace);
+    if (!parsed.ok) return reply.status(400).send({ error: parsed.error });
+    for (const c of candidateStores(workspace, parsed.mind)) {
       const frame = c.store.getById(frameId);
       if (frame) {
         return normalizeToMemory(frame, c.mind, c.mind === 'workspace' ? workspace : undefined);
@@ -235,7 +278,9 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
     frames.setMetadata(frame.id, JSON.stringify(meta));
 
     emitAuditEvent(server, {
-      workspaceId: workspace ?? 'personal',
+      // Attribute to the RESOLVED mind — an unknown workspace falls back to the
+      // personal store above, and the audit row must say so (review finding).
+      workspaceId: mind === 'workspace' && workspace ? workspace : 'personal',
       eventType: 'memory_write',
       input: JSON.stringify({ content: content.slice(0, 500), kind: meta.kind, source: 'memory-create' }),
       output: JSON.stringify({ frameId: frame.id, mind }),
@@ -254,7 +299,7 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
       content?: string; importance?: string; kind?: string; scope?: string;
       tags?: string[]; status?: string; title?: string; evidence?: string[];
     };
-    Querystring: { workspace?: string; workspaceId?: string };
+    Querystring: { workspace?: string; workspaceId?: string; mind?: string };
   }>('/api/memory/:id', async (request, reply) => {
     const frameId = parseInt(request.params.id, 10);
     if (isNaN(frameId)) return reply.status(400).send({ error: 'Invalid memory id' });
@@ -269,8 +314,10 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
       return reply.status(400).send({ error: `Invalid kind "${b.kind}"` });
     }
     const workspace = request.query.workspace ?? request.query.workspaceId;
+    const parsed = parseMind(request.query.mind, workspace);
+    if (!parsed.ok) return reply.status(400).send({ error: parsed.error });
 
-    for (const c of candidateStores(workspace)) {
+    for (const c of candidateStores(workspace, parsed.mind)) {
       const existing = c.store.getById(frameId);
       if (!existing) continue;
 
@@ -290,7 +337,7 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
       c.store.setMetadata(frameId, JSON.stringify(merged));
 
       emitAuditEvent(server, {
-        workspaceId: workspace ?? 'personal',
+        workspaceId: c.mind === 'workspace' && workspace ? workspace : 'personal',
         eventType: 'memory_write',
         input: JSON.stringify({ frameId, action: 'patch' }),
         output: JSON.stringify({ frameId, mind: c.mind }),
@@ -307,13 +354,15 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
   // POST /api/memory/:id/archive — reversible Archive (A8). Sets status=archived.
   server.post<{
     Params: { id: string };
-    Querystring: { workspace?: string; workspaceId?: string };
+    Querystring: { workspace?: string; workspaceId?: string; mind?: string };
   }>('/api/memory/:id/archive', async (request, reply) => {
     const frameId = parseInt(request.params.id, 10);
     if (isNaN(frameId)) return reply.status(400).send({ error: 'Invalid memory id' });
     const workspace = request.query.workspace ?? request.query.workspaceId;
+    const parsed = parseMind(request.query.mind, workspace);
+    if (!parsed.ok) return reply.status(400).send({ error: parsed.error });
 
-    for (const c of candidateStores(workspace)) {
+    for (const c of candidateStores(workspace, parsed.mind)) {
       const existing = c.store.getById(frameId);
       if (!existing) continue;
       const merged = parseFrameMetadata(existing.metadata);
@@ -322,7 +371,7 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
       c.store.setMetadata(frameId, JSON.stringify(merged));
 
       emitAuditEvent(server, {
-        workspaceId: workspace ?? 'personal',
+        workspaceId: c.mind === 'workspace' && workspace ? workspace : 'personal',
         eventType: 'memory_write',
         input: JSON.stringify({ frameId, action: 'archive' }),
         output: JSON.stringify({ frameId, mind: c.mind, status: 'archived' }),
@@ -340,16 +389,18 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
   // legacy DELETE /api/memory/frames/:id, on the bare-id contract.
   server.delete<{
     Params: { id: string };
-    Querystring: { workspace?: string; workspaceId?: string };
+    Querystring: { workspace?: string; workspaceId?: string; mind?: string };
   }>('/api/memory/:id', async (request, reply) => {
     const frameId = parseInt(request.params.id, 10);
     if (isNaN(frameId)) return reply.status(400).send({ error: 'Invalid memory id' });
     const workspace = request.query.workspace ?? request.query.workspaceId;
+    const parsed = parseMind(request.query.mind, workspace);
+    if (!parsed.ok) return reply.status(400).send({ error: parsed.error });
 
-    for (const c of candidateStores(workspace)) {
+    for (const c of candidateStores(workspace, parsed.mind)) {
       if (c.store.delete(frameId)) {
         emitAuditEvent(server, {
-          workspaceId: workspace ?? 'personal',
+          workspaceId: c.mind === 'workspace' && workspace ? workspace : 'personal',
           eventType: 'memory_delete',
           input: JSON.stringify({ frameId, mind: c.mind }),
         });
@@ -363,7 +414,7 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
   // archive originals rather than hard-delete; LLM-synthesis deferred). All ids
   // must resolve within a single mind.
   server.post<{
-    Body: { ids?: Array<string | number>; workspace?: string; workspaceId?: string; title?: string };
+    Body: { ids?: Array<string | number>; workspace?: string; workspaceId?: string; title?: string; mind?: string };
   }>('/api/memory/merge', async (request, reply) => {
     const b = request.body ?? {};
     const ids = (b.ids ?? []).map((x) => parseInt(String(x), 10)).filter((n) => !isNaN(n));
@@ -371,11 +422,15 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
       return reply.status(400).send({ error: 'merge requires at least 2 memory ids' });
     }
     const workspace = b.workspace ?? b.workspaceId;
+    const parsed = parseMind(b.mind, workspace);
+    if (!parsed.ok) return reply.status(400).send({ error: parsed.error });
 
-    // Find the store that holds ALL ids (single-mind merge for v1).
+    // Find the store that holds ALL ids (single-mind merge for v1). Mind-strict
+    // when declared: stale workspace ids must 404, never resolve as a complete
+    // set in the PERSONAL store and merge+archive unrelated personal frames.
     let chosen: { store: FrameStore; mind: string } | undefined;
     let frames: MemoryFrame[] = [];
-    for (const c of candidateStores(workspace)) {
+    for (const c of candidateStores(workspace, parsed.mind)) {
       const found = ids.map((id) => c.store.getById(id)).filter((f): f is MemoryFrame => !!f);
       if (found.length === ids.length) {
         chosen = c;
@@ -427,7 +482,7 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
     }
 
     emitAuditEvent(server, {
-      workspaceId: workspace ?? 'personal',
+      workspaceId: chosen.mind === 'workspace' && workspace ? workspace : 'personal',
       eventType: 'memory_write',
       input: JSON.stringify({ action: 'merge', ids, mind: chosen.mind }),
       output: JSON.stringify({ mergedFrameId: newFrame.id }),

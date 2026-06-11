@@ -1,19 +1,19 @@
-import { useState, useEffect } from 'react';
-import { Brain, Search, Clock, Trash2, Edit3, Filter, Network, ChevronDown, X, Eye, Copy, Loader2, Download, Activity, BookOpen, Sparkles } from 'lucide-react';
+import { useState } from 'react';
+import { Brain, Search, Clock, Trash2, Edit3, Filter, Eye, Copy, Loader2 } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { Input } from '@/components/ui/input';
-import type { MemoryFrame, KGNode, KGEdge } from '@/lib/types';
+import type { MemoryFrame } from '@/lib/types';
 import { renderSimpleMarkdown } from '@/lib/render-markdown';
 import ContextMenu, { type ContextMenuItem } from '@/components/os/ContextMenu';
-import KnowledgeGraphViewer from './memory/KnowledgeGraphViewer';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
-import HarvestTab from './memory/HarvestTab';
-import WeaverPanel from './memory/WeaverPanel';
-import WikiTab from './memory/WikiTab';
-import EvolutionTab from './memory/EvolutionTab';
-import MemoryCenterTab from './memory/MemoryCenterTab';
-import ImportReminderBanner from './memory/ImportReminderBanner';
-import { useOnboarding } from '@/hooks/useOnboarding';
+
+/**
+ * Timeline tab (P3/D2 extraction) — the chronological frame list + detail pane,
+ * moved VERBATIM out of the retired MemoryApp.tsx shell (its sidebar + detail
+ * JSX) so the capability survives the entry restructure. Operates on the legacy
+ * MemoryFrame surface (useMemory hook via the route), not the shared Memory
+ * entity — that distinction is the Memories tab's job.
+ */
 
 const frameTypeIcons: Record<string, string> = {
   fact: '📋', event: '📅', insight: '💡', decision: '⚖️', task: '✅', entity: '🏷️',
@@ -40,21 +40,7 @@ function readFrameProvenanceTool(frame: { metadata?: Record<string, unknown> }):
   return null;
 }
 
-// QW-2: labeled tab bar for Memory app. Replaces the cramped icon-only
-// toggles in the sidebar. Each tab is icon + short label + tooltip for the
-// longer description.
-type MemoryView = 'memories' | 'timeline' | 'graph' | 'harvest' | 'weaver' | 'wiki' | 'evolution';
-const MEMORY_TABS: { id: MemoryView; label: string; icon: React.ComponentType<{ className?: string }>; tooltip: string }[] = [
-  { id: 'memories', label: 'Memories', icon: Brain, tooltip: 'Memory Center — inspect, edit, review, merge' },
-  { id: 'timeline', label: 'Timeline', icon: Clock, tooltip: 'Chronological frame list' },
-  { id: 'graph', label: 'Graph', icon: Network, tooltip: 'Knowledge Graph — entities and relations' },
-  { id: 'harvest', label: 'Harvest', icon: Download, tooltip: 'Import conversations from other AIs' },
-  { id: 'weaver', label: 'Weaver', icon: Activity, tooltip: 'Memory distillation and consolidation' },
-  { id: 'wiki', label: 'Wiki', icon: BookOpen, tooltip: 'Compiled knowledge pages' },
-  { id: 'evolution', label: 'Evolution', icon: Sparkles, tooltip: 'Self-evolving prompts and agents' },
-];
-
-interface MemoryAppProps {
+export interface TimelineTabProps {
   frames: MemoryFrame[];
   selectedFrame: MemoryFrame | null;
   onSelectFrame: (frame: MemoryFrame | null) => void;
@@ -67,31 +53,16 @@ interface MemoryAppProps {
   onTypeFiltersChange?: (types: string[]) => void;
   minImportance?: number;
   onMinImportanceChange?: (val: number) => void;
-  knowledgeGraph?: { nodes: KGNode[]; edges: KGEdge[] };
-  onRefreshKG?: () => void;
-  kgScope?: 'current' | 'personal' | 'all';
-  onKGScopeChange?: (scope: 'current' | 'personal' | 'all') => void;
-  /** Knowledge graph fetch lifecycle — separate from the frames `loading` flag. */
-  kgLoading?: boolean;
-  kgError?: string | null;
   onContextRail?: (target: { type: 'frame' | 'entity'; id: string; label: string }) => void;
 }
 
-
-const MemoryApp = ({
+const TimelineTab = ({
   frames, selectedFrame, onSelectFrame, searchQuery, onSearchChange,
   onDeleteFrame, loading, stats, typeFilters = [], onTypeFiltersChange,
-  minImportance = 0, onMinImportanceChange,
-  knowledgeGraph, onRefreshKG, kgScope, onKGScopeChange,
-  kgLoading = false, kgError = null, onContextRail,
-}: MemoryAppProps) => {
-  const [view, setView] = useState<MemoryView>('memories');
+  minImportance = 0, onMinImportanceChange, onContextRail,
+}: TimelineTabProps) => {
   const [showFilters, setShowFilters] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ position: { x: number; y: number }; items: ContextMenuItem[] } | null>(null);
-  // Phase 1 #7 — onboarding flag controls reminder-banner eligibility. Pull
-  // here rather than threading through props so the banner can mount even
-  // when MemoryApp is rendered as a window without explicit prop wiring.
-  const { state: onboardingState } = useOnboarding();
 
   const handleFrameContextMenu = (e: React.MouseEvent, frame: MemoryFrame) => {
     e.preventDefault();
@@ -117,9 +88,8 @@ const MemoryApp = ({
 
   return (
     <div className="flex h-full">
-      {/* Timeline sidebar — hidden for the Memory Center view (S04), which has
-          its own list + filters; kept for the other tabs (existing behaviour). */}
-      <div className={`w-56 border-r border-border/50 flex flex-col shrink-0 ${view === 'memories' ? 'hidden' : ''}`}>
+      {/* Timeline sidebar — chronological frame list with search + filters. */}
+      <div className="w-56 border-r border-border/50 flex flex-col shrink-0">
         <div className="p-2 border-b border-border/30">
           <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg px-2 py-1">
             <Search className="w-3 h-3 text-muted-foreground" />
@@ -180,7 +150,10 @@ const MemoryApp = ({
         <div className="flex-1 overflow-auto p-1.5 space-y-0.5">
           {frames.map(f => (
             <button
-              key={f.id}
+              // Frame ids collide across minds (separate per-mind SQLite
+              // autoincrements) and the legacy frames API merges both — the id
+              // alone duplicated keys on real data (P3 live smoke, key `36`).
+              key={`${f.workspaceId ?? 'personal'}:${f.id}`}
               onClick={() => {
                 onSelectFrame(f);
                 if (onContextRail) onContextRail({ type: 'frame', id: String(f.id), label: f.content?.split('\n')[0]?.slice(0, 60) ?? 'Frame' });
@@ -230,60 +203,9 @@ const MemoryApp = ({
         </div>
       </div>
 
-      {/* Main content area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Phase 1 #7 — Pending Imports Reminder banner. Mounts above the tab
-            bar so it sits at the very top of MemoryApp's main view. The banner
-            self-suppresses based on onboarding state, frame count, retired
-            flag, and 7-day dismissal cadence (see import-reminder-state.ts). */}
-        <ImportReminderBanner
-          onboardingCompleted={onboardingState.completed}
-          totalFrameCount={stats.total}
-          onOpenHarvest={() => setView('harvest')}
-        />
-        {/* QW-2: labeled tab bar — icon + text per view */}
-        <div className="flex border-b border-border/50 bg-background/60">
-          {MEMORY_TABS.map(tab => {
-            const Icon = tab.icon;
-            const active = view === tab.id;
-            return (
-              <HintTooltip key={tab.id} content={tab.tooltip}>
-                <button
-                  onClick={() => setView(tab.id)}
-                  aria-pressed={active}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-display border-b-2 transition-colors ${
-                    active
-                      ? 'border-primary text-primary bg-primary/5'
-                      : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  <span>{tab.label}</span>
-                </button>
-              </HintTooltip>
-            );
-          })}
-        </div>
-        <div className="flex-1 overflow-auto">
-        {view === 'memories' ? (
-          <MemoryCenterTab />
-        ) : view === 'evolution' ? (
-          <EvolutionTab />
-        ) : view === 'wiki' ? (
-          <WikiTab />
-        ) : view === 'weaver' ? (
-          <WeaverPanel />
-        ) : view === 'harvest' ? (
-          <HarvestTab />
-        ) : view === 'graph' ? (
-          <KnowledgeGraphViewer nodes={knowledgeGraph?.nodes || []} edges={knowledgeGraph?.edges || []}
-            scope={kgScope} onScopeChange={onKGScopeChange}
-            loading={kgLoading} error={kgError} onRetry={onRefreshKG}
-            onNodeClick={(nodeId) => {
-              const node = knowledgeGraph?.nodes.find(n => n.id === nodeId);
-              if (node && onContextRail) onContextRail({ type: 'entity', id: nodeId, label: node.label ?? nodeId });
-            }} />
-        ) : selectedFrame ? (
+      {/* Detail pane */}
+      <div className="flex-1 overflow-auto">
+        {selectedFrame ? (
           <div className="p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -327,7 +249,6 @@ const MemoryApp = ({
             <p className="text-sm text-muted-foreground">Select a memory frame to view details</p>
           </div>
         )}
-        </div>
       </div>
 
       {/* Context menu */}
@@ -344,4 +265,4 @@ const MemoryApp = ({
   );
 };
 
-export default MemoryApp;
+export default TimelineTab;

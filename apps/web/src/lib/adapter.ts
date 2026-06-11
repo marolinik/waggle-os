@@ -794,8 +794,11 @@ class LocalAdapter {
   async listMemories(opts: {
     workspaceId?: string; kind?: string; status?: string; scope?: string;
     q?: string; minConfidence?: number; limit?: number;
+    /** P3/D2 two-mind split — select a single mind; omit for the legacy merge. */
+    mind?: 'personal' | 'workspace';
   } = {}): Promise<Memory[]> {
     const p = new URLSearchParams();
+    if (opts.mind) p.set('mind', opts.mind);
     if (opts.workspaceId) p.set('workspace', opts.workspaceId);
     if (opts.kind) p.set('kind', opts.kind);
     if (opts.status) p.set('status', opts.status);
@@ -813,11 +816,23 @@ class LocalAdapter {
     return body.results ?? [];
   }
 
-  async getMemory(id: string, workspaceId?: string): Promise<Memory | null> {
-    const qs = workspaceId ? `?workspace=${encodeURIComponent(workspaceId)}` : '';
+  /** Query string for the single-memory routes. `mind` makes server-side store
+   *  resolution STRICT (P3/D2): frame ids collide across the per-mind SQLite
+   *  DBs, so a workspace-scoped mutation must never fall through to (and
+   *  destroy) a colliding personal frame. Callers that know the mind — the
+   *  Memory Center always does — should pass it. */
+  private memoryScopeQs(workspaceId?: string, mind?: 'personal' | 'workspace'): string {
+    const p = new URLSearchParams();
+    if (workspaceId) p.set('workspace', workspaceId);
+    if (mind) p.set('mind', mind);
+    const s = p.toString();
+    return s ? `?${s}` : '';
+  }
+
+  async getMemory(id: string, workspaceId?: string, mind?: 'personal' | 'workspace'): Promise<Memory | null> {
     // P1b D3: fetchRaw preserves the documented 404→null contract (the
     // throwing fetch would reject before the status check).
-    const res = await this.fetchRaw(`/api/memory/${encodeURIComponent(id)}${qs}`);
+    const res = await this.fetchRaw(`/api/memory/${encodeURIComponent(id)}${this.memoryScopeQs(workspaceId, mind)}`);
     if (res.status === 404) return null;
     if (!res.ok) throw new AdapterHttpError(res.status, res.statusText, await res.clone().json().catch(() => undefined));
     return res.json();
@@ -835,28 +850,26 @@ class LocalAdapter {
     id: string,
     patch: { content?: string; importance?: string; kind?: string; scope?: string; tags?: string[]; status?: string; title?: string; evidence?: string[] },
     workspaceId?: string,
+    mind?: 'personal' | 'workspace',
   ): Promise<Memory> {
-    const qs = workspaceId ? `?workspace=${encodeURIComponent(workspaceId)}` : '';
-    const res = await this.fetch(`/api/memory/${encodeURIComponent(id)}${qs}`, { method: 'PATCH', body: JSON.stringify(patch) });
+    const res = await this.fetch(`/api/memory/${encodeURIComponent(id)}${this.memoryScopeQs(workspaceId, mind)}`, { method: 'PATCH', body: JSON.stringify(patch) });
     return res.json();
   }
 
-  async archiveMemory(id: string, workspaceId?: string): Promise<Memory> {
-    const qs = workspaceId ? `?workspace=${encodeURIComponent(workspaceId)}` : '';
-    const res = await this.fetch(`/api/memory/${encodeURIComponent(id)}/archive${qs}`, { method: 'POST' });
+  async archiveMemory(id: string, workspaceId?: string, mind?: 'personal' | 'workspace'): Promise<Memory> {
+    const res = await this.fetch(`/api/memory/${encodeURIComponent(id)}/archive${this.memoryScopeQs(workspaceId, mind)}`, { method: 'POST' });
     return res.json();
   }
 
   /** Hard delete (A8) via the bare-id route — distinct from deleteMemoryFrame. */
-  async deleteMemoryById(id: string, workspaceId?: string): Promise<void> {
-    const qs = workspaceId ? `?workspace=${encodeURIComponent(workspaceId)}` : '';
-    await this.fetch(`/api/memory/${encodeURIComponent(id)}${qs}`, { method: 'DELETE' });
+  async deleteMemoryById(id: string, workspaceId?: string, mind?: 'personal' | 'workspace'): Promise<void> {
+    await this.fetch(`/api/memory/${encodeURIComponent(id)}${this.memoryScopeQs(workspaceId, mind)}`, { method: 'DELETE' });
   }
 
-  async mergeMemories(ids: string[], opts: { workspaceId?: string; title?: string } = {}): Promise<Memory> {
+  async mergeMemories(ids: string[], opts: { workspaceId?: string; title?: string; mind?: 'personal' | 'workspace' } = {}): Promise<Memory> {
     const res = await this.fetch('/api/memory/merge', {
       method: 'POST',
-      body: JSON.stringify({ ids, workspaceId: opts.workspaceId, title: opts.title }),
+      body: JSON.stringify({ ids, workspaceId: opts.workspaceId, title: opts.title, mind: opts.mind }),
     });
     return res.json();
   }
