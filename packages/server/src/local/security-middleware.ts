@@ -238,6 +238,30 @@ export class SessionTimeoutTracker {
 const AUTH_EXEMPT_PATHS = ['/health', '/api/auth/session-token'];
 
 /**
+ * P1b-SSE: EventSource cannot send an Authorization header, so these exact
+ * GET stream paths accept the session token as a `?token=` query parameter —
+ * the same pattern GET /ws already uses (index.ts validates `?token=` there).
+ * Scope deliberately narrow: query-token auth is NOT a general alternative
+ * transport — it applies only to this allowlist, only on GET, and only when
+ * no Authorization header is present. (Local-log token exposure matches the
+ * existing /ws posture: the token is per-process and loopback-scoped.)
+ */
+const SSE_QUERY_TOKEN_PATHS = new Set([
+  '/api/notifications/stream', // notifications + named subagent_status events
+  '/api/events/stream',
+  '/api/waggle/stream',
+  '/api/harvest/progress',
+]);
+
+/** Extract `?token=` from a raw request URL (query parsing happens later in
+ *  Fastify's lifecycle than our onRequest hook needs). */
+function queryToken(rawUrl: string): string | null {
+  const q = rawUrl.indexOf('?');
+  if (q < 0) return null;
+  return new URLSearchParams(rawUrl.slice(q + 1)).get('token');
+}
+
+/**
  * AV-1 / R2-004: a Host header is allowed only if present AND (after stripping the
  * port) in the allowlist. An absent/empty Host MUST fail closed — the prior
  * `if (host && !allow.has(host))` form skipped the check entirely on empty Host,
@@ -329,12 +353,25 @@ async function securityMiddlewarePlugin(
         (trustLocalhost && isLocalhost);
       if (!isAuthExempt) {
         const authHeader = request.headers.authorization;
-        if (!authHeader) {
-          return reply.code(401).send({ error: 'Unauthorized', code: 'MISSING_TOKEN' });
-        }
-        const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-        if (token !== sessionToken) {
-          return reply.code(401).send({ error: 'Unauthorized', code: 'INVALID_TOKEN' });
+        // P1b-SSE: header-less GETs on the SSE allowlist may authenticate via
+        // `?token=` (EventSource cannot send headers). A header, when present,
+        // always wins — the query path is a fallback transport, not an
+        // override. Invalid/missing query tokens 401 with the same codes the
+        // header path uses, so the client's refresh logic stays uniform.
+        const sseEligible = !authHeader && request.method === 'GET' && SSE_QUERY_TOKEN_PATHS.has(requestPath);
+        if (sseEligible) {
+          const qToken = queryToken(request.url);
+          if (qToken !== sessionToken) {
+            return reply.code(401).send({ error: 'Unauthorized', code: qToken ? 'INVALID_TOKEN' : 'MISSING_TOKEN' });
+          }
+        } else {
+          if (!authHeader) {
+            return reply.code(401).send({ error: 'Unauthorized', code: 'MISSING_TOKEN' });
+          }
+          const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+          if (token !== sessionToken) {
+            return reply.code(401).send({ error: 'Unauthorized', code: 'INVALID_TOKEN' });
+          }
         }
       }
     }
