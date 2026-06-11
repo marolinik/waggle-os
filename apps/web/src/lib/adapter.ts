@@ -153,8 +153,8 @@ class LocalAdapter {
   private baseUrl: string;
   private authToken: string | null = null;
   private ws: WebSocket | null = null;
-  /** P1b-SSE: one live (reconnecting) subscription per path. */
-  private sseUnsubscribers = new Map<string, () => void>();
+  /** P1b-SSE: one ref-counted reconnecting stream per (path, eventName). */
+  private sseStreams = new Map<string, { close: () => void; listeners: Set<(data: unknown) => void> }>();
   private _connected = false;
   private _connectAttempted = false;
   // P1b D3 gate state. _connectPromise doubles as the deferral gate: kept
@@ -1064,7 +1064,9 @@ class LocalAdapter {
   }
 
   subscribeEvents(onEvent: (step: AgentStep) => void): () => void {
-    return this.subscribeSSE('/api/events/stream', (data) => onEvent(data as AgentStep));
+    // Server emits NAMED `event: audit` events (events.ts:325); the unnamed
+    // handshake never reaches this listener by SSE spec.
+    return this.subscribeSSE('/api/events/stream', (data) => onEvent(data as AgentStep), 'audit');
   }
 
   // --- Agent ---
@@ -1556,7 +1558,14 @@ class LocalAdapter {
 
   // --- Notifications ---
   subscribeNotifications(onNotification: (n: Notification) => void): () => void {
-    return this.subscribeSSE('/api/notifications/stream', (data) => onNotification(data as Notification));
+    return this.subscribeSSE('/api/notifications/stream', (data) => {
+      // The route writes an UNNAMED `data: {"type":"connected"}` handshake on
+      // every accept (notifications.ts:96) — with the reconnect loop that
+      // would mint a junk unread Notification per connect/reopen. Filter it
+      // at the adapter boundary.
+      if ((data as { type?: string } | null)?.type === 'connected') return;
+      onNotification(data as Notification);
+    });
   }
 
   /**
@@ -2395,7 +2404,9 @@ class LocalAdapter {
   }
 
   subscribeWaggleDance(onSignal: (signal: WaggleSignal) => void): () => void {
-    return this.subscribeSSE('/api/waggle/stream', (data) => onSignal(data as WaggleSignal));
+    // Server emits NAMED `event: signal` events (waggle-signals.ts:103); its
+    // `event: connected` handshake is equally named and equally ignored here.
+    return this.subscribeSSE('/api/waggle/stream', (data) => onSignal(data as WaggleSignal), 'signal');
   }
 
   /**
@@ -2462,20 +2473,46 @@ class LocalAdapter {
     };
   }
 
-  private subscribeSSE(path: string, onData: (data: unknown) => void): () => void {
-    // One live subscription per path (re-subscribing replaces the old one).
-    this.sseUnsubscribers.get(path)?.();
-    const unsubscribe = this.openSSE(path, (es) => {
-      es.onmessage = (e) => {
-        try { onData(JSON.parse(e.data)); } catch { /* skip */ }
+  /**
+   * P1b-SSE review fix: FAN-OUT, not replace. One ref-counted stream per
+   * (path, eventName); concurrent subscribers share it (AppShell's
+   * always-mounted waggle badge + the WaggleDance screen both consume
+   * /api/waggle/stream — the old replace-on-resubscribe dedup let the second
+   * mount permanently kill the first's stream). The socket closes only when
+   * the last subscriber leaves.
+   *
+   * `eventName` selects NAMED SSE events (review fix: the events/waggle
+   * routes emit `event: audit` / `event: signal`, which `onmessage` never
+   * receives per the SSE spec — both channels were payload-dead even with
+   * working auth).
+   */
+  private subscribeSSE(path: string, onData: (data: unknown) => void, eventName?: string): () => void {
+    const key = `${path}#${eventName ?? 'message'}`;
+    let stream = this.sseStreams.get(key);
+    if (!stream) {
+      const listeners = new Set<(data: unknown) => void>();
+      const dispatch = (e: MessageEvent) => {
+        try {
+          const data = JSON.parse(e.data);
+          for (const l of listeners) l(data);
+        } catch { /* skip malformed */ }
       };
-    });
-    const wrapped = () => {
-      unsubscribe();
-      if (this.sseUnsubscribers.get(path) === wrapped) this.sseUnsubscribers.delete(path);
+      const close = this.openSSE(path, (es) => {
+        if (eventName) es.addEventListener(eventName, dispatch as EventListener);
+        else es.onmessage = dispatch;
+      });
+      stream = { close, listeners };
+      this.sseStreams.set(key, stream);
+    }
+    const entry = stream;
+    entry.listeners.add(onData);
+    return () => {
+      entry.listeners.delete(onData);
+      if (entry.listeners.size === 0) {
+        entry.close();
+        if (this.sseStreams.get(key) === entry) this.sseStreams.delete(key);
+      }
     };
-    this.sseUnsubscribers.set(path, wrapped);
-    return wrapped;
   }
 
   // --- Telemetry ---

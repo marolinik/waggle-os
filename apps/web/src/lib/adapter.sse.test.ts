@@ -141,15 +141,70 @@ describe('P1b-SSE client', () => {
     expect(FakeEventSource.instances[1].closed).toBe(true);
   });
 
-  it('per-path dedup: re-subscribing the same path closes the previous stream', async () => {
+  it('FAN-OUT: concurrent same-path subscribers share ONE stream; both receive events; last-out closes', async () => {
+    // Review fix: the old replace-on-resubscribe dedup let a second mount
+    // (WaggleDance screen) permanently kill the first's stream (AppShell's
+    // always-mounted badge).
     const a = await connectedAdapter('tok-A');
-    a.subscribeNotifications(() => {});
+    const got1: unknown[] = [];
+    const got2: unknown[] = [];
+    const unsub1 = a.subscribeNotifications((n) => got1.push(n));
+    const unsub2 = a.subscribeNotifications((n) => got2.push(n));
     await flush();
+    expect(FakeEventSource.instances).toHaveLength(1); // shared socket
+
+    const es = FakeEventSource.instances[0];
+    es.onmessage?.({ data: JSON.stringify({ id: '1', title: 'hi' }) } as MessageEvent);
+    expect(got1).toHaveLength(1);
+    expect(got2).toHaveLength(1);
+
+    unsub1();
+    expect(es.closed).toBe(false); // second subscriber keeps it alive
+    es.onmessage?.({ data: JSON.stringify({ id: '2', title: 'again' }) } as MessageEvent);
+    expect(got1).toHaveLength(1); // unsubscribed callback no longer fires
+    expect(got2).toHaveLength(2);
+
+    unsub2();
+    expect(es.closed).toBe(true); // last-out closes
+
+    // A fresh subscribe after full teardown opens a NEW stream.
     a.subscribeNotifications(() => {});
     await flush();
     expect(FakeEventSource.instances).toHaveLength(2);
-    expect(FakeEventSource.instances[0].closed).toBe(true);
-    expect(FakeEventSource.instances[1].closed).toBe(false);
+  });
+
+  it('NAMED EVENTS: subscribeEvents/<audit> and subscribeWaggleDance/<signal> receive named payloads, not onmessage', async () => {
+    // Review fix: the server emits `event: audit` / `event: signal` — an
+    // onmessage-only listener made both channels payload-dead even with
+    // working auth.
+    const a = await connectedAdapter('tok-A');
+    const audits: unknown[] = [];
+    const signals: unknown[] = [];
+    a.subscribeEvents((e) => audits.push(e));
+    a.subscribeWaggleDance((s) => signals.push(s));
+    await flush();
+    const [eventsEs, waggleEs] = FakeEventSource.instances;
+
+    eventsEs.fireNamed('audit', { type: 'tool_call' });
+    waggleEs.fireNamed('signal', { id: 's1' });
+    expect(audits).toEqual([{ type: 'tool_call' }]);
+    expect(signals).toEqual([{ id: 's1' }]);
+
+    // The named `event: connected` waggle handshake is ignored by spec.
+    waggleEs.fireNamed('connected', { type: 'connected' });
+    expect(signals).toHaveLength(1);
+  });
+
+  it('HANDSHAKE FILTER: the unnamed {"type":"connected"} on the notifications stream never reaches the consumer', async () => {
+    const a = await connectedAdapter('tok-A');
+    const got: unknown[] = [];
+    a.subscribeNotifications((n) => got.push(n));
+    await flush();
+    const es = FakeEventSource.instances[0];
+    es.onmessage?.({ data: JSON.stringify({ type: 'connected' }) } as MessageEvent);
+    expect(got).toHaveLength(0); // junk handshake filtered
+    es.onmessage?.({ data: JSON.stringify({ id: 'n1', title: 'real' }) } as MessageEvent);
+    expect(got).toHaveLength(1);
   });
 
   it('subagent named-event listener is re-attached on every reopen (configure contract)', async () => {
