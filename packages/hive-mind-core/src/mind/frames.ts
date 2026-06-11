@@ -1,5 +1,9 @@
-import { createHash } from 'node:crypto';
 import type { MindDB } from './db.js';
+import { hashFrameContent, stripHmPrefix } from './content-hash.js';
+
+// Back-compat re-export — stripHmPrefix moved to content-hash.ts (oss-drift D3)
+// so the hash and the strip live in one module; existing importers unchanged.
+export { stripHmPrefix };
 
 /** Strict ISO-8601 check used by `createIFrame` to decide whether to honor
  *  a caller-supplied `createdAt`. Requires the `T` separator and a
@@ -32,6 +36,10 @@ export interface MemoryFrame {
   access_count: number;
   created_at: string;
   last_accessed: string;
+  /** oss-drift D3: canonical dedup hash (hashFrameContent — stripHmPrefix +
+   *  trim semantics). Maintained on every FrameStore write; NULL only on rows
+   *  written by raw SQL before the next boot's migration backfill. */
+  content_hash?: string | null;
   /** UX-Refactor Phase 2B: JSON blob for Memory Center provenance/classification
    *  (kind/confidence/scope/status/sourceId/sourceUrl/tags/evidence/related*).
    *  Always present at the column level (NOT NULL DEFAULT '{}'); typed optional
@@ -51,20 +59,6 @@ const IMPORTANCE_MULTIPLIERS: Record<Importance, number> = {
   temporary: 0.7,
   deprecated: 0.3,
 };
-
-/**
- * Strip the leading hive-mind metadata prefix `[hm session:… src:… event:…] `
- * so save-side dedup (`findDuplicate`) compares the semantic turn BODY, not the
- * provenance. The prefix is emitted by shim-core's `buildPrefix`
- * (`[hm <tokens>] `) and carries `session:`/`src:`/`event:` tokens; two captures
- * of the same turn from different sources differ only in that prefix. Content
- * without the prefix (harvest / ingest / cognify) is returned unchanged — a
- * no-op. The regex anchors on `[hm ` and stops at the first `]`, so a body that
- * merely contains `[` brackets later is never over-stripped.
- */
-export function stripHmPrefix(content: string): string {
-  return content.replace(/^\[hm [^\]]*\]\s*/, '');
-}
 
 export class FrameStore {
   private db: MindDB;
@@ -106,15 +100,16 @@ export class FrameStore {
     // (datetime('now')) — never write junk timestamps that would corrupt
     // range queries.
     const useProvidedTs = typeof createdAt === 'string' && isValidIsoTimestamp(createdAt);
+    const contentHash = hashFrameContent(content);
     const result = useProvidedTs
       ? raw.prepare(`
-          INSERT INTO memory_frames (frame_type, gop_id, t, base_frame_id, content, importance, source, created_at, last_accessed)
-          VALUES ('I', ?, ?, NULL, ?, ?, ?, ?, ?)
-        `).run(gopId, t, content, importance, source, createdAt, createdAt)
+          INSERT INTO memory_frames (frame_type, gop_id, t, base_frame_id, content, importance, source, content_hash, created_at, last_accessed)
+          VALUES ('I', ?, ?, NULL, ?, ?, ?, ?, ?, ?)
+        `).run(gopId, t, content, importance, source, contentHash, createdAt, createdAt)
       : raw.prepare(`
-          INSERT INTO memory_frames (frame_type, gop_id, t, base_frame_id, content, importance, source)
-          VALUES ('I', ?, ?, NULL, ?, ?, ?)
-        `).run(gopId, t, content, importance, source);
+          INSERT INTO memory_frames (frame_type, gop_id, t, base_frame_id, content, importance, source, content_hash)
+          VALUES ('I', ?, ?, NULL, ?, ?, ?, ?)
+        `).run(gopId, t, content, importance, source, contentHash);
 
     const frame = raw.prepare('SELECT * FROM memory_frames WHERE id = ?').get(result.lastInsertRowid) as MemoryFrame;
     this.indexFts(frame);
@@ -125,9 +120,9 @@ export class FrameStore {
     const t = this.nextT(gopId);
     const raw = this.db.getDatabase();
     const result = raw.prepare(`
-      INSERT INTO memory_frames (frame_type, gop_id, t, base_frame_id, content, importance, source)
-      VALUES ('P', ?, ?, ?, ?, ?, ?)
-    `).run(gopId, t, baseFrameId, content, importance, source);
+      INSERT INTO memory_frames (frame_type, gop_id, t, base_frame_id, content, importance, source, content_hash)
+      VALUES ('P', ?, ?, ?, ?, ?, ?, ?)
+    `).run(gopId, t, baseFrameId, content, importance, source, hashFrameContent(content));
 
     const frame = raw.prepare('SELECT * FROM memory_frames WHERE id = ?').get(result.lastInsertRowid) as MemoryFrame;
     this.indexFts(frame);
@@ -143,9 +138,9 @@ export class FrameStore {
     });
     const raw = this.db.getDatabase();
     const result = raw.prepare(`
-      INSERT INTO memory_frames (frame_type, gop_id, t, base_frame_id, content, importance)
-      VALUES ('B', ?, ?, ?, ?, 'normal')
-    `).run(gopId, t, baseFrameId, bContent);
+      INSERT INTO memory_frames (frame_type, gop_id, t, base_frame_id, content, importance, content_hash)
+      VALUES ('B', ?, ?, ?, ?, 'normal', ?)
+    `).run(gopId, t, baseFrameId, bContent, hashFrameContent(bContent));
 
     const frame = raw.prepare('SELECT * FROM memory_frames WHERE id = ?').get(result.lastInsertRowid) as MemoryFrame;
     this.indexFts(frame);
@@ -254,41 +249,26 @@ export class FrameStore {
    * Returns the existing frame if content hash matches, null otherwise.
    * If a duplicate is found, updates its access_count instead of creating a new frame.
    *
-   * Comparison is trim-stable — we compare the SHA-256 of `content.trim()`
-   * (JS trim, strips all Unicode whitespace) against the SHA-256 of every
-   * stored frame's JS-trimmed content. No SQL `length()` pre-filter is
-   * used because SQLite's built-in `trim()` only strips the ASCII space
-   * character (0x20), which would mis-compare any content with trailing
-   * newlines, tabs, or carriage returns.
-   *
-   * Comparison is also provenance-insensitive (OQ-6): both the incoming
-   * content and each stored frame's content are passed through
-   * `stripHmPrefix` before hashing, so two same-body captures of the same
-   * turn collapse into one frame regardless of which source's `[hm …]`
-   * metadata prefix they carry (e.g. an OpenClaw-gateway capture vs the
-   * backend tool's own lifecycle-hook capture). Content without the prefix
-   * (harvest / ingest / cognify) is unaffected — the strip is a no-op.
-   *
-   * NOTE: Only the last 500 frames are inspected as a cost bound. This is
-   * deliberate — hash-based dedup across an unbounded table would need a
-   * separate content_hash column with its own index. If a duplicate check
-   * matters beyond the recency window, callers should add their own
-   * gop_id-scoped guard.
+   * oss-drift D3 (2026-06-11): O(1) lookup on the indexed `content_hash`
+   * column with NO recency window — the previous implementation scanned only
+   * the last 500 frames and silently missed older duplicates. Hash semantics
+   * (hashFrameContent) are unchanged:
+   *  - trim-stable: JS `trim()` over the content (SQLite's `trim()` only
+   *    strips ASCII space, so hashing happens JS-side, never in SQL);
+   *  - provenance-insensitive (OQ-6): content passes through `stripHmPrefix`
+   *    before hashing, so two same-body captures of one turn collapse into
+   *    one frame regardless of which source's `[hm …]` prefix they carry.
+   * Rows written by raw SQL before the column existed are backfilled by
+   * db.ts runMigrations() on open.
    */
   findDuplicate(content: string): MemoryFrame | null {
-    const hash = createHash('sha256').update(stripHmPrefix(content).trim()).digest('hex');
-    const existing = this.db.getDatabase().prepare(`
-      SELECT * FROM memory_frames
-      ORDER BY id DESC LIMIT 500
-    `).all() as MemoryFrame[];
-
-    for (const frame of existing) {
-      const frameHash = createHash('sha256').update(stripHmPrefix(frame.content).trim()).digest('hex');
-      if (frameHash === hash) {
-        // Update access count instead of creating duplicate
-        this.touch(frame.id);
-        return frame;
-      }
+    const frame = this.db.getDatabase().prepare(`
+      SELECT * FROM memory_frames WHERE content_hash = ? ORDER BY id DESC LIMIT 1
+    `).get(hashFrameContent(content)) as MemoryFrame | undefined;
+    if (frame) {
+      // Update access count instead of creating duplicate
+      this.touch(frame.id);
+      return frame;
     }
     return null;
   }
@@ -305,10 +285,10 @@ export class FrameStore {
 
     const newImportance = importance ?? existing.importance;
 
-    // Update main table
+    // Update main table (content_hash maintained — oss-drift D3)
     raw.prepare(`
-      UPDATE memory_frames SET content = ?, importance = ? WHERE id = ?
-    `).run(content, newImportance, id);
+      UPDATE memory_frames SET content = ?, importance = ?, content_hash = ? WHERE id = ?
+    `).run(content, newImportance, hashFrameContent(content), id);
 
     // Update FTS index: delete old entry, insert new
     raw.prepare('DELETE FROM memory_frames_fts WHERE rowid = ?').run(id);
@@ -435,8 +415,9 @@ export class FrameStore {
       const toMerge = pframes.slice(0, pframes.length - 5);
       const mergedContent = [latestI.content, ...toMerge.map(p => p.content)].join('\n---\n');
 
-      // Update the I-frame with merged content
-      raw.prepare('UPDATE memory_frames SET content = ? WHERE id = ?').run(mergedContent, latestI.id);
+      // Update the I-frame with merged content (content_hash maintained — oss-drift D3)
+      raw.prepare('UPDATE memory_frames SET content = ?, content_hash = ? WHERE id = ?')
+        .run(mergedContent, hashFrameContent(mergedContent), latestI.id);
       // Update FTS
       raw.prepare('DELETE FROM memory_frames_fts WHERE rowid = ?').run(latestI.id);
       raw.prepare('INSERT INTO memory_frames_fts (rowid, content) VALUES (?, ?)').run(latestI.id, mergedContent);

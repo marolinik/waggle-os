@@ -275,19 +275,20 @@ describe('FrameStore provenance-insensitive dedup (OQ-6)', () => {
     expect(frames.getById(plain.id)?.content).toBe('the shared turn body');
   });
 
-  it('does not dedup a duplicate older than the 500-frame recency window', () => {
-    // Insert a target body, then push it past the LIMIT 500 window with 500
-    // distinct fillers, then attempt to re-insert the same body. Because the
-    // original is now beyond the window, it is not found → a new row is made.
+  it('dedups duplicates beyond the old 500-frame recency window (oss-drift D3)', () => {
+    // Pre-D3 this test asserted the OPPOSITE: findDuplicate scanned only the
+    // last 500 frames, so a body buried under 500 fillers re-inserted as a new
+    // row. The indexed content_hash lookup has no recency window — the old
+    // limitation (and the old assertion) is gone.
     const original = frames.createIFrame('gop-test', 'recency-bound body');
     for (let i = 0; i < 500; i++) {
       frames.createIFrame('gop-test', `filler-${i}`);
     }
     const reinserted = frames.createIFrame('gop-test', 'recency-bound body');
 
-    expect(reinserted.id).not.toBe(original.id);
-    // Both the original and the re-inserted copy exist (502 total: 2 bodies + 500 fillers).
-    expect(frames.getStats().total).toBe(502);
+    expect(reinserted.id).toBe(original.id);
+    // 501 total: 1 deduped body + 500 fillers.
+    expect(frames.getStats().total).toBe(501);
   });
 });
 

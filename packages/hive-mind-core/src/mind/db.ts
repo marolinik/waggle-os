@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import type { Database as DatabaseType } from 'better-sqlite3';
 import * as sqliteVec from 'sqlite-vec';
 import { SCHEMA_SQL, VEC_TABLE_SQL, SCHEMA_VERSION, vecTableSqlForDim } from './schema.js';
+import { hashFrameContent } from './content-hash.js';
 
 // Reverse-ported from OSS hive-mind (oss-drift triage R7, 2026-06-11).
 /** A persisted embedding fingerprint: which provider/model produced this .mind's
@@ -222,6 +223,23 @@ export class MindDB {
       );
     }
 
+    // oss-drift D3 (2026-06-11): indexed content_hash for O(1) frame dedup —
+    // FrameStore.findDuplicate previously scanned only the last 500 frames
+    // (silently missed older duplicates). Hash semantics are MONO's
+    // (stripHmPrefix + trim, mind/content-hash.ts), so the backfill must use
+    // hashFrameContent, never a SQL-side hash. Idempotent: ADD COLUMN guarded
+    // by pragma check; backfill targets only NULL rows (no-op when current).
+    const hasContentHashCol = this.db.prepare(
+      "SELECT COUNT(*) as cnt FROM pragma_table_info('memory_frames') WHERE name='content_hash'"
+    ).get() as { cnt: number };
+    if (hasContentHashCol.cnt === 0) {
+      this.db.exec('ALTER TABLE memory_frames ADD COLUMN content_hash TEXT');
+    }
+    this.db.exec(
+      'CREATE INDEX IF NOT EXISTS idx_frames_content_hash ON memory_frames (content_hash)'
+    );
+    this.backfillContentHash();
+
     // 2026-04-15: EU AI Act Art. 12.1(a) — record inputs and outputs, not just
     // token counts (review Critical #3 from cowork/Code-Review_Compliance).
     const hasInputText = this.db.prepare(
@@ -244,6 +262,20 @@ export class MindDB {
     this.db.exec(
       "CREATE TRIGGER IF NOT EXISTS ai_interactions_no_update BEFORE UPDATE ON ai_interactions BEGIN SELECT RAISE(ABORT, 'ai_interactions is append-only (EU AI Act Art. 12 audit log)'); END"
     );
+  }
+
+  /** Backfill memory_frames.content_hash for rows inserted before the column
+   *  existed (oss-drift D3). Transactional; only NULL rows touched. */
+  private backfillContentHash(): void {
+    const rows = this.db
+      .prepare('SELECT id, content FROM memory_frames WHERE content_hash IS NULL')
+      .all() as { id: number; content: string }[];
+    if (rows.length === 0) return;
+    const update = this.db.prepare('UPDATE memory_frames SET content_hash = ? WHERE id = ?');
+    const tx = this.db.transaction((items: { id: number; content: string }[]) => {
+      for (const r of items) update.run(hashFrameContent(r.content), r.id);
+    });
+    tx(rows);
   }
 
   // Reverse-ported from OSS hive-mind (oss-drift triage R7, 2026-06-11).

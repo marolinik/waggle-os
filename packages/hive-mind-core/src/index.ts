@@ -17,7 +17,8 @@ export {
 } from './mind/db.js';
 export { IdentityLayer, type Identity } from './mind/identity.js';
 export { AwarenessLayer, type AwarenessItem, type AwarenessCategory } from './mind/awareness.js';
-export { FrameStore, type MemoryFrame, type FrameType, type Importance, type FrameSource } from './mind/frames.js';
+export { FrameStore, stripHmPrefix, type MemoryFrame, type FrameType, type Importance, type FrameSource } from './mind/frames.js';
+export { hashFrameContent } from './mind/content-hash.js';
 export { SessionStore, type Session } from './mind/sessions.js';
 export { HybridSearch, type SearchResult } from './mind/search.js';
 export { KnowledgeGraph, type Entity, type Relation, type ValidationSchema } from './mind/knowledge.js';
@@ -93,6 +94,10 @@ export {
   type MemoryLaneExtraction, type ExtractedEvent, type ExtractedFact, type ExtractedProfile,
   type WriteLaneFramesResult,
 } from './harvest/extract-memory-lanes.js';
+export {
+  extractKgEntities, writeKgEntities, KG_ENTITY_TYPES,
+  type KgEntity, type KgEntityType, type KgEntityExtraction, type WriteKgEntitiesResult,
+} from './harvest/extract-kg-entities.js';
 export {
   writeRawTurnFrames, rawTurnHeader, parseRawTurnHeader, rawTurnConvKey,
   MIND_RAWTURN_PREFIX, MAX_TURNS_PER_ITEM, RAWDETAIL_KILL_SWITCH,

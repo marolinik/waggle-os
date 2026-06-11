@@ -15,8 +15,11 @@ import {
   type MindDB,
   FrameStore,
   SessionStore,
+  KnowledgeGraph,
   extractMemoryLanes,
   writeMemoryLaneFrames,
+  extractKgEntities,
+  writeKgEntities,
   type LLMCallFn,
   type WriteLaneFramesResult,
 } from '@waggle/core';
@@ -37,6 +40,8 @@ export interface LaneExtractionRunResult {
   framesProcessed: number;
   watermark: number;
   written?: WriteLaneFramesResult;
+  /** KG entities written this run (created + seen_count bumps). D2 KG pass. */
+  kgEntitiesWritten: number;
   errors: string[];
 }
 
@@ -77,7 +82,7 @@ export async function runMemoryLaneExtraction(
   ).all(watermark, MAX_FRAMES_PER_RUN) as Array<{ id: number; content: string; created_at: string }>;
 
   if (rows.length < MIN_NEW_FRAMES) {
-    return { skipped: true, framesProcessed: 0, watermark, errors: [] };
+    return { skipped: true, framesProcessed: 0, watermark, kgEntitiesWritten: 0, errors: [] };
   }
 
   // Dated passages — the events pass resolves relative cues against these.
@@ -98,10 +103,28 @@ export async function runMemoryLaneExtraction(
 
   new SessionStore(db).ensure(LANE_SESSION_ID, 'system', 'Extracted memory lanes (facts/events/profiles)');
   const written = writeMemoryLaneFrames(new FrameStore(db), LANE_SESSION_ID, extraction);
+  const errors = [...extraction.errors];
+
+  // D2 — KG entity pass over the SAME frame window (only the frames the lane
+  // pass actually consumed, so this rides the single shared watermark).
+  // extractKgEntities never throws (per-batch errors collected); the write is
+  // belt-and-braces wrapped so a graph failure can't kill the cron.
+  let kgEntitiesWritten = 0;
+  try {
+    const kgExtraction = await extractKgEntities(
+      rows.slice(0, processed).map((r) => ({ id: r.id, content: r.content })),
+      llmCall,
+    );
+    errors.push(...kgExtraction.errors);
+    const kgWritten = writeKgEntities(new KnowledgeGraph(db), kgExtraction);
+    kgEntitiesWritten = kgWritten.created + kgWritten.updated;
+  } catch (e: unknown) {
+    errors.push(`kg-entities: ${e instanceof Error ? e.message : String(e)}`);
+  }
 
   // Advance the watermark ONLY past what we actually fed to the LLM — frames
   // beyond the input cap are picked up by the next run.
   setWatermark(db, lastId);
 
-  return { skipped: false, framesProcessed: processed, watermark: lastId, written, errors: extraction.errors };
+  return { skipped: false, framesProcessed: processed, watermark: lastId, written, kgEntitiesWritten, errors };
 }

@@ -23,6 +23,13 @@ describe('runMemoryLaneExtraction', () => {
     if (prompt.includes('profile card')) {
       return '{"profiles":[{"speaker":"Ana","card":"Ana is a designer."}]}';
     }
+    if (prompt.includes('Extract named entities from the FRAMES')) {
+      // Same entity mentioned in two frames — exercises findEntityByName dedup.
+      return [
+        '{"frame_id": 1, "name": "Hive Mind", "type": "project"}',
+        '{"frame_id": 2, "name": "Hive Mind", "type": "project"}',
+      ].join('\n');
+    }
     return '{}';
   };
 
@@ -61,6 +68,23 @@ describe('runMemoryLaneExtraction', () => {
       `SELECT created_at FROM memory_frames WHERE content LIKE '[mind-event]%'`
     ).get() as { created_at: string };
     expect(event.created_at).toBe('2026-05-07T00:00:00.000Z');
+  });
+
+  it('writes KG entities over the same window; findEntityByName dedups to one row', async () => {
+    seedSourceFrames(8);
+    const r = await runMemoryLaneExtraction(db, mockLLM);
+    expect(r.skipped).toBe(false);
+    // Two mentions of "Hive Mind": one create + one seen_count bump.
+    expect(r.kgEntitiesWritten).toBe(2);
+    expect(r.errors).toHaveLength(0);
+
+    const raw = db.getDatabase();
+    const rows = raw.prepare(
+      `SELECT entity_type, properties FROM knowledge_entities WHERE name = 'Hive Mind'`
+    ).all() as Array<{ entity_type: string; properties: string }>;
+    expect(rows).toHaveLength(1); // deduped, not duplicated
+    expect(rows[0].entity_type).toBe('project');
+    expect(JSON.parse(rows[0].properties)).toMatchObject({ seen_count: 2, source: 'cognify-llm' });
   });
 
   it('second run with no new frames skips (watermark holds)', async () => {

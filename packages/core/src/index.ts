@@ -22,7 +22,8 @@ export {
   type EmbeddingFingerprint, type FingerprintCheck,
   IdentityLayer, type Identity,
   AwarenessLayer, type AwarenessItem, type AwarenessCategory,
-  FrameStore, type MemoryFrame, type FrameType, type Importance, type FrameSource,
+  FrameStore, stripHmPrefix, hashFrameContent,
+  type MemoryFrame, type FrameType, type Importance, type FrameSource,
   SessionStore, type Session,
   HybridSearch, type SearchResult,
   KnowledgeGraph, type Entity, type Relation, type ValidationSchema,
@@ -80,6 +81,9 @@ export {
   MIND_FACT_PREFIX, MIND_EVENT_PREFIX, MIND_PROFILE_PREFIX,
   type MemoryLaneExtraction, type ExtractedEvent, type ExtractedFact, type ExtractedProfile,
   type WriteLaneFramesResult,
+  // D2 — LLM-based KG entity extraction (oss-drift triage, 2026-06-11)
+  extractKgEntities, writeKgEntities, KG_ENTITY_TYPES,
+  type KgEntity, type KgEntityType, type KgEntityExtraction, type WriteKgEntitiesResult,
   // W4.6 — raw-turn storage + RAWDETAIL recall lane
   writeRawTurnFrames, rawTurnHeader, parseRawTurnHeader, rawTurnConvKey,
   MIND_RAWTURN_PREFIX, MAX_TURNS_PER_ITEM, RAWDETAIL_KILL_SWITCH,

@@ -63,11 +63,18 @@ CREATE TABLE IF NOT EXISTS memory_frames (
   -- See PRD §15.4 + docs/ux-refactor/deltas/shared-types-delta.md §3a. Existing
   -- DBs get this via the idempotent ADD COLUMN in db.ts runMigrations().
   metadata TEXT NOT NULL DEFAULT '{}',
+  -- oss-drift D3 (2026-06-11): canonical dedup hash — sha256 over the
+  -- stripHmPrefix-stripped + trimmed content (mind/content-hash.ts; mono
+  -- semantics, NOT the OSS trim-only hash). Indexed so FrameStore.findDuplicate
+  -- is an O(1) lookup with no recency window. Existing DBs get this via the
+  -- idempotent ADD COLUMN + backfill in db.ts runMigrations().
+  content_hash TEXT,
   FOREIGN KEY (gop_id) REFERENCES sessions(gop_id)
 );
 CREATE INDEX IF NOT EXISTS idx_frames_gop_t ON memory_frames (gop_id, t);
 CREATE INDEX IF NOT EXISTS idx_frames_type ON memory_frames (frame_type, gop_id);
 CREATE INDEX IF NOT EXISTS idx_frames_base ON memory_frames (base_frame_id);
+CREATE INDEX IF NOT EXISTS idx_frames_content_hash ON memory_frames (content_hash);
 
 -- FTS5 for keyword search on frame content
 CREATE VIRTUAL TABLE IF NOT EXISTS memory_frames_fts USING fts5(

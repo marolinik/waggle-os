@@ -47,8 +47,8 @@ export function findDuplicates(entities: EntityRef[]): EntityRef[][] {
 // ── Write-time noise filter ───────────────────────────────────────────────
 // Reverse-ported from OSS hive-mind (oss-drift triage R3, 2026-06-11).
 // Applied at extraction time so low-signal names never enter the knowledge
-// graph instead of being purged after the fact. NOT yet wired into any
-// caller — capability only.
+// graph instead of being purged after the fact. Wired into
+// harvest/extract-kg-entities.ts (oss-drift D2, 2026-06-11).
 
 /** Capitalized sentence-starts / verbs / weekday + month tokens that are
  *  formatting artefacts, not entities. Title-cased to match extractor output. */
