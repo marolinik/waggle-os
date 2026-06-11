@@ -112,6 +112,19 @@ single-session categories) per proposal §5 — guards the production-policy var
 
 ## 7. Status log
 
+- 2026-06-11 (SHIPPED → origin/main): **W4.1a** `9487f0d` (temporal render +
+  W1 guidance + unconditional importance lane), **W4.1b** `eb8996f`
+  (date-window parser + since/until fencepost + slot-consumption fixes),
+  **W4.2** `f47ee8f` (reranker reverse-port, flag `WAGGLE_RERANKER=1` opt-in;
+  bug #3 created_at decay FIXED; bug #1 documented-not-zeroed — constant-0 is
+  ranking-neutral, zeroing would break graphDistances capability), **W4.3a-d**
+  `8cd841c`/`71f8abe`/`a6c1107`/`8289e53` (extract-memory-lanes passes +
+  [mind-*] frame conventions + recallMemory lane rendering + ingest
+  unification incl. memory-mcp no-timestamp bug + daily extraction cron).
+  All via worktree D:/Projects/waggle-os-w4 (branch feature/w4-port).
+  Remaining: W4.4 caption adapters, W4.5 PromptAssembler fixes + flag flips
+  + live smoke, W4.6 rawdetail (gated on storage decision).
+
 - 2026-06-11: Plan written from w4-port-recon workflow output.
 - 2026-06-11 (W3.4 ablation DONE): **attribution resolved — captions alone +0.26 ns;
   raw-detail lane on top +2.40 (z=1.95).** The lane is the delivery mechanism, captions
