@@ -19,6 +19,10 @@ import {
   MIND_FACT_PREFIX,
   MIND_EVENT_PREFIX,
   MIND_PROFILE_PREFIX,
+  MIND_RAWTURN_PREFIX,
+  fetchRawDetailLane,
+  rawTurnBody,
+  type RawTurnHit,
 } from '@waggle/core';
 import { createMindTools, type ToolDefinition } from './tools.js';
 import { buildSelfAwareness, type AgentCapabilities } from './self-awareness.js';
@@ -469,6 +473,10 @@ export class Orchestrator {
       // W4.1b/W4.3b: parsed explicit-period window — drives since/until in the
       // normal branch AND the "Events during X" render section below.
       let dateWindow: ReturnType<typeof parseDateWindow> = null;
+      // W4.6: hoisted so the RAWDETAIL lane below can reuse the same instance.
+      // Stays undefined on the catch-up branch — raw-detail escalation targets
+      // specific-detail queries, not status summaries.
+      let reranker: Reranker | undefined;
 
       if (isCatchUp && this.workspaceLayers) {
         // For catch-up queries: fetch important frames by importance + recency, not semantic search.
@@ -521,7 +529,7 @@ export class Orchestrator {
           : {};
 
         // W4.2: cross-encoder reranker (soft-fails to undefined → RRF order).
-        const reranker = await this.getReranker();
+        reranker = await this.getReranker();
 
         // Normal semantic search for specific queries
         personalResults = await this.search.search(query, { limit, profile, reranker, ...windowOpts });
@@ -609,6 +617,9 @@ export class Orchestrator {
 
       // Dedup: lane frames never double-render via the search lanes; profile
       // frames are excluded from snippets UNCONDITIONALLY (benchmark rule).
+      // W4.6: raw-turn frames likewise render ONLY via their own verbatim
+      // excerpts section — as snippets they'd carry their [mind-rawturn …]
+      // header noise and crowd the semantic top-K the summary frames serve.
       const laneFrameIds = new Set<number>([
         ...profileFrames.map(f => f.id),
         ...factFrames.map(f => f.id),
@@ -616,7 +627,8 @@ export class Orchestrator {
       ]);
       const notLaneFrame = (r: { frame: { id?: number; content: string } }): boolean =>
         !(r.frame.id !== undefined && laneFrameIds.has(r.frame.id)) &&
-        !r.frame.content.startsWith(MIND_PROFILE_PREFIX);
+        !r.frame.content.startsWith(MIND_PROFILE_PREFIX) &&
+        !r.frame.content.startsWith(MIND_RAWTURN_PREFIX);
       personalResults = personalResults.filter(notLaneFrame);
       workspaceResults = workspaceResults.filter(notLaneFrame);
 
@@ -688,7 +700,45 @@ export class Orchestrator {
         }
       }
 
-      const laneCount = profileFrames.length + factFrames.length + eventFrames.length;
+      // ── W4.6: RAWDETAIL escalation lane (benchmark lane #10) ───────────
+      // Verbatim turn excerpts rendered LAST: escalation evidence for
+      // fine-grained detail the distilled lanes only carry generically
+      // (W3.4 ablation: +2.40 z=1.95 — the single-hop driver). Requires the
+      // cross-encoder (P5 anti-goal: no relevance-only injection without
+      // the CE floor) — catch-up queries and reranker-less recalls skip it.
+      // Kill switch: WAGGLE_RAWDETAIL=0.
+      let rawDetailHits: RawTurnHit[] = [];
+      if (reranker && process.env['WAGGLE_RAWDETAIL'] !== '0') {
+        try {
+          const excludeIds = new Set<number>(laneFrameIds);
+          for (const r of [...workspaceResults, ...personalResults]) {
+            const id = (r.frame as { id?: number }).id;
+            if (id !== undefined) excludeIds.add(id);
+          }
+          rawDetailHits = await fetchRawDetailLane(laneMindDb, query, reranker, {
+            window: dateWindow ? { since: dateWindow.since, until: dateWindow.until } : null,
+            excludeIds,
+          });
+        } catch (err) {
+          // Lane failure never blocks recall — the other 6 lanes stand.
+          logger.warn('raw-detail lane failed — skipping', {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+      if (rawDetailHits.length > 0) {
+        allLines.push('## Raw dialogue excerpts (verbatim)');
+        for (const h of rawDetailHits) {
+          const date = h.created_at ? `[${String(h.created_at).slice(0, 10)}] ` : '';
+          // Speaker is parenthesized, NOT colon-suffixed: "assistant:" /
+          // "system:" are chat-template-smuggling patterns the read-side
+          // injection scanner rightly flags — the render format must never
+          // collide with them.
+          allLines.push(`- ${date}(${h.speaker}) ${rawTurnBody(h.content).slice(0, RECALL_LINE_LENGTH)}`);
+        }
+      }
+
+      const laneCount = profileFrames.length + factFrames.length + eventFrames.length + rawDetailHits.length;
       const totalCount = personalResults.length + workspaceResults.length + laneCount;
       if (totalCount === 0) {
         logTurnEvent(opts?.turnId, { stage: 'orchestrator.recallMemory.exit', totalCount: 0, blocked: false });
@@ -700,7 +750,7 @@ export class Orchestrator {
       for (const r of [...workspaceResults, ...personalResults]) {
         recalled.push(r.frame.content.slice(0, RECALLED_SNIPPET_LENGTH));
       }
-      for (const f of [...profileFrames, ...factFrames, ...eventFrames]) {
+      for (const f of [...profileFrames, ...factFrames, ...eventFrames, ...rawDetailHits]) {
         recalled.push(f.content.slice(0, RECALLED_SNIPPET_LENGTH));
       }
 
@@ -723,6 +773,7 @@ export class Orchestrator {
       const anchorLine = renderReferenceDateLine([
         ...[...workspaceResults, ...personalResults].map(r => r.frame.created_at),
         ...[...profileFrames, ...factFrames, ...eventFrames].map(f => f.created_at),
+        ...rawDetailHits.map(h => h.created_at),
       ]);
 
       const text = '# Recalled Memories\n'

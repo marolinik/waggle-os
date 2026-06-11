@@ -79,6 +79,12 @@ export {
   MIND_FACT_PREFIX, MIND_EVENT_PREFIX, MIND_PROFILE_PREFIX,
   type MemoryLaneExtraction, type ExtractedEvent, type ExtractedFact, type ExtractedProfile,
   type WriteLaneFramesResult,
+  // W4.6 — raw-turn storage + RAWDETAIL recall lane
+  writeRawTurnFrames, rawTurnHeader, parseRawTurnHeader, rawTurnConvKey,
+  MIND_RAWTURN_PREFIX, MAX_TURNS_PER_ITEM, RAWDETAIL_KILL_SWITCH,
+  type WriteRawTurnsResult, type ParsedRawTurnHeader,
+  fetchRawDetailLane, rawTurnBody, RAW_DETAIL_K,
+  type RawTurnHit, type RawDetailLaneOptions,
   dedup, harvestSetHash,
   HARVEST_FRAME_CONTENT_CAP,
   type ImportSourceType, type ImportItemType, type UniversalImportItem, type DistilledKnowledge,
