@@ -53,3 +53,10 @@ Adversarial review (3 lenses, 8 agents): 5 confirmed (3 HIGH — all fixed: fan-
 - [ ] Stale `_connected`-gate comments in room-parallel-agents.spec.ts mock + backend-map docs — P7 doc sweep.
 
 Security lens verdict: query-token transport sound — GET-only, allowlist-only, header-absent-only; no leakage sink beyond the existing /ws posture (no server URL logging; EventSource URLs don't enter history/cache/referrer).
+
+## P1b-SSE live-smoke RESULTS (2026-06-11)
+
+- **✅ Server auth contract:** `GET /api/notifications/stream?token=<valid>` → 200 (stream holds); without token → 401. Verified via curl against the branch sidecar.
+- **✅ Browser streams LIVE:** both always-mounted streams (`/api/waggle/stream`, `/api/notifications/stream`) connect **200 with the token attached** — the exact requests that were 401 in the P1b smoke the day before.
+- **✅ Reconnect loop proven live:** sidecar killed mid-session → both streams errored → the loop reopened them with a FRESHLY REFRESHED token on capped backoff (console shows retries carrying a new token, not the stale one). After re-pointing at the proxy (dev-env step), streams reconnected **200 with the restarted process's rotated token** — error→refresh→reopen full cycle observed.
+- **Dev-env artifact (same as the P1b smoke, ledgered):** during the kill window the health-probe fallback hops baseUrl to DEFAULT_SERVER (3333 = the long-running PRE-refactor sidecar without the new middleware), so backoff retries 401 against the wrong server until re-point/reload. Production has one server; the fallback is inert there.
