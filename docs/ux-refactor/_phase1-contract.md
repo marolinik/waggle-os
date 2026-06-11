@@ -102,6 +102,9 @@ export interface HomeBriefing {
   upNext: UpNextItem[];
   activeModels?: string[];
   isFirstRun: boolean;
+  /** P2 amendment — J08 (D6): personal-mind memories with status 'unreviewed'.
+   *  The FE types this optional for back-compat with pre-P2 sidecars. */
+  needsReviewCount: number;
 }
 export interface OvernightFailure {
   id: string; label: string; automationId?: string; error: string; at: string;

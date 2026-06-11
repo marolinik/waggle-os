@@ -83,11 +83,12 @@ export function routeFor(appId: AppId, ctx?: RouteContext): string {
  * Deep-link query-string carrier for the `waggle:open-app` shim (§2.3) and
  * the `?session=` reservation (§1.1 /workspaces row). Empty params → ''.
  */
-export function queryString(params: { tab?: string; automationId?: string; session?: string }): string {
+export function queryString(params: { tab?: string; automationId?: string; session?: string; filter?: string }): string {
   const qs = new URLSearchParams();
   if (params.tab) qs.set('tab', params.tab);
   if (params.automationId) qs.set('automationId', params.automationId);
   if (params.session) qs.set('session', params.session);
+  if (params.filter) qs.set('filter', params.filter);
   const s = qs.toString();
   return s ? `?${s}` : '';
 }

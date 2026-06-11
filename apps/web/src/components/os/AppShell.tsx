@@ -123,13 +123,13 @@ const ShellLayout = () => {
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail as
-        | { appId?: AppId; tab?: string; automationId?: string; redispatch?: boolean }
+        | { appId?: AppId; tab?: string; automationId?: string; filter?: string; redispatch?: boolean }
         | undefined;
       if (!detail?.appId || detail.redispatch) return;
-      stashDeepLink({ appId: detail.appId, tab: detail.tab, automationId: detail.automationId });
+      stashDeepLink({ appId: detail.appId, tab: detail.tab, automationId: detail.automationId, filter: detail.filter });
       navigate(
         routeFor(detail.appId, { activeWorkspaceId }) +
-        queryString({ tab: detail.tab, automationId: detail.automationId }),
+        queryString({ tab: detail.tab, automationId: detail.automationId, filter: detail.filter }),
       );
       // Two rAFs ≈ the tick after the navigated-to route has committed.
       requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -185,6 +185,14 @@ const ShellLayout = () => {
     // below), so the wizard's workspaceName arg is no longer needed.
     void workspaceName;
     seedChat(workspaceId, { personaId, initialMessage: firstMessage });
+    // P2 fix (acceptance check 8 live-run): the wizard usually finishes at
+    // pathname '/', and completing onboarding (normal-priority state) commits
+    // BEFORE this navigate (a v7_startTransition update) — so the shell
+    // mounts at '/', IndexRedirect fires, and its '/home' navigation queues
+    // after ours and wins. Hand the landing target to IndexRedirect so both
+    // navigation authorities agree; the navigate below remains the primary
+    // path when the wizard finishes at a non-index URL.
+    pendingWizardLanding = `/workspaces/${workspaceId}/chat`;
     navigate(`/workspaces/${workspaceId}/chat`);
     refreshWorkspaces();
   }, [selectWorkspace, navigate, refreshWorkspaces]);
@@ -423,8 +431,14 @@ const AppShell = () => {
  * once (the boot entry), '/home' on every later visit. Replaces the old
  * Desktop.tsx:192-206 launch-flip (§2.2 — the index redirect subsumes it).
  */
+/** One-shot landing target set by handleOnboardingFinish — see the P2 note
+ *  there. Read (not cleared) in IndexRedirect's initializer so a StrictMode
+ *  double-run stays consistent; cleared in its mount effect. */
+let pendingWizardLanding: string | null = null;
+
 export const IndexRedirect = () => {
-  const [to] = useState(() => indexLandingRoute());
+  const [to] = useState(() => pendingWizardLanding ?? indexLandingRoute());
+  useEffect(() => { pendingWizardLanding = null; }, []);
   return <Navigate to={to} replace />;
 };
 

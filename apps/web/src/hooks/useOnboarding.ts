@@ -30,6 +30,15 @@ const defaultState: OnboardingState = {
   step: 0,
 };
 
+// P2 fix (acceptance check 8 live-run): the ?forceWizard reset must fire ONCE
+// per page load, not on every loadState() call. loadState() also runs in the
+// 'waggle:onboarding-sync' listener — without this latch, every wizard save
+// (e.g. workspace-create persisting workspaceId) triggered a sync reload that
+// reset state to {completed:false, step:0} AND wiped the just-saved fields,
+// so onFinish ran with a fallback local-* id and the seeding/navigation chain
+// silently broke.
+let forceWizardConsumed = false;
+
 function loadState(): OnboardingState {
   try {
     // E2E test bypass: ?skipOnboarding=true skips wizard and sets tier to 'power'
@@ -49,7 +58,8 @@ function loadState(): OnboardingState {
     // symmetric "always run" counterpart. Gated on import.meta.env.DEV so a
     // production deployment can't accidentally re-trigger onboarding for
     // returning users via a stray URL.
-    if (import.meta.env.DEV && params.get('forceWizard') === 'true') {
+    if (import.meta.env.DEV && params.get('forceWizard') === 'true' && !forceWizardConsumed) {
+      forceWizardConsumed = true;
       const fresh: OnboardingState = { ...defaultState, completed: false, step: 0 };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
       // FR #47: also clear the tour completion flag so the post-wizard Tour

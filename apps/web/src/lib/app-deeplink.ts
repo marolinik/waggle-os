@@ -13,6 +13,9 @@ export interface AppDeepLink {
   tab?: string;
   /** Journey 16: the failing automation to preselect on the Logs tab. */
   automationId?: string;
+  /** J08: a list-filter to preselect in the target app (validated by the
+   *  consumer — e.g. Memory Center seeds its status filter from this). */
+  filter?: string;
 }
 
 const pending = new Map<string, AppDeepLink>();

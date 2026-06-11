@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Search, Loader2, Brain, Archive, Trash2, GitMerge, RotateCcw, Check, Save } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { consumeDeepLink } from '@/lib/app-deeplink';
 import type { Memory, MemoryKind, MemoryStatus } from '@/lib/types';
 import { MEMORY_KIND_META, memoryKindLabel } from '@/lib/harvest-kind-map';
 import { MemoryCard } from './MemoryCard';
@@ -52,7 +53,40 @@ export default function MemoryCenterTab() {
   const [draftContent, setDraftContent] = useState('');
   const [draftKind, setDraftKind] = useState<MemoryKind>('fact');
 
+  // J08: Home's "N memories need review" banner deep-links here with
+  // {appId:'memory', filter:'unreviewed'}. Two paths (AutomationCenterApp
+  // pattern): cold open consumes the stashed intent on mount; an already-
+  // mounted tab applies the live event directly (and drops the stash so a
+  // later remount can't replay it). The filter value is validated against
+  // STATUS_FILTERS before seeding.
+  const applyDeepLink = useCallback((detail: { filter?: string }) => {
+    if (detail.filter && STATUS_FILTERS.some((f) => f.value === detail.filter)) {
+      setStatus(detail.filter as MemoryStatus);
+    }
+  }, []);
+
+  useEffect(() => {
+    const pending = consumeDeepLink('memory');
+    if (pending) applyDeepLink(pending);
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { appId?: string; filter?: string } | undefined;
+      if (detail?.appId === 'memory') {
+        consumeDeepLink('memory');
+        applyDeepLink(detail);
+      }
+    };
+    window.addEventListener('waggle:open-app', handler);
+    return () => window.removeEventListener('waggle:open-app', handler);
+  }, [applyDeepLink]);
+
+  // Monotonic request guard: rapid filter changes (and the J08 deep-link
+  // seeding the status filter right after mount) can leave two listMemories
+  // calls in flight — only the latest one may win setMemories, or a stale
+  // unfiltered response can render under the 'Needs review' pill.
+  const loadSeq = useRef(0);
+
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     setLoading(true);
     setError(null);
     try {
@@ -63,11 +97,11 @@ export default function MemoryCenterTab() {
         minConfidence: minConfidence || undefined,
         limit: 200,
       });
-      setMemories(res);
+      if (seq === loadSeq.current) setMemories(res);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load memories');
+      if (seq === loadSeq.current) setError(e instanceof Error ? e.message : 'Failed to load memories');
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
   }, [q, kind, status, minConfidence]);
 

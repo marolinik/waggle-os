@@ -25,7 +25,8 @@
  */
 
 import type { FastifyPluginAsync } from 'fastify';
-import { IdentityLayer } from '@waggle/core';
+import { FrameStore, IdentityLayer } from '@waggle/core';
+import { normalizeToMemory } from './memory-center.js';
 import { buildWorkspaceState } from '../workspace-state.js';
 import {
   buildTimeAwareGreeting,
@@ -39,7 +40,7 @@ const log = createLogger('home');
 
 // ── Response view-models (mirror `_phase1-contract.md` §2) ──────────────
 
-interface RecentWorkspaceCard {
+export interface RecentWorkspaceCard {
   id: string;
   name: string;
   group: string;
@@ -73,6 +74,8 @@ interface HomeBriefing {
   upNext: UpNextItem[];
   activeModels?: string[];
   isFirstRun: boolean;
+  /** J08 (D6): personal-mind memories with status 'unreviewed' (C33 imports). */
+  needsReviewCount: number;
 }
 
 interface OvernightFailure {
@@ -105,6 +108,16 @@ const MAX_UP_NEXT = 8;
 const OVERNIGHT_DEFAULT_HOURS = 24;
 /** Per-schedule cron-history rows to scan for the overnight window. */
 const CRON_HISTORY_SCAN = 50;
+/** J08 needs-review scan bound — matches the 200-frame window the Memory
+ *  Center list itself fetches (MemoryCenterTab limit=200), so the Home count
+ *  always agrees with what the deep-linked "Needs review" view shows. */
+const NEEDS_REVIEW_SCAN = 200;
+/** Priority boost: each pending/blocked item ranks a workspace as if touched
+ *  this much more recently (PRD §12.1 "ranked by recency AND priority"). */
+const PENDING_BOOST_MS = 3_600_000; // 1 hour per pending item
+/** Cap on the pending-item boost so attention debt breaks near-ties without
+ *  letting a stale workspace leapfrog genuinely active ones. */
+const PENDING_BOOST_CAP = 5;
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -128,6 +141,39 @@ function resolveRankTimestamp(ws: {
   const iso = ws.lastActiveAt ?? ws.updatedAt ?? ws.created ?? '';
   const parsed = iso ? Date.parse(iso) : NaN;
   return { ts: Number.isFinite(parsed) ? parsed : 0, iso };
+}
+
+/**
+ * Inject the user's name into the first clause of a greeting (B8 / PRD §12.1
+ * "greeting with user name"). The greeting strings are fixed sentences like
+ * "Good morning. Here's your day:" or "Welcome — anything you discuss here
+ * will be remembered." — the name splices in before the first sentence break:
+ * "Good morning, Marko. Here's your day:". Unknown shapes pass through.
+ * Exported for unit tests.
+ */
+export function personalizeGreeting(greeting: string, name?: string): string {
+  if (!name) return greeting;
+  const m = greeting.match(/^([^.!—]+?)([.!]| —)/);
+  if (!m) return greeting;
+  return `${m[1]}, ${name}${m[2]}${greeting.slice(m[0].length)}`;
+}
+
+/**
+ * PRD §12.1 "ranked by recency AND priority": order cards by recency with a
+ * bounded pending-item boost — each pending/blocked item buys up to
+ * PENDING_BOOST_CAP hours of effective recency, so attention debt breaks
+ * near-ties without letting a stale workspace leapfrog genuinely active ones.
+ * Exported for unit tests.
+ */
+export function applyPriorityRanking(
+  rankedCards: ReadonlyArray<{ card: RecentWorkspaceCard; rankTs: number }>,
+): RecentWorkspaceCard[] {
+  const boostedTs = (r: { card: RecentWorkspaceCard; rankTs: number }): number =>
+    r.rankTs + Math.min(r.card.pendingCount, PENDING_BOOST_CAP) * PENDING_BOOST_MS;
+  return [...rankedCards]
+    .sort((a, b) => boostedTs(b) - boostedTs(a))
+    .slice(0, MAX_RECENT_CARDS)
+    .map((r) => r.card);
 }
 
 /**
@@ -221,7 +267,11 @@ export const homeRoutes: FastifyPluginAsync = async (server) => {
     const ranked = rankPersonalWorkspaces();
 
     // ── Per-workspace state for the top-ranked workspaces ─────────
-    const recentWorkspaces: RecentWorkspaceCard[] = [];
+    // Cards are collected with their recency timestamp and re-ranked after the
+    // loop (recency + bounded pending-item boost — PRD §12.1 "recency AND
+    // priority"), so a workspace carrying blocked work can outrank a fresher
+    // empty one within the boost window.
+    const rankedCards: Array<{ card: RecentWorkspaceCard; rankTs: number }> = [];
     const suggestedActions: SuggestedAction[] = [];
     const upNext: UpNextItem[] = [];
     let anyMemory = false;
@@ -259,16 +309,17 @@ export const homeRoutes: FastifyPluginAsync = async (server) => {
         log.warn(`briefing: state build failed for ${ws.id}`, (err as Error).message);
       }
 
-      if (recentWorkspaces.length < MAX_RECENT_CARDS) {
-        recentWorkspaces.push({
+      rankedCards.push({
+        rankTs: ws.rankTs,
+        card: {
           id: ws.id,
           name: ws.name,
           group: ws.group,
           ...(summary ? { summary } : {}),
           lastActive: ws.lastActiveIso || now.toISOString(),
           pendingCount,
-        });
-      }
+        },
+      });
 
       // Aggregate next-actions into cross-workspace suggested actions.
       for (const action of nextActions) {
@@ -306,9 +357,27 @@ export const homeRoutes: FastifyPluginAsync = async (server) => {
       }
     }
 
-    const greeting = buildTimeAwareGreeting(
-      ranked[0]?.lastActiveIso ?? null,
-      { frameCount: anyMemory ? 1 : 0 },
+    // ── J08 (D6): personal-mind memories awaiting review ───────────
+    // Personal-only by design: harvest (C33) stamps status:'unreviewed' on
+    // personal-mind imports, and the deep-linked Memory Center "Needs review"
+    // view is personal-mind-only — a cross-mind count would not match it.
+    let needsReviewCount = 0;
+    try {
+      for (const f of new FrameStore(server.multiMind.personal).getRecent(NEEDS_REVIEW_SCAN)) {
+        if (normalizeToMemory(f, 'personal').status === 'unreviewed') needsReviewCount++;
+      }
+    } catch (err) {
+      log.warn('briefing: needs-review scan failed', (err as Error).message);
+    }
+
+    const recentWorkspaces = applyPriorityRanking(rankedCards);
+
+    const greeting = personalizeGreeting(
+      buildTimeAwareGreeting(
+        ranked[0]?.lastActiveIso ?? null,
+        { frameCount: anyMemory ? 1 : 0 },
+      ),
+      userName,
     );
 
     const briefing: HomeBriefing = {
@@ -321,6 +390,7 @@ export const homeRoutes: FastifyPluginAsync = async (server) => {
       // True first-run = no workspaces at all, distinct from has-workspaces-but-
       // no-memory (the greeting heuristic above already keys off anyMemory).
       isFirstRun: ranked.length === 0,
+      needsReviewCount,
     };
 
     return briefing;

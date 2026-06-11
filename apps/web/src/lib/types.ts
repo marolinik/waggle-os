@@ -287,6 +287,9 @@ export interface HomeBriefing {
   upNext: UpNextItem[];
   activeModels?: string[];
   isFirstRun: boolean;
+  /** J08 (D6): personal-mind memories with status 'unreviewed' awaiting review.
+   *  Optional for back-compat with pre-P2 sidecars. */
+  needsReviewCount?: number;
 }
 
 /** One overnight failure row, expandable to the Automation Center (S01 §6). */
