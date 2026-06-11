@@ -278,7 +278,9 @@ function renderPersona(persona: AgentPersona): string {
 }
 
 function renderFrames(frames: MemoryFrame[]): string {
-  return frames.map(f => `- [${f.importance}] ${f.content}`).join('\n');
+  // W4.1 (#1): date-prefixed — matches recallMemory's `[YYYY-MM-DD, importance]`
+  // line format so the temporal anchor survives the assembled path too.
+  return frames.map(f => `- [${f.created_at?.slice(0, 10) ?? 'unknown'}, ${f.importance}] ${f.content}`).join('\n');
 }
 
 function renderActiveWork(items: ContextFrames['activeWork']): string {

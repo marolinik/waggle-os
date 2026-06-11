@@ -11,6 +11,8 @@ import {
   ImprovementSignalStore,
   createCoreLogger,
   type Embedder,
+  TEMPORAL_GUIDANCE,
+  renderReferenceDateLine,
 } from '@waggle/core';
 import { createMindTools, type ToolDefinition } from './tools.js';
 import { buildSelfAwareness, type AgentCapabilities } from './self-awareness.js';
@@ -457,6 +459,35 @@ export class Orchestrator {
         workspaceResults = this.workspaceLayers
           ? await this.workspaceLayers.search.search(query, { limit, profile })
           : [];
+
+        // W4.1 (#2) — unconditional importance lane (benchmark fetchImportantFrames
+        // K=5): critical/important frames reach recall on EVERY query, not only on
+        // catch-up regex matches. Active mind only (workspace when set, else
+        // personal); rendered BEFORE semantic hits (benchmark order); deduped by
+        // frame id so a frame surfaced by both lanes renders once.
+        const IMPORTANCE_LANE_K = 5;
+        const laneDb = this.workspaceLayers?.db ?? this.db;
+        type LaneRow = { id: number; content: string; frame_type: string; importance: string; created_at: string };
+        const laneRows = laneDb.getDatabase().prepare(
+          `SELECT id, content, frame_type, importance, created_at
+           FROM memory_frames
+           WHERE importance IN ('critical', 'important')
+           ORDER BY
+             CASE importance WHEN 'critical' THEN 0 WHEN 'important' THEN 1 ELSE 2 END,
+             id DESC
+           LIMIT ?`
+        ).all(IMPORTANCE_LANE_K) as LaneRow[];
+        if (laneRows.length > 0) {
+          const laneIds = new Set(laneRows.map(f => f.id));
+          const laneResults = laneRows.map(f => ({ score: 1, frame: f }));
+          const notInLane = (r: { frame: { id?: number } }): boolean =>
+            r.frame.id === undefined || !laneIds.has(r.frame.id);
+          if (this.workspaceLayers) {
+            workspaceResults = [...laneResults, ...workspaceResults.filter(notInLane)];
+          } else {
+            personalResults = [...laneResults, ...personalResults.filter(notInLane)];
+          }
+        }
       }
 
       // R2 sign-gate: self-incapacity frames are persisted at 'temporary'
@@ -526,6 +557,11 @@ export class Orchestrator {
         return { text: '', count: 0, recalled: [] };
       }
 
+      // W4.1 (#1): anchor = max created_at across all rendered frames.
+      const anchorLine = renderReferenceDateLine(
+        [...workspaceResults, ...personalResults].map(r => r.frame.created_at),
+      );
+
       const text = '# Recalled Memories\n'
         + "These are facts saved in this WORKSPACE'S memory, retrieved for the user's current message. "
         + 'They may come from earlier sessions, other sessions, or imported sources — NOT necessarily from this conversation.\n'
@@ -533,7 +569,14 @@ export class Orchestrator {
         + '- Attribute saved / earlier-session memory EXPLICITLY as memory: "your saved memory shows…", "in an earlier session you noted…", "from your workspace notes…". Never imply an ongoing relationship — do NOT say "welcome back", "you\'re back in context", "as we\'ve been discussing", or "from our last session", even when the recalled memory is real and cross-session. Reserve "you just said" / "as you mentioned" strictly for things said earlier in THIS same conversation.\n'
         + '- On the user\'s first message, do NOT claim continuity ("welcome back", "as we discussed", "you\'re back in context") — you have no prior turn with them yet.\n'
         + '- State ONLY what the memories below actually say. Do NOT add specifics — runway figures, headcounts, dollar amounts, dates, percentages, entity COUNTS, or competitor names — unless they appear verbatim in the memories. A detail that feels plausible but is not written below is CONFABULATION: ask instead of asserting. (Observed failures to avoid: stating "4 months runway" or "227 entities tracked" when neither appears in the memories.)\n'
-        + '- Do NOT ignore relevant memories. Do NOT present memory content as your own reasoning — attribute it.\n\n'
+        + '- Do NOT ignore relevant memories. Do NOT present memory content as your own reasoning — attribute it.\n'
+        // W4.1 (#1): temporal guidance rides with the recalled block (NOT the
+        // global system prompt) + a reference-date anchor so the model has a
+        // concrete "now" to resolve relative time against. Both derive from
+        // static text / frame dates — no injection surface beyond joinedLines
+        // (already scanned above).
+        + TEMPORAL_GUIDANCE + '\n\n'
+        + (anchorLine ? anchorLine + '\n' : '')
         + joinedLines;
 
       logTurnEvent(opts?.turnId, {

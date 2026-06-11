@@ -22,12 +22,33 @@
  * Prompt fragment wired into the memory-recall injection path (NOT the global
  * system prompt). Teaches the model to use the surfaced `[YYYY-MM-DD]` stamps
  * as the anchor for resolving relative time expressions and conflicting facts.
+ *
+ * W4.1 upgrade (W4-PRODUCTION-PORT-PLAN-2026-06-11.md §1): replaced the original
+ * "nearest timestamp as anchor" phrasing with the benchmark-proven W1 wording —
+ * concrete relative-date arithmetic with worked examples (Memori instruction-5
+ * lineage, incl. the verified conv-26 "yesterday" failure case) plus the
+ * granularity-calibration clause (failure mining: 22 temporal fails emitted a
+ * confident exact ISO day 1-7 days off where a coarse answer was correct).
+ * Temporal was the #1 LoCoMo lever (80.06 → 84.7 across W1-W3.1).
+ * Production-safe subset: no never-refuse clause (that was benchmark-cell
+ * policy only — conditional abstention stays).
  */
 export const TEMPORAL_GUIDANCE =
-  "Memories are timestamped [YYYY-MM-DD]. When a question asks about timing or dates, " +
-  "resolve relative references ('last year', 'two months ago') to absolute dates using " +
-  "the nearest memory timestamp as the anchor. When the same fact appears at different " +
-  "times, the most recent version is correct.";
+  "Memories and snippets are timestamped [YYYY-MM-DD]. Pay special attention to these " +
+  "timestamps to determine timing. If a question involves relative time references " +
+  "('last year', 'two months ago', 'yesterday', 'last week'), CALCULATE the actual date " +
+  "from the timestamp of the memory that mentions it. For example: a memory dated " +
+  "4 May 2022 that says 'went to India last year' means the trip was in 2021; a memory " +
+  "dated 8 May 2023 that says 'I went to the group yesterday' means the event was 7 May 2023. " +
+  "Always convert relative references to specific dates, months, or years using the " +
+  "memory's timestamp as the anchor, and ignore the relative phrase itself when answering. " +
+  "When the same fact appears at different times, the most recent version is correct. " +
+  "GRANULARITY: state an exact day ONLY when that exact date was explicitly stated or " +
+  "directly computed from an explicit relative reference; otherwise answer at the " +
+  "granularity you are confident in — 'early June 2023', 'the week before 9 August 2023', " +
+  "'August 2022'. A confidently wrong exact day is worse than a correct coarse answer. " +
+  "For 'how long / how many months' duration questions, give ONLY the final value " +
+  "(e.g. 'six months') — no intermediate dates, no reasoning steps.";
 
 /** Anchor-line prefix for the most-recent rendered memory date. */
 const REFERENCE_DATE_LABEL = 'Reference date (most recent memory):';

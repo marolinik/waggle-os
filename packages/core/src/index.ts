@@ -57,6 +57,8 @@ export {
   type ReconcileResult,
   ConceptTracker, CONCEPT_MASTERY_TABLE_SQL,
   type ConceptEntry, type ConceptUpdate,
+  // recall-context — temporal rendering helpers (W4.1 production port)
+  TEMPORAL_GUIDANCE, toDatePrefix, renderDatedSnippet, referenceDate, renderReferenceDateLine,
   // harvest/ — universal memory ingestion pipeline
   HarvestSourceStore,
   HarvestRunStore, type HarvestRun, type HarvestRunStatus,

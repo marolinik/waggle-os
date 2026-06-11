@@ -214,7 +214,7 @@ export function createMindTools(deps: MindToolDeps): ToolDefinition[] {
           if (wsResults.length > 0) {
             sections.push('## Workspace Memory');
             sections.push(...wsResults.map((r, i) =>
-              `[${i + 1}] (score: ${r.finalScore.toFixed(3)}, type: ${r.frame.frame_type}, importance: ${r.frame.importance}, source: ${r.frame.source ?? 'user_stated'})\n${r.frame.content}`
+              `[${i + 1}] (score: ${r.finalScore.toFixed(3)}, date: ${r.frame.created_at?.slice(0, 10) ?? 'unknown'}, type: ${r.frame.frame_type}, importance: ${r.frame.importance}, source: ${r.frame.source ?? 'user_stated'})\n${r.frame.content}`
             ));
           }
         }
@@ -229,7 +229,7 @@ export function createMindTools(deps: MindToolDeps): ToolDefinition[] {
               sections.push('## Personal Memory\n_(Cross-workspace — not specific to this workspace)_');
             }
             sections.push(...personalResults.map((r, i) =>
-              `[${i + 1}] (score: ${r.finalScore.toFixed(3)}, type: ${r.frame.frame_type}, importance: ${r.frame.importance}, source: ${r.frame.source ?? 'user_stated'})\n${r.frame.content}`
+              `[${i + 1}] (score: ${r.finalScore.toFixed(3)}, date: ${r.frame.created_at?.slice(0, 10) ?? 'unknown'}, type: ${r.frame.frame_type}, importance: ${r.frame.importance}, source: ${r.frame.source ?? 'user_stated'})\n${r.frame.content}`
             ));
           }
         }
