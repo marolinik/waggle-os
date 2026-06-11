@@ -629,3 +629,32 @@ Recorded per the single-decision-log rule; full record in
    offline state — deterministic 404/403 states do not auto-refetch on focus.
 4. **Note (P1b-SSE follow-up):** the SSE ask above was ratified and SHIPPED as a
    P1b follow-up (PR #15, main @ 4e3d65d) — closed before P2 started.
+
+---
+
+## P3 implementation notes (D2 two-mind Memory Center, 2026-06-11)
+
+Recorded per the single-decision-log rule; full design + live-run findings in
+`docs/ux-refactor/p3-memory-center-plan.md`.
+
+1. **D2 SHIPPED in full.** Standalone `MemoryCenterApp` (ArtifactCenterApp shape, fully
+   controlled — URL is the only navigation authority): mind pills "About you" / "About this
+   work · {ws}" on the Memories view; all six legacy MemoryApp views survive as secondary
+   tabs (Timeline extracted verbatim to `memory/TimelineTab.tsx`; `MemoryApp.tsx` retired —
+   capability preserved, entry restructured). `/memory/:mindScope` + `?tab=` implemented
+   (conversion plan §5.3 #1-2 closed); `?filter=` J08 stash unchanged. S02-FR2 Memory part
+   closed: WorkspaceDesktop memory tab embeds the per-mind list (`consumeDeepLinks=false` so
+   the J08 stash stays with the /memory route).
+2. **Server contract (additive):** `GET /api/memory?mind=personal|workspace` selects one
+   store; invalid mind or workspace-less `mind=workspace` is a 400 (a typo must not silently
+   become the merge view); omitted mind keeps the legacy merge (pinned). Workspace-mind
+   mutations now carry `workspace` from the FE — without it, PATCH/archive/delete/merge
+   missed the workspace store entirely (404 class, fixed + pinned).
+3. **Cross-mind id-collision class:** per-mind SQLite autoincrements collide; the split makes
+   every view single-mind (mutation ambiguity structurally gone from the new UI); selection +
+   list clear on mind switch (cross-mind merge / stale-rows-under-wrong-pill pins). Full id
+   namespacing remains post-launch.
+4. **Live-run defects fixed (pre-existing, surfaced by the mandatory smoke):**
+   KnowledgeGraphViewer crashed the surface on untyped entities (54/214 real rows; fixed via
+   single-entry node normalization, 'unknown' legend chip); Timeline duplicated React keys on
+   cross-mind id 36 (fixed via mind-qualified keys).
