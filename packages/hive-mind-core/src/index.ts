@@ -91,6 +91,7 @@ export {
   type WriteLaneFramesResult,
 } from './harvest/extract-memory-lanes.js';
 export { dedup, harvestSetHash } from './harvest/dedup.js';
+export { HARVEST_FRAME_CONTENT_CAP } from './harvest/types.js';
 export type {
   ImportSourceType, ImportItemType, UniversalImportItem, DistilledKnowledge,
   HarvestPipelineResult, HarvestSource, SourceAdapter, FilesystemAdapter,

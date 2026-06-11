@@ -6,7 +6,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import fs from 'node:fs';
-import { resolveRelativeDate } from '@waggle/hive-mind-core';
+import { resolveRelativeDate, HARVEST_FRAME_CONTENT_CAP} from '@waggle/hive-mind-core';
 import {
   getFrameStore,
   getSessions,
@@ -105,8 +105,8 @@ export function registerHarvestTools(server: McpServer): void {
       for (const item of items) {
         // Build a summary from the conversation
         const content = item.title
-          ? `[${item.source}] ${item.title}: ${item.content.slice(0, 2000)}`
-          : `[${item.source}] ${item.content.slice(0, 2000)}`;
+          ? `[${item.source}] ${item.title}: ${item.content.slice(0, HARVEST_FRAME_CONTENT_CAP)}`
+          : `[${item.source}] ${item.content.slice(0, HARVEST_FRAME_CONTENT_CAP)}`;
 
         // Write-time temporal anchoring. The frame's created_at should reflect WHEN the
         // event happened, not the ingest wall-clock. Start from the source timestamp; if

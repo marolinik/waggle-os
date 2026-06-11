@@ -131,3 +131,10 @@ export interface SourceAdapter {
 export interface FilesystemAdapter extends SourceAdapter {
   scan(dirPath: string): UniversalImportItem[];
 }
+
+/**
+ * W4.4: unified per-frame content cap for harvest imports. The three ingest
+ * surfaces had drifted (MCP tools 2,000 vs sidecar 10,000) — a 5x divergence
+ * in what the same export preserved depending on the door it came through.
+ */
+export const HARVEST_FRAME_CONTENT_CAP = 10_000;

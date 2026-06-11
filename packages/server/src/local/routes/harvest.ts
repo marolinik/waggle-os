@@ -17,7 +17,7 @@ import {
   HarvestSourceStore, HarvestRunStore, ChatGPTAdapter, ClaudeAdapter,
   ClaudeCodeAdapter, GeminiAdapter, UniversalAdapter, harvestSetHash,
   type ImportSourceType, type UniversalImportItem,
-  type SourceAdapter, type FilesystemAdapter, resolveRelativeDate,
+  type SourceAdapter, type FilesystemAdapter, resolveRelativeDate, HARVEST_FRAME_CONTENT_CAP,
 } from '@waggle/core';
 import { loadProfile, saveProfile, type IdentitySuggestion } from './profile.js';
 import { importItemTypeToMemoryKind, harvestConfidence } from './harvest-classify.js';
@@ -52,7 +52,8 @@ function isIsoTimestamp(value: string): boolean {
  *  substantive assistant response on median Marko-side Claude.ai sessions
  *  (~15K chars opening). Storage impact: ~12 MB on a 646-frame ingest,
  *  well within SQLite single-file comfort zone. */
-const HARVEST_PREVIEW_CAP_CHARS = 10_000;
+// W4.4: unified with the MCP surfaces via the shared constant.
+const HARVEST_PREVIEW_CAP_CHARS = HARVEST_FRAME_CONTENT_CAP;
 
 /** M-08: where cached input payloads live so we can resume interrupted runs. */
 function getHarvestCacheDir(dataDir: string): string {

@@ -80,6 +80,7 @@ export {
   type MemoryLaneExtraction, type ExtractedEvent, type ExtractedFact, type ExtractedProfile,
   type WriteLaneFramesResult,
   dedup, harvestSetHash,
+  HARVEST_FRAME_CONTENT_CAP,
   type ImportSourceType, type ImportItemType, type UniversalImportItem, type DistilledKnowledge,
   type HarvestPipelineResult, type HarvestSource, type SourceAdapter, type FilesystemAdapter,
   type ClassifiedItem, type ExtractedContent, type KnowledgeProvenance,

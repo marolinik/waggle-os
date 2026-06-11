@@ -47,6 +47,25 @@ export class ClaudeAdapter implements SourceAdapter {
         } else {
           text = (getString(msg, 'text') ?? getString(msg, 'content') ?? '').trim();
         }
+
+        // W4.4 (caption parity): Claude exports carry message-level
+        // `attachments` (with extracted_content — text already extracted
+        // from images/docs) and `files` arrays; both were never accessed.
+        const extras: string[] = [];
+        for (const key of ['attachments', 'files'] as const) {
+          for (const rawAtt of getArray(msg, key) ?? []) {
+            const att = asRecord(rawAtt);
+            if (!att) continue;
+            const name = getString(att, 'file_name') ?? getString(att, 'name');
+            const extracted = getString(att, 'extracted_content');
+            if (extracted && extracted.trim()) {
+              extras.push(`[Attached: ${name ?? 'file'}] ${extracted.trim().slice(0, 500)}`);
+            } else if (name) {
+              extras.push(`[Shared file: ${name}]`);
+            }
+          }
+        }
+        if (extras.length > 0) text = [text, ...extras].filter(Boolean).join('\n').trim();
         if (!text) continue;
 
         messages.push({

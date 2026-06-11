@@ -213,7 +213,12 @@ export class UniversalAdapter implements SourceAdapter {
         .map(b => {
           if (typeof b === 'string') return b;
           const rec = asRecord(b);
-          return rec && rec.type === 'text' ? getString(rec, 'text') ?? '' : undefined;
+          if (!rec) return undefined;
+          if (rec.type === 'text') return getString(rec, 'text') ?? '';
+          // W4.4 (caption parity): generic text-bearing image fields.
+          const caption = getString(rec, 'caption') ?? getString(rec, 'alt') ?? getString(rec, 'description');
+          if (caption) return `[Shared image: ${caption}]`;
+          return undefined;
         })
         .filter((t): t is string => typeof t === 'string')
         .join('\n')

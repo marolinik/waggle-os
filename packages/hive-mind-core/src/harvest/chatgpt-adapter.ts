@@ -56,10 +56,32 @@ export class ChatGPTAdapter implements SourceAdapter {
           const role = authorRole === 'user' ? 'user' as const : 'assistant' as const;
           const content = asRecord(msg.content);
           const parts = content ? getArray(content, 'parts') : undefined;
-          const text = (parts ?? [])
-            .filter((p): p is string => typeof p === 'string')
-            .join('\n')
-            .trim();
+          // W4.4 (caption parity): multimodal object parts were silently
+          // dropped — DALL-E image parts carry their generation prompt
+          // (metadata.dalle.prompt), the only text-bearing image field in
+          // ChatGPT exports. Render as "[Shared image: …]" (Memori's
+          // convention; W3.3 measured dropped captions at 4.5pp single-hop).
+          const textParts: string[] = [];
+          for (const p of parts ?? []) {
+            if (typeof p === 'string') { textParts.push(p); continue; }
+            const rec = asRecord(p);
+            if (!rec) continue;
+            const ct = getString(rec, 'content_type') ?? '';
+            if (ct.includes('image')) {
+              const meta = asRecord(rec.metadata);
+              const dalle = meta ? asRecord(meta.dalle) : null;
+              const prompt = dalle ? getString(dalle, 'prompt') : undefined;
+              if (prompt) textParts.push(`[Shared image: ${prompt}]`);
+            }
+          }
+          // Message-level attachments: names are text-bearing presence signals.
+          const msgMeta = asRecord(msg.metadata);
+          for (const rawAtt of (msgMeta ? getArray(msgMeta, 'attachments') : undefined) ?? []) {
+            const att = asRecord(rawAtt);
+            const name = att ? getString(att, 'name') : undefined;
+            if (name) textParts.push(`[Attached: ${name}]`);
+          }
+          const text = textParts.join('\n').trim();
           if (!text) continue;
 
           const createTime = getNumber(msg, 'create_time');

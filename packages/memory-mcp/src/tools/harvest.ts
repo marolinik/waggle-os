@@ -15,7 +15,7 @@ import {
   getPersonalDb,
   getAdapter,
 } from '../core/setup.js';
-import { resolveRelativeDate } from '@waggle/core';
+import { resolveRelativeDate, HARVEST_FRAME_CONTENT_CAP} from '@waggle/core';
 
 export function registerHarvestTools(server: McpServer): void {
 
@@ -105,8 +105,8 @@ export function registerHarvestTools(server: McpServer): void {
       for (const item of items) {
         // Build a summary from the conversation
         const content = item.title
-          ? `[${item.source}] ${item.title}: ${item.content.slice(0, 2000)}`
-          : `[${item.source}] ${item.content.slice(0, 2000)}`;
+          ? `[${item.source}] ${item.title}: ${item.content.slice(0, HARVEST_FRAME_CONTENT_CAP)}`
+          : `[${item.source}] ${item.content.slice(0, HARVEST_FRAME_CONTENT_CAP)}`;
 
         // W4.3c (ingest unification): this legacy duplicate previously passed NO
         // timestamp at all — every imported frame got datetime('now'), neither

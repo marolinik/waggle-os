@@ -126,7 +126,27 @@ export class GeminiAdapter implements SourceAdapter {
     if (parts) {
       return parts
         .map(asRecord)
-        .map(p => (p ? getString(p, 'text') : undefined))
+        .map(p => {
+          if (!p) return undefined;
+          const t = getString(p, 'text');
+          if (t !== undefined) return t;
+          // W4.4 (caption parity): media parts were silently dropped.
+          // Surface the text-bearing fields the export carries — file
+          // URI/name for fileData, mime type as a presence signal for
+          // inline images ("did X share a photo?" questions).
+          const fd = asRecord(p.fileData) ?? asRecord(p.file_data);
+          if (fd) {
+            const uri = getString(fd, 'fileUri') ?? getString(fd, 'file_uri') ?? getString(fd, 'displayName');
+            const mime = getString(fd, 'mimeType') ?? getString(fd, 'mime_type');
+            return `[Shared file: ${uri ?? mime ?? 'media'}]`;
+          }
+          const il = asRecord(p.inlineData) ?? asRecord(p.inline_data);
+          if (il) {
+            const mime = getString(il, 'mimeType') ?? getString(il, 'mime_type');
+            return mime ? `[Shared media: ${mime}]` : undefined;
+          }
+          return undefined;
+        })
         .filter((t): t is string => typeof t === 'string')
         .join('\n')
         .trim();
