@@ -4,7 +4,7 @@
  * NOT a full markdown parser — just the most common patterns.
  *
  * Security (S04 review HIGH, 2026-06-09): output is injected via
- * dangerouslySetInnerHTML by every consumer (MemoryCenterTab, MemoryApp,
+ * dangerouslySetInnerHTML by every consumer (MemoryCenterTab, TimelineTab,
  * WikiTab) over potentially-untrusted harvested content. Two defenses, both
  * required and both exercised below:
  *  1. Escape & < > AND " before any tag is emitted — escaping `"` closes the

@@ -1,7 +1,7 @@
 /**
  * Phase 1 #7 — Pending Imports Reminder banner.
  *
- * Surfaces a dismissible banner above MemoryApp's tab bar reminding users who
+ * Surfaces a dismissible banner above the Memory Center's tab bar reminding users who
  * skipped the wizard's Memory Import step that they can import six months of
  * AI history at any time. Re-shows on a 7-day cadence after dismissal until
  * the user actually heads to the Harvest tab (which retires the banner).
@@ -31,7 +31,7 @@ interface ImportReminderBannerProps {
    *  "has the user imported anything yet?" — combined with the `retired`
    *  flag this gates eligibility. */
   totalFrameCount: number;
-  /** Switch the parent's tab to Harvest. Wired by MemoryApp. */
+  /** Switch the parent's tab to Harvest. Wired by MemoryCenterApp. */
   onOpenHarvest: () => void;
 }
 

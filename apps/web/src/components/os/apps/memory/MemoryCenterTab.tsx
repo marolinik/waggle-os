@@ -17,9 +17,28 @@ import { cn } from '@/lib/utils';
  * Memory Center (UX-Refactor Phase 2, S04). Self-contained tab (like HarvestTab):
  * fetches the shared Memory entity via the new /api/memory* adapter methods and
  * exposes source / confidence / evidence / scope + edit / archive / delete / merge
- * (PRD §12.4, DoD #4; C11 merge). Personal mind by default, matching the sibling
- * memory tabs. The 'Needs review' filter surfaces C33 imports (status=unreviewed).
+ * (PRD §12.4, DoD #4; C11 merge). The 'Needs review' filter surfaces C33 imports
+ * (status=unreviewed).
+ *
+ * P3/D2 two-mind split: the tab is the per-mind LIST, parameterized by `mind`
+ * (+ `workspaceId` for the workspace mind). Defaults to personal — the J08 deep
+ * link and pre-P3 call sites keep their behavior. Workspace-mind mutations MUST
+ * carry workspaceId or the server's candidateStores lookup misses the frame
+ * (personal-store-only search → 404).
  */
+
+export interface MemoryCenterTabProps {
+  /** Which mind this list reads/writes. Default: personal. */
+  mind?: 'personal' | 'workspace';
+  /** Required when mind='workspace' — the workspace whose mind to show. */
+  workspaceId?: string;
+  /**
+   * Whether this instance consumes `waggle:open-app {appId:'memory'}` deep links
+   * (J08). The /memory route instance does; secondary embeds (WorkspaceDesktop's
+   * Memory tab) must NOT steal a stash meant for the route. Default: true.
+   */
+  consumeDeepLinks?: boolean;
+}
 
 const KINDS = Object.keys(MEMORY_KIND_META) as MemoryKind[];
 
@@ -37,7 +56,13 @@ const CONFIDENCE_FILTERS: { value: number; label: string }[] = [
   { value: 75, label: 'High only' },
 ];
 
-export default function MemoryCenterTab() {
+export default function MemoryCenterTab({
+  mind = 'personal',
+  workspaceId,
+  consumeDeepLinks = true,
+}: MemoryCenterTabProps = {}) {
+  // Workspace-mind ops carry the workspace param; personal ops must not.
+  const wsParam = mind === 'workspace' ? workspaceId : undefined;
   const [memories, setMemories] = useState<Memory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,6 +91,7 @@ export default function MemoryCenterTab() {
   }, []);
 
   useEffect(() => {
+    if (!consumeDeepLinks) return;
     const pending = consumeDeepLink('memory');
     if (pending) applyDeepLink(pending);
     const handler = (e: Event) => {
@@ -77,20 +103,35 @@ export default function MemoryCenterTab() {
     };
     window.addEventListener('waggle:open-app', handler);
     return () => window.removeEventListener('waggle:open-app', handler);
-  }, [applyDeepLink]);
+  }, [applyDeepLink, consumeDeepLinks]);
 
   // Monotonic request guard: rapid filter changes (and the J08 deep-link
   // seeding the status filter right after mount) can leave two listMemories
   // calls in flight — only the latest one may win setMemories, or a stale
   // unfiltered response can render under the 'Needs review' pill.
   const loadSeq = useRef(0);
+  // Post-mutation refetch trigger. mutate() must NOT call its render's closured
+  // load() — that stale call would claim the newest seq and could commit
+  // old-mind/old-filter rows after a mid-mutation mind or filter switch (P3
+  // review MED). Bumping state re-runs the load effect with CURRENT props.
+  const [reloadTick, setReloadTick] = useState(0);
 
   const load = useCallback(async () => {
     const seq = ++loadSeq.current;
+    // Workspace mind with no workspace resolved yet (e.g. shell still booting):
+    // don't fall through to a personal-mind fetch mislabeled as workspace data.
+    if (mind === 'workspace' && !wsParam) {
+      setMemories([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       const res = await adapter.listMemories({
+        mind,
+        workspaceId: wsParam,
         q: q.trim() || undefined,
         kind: kind || undefined,
         status: status || undefined,
@@ -103,12 +144,29 @@ export default function MemoryCenterTab() {
     } finally {
       if (seq === loadSeq.current) setLoading(false);
     }
-  }, [q, kind, status, minConfidence]);
+  }, [q, kind, status, minConfidence, mind, wsParam]);
 
   useEffect(() => {
     const t = setTimeout(load, q ? 250 : 0); // debounce text search only
     return () => clearTimeout(t);
-  }, [load, q]);
+  }, [load, q, reloadTick]);
+
+  // Mind switch invalidates EVERYTHING in flight and on screen (keyed on the
+  // EFFECTIVE scope, so personal-mind instances ignore workspace churn):
+  //  - selection/checklist: a drawer or merge set carried across minds would
+  //    mutate the wrong store (ids collide across the per-mind SQLite DBs);
+  //  - the list: stale rows must not render under the new mind's pill;
+  //  - loadSeq: an in-flight old-mind response must not commit into the window
+  //    between this reset and the (debounced) next load starting;
+  //  - loading: with a typed q, the 250ms debounce window would otherwise show
+  //    a misleading "No memories match these filters." empty state.
+  useEffect(() => {
+    loadSeq.current++;
+    setSelected(null);
+    setChecked(new Set());
+    setMemories([]);
+    setLoading(true);
+  }, [mind, wsParam]);
 
   const openDetail = (m: Memory) => {
     setSelected(m);
@@ -129,7 +187,9 @@ export default function MemoryCenterTab() {
     try {
       await fn();
       if (closeDrawer) setSelected(null);
-      await load();
+      // Refetch via the effect (NOT the closured load) so post-mutation rows
+      // always load with the props of the render that is current by then.
+      setReloadTick((t) => t + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Action failed');
     } finally {
@@ -143,21 +203,21 @@ export default function MemoryCenterTab() {
     if (draftContent !== selected.content) patch.content = draftContent;
     if (draftKind !== selected.kind) patch.kind = draftKind;
     if (Object.keys(patch).length === 0) { setSelected(null); return; }
-    void mutate(() => adapter.patchMemory(selected.id, patch), true);
+    void mutate(() => adapter.patchMemory(selected.id, patch, wsParam, mind), true);
   };
 
-  const archive = (m: Memory) => void mutate(() => adapter.archiveMemory(m.id), true);
-  const unarchive = (m: Memory) => void mutate(() => adapter.patchMemory(m.id, { status: 'active' }), true);
-  const markReviewed = (m: Memory) => void mutate(() => adapter.patchMemory(m.id, { status: 'active' }), true);
+  const archive = (m: Memory) => void mutate(() => adapter.archiveMemory(m.id, wsParam, mind), true);
+  const unarchive = (m: Memory) => void mutate(() => adapter.patchMemory(m.id, { status: 'active' }, wsParam, mind), true);
+  const markReviewed = (m: Memory) => void mutate(() => adapter.patchMemory(m.id, { status: 'active' }, wsParam, mind), true);
   const remove = (m: Memory) => {
     if (!window.confirm(`Delete this memory permanently?\n\n"${m.title}"\n\nThis cannot be undone. To keep it but hide it, use Archive instead.`)) return;
-    void mutate(() => adapter.deleteMemoryById(m.id), true);
+    void mutate(() => adapter.deleteMemoryById(m.id, wsParam, mind), true);
   };
   const mergeSelected = () => {
     const ids = [...checked];
     if (ids.length < 2) return;
     void mutate(async () => {
-      await adapter.mergeMemories(ids);
+      await adapter.mergeMemories(ids, { workspaceId: wsParam, mind });
       setChecked(new Set());
     });
   };
@@ -246,7 +306,13 @@ export default function MemoryCenterTab() {
           <div role="status" aria-live="polite" className="text-center py-12">
             <Brain className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
             <p className="text-xs text-muted-foreground">
-              {q || kind || status || minConfidence ? 'No memories match these filters.' : 'No memories yet — import or capture some to get started.'}
+              {mind === 'workspace' && !workspaceId
+                ? 'No workspace selected — open a workspace to see what it has learned.'
+                : q || kind || status || minConfidence
+                  ? 'No memories match these filters.'
+                  : mind === 'workspace'
+                    ? 'Nothing learned in this workspace yet — memories appear here as you work.'
+                    : 'No memories yet — import or capture some to get started.'}
             </p>
           </div>
         ) : (
@@ -329,7 +395,7 @@ export default function MemoryCenterTab() {
               />
               {/* Read-only rendered preview below the editor for markdown context.
                   Safe: renderSimpleMarkdown escapes &/</> before formatting (same
-                  established escaper MemoryApp uses), so harvested content can't
+                  established escaper TimelineTab uses), so harvested content can't
                   inject markup. */}
               <div className="mt-2 text-xs text-muted-foreground/80 max-h-32 overflow-auto" dangerouslySetInnerHTML={{ __html: renderSimpleMarkdown(draftContent) }} />
             </div>

@@ -133,6 +133,15 @@ const KnowledgeGraphViewer = ({
   const [simLinks, setSimLinks] = useState<SimLink[]>([]);
   const simulationRef = useRef<ReturnType<typeof forceSimulation<SimNode>> | null>(null);
 
+  // Real graph data can carry untyped/unlabeled entity rows (P3 live smoke:
+  // 214-entity personal graph crashed `n.type.toLowerCase()` into the surface
+  // boundary). Coerce ONCE at entry so every downstream lowercase/render/legend
+  // path is safe — 'unknown' joins the legend like any other type.
+  const safeNodes = useMemo<KGNode[]>(
+    () => nodes.map(n => ({ ...n, type: n.type || 'unknown', label: n.label || String(n.id) })),
+    [nodes],
+  );
+
   // Count connections per node — derived from the FULL edge set so top-N
   // selection reflects real graph centrality, not the filtered subgraph.
   const connectionCounts = useMemo(() => {
@@ -147,12 +156,12 @@ const KnowledgeGraphViewer = ({
   // Type → count breakdown for legend chips. Derived from full nodes.
   const typeCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const n of nodes) {
+    for (const n of safeNodes) {
       const t = n.type.toLowerCase();
       counts[t] = (counts[t] ?? 0) + 1;
     }
     return counts;
-  }, [nodes]);
+  }, [safeNodes]);
 
   // Unique types sorted by descending count (most common first).
   const uniqueTypes = useMemo(() => {
@@ -162,13 +171,13 @@ const KnowledgeGraphViewer = ({
   // Visible subgraph = (not hidden by type) ∧ (top-N by connection count).
   const visibleNodes = useMemo(() => {
     const filtered = hiddenTypes.size === 0
-      ? nodes
-      : nodes.filter(n => !hiddenTypes.has(n.type.toLowerCase()));
+      ? safeNodes
+      : safeNodes.filter(n => !hiddenTypes.has(n.type.toLowerCase()));
     const sorted = [...filtered].sort(
       (a, b) => (connectionCounts[b.id] ?? 0) - (connectionCounts[a.id] ?? 0),
     );
     return nodeLimit === 'all' ? sorted : sorted.slice(0, nodeLimit);
-  }, [nodes, hiddenTypes, connectionCounts, nodeLimit]);
+  }, [safeNodes, hiddenTypes, connectionCounts, nodeLimit]);
 
   const visibleNodeIds = useMemo(
     () => new Set(visibleNodes.map(n => n.id)),
