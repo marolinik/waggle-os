@@ -4,13 +4,15 @@
  * with links to each workspace. Feels like a colleague catching you up.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Brain, Clock, MessageSquare, Sparkles, ChevronRight,
   Loader2, X, AlertTriangle, Lightbulb,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { useService } from '@/providers/ServiceProvider';
+import { useRevalidateOnError } from '@/hooks/useRevalidateOnError';
 import type { Workspace } from '@/lib/types';
 import { selectBriefingHighlights } from '@/lib/briefing-highlights';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
@@ -78,13 +80,22 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
   const [highlights, setHighlights] = useState<MemoryHighlight[]>([]);
   const [brag, setBrag] = useState<BragSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  // P1b D3: a failed briefing load must NOT render the Day-0 empty-hook —
+  // backend failure was indistinguishable from a brand-new user (and the
+  // brag header sat on 'Loading…' forever).
+  const [errored, setErrored] = useState(false);
   const [greeting, setGreeting] = useState('');
+  // P1b D3: defer the batch until the connect attempt settles (the 0609
+  // HomeCockpit gate pattern) — gates on connecting-SETTLED, not connected,
+  // so a failed connect still reaches the errored UI instead of a skeleton.
+  const { connecting } = useService();
 
   useEffect(() => {
     const hour = new Date().getHours();
     const timeGreeting =
       hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
     setGreeting(timeGreeting);
+    if (connecting) return;
     // Best-effort identity fetch — appends the user's name to the greeting
     // when configured. Silent on failure so the briefing never blocks on it.
     adapter.getIdentity()
@@ -94,9 +105,18 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
       .catch(() => { /* no identity yet — leave greeting time-only */ });
 
     loadBriefing();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connecting]);
 
+  // D3 plus-clause: an errored briefing revalidates on focus/online/connect-settled.
+  useRevalidateOnError(errored, () => { void loadBriefing(); });
+
+  // Review fix: a connect settlement fires BOTH the [connecting] effect and
+  // the revalidation bus listener — single-flight the (5+ fetch) batch.
+  const loadInFlight = useRef(false);
   const loadBriefing = async () => {
+    if (loadInFlight.current) return;
+    loadInFlight.current = true;
     try {
       const [workspaces, frames, stats] = await Promise.all([
         adapter.getWorkspaces(),
@@ -159,8 +179,13 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
       // reads adapter.getMemoryStats()'s normalised shape and the
       // workspace summaries we just built.
       setBrag(computeBragSummary(stats, resolved));
-    } catch { /* ignore */ }
-    finally { setLoading(false); }
+      setErrored(false);
+    } catch {
+      // P1b D3: surface the failure — do not let it fall through to the
+      // Day-0 empty-hook render path.
+      setErrored(true);
+    }
+    finally { setLoading(false); loadInFlight.current = false; }
   };
 
   const bragLine = brag ? formatBragLine(brag) : null;
@@ -189,7 +214,7 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
               <h2 className="text-lg font-display font-bold text-foreground">{greeting}</h2>
               <p className="text-xs text-muted-foreground flex items-center flex-wrap gap-x-1 gap-y-0.5" data-testid="login-briefing-brag-line">
                 <Brain className="w-3 h-3 inline mr-0.5 shrink-0" />
-                <span>{bragLine ?? 'Loading…'}</span>
+                <span>{bragLine ?? (errored ? 'Briefing unavailable' : 'Loading…')}</span>
                 {totalPending > 0 && (
                   <span className="text-amber-400 inline-flex items-center gap-0.5">
                     <AlertTriangle className="w-3 h-3" />
@@ -206,6 +231,21 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-5 h-5 animate-spin text-primary" />
+            </div>
+          ) : errored ? (
+            // P1b D3: failure state — distinct from the Day-0 empty hook.
+            // Auto-recovers via useRevalidateOnError (focus / online /
+            // connect-settled); the button is the manual escape hatch.
+            <div className="py-4 space-y-2 text-center" data-testid="login-briefing-error">
+              <p className="text-xs text-muted-foreground">
+                Couldn’t load your briefing — I’ll retry when the connection is back.
+              </p>
+              <button
+                onClick={() => { setLoading(true); void loadBriefing(); }}
+                className="px-3 py-1.5 text-xs rounded-lg bg-secondary/50 text-foreground hover:bg-secondary/70 transition-colors"
+              >
+                Retry now
+              </button>
             </div>
           ) : highlights.length === 0 && summaries.length === 0 ? (
             // Day-0 user — no workspaces AND no memory yet. The bare

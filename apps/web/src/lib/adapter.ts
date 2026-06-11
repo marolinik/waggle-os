@@ -1,5 +1,5 @@
 // LocalAdapter — HTTP/SSE/WS client for Waggle backend
-import { fetchWithTimeout } from './fetch-utils';
+import { fetchWithTimeout, TimeoutError } from './fetch-utils';
 import {
   isTauri,
   recallMemory as tauriRecallMemory,
@@ -36,6 +36,66 @@ const IMPORTANCE_NUM_TO_STRING: Record<number, FrameImportance> = {
 };
 
 const DEFAULT_SERVER = 'http://127.0.0.1:3333';
+
+/**
+ * P1b D3 — client mirror of the server's AUTH_EXEMPT_PATHS
+ * (packages/server/src/local/security-middleware.ts:238, exact-path match).
+ * These two paths must bypass the ensureReady() deferral gate (connect()
+ * itself fetches them — gating them would self-deadlock) and the 401-refresh
+ * leg (refreshing the token endpoint with itself would loop).
+ */
+const AUTH_EXEMPT_PATHS = new Set(['/health', '/api/auth/session-token']);
+
+/**
+ * P1b D3 — end-to-end deadline for a connect() attempt. fetchWithTimeout only
+ * bounds time-to-headers; the probe/token body reads are otherwise unbounded,
+ * and a connect that never settles would wedge the deferral gate (and with it
+ * every non-exempt request in the app). The race guarantees settlement.
+ */
+const CONNECT_DEADLINE_MS = 15000;
+
+/**
+ * P1b D3 — settle a promise within `ms` or reject with TimeoutError. Used to
+ * bound the single-flight probe/refresh memos: fetchWithTimeout only bounds
+ * time-to-headers, so an unbounded body read would otherwise occupy a memo
+ * forever and wedge every future caller that dedups onto it. (The underlying
+ * fetch is not aborted — its eventual settle is epoch-guarded and harmless.)
+ */
+function deadlined<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new TimeoutError(label, ms)), ms);
+  });
+  return Promise.race([p, deadline]).finally(() => clearTimeout(timer)) as Promise<T>;
+}
+
+/**
+ * P1b D3 — thrown by `adapter.fetch()` on any non-2xx response (the
+ * chokepoint conversion of ~145 silent-empty getters). Message precedence is
+ * MESSAGE-FIRST (`body.message ?? body.error ?? HTTP <status>`) — matches the
+ * incumbent eraseData/startTrial convention and surfaces the human-readable
+ * reason for `{ error: 'TIER_INSUFFICIENT', message: '…' }`-shaped bodies.
+ * `.status`/`.body` are field-compatible with the pre-existing rich errors
+ * thrown by installSkill/installPack (consumers: CapabilitiesApp
+ * handleInstallError, SkillBuilder onTierError).
+ */
+export class AdapterHttpError extends Error {
+  readonly status: number;
+  readonly statusText: string;
+  readonly body: unknown;
+  readonly code?: string;
+
+  constructor(status: number, statusText: string, body: unknown) {
+    const b = body as { message?: unknown; error?: unknown; code?: unknown } | undefined;
+    const detail = b?.message ?? b?.error;
+    super(detail != null ? String(detail) : `HTTP ${status}`);
+    this.name = 'AdapterHttpError';
+    this.status = status;
+    this.statusText = statusText;
+    this.body = body;
+    if (typeof b?.code === 'string') this.code = b.code;
+  }
+}
 
 /** Unwrap API responses that return { results: [...] } or { key: [...] } instead of raw arrays */
 function unwrapArray<T>(data: any): T[] {
@@ -96,6 +156,16 @@ class LocalAdapter {
   private sseConnections = new Map<string, EventSource>();
   private _connected = false;
   private _connectAttempted = false;
+  // P1b D3 gate state. _connectPromise doubles as the deferral gate: kept
+  // after a SUCCESSFUL settle (late connect() callers dedup onto it), cleared
+  // on failure (so ensureReady can re-arm with a fresh attempt) and by
+  // setServerUrl(). _epoch invalidates stale connect/probe continuations
+  // after a mid-flight setServerUrl (they must not clobber baseUrl,
+  // localStorage, authToken or _connected).
+  private _connectPromise: Promise<SystemHealth> | null = null;
+  private _healthProbePromise: Promise<SystemHealth> | null = null;
+  private _refreshPromise: Promise<void> | null = null;
+  private _epoch = 0;
 
   constructor(serverUrl?: string) {
     this.baseUrl = serverUrl || localStorage.getItem('waggle:server-url') || DEFAULT_SERVER;
@@ -105,46 +175,155 @@ class LocalAdapter {
   get hasAttemptedConnect() { return this._connectAttempted; }
 
   setServerUrl(url: string) {
+    this._epoch++;
     this.baseUrl = url;
     localStorage.setItem('waggle:server-url', url);
+    this.authToken = null;
     this._connected = false;
     this._connectAttempted = false;
+    // Review fix: clear ALL in-flight memos, not just the connect one — a
+    // post-setServerUrl connect must never dedup onto a probe/refresh of the
+    // OLD url (their stale settles are epoch-no-op'd, but reusing them would
+    // derive the NEW connection's outcome from the old server).
+    this._connectPromise = null;
+    this._healthProbePromise = null;
+    this._refreshPromise = null;
   }
 
   getServerUrl() {
     return this.baseUrl;
   }
 
+  /**
+   * P1b D3: explicit re-probe that bypasses the retained settled-success
+   * memo. `connect()` deliberately dedups onto a successful attempt (the
+   * deferral gate's fast path) — so a user-initiated "reconnect" after a
+   * sidecar death must clear the memo first or it would no-op.
+   */
+  forceReconnect(): Promise<SystemHealth> {
+    this._connectPromise = null;
+    this._healthProbePromise = null;
+    return this.connect();
+  }
+
   // --- Auth ---
-  async connect(): Promise<SystemHealth> {
+  /**
+   * P1b D3: memoized, watchdog-bounded connect. The memo is assigned
+   * SYNCHRONOUSLY so two same-tick callers (boot-connect kickoff,
+   * ServiceProvider's effect, OnboardingWizard's fire-and-forget) share one
+   * probe. A settled-success memo is retained — late callers resolve
+   * instantly; a settled-failure memo self-clears so the next connect() (or a
+   * gated request via ensureReady's re-arm) starts a fresh attempt.
+   */
+  connect(): Promise<SystemHealth> {
+    if (this._connectPromise) return this._connectPromise;
+    const p = this.doConnect(this._epoch);
+    this._connectPromise = p;
+    p.catch(() => {
+      if (this._connectPromise === p) this._connectPromise = null;
+    });
+    return p;
+  }
+
+  private async doConnect(epoch: number): Promise<SystemHealth> {
     this._connectAttempted = true;
+    // Watchdog: fetchWithTimeout bounds time-to-headers only; the probe/token
+    // body reads are unbounded, and an unsettled connect would wedge the
+    // deferral gate app-wide. The race guarantees settlement.
+    let watchdog: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<never>((_, reject) => {
+      watchdog = setTimeout(
+        () => reject(new TimeoutError(`${this.baseUrl} (connect)`, CONNECT_DEADLINE_MS)),
+        CONNECT_DEADLINE_MS,
+      );
+    });
     try {
-      const data = await this.healthProbe();
-      // D1: the sidecar now requires a bearer token even on loopback. Fetch it from
-      // the auth-exempt, same-origin-gated bootstrap and attach it to every request.
-      // (R1-001: it is NOT served by the unauthenticated /health.) Best-effort — if
-      // the bootstrap is unreachable we proceed token-less and authed routes 401,
-      // which surfaces the misconfiguration instead of silently masking it.
-      await this.fetchSessionToken();
-      this._connected = true;
+      const data = await Promise.race([
+        (async () => {
+          const health = await this.healthProbe(epoch);
+          // D1: the sidecar requires a bearer token even on loopback. Fetch it
+          // from the auth-exempt, same-origin-gated bootstrap. (R1-001: it is
+          // NOT served by the unauthenticated /health.) Best-effort — if the
+          // bootstrap is unreachable we proceed token-less; the 401-refresh
+          // retry leg recovers as soon as the endpoint is reachable.
+          await this.fetchSessionToken(epoch);
+          return health;
+        })(),
+        deadline,
+      ]);
+      if (epoch === this._epoch) this._connected = true;
       return data;
     } catch (e) {
-      this._connected = false;
+      if (epoch === this._epoch) this._connected = false;
       throw e;
+    } finally {
+      clearTimeout(watchdog);
     }
   }
 
-  /** D1: obtain the sidecar session token from the same-origin bootstrap endpoint. */
-  private async fetchSessionToken(): Promise<void> {
+  /**
+   * P1b D3: the deferral gate awaited by every non-exempt request.
+   * Four states:
+   *  - never attempted  → pass through (keeps the adapter unit-test files,
+   *    which construct LocalAdapter and call methods directly, gate-free;
+   *    production arms the gate via boot-connect.ts, main.tsx's first import)
+   *  - in flight        → await settlement
+   *  - settled success  → pass through (memo retained, resolves instantly)
+   *  - settled failure  → re-arm: kick ONE fresh memoized connect() and defer
+   *    onto it. This makes the gate self-healing on the default desktop path
+   *    (webview up before the sidecar listens: the boot kickoff fails fast
+   *    with ECONNREFUSED and must not permanently disarm the gate).
+   * A FAILED attempt always releases the gate — the request proceeds and
+   * fails loudly with its own cause rather than hanging.
+   */
+  private async ensureReady(): Promise<void> {
+    if (!this._connectAttempted) return;
+    const gate = this._connectPromise ?? this.connect();
+    try { await gate; } catch { /* released — request fails with its own cause */ }
+  }
+
+  /** D1: obtain the sidecar session token from the same-origin bootstrap
+   *  endpoint. Best-effort (connect-path semantics): failure leaves authToken
+   *  null. The 401-refresh leg (refreshSessionToken) is the LOUD variant. */
+  private async fetchSessionToken(epoch: number): Promise<void> {
     try {
-      const res = await this.fetch('/api/auth/session-token');
+      const res = await this.request('/api/auth/session-token');
       if (res.ok) {
         const body = (await res.json()) as { token?: string };
-        this.authToken = body.token ?? null;
+        if (epoch === this._epoch) this.authToken = body.token ?? null;
       }
     } catch {
-      /* leave authToken null; authed routes will 401 and surface the misconfig */
+      /* leave authToken null; the refresh-retry leg recovers on first 401 */
     }
+  }
+
+  /**
+   * P1b D3-3: single-flight token refresh for the 401→retry leg. Unlike
+   * fetchSessionToken this THROWS on failure so the retry path fails fast
+   * with the true cause (refresh endpoint unreachable) instead of silently
+   * retrying token-less into a guaranteed second 401.
+   */
+  private refreshSessionToken(): Promise<void> {
+    if (this._refreshPromise) return this._refreshPromise;
+    const epoch = this._epoch;
+    // Review fix: deadline INSIDE the memoized promise — fetchWithTimeout
+    // bounds headers only; an unbounded body read would otherwise occupy the
+    // single-flight memo forever and wedge every future 401 recovery.
+    const p = deadlined((async () => {
+      const res = await this.request('/api/auth/session-token');
+      if (!res.ok) {
+        const body = await res.clone().json().catch(() => undefined);
+        throw new AdapterHttpError(res.status, res.statusText, body);
+      }
+      const body = (await res.json()) as { token?: string };
+      if (!body.token) throw new Error('Session token refresh returned no token');
+      if (epoch === this._epoch) this.authToken = body.token;
+    })(), CONNECT_DEADLINE_MS, 'session-token refresh');
+    this._refreshPromise = p;
+    p.finally(() => {
+      if (this._refreshPromise === p) this._refreshPromise = null;
+    }).catch(() => { /* settled via callers */ });
+    return p;
   }
 
   /**
@@ -157,32 +336,85 @@ class LocalAdapter {
    * but a stored-but-stale URL would otherwise stick until the user navigates
    * to Settings. Auto-rediscovery keeps a fresh user on the rails.
    *
-   * On a successful fallback we persist DEFAULT_SERVER so the next cold start
-   * begins on the right URL. On total failure we restore the original baseUrl
-   * (so Settings still shows what the user had configured) and rethrow the
-   * original error — the second-attempt error is less informative.
+   * P1b D3 hardening: single-flighted (useOfflineStatus's exempt /health
+   * probes race connect()'s probe), and the fallback runs against a LOCAL
+   * url — `this.baseUrl` and localStorage are committed only on fallback
+   * success AND an epoch match, so a stale settle can never clobber a URL the
+   * user just configured. On total failure the original error is rethrown —
+   * the second-attempt error is less informative.
    */
-  private async healthProbe(): Promise<SystemHealth> {
+  private healthProbe(epoch = this._epoch): Promise<SystemHealth> {
+    // Review fix: the memo is epoch-checked at creation (setServerUrl clears
+    // it, so a live memo always belongs to the current epoch) and DEADLINED —
+    // a server that sends headers then stalls the body must not occupy the
+    // single-flight slot forever (it would wedge every re-armed connect).
+    if (this._healthProbePromise) return this._healthProbePromise;
+    const p = deadlined(this.doHealthProbe(epoch), CONNECT_DEADLINE_MS, 'health probe');
+    this._healthProbePromise = p;
+    p.finally(() => {
+      if (this._healthProbePromise === p) this._healthProbePromise = null;
+    }).catch(() => { /* settled via callers */ });
+    return p;
+  }
+
+  private async doHealthProbe(epoch: number): Promise<SystemHealth> {
     try {
-      const res = await this.fetch('/health');
+      const res = await this.request('/health');
+      if (!res.ok) throw new AdapterHttpError(res.status, res.statusText, await res.clone().json().catch(() => undefined));
       return await res.json();
     } catch (firstErr) {
       if (this.baseUrl === DEFAULT_SERVER) throw firstErr;
-      const prevUrl = this.baseUrl;
-      this.baseUrl = DEFAULT_SERVER;
       try {
-        const res = await this.fetch('/health');
+        const res = await fetchWithTimeout(`${DEFAULT_SERVER}/health`);
+        if (!res.ok) throw firstErr;
         const data = await res.json();
-        try { localStorage.setItem('waggle:server-url', DEFAULT_SERVER); } catch { /* private mode etc. */ }
+        if (epoch === this._epoch) {
+          this.baseUrl = DEFAULT_SERVER;
+          try { localStorage.setItem('waggle:server-url', DEFAULT_SERVER); } catch { /* private mode etc. */ }
+        }
         return data;
       } catch {
-        this.baseUrl = prevUrl;
         throw firstErr;
       }
     }
   }
 
-  async fetch(path: string, init?: RequestInit): Promise<Response> {
+  /**
+   * P1b D3-2: the THROWING request path — rejects with AdapterHttpError on any
+   * non-2xx response (after the 403 tier dispatch). This is the chokepoint
+   * conversion of the failure-as-data class: ~145 getters that previously
+   * parsed error bodies as data now surface failures to their callers.
+   * Callers that need raw status/body semantics use `fetchRaw()`.
+   */
+  async fetch(path: string, init?: RequestInit, timeoutMs?: number): Promise<Response> {
+    const res = await this.request(path, init, timeoutMs);
+    if (!res.ok) {
+      const body = await res.clone().json().catch(() => undefined);
+      throw new AdapterHttpError(res.status, res.statusText, body);
+    }
+    return res;
+  }
+
+  /**
+   * P1b D3: today's pre-conversion semantics — never throws on HTTP status
+   * (still defers on the gate, attaches the token, runs the 401-refresh-retry
+   * and dispatches the 403 tier event). For the two caller classes whose
+   * error-path payload is load-bearing: raw-Response consumers
+   * (installMarketplacePackage) and body-envelope getters (installMcp et al,
+   * whose 403/422 bodies drive the ApprovalModal security flow).
+   */
+  async fetchRaw(path: string, init?: RequestInit, timeoutMs?: number): Promise<Response> {
+    return this.request(path, init, timeoutMs);
+  }
+
+  /** Shared request core: deferral gate → headers/token → fetch → 403 tier
+   *  dispatch → 401 refresh-retry (token-versioned, once per request). */
+  private async request(path: string, init?: RequestInit, timeoutMs?: number, isRetry = false): Promise<Response> {
+    const purePath = path.split('?')[0];
+    const exempt = AUTH_EXEMPT_PATHS.has(purePath);
+    if (!exempt) await this.ensureReady();
+
+    const issuedToken = this.authToken;
     const headers: Record<string, string> = {
       ...(init?.headers as Record<string, string>),
     };
@@ -190,17 +422,19 @@ class LocalAdapter {
     // A bodyless POST (e.g. /api/harvest/scan-claude-code, fired on boot)
     // carrying Content-Type: application/json makes Fastify's JSON parser
     // 400 the empty body before the route handler runs. Any caller-supplied
-    // Content-Type (any casing) is preserved as-is.
+    // Content-Type (any casing) is preserved as-is. FormData bodies must NOT
+    // get the JSON default either — the browser sets the multipart boundary.
     const hasContentType = Object.keys(headers).some(
       h => h.toLowerCase() === 'content-type',
     );
-    if (init?.body != null && !hasContentType) {
+    const isFormData = typeof FormData !== 'undefined' && init?.body instanceof FormData;
+    if (init?.body != null && !isFormData && !hasContentType) {
       headers['Content-Type'] = 'application/json';
     }
-    if (this.authToken) {
-      headers['Authorization'] = `Bearer ${this.authToken}`;
+    if (issuedToken) {
+      headers['Authorization'] = `Bearer ${issuedToken}`;
     }
-    const res = await fetchWithTimeout(`${this.baseUrl}${path}`, { ...init, headers });
+    const res = await fetchWithTimeout(`${this.baseUrl}${path}`, { ...init, headers }, timeoutMs);
     if (res.status === 403) {
       const clone = res.clone();
       try {
@@ -211,6 +445,18 @@ class LocalAdapter {
           }));
         }
       } catch { /* not JSON — ignore */ }
+    }
+    // P1b D3-3: the session token is per-sidecar-process — it rotates on every
+    // restart. One silent refresh + single retry per request recovers without
+    // a page reload. Token-versioned: if another request's refresh already
+    // rotated the token while we were in flight, skip the redundant refresh
+    // and retry immediately with the current token (stops a post-restart
+    // straggler burst from chaining N sequential refreshes).
+    if (res.status === 401 && !exempt && !isRetry) {
+      if (this.authToken === issuedToken) {
+        await this.refreshSessionToken();
+      }
+      return this.request(path, init, timeoutMs, true);
     }
     return res;
   }
@@ -344,9 +590,11 @@ class LocalAdapter {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('path', dirPath);
-    const res = await fetchWithTimeout(`${this.baseUrl}/api/workspaces/${workspaceId}/files/upload`, {
+    // P1b D3: through the shared core (was a raw fetchWithTimeout that bypassed
+    // the deferral gate, the 401-refresh retry AND the !ok throw — a failed
+    // upload's error body parsed as the FileEntry).
+    const res = await this.fetch(`/api/workspaces/${workspaceId}/files/upload`, {
       method: 'POST',
-      headers: this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {},
       body: formData,
     }, 30000);
     return res.json();
@@ -560,8 +808,11 @@ class LocalAdapter {
 
   async getMemory(id: string, workspaceId?: string): Promise<Memory | null> {
     const qs = workspaceId ? `?workspace=${encodeURIComponent(workspaceId)}` : '';
-    const res = await this.fetch(`/api/memory/${encodeURIComponent(id)}${qs}`);
+    // P1b D3: fetchRaw preserves the documented 404→null contract (the
+    // throwing fetch would reject before the status check).
+    const res = await this.fetchRaw(`/api/memory/${encodeURIComponent(id)}${qs}`);
     if (res.status === 404) return null;
+    if (!res.ok) throw new AdapterHttpError(res.status, res.statusText, await res.clone().json().catch(() => undefined));
     return res.json();
   }
 
@@ -627,8 +878,10 @@ class LocalAdapter {
 
   async getArtifact(id: string, workspaceId?: string): Promise<Artifact | null> {
     const qs = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : '';
-    const res = await this.fetch(`/api/artifacts/${encodeURIComponent(id)}${qs}`);
+    // P1b D3: fetchRaw preserves the documented 404→null contract.
+    const res = await this.fetchRaw(`/api/artifacts/${encodeURIComponent(id)}${qs}`);
     if (res.status === 404) return null;
+    if (!res.ok) throw new AdapterHttpError(res.status, res.statusText, await res.clone().json().catch(() => undefined));
     return res.json();
   }
 
@@ -863,16 +1116,10 @@ class LocalAdapter {
   }): Promise<void> {
     // Phase-3 fix: this used to send only { name, description }, which the
     // route rejects (steps is mandatory) — the call could never succeed.
-    const res = await this.fetch('/api/skills/create', { method: 'POST', body: JSON.stringify(data) });
-    if (!res.ok) {
-      // Rich error (mirrors installSkill): callers branch on .status (e.g.
-      // SkillBuilder routes a 403 to the UpgradeModal tier event).
-      const body = await res.json().catch(() => ({} as Record<string, unknown>));
-      const err = new Error((body as { error?: string }).error ?? `createSkill failed: ${res.status}`) as Error & { status?: number; body?: unknown };
-      err.status = res.status;
-      err.body = body;
-      throw err;
-    }
+    // P1b D3: the chokepoint AdapterHttpError carries the same .status/.body
+    // fields the bespoke rich error did (SkillBuilder routes a 403 to the
+    // UpgradeModal tier event via onTierError) — the local !ok block is gone.
+    await this.fetch('/api/skills/create', { method: 'POST', body: JSON.stringify(data) });
   }
 
   /** Update a skill's markdown body. The skill NAME is its id. */
@@ -984,9 +1231,13 @@ class LocalAdapter {
    * MUST go through the authenticated `this.fetch()` (which attaches the
    * bearer token) — a raw fetch() returns 401 before the session token has
    * bootstrapped, and the UI was silently caching the empty 401 body as an
-   * empty catalog. The install/uninstall variants return the raw Response so
-   * the caller can keep its existing status-aware handling (403 →
-   * UpgradeModal, scan-blocked toasts).
+   * empty catalog. The INSTALL variant returns the raw Response (fetchRaw) so
+   * the caller keeps its status-aware handling (403 → UpgradeModal, scan-
+   * blocked toasts). P1b D3: uninstall moved to the THROWING fetch — its only
+   * consumer ignored the Response and toasted success unconditionally, so a
+   * failed uninstall rendered as success; throwing routes it to the catch.
+   * search also throws now: its consumers parse the body with no ok check, so
+   * an HTTP error previously rendered as "no results".
    *
    * NOTE: there is deliberately NO installMarketplacePack — POST
    * /api/marketplace/install resolves PACKAGE ids only; posting a pack id
@@ -998,7 +1249,7 @@ class LocalAdapter {
   }
 
   async installMarketplacePackage(packageId: number): Promise<Response> {
-    return this.fetch('/api/marketplace/install', {
+    return this.fetchRaw('/api/marketplace/install', {
       method: 'POST',
       body: JSON.stringify({ packageId }),
     });
@@ -1092,9 +1343,10 @@ class LocalAdapter {
   }
 
   async getAgent(id: string): Promise<Agent | null> {
-    const res = await this.fetch(`/api/agents/${encodeURIComponent(id)}`);
+    // P1b D3: fetchRaw preserves the documented 404→null contract.
+    const res = await this.fetchRaw(`/api/agents/${encodeURIComponent(id)}`);
     if (res.status === 404) return null;
-    if (!res.ok) throw new Error(`getAgent failed: ${res.status}`);
+    if (!res.ok) throw new AdapterHttpError(res.status, res.statusText, await res.clone().json().catch(() => undefined));
     const body = await res.json() as { agent: Agent };
     return body.agent;
   }
@@ -1584,7 +1836,14 @@ class LocalAdapter {
     try {
       const res = await this.fetch(`/api/jobs/${jobId}`);
       return res.json();
-    } catch (err) { console.error('[adapter] getJobStatus failed:', err); return null; }
+    } catch (err) {
+      // 404 = job unknown (in-memory store; lost on sidecar restart). Callers
+      // poll on a tight interval — don't console-spam the expected case.
+      if (!(err instanceof AdapterHttpError && err.status === 404)) {
+        console.error('[adapter] getJobStatus failed:', err);
+      }
+      return null;
+    }
   }
 
   async cancelJob(jobId: string): Promise<void> {
@@ -1642,7 +1901,8 @@ class LocalAdapter {
     ok?: boolean; connectorId?: string; revoked?: boolean;
     cleanedKeys?: number; oauthPurged?: number; error?: string;
   }> {
-    const res = await this.fetch(`/api/connectors/${id}/revoke`, { method: 'POST' });
+    // P1b D3: fetchRaw preserves the documented branch-on-`ok` contract above.
+    const res = await this.fetchRaw(`/api/connectors/${id}/revoke`, { method: 'POST' });
     return res.json();
   }
 
@@ -1663,7 +1923,11 @@ class LocalAdapter {
   async installMcp(mcpId: string, opts?: { settings?: Record<string, string>; force?: boolean; forceInsecure?: boolean }): Promise<{
     installed: boolean; server?: string; status?: string; requiresApproval?: boolean;
   }> {
-    const res = await this.fetch('/api/mcps/install', {
+    // P1b D3: fetchRaw — the 403/422 ERROR body is load-bearing: it carries
+    // { error: 'TIER_INSUFFICIENT' } AND the SecurityGate envelope
+    // { requiresApproval, blocked, severity, scanResult } that drives
+    // MCPHubApp's ApprovalModal HIGH-override / CRITICAL-non-overridable flow.
+    const res = await this.fetchRaw('/api/mcps/install', {
       method: 'POST',
       body: JSON.stringify({ mcpId, ...opts }),
     });
@@ -1674,28 +1938,34 @@ class LocalAdapter {
     name: string; command: string; args?: string[];
     env?: Record<string, string>; workspaceId?: string;
   }): Promise<{ id: string; registered: boolean }> {
-    const res = await this.fetch('/api/mcps', { method: 'POST', body: JSON.stringify(config) });
+    // P1b D3: fetchRaw — body-envelope getter; AddCustomMcpForm branches on
+    // res.error (incl. the deliberate TIER_INSUFFICIENT inline-suppression)
+    // and renders 400-validation / injection-scan / 409-duplicate reasons.
+    const res = await this.fetchRaw('/api/mcps', { method: 'POST', body: JSON.stringify(config) });
     return res.json();
   }
 
-  /** C21: mode 'live' = real spawn + handshake; 'static' = manifest validation. */
+  /** C21: mode 'live' = real spawn + handshake; 'static' = manifest validation.
+   *  P1b D3: fetchRaw — error envelopes (502 { status, error }) resolve as
+   *  data; InstalledMcpList renders the server's reason from `error`. */
   async testMcp(id: string): Promise<{ ok: boolean; mode: 'live' | 'static'; tools: string[]; error?: string }> {
-    const res = await this.fetch(`/api/mcps/${id}/test`, { method: 'POST' });
+    const res = await this.fetchRaw(`/api/mcps/${id}/test`, { method: 'POST' });
     return res.json();
   }
 
   async startMcp(id: string): Promise<{ status: string; error?: string }> {
-    const res = await this.fetch(`/api/mcps/${id}/start`, { method: 'POST' });
+    const res = await this.fetchRaw(`/api/mcps/${id}/start`, { method: 'POST' });
     return res.json();
   }
 
   async stopMcp(id: string): Promise<{ status: string; error?: string }> {
-    const res = await this.fetch(`/api/mcps/${id}/stop`, { method: 'POST' });
+    const res = await this.fetchRaw(`/api/mcps/${id}/stop`, { method: 'POST' });
     return res.json();
   }
 
   async revokeMcp(id: string): Promise<{ ok: boolean; stoppedInstance: boolean; removedConfig: boolean }> {
-    const res = await this.fetch(`/api/mcps/${id}/revoke`, { method: 'POST' });
+    // P1b D3: fetchRaw — MCPHubApp.handleRevoke branches res.ok/res.error.
+    const res = await this.fetchRaw(`/api/mcps/${id}/revoke`, { method: 'POST' });
     return res.json();
   }
 
@@ -1705,7 +1975,8 @@ class LocalAdapter {
   async updateMcpPermissions(id: string, body: { scope?: 'personal' | 'workspace'; workspaceId?: string }): Promise<{
     ok?: boolean; scope?: string; workspaceId?: string; error?: string;
   }> {
-    const res = await this.fetch(`/api/mcps/${id}/permissions`, {
+    // P1b D3: fetchRaw preserves the documented never-throws contract above.
+    const res = await this.fetchRaw(`/api/mcps/${id}/permissions`, {
       method: 'PATCH',
       body: JSON.stringify(body),
     });
@@ -1904,9 +2175,9 @@ class LocalAdapter {
   async ingestFile(file: File): Promise<unknown> {
     const formData = new FormData();
     formData.append('file', file);
-    const res = await fetchWithTimeout(`${this.baseUrl}/api/ingest`, {
+    // P1b D3: through the shared core (see uploadFile).
+    const res = await this.fetch('/api/ingest', {
       method: 'POST',
-      headers: this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {},
       body: formData,
     }, 30000);
     return res.json();
@@ -2044,7 +2315,8 @@ class LocalAdapter {
     /** Optional cwd override; defaults to the binary's directory. */
     cwd?: string;
   }): Promise<{ ok: boolean; pid: number | null; error?: string }> {
-    const res = await this.fetch('/api/tools/launch', {
+    // P1b D3: fetchRaw — non-2xx body maps into the { ok:false, error } envelope.
+    const res = await this.fetchRaw('/api/tools/launch', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
@@ -2081,7 +2353,7 @@ class LocalAdapter {
     reason: string;
     error?: string;
   }> {
-    const res = await this.fetch('/api/tools/kill', {
+    const res = await this.fetchRaw('/api/tools/kill', {
       method: 'POST',
       body: JSON.stringify({ pid }),
     });
@@ -2106,7 +2378,8 @@ class LocalAdapter {
     code: number;
     error?: string;
   }> {
-    const res = await this.fetch('/api/tools/hooks', {
+    // P1b D3: fetchRaw — hook-failure diagnostics (stderr/exit code) ride the error body.
+    const res = await this.fetchRaw('/api/tools/hooks', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
@@ -2220,20 +2493,22 @@ class LocalAdapter {
     dataDirSnapshot: { fileCount: number; totalBytes: number; topLevelEntries: Array<{ name: string; isDirectory: boolean; bytes: number }> };
     instruction: string;
   }> {
-    const res = await this.fetch('/api/data/erase', {
-      method: 'POST',
-      headers: { 'X-Confirm-Erase': 'yes' },
-      body: JSON.stringify({ confirmation: confirmationPhrase }),
-    });
-    if (!res.ok) {
-      let detail: string | undefined;
-      try {
-        const body = await res.clone().json();
-        detail = (body?.message as string) ?? (body?.error as string);
-      } catch { /* not JSON */ }
-      throw new Error(`Erase failed (${res.status}): ${detail ?? res.statusText}`);
+    // P1b D3: the chokepoint now throws AdapterHttpError before the legacy
+    // !ok block could run — rethrow in the test-pinned legacy format.
+    try {
+      const res = await this.fetch('/api/data/erase', {
+        method: 'POST',
+        headers: { 'X-Confirm-Erase': 'yes' },
+        body: JSON.stringify({ confirmation: confirmationPhrase }),
+      });
+      return res.json();
+    } catch (e) {
+      if (e instanceof AdapterHttpError) {
+        const b = e.body as { message?: string; error?: string } | undefined;
+        throw new Error(`Erase failed (${e.status}): ${b?.message ?? b?.error ?? e.statusText}`);
+      }
+      throw e;
     }
-    return res.json();
   }
 
   /**
@@ -2257,16 +2532,17 @@ class LocalAdapter {
     trialExpired: boolean;
     capabilities: Record<string, unknown>;
   }> {
-    const res = await this.fetch('/api/tier/start-trial', { method: 'POST' });
-    if (!res.ok) {
-      let detail: string | undefined;
-      try {
-        const body = await res.clone().json();
-        detail = (body?.message as string) ?? (body?.error as string);
-      } catch { /* not JSON */ }
-      throw new Error(`Start trial failed (${res.status}): ${detail ?? res.statusText}`);
+    // P1b D3: chokepoint throws first — rethrow in the test-pinned legacy format.
+    try {
+      const res = await this.fetch('/api/tier/start-trial', { method: 'POST' });
+      return res.json();
+    } catch (e) {
+      if (e instanceof AdapterHttpError) {
+        const b = e.body as { message?: string; error?: string } | undefined;
+        throw new Error(`Start trial failed (${e.status}): ${b?.message ?? b?.error ?? e.statusText}`);
+      }
+      throw e;
     }
-    return res.json();
   }
 
   // --- Import ---

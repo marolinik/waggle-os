@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { adapter } from '@/lib/adapter';
 import type { Workspace } from '@/lib/types';
+import { useRevalidateOnError } from '@/hooks/useRevalidateOnError';
 
 export const useWorkspaces = () => {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -17,12 +18,18 @@ export const useWorkspaces = () => {
       setError(null);
     } catch (err) {
       console.error('[useWorkspaces] fetch failed:', err);
+      // P1b D3: surface the failure (this channel existed but was never set —
+      // a lost boot race meant an empty workspace list for the whole session)
+      // and keep any previously good list rather than clobbering it.
+      setError(err instanceof Error ? err.message : 'Failed to load workspaces');
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => { fetchWorkspaces(); }, []);
+  // P1b D3 plus-clause: errored list revalidates on focus/online/connect-settled.
+  useRevalidateOnError(error !== null, fetchWorkspaces);
 
   const createWorkspace = useCallback(async (data: { name: string; group: string; persona?: string; agentGroupId?: string; shared?: boolean; templateId?: string }) => {
     try {

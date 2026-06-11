@@ -67,7 +67,7 @@ const ShellLayout = () => {
   const location = useLocation();
   const {
     workspaces, activeWorkspace, activeWorkspaceId,
-    selectWorkspace, createWorkspace, patchWorkspace, refreshWorkspaces,
+    selectWorkspace, createWorkspace, patchWorkspace, refreshWorkspaces, workspacesError,
     currentTier, billingTier, trialInfo, refreshTier, showTrialExpired, setShowTrialExpired,
     notifications, unreadCount, markRead, markAllRead,
     onboardingState, updateOnboarding, completeOnboarding,
@@ -326,6 +326,7 @@ const ShellLayout = () => {
         onSelectGroup={(groupId) => { if (activeWorkspaceId) patchWorkspace(activeWorkspaceId, { agentGroupId: groupId, persona: undefined }); }} />
       <WorkspaceSwitcher open={ov.showWorkspaceSwitcher} onClose={() => ov.setShowWorkspaceSwitcher(false)}
         workspaces={workspaces} activeWorkspaceId={activeWorkspaceId}
+        error={workspacesError} onRetry={() => { void refreshWorkspaces(); }}
         onSelect={(id) => { selectWorkspace(id); navigate(`/workspaces/${id}`); }} />
       <NotificationInbox open={ov.showNotifications} onClose={() => ov.setShowNotifications(false)} notifications={notifications} onMarkRead={markRead} onMarkAllRead={markAllRead} />
       <KeyboardShortcutsHelp open={ov.showKeyboardHelp} onClose={() => ov.setShowKeyboardHelp(false)} />

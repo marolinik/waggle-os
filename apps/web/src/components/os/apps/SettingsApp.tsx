@@ -51,7 +51,6 @@ const SettingsApp = () => {
   const [budgetModel, setBudgetModel] = useState<string | null>(null);
   const [budgetThreshold, setBudgetThreshold] = useState(0.8);
   const [dailyBudget, setDailyBudget] = useState<string>('');
-  const [tier, setTier] = useState('FREE');
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
 
@@ -154,7 +153,6 @@ const SettingsApp = () => {
       setBudgetModel(s.budgetModel ?? null);
       setBudgetThreshold(s.budgetThreshold ?? 0.8);
       setDailyBudget(s.dailyBudget != null ? String(s.dailyBudget) : '');
-      setTier(s.tier ?? 'FREE');
     }).catch(() => {});
 
     // P4: permissions now live on /api/settings/permissions (separate from
@@ -231,14 +229,21 @@ const SettingsApp = () => {
           <div className="space-y-5">
             <h3 className="text-sm font-display font-semibold text-foreground">General</h3>
 
-            {/* Tier */}
+            {/* Tier. P1b D3-4: single-sourced from the resolved billing state
+                (was a separate getSettings-fed copy that defaulted to 'FREE'
+                on failure and could disagree with the Billing tab). Unresolved
+                renders a neutral placeholder, never 'FREE plan' as fact. */}
             <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs font-display font-medium text-foreground">Tier</p>
-                  <p className="text-[11px] text-muted-foreground capitalize">{tier} plan</p>
+                  <p className="text-[11px] text-muted-foreground capitalize">
+                    {billing.tierResolved ? `${billing.tier} plan` : 'Confirming plan…'}
+                  </p>
                 </div>
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-display bg-primary/20 text-primary capitalize">{tier}</span>
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-display bg-primary/20 text-primary capitalize">
+                  {billing.tierResolved ? billing.tier : '…'}
+                </span>
               </div>
             </div>
 
@@ -489,7 +494,22 @@ const SettingsApp = () => {
                 tier card so it's the first thing they read in Billing. */}
             <CoverageCompassCard />
 
-            {/* Current tier badge */}
+            {/* Current tier badge. P1b D3-4: while the tier is unresolved
+                (boot race / sidecar down) render an explicit unresolved state —
+                NEVER the default 'FREE' as fact. */}
+            {!billing.tierResolved ? (
+              <div className="p-4 rounded-xl bg-secondary/30 border border-border/30" data-testid="billing-tier-unresolved">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-display font-medium text-foreground">Current Plan</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      {billing.error ? 'Couldn’t reach the server to confirm your plan — retrying automatically.' : 'Confirming your plan…'}
+                    </p>
+                  </div>
+                  <span className="px-3 py-1 rounded-full text-xs font-display font-semibold bg-muted text-muted-foreground">…</span>
+                </div>
+              </div>
+            ) : (
             <div className="p-4 rounded-xl bg-secondary/30 border border-border/30">
               <div className="flex items-center justify-between">
                 <div>
@@ -513,6 +533,7 @@ const SettingsApp = () => {
                 </span>
               </div>
             </div>
+            )}
 
             {/* Error display */}
             {billing.error && (
@@ -529,8 +550,8 @@ const SettingsApp = () => {
               </div>
             )}
 
-            {/* Upgrade buttons for FREE / TRIAL users */}
-            {(billing.tier === 'FREE' || billing.tier === 'TRIAL') && (
+            {/* Upgrade buttons for FREE / TRIAL users — only on a RESOLVED tier (D3-4) */}
+            {billing.tierResolved && (billing.tier === 'FREE' || billing.tier === 'TRIAL') && (
               <div className="space-y-2">
                 <p className="text-xs font-display font-medium text-foreground">Upgrade</p>
                 <div className="grid grid-cols-2 gap-3">
@@ -588,8 +609,8 @@ const SettingsApp = () => {
               </div>
             )}
 
-            {/* Enterprise CTA */}
-            {billing.tier !== 'ENTERPRISE' && (
+            {/* Enterprise CTA — only on a RESOLVED tier (D3-4) */}
+            {billing.tierResolved && billing.tier !== 'ENTERPRISE' && (
               <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/20">
                 <p className="text-xs font-display font-medium text-amber-400">Enterprise</p>
                 <p className="text-[11px] text-muted-foreground mt-1">

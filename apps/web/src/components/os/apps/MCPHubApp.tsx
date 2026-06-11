@@ -19,11 +19,12 @@
  * consolidation to the single S21 surface (MarketplaceApp), which the dock's
  * Extend zone exposes next to this hub.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ExternalLink, Loader2, Server } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { useService } from '@/providers/ServiceProvider';
 import { useToast } from '@/hooks/use-toast';
+import { useRevalidateOnError } from '@/hooks/useRevalidateOnError';
 import { ApprovalModal, type ApprovalRequest } from '@/components/ui/approval-modal';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 import McpCatalog from './connectors/McpCatalog';
@@ -85,6 +86,7 @@ const MCPHubApp = ({ personaId }: MCPHubAppProps = {}) => {
   // resolvable set once and render Install only where the path exists; the
   // copy-command strip stays as the path for everything else.
   const [resolvableMcpNames, setResolvableMcpNames] = useState<ReadonlySet<string>>(new Set());
+  const [resolvableErrored, setResolvableErrored] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -105,16 +107,32 @@ const MCPHubApp = ({ personaId }: MCPHubAppProps = {}) => {
     void load();
   }, [connecting, load]);
 
+  // Review fix: connect settlement fires both the [connecting] effect and the
+  // revalidation listener — single-flight the fetch.
+  const resolvableInFlight = useRef(false);
+  const loadResolvableNames = useCallback(() => {
+    if (resolvableInFlight.current) return;
+    resolvableInFlight.current = true;
+    adapter.getMarketplace({ type: 'mcp', limit: 200 })
+      .then(r => {
+        setResolvableMcpNames(
+          new Set(((r.packages ?? []) as Array<{ name?: string }>).map(p => p.name ?? '')),
+        );
+        setResolvableErrored(false);
+      })
+      // Unknown registry (server down) → no Install buttons; the copy-command
+      // fallback still works and installs would 404/fail anyway. P1b D3
+      // plus-clause: flagged errored so the empty Set is no longer cached as
+      // valid for the session — revalidates on focus/online/connect-settled.
+      .catch(() => { setResolvableMcpNames(new Set()); setResolvableErrored(true); })
+      .finally(() => { resolvableInFlight.current = false; });
+  }, []);
+
   useEffect(() => {
     if (connecting) return;
-    adapter.getMarketplace({ type: 'mcp', limit: 200 })
-      .then(r => setResolvableMcpNames(
-        new Set(((r.packages ?? []) as Array<{ name?: string }>).map(p => p.name ?? '')),
-      ))
-      // Unknown registry (server down) → no Install buttons; the copy-command
-      // fallback still works and installs would 404/fail anyway.
-      .catch(() => setResolvableMcpNames(new Set()));
-  }, [connecting]);
+    loadResolvableNames();
+  }, [connecting, loadResolvableNames]);
+  useRevalidateOnError(resolvableErrored, loadResolvableNames);
 
   const installed = items.filter(i => i.installed);
   const installedIds = new Set(installed.map(i => i.id));

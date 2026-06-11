@@ -38,7 +38,7 @@ const BackupApp = () => {
     // The route returns 404 when no backup exists yet — that's the legitimate
     // empty state, not a failure. Any other non-2xx (or a network error) is a
     // real fault and must surface as a retryable error, never as "No backups".
-    adapter.fetch('/api/backup/metadata')
+    adapter.fetchRaw('/api/backup/metadata')
       .then(async r => {
         const kind = classifyMetadataStatus(r.status);
         if (kind === 'empty') { setBackups([]); setLoading(false); return; }
@@ -56,7 +56,7 @@ const BackupApp = () => {
     setCreating(true);
     setLastResult(null);
     try {
-      const res = await adapter.fetch('/api/backup', { method: 'POST' });
+      const res = await adapter.fetchRaw('/api/backup', { method: 'POST' });
       if (res.ok) {
         setLastResult('Backup created successfully.');
         const data = await res.json().catch(() => null);
@@ -86,7 +86,7 @@ const BackupApp = () => {
         reader.onerror = () => reject(reader.error ?? new Error('read failed'));
         reader.readAsDataURL(file);
       });
-      const res = await adapter.fetch('/api/restore', {
+      const res = await adapter.fetchRaw('/api/restore', {
         method: 'POST',
         body: JSON.stringify({ backup: base64 }),
       });

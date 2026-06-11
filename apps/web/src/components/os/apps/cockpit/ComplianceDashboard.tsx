@@ -12,6 +12,7 @@ import {
   LayoutTemplate,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { useRevalidateOnError } from '@/hooks/useRevalidateOnError';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 import { ComplianceTemplateModal, type ComplianceTemplate, type ComplianceTemplateSections } from './ComplianceTemplateModal';
 
@@ -102,19 +103,25 @@ const ComplianceDashboard = () => {
   const [templateId, setTemplateId] = useState<number | null>(null);
   const [templatesModalOpen, setTemplatesModalOpen] = useState(false);
 
+  const [templatesErrored, setTemplatesErrored] = useState(false);
   const refreshTemplates = useCallback(async () => {
     try {
       const { templates: list } = await adapter.listComplianceTemplates();
       setTemplates(list as ComplianceTemplate[]);
+      setTemplatesErrored(false);
     } catch {
       // Non-fatal: leave templates empty and let the picker show "no templates".
+      // P1b D3 plus-clause: flagged errored so the empty list is no longer
+      // cached as valid for the session — revalidates on focus/connect-settled.
       setTemplates([]);
+      setTemplatesErrored(true);
     }
   }, []);
 
   useEffect(() => {
     void refreshTemplates();
   }, [refreshTemplates]);
+  useRevalidateOnError(templatesErrored, () => { void refreshTemplates(); });
 
   const selectedTemplate = templateId !== null
     ? templates.find(t => t.id === templateId) ?? null
@@ -271,7 +278,7 @@ const ComplianceDashboard = () => {
   // are meaningless — show an em-dash so the user doesn't read "0 oversight
   // actions" as a compliance issue. Article status badges still reflect
   // the real state.
-  const hasInteractions = status.art12Logging.totalInteractions > 0;
+  const hasInteractions = (status.art12Logging?.totalInteractions ?? 0) > 0;
   const articles = [
     {
       key: 'art12',
@@ -294,15 +301,15 @@ const ComplianceDashboard = () => {
       label: 'Art. 19 Retention',
       data: status.art19Retention,
       icon: <Clock className="w-3 h-3" />,
-      metric: status.art19Retention.retentionDays > 0 ? `${status.art19Retention.retentionDays}d` : '∞',
-      hint: status.art19Retention.retentionDays > 0 ? 'days retained' : 'permanent',
+      metric: (status.art19Retention?.retentionDays ?? 0) > 0 ? `${status.art19Retention.retentionDays}d` : '∞',
+      hint: (status.art19Retention?.retentionDays ?? 0) > 0 ? 'days retained' : 'permanent',
     },
     {
       key: 'art26',
       label: 'Art. 26 Monitor',
       data: status.art26Monitoring,
       icon: <Database className="w-3 h-3" />,
-      metric: `${status.art26Monitoring.activeMonitors.length}`,
+      metric: `${status.art26Monitoring?.activeMonitors?.length ?? 0}`,
       hint: 'active monitors',
     },
   ];

@@ -571,7 +571,7 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
       )}
 
       <RecentWorkspacesPanel
-        cards={briefing.recentWorkspaces}
+        cards={briefing.recentWorkspaces ?? []}
         onContinue={onContinue}
         onOpenDesktop={onOpenWorkspaceDesktop}
       />

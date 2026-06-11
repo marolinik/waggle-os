@@ -10,6 +10,9 @@ interface WorkspaceSwitcherProps {
   workspaces: Workspace[];
   activeWorkspaceId: string | null;
   onSelect: (id: string) => void;
+  /** P1b D3: load failure — an errored empty list must not read as "No workspaces". */
+  error?: string | null;
+  onRetry?: () => void;
 }
 
 // Mirrors the LoginBriefing filter — workspace names matching these patterns
@@ -22,7 +25,7 @@ const TEST_WORKSPACE_PATTERNS: ReadonlyArray<RegExp> = [
   /^audit-/i,
 ];
 
-const WorkspaceSwitcher = ({ open, onClose, workspaces, activeWorkspaceId, onSelect }: WorkspaceSwitcherProps) => {
+const WorkspaceSwitcher = ({ open, onClose, workspaces, activeWorkspaceId, onSelect, error, onRetry }: WorkspaceSwitcherProps) => {
   if (!open) return null;
 
   const visibleWorkspaces = workspaces.filter(
@@ -80,7 +83,21 @@ const WorkspaceSwitcher = ({ open, onClose, workspaces, activeWorkspaceId, onSel
               );
             })}
             {visibleWorkspaces.length === 0 && (
-              <p className="text-xs text-muted-foreground text-center py-4">No workspaces</p>
+              error ? (
+                <div className="text-center py-4 space-y-2" data-testid="workspace-switcher-error">
+                  <p className="text-xs text-muted-foreground">Couldn’t load workspaces — retrying when the connection is back.</p>
+                  {onRetry && (
+                    <button
+                      onClick={onRetry}
+                      className="px-3 py-1 text-xs rounded-lg bg-secondary/50 text-foreground hover:bg-secondary/70 transition-colors"
+                    >
+                      Retry now
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground text-center py-4">No workspaces</p>
+              )
             )}
           </div>
           <p className="text-[11px] text-muted-foreground mt-3 text-center">Ctrl+Tab to toggle</p>
