@@ -124,6 +124,16 @@ single-session categories) per proposal §5 — guards the production-policy var
   All via worktree D:/Projects/waggle-os-w4 (branch feature/w4-port).
   Remaining: W4.4 caption adapters, W4.5 PromptAssembler fixes + flag flips
   + live smoke, W4.6 rawdetail (gated on storage decision).
+- 2026-06-11 (later, SHIPPED → origin/main): **W4.4** `1c337d7` (4 caption-aware
+  adapters + HARVEST_FRAME_CONTENT_CAP=10k unification across 3 surfaces),
+  **W4.5** `5a5fc0a` + `a6ef018` (double-inject + double-compute FIXED;
+  recallMemory's multi-lane block routes verbatim through the assembler budget;
+  LIVE SMOKE all-pass — real server + real ONNX reranker, 58-83ms warm recalls,
+  recall block exactly once; **WAGGLE_RERANKER now DEFAULT ON**, kill switch =0,
+  tests pinned off). **WAGGLE_PROMPT_ASSEMBLER stays opt-in** — flip pending
+  founder ratification (smoke validated the recall path, not assembler-wide
+  prompt reshaping in live LLM chats). Remaining: **W4.6 rawdetail only**
+  (gated on the per-turn raw-storage decision, §6.2).
 
 - 2026-06-11: Plan written from w4-port-recon workflow output.
 - 2026-06-11 (W3.4 ablation DONE): **attribution resolved — captions alone +0.26 ns;
