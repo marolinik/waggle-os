@@ -572,3 +572,37 @@ Plus: error states never cache as valid-empty; focus/visibility revalidation on 
 ## Phase sequence (unblocked)
 
 **Phase 0** = D1 conversion plan + route map, naming sweep (D8/D9), doc authority (D10). Then **P1**=D3, **P2**=verify + J08 alert, **P3**=D2, **P4**=D11/D12 + FREE→Upgrade e2e re-run, **P5**=D4, **P7**=D15 scope. **Nothing from prior Phases 0–4 is rebuilt.**
+
+---
+
+## D3 implementation notes (P1b, 2026-06-11)
+
+Recorded per the single-decision-log rule; full design + verification record in
+`docs/ux-refactor/p1b-auth-gate-plan.md` + `p1b-plan-review-record.md`.
+
+1. **fetchRaw exception class — ratified-flow-preserving deviation from the literal
+   "throw mandated adapter-wide" (D3-2).** Two caller classes keep non-throwing
+   semantics because their *error-path payload is load-bearing*: raw-Response
+   consumers (`installMarketplacePackage` — documented 403/SecurityGate status
+   handling) and body-envelope getters (`installMcp` + 6 MCP siblings +
+   `revokeConnector` — their 403/422 bodies carry `TIER_INSUFFICIENT` and the
+   `requiresApproval/blocked/severity` envelope that drives the D4 ApprovalModal
+   security flow). All six ruling-named getters throw as mandated. Adapter-level
+   envelope pins added (component tests mock the adapter and cannot see this layer).
+2. **Plus-clause revalidation scope.** Wired: tier (ShellContext), useBilling,
+   useWorkspaces, LoginBriefing, MCPHubApp resolvableMcpNames, ComplianceDashboard
+   templates. Deferred to P7 with ledger: ChatWindowInstance FALLBACK_MODELS,
+   TemplatesView/AgentBuilder catalogs (their boot-race instance dies with the gate;
+   the 401-retry leg cures their restart instance; residual is genuine-5xx staleness).
+3. **D3-4 extensions (same monetization-defect class):** useBilling (Settings→Billing
+   rendered FREE-as-fact + upgrade CTAs on failure) and the Settings→General
+   "{tier} plan" badge (separate getSettings-fed copy, now single-sourced from
+   resolved billing state).
+4. **DISCOVERED, OUT OF P1b SCOPE — needs a founder ruling:** all five EventSource
+   SSE channels (notifications / events / subagent status / waggle signals / harvest
+   progress) are **401-dead in every default run since D1** — the server bearer-gates
+   all /api/* GETs, EventSource cannot send headers, no SSE route accepts ?token=
+   (only /ws does), and onerror handlers permanently close. Working only under
+   WAGGLE_TRUST_LOCALHOST=1. Fix = server auth model (per-route ?token= like /ws, or
+   exempt-with-validation) + client reconnect design — one coherent follow-up
+   ("SSE auth + reconnect"). **Ask: ratify as P1b follow-up stage or P2 line item.**
