@@ -65,6 +65,38 @@ focus-revalidation pin, needs-review comparison query corrected to `limit=200`.
 | J08 count bound: getRecent(200) scan undercounts past 200 unreviewed frames (consistent with the Memory Center view itself; large E-11 imports could exceed it — SQL count if exactness ever matters) | LOW | S | P7 |
 | AppShell shim filter passthrough has no mounted-router test (queryString + route-level stash are pinned) | LOW | S | P7 |
 
+## Acceptance check 8 — wizard onFinish seeding (LIVE-RUN, first ever)
+
+**Result: PASS — after fixing two real defects the run itself surfaced.** Driven via Playwright
+against a fresh sidecar (3333) + Vite dev (8080) with `?forceWizard=true`, three full wizard runs.
+
+**Defect 1 (state):** `loadState()` re-evaluated the `?forceWizard` reset on every call — including
+the `waggle:onboarding-sync` reload fired by every wizard save. The moment workspace-create persisted
+`{workspaceId}`, the sync reload reset onboarding to `{completed:false, step:0}` and wiped it; `onFinish`
+then ran with a fallback `local-*` id and the seeding chain silently broke (run 1 ended force-completed
+by the returning-user auto-complete, user stranded on `/home`). Fix: once-per-page-load latch
+(`forceWizardConsumed`), pinned by `p2-onboarding-forcewizard.test.ts`.
+
+**Defect 2 (navigation):** the wizard finishes at pathname `/`; completing onboarding (normal-priority
+state) commits before `handleOnboardingFinish`'s navigate (a `v7_startTransition` update), so the shell
+mounts at `/`, `IndexRedirect` fires, and its `/home` navigation queues after the wizard's and wins.
+Fix: one-shot `pendingWizardLanding` handoff — `IndexRedirect` honors the wizard's landing target.
+Live-verified; not unit-pinned (module-internal handoff — the live smoke is the evidence; ledgered).
+
+**Run 3 (post-fix) assertions, all green:** lands on `/workspaces/p2-smoke-three/chat` (real server id,
+not `local-*`); widget header `P2 Smoke Three · general-purpose` (wizard persona active); composer
+prefilled `Hello! What can you help me with?` (QW-1 starter, NOT sent); `waggle-chat-state-v1` persisted
+the persona; zero chat-completion/LLM requests in the network log. Smoke workspaces deleted after.
+
+**Flagged for founder (production-class, NOT fixed here):** the returning-user auto-complete
+(`useOnboarding.ts` "Bug #2" effect) completes the wizard whenever a `useOnboarding` instance mounts
+with `completed:false`, no `forceWizard` in the URL, and ≥1 workspace on the server. Its own comment
+says the boot-time `wsManager.ensureDefault` stub counts. If `ensureDefault` seeds `default-workspace`
+before first FE mount on a clean install, **a truly-new production user may never see onboarding at
+all** (and the Tauri filesystem first-launch flag does not gate this effect). Needs a clean-install
+verification (P4/D12 binary work is the natural place); until then this is a suspected
+launch-integrity defect, not a confirmed one.
+
 ## Gates at close
 
 FE tsc 0 · server tsc 0 (after `npm run build:packages`) · FE vitest 75 files green ·
