@@ -14,6 +14,8 @@ import {
   TEMPORAL_GUIDANCE,
   renderReferenceDateLine,
   parseDateWindow,
+  createInProcessReranker,
+  type Reranker,
 } from '@waggle/core';
 import { createMindTools, type ToolDefinition } from './tools.js';
 import { buildSelfAwareness, type AgentCapabilities } from './self-awareness.js';
@@ -66,6 +68,13 @@ export interface OrchestratorConfig {
   mode?: 'local' | 'team';
   version?: string;
   skills?: string[];
+  /**
+   * W4.2: optional cross-encoder reranker injected for tests. When absent,
+   * a lazy in-process reranker (Xenova/ms-marco-MiniLM-L-6-v2, ~22MB ONNX)
+   * is created on first recall IF the WAGGLE_RERANKER=1 flag is set;
+   * creation failure soft-fails to RRF-only ordering.
+   */
+  reranker?: Reranker;
 }
 
 /**
@@ -117,6 +126,8 @@ export class Orchestrator {
 
   /** Workspace-specific layers (null when no workspace is active) */
   private workspaceLayers: WorkspaceLayers | null = null;
+  /** W4.2: memoized reranker promise — resolves undefined on creation failure. */
+  private rerankerPromise: Promise<Reranker | undefined> | null = null;
 
   /** Team sync client — set for team workspaces, null for personal */
   private teamSync: import('@waggle/core').TeamSync | null = null;
@@ -139,6 +150,7 @@ export class Orchestrator {
     this.frames = new FrameStore(config.db);
     this.sessions = new SessionStore(config.db);
     this.search = new HybridSearch(config.db, config.embedder);
+    if (config.reranker) this.rerankerPromise = Promise.resolve(config.reranker);
     this.knowledge = new KnowledgeGraph(config.db);
     this.improvementSignals = new ImprovementSignalStore(config.db);
 
@@ -395,6 +407,27 @@ export class Orchestrator {
    * `opts` is optional — when omitted, behavior is byte-identical to the
    * pre-PromptAssembler implementation (profile='balanced', no score floor).
    */
+  /**
+   * W4.2: lazy cross-encoder reranker. Opt-in via WAGGLE_RERANKER=1 (flag-off
+   * default until the W4.5 live smoke — first use downloads the ~22MB ONNX
+   * model). Creation failure memoizes undefined: recall soft-fails to
+   * RRF-only ordering, never throws.
+   */
+  private getReranker(): Promise<Reranker | undefined> {
+    if (this.rerankerPromise) return this.rerankerPromise;
+    if (process.env['WAGGLE_RERANKER'] !== '1') {
+      this.rerankerPromise = Promise.resolve(undefined);
+      return this.rerankerPromise;
+    }
+    this.rerankerPromise = createInProcessReranker().catch((e: unknown) => {
+      logger.warn('reranker unavailable — falling back to RRF ordering', {
+        error: e instanceof Error ? e.message : String(e),
+      });
+      return undefined;
+    });
+    return this.rerankerPromise;
+  }
+
   async recallMemory(
     query: string,
     limit = 10,
@@ -466,17 +499,20 @@ export class Orchestrator {
           ? { since: dateWindow.since, until: dateWindow.until }
           : {};
 
+        // W4.2: cross-encoder reranker (soft-fails to undefined → RRF order).
+        const reranker = await this.getReranker();
+
         // Normal semantic search for specific queries
-        personalResults = await this.search.search(query, { limit, profile, ...windowOpts });
+        personalResults = await this.search.search(query, { limit, profile, reranker, ...windowOpts });
         workspaceResults = this.workspaceLayers
-          ? await this.workspaceLayers.search.search(query, { limit, profile, ...windowOpts })
+          ? await this.workspaceLayers.search.search(query, { limit, profile, reranker, ...windowOpts })
           : [];
 
         if (dateWindow && personalResults.length === 0 && workspaceResults.length === 0) {
           logTurnEvent(opts?.turnId, { stage: 'orchestrator.recallMemory.dateWindowEmpty', label: dateWindow.label });
-          personalResults = await this.search.search(query, { limit, profile });
+          personalResults = await this.search.search(query, { limit, profile, reranker });
           workspaceResults = this.workspaceLayers
-            ? await this.workspaceLayers.search.search(query, { limit, profile })
+            ? await this.workspaceLayers.search.search(query, { limit, profile, reranker })
             : [];
         }
 

@@ -9,6 +9,16 @@ export interface ScoringWeights {
   importance: number;
 }
 
+/**
+ * KNOWN GAP (W4-PRODUCTION-PORT-PLAN-2026-06-11.md §3 bug #1): no production
+ * caller passes `graphDistances`, so the `contextual` dimension scores 0 for
+ * every frame — 20% of 'balanced' (60% of 'connected') is a uniform constant.
+ * This does NOT distort ranking (a constant-0 term preserves ordering) but it
+ * deflates absolute finalScores and makes 'connected' a functional no-op.
+ * Deliberately NOT zeroed out: tests and future callers may pass
+ * graphDistances, and KnowledgeGraph.bfsDistances needs an entity-id →
+ * frame-id bridge before production wiring (open decision #3).
+ */
 export const SCORING_PROFILES: Record<ScoringProfile, ScoringWeights> = {
   balanced: { temporal: 0.4, popularity: 0.2, contextual: 0.2, importance: 0.2 },
   recent: { temporal: 0.6, popularity: 0.1, contextual: 0.2, importance: 0.1 },
@@ -74,11 +84,17 @@ export function computeImportanceScore(importance: Importance): number {
 }
 
 export function computeRelevance(
-  frame: { id: number; last_accessed: string; access_count: number; importance: Importance },
+  frame: { id: number; created_at?: string; last_accessed: string; access_count: number; importance: Importance },
   weights: ScoringWeights,
   context: ScoringContext = {}
 ): number {
-  const temporal = computeTemporalScore(frame.last_accessed);
+  // W4.2 (plan §3 bug #3): the temporal dimension decays on WRITE time
+  // (created_at), not access time. last_accessed is bumped to "now" by
+  // touch() on every read — decaying on it made this dimension constant
+  // noise on historical corpora (every recalled frame scored "recent").
+  // created_at is optional for back-compat; callers not passing it keep
+  // the old access-decay behavior.
+  const temporal = computeTemporalScore(frame.created_at ?? frame.last_accessed);
   const popularity = computePopularityScore(frame.access_count);
   const contextual = computeContextualScore(frame.id, context.graphDistances);
   const importance = computeImportanceScore(frame.importance);

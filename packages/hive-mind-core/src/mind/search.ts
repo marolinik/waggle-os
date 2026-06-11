@@ -1,6 +1,7 @@
 import type { MindDB } from './db.js';
 import type { Embedder } from './embeddings.js';
 import type { MemoryFrame, Importance } from './frames.js';
+import type { Reranker } from './inprocess-reranker.js';
 import {
   computeRelevance,
   SCORING_PROFILES,
@@ -18,6 +19,16 @@ export interface SearchOptions {
   since?: string;
   /** F20: Only include frames created on or before this ISO date string. */
   until?: string;
+  /**
+   * W4.2: cross-encoder reranker invoked AFTER RRF on the top-`rerankPoolSize`
+   * candidates. When provided, results are sorted by reranker score
+   * (jointly attentive over query+doc). RRF still selects the candidate
+   * pool; the reranker only re-orders the survivors. Soft-fails to RRF
+   * ordering on any reranker error.
+   */
+  reranker?: Reranker;
+  /** How many candidates to send to the reranker (default 30). */
+  rerankPoolSize?: number;
 }
 
 export interface SearchResult {
@@ -51,7 +62,7 @@ export class HybridSearch {
   }
 
   async search(query: string, options: SearchOptions = {}): Promise<SearchResult[]> {
-    const { limit = 20, gopId, profile = 'balanced', context = {}, since, until } = options;
+    const { limit = 20, gopId, profile = 'balanced', context = {}, since, until, reranker, rerankPoolSize } = options;
     const weights = SCORING_PROFILES[profile];
 
     // Run keyword and vector searches in parallel.
@@ -129,6 +140,8 @@ export class HybridSearch {
       const relevanceScore = computeRelevance(
         {
           id: frame.id,
+          // W4.2 bug #3: temporal decay anchors on write time, not access time.
+          created_at: frame.created_at,
           last_accessed: frame.last_accessed,
           access_count: frame.access_count,
           importance: frame.importance as Importance,
@@ -146,6 +159,32 @@ export class HybridSearch {
     }
 
     results.sort((a, b) => b.finalScore - a.finalScore);
+
+    // W4.2: optional cross-encoder reranking on the top pool (reverse-ported
+    // from the OSS benchmark-proven stack). Reranker scoring is jointly
+    // attentive over (query, doc), so it discriminates much better than
+    // vector dot products on densely-homogeneous corpora. RRF still selects
+    // the candidate pool; the reranker only re-orders the survivors.
+    if (reranker) {
+      const poolSize = Math.min(rerankPoolSize ?? 30, results.length);
+      const pool = results.slice(0, poolSize);
+      try {
+        const docs = pool.map((r) => r.frame.content);
+        const scores = await reranker.scoreBatch(query, docs);
+        // Pair (result, rerank score), sort desc, replace finalScore so the
+        // shape stays the same for downstream consumers.
+        const reranked = pool.map((r, i) => ({ ...r, finalScore: scores[i] }));
+        reranked.sort((a, b) => b.finalScore - a.finalScore);
+        // Append any pool tail items beyond rerankPoolSize so a small limit
+        // doesn't suddenly contract the result set.
+        return reranked.concat(results.slice(poolSize)).slice(0, limit);
+      } catch {
+        // Reranker failure (model load, OOM, dim mismatch) — fall back to
+        // RRF ordering. Soft-fail so a misconfigured reranker doesn't
+        // kill recall entirely.
+      }
+    }
+
     return results.slice(0, limit);
   }
 

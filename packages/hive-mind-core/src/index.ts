@@ -69,6 +69,7 @@ export {
 } from './mind/recall-context.js';
 export { resolveRelativeDate, type ResolvedDate } from './mind/resolve-relative-date.js';
 export { parseDateWindow, type DateWindow } from './mind/parse-date-window.js';
+export { createInProcessReranker, type Reranker, type InProcessRerankerConfig } from './mind/inprocess-reranker.js';
 
 // ── harvest/ — universal memory ingestion pipeline ──
 export { HarvestSourceStore } from './harvest/source-store.js';
