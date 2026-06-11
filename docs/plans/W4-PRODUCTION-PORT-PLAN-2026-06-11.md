@@ -134,6 +134,22 @@ single-session categories) per proposal §5 — guards the production-policy var
   founder ratification (smoke validated the recall path, not assembler-wide
   prompt reshaping in live LLM chats). Remaining: **W4.6 rawdetail only**
   (gated on the per-turn raw-storage decision, §6.2).
+- 2026-06-11 (W4.6 SHIPPED — **port COMPLETE, 7/7 lanes**): Marko GO on the
+  storage tradeoff (§6.2, full — no retention cap). **W4.6a** raw-turn storage
+  + RAWDETAIL lane core (`harvest/raw-turns.ts` per-turn
+  `[mind-rawturn conv:<key> turn:<n> speaker:<s>]` frames, write-time injection
+  scan per turn; `mind/raw-detail-lane.ts` window/FTS pool → CE top-6 → ±1
+  dialogue neighbors), **W4.6b** recallMemory wiring (rendered LAST as
+  '## Raw dialogue excerpts (verbatim)', CE-gated, raw turns excluded from the
+  snippet lanes, kill switch WAGGLE_RAWDETAIL=0; speaker labels PARENTHESIZED —
+  colon-suffixed role labels collide with the injection scanner's
+  chat-template-smuggling patterns), **W4.6c** writes on all 3 harvest surfaces
+  + sidecar cognify-selection fix (explicit summary-frame ids replace the
+  getRecent recency window the interleaved raw turns would have polluted).
+  Suites: hive-mind-core+agent 3353/3353, server-local 868/868; tsc
+  agent/server/hive-mind-core/memory-mcp 0. Same-session decisions ratified:
+  assembler = smoke-then-flip; §7.5 = monorepo sole source + drift check;
+  graphDistances = leave documented (§6.3 closed as leave).
 
 - 2026-06-11: Plan written from w4-port-recon workflow output.
 - 2026-06-11 (W3.4 ablation DONE): **attribution resolved — captions alone +0.26 ns;
