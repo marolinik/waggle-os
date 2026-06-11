@@ -268,6 +268,23 @@ CREATE TABLE IF NOT EXISTS harvest_sources (
   last_content_hash TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Reverse-ported from OSS hive-mind chunker (oss-drift triage D1, 2026-06-11).
+-- Memory frame chunks: paragraph-level subdivisions of memory_frames for
+-- semantic-search precision. One frame produces N chunks (N=1 for short
+-- frames). Each chunk gets its own embedding in memory_frame_chunks_vec.
+-- Recall maps top-K chunks back to parent frames via frame_id.
+CREATE TABLE IF NOT EXISTS memory_frame_chunks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  frame_id INTEGER NOT NULL REFERENCES memory_frames(id) ON DELETE CASCADE,
+  chunk_idx INTEGER NOT NULL,
+  content TEXT NOT NULL,
+  char_start INTEGER NOT NULL,
+  char_end INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(frame_id, chunk_idx)
+);
+CREATE INDEX IF NOT EXISTS idx_chunks_frame ON memory_frame_chunks (frame_id);
 `;
 
 // Reverse-ported from OSS hive-mind (oss-drift triage R7, 2026-06-11).
@@ -284,3 +301,19 @@ CREATE VIRTUAL TABLE IF NOT EXISTS memory_frames_vec USING vec0(
 
 /** Default vec schema at the canonical 1024-dim (used on first init + migrations). */
 export const VEC_TABLE_SQL = vecTableSqlForDim(1024);
+
+// Reverse-ported from OSS hive-mind chunker (oss-drift triage D1, 2026-06-11).
+/** Chunk-level vec-table DDL parameterized by embedding dimension. Separate from
+ *  vecTableSqlForDim so callers can create/recreate the chunk index independently;
+ *  MindDB.recreateVecTables(dim) recreates BOTH (frames + chunks) together. */
+export function chunksVecTableSqlForDim(dim: number): string {
+  const d = Math.trunc(dim);
+  return `
+CREATE VIRTUAL TABLE IF NOT EXISTS memory_frame_chunks_vec USING vec0(
+  embedding float[${d}]
+);
+`;
+}
+
+/** Default chunk-vec schema at the canonical 1024-dim (first init + migrations). */
+export const CHUNKS_VEC_TABLE_SQL = chunksVecTableSqlForDim(1024);

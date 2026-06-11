@@ -1,7 +1,10 @@
 import Database from 'better-sqlite3';
 import type { Database as DatabaseType } from 'better-sqlite3';
 import * as sqliteVec from 'sqlite-vec';
-import { SCHEMA_SQL, VEC_TABLE_SQL, SCHEMA_VERSION, vecTableSqlForDim } from './schema.js';
+import {
+  SCHEMA_SQL, VEC_TABLE_SQL, CHUNKS_VEC_TABLE_SQL, SCHEMA_VERSION,
+  vecTableSqlForDim, chunksVecTableSqlForDim,
+} from './schema.js';
 import { hashFrameContent } from './content-hash.js';
 
 // Reverse-ported from OSS hive-mind (oss-drift triage R7, 2026-06-11).
@@ -65,6 +68,7 @@ export class MindDB {
     if (!existing) {
       this.db.exec(SCHEMA_SQL);
       this.db.exec(VEC_TABLE_SQL);
+      this.db.exec(CHUNKS_VEC_TABLE_SQL);
       this.db.prepare(
         "INSERT INTO meta (key, value) VALUES ('schema_version', ?)"
       ).run(SCHEMA_VERSION);
@@ -196,6 +200,15 @@ export class MindDB {
     } else {
       this.db.exec(SCHEMA_SQL);
     }
+
+    // oss-drift D1 (2026-06-11): chunk-level retrieval. SCHEMA_SQL above creates
+    // memory_frame_chunks (IF NOT EXISTS); the vec0 virtual table needs its own
+    // idempotent exec because vec tables live outside SCHEMA_SQL (they require
+    // the sqlite-vec extension, loaded in the constructor). Databases that
+    // predate D1 gain an EMPTY chunk index here — vectorSearchChunks returns
+    // null on an empty index, so recall falls back to whole-frame vectors until
+    // rechunkAllFrames (or flag-gated indexFrame chunking) populates it.
+    this.db.exec(CHUNKS_VEC_TABLE_SQL);
 
     // W2.1: Add 'source' column to memory_frames (provenance tracking)
     const hasSourceCol = this.db.prepare(
@@ -350,16 +363,25 @@ export class MindDB {
   }
 
   /**
-   * DROP + CREATE the vec table at `dim` (vec0 columns can't be ALTERed) and
-   * update the stored dim. DESTRUCTIVE — existing vectors are discarded; the
-   * caller re-embeds afterward (e.g. reconcileVecIndex over all frames). This
-   * is the remediation for an EmbeddingDimMismatchError.
+   * DROP + CREATE both vec tables (memory_frames_vec + memory_frame_chunks_vec)
+   * at `dim` (vec0 columns can't be ALTERed) and update the stored dim.
+   * DESTRUCTIVE — existing vectors are discarded; the caller re-embeds
+   * afterward (e.g. reconcileVecIndex over all frames + rechunkAllFrames for
+   * chunks). This is the remediation for an EmbeddingDimMismatchError.
+   *
+   * memory_frame_chunks CONTENT rows deliberately survive (OSS behavior):
+   * they're derived text, not vectors — re-deriving them is rechunkAllFrames'
+   * job, and an empty chunks_vec makes vectorSearchChunks return no rows so
+   * stale chunk rows are inert until re-embedded.
    */
   recreateVecTables(dim: number): void {
     const d = Math.trunc(dim);
     const tx = this.db.transaction(() => {
-      this.db.exec('DROP TABLE IF EXISTS memory_frames_vec;');
+      this.db.exec(
+        'DROP TABLE IF EXISTS memory_frames_vec; DROP TABLE IF EXISTS memory_frame_chunks_vec;'
+      );
       this.db.exec(vecTableSqlForDim(d));
+      this.db.exec(chunksVecTableSqlForDim(d));
       this.setMeta('embedding_dim', String(d));
     });
     tx();

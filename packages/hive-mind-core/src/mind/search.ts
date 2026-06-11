@@ -2,6 +2,7 @@ import type { MindDB } from './db.js';
 import type { Embedder } from './embeddings.js';
 import type { MemoryFrame, Importance } from './frames.js';
 import type { Reranker } from './inprocess-reranker.js';
+import { chunkText, type ChunkOptions } from './chunker.js';
 import { createCoreLogger } from '../logger.js';
 import {
   computeRelevance,
@@ -42,6 +43,20 @@ export interface SearchResult {
 const RRF_K = 60;
 
 const log = createCoreLogger('hybrid-search');
+
+// Reverse-ported from OSS hive-mind chunker (oss-drift triage D1, 2026-06-11).
+/**
+ * Chunk-level retrieval flag — OPT-IN, default OFF (mirrors how WAGGLE_RERANKER
+ * shipped opt-in in W4.2). Gates BOTH the write side (indexFrame /
+ * indexFramesBatch also chunk-index the frame) and the read side (search()
+ * queries memory_frame_chunks_vec instead of whole-frame vectors). With the
+ * flag off, behavior is byte-identical to pre-D1. Default flip is pending a
+ * LoCoMo eval gate. `indexChunksForFrame` / `rechunkAllFrames` themselves stay
+ * callable regardless of the flag (backfill + eval need them).
+ */
+export function chunkRetrievalEnabled(): boolean {
+  return process.env.WAGGLE_CHUNK_RETRIEVAL === '1';
+}
 
 function f32ToBlob(f32: Float32Array): Uint8Array {
   return new Uint8Array(f32.buffer, f32.byteOffset, f32.byteLength);
@@ -104,9 +119,23 @@ export class HybridSearch {
     // even when in-window frames exist deeper in the lanes. Over-fetch the
     // lanes when a temporal window is active so the post-filter has depth.
     const laneFetch = (since || until) ? limit * 10 : limit * 2;
+
+    // D1 chunk lane (flag-gated, default OFF): prefer chunk-level vector
+    // search when WAGGLE_CHUNK_RETRIEVAL=1 AND chunks_vec is populated —
+    // chunk embeddings discriminate better on domain-homogeneous corpora
+    // than whole-frame embeddings. vectorSearchChunks returns null when no
+    // chunks exist, signalling clean fallback to the whole-frame path. Both
+    // paths return frame IDs so the RRF + scoring pipeline is unchanged.
+    // Flag off → chunkResults is null without touching the chunk tables,
+    // so the lane below is byte-identical to pre-D1.
+    const chunkResults = chunkRetrievalEnabled()
+      ? await this.vectorSearchChunks(query, laneFetch, gopId)
+      : null;
     const [keywordResults, vectorResults] = await Promise.all([
       this.keywordSearch(query, laneFetch, gopId),
-      this.vectorSearch(query, laneFetch, gopId),
+      chunkResults !== null
+        ? Promise.resolve(chunkResults)
+        : this.vectorSearch(query, laneFetch, gopId),
     ]);
 
     // RRF fusion
@@ -373,6 +402,20 @@ export class HybridSearch {
     raw.prepare(
       `INSERT INTO memory_frames_vec (rowid, embedding) VALUES (${id}, ?)`
     ).run(f32ToBlob(embedding));
+
+    // D1 (flag-gated, default OFF): keep the chunk index in lockstep with
+    // live frame writes. Soft-fail — a chunk-indexing error must never break
+    // the primary whole-frame write (mirrors the reranker soft-fail stance).
+    if (chunkRetrievalEnabled()) {
+      try {
+        await this.indexChunksForFrame(frameId, content);
+      } catch (err) {
+        log.warn(
+          `chunk indexing failed for frame ${id} (whole-frame vector written): ` +
+            `${err instanceof Error ? err.message : String(err)}`
+        );
+      }
+    }
   }
 
   async indexFramesBatch(frames: { id: number; content: string }[]): Promise<void> {
@@ -396,5 +439,193 @@ export class HybridSearch {
       }
     });
     insertAll();
+
+    // D1 (flag-gated, default OFF): chunk-index batch writes too, so frames
+    // ingested via the batch path (harvest) aren't invisible to the chunk
+    // lane. Soft-fail per frame — see indexFrame.
+    if (chunkRetrievalEnabled()) {
+      for (const f of frames) {
+        try {
+          await this.indexChunksForFrame(f.id, f.content);
+        } catch (err) {
+          log.warn(
+            `chunk indexing failed for frame ${Math.trunc(f.id)} (whole-frame vector written): ` +
+              `${err instanceof Error ? err.message : String(err)}`
+          );
+        }
+      }
+    }
   }
+
+  // ── Chunk-level indexing (oss-drift triage D1, 2026-06-11) ─────────────
+  // Reverse-ported from OSS hive-mind "Phase 3b-3 chunking". Whole-frame
+  // embeddings cluster too tightly on a domain-homogeneous corpus (every
+  // frame is "about the same project"), so retrieval can't discriminate.
+  // Chunking decomposes a frame into ~500-token paragraph-level pieces,
+  // each with its own embedding — search returns the chunk, we map back to
+  // the parent frame for the final result.
+  // ─────────────────────────────────────────────────────────────────────
+
+  /**
+   * Replace all chunks for a frame: clears existing chunks/vec rows for the
+   * frame, re-chunks the content, embeds each chunk, inserts both rows.
+   * Idempotent — safe to call repeatedly. Used by rechunkAllFrames and by
+   * the flag-gated indexFrame path. NOT itself gated on
+   * WAGGLE_CHUNK_RETRIEVAL (backfill + eval call it directly).
+   */
+  async indexChunksForFrame(
+    frameId: number,
+    content: string,
+    opts: ChunkOptions = {},
+  ): Promise<number> {
+    if (!Number.isFinite(frameId) || frameId <= 0) {
+      throw new Error('Invalid frame ID for chunk indexing');
+    }
+    this.ensureFingerprint();
+    const raw = this.db.getDatabase();
+    const id = Math.trunc(frameId);
+
+    const chunks = chunkText(content, opts);
+    if (chunks.length === 0) return 0;
+
+    // Embed all chunks. embedBatch amortises HTTP overhead on Ollama/API providers.
+    const texts = chunks.map((c) => c.text);
+    const embeddings = await this.embedder.embedBatch(texts);
+
+    // Single tx so partial failure leaves the frame's chunks empty
+    // (next rechunk pass will re-fill from scratch — same end state).
+    const tx = raw.transaction(() => {
+      // Find existing chunk_ids for this frame so we can drop their vec rows.
+      // Foreign-key cascade handles memory_frame_chunks deletion when the
+      // parent frame is deleted, but for re-indexing we're keeping the
+      // frame and just replacing its chunks.
+      const existing = raw
+        .prepare('SELECT id FROM memory_frame_chunks WHERE frame_id = ?')
+        .all(id) as Array<{ id: number }>;
+      for (const row of existing) {
+        // sqlite-vec rowid must be SQL literal.
+        raw.prepare(`DELETE FROM memory_frame_chunks_vec WHERE rowid = ${Math.trunc(row.id)}`).run();
+      }
+      raw.prepare('DELETE FROM memory_frame_chunks WHERE frame_id = ?').run(id);
+
+      const insertChunk = raw.prepare(
+        'INSERT INTO memory_frame_chunks (frame_id, chunk_idx, content, char_start, char_end) VALUES (?, ?, ?, ?, ?)'
+      );
+      for (let i = 0; i < chunks.length; i++) {
+        const c = chunks[i];
+        const result = insertChunk.run(id, i, c.text, c.charStart, c.charEnd);
+        const chunkId = Math.trunc(Number(result.lastInsertRowid));
+        raw
+          .prepare(`INSERT INTO memory_frame_chunks_vec (rowid, embedding) VALUES (${chunkId}, ?)`)
+          .run(f32ToBlob(embeddings[i]));
+      }
+    });
+    tx();
+    return chunks.length;
+  }
+
+  /**
+   * Vector search over chunks. Returns parent frame IDs deduped (best-chunk-
+   * per-frame wins — first-seen order under ORDER BY distance). When the
+   * chunk index is empty (or the tables are missing), returns null so callers
+   * can cleanly fall back to the whole-frame vectorSearch path.
+   */
+  async vectorSearchChunks(query: string, limit: number, gopId?: string): Promise<number[] | null> {
+    this.ensureFingerprint();
+    const raw = this.db.getDatabase();
+    // Cheap probe — avoid embedding the query when chunks aren't populated.
+    let chunkCount: number;
+    try {
+      const row = raw.prepare('SELECT COUNT(*) AS n FROM memory_frame_chunks').get() as
+        | { n: number }
+        | undefined;
+      chunkCount = row?.n ?? 0;
+    } catch {
+      return null;
+    }
+    if (chunkCount === 0) return null;
+
+    const embedding = await this.embedder.embed(query);
+    const blob = f32ToBlob(embedding);
+
+    // Over-fetch chunks (limit * 5) so dedup-to-frame still leaves enough
+    // candidates after collapsing multiple chunks of the same frame.
+    try {
+      const chunkRows = raw
+        .prepare(
+          `SELECT v.rowid AS chunk_id, c.frame_id
+             FROM memory_frame_chunks_vec v
+             JOIN memory_frame_chunks c ON c.id = v.rowid
+            WHERE v.embedding MATCH ? AND k = ?
+            ORDER BY distance`
+        )
+        .all(blob, Math.max(limit * 5, 25)) as Array<{ chunk_id: number; frame_id: number }>;
+
+      if (chunkRows.length === 0) return [];
+
+      // Dedup by frame_id, preserving first-seen order (best-distance chunk).
+      const seen = new Set<number>();
+      const frameIds: number[] = [];
+      for (const r of chunkRows) {
+        if (seen.has(r.frame_id)) continue;
+        seen.add(r.frame_id);
+        frameIds.push(r.frame_id);
+        if (frameIds.length >= limit) break;
+      }
+
+      if (gopId) {
+        const placeholders = frameIds.map(() => '?').join(',');
+        const filtered = raw
+          .prepare(
+            `SELECT id FROM memory_frames WHERE id IN (${placeholders}) AND gop_id = ?`
+          )
+          .all(...frameIds, gopId) as { id: number }[];
+        return filtered.map((r) => r.id).slice(0, limit);
+      }
+      return frameIds;
+    } catch {
+      return null;
+    }
+  }
+}
+
+// Reverse-ported from OSS hive-mind chunker (oss-drift triage D1, 2026-06-11);
+// follows the OSS `maintenance --rechunk-all` per-mind logic.
+export interface RechunkResult {
+  framesProcessed: number;
+  chunksCreated: number;
+  framesFailed: number;
+}
+
+/**
+ * (Re)chunk + chunk-index every non-deprecated frame in the .mind. Idempotent
+ * per-frame — indexChunksForFrame deletes a frame's existing chunks before
+ * re-inserting. One bad frame doesn't abort the batch (logged + counted).
+ * Backfill/eval helper only — no CLI/route wiring yet, and NOT gated on
+ * WAGGLE_CHUNK_RETRIEVAL (it must be runnable before any flag flip).
+ */
+export async function rechunkAllFrames(db: MindDB, search: HybridSearch): Promise<RechunkResult> {
+  const raw = db.getDatabase();
+  const frames = raw
+    .prepare("SELECT id, content FROM memory_frames WHERE importance != 'deprecated' ORDER BY id ASC")
+    .all() as Array<{ id: number; content: string }>;
+
+  let framesProcessed = 0;
+  let chunksCreated = 0;
+  let framesFailed = 0;
+
+  for (const f of frames) {
+    try {
+      const n = await search.indexChunksForFrame(f.id, f.content);
+      framesProcessed++;
+      chunksCreated += n;
+    } catch (err) {
+      framesFailed++;
+      log.warn(
+        `rechunkAllFrames: frame ${f.id} failed: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  }
+
+  return { framesProcessed, chunksCreated, framesFailed };
 }

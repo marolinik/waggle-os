@@ -26,8 +26,12 @@ export {
   type MemoryFrame, type FrameType, type Importance, type FrameSource,
   SessionStore, type Session,
   HybridSearch, type SearchResult,
+  // D1 (oss-drift triage, 2026-06-11) — chunk-level retrieval (flag-gated, default OFF)
+  chunkRetrievalEnabled, rechunkAllFrames, type RechunkResult,
+  chunkText, type ChunkOptions, type FrameChunk,
   KnowledgeGraph, type Entity, type Relation, type ValidationSchema,
-  SCHEMA_SQL, VEC_TABLE_SQL, SCHEMA_VERSION, vecTableSqlForDim,
+  SCHEMA_SQL, VEC_TABLE_SQL, CHUNKS_VEC_TABLE_SQL, SCHEMA_VERSION,
+  vecTableSqlForDim, chunksVecTableSqlForDim,
   computeRelevance,
   computeTemporalScore,
   computePopularityScore,

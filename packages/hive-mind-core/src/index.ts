@@ -20,9 +20,17 @@ export { AwarenessLayer, type AwarenessItem, type AwarenessCategory } from './mi
 export { FrameStore, stripHmPrefix, type MemoryFrame, type FrameType, type Importance, type FrameSource } from './mind/frames.js';
 export { hashFrameContent } from './mind/content-hash.js';
 export { SessionStore, type Session } from './mind/sessions.js';
-export { HybridSearch, type SearchResult } from './mind/search.js';
+export {
+  HybridSearch, type SearchResult,
+  // D1 (oss-drift triage, 2026-06-11) — chunk-level retrieval (flag-gated, default OFF)
+  chunkRetrievalEnabled, rechunkAllFrames, type RechunkResult,
+} from './mind/search.js';
+export { chunkText, type ChunkOptions, type FrameChunk } from './mind/chunker.js';
 export { KnowledgeGraph, type Entity, type Relation, type ValidationSchema } from './mind/knowledge.js';
-export { SCHEMA_SQL, VEC_TABLE_SQL, SCHEMA_VERSION, vecTableSqlForDim } from './mind/schema.js';
+export {
+  SCHEMA_SQL, VEC_TABLE_SQL, CHUNKS_VEC_TABLE_SQL, SCHEMA_VERSION,
+  vecTableSqlForDim, chunksVecTableSqlForDim,
+} from './mind/schema.js';
 export {
   computeRelevance,
   computeTemporalScore,

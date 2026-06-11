@@ -39,13 +39,13 @@ extract-memory-lanes, multi-mind, proprietary-excluded evolution/traces/signals)
 | R6 | claude-adapter.ts | 2026-04-22 Claude export streams: `memories` (conversations_memory + project_memories) + `design_chats[]` + enriched project-doc parsing — mono silently drops two whole export streams. | M | PORTED |
 | R7 | db.ts | Embedding-fingerprint guard (`ensureEmbeddingFingerprint` + `EmbeddingDimMismatchError` + `recreateVecTables`) — refuses loudly on dim mismatch; mono has zero protection against mixed-dim vector corruption. | M | PORTED |
 
-### DEFERRED — need founder decision / eval gate
+### D-items — founder GO 2026-06-11 ("do all 3"), ALL PORTED same session
 
-| # | What | Why deferred |
+| # | What | Status |
 |---|---|---|
-| D1 | **Chunk-level retrieval stack** (chunker.ts + memory_frame_chunks(+_vec) schema + indexChunksForFrame + HybridSearch chunk lane + backfill) | Same class as the reranker: measurable OSS-ahead retrieval improvement, but a multi-file wave that should be **A/B-gated on LoCoMo/recall** before default-on. Recommend: own W-phase. |
-| D2 | **llm-extractor.ts KG entity extraction** (LLM replaces the regex extractor mono cognify still uses) | Port the prompt/parser/batch core but REPLACE executors ('cc' subprocess + raw Anthropic POST) with mono's LLM routing; needs a where-does-it-run decision (cognify write path vs cron). |
-| D3 | content_hash indexed dedup column (frames/schema/db) | Mono's hash semantics are deliberately different (stripHmPrefix-aware); bounded 500-row scan is fine at current scale. Adopt the **column pattern with mono semantics** only when scale demands. |
+| D1 | **Chunk-level retrieval stack** — chunker.ts + `memory_frame_chunks`(+`_vec`, dim-parameterized) schema + `indexChunksForFrame` + chunk-vec lane in HybridSearch (over-fetch ×5, best-chunk-per-frame dedup, clean fallback to whole-frame vectors) + `rechunkAllFrames` backfill. | PORTED — **opt-in `WAGGLE_CHUNK_RETRIEVAL=1`, default OFF**: the default flip stays gated on a LoCoMo/recall A/B (reranker precedent). Flag-off behavior regression-locked byte-identical. recreateVecTables covers both vec tables. |
+| D2 | **LLM KG entity extraction** (replaces the capitalized-n-gram regex as the KG quality path) | PORTED — prompt/parser/batching from OSS llm-extractor; executors rehomed onto `LLMCallFn` 'fast'. Runs in the daily memory-lane cron AFTER the lane pass, same frame window + shared watermark. Writes dedup via `findEntityByName` (R2) + filter via `isNoiseName` (R3); injection-scanned. |
+| D3 | content_hash indexed dedup column | PORTED — **with MONO semantics** (sha256 over `stripHmPrefix(content).trim()`, content-hash.ts): the OSS trim-only hash would have regressed OQ-6 provenance-insensitive dedup. `findDuplicate` now O(1) indexed, NO recency window (old LIMIT-500 scan silently missed older dups). Idempotent migration + backfill. |
 
 ### Forward-port queue (mono → OSS, next re-split)
 W4 arc (all of it), scoring created_at fix, since/until fencepost fixes,
@@ -56,4 +56,8 @@ HARVEST_FRAME_CONTENT_CAP, harvestSetHash. Note: mono adapters depend on
 ## Execution record
 - 2026-06-11: triage run (4 parallel agents over monorepo HEAD vs oss origin/master).
 - 2026-06-11: R1-R7 reverse-ported (see commits on main).
-- D1/D2/D3 + re-split timing → Marko.
+- 2026-06-11 (later): founder GO "do all 3" → D1+D2+D3 ported same session
+  (3 implementation agents + direct work; D1 flag-gated default-OFF).
+- **Still open:** D1 default-flip eval gate (LoCoMo/recall A/B with
+  WAGGLE_CHUNK_RETRIEVAL=1 + rechunkAllFrames backfill); re-split timing
+  (mirror now strictly behind — forward-port queue above).
