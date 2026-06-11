@@ -425,14 +425,15 @@ export class Orchestrator {
    * pre-PromptAssembler implementation (profile='balanced', no score floor).
    */
   /**
-   * W4.2: lazy cross-encoder reranker. Opt-in via WAGGLE_RERANKER=1 (flag-off
-   * default until the W4.5 live smoke — first use downloads the ~22MB ONNX
-   * model). Creation failure memoizes undefined: recall soft-fails to
-   * RRF-only ordering, never throws.
+   * W4.2/W4.5: lazy cross-encoder reranker — DEFAULT ON since the W4.5 live
+   * smoke (real ONNX load + 58-83ms warm recalls verified through the real
+   * server). Kill switch: WAGGLE_RERANKER=0. First use downloads the ~22MB
+   * model (cached at ~/.hive-mind/models); creation failure (offline, OOM)
+   * memoizes undefined: recall soft-fails to RRF-only ordering, never throws.
    */
   private getReranker(): Promise<Reranker | undefined> {
     if (this.rerankerPromise) return this.rerankerPromise;
-    if (process.env['WAGGLE_RERANKER'] !== '1') {
+    if (process.env['WAGGLE_RERANKER'] === '0') {
       this.rerankerPromise = Promise.resolve(undefined);
       return this.rerankerPromise;
     }

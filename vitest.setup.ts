@@ -14,6 +14,14 @@ if (!process.env.WAGGLE_PHASE5_CANARY_PCT) {
   process.env.WAGGLE_PHASE5_CANARY_PCT = '0';
 }
 
+// W4.5: the cross-encoder reranker is default-ON in production (kill switch
+// WAGGLE_RERANKER=0). Tests pin it OFF — the real ONNX model is a ~22MB
+// download + per-call CPU inference, both unwanted in unit suites. Tests
+// that exercise reranking inject a mock Reranker via OrchestratorConfig.
+if (!process.env.WAGGLE_RERANKER) {
+  process.env.WAGGLE_RERANKER = '0';
+}
+
 // D1: the local sidecar now requires a bearer token even on loopback in production
 // (no localhost-trust). The broad server suite predates this and uses raw inject()
 // without tokens, so default tests to localhost-trust mode. Production keeps the

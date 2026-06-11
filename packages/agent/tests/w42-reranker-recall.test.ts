@@ -55,8 +55,8 @@ describe('W4.2 — recallMemory reranker wiring', () => {
     if (standupIdx > -1) expect(fridayIdx).toBeLessThan(standupIdx);
   });
 
-  it('does not create a reranker when flag is off and none injected', async () => {
-    delete process.env['WAGGLE_RERANKER'];
+  it('does not create a reranker when the kill switch is set and none injected', async () => {
+    process.env['WAGGLE_RERANKER'] = '0'; // kill switch (also pinned in vitest.setup)
     const orchestrator = new Orchestrator({ db, embedder: new MockEmbedder() });
     await orchestrator.executeTool('save_memory', {
       content: 'User preference: weekly report goes out on Fridays',
