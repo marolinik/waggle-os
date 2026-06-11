@@ -34,6 +34,7 @@ import { useNotifications } from '@/hooks/useNotifications';
 import { useOnboarding } from '@/hooks/useOnboarding';
 import { useOfflineStatus } from '@/hooks/useOfflineStatus';
 import { useOverlayState } from '@/hooks/useOverlayState';
+import { useRevalidateOnError } from '@/hooks/useRevalidateOnError';
 
 type WorkspacesBundle = ReturnType<typeof useWorkspaces>;
 type AgentStatusBundle = ReturnType<typeof useAgentStatus>;
@@ -58,6 +59,11 @@ export interface ShellContextValue {
   // ── Tier (Desktop.tsx:129, 141-158) ──
   currentTier: UserTier;
   billingTier: BillingTier;
+  /** P1b D3-4: false until a getTier() round-trip SUCCEEDS. While false,
+   *  billingTier's 'FREE' default is a fail-closed capability gate (nav
+   *  hiding) — it must never be rendered as the user's actual plan. */
+  tierResolved: boolean;
+  tierError: string | null;
   trialInfo: TrialInfo;
   refreshTier: () => Promise<void>;
   showTrialExpired: boolean;
@@ -105,9 +111,17 @@ export const ShellProvider = ({ children }: { children: ReactNode }) => {
   // Trial info from backend (relocated from Desktop.tsx:141-158)
   const [trialInfo, setTrialInfo] = useState<TrialInfo>({});
   const [billingTier, setBillingTier] = useState<BillingTier>('FREE');
+  const [tierResolved, setTierResolved] = useState(false);
+  const [tierError, setTierError] = useState<string | null>(null);
   const [showTrialExpired, setShowTrialExpired] = useState(false);
   // Extracted so post-action paths (start-trial, post-checkout-redirect)
   // can re-pull tier/trial state without duplicating the fetch+parse logic.
+  // P1b D3-4: getTier now THROWS on HTTP failure (adapter chokepoint), so the
+  // catch is the single failure path — it must touch NEITHER billingTier NOR
+  // trialInfo (a failed refresh used to actively reset a paying user to FREE
+  // and wipe the trial countdown). tierResolved flips true on ANY successful
+  // round-trip, even an unrecognized tier string — resolution is about the
+  // server answering, not the value parsing.
   const refreshTier = useCallback(async () => {
     try {
       const data = await adapter.getTier();
@@ -116,10 +130,17 @@ export const ShellProvider = ({ children }: { children: ReactNode }) => {
       if (t === 'FREE' || t === 'TRIAL' || t === 'PRO' || t === 'TEAMS' || t === 'ENTERPRISE') {
         setBillingTier(t);
       }
+      setTierResolved(true);
+      setTierError(null);
       if (data.trialExpired) setShowTrialExpired(true);
-    } catch { /* offline — keep last known state */ }
+    } catch (e) {
+      setTierError(e instanceof Error ? e.message : 'Tier lookup failed');
+    }
   }, []);
   useEffect(() => { refreshTier(); }, [refreshTier]);
+  // D3 plus-clause: an errored tier revalidates on focus/visibility/online
+  // and on connect-settled (the only signal on an already-focused desktop).
+  useRevalidateOnError(tierError !== null, refreshTier);
 
   // P4: default autonomy inherited by new chat widgets (relocated from
   // Desktop.tsx:160-167). Fetched once on mount; SettingsApp writes via
@@ -140,7 +161,7 @@ export const ShellProvider = ({ children }: { children: ReactNode }) => {
     <ShellContext.Provider value={{
       workspaces, activeWorkspace, activeWorkspaceId,
       selectWorkspace, createWorkspace, patchWorkspace, refreshWorkspaces,
-      currentTier, billingTier, trialInfo, refreshTier, showTrialExpired, setShowTrialExpired,
+      currentTier, billingTier, tierResolved, tierError, trialInfo, refreshTier, showTrialExpired, setShowTrialExpired,
       defaultAutonomy,
       notifications, unreadCount, markRead, markAllRead,
       onboardingState, updateOnboarding, completeOnboarding,

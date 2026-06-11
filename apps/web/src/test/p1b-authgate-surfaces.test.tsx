@@ -1,0 +1,224 @@
+/**
+ * P1b D3 — Stage B boot-path surface contracts over a mocked adapter:
+ *
+ *  - ShellContext tier: a failed getTier touches NEITHER billingTier NOR
+ *    trialInfo (the severity-critical silent-FREE class), tierResolved stays
+ *    false, and the tier revalidates on connect-settled.
+ *  - useBilling: failure keeps tierResolved=false (Billing tab renders the
+ *    unresolved state, never 'FREE' as fact).
+ *  - useWorkspaces: failure sets the (previously dead) error channel, keeps
+ *    a previously-good list, and recovers on connect-settled.
+ *  - useChat: a thrown AdapterHttpError-shaped failure renders a status-true
+ *    error block ('Backend is offline' reserved for network errors); the
+ *    tier-403 copy defers to the UpgradeModal; empty-messages race guarded.
+ */
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { renderHook, act, waitFor, cleanup } from '@testing-library/react';
+import { CONNECT_SETTLED_EVENT } from '@/hooks/useRevalidateOnError';
+
+const mocks = vi.hoisted(() => ({
+  adapter: {
+    connect: vi.fn().mockResolvedValue(undefined),
+    getTier: vi.fn(),
+    getWorkspaces: vi.fn(),
+    getPermissions: vi.fn().mockResolvedValue({ defaultAutonomy: 'normal', externalGates: {} }),
+    getAgentStatus: vi.fn().mockResolvedValue({ active: 0, agents: [] }),
+    getNotificationHistory: vi.fn().mockResolvedValue([]),
+    subscribeNotifications: vi.fn().mockReturnValue(() => {}),
+    getSystemHealth: vi.fn().mockResolvedValue({ status: 'ok' }),
+    getHistory: vi.fn().mockResolvedValue([]),
+    sendMessage: vi.fn(),
+    getSessions: vi.fn().mockResolvedValue([]),
+    getIdentity: vi.fn(),
+    searchMemory: vi.fn(),
+    getMemoryStats: vi.fn(),
+  },
+}));
+vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
+
+/** AdapterHttpError stand-in — the real class is mocked away with the module,
+ *  so consumers must duck-type on error.name (that is part of the contract). */
+function httpError(status: number, body: unknown, message: string) {
+  const e = new Error(message) as Error & { status: number; body: unknown };
+  e.name = 'AdapterHttpError';
+  e.status = status;
+  e.body = body;
+  return e;
+}
+
+const settleConnect = () =>
+  act(() => { window.dispatchEvent(new CustomEvent(CONNECT_SETTLED_EVENT, { detail: { connected: true } })); });
+
+afterEach(() => { cleanup(); vi.clearAllMocks(); });
+
+// ── useWorkspaces ──────────────────────────────────────────────────────────
+
+describe('useWorkspaces (P1b)', () => {
+  it('failure sets the error channel and keeps the previous list; connect-settled recovers', async () => {
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    mocks.adapter.getWorkspaces.mockResolvedValueOnce([{ id: 'w1', name: 'Alpha' }]);
+    const { result } = renderHook(() => useWorkspaces());
+    await waitFor(() => expect(result.current.workspaces).toHaveLength(1));
+
+    mocks.adapter.getWorkspaces.mockRejectedValueOnce(httpError(401, { code: 'INVALID_TOKEN' }, 'Unauthorized'));
+    await act(async () => { await result.current.refresh(); });
+    expect(result.current.error).toBe('Unauthorized');
+    expect(result.current.workspaces).toHaveLength(1); // previous list preserved
+
+    mocks.adapter.getWorkspaces.mockResolvedValueOnce([{ id: 'w1', name: 'Alpha' }, { id: 'w2', name: 'Beta' }]);
+    settleConnect();
+    await waitFor(() => expect(result.current.workspaces).toHaveLength(2));
+    expect(result.current.error).toBeNull();
+  });
+});
+
+// ── useBilling ─────────────────────────────────────────────────────────────
+
+describe('useBilling (P1b D3-4)', () => {
+  it('failure keeps tierResolved=false and surfaces the error — FREE default is never presented as fact', async () => {
+    const { useBilling } = await import('@/hooks/useBilling');
+    mocks.adapter.getTier.mockRejectedValue(httpError(401, {}, 'Unauthorized'));
+    const { result } = renderHook(() => useBilling());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.tierResolved).toBe(false);
+    expect(result.current.error).toBe('Unauthorized');
+  });
+
+  it('connect-settled revalidates an unresolved tier to the real plan', async () => {
+    const { useBilling } = await import('@/hooks/useBilling');
+    mocks.adapter.getTier.mockRejectedValueOnce(httpError(401, {}, 'Unauthorized'));
+    const { result } = renderHook(() => useBilling());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.tierResolved).toBe(false);
+
+    mocks.adapter.getTier.mockResolvedValue({ tier: 'PRO', capabilities: {}, usage: {} });
+    settleConnect();
+    await waitFor(() => expect(result.current.tierResolved).toBe(true));
+    expect(result.current.tier).toBe('PRO');
+  });
+});
+
+// ── ShellContext tier (the severity-critical silent-FREE class) ────────────
+
+describe('ShellContext tier (P1b D3-4)', () => {
+  async function renderShell() {
+    const { ShellProvider, useShell } = await import('@/providers/ShellContext');
+    const wrapper = ({ children }: { children: React.ReactNode }) => <ShellProvider>{children}</ShellProvider>;
+    return renderHook(() => useShell(), { wrapper });
+  }
+
+  it('failed getTier touches neither billingTier nor trialInfo; tierResolved stays false', async () => {
+    mocks.adapter.getWorkspaces.mockResolvedValue([]);
+    mocks.adapter.getTier.mockRejectedValue(httpError(401, { code: 'MISSING_TOKEN' }, 'Unauthorized'));
+    const { result } = await renderShell();
+    await waitFor(() => expect(result.current.tierError).toBe('Unauthorized'));
+    expect(result.current.billingTier).toBe('FREE'); // fail-closed capability default…
+    expect(result.current.tierResolved).toBe(false); // …never presented as resolved fact
+    expect(result.current.trialInfo).toEqual({});    // trial countdown not clobbered
+    expect(result.current.showTrialExpired).toBe(false);
+  });
+
+  it('a paying user is not reset to FREE by a transient failure, and recovers on connect-settled', async () => {
+    mocks.adapter.getWorkspaces.mockResolvedValue([]);
+    mocks.adapter.getTier.mockResolvedValueOnce({
+      tier: 'PRO', trialDaysRemaining: undefined, trialExpired: false, capabilities: {}, usage: {},
+    });
+    const { result } = await renderShell();
+    await waitFor(() => expect(result.current.billingTier).toBe('PRO'));
+    expect(result.current.tierResolved).toBe(true);
+
+    // Transient failure (e.g. sidecar restart mid-refresh): state must hold.
+    mocks.adapter.getTier.mockRejectedValueOnce(httpError(401, {}, 'Unauthorized'));
+    await act(async () => { await result.current.refreshTier(); });
+    expect(result.current.billingTier).toBe('PRO');
+    expect(result.current.tierError).toBe('Unauthorized');
+
+    // Recovery: connect-settled revalidates while errored.
+    mocks.adapter.getTier.mockResolvedValue({ tier: 'PRO', capabilities: {}, usage: {} });
+    settleConnect();
+    await waitFor(() => expect(result.current.tierError).toBeNull());
+  });
+});
+
+// ── LoginBriefing failure ≠ Day-0 ──────────────────────────────────────────
+
+describe('LoginBriefing (P1b)', () => {
+  async function renderBriefing() {
+    const { default: LoginBriefing } = await import('@/components/os/overlays/LoginBriefing');
+    const { ServiceProvider } = await import('@/providers/ServiceProvider');
+    const { TooltipProvider } = await import('@/components/ui/tooltip');
+    const { render, screen } = await import('@testing-library/react');
+    render(
+      <TooltipProvider>
+        <ServiceProvider>
+          <LoginBriefing onDismiss={() => {}} onOpenWorkspace={() => {}} />
+        </ServiceProvider>
+      </TooltipProvider>,
+    );
+    return screen;
+  }
+
+  it('batch failure renders the error state, NOT the Day-0 demo bubbles', async () => {
+    mocks.adapter.getIdentity.mockRejectedValue(new Error('no identity'));
+    mocks.adapter.searchMemory.mockRejectedValue(httpError(401, {}, 'Unauthorized'));
+    mocks.adapter.getMemoryStats.mockRejectedValue(httpError(401, {}, 'Unauthorized'));
+    mocks.adapter.getWorkspaces.mockRejectedValue(httpError(401, { code: 'MISSING_TOKEN' }, 'Unauthorized'));
+    const screen = await renderBriefing();
+    await waitFor(() => expect(screen.getByTestId('login-briefing-error')).toBeInTheDocument());
+    expect(screen.queryByTestId('login-briefing-empty-hook')).toBeNull();
+    expect(screen.getByTestId('login-briefing-brag-line').textContent).toContain('Briefing unavailable');
+    // Generous budget: full framer-motion render under parallel suite load.
+  }, 15000);
+
+  it('a genuinely empty (Day-0) account still gets the demo bubbles', async () => {
+    mocks.adapter.getIdentity.mockResolvedValue(null);
+    mocks.adapter.searchMemory.mockResolvedValue([]);
+    mocks.adapter.getMemoryStats.mockResolvedValue(null);
+    mocks.adapter.getWorkspaces.mockResolvedValue([]);
+    const screen = await renderBriefing();
+    await waitFor(() => expect(screen.getByTestId('login-briefing-empty-hook')).toBeInTheDocument());
+    expect(screen.queryByTestId('login-briefing-error')).toBeNull();
+  }, 15000);
+});
+
+// ── useChat catch semantics ────────────────────────────────────────────────
+
+describe('useChat error surfacing (P1b)', () => {
+  beforeEach(() => {
+    mocks.adapter.getHistory.mockResolvedValue([]);
+  });
+
+  async function sendFailing(err: unknown) {
+    const { useChat } = await import('@/hooks/useChat');
+    mocks.adapter.sendMessage.mockImplementation(async function* (): AsyncGenerator<never> {
+      throw err;
+      // eslint-disable-next-line no-unreachable
+      yield undefined as never;
+    });
+    const { result } = renderHook(() => useChat({ workspaceId: 'ws-1', sessionId: 'sess-1' }));
+    // Let the mount-time history fetch settle first — it resolves to [] and
+    // would otherwise clobber the messages pushed by sendMessage.
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => { await result.current.sendMessage('hello'); });
+    return result;
+  }
+
+  it('HTTP failure renders a status-true error block, not the offline lie', async () => {
+    const result = await sendFailing(httpError(500, { error: 'boom' }, 'boom'));
+    const last = result.current.messages[result.current.messages.length - 1];
+    const errBlock = last.blocks?.find(b => b.type === 'error') as { message?: string } | undefined;
+    expect(errBlock?.message).toBe('Chat request failed (500): boom');
+  });
+
+  it('tier-403 copy defers to the UpgradeModal instead of duplicating the upsell', async () => {
+    const result = await sendFailing(httpError(403, { error: 'TIER_INSUFFICIENT', required: 'PRO' }, 'Needs PRO'));
+    const last = result.current.messages[result.current.messages.length - 1];
+    expect(last.content).toBe('This action needs a higher plan — see the upgrade window.');
+  });
+
+  it('network failure keeps the Backend-is-offline copy', async () => {
+    const result = await sendFailing(new TypeError('fetch failed'));
+    const last = result.current.messages[result.current.messages.length - 1];
+    expect(last.content).toBe('Backend is offline. Connect to a Waggle server to start chatting.');
+  });
+});

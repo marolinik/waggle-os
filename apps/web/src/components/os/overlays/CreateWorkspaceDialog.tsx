@@ -662,7 +662,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
       adapter.getConnectors().catch(() => [] as ConnectorDefinition[]),
       adapter.getAgentGroups().catch(() => [] as unknown[]),
     ]).then(([tmplData, connData, groupsData]) => {
-      setTemplates(tmplData.templates);
+      setTemplates(tmplData.templates ?? []);
       setConnectors(connData);
       setAgentGroups((groupsData as AgentGroupOption[]).map(g => ({
         id: g.id, name: g.name, description: g.description,

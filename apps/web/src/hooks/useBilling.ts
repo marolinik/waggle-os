@@ -8,9 +8,14 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { adapter } from '@/lib/adapter';
+import { useRevalidateOnError } from '@/hooks/useRevalidateOnError';
 
 export interface BillingState {
   tier: string;
+  /** P1b D3-4: false until a getTier() round-trip succeeds. While false the
+   *  default 'FREE' is a placeholder, NOT the user's plan — billing surfaces
+   *  must render an unresolved state instead of the FREE card + upgrade grid. */
+  tierResolved: boolean;
   loading: boolean;
   error: string | null;
   syncing: boolean;
@@ -19,6 +24,7 @@ export interface BillingState {
 export function useBilling() {
   const [state, setState] = useState<BillingState>({
     tier: 'FREE',
+    tierResolved: false,
     loading: true,
     error: null,
     syncing: false,
@@ -28,11 +34,16 @@ export function useBilling() {
   const refreshTier = useCallback(async () => {
     try {
       const data = await adapter.getTier();
-      setState((prev) => ({ ...prev, tier: data.tier, loading: false, error: null }));
-    } catch {
-      setState((prev) => ({ ...prev, loading: false }));
+      setState((prev) => ({ ...prev, tier: data.tier, tierResolved: true, loading: false, error: null }));
+    } catch (err) {
+      // P1b D3-4: keep the previous tier (never present the 'FREE' default as
+      // fact) and surface the failure so the Billing tab can render it.
+      const message = err instanceof Error ? err.message : 'Tier lookup failed';
+      setState((prev) => ({ ...prev, loading: false, error: prev.tierResolved ? prev.error : message }));
     }
   }, []);
+  // D3 plus-clause: revalidate an unresolved tier on focus/online/connect-settled.
+  useRevalidateOnError(!state.tierResolved && !state.loading, refreshTier);
 
   /** Call after Stripe checkout redirect to confirm payment and update tier. */
   const syncAfterCheckout = useCallback(async (sessionId: string) => {
@@ -42,6 +53,7 @@ export function useBilling() {
       setState((prev) => ({
         ...prev,
         tier: result.tier,
+        tierResolved: true,
         syncing: false,
         error: null,
       }));

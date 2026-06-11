@@ -262,16 +262,32 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
         });
       }
     } catch (e) {
+      // P1b D3: sendMessage now THROWS AdapterHttpError on HTTP failure (it
+      // used to parse the error body as an empty SSE stream — silent dead
+      // chat). 'Backend is offline' is reserved for genuine network failures;
+      // a tier 403 already opened the UpgradeModal via the adapter's global
+      // dispatch, so its inline copy points there instead of duplicating the
+      // upsell. Duck-typed on error.name (NOT instanceof an imported class) so
+      // component tests that vi.mock('@/lib/adapter') wholesale stay decoupled.
+      const httpErr = e instanceof Error && e.name === 'AdapterHttpError'
+        ? (e as Error & { status?: number; body?: unknown })
+        : null;
+      const isTier403 = (httpErr?.body as { error?: string } | undefined)?.error === 'TIER_INSUFFICIENT';
+      const message = isTier403
+        ? 'This action needs a higher plan — see the upgrade window.'
+        : httpErr
+          ? `Chat request failed (${httpErr.status}): ${httpErr.message}`
+          : 'Backend is offline. Connect to a Waggle server to start chatting.';
       setMessages(prev => {
         const msgs = [...prev];
         const last = msgs[msgs.length - 1];
-        if (last.role === 'assistant') {
-          const blocks = [...(last.blocks || []), { type: 'error' as const, blockId: nextBlockId('error'), message: 'Backend is offline. Connect to a Waggle server to start chatting.' }];
-          return msgs.map((m, i) =>
-            i === msgs.length - 1 ? { ...m, blocks, content: 'Backend is offline.' } : m
-          );
-        }
-        return msgs;
+        // Same empty-array guard as the stream updater: a session/workspace
+        // switch mid-flight resets messages to [].
+        if (!last || last.role !== 'assistant') return msgs;
+        const blocks = [...(last.blocks || []), { type: 'error' as const, blockId: nextBlockId('error'), message }];
+        return msgs.map((m, i) =>
+          i === msgs.length - 1 ? { ...m, blocks, content: message } : m
+        );
       });
     } finally {
       setIsLoading(false);
