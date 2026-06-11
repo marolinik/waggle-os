@@ -60,6 +60,7 @@ export {
   // recall-context — temporal rendering helpers (W4.1 production port)
   TEMPORAL_GUIDANCE, toDatePrefix, renderDatedSnippet, referenceDate, renderReferenceDateLine,
   parseDateWindow, type DateWindow,
+  resolveRelativeDate, type ResolvedDate,
   createInProcessReranker, type Reranker, type InProcessRerankerConfig,
   // harvest/ — universal memory ingestion pipeline
   HarvestSourceStore,

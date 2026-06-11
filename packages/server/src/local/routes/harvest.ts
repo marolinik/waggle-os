@@ -17,7 +17,7 @@ import {
   HarvestSourceStore, HarvestRunStore, ChatGPTAdapter, ClaudeAdapter,
   ClaudeCodeAdapter, GeminiAdapter, UniversalAdapter, harvestSetHash,
   type ImportSourceType, type UniversalImportItem,
-  type SourceAdapter, type FilesystemAdapter,
+  type SourceAdapter, type FilesystemAdapter, resolveRelativeDate,
 } from '@waggle/core';
 import { loadProfile, saveProfile, type IdentitySuggestion } from './profile.js';
 import { importItemTypeToMemoryKind, harvestConfidence } from './harvest-classify.js';
@@ -427,6 +427,16 @@ export async function harvestRoutes(fastify: FastifyInstance) {
         // adapter source + item id for diagnostic trace.
         const providedTimestamp = typeof item.timestamp === 'string' ? item.timestamp : undefined;
         const useProvidedTs = providedTimestamp !== undefined && isIsoTimestamp(providedTimestamp);
+        // W4.3c (ingest unification): write-time temporal anchoring — the
+        // frame's created_at should reflect WHEN the event happened, not the
+        // export/ingest timestamp. If the content carries a relative cue
+        // ("yesterday", "last week"), resolve it against the source date to
+        // the true event date. Same contract as the hive-mind-mcp-server
+        // harvest path (commit 09a040d); benchmark-validated (LoCoMo P4).
+        const resolvedEvent = useProvidedTs ? resolveRelativeDate(content, providedTimestamp) : null;
+        const effectiveTimestamp = resolvedEvent
+          ? `${resolvedEvent.iso}T00:00:00Z`
+          : (useProvidedTs ? providedTimestamp : null);
         if (!useProvidedTs) {
           timestampFallbacks++;
           request.log.warn(
@@ -439,7 +449,7 @@ export async function harvestRoutes(fastify: FastifyInstance) {
           `${label}\n\n${content}`,
           'normal',
           'import',
-          useProvidedTs ? providedTimestamp : null,
+          effectiveTimestamp,
         );
         // Phase 2B.3 (C33 + B2 + B6): stamp classification so the imported frame
         // lands as 'unreviewed' with a heuristic confidence + canonical kind,

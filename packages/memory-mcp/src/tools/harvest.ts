@@ -15,6 +15,7 @@ import {
   getPersonalDb,
   getAdapter,
 } from '../core/setup.js';
+import { resolveRelativeDate } from '@waggle/core';
 
 export function registerHarvestTools(server: McpServer): void {
 
@@ -107,12 +108,21 @@ export function registerHarvestTools(server: McpServer): void {
           ? `[${item.source}] ${item.title}: ${item.content.slice(0, 2000)}`
           : `[${item.source}] ${item.content.slice(0, 2000)}`;
 
+        // W4.3c (ingest unification): this legacy duplicate previously passed NO
+        // timestamp at all — every imported frame got datetime('now'), neither
+        // source nor event date (twin-drift vs hive-mind-mcp-server). Anchor on
+        // the source timestamp and resolve relative cues to the true event date,
+        // same contract as the canonical MCP harvest path (commit 09a040d).
+        const resolved = resolveRelativeDate(content, item.timestamp);
+        const createdAt = resolved ? `${resolved.iso}T00:00:00Z` : (item.timestamp || undefined);
+
         // createIFrame handles dedup internally — returns existing frame if content matches
         const frame = frameStore.createIFrame(
           session.gop_id,
           content,
           'normal',
           'import',
+          createdAt,
         );
 
         // Frames created during this batch have id > maxBefore.
