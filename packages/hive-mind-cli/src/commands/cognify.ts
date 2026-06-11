@@ -83,11 +83,14 @@ export async function runCognify(options: CognifyOptions = {}): Promise<CognifyR
         const normalized = normalizeEntityName(name);
         if (normalized.length < 3) continue;
 
-        // Dedup by exact normalized match — we conservatively classify everything
+        // Dedup by exact name match — we conservatively classify everything
         // as 'concept' because the heuristic can't tell person from org reliably.
-        const existing = env.kg
-          .searchEntities(name, 3)
-          .find((e) => normalizeEntityName(e.name) === normalized);
+        // Previously used searchEntities(name, 3), a LIKE '%name%' fuzzy search —
+        // once enough entities share a common substring, the exact match drops
+        // out of top-3 and dedup silently fails (runaway duplicate rows).
+        // findEntityByName is the indexed exact-name lookup.
+        // Reverse-ported from OSS hive-mind (oss-drift triage R2, 2026-06-11).
+        const existing = env.kg.findEntityByName(name);
 
         if (existing) {
           // Touch properties to bump "seen in frame" count for future ranking.

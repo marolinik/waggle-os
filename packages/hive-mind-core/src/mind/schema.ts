@@ -263,8 +263,17 @@ CREATE TABLE IF NOT EXISTS harvest_sources (
 );
 `;
 
-export const VEC_TABLE_SQL = `
+// Reverse-ported from OSS hive-mind (oss-drift triage R7, 2026-06-11).
+/** Vec-table DDL parameterized by embedding dimension. vec0 columns can't be
+ *  ALTERed, so changing dimension means DROP + CREATE (see MindDB.recreateVecTables). */
+export function vecTableSqlForDim(dim: number): string {
+  const d = Math.trunc(dim);
+  return `
 CREATE VIRTUAL TABLE IF NOT EXISTS memory_frames_vec USING vec0(
-  embedding float[1024]
+  embedding float[${d}]
 );
 `;
+}
+
+/** Default vec schema at the canonical 1024-dim (used on first init + migrations). */
+export const VEC_TABLE_SQL = vecTableSqlForDim(1024);

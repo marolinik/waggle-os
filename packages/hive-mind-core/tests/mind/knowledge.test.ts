@@ -92,6 +92,123 @@ describe('Knowledge Graph (Layer 3)', () => {
     });
   });
 
+  // Reverse-ported from OSS hive-mind (oss-drift triage R2, 2026-06-11).
+  describe('Entity dedup (findEntityByName + dedupeByName)', () => {
+    it('findEntityByName returns the exact active match', () => {
+      kg.createEntity('concept', 'Phase', { seen_count: 1 });
+      const found = kg.findEntityByName('Phase');
+      expect(found).toBeDefined();
+      expect(found!.name).toBe('Phase');
+      expect(kg.findEntityByName('Nonexistent')).toBeUndefined();
+    });
+
+    it('findEntityByName ignores retired entities', () => {
+      const e = kg.createEntity('concept', 'Retired Thing', {});
+      kg.retireEntity(e.id);
+      expect(kg.findEntityByName('Retired Thing')).toBeUndefined();
+    });
+
+    it('finds the exact match even when LIKE top-K drops it (the runaway-dup bug)', () => {
+      // Names containing "Phase" that sort BEFORE the plain "Phase" crowd it
+      // out of a searchEntities(name, 3) top-K window — the old dedup pattern.
+      kg.createEntity('concept', 'Alpha Phase', {});
+      kg.createEntity('concept', 'Beta Phase', {});
+      kg.createEntity('concept', 'Gamma Phase', {});
+      kg.createEntity('concept', 'Phase', {});
+
+      // Demonstrate the bug: LIKE top-3 misses the exact match…
+      const topK = kg.searchEntities('Phase', 3);
+      expect(topK.some(e => e.name === 'Phase')).toBe(false);
+      // …but the exact-name lookup finds it.
+      expect(kg.findEntityByName('Phase')?.name).toBe('Phase');
+    });
+
+    it('exact-match-guarded upsert never re-creates an existing entity', () => {
+      // The create-path pattern wired in hive-mind-cli cognify: check exact
+      // match first, only create when absent.
+      const upsert = (name: string): void => {
+        const existing = kg.findEntityByName(name);
+        if (existing) {
+          const props = JSON.parse(existing.properties) as Record<string, unknown>;
+          kg.updateEntity(existing.id, {
+            properties: { ...props, seen_count: Number(props.seen_count ?? 1) + 1 },
+          });
+        } else {
+          kg.createEntity('concept', name, { seen_count: 1 });
+        }
+      };
+
+      upsert('Phase');
+      upsert('Phase');
+
+      const rows = kg.getEntities(1000).filter(e => e.name === 'Phase');
+      expect(rows).toHaveLength(1);
+      expect(JSON.parse(rows[0].properties).seen_count).toBe(2);
+    });
+
+    it('dedupeByName merges same-name/type entities, re-points relations, sums seen_count', () => {
+      // 'React' and 'react.js' both normalize to the same canonical name + type.
+      kg.createEntity('technology', 'React', { seen_count: 2 });
+      const b = kg.createEntity('technology', 'react.js', { seen_count: 3 });
+      const other = kg.createEntity('person', 'Ada', {});
+      // A relation on the more-connected entity (b) — the survivor it should win.
+      kg.createRelation(other.id, b.id, 'uses');
+
+      const result = kg.dedupeByName();
+      expect(result.groups).toBe(1);
+      expect(result.merged).toBe(1);
+
+      // Exactly one active technology entity survives.
+      const techs = kg.getEntities(1000).filter(e => e.entity_type === 'technology');
+      expect(techs).toHaveLength(1);
+      const survivor = techs[0];
+      // seen_count summed across the merged group (2 + 3).
+      expect(JSON.parse(survivor.properties).seen_count).toBe(5);
+      // The relation now resolves to the survivor (still active).
+      const relsToSurvivor = kg.getRelationsTo(survivor.id);
+      expect(
+        relsToSurvivor.some(r => r.source_id === other.id && r.relation_type === 'uses'),
+      ).toBe(true);
+    });
+
+    it('dedupeByName re-points outgoing relations and is a no-op without duplicates', () => {
+      const a = kg.createEntity('technology', 'TypeScript', { seen_count: 1 });
+      const dup = kg.createEntity('technology', 'ts', { seen_count: 1 });
+      const target = kg.createEntity('project', 'Waggle', {});
+      kg.createRelation(a.id, target.id, 'used_in');
+      kg.createRelation(dup.id, target.id, 'used_in');
+
+      const result = kg.dedupeByName();
+      expect(result.groups).toBe(1);
+      expect(result.merged).toBe(1);
+
+      const techs = kg.getEntities(1000).filter(e => e.entity_type === 'technology');
+      expect(techs).toHaveLength(1);
+      // Survivor keeps an active outgoing relation to the target.
+      expect(kg.getRelationsFrom(techs[0].id).some(r => r.target_id === target.id)).toBe(true);
+
+      // Second run: nothing left to merge.
+      const second = kg.dedupeByName();
+      expect(second.groups).toBe(0);
+      expect(second.merged).toBe(0);
+    });
+
+    it('dedupeByName survives malformed properties JSON (safeParseProps)', () => {
+      const a = kg.createEntity('concept', 'Broken', { seen_count: 2 });
+      kg.createEntity('concept', 'broken', { seen_count: 1 });
+      // Corrupt the survivor's props directly to exercise the hardened parse.
+      db.getDatabase().prepare('UPDATE knowledge_entities SET properties = ? WHERE id = ?')
+        .run('{not json', a.id);
+
+      const result = kg.dedupeByName();
+      expect(result.merged).toBe(1);
+      const survivor = kg.getEntities(1000).filter(e => e.entity_type === 'concept');
+      expect(survivor).toHaveLength(1);
+      // Corrupt props treated as {} → seen_count = 1 (default) + 1.
+      expect(JSON.parse(survivor[0].properties).seen_count).toBe(2);
+    });
+  });
+
   describe('Relation CRUD', () => {
     it('creates a directed relation with confidence', () => {
       const alice = kg.createEntity('person', 'Alice', {});

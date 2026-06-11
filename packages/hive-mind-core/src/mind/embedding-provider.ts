@@ -146,6 +146,47 @@ function createMockEmbedder(dims: number): Embedder {
   };
 }
 
+// ── Embed-input guards (oversized-frame truncation + skip-not-abort) ──
+// Reverse-ported from OSS hive-mind (oss-drift triage R5, 2026-06-11).
+
+/**
+ * Per-input character cap for embedding. `nomic-embed-text` has a 2048-token
+ * (~6K char dense English) default context; the `*-8k` variants (or any model
+ * with `num_ctx 8192`) raise it to ~24K chars. Embedding an input longer than
+ * the backend's context makes the backend reject the request, so we cap here.
+ */
+export function maxEmbedCharsForModel(modelName: string): number {
+  return /(-|_|\.)8k\b|num_ctx[^0-9]*8192/i.test(modelName) ? 24_000 : 6_000;
+}
+
+/** Clamp a single input to `maxChars` (no-op when already under the cap). */
+export function capEmbedText(text: string, maxChars: number): string {
+  return text.length > maxChars ? text.slice(0, maxChars) : text;
+}
+
+/**
+ * Re-embed a batch one text at a time, degrading ONLY the inputs that genuinely
+ * fail to a deterministic mock vector. This is the batch-error recovery path:
+ * a single backend-rejected text can no longer poison its batchmates (the prior
+ * behavior substituted mock for the WHOLE batch — silent corruption of every
+ * frame in the batch). Inputs should already be char-capped by the caller.
+ */
+export async function reembedPerText(
+  embedder: Embedder,
+  texts: string[],
+  dims: number,
+): Promise<Float32Array[]> {
+  return Promise.all(
+    texts.map(async (t) => {
+      try {
+        return await embedder.embed(t);
+      } catch {
+        return mockEmbed(t, dims);
+      }
+    }),
+  );
+}
+
 interface ProbeResult {
   type: EmbeddingProviderType;
   embedder: Embedder;
@@ -379,15 +420,18 @@ export async function createEmbeddingProvider(config?: EmbeddingProviderConfig):
 
     async embed(text: string): Promise<Float32Array> {
       checkQuota(1);
+      // Cap input to the active model's context so the backend never rejects
+      // an oversized frame. Reverse-ported from OSS hive-mind (oss-drift triage R5, 2026-06-11).
+      const capped = capEmbedText(text, maxEmbedCharsForModel(activeModelName));
       try {
-        const result = await activeEmbedder.embed(text);
+        const result = await activeEmbedder.embed(capped);
         recordUsage(1);
         return result;
       } catch (err) {
         if (err instanceof EmbeddingQuotaExceededError) throw err;
         log.warn(`Embedding failed with ${activeType}, falling back to mock: ${(err as Error).message}`);
         lastError = (err as Error).message;
-        const fallback = mockEmbed(text, dims);
+        const fallback = mockEmbed(capped, dims);
         recordUsage(1);
         return fallback;
       }
@@ -396,17 +440,23 @@ export async function createEmbeddingProvider(config?: EmbeddingProviderConfig):
     async embedBatch(texts: string[]): Promise<Float32Array[]> {
       if (texts.length === 0) return [];
       checkQuota(texts.length);
+      // Cap each input first so one oversized frame can't make the backend
+      // reject the whole request. Reverse-ported from OSS hive-mind
+      // (oss-drift triage R5, 2026-06-11).
+      const capped = texts.map(t => capEmbedText(t, maxEmbedCharsForModel(activeModelName)));
       try {
-        const result = await activeEmbedder.embedBatch(texts);
+        const result = await activeEmbedder.embedBatch(capped);
         recordUsage(texts.length);
         return result;
       } catch (err) {
         if (err instanceof EmbeddingQuotaExceededError) throw err;
-        log.warn(`Batch embedding failed with ${activeType}, falling back to mock: ${(err as Error).message}`);
+        // Skip-not-abort: re-embed per-text so a single backend-rejected input
+        // degrades alone instead of mock-poisoning the WHOLE batch.
+        log.warn(`Batch embedding failed with ${activeType}, re-embedding per-text: ${(err as Error).message}`);
         lastError = (err as Error).message;
-        const fallback = texts.map(t => mockEmbed(t, dims));
+        const result = await reembedPerText(activeEmbedder, capped, dims);
         recordUsage(texts.length);
-        return fallback;
+        return result;
       }
     },
 

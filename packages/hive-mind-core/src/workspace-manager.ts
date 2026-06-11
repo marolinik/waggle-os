@@ -147,7 +147,37 @@ export class WorkspaceManager {
    * Create a new workspace with directory structure and config.
    */
   create(options: CreateWorkspaceOptions): WorkspaceConfig {
-    const id = this.generateId(options.name);
+    return this.createWithId(this.generateId(options.name), options);
+  }
+
+  /**
+   * Ensure a workspace with the given id exists. Idempotent — returns the
+   * existing config unchanged if the workspace already exists; otherwise
+   * creates it with the supplied id (bypassing slug-collision handling in
+   * generateId, since callers construct ids from trusted internal state
+   * like CWD-derived prefixes — e.g. SessionStart hooks).
+   *
+   * Use this from auto-attach paths (e.g. save_memory with a workspace arg
+   * that names a workspace not yet created on disk). Direct-create flows
+   * with user-supplied names should still go through `create()` so the
+   * generateId collision logic runs.
+   */
+  // Reverse-ported from OSS hive-mind (oss-drift triage R4, 2026-06-11).
+  ensure(id: string, options: Partial<CreateWorkspaceOptions> = {}): WorkspaceConfig {
+    const existing = this.get(id);
+    if (existing) return existing;
+
+    return this.createWithId(id, {
+      ...options,
+      name: options.name ?? id,
+      group: options.group ?? 'auto',
+    });
+  }
+
+  /**
+   * Shared create path: write directory structure + config for an exact id.
+   */
+  private createWithId(id: string, options: CreateWorkspaceOptions): WorkspaceConfig {
     const wsDir = path.join(this.workspacesDir, id);
 
     fs.mkdirSync(wsDir, { recursive: true });

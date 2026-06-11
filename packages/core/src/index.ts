@@ -15,17 +15,18 @@
 // ── Substrate re-exports from @waggle/hive-mind-core (Apache 2.0 OSS) ──
 export {
   // Logger + injection scanner
-  createCoreLogger,
+  createCoreLogger, type CoreLogger,
   scanForInjection, type ScanResult,
   // mind/ — memory substrate
-  MindDB,
+  MindDB, EmbeddingDimMismatchError,
+  type EmbeddingFingerprint, type FingerprintCheck,
   IdentityLayer, type Identity,
   AwarenessLayer, type AwarenessItem, type AwarenessCategory,
   FrameStore, type MemoryFrame, type FrameType, type Importance, type FrameSource,
   SessionStore, type Session,
   HybridSearch, type SearchResult,
   KnowledgeGraph, type Entity, type Relation, type ValidationSchema,
-  SCHEMA_SQL, VEC_TABLE_SQL, SCHEMA_VERSION,
+  SCHEMA_SQL, VEC_TABLE_SQL, SCHEMA_VERSION, vecTableSqlForDim,
   computeRelevance,
   computeTemporalScore,
   computePopularityScore,
@@ -42,7 +43,7 @@ export {
   createEmbeddingProvider, EmbeddingQuotaExceededError, getMinimumTierForProvider,
   type EmbeddingProviderConfig, type EmbeddingProviderStatus, type EmbeddingProviderType,
   type EmbeddingProviderInstance, type EmbeddingQuotaStatus,
-  normalizeEntityName, findDuplicates,
+  normalizeEntityName, findDuplicates, isNoiseName, isLikelyAcronym,
   Ontology, validateEntity, type EntitySchema, type ValidationResult,
   ImprovementSignalStore,
   type ImprovementSignal, type ActionableSignal, type SignalCategory, type ActionableThresholds,

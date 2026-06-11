@@ -1,7 +1,39 @@
 import Database from 'better-sqlite3';
 import type { Database as DatabaseType } from 'better-sqlite3';
 import * as sqliteVec from 'sqlite-vec';
-import { SCHEMA_SQL, VEC_TABLE_SQL, SCHEMA_VERSION } from './schema.js';
+import { SCHEMA_SQL, VEC_TABLE_SQL, SCHEMA_VERSION, vecTableSqlForDim } from './schema.js';
+
+// Reverse-ported from OSS hive-mind (oss-drift triage R7, 2026-06-11).
+/** A persisted embedding fingerprint: which provider/model produced this .mind's
+ *  vectors, and at what dimension. Recorded in `meta` on the first vector use. */
+export interface EmbeddingFingerprint {
+  provider: string;
+  model: string;
+  dim: number;
+}
+
+export type FingerprintCheck =
+  | { status: 'recorded' }
+  | { status: 'match' }
+  | { status: 'model-changed'; storedModel: string; storedProvider: string };
+
+/** Thrown when the active embedder's dimension differs from the dimension this
+ *  .mind's vectors were written at. Mixing dims returns noise and corrupts the
+ *  index, so we refuse loudly and point at the re-embed remediation. */
+export class EmbeddingDimMismatchError extends Error {
+  constructor(
+    readonly storedDim: number,
+    readonly runtimeDim: number,
+  ) {
+    super(
+      `Embedding dimension mismatch: this .mind stores ${storedDim}-dim vectors but the active ` +
+        `embedder produces ${runtimeDim}-dim vectors. Vector search would return noise and writes ` +
+        `would corrupt the index. Call MindDB.recreateVecTables(${runtimeDim}) and re-embed all ` +
+        `frames at the new dimension, or switch back to a ${storedDim}-dim model.`,
+    );
+    this.name = 'EmbeddingDimMismatchError';
+  }
+}
 
 export class MindDB {
   private db: DatabaseType;
@@ -212,6 +244,93 @@ export class MindDB {
     this.db.exec(
       "CREATE TRIGGER IF NOT EXISTS ai_interactions_no_update BEFORE UPDATE ON ai_interactions BEGIN SELECT RAISE(ABORT, 'ai_interactions is append-only (EU AI Act Art. 12 audit log)'); END"
     );
+  }
+
+  // Reverse-ported from OSS hive-mind (oss-drift triage R7, 2026-06-11).
+  /** Read a single `meta` value, or null if absent. */
+  private getMeta(key: string): string | null {
+    const row = this.db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as
+      | { value: string }
+      | undefined;
+    return row?.value ?? null;
+  }
+
+  /** Upsert a single `meta` key/value (meta.key is the PRIMARY KEY). */
+  private setMeta(key: string, value: string): void {
+    this.db
+      .prepare(
+        'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
+      )
+      .run(key, value);
+  }
+
+  /**
+   * Guard this .mind's embedding fingerprint. Call before the first vector
+   * write/read of a session (HybridSearch is the natural seam — it holds both
+   * the db and the embedder). Returns the check result; throws only on a hard
+   * dimension mismatch:
+   *   - no fingerprint yet → record {provider, model, dim}, return 'recorded'
+   *   - same dim + same model → 'match' (no-op)
+   *   - same dim, different model/provider → update + 'model-changed' (caller
+   *     should warn: vectors stay numerically valid but cross-model comparison
+   *     is semantically degraded)
+   *   - different dim → throw EmbeddingDimMismatchError (only safe path is re-embed)
+   */
+  ensureEmbeddingFingerprint(fp: EmbeddingFingerprint): FingerprintCheck {
+    const storedDimRaw = this.getMeta('embedding_dim');
+    if (storedDimRaw === null) {
+      this.setMeta('embedding_provider', fp.provider);
+      this.setMeta('embedding_model', fp.model);
+      this.setMeta('embedding_dim', String(fp.dim));
+      return { status: 'recorded' };
+    }
+    const storedDim = Number(storedDimRaw);
+    if (storedDim !== fp.dim) {
+      throw new EmbeddingDimMismatchError(storedDim, fp.dim);
+    }
+    const storedModel = this.getMeta('embedding_model') ?? '';
+    const storedProvider = this.getMeta('embedding_provider') ?? '';
+    if (storedModel !== fp.model || storedProvider !== fp.provider) {
+      this.setMeta('embedding_provider', fp.provider);
+      this.setMeta('embedding_model', fp.model);
+      return { status: 'model-changed', storedModel, storedProvider };
+    }
+    return { status: 'match' };
+  }
+
+  /** Force-write the embedding fingerprint. Used after a re-embed so the guard
+   *  matches the embedder that produced the new vectors. */
+  setEmbeddingFingerprint(fp: EmbeddingFingerprint): void {
+    this.setMeta('embedding_provider', fp.provider);
+    this.setMeta('embedding_model', fp.model);
+    this.setMeta('embedding_dim', String(fp.dim));
+  }
+
+  /** Read the recorded embedding fingerprint, or null if none recorded yet. */
+  getEmbeddingFingerprint(): EmbeddingFingerprint | null {
+    const dimRaw = this.getMeta('embedding_dim');
+    if (dimRaw === null) return null;
+    return {
+      provider: this.getMeta('embedding_provider') ?? 'unknown',
+      model: this.getMeta('embedding_model') ?? 'unknown',
+      dim: Number(dimRaw),
+    };
+  }
+
+  /**
+   * DROP + CREATE the vec table at `dim` (vec0 columns can't be ALTERed) and
+   * update the stored dim. DESTRUCTIVE — existing vectors are discarded; the
+   * caller re-embeds afterward (e.g. reconcileVecIndex over all frames). This
+   * is the remediation for an EmbeddingDimMismatchError.
+   */
+  recreateVecTables(dim: number): void {
+    const d = Math.trunc(dim);
+    const tx = this.db.transaction(() => {
+      this.db.exec('DROP TABLE IF EXISTS memory_frames_vec;');
+      this.db.exec(vecTableSqlForDim(d));
+      this.setMeta('embedding_dim', String(d));
+    });
+    tx();
   }
 
   getDatabase(): DatabaseType {

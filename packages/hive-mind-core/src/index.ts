@@ -7,18 +7,21 @@
 // scanner, structured logger.
 
 // ── Logger + injection scanner (utilities used by substrate + Waggle agent) ──
-export { createCoreLogger } from './logger.js';
+export { createCoreLogger, type CoreLogger } from './logger.js';
 export { scanForInjection, type ScanResult } from './injection-scanner.js';
 
 // ── mind/ — memory substrate (FrameStore, KnowledgeGraph, embedders, search, scoring) ──
-export { MindDB } from './mind/db.js';
+export {
+  MindDB, EmbeddingDimMismatchError,
+  type EmbeddingFingerprint, type FingerprintCheck,
+} from './mind/db.js';
 export { IdentityLayer, type Identity } from './mind/identity.js';
 export { AwarenessLayer, type AwarenessItem, type AwarenessCategory } from './mind/awareness.js';
 export { FrameStore, type MemoryFrame, type FrameType, type Importance, type FrameSource } from './mind/frames.js';
 export { SessionStore, type Session } from './mind/sessions.js';
 export { HybridSearch, type SearchResult } from './mind/search.js';
 export { KnowledgeGraph, type Entity, type Relation, type ValidationSchema } from './mind/knowledge.js';
-export { SCHEMA_SQL, VEC_TABLE_SQL, SCHEMA_VERSION } from './mind/schema.js';
+export { SCHEMA_SQL, VEC_TABLE_SQL, SCHEMA_VERSION, vecTableSqlForDim } from './mind/schema.js';
 export {
   computeRelevance,
   computeTemporalScore,
@@ -34,8 +37,8 @@ export { createLiteLLMEmbedder, type LiteLLMEmbedderConfig } from './mind/litell
 export { createInProcessEmbedder, normalizeDimensions, type InProcessEmbedderConfig } from './mind/inprocess-embedder.js';
 export { createOllamaEmbedder, type OllamaEmbedderConfig } from './mind/ollama-embedder.js';
 export { createApiEmbedder, type ApiEmbedderConfig } from './mind/api-embedder.js';
-export { createEmbeddingProvider, EmbeddingQuotaExceededError, getMinimumTierForProvider, type EmbeddingProviderConfig, type EmbeddingProviderStatus, type EmbeddingProviderType, type EmbeddingProviderInstance, type EmbeddingQuotaStatus } from './mind/embedding-provider.js';
-export { normalizeEntityName, findDuplicates } from './mind/entity-normalizer.js';
+export { createEmbeddingProvider, EmbeddingQuotaExceededError, getMinimumTierForProvider, maxEmbedCharsForModel, capEmbedText, reembedPerText, type EmbeddingProviderConfig, type EmbeddingProviderStatus, type EmbeddingProviderType, type EmbeddingProviderInstance, type EmbeddingQuotaStatus } from './mind/embedding-provider.js';
+export { normalizeEntityName, findDuplicates, isNoiseName, isLikelyAcronym } from './mind/entity-normalizer.js';
 export { Ontology, validateEntity, type EntitySchema, type ValidationResult } from './mind/ontology.js';
 export {
   ImprovementSignalStore,

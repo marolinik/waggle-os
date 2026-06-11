@@ -292,6 +292,69 @@ describe('WorkspaceManager', () => {
     });
   });
 
+  // Reverse-ported from OSS hive-mind (oss-drift triage R4, 2026-06-11).
+  describe('ensure', () => {
+    it('creates a workspace with the exact supplied id when missing', () => {
+      const ws = manager.ensure('cwd-derived-id');
+
+      expect(ws.id).toBe('cwd-derived-id');
+      expect(ws.name).toBe('cwd-derived-id'); // defaults to id
+      expect(ws.group).toBe('auto');
+      expect(ws.created).toBeTruthy();
+
+      const wsDir = path.join(tmpDir, 'workspaces', 'cwd-derived-id');
+      expect(fs.existsSync(path.join(wsDir, 'workspace.json'))).toBe(true);
+      expect(fs.existsSync(path.join(wsDir, 'workspace.mind'))).toBe(true);
+      expect(fs.existsSync(path.join(wsDir, 'sessions'))).toBe(true);
+    });
+
+    it('returns the existing workspace unchanged when the id exists', () => {
+      const created = manager.create({ name: 'My Project', group: 'Work', model: 'gpt-4o' });
+
+      const ensured = manager.ensure(created.id, { name: 'Other Name', group: 'Other' });
+
+      expect(ensured).toEqual(created);
+      // On-disk config untouched.
+      const onDisk = manager.get(created.id)!;
+      expect(onDisk.name).toBe('My Project');
+      expect(onDisk.group).toBe('Work');
+      expect(onDisk.model).toBe('gpt-4o');
+    });
+
+    it('is idempotent — repeated ensure returns the same config', () => {
+      const first = manager.ensure('hook-ws', { name: 'Hook WS', group: 'Hooks' });
+      const second = manager.ensure('hook-ws');
+      expect(second).toEqual(first);
+      expect(manager.list().filter(w => w.id === 'hook-ws')).toHaveLength(1);
+    });
+
+    it('bypasses slug-collision suffixing — id is used verbatim', () => {
+      manager.create({ name: 'Marketing', group: 'Work' }); // takes 'marketing'
+      // ensure on a fresh exact id does NOT become marketing-2
+      const ws = manager.ensure('marketing-team');
+      expect(ws.id).toBe('marketing-team');
+    });
+
+    it('passes through mono-only optional fields like create() does', () => {
+      const before = Date.now();
+      const ws = manager.ensure('risk-ws', {
+        name: 'Risk WS',
+        group: 'Work',
+        personaId: 'researcher',
+        riskLevel: 'high-risk',
+      });
+      const after = Date.now();
+
+      expect(ws.personaId).toBe('researcher');
+      expect(ws.riskLevel).toBe('high-risk');
+      // riskClassifiedAt auto-stamped, same as create()
+      expect(ws.riskClassifiedAt).toBeTruthy();
+      const t = Date.parse(ws.riskClassifiedAt!);
+      expect(t).toBeGreaterThanOrEqual(before);
+      expect(t).toBeLessThanOrEqual(after);
+    });
+  });
+
   describe('default workspace', () => {
     it('sets and gets default workspace', () => {
       manager.create({ name: 'Default WS', group: 'Work' });

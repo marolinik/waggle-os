@@ -18,7 +18,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { rmSync, existsSync } from 'node:fs';
-import { MindDB } from '../../src/mind/db.js';
+import { MindDB, EmbeddingDimMismatchError } from '../../src/mind/db.js';
 
 describe('MindDB (hive-mind port)', () => {
   let dbPath: string;
@@ -135,5 +135,88 @@ describe('MindDB (hive-mind port)', () => {
     db = new MindDB(dbPath);
     // No throw = migrations re-applied cleanly against existing schema.
     expect(db.getFirstRunAt()).not.toBeNull();
+  });
+
+  // Reverse-ported from OSS hive-mind (oss-drift triage R7, 2026-06-11).
+  describe('embedding fingerprint guard', () => {
+    it('ensureEmbeddingFingerprint records the fingerprint on first call, then matches', () => {
+      const first = db!.ensureEmbeddingFingerprint({ provider: 'voyage', model: 'voyage-3-lite', dim: 1024 });
+      expect(first.status).toBe('recorded');
+      const second = db!.ensureEmbeddingFingerprint({ provider: 'voyage', model: 'voyage-3-lite', dim: 1024 });
+      expect(second.status).toBe('match');
+    });
+
+    it('ensureEmbeddingFingerprint throws EmbeddingDimMismatchError on a dimension change', () => {
+      db!.ensureEmbeddingFingerprint({ provider: 'voyage', model: 'voyage-3-lite', dim: 1024 });
+      expect(() =>
+        db!.ensureEmbeddingFingerprint({ provider: 'ollama', model: 'nomic-embed-text', dim: 768 }),
+      ).toThrow(EmbeddingDimMismatchError);
+      try {
+        db!.ensureEmbeddingFingerprint({ provider: 'ollama', model: 'nomic-embed-text', dim: 768 });
+      } catch (e) {
+        const msg = (e as Error).message;
+        expect(msg).toContain('1024'); // stored dim
+        expect(msg).toContain('768'); // runtime dim
+        expect(msg).toContain('recreateVecTables'); // points at the remediation
+      }
+    });
+
+    it('ensureEmbeddingFingerprint warns but ALLOWS a same-dim model change', () => {
+      db!.ensureEmbeddingFingerprint({ provider: 'voyage', model: 'voyage-3-lite', dim: 1024 });
+      const changed = db!.ensureEmbeddingFingerprint({
+        provider: 'openai',
+        model: 'text-embedding-3-small',
+        dim: 1024,
+      });
+      expect(changed.status).toBe('model-changed');
+      if (changed.status === 'model-changed') {
+        expect(changed.storedModel).toBe('voyage-3-lite');
+        expect(changed.storedProvider).toBe('voyage');
+      }
+      // Fingerprint is updated to the new model, so a repeat now matches.
+      const after = db!.ensureEmbeddingFingerprint({
+        provider: 'openai',
+        model: 'text-embedding-3-small',
+        dim: 1024,
+      });
+      expect(after.status).toBe('match');
+    });
+
+    it('setEmbeddingFingerprint / getEmbeddingFingerprint round-trip', () => {
+      expect(db!.getEmbeddingFingerprint()).toBeNull();
+      db!.setEmbeddingFingerprint({ provider: 'ollama', model: 'nomic-embed-text', dim: 768 });
+      expect(db!.getEmbeddingFingerprint()).toEqual({
+        provider: 'ollama',
+        model: 'nomic-embed-text',
+        dim: 768,
+      });
+    });
+
+    it('recreateVecTables rebuilds memory_frames_vec at a new dimension', () => {
+      const raw = db!.getDatabase();
+      const v1024 = new Float32Array(1024);
+      raw
+        .prepare('INSERT INTO memory_frames_vec (rowid, embedding) VALUES (1, ?)')
+        .run(new Uint8Array(v1024.buffer));
+      expect((raw.prepare('SELECT COUNT(*) n FROM memory_frames_vec').get() as { n: number }).n).toBe(1);
+
+      db!.recreateVecTables(768);
+
+      // Old rows are gone and the column is now 768-dim.
+      expect((raw.prepare('SELECT COUNT(*) n FROM memory_frames_vec').get() as { n: number }).n).toBe(0);
+      const v768 = new Float32Array(768);
+      expect(() =>
+        raw
+          .prepare('INSERT INTO memory_frames_vec (rowid, embedding) VALUES (2, ?)')
+          .run(new Uint8Array(v768.buffer)),
+      ).not.toThrow();
+      expect(() =>
+        raw
+          .prepare('INSERT INTO memory_frames_vec (rowid, embedding) VALUES (3, ?)')
+          .run(new Uint8Array(v1024.buffer)),
+      ).toThrow(); // 1024 no longer fits the 768 column
+      // The stored dim fingerprint follows the recreation.
+      expect(db!.getEmbeddingFingerprint()?.dim).toBe(768);
+    });
   });
 });
