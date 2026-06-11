@@ -16,6 +16,9 @@ import {
   parseDateWindow,
   createInProcessReranker,
   type Reranker,
+  MIND_FACT_PREFIX,
+  MIND_EVENT_PREFIX,
+  MIND_PROFILE_PREFIX,
 } from '@waggle/core';
 import { createMindTools, type ToolDefinition } from './tools.js';
 import { buildSelfAwareness, type AgentCapabilities } from './self-awareness.js';
@@ -448,6 +451,9 @@ export class Orchestrator {
 
       let personalResults;
       let workspaceResults;
+      // W4.1b/W4.3b: parsed explicit-period window — drives since/until in the
+      // normal branch AND the "Events during X" render section below.
+      let dateWindow: ReturnType<typeof parseDateWindow> = null;
 
       if (isCatchUp && this.workspaceLayers) {
         // For catch-up queries: fetch important frames by importance + recency, not semantic search.
@@ -494,7 +500,7 @@ export class Orchestrator {
         // since/until filter. Graceful degradation: a window that matches
         // nothing falls back to unwindowed search below — the lane must never
         // LOSE recall, only sharpen it.
-        const dateWindow = parseDateWindow(query);
+        dateWindow = parseDateWindow(query);
         const windowOpts = dateWindow
           ? { since: dateWindow.since, until: dateWindow.until }
           : {};
@@ -565,7 +571,88 @@ export class Orchestrator {
         workspaceResults = workspaceResults.filter(passes);
       }
 
+      // ── W4.3b: extraction-lane fetches (benchmark lanes #5/#6/#8) ──────
+      // Prefix-tagged frames written by extract-memory-lanes (cron/harvest).
+      // Active mind only; caps keep the rendered block token-bounded:
+      // facts most-recent 60, events most-recent 40 (chronological render —
+      // the wholesale chronological block is load-bearing; cap, don't rank).
+      type LaneFrameRow = { id: number; content: string; importance: string; created_at: string };
+      const laneMindDb = (this.workspaceLayers?.db ?? this.db).getDatabase();
+      const profileFrames = laneMindDb.prepare(
+        `SELECT id, content, importance, created_at FROM memory_frames
+         WHERE content LIKE '${MIND_PROFILE_PREFIX} %' ORDER BY id ASC`
+      ).all() as LaneFrameRow[];
+      const factFrames = (laneMindDb.prepare(
+        `SELECT id, content, importance, created_at FROM memory_frames
+         WHERE content LIKE '${MIND_FACT_PREFIX}%' ORDER BY id DESC LIMIT 60`
+      ).all() as LaneFrameRow[]).reverse();
+      const eventFramesAll = laneMindDb.prepare(
+        `SELECT id, content, importance, created_at FROM memory_frames
+         WHERE content LIKE '${MIND_EVENT_PREFIX}%' ORDER BY created_at ASC, id ASC`
+      ).all() as LaneFrameRow[];
+      const eventFrames = eventFramesAll.slice(-40);
+
+      // Dedup: lane frames never double-render via the search lanes; profile
+      // frames are excluded from snippets UNCONDITIONALLY (benchmark rule).
+      const laneFrameIds = new Set<number>([
+        ...profileFrames.map(f => f.id),
+        ...factFrames.map(f => f.id),
+        ...eventFramesAll.map(f => f.id),
+      ]);
+      const notLaneFrame = (r: { frame: { id?: number; content: string } }): boolean =>
+        !(r.frame.id !== undefined && laneFrameIds.has(r.frame.id)) &&
+        !r.frame.content.startsWith(MIND_PROFILE_PREFIX);
+      personalResults = personalResults.filter(notLaneFrame);
+      workspaceResults = workspaceResults.filter(notLaneFrame);
+
+      /** Body of a prefix-tagged lane frame (everything after the header line). */
+      const laneBody = (content: string): string => {
+        const nl = content.indexOf('\n');
+        return nl >= 0 ? content.slice(nl + 1).trim() : content;
+      };
+
       const allLines: string[] = [];
+
+      // Render order is the benchmark's: profiles → facts → events →
+      // windowed events → snippets (workspace/personal sections below).
+      if (profileFrames.length > 0) {
+        allLines.push('## Profiles');
+        for (const f of profileFrames) {
+          const m = f.content.match(/^\[mind-profile ([^\]]+)\]/);
+          const name = m ? m[1] : 'Person';
+          allLines.push(`- ${name}: ${laneBody(f.content).slice(0, 1200)}`);
+        }
+      }
+      if (factFrames.length > 0) {
+        allLines.push('## Memory Facts');
+        for (const f of factFrames) {
+          const date = f.created_at?.slice(0, 10);
+          const datePrefix = date ? `[${date}] ` : '';
+          allLines.push(`- ${datePrefix}${laneBody(f.content).slice(0, RECALL_LINE_LENGTH)}`);
+        }
+      }
+      if (eventFrames.length > 0) {
+        allLines.push('## Events (chronological)');
+        for (const f of eventFrames) {
+          // body already carries its [YYYY-MM-DD] resolved-event-date prefix
+          allLines.push(`- ${laneBody(f.content).slice(0, RECALL_LINE_LENGTH)}`);
+        }
+      }
+      // W4.3b: explicit-period queries surface the events INSIDE the window as
+      // a dedicated section (uncapped — windows are small) so the model binds
+      // to the right event instead of a similar one from another month.
+      if (dateWindow) {
+        const windowEvents = eventFramesAll.filter(f => {
+          const d = String(f.created_at ?? '').slice(0, 10);
+          return d >= dateWindow!.since && d <= dateWindow!.until;
+        });
+        if (windowEvents.length > 0) {
+          allLines.push(`## Events during ${dateWindow.label}`);
+          for (const f of windowEvents) {
+            allLines.push(`- ${laneBody(f.content).slice(0, RECALL_LINE_LENGTH)}`);
+          }
+        }
+      }
 
       if (workspaceResults.length > 0) {
         allLines.push('## Workspace Memory');
@@ -586,7 +673,8 @@ export class Orchestrator {
         }
       }
 
-      const totalCount = personalResults.length + workspaceResults.length;
+      const laneCount = profileFrames.length + factFrames.length + eventFrames.length;
+      const totalCount = personalResults.length + workspaceResults.length + laneCount;
       if (totalCount === 0) {
         logTurnEvent(opts?.turnId, { stage: 'orchestrator.recallMemory.exit', totalCount: 0, blocked: false });
         return { text: '', count: 0, recalled: [] };
@@ -596,6 +684,9 @@ export class Orchestrator {
       const recalled: string[] = [];
       for (const r of [...workspaceResults, ...personalResults]) {
         recalled.push(r.frame.content.slice(0, RECALLED_SNIPPET_LENGTH));
+      }
+      for (const f of [...profileFrames, ...factFrames, ...eventFrames]) {
+        recalled.push(f.content.slice(0, RECALLED_SNIPPET_LENGTH));
       }
 
       // Scan recalled memory for injection — a poisoned harvest frame
@@ -614,9 +705,10 @@ export class Orchestrator {
       }
 
       // W4.1 (#1): anchor = max created_at across all rendered frames.
-      const anchorLine = renderReferenceDateLine(
-        [...workspaceResults, ...personalResults].map(r => r.frame.created_at),
-      );
+      const anchorLine = renderReferenceDateLine([
+        ...[...workspaceResults, ...personalResults].map(r => r.frame.created_at),
+        ...[...profileFrames, ...factFrames, ...eventFrames].map(f => f.created_at),
+      ]);
 
       const text = '# Recalled Memories\n'
         + "These are facts saved in this WORKSPACE'S memory, retrieved for the user's current message. "
