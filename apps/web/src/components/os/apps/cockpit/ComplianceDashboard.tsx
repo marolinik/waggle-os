@@ -301,15 +301,15 @@ const ComplianceDashboard = () => {
       label: 'Art. 19 Retention',
       data: status.art19Retention,
       icon: <Clock className="w-3 h-3" />,
-      metric: status.art19Retention.retentionDays > 0 ? `${status.art19Retention.retentionDays}d` : '∞',
-      hint: status.art19Retention.retentionDays > 0 ? 'days retained' : 'permanent',
+      metric: (status.art19Retention?.retentionDays ?? 0) > 0 ? `${status.art19Retention.retentionDays}d` : '∞',
+      hint: (status.art19Retention?.retentionDays ?? 0) > 0 ? 'days retained' : 'permanent',
     },
     {
       key: 'art26',
       label: 'Art. 26 Monitor',
       data: status.art26Monitoring,
       icon: <Database className="w-3 h-3" />,
-      metric: `${status.art26Monitoring.activeMonitors.length}`,
+      metric: `${status.art26Monitoring?.activeMonitors?.length ?? 0}`,
       hint: 'active monitors',
     },
   ];

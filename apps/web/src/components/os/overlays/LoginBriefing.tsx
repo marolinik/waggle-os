@@ -4,7 +4,7 @@
  * with links to each workspace. Feels like a colleague catching you up.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Brain, Clock, MessageSquare, Sparkles, ChevronRight,
@@ -111,7 +111,12 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
   // D3 plus-clause: an errored briefing revalidates on focus/online/connect-settled.
   useRevalidateOnError(errored, () => { void loadBriefing(); });
 
+  // Review fix: a connect settlement fires BOTH the [connecting] effect and
+  // the revalidation bus listener — single-flight the (5+ fetch) batch.
+  const loadInFlight = useRef(false);
   const loadBriefing = async () => {
+    if (loadInFlight.current) return;
+    loadInFlight.current = true;
     try {
       const [workspaces, frames, stats] = await Promise.all([
         adapter.getWorkspaces(),
@@ -180,7 +185,7 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
       // Day-0 empty-hook render path.
       setErrored(true);
     }
-    finally { setLoading(false); }
+    finally { setLoading(false); loadInFlight.current = false; }
   };
 
   const bragLine = brag ? formatBragLine(brag) : null;

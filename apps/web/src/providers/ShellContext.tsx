@@ -56,6 +56,8 @@ export interface ShellContextValue {
   createWorkspace: WorkspacesBundle['createWorkspace'];
   patchWorkspace: WorkspacesBundle['patchWorkspace'];
   refreshWorkspaces: WorkspacesBundle['refresh'];
+  /** P1b D3: load-failure surface — an errored empty list must not render as "no workspaces". */
+  workspacesError: WorkspacesBundle['error'];
   // ── Tier (Desktop.tsx:129, 141-158) ──
   currentTier: UserTier;
   billingTier: BillingTier;
@@ -101,6 +103,7 @@ export const ShellProvider = ({ children }: { children: ReactNode }) => {
   const {
     workspaces, activeWorkspace, activeWorkspaceId,
     selectWorkspace, createWorkspace, patchWorkspace, refresh: refreshWorkspaces,
+    error: workspacesError,
   } = useWorkspaces();
   const agentStatus = useAgentStatus();
   const { notifications, unreadCount, markRead, markAllRead } = useNotifications();
@@ -160,7 +163,7 @@ export const ShellProvider = ({ children }: { children: ReactNode }) => {
   return (
     <ShellContext.Provider value={{
       workspaces, activeWorkspace, activeWorkspaceId,
-      selectWorkspace, createWorkspace, patchWorkspace, refreshWorkspaces,
+      selectWorkspace, createWorkspace, patchWorkspace, refreshWorkspaces, workspacesError,
       currentTier, billingTier, tierResolved, tierError, trialInfo, refreshTier, showTrialExpired, setShowTrialExpired,
       defaultAutonomy,
       notifications, unreadCount, markRead, markAllRead,

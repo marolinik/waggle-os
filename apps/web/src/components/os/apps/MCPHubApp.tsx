@@ -19,7 +19,7 @@
  * consolidation to the single S21 surface (MarketplaceApp), which the dock's
  * Extend zone exposes next to this hub.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ExternalLink, Loader2, Server } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { useService } from '@/providers/ServiceProvider';
@@ -107,7 +107,12 @@ const MCPHubApp = ({ personaId }: MCPHubAppProps = {}) => {
     void load();
   }, [connecting, load]);
 
+  // Review fix: connect settlement fires both the [connecting] effect and the
+  // revalidation listener — single-flight the fetch.
+  const resolvableInFlight = useRef(false);
   const loadResolvableNames = useCallback(() => {
+    if (resolvableInFlight.current) return;
+    resolvableInFlight.current = true;
     adapter.getMarketplace({ type: 'mcp', limit: 200 })
       .then(r => {
         setResolvableMcpNames(
@@ -119,7 +124,8 @@ const MCPHubApp = ({ personaId }: MCPHubAppProps = {}) => {
       // fallback still works and installs would 404/fail anyway. P1b D3
       // plus-clause: flagged errored so the empty Set is no longer cached as
       // valid for the session — revalidates on focus/online/connect-settled.
-      .catch(() => { setResolvableMcpNames(new Set()); setResolvableErrored(true); });
+      .catch(() => { setResolvableMcpNames(new Set()); setResolvableErrored(true); })
+      .finally(() => { resolvableInFlight.current = false; });
   }, []);
 
   useEffect(() => {

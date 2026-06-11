@@ -211,6 +211,27 @@ describe('MarketplaceApp — consolidated Extend surface (S21)', () => {
     await waitFor(() => expect(mocks.adapter.uninstallMarketplacePackage).toHaveBeenCalledWith(7));
   });
 
+  it('P1b: a FAILED uninstall shows the failure toast and does NOT flip installed:false', async () => {
+    // Pre-P1b the adapter resolved error Responses, so a 500 uninstall toasted
+    // "Uninstalled" and desynced UI state; the throwing fetch routes it to the
+    // catch. Pinned at the component level (the adapter is mocked here).
+    mocks.adapter.getMarketplace.mockImplementation(async (params?: { type?: string }) => (
+      params?.type === 'mcp'
+        ? { packages: [], total: 0 }
+        : { packages: [{ id: 7, name: 'web-scraper', description: 'Scrape pages', waggle_install_type: 'skill', installed: true, scanStatus: 'passed', source: 'registry' }], total: 1 }
+    ));
+    mocks.adapter.uninstallMarketplacePackage.mockRejectedValue(
+      Object.assign(new Error('boom'), { name: 'AdapterHttpError', status: 500 }),
+    );
+    renderApp();
+    await screen.findByText('web-scraper');
+    fireEvent.click(screen.getByRole('button', { name: /Remove/ }));
+    fireEvent.click(await screen.findByTestId('approval-modal-approve'));
+    await waitFor(() => expect(mocks.adapter.uninstallMarketplacePackage).toHaveBeenCalledWith(7));
+    // Still installed: the Remove affordance survives the failed uninstall.
+    expect(screen.getByRole('button', { name: /Remove/ })).toBeInTheDocument();
+  });
+
   it('the Audit tab reads the C18 shared feed and the type filter re-queries', async () => {
     mocks.adapter.getExtendAudit.mockResolvedValue([{
       id: 3, timestamp: '2026-06-01T09:00:00.000Z', capabilityName: 'web-scraper',

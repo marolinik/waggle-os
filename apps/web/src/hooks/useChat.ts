@@ -282,8 +282,9 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
         const msgs = [...prev];
         const last = msgs[msgs.length - 1];
         // Same empty-array guard as the stream updater: a session/workspace
-        // switch mid-flight resets messages to [].
-        if (!last || last.role !== 'assistant') return msgs;
+        // switch mid-flight resets messages to []. Return prev (not the
+        // clone) so React's setState bail-out skips the no-op re-render.
+        if (!last || last.role !== 'assistant') return prev;
         const blocks = [...(last.blocks || []), { type: 'error' as const, blockId: nextBlockId('error'), message }];
         return msgs.map((m, i) =>
           i === msgs.length - 1 ? { ...m, blocks, content: message } : m

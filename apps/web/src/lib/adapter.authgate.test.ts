@@ -385,4 +385,103 @@ describe('P1b auth gate', () => {
     expect(Object.keys(headers).find(h => h.toLowerCase() === 'content-type')).toBeUndefined();
     expect(init.body).toBeInstanceOf(FormData);
   });
+
+  it('uploadFile: 401 → refresh → retried multipart succeeds; 413 surfaces the server reason', async () => {
+    const a = await connectedAdapter('tok-A');
+    fetchSpy.mockClear();
+    let calls = 0;
+    routeMock(fetchSpy, [
+      [TOKEN_PATH, () => jsonRes({ token: 'tok-B' })],
+      ['/files/upload', () => (++calls === 1
+        ? jsonRes({ error: 'Unauthorized', code: 'INVALID_TOKEN' }, 401)
+        : jsonRes({ name: 'f.txt' }))],
+    ]);
+    await expect(a.uploadFile('ws1', '/', new File(['x'], 'f.txt'))).resolves.toMatchObject({ name: 'f.txt' });
+    const ups = callsTo(fetchSpy, '/files/upload');
+    expect(ups).toHaveLength(2);
+    expect((ups[1][1].headers as Record<string, string>).Authorization).toBe('Bearer tok-B');
+
+    routeMock(fetchSpy, [['/api/ingest', () => jsonRes({ error: 'backup too large', message: 'File exceeds 50MB' }, 413)]]);
+    const err = await a.ingestFile(new File(['x'], 'big.bin')).catch((e: unknown) => e) as AdapterHttpError;
+    expect(err).toBeInstanceOf(AdapterHttpError);
+    expect(err.status).toBe(413);
+    expect(err.message).toBe('File exceeds 50MB');
+  });
+
+  // ── 404→null contracts + envelope stragglers (review fixes) ──────────────
+
+  it.each([
+    ['getMemory', (a: InstanceType<typeof LocalAdapter>) => a.getMemory('m1'), '/api/memory/m1'],
+    ['getArtifact', (a: InstanceType<typeof LocalAdapter>) => a.getArtifact('a1'), '/api/artifacts/a1'],
+    ['getAgent', (a: InstanceType<typeof LocalAdapter>) => a.getAgent('ag1'), '/api/agents/ag1'],
+  ])('%s preserves the documented 404→null contract and throws on other failures', async (_n, call, path) => {
+    const a = new LocalAdapter(BASE);
+    routeMock(fetchSpy, [[path, () => jsonRes({ error: 'not found' }, 404)]]);
+    await expect(call(a)).resolves.toBeNull();
+    routeMock(fetchSpy, [[path, () => jsonRes({ error: 'boom' }, 500)]]);
+    await expect(call(a)).rejects.toThrow(AdapterHttpError);
+  });
+
+  it('manageHooks maps a non-2xx body into the { ok:false, stderr, code } envelope (not a throw)', async () => {
+    const a = new LocalAdapter(BASE);
+    routeMock(fetchSpy, [['/api/tools/hooks', () => jsonRes({ ok: false, action: 'install', stdout: '', stderr: 'permission denied', code: 1, error: 'install failed' }, 500)]]);
+    await expect(a.manageHooks({ id: 'claude-code', action: 'install' })).resolves.toMatchObject({
+      ok: false, stderr: 'permission denied', code: 1, error: 'install failed',
+    });
+  });
+
+  // ── Watchdog recovery + setServerUrl memo hygiene (review fixes) ─────────
+
+  it('after a hung-body timeout, the NEXT connect probes fresh (memo does not wedge re-arms)', async () => {
+    vi.useFakeTimers();
+    const a = new LocalAdapter(BASE);
+    const hanging = {
+      ok: true, status: 200, statusText: 'OK',
+      json: () => new Promise(() => { /* never */ }),
+      clone() { return this; },
+    } as unknown as Response;
+    fetchSpy.mockResolvedValue(hanging);
+    const p1 = a.connect();
+    const assertion1 = expect(p1).rejects.toThrow(/timed out/);
+    await vi.advanceTimersByTimeAsync(16000);
+    await assertion1;
+    vi.useRealTimers();
+    // Sidecar healthy now — a fresh connect must succeed, not dedup onto the hung probe.
+    routeMock(fetchSpy, [
+      ['/health', () => jsonRes(HEALTH)],
+      [TOKEN_PATH, () => jsonRes({ token: 'tok-A' })],
+    ]);
+    await expect(a.connect()).resolves.toMatchObject({ status: 'ok' });
+  });
+
+  it('setServerUrl clears the probe memo — a follow-up connect probes the NEW url', async () => {
+    const a = new LocalAdapter(BASE);
+    let releaseOld!: (r: Response) => void;
+    const oldGate = new Promise<Response>(res => { releaseOld = res; });
+    fetchSpy.mockImplementation(async (url: unknown) => {
+      const u = String(url);
+      if (u.startsWith(BASE)) return oldGate; // old-server probe hangs
+      if (u.includes('/health')) return jsonRes(HEALTH);
+      if (u.includes(TOKEN_PATH)) return jsonRes({ token: 'tok-NEW' });
+      throw new Error(`unmocked: ${u}`);
+    });
+    const p1 = a.connect();
+    a.setServerUrl('http://new-server:5555');
+    const p2 = a.connect();
+    await expect(p2).resolves.toMatchObject({ status: 'ok' });
+    expect(fetchSpy.mock.calls.some(([u]) => String(u).startsWith('http://new-server:5555/health'))).toBe(true);
+    releaseOld(jsonRes(HEALTH));
+    await p1.catch(() => { /* stale attempt — outcome irrelevant */ });
+  });
+
+  it('forceReconnect bypasses the settled-success memo and re-probes', async () => {
+    const a = await connectedAdapter('tok-A');
+    fetchSpy.mockClear();
+    routeMock(fetchSpy, [
+      ['/health', () => jsonRes(HEALTH)],
+      [TOKEN_PATH, () => jsonRes({ token: 'tok-B' })],
+    ]);
+    await a.forceReconnect();
+    expect(callsTo(fetchSpy, '/health')).toHaveLength(1); // a plain connect() would have made zero calls
+  });
 });

@@ -30,21 +30,28 @@ export const ServiceProvider = ({ children }: { children: ReactNode }) => {
   const [connecting, setConnecting] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Review fix: a connect rejection landing AFTER unmount must not schedule a
+  // new timer (the unmount cleanup already ran) or setState on a dead tree.
+  const mounted = useRef(true);
 
   // P1b D3: every settlement (success or failure) is broadcast so errored
   // Stage-B surfaces (tier, workspaces, briefing, …) revalidate without
   // waiting for a focus event that never fires on an already-focused window.
-  const connect = async (attempt = 0) => {
+  // `force` bypasses the adapter's retained settled-success memo — without it
+  // a user-initiated reconnect after a sidecar death would silently no-op.
+  const connect = async (attempt = 0, force = false) => {
     if (retryTimer.current) { clearTimeout(retryTimer.current); retryTimer.current = null; }
     setConnecting(true);
     setError(null);
     try {
       // Dedups onto the boot-connect.ts kickoff via the adapter's memo.
-      await adapter.connect();
+      await (force ? adapter.forceReconnect() : adapter.connect());
+      if (!mounted.current) return;
       setConnected(true);
       setConnecting(false);
       window.dispatchEvent(new CustomEvent(CONNECT_SETTLED_EVENT, { detail: { connected: true } }));
     } catch (e) {
+      if (!mounted.current) return;
       setError(e instanceof Error ? e.message : 'Failed to connect');
       setConnected(false);
       setConnecting(false);
@@ -56,12 +63,16 @@ export const ServiceProvider = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
+    mounted.current = true;
     connect();
-    return () => { if (retryTimer.current) clearTimeout(retryTimer.current); };
+    return () => {
+      mounted.current = false;
+      if (retryTimer.current) clearTimeout(retryTimer.current);
+    };
   }, []);
 
   return (
-    <ServiceContext.Provider value={{ adapter: adapter as LocalAdapter, connected, connecting, error, reconnect: () => connect() }}>
+    <ServiceContext.Provider value={{ adapter: adapter as LocalAdapter, connected, connecting, error, reconnect: () => connect(0, true) }}>
       {children}
     </ServiceContext.Provider>
   );

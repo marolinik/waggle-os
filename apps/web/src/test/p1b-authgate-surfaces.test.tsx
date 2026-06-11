@@ -32,6 +32,11 @@ const mocks = vi.hoisted(() => ({
     getIdentity: vi.fn(),
     searchMemory: vi.fn(),
     getMemoryStats: vi.fn(),
+    fetchRaw: vi.fn(),
+    getSettings: vi.fn(),
+    getTelemetryStatus: vi.fn(),
+    getTeamStatus: vi.fn(),
+    getServerUrl: vi.fn(),
   },
 }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
@@ -178,6 +183,77 @@ describe('LoginBriefing (P1b)', () => {
     const screen = await renderBriefing();
     await waitFor(() => expect(screen.getByTestId('login-briefing-empty-hook')).toBeInTheDocument());
     expect(screen.queryByTestId('login-briefing-error')).toBeNull();
+  }, 15000);
+
+  it('RECOVERS: connect-settled after the backend returns replaces the error with the briefing', async () => {
+    mocks.adapter.getIdentity.mockRejectedValue(new Error('down'));
+    mocks.adapter.searchMemory.mockRejectedValue(httpError(401, {}, 'Unauthorized'));
+    mocks.adapter.getMemoryStats.mockRejectedValue(httpError(401, {}, 'Unauthorized'));
+    mocks.adapter.getWorkspaces.mockRejectedValue(httpError(401, {}, 'Unauthorized'));
+    const screen = await renderBriefing();
+    await waitFor(() => expect(screen.getByTestId('login-briefing-error')).toBeInTheDocument());
+
+    // Backend comes back; the bus settlement revalidates the errored briefing.
+    mocks.adapter.searchMemory.mockResolvedValue([]);
+    mocks.adapter.getMemoryStats.mockResolvedValue(null);
+    mocks.adapter.getWorkspaces.mockResolvedValue([]);
+    settleConnect();
+    await waitFor(() => expect(screen.queryByTestId('login-briefing-error')).toBeNull());
+    expect(screen.getByTestId('login-briefing-empty-hook')).toBeInTheDocument();
+  }, 15000);
+});
+
+// ── BackupApp 404→empty (fetchRaw migration pin) ───────────────────────────
+
+describe('BackupApp (P1b)', () => {
+  it('a 404 metadata response renders the empty state, not the error panel', async () => {
+    mocks.adapter.fetchRaw.mockResolvedValue(
+      new Response(JSON.stringify({ error: 'no backups' }), { status: 404 }),
+    );
+    const { default: BackupApp } = await import('@/components/os/apps/BackupApp');
+    const { render, screen } = await import('@testing-library/react');
+    render(<BackupApp />);
+    await waitFor(() => expect(screen.getByText(/no backups yet/i)).toBeInTheDocument());
+    expect(screen.queryByText(/couldn.t load backups|retry/i)).toBeNull();
+  });
+
+  it('a 500 metadata response renders the retryable error, never the empty state', async () => {
+    mocks.adapter.fetchRaw.mockResolvedValue(
+      new Response(JSON.stringify({ error: 'boom' }), { status: 500 }),
+    );
+    const { default: BackupApp } = await import('@/components/os/apps/BackupApp');
+    const { render, screen } = await import('@testing-library/react');
+    render(<BackupApp />);
+    await waitFor(() => expect(screen.queryByText(/no backups yet/i)).toBeNull());
+  });
+});
+
+// ── SettingsApp tier-as-fact pins ──────────────────────────────────────────
+
+describe('SettingsApp tier badges (P1b D3-4)', () => {
+  async function renderSettings() {
+    mocks.adapter.getSettings.mockResolvedValue({});
+    mocks.adapter.getTelemetryStatus.mockResolvedValue({ enabled: false });
+    mocks.adapter.getTeamStatus.mockResolvedValue({ connected: false });
+    mocks.adapter.getServerUrl.mockReturnValue('http://127.0.0.1:3333');
+    const { default: SettingsApp } = await import('@/components/os/apps/SettingsApp');
+    const { TooltipProvider } = await import('@/components/ui/tooltip');
+    const { render, screen } = await import('@testing-library/react');
+    render(<TooltipProvider><SettingsApp /></TooltipProvider>);
+    return screen;
+  }
+
+  it('getTier failure: General tab never renders "FREE plan" as fact', async () => {
+    mocks.adapter.getTier.mockRejectedValue(httpError(401, {}, 'Unauthorized'));
+    const screen = await renderSettings();
+    await waitFor(() => expect(screen.getByText(/confirming plan/i)).toBeInTheDocument());
+    expect(screen.queryByText(/FREE plan/i)).toBeNull();
+  }, 15000);
+
+  it('resolved PRO tier renders the real plan in the General tab', async () => {
+    mocks.adapter.getTier.mockResolvedValue({ tier: 'PRO', capabilities: {}, usage: {} });
+    const screen = await renderSettings();
+    await waitFor(() => expect(screen.getByText(/PRO plan/i)).toBeInTheDocument());
   }, 15000);
 });
 

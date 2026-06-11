@@ -55,6 +55,21 @@ const AUTH_EXEMPT_PATHS = new Set(['/health', '/api/auth/session-token']);
 const CONNECT_DEADLINE_MS = 15000;
 
 /**
+ * P1b D3 — settle a promise within `ms` or reject with TimeoutError. Used to
+ * bound the single-flight probe/refresh memos: fetchWithTimeout only bounds
+ * time-to-headers, so an unbounded body read would otherwise occupy a memo
+ * forever and wedge every future caller that dedups onto it. (The underlying
+ * fetch is not aborted — its eventual settle is epoch-guarded and harmless.)
+ */
+function deadlined<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new TimeoutError(label, ms)), ms);
+  });
+  return Promise.race([p, deadline]).finally(() => clearTimeout(timer)) as Promise<T>;
+}
+
+/**
  * P1b D3 — thrown by `adapter.fetch()` on any non-2xx response (the
  * chokepoint conversion of ~145 silent-empty getters). Message precedence is
  * MESSAGE-FIRST (`body.message ?? body.error ?? HTTP <status>`) — matches the
@@ -166,11 +181,29 @@ class LocalAdapter {
     this.authToken = null;
     this._connected = false;
     this._connectAttempted = false;
+    // Review fix: clear ALL in-flight memos, not just the connect one — a
+    // post-setServerUrl connect must never dedup onto a probe/refresh of the
+    // OLD url (their stale settles are epoch-no-op'd, but reusing them would
+    // derive the NEW connection's outcome from the old server).
     this._connectPromise = null;
+    this._healthProbePromise = null;
+    this._refreshPromise = null;
   }
 
   getServerUrl() {
     return this.baseUrl;
+  }
+
+  /**
+   * P1b D3: explicit re-probe that bypasses the retained settled-success
+   * memo. `connect()` deliberately dedups onto a successful attempt (the
+   * deferral gate's fast path) — so a user-initiated "reconnect" after a
+   * sidecar death must clear the memo first or it would no-op.
+   */
+  forceReconnect(): Promise<SystemHealth> {
+    this._connectPromise = null;
+    this._healthProbePromise = null;
+    return this.connect();
   }
 
   // --- Auth ---
@@ -200,7 +233,7 @@ class LocalAdapter {
     let watchdog: ReturnType<typeof setTimeout> | undefined;
     const deadline = new Promise<never>((_, reject) => {
       watchdog = setTimeout(
-        () => reject(new TimeoutError('connect()', CONNECT_DEADLINE_MS)),
+        () => reject(new TimeoutError(`${this.baseUrl} (connect)`, CONNECT_DEADLINE_MS)),
         CONNECT_DEADLINE_MS,
       );
     });
@@ -273,7 +306,10 @@ class LocalAdapter {
   private refreshSessionToken(): Promise<void> {
     if (this._refreshPromise) return this._refreshPromise;
     const epoch = this._epoch;
-    const p = (async () => {
+    // Review fix: deadline INSIDE the memoized promise — fetchWithTimeout
+    // bounds headers only; an unbounded body read would otherwise occupy the
+    // single-flight memo forever and wedge every future 401 recovery.
+    const p = deadlined((async () => {
       const res = await this.request('/api/auth/session-token');
       if (!res.ok) {
         const body = await res.clone().json().catch(() => undefined);
@@ -282,7 +318,7 @@ class LocalAdapter {
       const body = (await res.json()) as { token?: string };
       if (!body.token) throw new Error('Session token refresh returned no token');
       if (epoch === this._epoch) this.authToken = body.token;
-    })();
+    })(), CONNECT_DEADLINE_MS, 'session-token refresh');
     this._refreshPromise = p;
     p.finally(() => {
       if (this._refreshPromise === p) this._refreshPromise = null;
@@ -308,8 +344,12 @@ class LocalAdapter {
    * the second-attempt error is less informative.
    */
   private healthProbe(epoch = this._epoch): Promise<SystemHealth> {
+    // Review fix: the memo is epoch-checked at creation (setServerUrl clears
+    // it, so a live memo always belongs to the current epoch) and DEADLINED —
+    // a server that sends headers then stalls the body must not occupy the
+    // single-flight slot forever (it would wedge every re-armed connect).
     if (this._healthProbePromise) return this._healthProbePromise;
-    const p = this.doHealthProbe(epoch);
+    const p = deadlined(this.doHealthProbe(epoch), CONNECT_DEADLINE_MS, 'health probe');
     this._healthProbePromise = p;
     p.finally(() => {
       if (this._healthProbePromise === p) this._healthProbePromise = null;
@@ -768,8 +808,11 @@ class LocalAdapter {
 
   async getMemory(id: string, workspaceId?: string): Promise<Memory | null> {
     const qs = workspaceId ? `?workspace=${encodeURIComponent(workspaceId)}` : '';
-    const res = await this.fetch(`/api/memory/${encodeURIComponent(id)}${qs}`);
+    // P1b D3: fetchRaw preserves the documented 404→null contract (the
+    // throwing fetch would reject before the status check).
+    const res = await this.fetchRaw(`/api/memory/${encodeURIComponent(id)}${qs}`);
     if (res.status === 404) return null;
+    if (!res.ok) throw new AdapterHttpError(res.status, res.statusText, await res.clone().json().catch(() => undefined));
     return res.json();
   }
 
@@ -835,8 +878,10 @@ class LocalAdapter {
 
   async getArtifact(id: string, workspaceId?: string): Promise<Artifact | null> {
     const qs = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : '';
-    const res = await this.fetch(`/api/artifacts/${encodeURIComponent(id)}${qs}`);
+    // P1b D3: fetchRaw preserves the documented 404→null contract.
+    const res = await this.fetchRaw(`/api/artifacts/${encodeURIComponent(id)}${qs}`);
     if (res.status === 404) return null;
+    if (!res.ok) throw new AdapterHttpError(res.status, res.statusText, await res.clone().json().catch(() => undefined));
     return res.json();
   }
 
@@ -1298,9 +1343,10 @@ class LocalAdapter {
   }
 
   async getAgent(id: string): Promise<Agent | null> {
-    const res = await this.fetch(`/api/agents/${encodeURIComponent(id)}`);
+    // P1b D3: fetchRaw preserves the documented 404→null contract.
+    const res = await this.fetchRaw(`/api/agents/${encodeURIComponent(id)}`);
     if (res.status === 404) return null;
-    if (!res.ok) throw new Error(`getAgent failed: ${res.status}`);
+    if (!res.ok) throw new AdapterHttpError(res.status, res.statusText, await res.clone().json().catch(() => undefined));
     const body = await res.json() as { agent: Agent };
     return body.agent;
   }
@@ -1790,7 +1836,14 @@ class LocalAdapter {
     try {
       const res = await this.fetch(`/api/jobs/${jobId}`);
       return res.json();
-    } catch (err) { console.error('[adapter] getJobStatus failed:', err); return null; }
+    } catch (err) {
+      // 404 = job unknown (in-memory store; lost on sidecar restart). Callers
+      // poll on a tight interval — don't console-spam the expected case.
+      if (!(err instanceof AdapterHttpError && err.status === 404)) {
+        console.error('[adapter] getJobStatus failed:', err);
+      }
+      return null;
+    }
   }
 
   async cancelJob(jobId: string): Promise<void> {
@@ -2262,7 +2315,8 @@ class LocalAdapter {
     /** Optional cwd override; defaults to the binary's directory. */
     cwd?: string;
   }): Promise<{ ok: boolean; pid: number | null; error?: string }> {
-    const res = await this.fetch('/api/tools/launch', {
+    // P1b D3: fetchRaw — non-2xx body maps into the { ok:false, error } envelope.
+    const res = await this.fetchRaw('/api/tools/launch', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
@@ -2299,7 +2353,7 @@ class LocalAdapter {
     reason: string;
     error?: string;
   }> {
-    const res = await this.fetch('/api/tools/kill', {
+    const res = await this.fetchRaw('/api/tools/kill', {
       method: 'POST',
       body: JSON.stringify({ pid }),
     });
@@ -2324,7 +2378,8 @@ class LocalAdapter {
     code: number;
     error?: string;
   }> {
-    const res = await this.fetch('/api/tools/hooks', {
+    // P1b D3: fetchRaw — hook-failure diagnostics (stderr/exit code) ride the error body.
+    const res = await this.fetchRaw('/api/tools/hooks', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
