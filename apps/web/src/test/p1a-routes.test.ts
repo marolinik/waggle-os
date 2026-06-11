@@ -168,6 +168,11 @@ describe('queryString — §2.3 deep-link carrier', () => {
   it('serializes the reserved session param (§1.1 /workspaces row)', () => {
     expect(queryString({ session: 'sess-1' })).toBe('?session=sess-1');
   });
+
+  it('serializes the filter param (P2/J08 — Memory Center needs-review deep link)', () => {
+    expect(queryString({ filter: 'unreviewed' })).toBe('?filter=unreviewed');
+    expect(queryString({ tab: 'memories', filter: 'unreviewed' })).toBe('?tab=memories&filter=unreviewed');
+  });
 });
 
 describe('matchNavRoute — §2.1.2 active-state prefix match', () => {

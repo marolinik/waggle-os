@@ -535,7 +535,13 @@ class LocalAdapter {
 
   async getWorkspaceFiles(workspaceId: string): Promise<unknown[]> {
     const res = await this.fetch(`/api/workspaces/${workspaceId}/files`);
-    return res.json();
+    // The route returns a `{ files: [...] }` envelope (workspaces.ts F2) —
+    // unwrap it so consumers get the array either way (P2 fix: the envelope
+    // object reached normalizeArtifacts() as-is and rendered Artifacts empty).
+    const body: unknown = await res.json();
+    if (Array.isArray(body)) return body;
+    const files = (body as { files?: unknown[] } | null)?.files;
+    return Array.isArray(files) ? files : [];
   }
 
   // --- Workspace Desktop (UX-Refactor Phase 1, S02) ---

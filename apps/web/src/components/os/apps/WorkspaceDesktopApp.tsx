@@ -35,10 +35,11 @@ import {
   LayoutGrid, MessageSquare, BookOpen, FileBox, Brain, ListTodo,
   Clock, Settings as SettingsIcon, Loader2, CheckCircle2, AlertTriangle,
   Lightbulb, Sparkles, Users, Activity, WifiOff, ShieldAlert, ChevronRight,
-  Circle, FileText, ArrowUpRight,
+  Circle, FileText, ArrowUpRight, SearchX, RefreshCw,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { useRoomState } from '@/hooks/useRoomState';
+import { useRevalidateOnError } from '@/hooks/useRevalidateOnError';
 import type {
   WorkspaceContext,
   WorkspaceStateView,
@@ -646,9 +647,18 @@ const WorkspaceDesktopApp = ({
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [artifacts, setArtifacts] = useState<ArtifactRow[]>([]);
   const [loading, setLoading] = useState(true);
-  // Distinguish a hard fetch failure (offline) from a permission denial so
-  // the two required states render differently (PRD §12.2 state list).
-  const [errorKind, setErrorKind] = useState<'offline' | 'permission' | null>(null);
+  // Distinguish a hard fetch failure (offline) from a permission denial and
+  // an unknown workspace id so the required states render differently (PRD
+  // §12.2 state list; P2 fix — a stale/mistyped URL used to claim "offline").
+  const [errorKind, setErrorKind] = useState<'offline' | 'permission' | 'notfound' | null>(null);
+  // D3 plus-clause: bumping this re-runs the load effect; wired to Retry and
+  // to focus/online/connect-settled revalidation while the screen is errored.
+  // Revalidation arms ONLY for the transient 'offline' state — 'notfound' and
+  // 'permission' are deterministic (a deleted workspace 404s forever), so
+  // auto-refetching them would just flash the loading screen on every refocus.
+  const [reloadKey, setReloadKey] = useState(0);
+  const retry = useCallback(() => setReloadKey((k) => k + 1), []);
+  useRevalidateOnError(errorKind === 'offline', retry);
 
   // Live agents-running indicator for THIS workspace (reuse Room SSE state).
   const { workspaceMap } = useRoomState();
@@ -675,10 +685,20 @@ const WorkspaceDesktopApp = ({
       } catch (err: unknown) {
         if (cancelled) return;
         setCtx(null);
-        const msg = err instanceof Error ? err.message.toLowerCase() : '';
-        setErrorKind(msg.includes('403') || msg.includes('forbid') || msg.includes('denied')
-          ? 'permission'
-          : 'offline');
+        // Structured branching on the P1b adapter error (status is reliable).
+        // Duck-type on error.name, NOT instanceof — the adapter module is
+        // mocked away in component tests (p1b-authgate convention) and the
+        // name+status contract is the stable surface. Message-sniffing
+        // remains only as the non-HTTP fallback.
+        const httpErr = err instanceof Error && err.name === 'AdapterHttpError'
+          ? (err as Error & { status?: number })
+          : null;
+        if (httpErr) {
+          setErrorKind(httpErr.status === 404 ? 'notfound' : httpErr.status === 403 ? 'permission' : 'offline');
+        } else {
+          const msg = err instanceof Error ? err.message.toLowerCase() : '';
+          setErrorKind(msg.includes('forbid') || msg.includes('denied') ? 'permission' : 'offline');
+        }
         // Context decides the whole-screen error state — bail before the
         // best-effort feeds fire, so a permission denial doesn't fan out into
         // four more 403s against the same workspace.
@@ -717,7 +737,7 @@ const WorkspaceDesktopApp = ({
     })();
 
     return () => { cancelled = true; };
-  }, [workspaceId]);
+  }, [workspaceId, reloadKey]);
 
   const displayName = ctx?.workspace?.name ?? workspaceName;
   const wsType = ctx?.workspace?.type;
@@ -750,6 +770,28 @@ const WorkspaceDesktopApp = ({
     );
   }
 
+  if (errorKind === 'notfound') {
+    return (
+      <FullScreenState
+        icon={SearchX}
+        iconClass="text-muted-foreground"
+        title="Workspace not found"
+        body="This workspace doesn't exist — it may have been deleted, or the link is stale."
+        testId="ws-desktop-notfound"
+        cta={
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('waggle:open-app', { detail: { appId: 'home' } }))}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-display rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 transition-colors"
+            data-testid="ws-desktop-notfound-home"
+          >
+            Go to Home <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        }
+      />
+    );
+  }
+
   if (errorKind === 'offline') {
     return (
       <FullScreenState
@@ -758,6 +800,16 @@ const WorkspaceDesktopApp = ({
         title="Can't reach this workspace"
         body="The workspace couldn't be loaded. Check your connection — the server may be offline."
         testId="ws-desktop-offline"
+        cta={
+          <button
+            type="button"
+            onClick={retry}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-display rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 transition-colors"
+            data-testid="ws-desktop-retry"
+          >
+            <RefreshCw className="w-3.5 h-3.5" /> Retry
+          </button>
+        }
       />
     );
   }

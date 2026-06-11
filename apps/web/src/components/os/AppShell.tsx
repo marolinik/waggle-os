@@ -123,13 +123,13 @@ const ShellLayout = () => {
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail as
-        | { appId?: AppId; tab?: string; automationId?: string; redispatch?: boolean }
+        | { appId?: AppId; tab?: string; automationId?: string; filter?: string; redispatch?: boolean }
         | undefined;
       if (!detail?.appId || detail.redispatch) return;
-      stashDeepLink({ appId: detail.appId, tab: detail.tab, automationId: detail.automationId });
+      stashDeepLink({ appId: detail.appId, tab: detail.tab, automationId: detail.automationId, filter: detail.filter });
       navigate(
         routeFor(detail.appId, { activeWorkspaceId }) +
-        queryString({ tab: detail.tab, automationId: detail.automationId }),
+        queryString({ tab: detail.tab, automationId: detail.automationId, filter: detail.filter }),
       );
       // Two rAFs ≈ the tick after the navigated-to route has committed.
       requestAnimationFrame(() => requestAnimationFrame(() => {

@@ -611,7 +611,17 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
     const crossWorkspaceHints: string[] = [];
 
     return {
-      workspace: { id: ws.id, name: ws.name, group: ws.group, model: ws.model, directory: ws.directory, templateId: ws.templateId, personaId: ws.personaId },
+      // P2 (PRD §12.2 header FRs): project type/status/description so the
+      // Workspace Desktop header renders real values — the FE already reads
+      // all three (`ctx?.workspace?.type` / `.status` / description) and fell
+      // back to hardcoded 'active' while the block omitted them.
+      workspace: {
+        id: ws.id, name: ws.name, group: ws.group, model: ws.model,
+        directory: ws.directory, templateId: ws.templateId, personaId: ws.personaId,
+        ...(ws.description ? { description: ws.description } : {}),
+        ...(ws.type ? { type: ws.type } : {}),
+        status: ws.status ?? 'active',
+      },
       // FR #25: avoid the "Default Workspace workspace" duplication when the
       // workspace name already includes the word "workspace". The fallback now
       // names the workspace inline rather than treating "workspace" as a noun

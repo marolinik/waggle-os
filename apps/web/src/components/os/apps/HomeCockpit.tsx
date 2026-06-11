@@ -124,12 +124,20 @@ function FirstRunEmpty({ greeting, onCreateWorkspace }: { greeting: string; onCr
 }
 
 // ── Greeting header ──────────────────────────────────────────────────────
+/** The briefing ships `date` as a raw ISO string — render it as a human date
+ *  (P2 fix: the header showed "2026-06-11T07:42:13.512Z" verbatim). */
+function formatBriefingDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+}
+
 function GreetingHeader({ greeting, date, offline }: { greeting: string; date: string; offline: boolean }) {
   return (
     <div className="mb-6 flex items-start justify-between gap-3">
       <div className="min-w-0">
         <h1 className="text-2xl font-display font-bold text-foreground leading-tight">{greeting}</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">{date}</p>
+        <p className="text-sm text-muted-foreground mt-0.5">{formatBriefingDate(date)}</p>
       </div>
       <div className="flex items-center gap-2 shrink-0">
         {offline && (
@@ -548,6 +556,16 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
   // hidden when there's no activity, so failures would otherwise go unseen.
   const failureCount = overnight?.failures?.length ?? 0;
 
+  // J08 (D6, Journey 6): imported memories awaiting review get a sibling
+  // attention banner that deep-links to the Memory Center "Needs review"
+  // filter via the established waggle:open-app shim.
+  const needsReviewCount = briefing.needsReviewCount ?? 0;
+  const openMemoryReview = () => {
+    window.dispatchEvent(new CustomEvent('waggle:open-app', {
+      detail: { appId: 'memory', filter: 'unreviewed' },
+    }));
+  };
+
   return (
     <div className="h-full overflow-auto p-6 max-w-3xl mx-auto" data-testid="home-cockpit">
       <GreetingHeader greeting={greeting} date={briefing.date} offline={offline} />
@@ -567,6 +585,32 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
           <p className="text-xs font-display">
             {failureCount} overnight {failureCount === 1 ? 'task needs' : 'tasks need'} your attention.
           </p>
+        </div>
+      )}
+
+      {needsReviewCount > 0 && (
+        <div
+          className="mb-4 flex items-center gap-2 rounded-xl px-3 py-2.5"
+          style={{
+            color: 'var(--sem-attention)',
+            backgroundColor: 'color-mix(in srgb, var(--sem-attention) 10%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--sem-attention) 30%, transparent)',
+          }}
+          role="alert"
+          data-testid="home-cockpit-review-banner"
+        >
+          <Brain className="w-4 h-4 shrink-0" />
+          <p className="text-xs font-display flex-1">
+            {needsReviewCount} imported {needsReviewCount === 1 ? 'memory needs' : 'memories need'} your review.
+          </p>
+          <button
+            type="button"
+            onClick={openMemoryReview}
+            className="inline-flex items-center gap-0.5 px-2 py-1 text-[11px] font-display rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors shrink-0"
+            data-testid="home-cockpit-review-cta"
+          >
+            Review <ChevronRight className="w-3 h-3" />
+          </button>
         </div>
       )}
 
