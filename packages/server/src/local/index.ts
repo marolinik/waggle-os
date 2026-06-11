@@ -71,6 +71,7 @@ import { settingsRoutes } from './routes/settings.js';
 import { sessionRoutes, findUndistilledSessions, markSessionDistilled } from './routes/sessions.js';
 import { knowledgeRoutes } from './routes/knowledge.js';
 import { litellmRoutes } from './routes/litellm.js';
+import { runMemoryLaneExtraction } from './memory-lane-cron.js';
 import { ingestRoutes, readFileRegistry } from './routes/ingest.js';
 import { mindRoutes } from './routes/mind.js';
 import { agentRoutes } from './routes/agent.js';
@@ -1510,6 +1511,53 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
             }
           } catch (err) {
             log.warn(`[cron] Memory compaction failed: ${(err as Error).message}`);
+          }
+        } else if (mcJobConfig.action === 'memory_lane_extract') {
+          // W4.3d: extraction of the benchmark-proven recall lanes
+          // (facts/events/profiles) over frames written since the last run.
+          // Routes through the built-in proxy ('fast' tier = haiku) — the
+          // same internal-LLM pattern as prompt_optimization above.
+          try {
+            const llmCall = async (prompt: string, _model: 'fast' | 'accurate'): Promise<string> => {
+              const proxyUrl = `http://127.0.0.1:${fullConfig.port ?? 3333}/v1/chat/completions`;
+              const res = await fetch(proxyUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                signal: AbortSignal.timeout(90_000),
+                body: JSON.stringify({
+                  model: 'claude-haiku-4-5',
+                  max_tokens: 4096,
+                  messages: [{ role: 'user', content: prompt }],
+                }),
+              });
+              if (!res.ok) throw new Error(`lane-extract LLM HTTP ${res.status}`);
+              const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
+              return data.choices?.[0]?.message?.content ?? '';
+            };
+            const minds: Array<{ label: string; db: import('@waggle/core').MindDB }> = [
+              { label: 'personal', db: multiMind.personal },
+            ];
+            for (const ws of wsManager.list()) {
+              const wsDb = getWorkspaceMindDb(ws.id);
+              if (wsDb) minds.push({ label: `workspace "${ws.name}"`, db: wsDb });
+            }
+            for (const mind of minds) {
+              try {
+                const r = await runMemoryLaneExtraction(mind.db, llmCall);
+                if (!r.skipped) {
+                  log.info(
+                    `[cron] Memory lanes (${mind.label}): ${r.framesProcessed} frames → ` +
+                    `facts=${r.written?.factsWritten ?? 0} events=${r.written?.eventsWritten ?? 0} ` +
+                    `profiles=${r.written?.profilesWritten ?? 0}` +
+                    (r.errors.length ? ` (errors: ${r.errors.join('; ').slice(0, 200)})` : '')
+                  );
+                }
+              } catch (innerErr) {
+                log.warn(`[cron] Memory lanes (${mind.label}) failed: ${(innerErr as Error).message}`);
+              }
+            }
+          } catch (err) {
+            log.warn(`[cron] Memory lane extraction failed: ${(err as Error).message}`);
           }
         } else {
           // Normal memory consolidation

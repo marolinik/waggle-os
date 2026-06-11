@@ -33,4 +33,8 @@ export function seedDefaultCrons(cronStore: CronStore): void {
 
   // Phase 9a: Memory compaction — prune temporary/deprecated frames, merge stale P-frames
   ensure('Memory compaction', '30 3 * * *', 'memory_consolidation', { action: 'memory_compact' });
+
+  // W4.3d: Memory lane extraction — facts/events/profiles passes over new
+  // frames (benchmark-proven recall lanes; see extract-memory-lanes.ts)
+  ensure('Memory lane extraction', '0 4 * * *', 'memory_consolidation', { action: 'memory_lane_extract' });
 }
