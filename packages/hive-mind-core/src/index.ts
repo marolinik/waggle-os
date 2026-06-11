@@ -90,6 +90,15 @@ export {
   type MemoryLaneExtraction, type ExtractedEvent, type ExtractedFact, type ExtractedProfile,
   type WriteLaneFramesResult,
 } from './harvest/extract-memory-lanes.js';
+export {
+  writeRawTurnFrames, rawTurnHeader, parseRawTurnHeader, rawTurnConvKey,
+  MIND_RAWTURN_PREFIX, MAX_TURNS_PER_ITEM, RAWDETAIL_KILL_SWITCH,
+  type WriteRawTurnsResult, type ParsedRawTurnHeader,
+} from './harvest/raw-turns.js';
+export {
+  fetchRawDetailLane, rawTurnBody, RAW_DETAIL_K,
+  type RawTurnHit, type RawDetailLaneOptions,
+} from './mind/raw-detail-lane.js';
 export { dedup, harvestSetHash } from './harvest/dedup.js';
 export { HARVEST_FRAME_CONTENT_CAP } from './harvest/types.js';
 export type {
