@@ -153,7 +153,8 @@ class LocalAdapter {
   private baseUrl: string;
   private authToken: string | null = null;
   private ws: WebSocket | null = null;
-  private sseConnections = new Map<string, EventSource>();
+  /** P1b-SSE: one live (reconnecting) subscription per path. */
+  private sseUnsubscribers = new Map<string, () => void>();
   private _connected = false;
   private _connectAttempted = false;
   // P1b D3 gate state. _connectPromise doubles as the deferral gate: kept
@@ -1063,7 +1064,6 @@ class LocalAdapter {
   }
 
   subscribeEvents(onEvent: (step: AgentStep) => void): () => void {
-    if (!this._connected) return () => {};
     return this.subscribeSSE('/api/events/stream', (data) => onEvent(data as AgentStep));
   }
 
@@ -1556,7 +1556,6 @@ class LocalAdapter {
 
   // --- Notifications ---
   subscribeNotifications(onNotification: (n: Notification) => void): () => void {
-    if (!this._connected) return () => {};
     return this.subscribeSSE('/api/notifications/stream', (data) => onNotification(data as Notification));
   }
 
@@ -1584,18 +1583,16 @@ class LocalAdapter {
       timestamp: string;
     }) => void,
   ): () => void {
-    if (!this._connected) return () => {};
-    const url = `${this.baseUrl}/api/notifications/stream`;
-    const es = new EventSource(url);
+    // P1b-SSE: dedicated reconnecting EventSource (NOT subscribeSSE — that
+    // dedups by path, and this shares /api/notifications/stream with
+    // subscribeNotifications). configure re-attaches the named listener on
+    // every reopen.
     const handler = (e: MessageEvent) => {
       try { onEvent(JSON.parse(e.data)); } catch { /* skip malformed */ }
     };
-    es.addEventListener('subagent_status', handler as EventListener);
-    es.onerror = () => { es.close(); };
-    return () => {
-      es.removeEventListener('subagent_status', handler as EventListener);
-      es.close();
-    };
+    return this.openSSE('/api/notifications/stream', (es) => {
+      es.addEventListener('subagent_status', handler as EventListener);
+    });
   }
 
   /**
@@ -1611,28 +1608,31 @@ class LocalAdapter {
   subscribeHarvestProgress(
     onEvent: (data: { phase: string; current: number; total: number; source: string }) => void,
   ): { ready: Promise<void>; close: () => void } {
-    if (!this._connected) {
+    if (typeof EventSource === 'undefined') {
       return { ready: Promise.resolve(), close: () => {} };
     }
-    const url = `${this.baseUrl}/api/harvest/progress`;
-    const es = new EventSource(url);
-
+    // P1b-SSE: token-attached lazy-open via openSSE. `ready` resolves on the
+    // first successful handshake so the caller defers the import POST until
+    // the listener is registered server-side — with a 5s overall safety cap
+    // (deferral + handshake) so a down server can't block the import flow
+    // indefinitely (the POST surfaces its own error).
     let resolved = false;
+    let finish!: () => void;
     const ready = new Promise<void>((resolve) => {
-      const finish = () => { if (!resolved) { resolved = true; resolve(); } };
-      if (es.readyState === EventSource.OPEN) return finish();
-      es.addEventListener('open', finish, { once: true });
-      // Safety: if the handshake stalls, proceed anyway after 1s so a
-      // flaky SSE doesn't block the actual import indefinitely.
-      setTimeout(finish, 1000);
+      finish = () => { if (!resolved) { resolved = true; resolve(); } };
     });
+    const safety = setTimeout(() => finish(), 5000);
 
-    es.onmessage = (e) => {
-      try { onEvent(JSON.parse(e.data)); } catch { /* skip malformed */ }
+    const close = this.openSSE('/api/harvest/progress', (es) => {
+      es.onmessage = (e) => {
+        try { onEvent(JSON.parse(e.data)); } catch { /* skip malformed */ }
+      };
+    }, /* onOpen */ () => finish());
+
+    return {
+      ready: ready.finally(() => clearTimeout(safety)),
+      close: () => { clearTimeout(safety); finish(); close(); },
     };
-    es.onerror = () => { /* keep open — server may reconnect; close handled by caller */ };
-
-    return { ready, close: () => es.close() };
   }
 
   async getNotificationHistory(): Promise<Notification[]> {
@@ -2395,28 +2395,87 @@ class LocalAdapter {
   }
 
   subscribeWaggleDance(onSignal: (signal: WaggleSignal) => void): () => void {
-    if (!this._connected) return () => {};
     return this.subscribeSSE('/api/waggle/stream', (data) => onSignal(data as WaggleSignal));
   }
 
-  private subscribeSSE(path: string, onData: (data: unknown) => void): () => void {
-    const url = `${this.baseUrl}${path}`;
-    if (this.sseConnections.has(path)) {
-      this.sseConnections.get(path)!.close();
-    }
-    const es = new EventSource(url);
-    this.sseConnections.set(path, es);
-    es.onmessage = (e) => {
-      try { onData(JSON.parse(e.data)); } catch { /* skip */ }
+  /**
+   * P1b-SSE: shared EventSource lifecycle — token-attached, lazy-open,
+   * reconnecting. Fixes the three defects that made every stream dead in
+   * default config:
+   *  1. AUTH — EventSource cannot send headers; the server now accepts
+   *     `?token=` on the SSE allowlist (security-middleware SSE_QUERY_TOKEN_PATHS,
+   *     the /ws pattern), so the URL carries the session token.
+   *  2. LAZY-OPEN — the old `if (!this._connected) return () => {}` guards
+   *     turned any subscription mounted before connect settled into a
+   *     session-long noop. The handle returns synchronously; the EventSource
+   *     opens once `ensureReady()` settles (token available).
+   *  3. RECONNECT — the old onerror closed permanently, and EventSource's
+   *     native retry can't help anyway once the token rotates (it's baked
+   *     into the URL). On error: close, refresh the token (single-flight,
+   *     loud-on-failure variant — the rotation case), reopen on capped
+   *     exponential backoff (1s → 30s).
+   * `configure` attaches the caller's listeners to each (re)opened instance.
+   * No-ops in environments without EventSource (jsdom unit tests).
+   */
+  private openSSE(
+    path: string,
+    configure: (es: EventSource) => void,
+    onOpen?: () => void,
+  ): () => void {
+    if (typeof EventSource === 'undefined') return () => {};
+    let es: EventSource | null = null;
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let attempt = 0;
+
+    const open = () => {
+      if (cancelled) return;
+      const sep = path.includes('?') ? '&' : '?';
+      const url = `${this.baseUrl}${path}${this.authToken ? `${sep}token=${encodeURIComponent(this.authToken)}` : ''}`;
+      es = new EventSource(url);
+      configure(es);
+      es.onopen = () => { attempt = 0; onOpen?.(); };
+      es.onerror = () => {
+        es?.close();
+        if (cancelled) return;
+        const delay = Math.min(30000, 1000 * 2 ** attempt++);
+        retryTimer = setTimeout(() => {
+          // Sidecar restart rotates the token; the URL-baked one is then
+          // permanently stale. Best-effort refresh before each reopen —
+          // single-flighted, and a failure just means the next backoff round.
+          void this.refreshSessionToken().catch(() => { /* server still down */ })
+            .then(() => { if (!cancelled) open(); });
+        }, delay);
+      };
     };
-    es.onerror = () => {
-      es.close();
-      this.sseConnections.delete(path);
-    };
+
+    // Lazy-open: wait for the connect attempt to settle so the token exists.
+    // Never-attempted (unit tests) passes through immediately; a FAILED
+    // connect also releases — the stream 401s and enters the retry loop,
+    // which doubles as the recovery path.
+    void this.ensureReady().then(() => { if (!cancelled) open(); });
+
     return () => {
-      es.close();
-      this.sseConnections.delete(path);
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      es?.close();
     };
+  }
+
+  private subscribeSSE(path: string, onData: (data: unknown) => void): () => void {
+    // One live subscription per path (re-subscribing replaces the old one).
+    this.sseUnsubscribers.get(path)?.();
+    const unsubscribe = this.openSSE(path, (es) => {
+      es.onmessage = (e) => {
+        try { onData(JSON.parse(e.data)); } catch { /* skip */ }
+      };
+    });
+    const wrapped = () => {
+      unsubscribe();
+      if (this.sseUnsubscribers.get(path) === wrapped) this.sseUnsubscribers.delete(path);
+    };
+    this.sseUnsubscribers.set(path, wrapped);
+    return wrapped;
   }
 
   // --- Telemetry ---
