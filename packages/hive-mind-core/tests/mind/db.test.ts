@@ -45,6 +45,28 @@ describe('MindDB (hive-mind port)', () => {
     expect(() => new Date(firstRun!).toISOString()).not.toThrow();
   });
 
+  it('REOPENS a pre-D3 database (no content_hash column) without throwing — boot regression pin', () => {
+    // 2026-06-12: every EXISTING install failed to boot ("no such column:
+    // content_hash") because SCHEMA_SQL carried the content_hash INDEX — on an
+    // old DB the CREATE TABLE no-ops and the index referenced a column only
+    // the (later) guarded ALTER adds. Simulate a pre-D3 DB by dropping the
+    // column + index, then reopen: migrations must restore both.
+    const raw = db!.getDatabase();
+    raw.exec('DROP INDEX IF EXISTS idx_frames_content_hash');
+    raw.exec('ALTER TABLE memory_frames DROP COLUMN content_hash');
+    db!.close();
+
+    db = new MindDB(dbPath); // must not throw
+    const cols = db!.getDatabase()
+      .prepare("SELECT COUNT(*) as cnt FROM pragma_table_info('memory_frames') WHERE name='content_hash'")
+      .get() as { cnt: number };
+    expect(cols.cnt).toBe(1);
+    const idx = db!.getDatabase()
+      .prepare("SELECT COUNT(*) as cnt FROM sqlite_master WHERE type='index' AND name='idx_frames_content_hash'")
+      .get() as { cnt: number };
+    expect(idx.cnt).toBe(1);
+  });
+
   it('creates the OSS shared-substrate tables (verbatim from hive-mind)', () => {
     const raw = db!.getDatabase();
     const tables = raw

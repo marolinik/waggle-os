@@ -74,7 +74,11 @@ CREATE TABLE IF NOT EXISTS memory_frames (
 CREATE INDEX IF NOT EXISTS idx_frames_gop_t ON memory_frames (gop_id, t);
 CREATE INDEX IF NOT EXISTS idx_frames_type ON memory_frames (frame_type, gop_id);
 CREATE INDEX IF NOT EXISTS idx_frames_base ON memory_frames (base_frame_id);
-CREATE INDEX IF NOT EXISTS idx_frames_content_hash ON memory_frames (content_hash);
+-- idx_frames_content_hash is created ONLY in db.ts runMigrations(), AFTER the
+-- guarded ADD COLUMN. It must NOT live here: on a pre-D3 database the CREATE
+-- TABLE above no-ops (table exists without content_hash), so an index here
+-- referenced a missing column and SCHEMA_SQL threw BEFORE the ALTER could run
+-- — every existing install failed to boot (2026-06-12 regression).
 
 -- FTS5 for keyword search on frame content
 CREATE VIRTUAL TABLE IF NOT EXISTS memory_frames_fts USING fts5(
