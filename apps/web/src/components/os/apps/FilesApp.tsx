@@ -9,6 +9,7 @@ import {
   Trash2, Copy, Scissors, ClipboardPaste, Edit, FolderPlus, X as XIcon,
   RefreshCw, CheckSquare, XSquare, FolderInput,
   Info, Shield, MapPin, Clock, Hash, Lock, Unlock, FileText, HardDrive,
+  Loader2, AlertTriangle,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { FileEntry, StorageType, Workspace } from '@/lib/types';
@@ -381,8 +382,10 @@ const FilesApp = ({
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
-      {/* Offline banner */}
-      {offline && (
+      {/* Degraded-cache banner — only honest when there actually IS a cache.
+          P7/D15 B4: a cold-load failure (files.length === 0) is a real error and
+          is rendered in the list pane below, NOT mislabelled "showing cached files." */}
+      {offline && files.length > 0 && (
         <div className="absolute top-0 left-0 right-0 z-10 px-4 py-2 text-xs text-center" style={{ backgroundColor: 'var(--hive-800)', borderBottom: '1px solid var(--hive-700)', color: 'var(--honey-500)' }}>
           Server unreachable — showing cached files. <button onClick={refreshFiles} className="underline ml-1">Retry</button>
         </div>
@@ -467,7 +470,24 @@ const FilesApp = ({
 
         {/* File list/grid */}
         <div className="flex-1 overflow-auto p-2" onContextMenu={e => handleContextMenu(e)}>
-          {visibleFiles.length === 0 ? (
+          {loading && files.length === 0 ? (
+            /* P7/D15 B4: in-flight cold load — not an empty directory. */
+            <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2" data-testid="files-loading">
+              <Loader2 className="w-8 h-8 opacity-40 animate-spin" />
+              <p className="text-xs">Loading files…</p>
+            </div>
+          ) : offline && files.length === 0 ? (
+            /* P7/D15 B4: cold-load FAILURE with no cache — a real error, never
+               the "showing cached files"/"empty directory" lie. */
+            <div role="alert" className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2">
+              <AlertTriangle className="w-8 h-8 text-destructive/60" />
+              <p className="text-xs text-foreground">Couldn't load files</p>
+              <p className="text-[11px] max-w-xs text-center">The file service is unreachable — this is a load error, not an empty folder.</p>
+              <button onClick={refreshFiles} className="text-[11px] px-3 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors">
+                Retry
+              </button>
+            </div>
+          ) : visibleFiles.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2">
               <Folder className="w-10 h-10 opacity-30" />
               <p className="text-xs">Empty directory</p>
