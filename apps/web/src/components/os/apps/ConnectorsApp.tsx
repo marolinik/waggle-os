@@ -22,6 +22,7 @@ import { adapter } from '@/lib/adapter';
 import { useService } from '@/providers/ServiceProvider';
 import { useToast } from '@/hooks/use-toast';
 import { ApprovalModal, type ApprovalRequest } from '@/components/ui/approval-modal';
+import { actionRisk } from '@/lib/risk-display';
 import ConnectorCard, { type ConnectorSetupHint } from './connectors/ConnectorCard';
 import InstallAuditPanel from './extend/InstallAuditPanel';
 import { formatPersonaName } from '@/lib/persona-display';
@@ -89,7 +90,7 @@ export function buildRevokeRequest(conn: Pick<ConnectorDefinition, 'id' | 'name'
         : 'Purges this provider’s OAuth tokens',
       'Writes a revoke entry to the install audit trail',
     ],
-    riskLevel: 'medium',
+    riskLevel: actionRisk('connector-revoke'),
   };
 }
 

@@ -16,7 +16,7 @@ import { Store, Search, Loader2, Package } from 'lucide-react';
 import type { ExtensionType } from '@waggle/shared';
 import { EXTENSION_TYPES } from '@waggle/shared';
 import { Input } from '@/components/ui/input';
-import { classifyInstallRisk } from '@/lib/risk-display';
+import { classifyInstallRisk, actionRisk } from '@/lib/risk-display';
 import { adapter } from '@/lib/adapter';
 import { useService } from '@/providers/ServiceProvider';
 import { useToast } from '@/hooks/use-toast';
@@ -69,7 +69,7 @@ export function buildRemoveRequest(ext: Extension): ApprovalRequest {
       'Uninstalls the package and the skills it provides',
       'Recorded in the install audit trail',
     ],
-    riskLevel: 'medium',
+    riskLevel: actionRisk('install-remove'),
   };
 }
 

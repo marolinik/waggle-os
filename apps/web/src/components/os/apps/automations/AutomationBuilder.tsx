@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { BuilderStepper, type BuilderStep } from '@/components/ui/stepper';
 import { ApprovalModal, type ApprovalRequest } from '@/components/ui/approval-modal';
+import { actionRisk } from '@/lib/risk-display';
 import { adapter } from '@/lib/adapter';
 import type { Automation } from '@waggle/shared';
 import type { Workspace } from '@/lib/types';
@@ -251,7 +252,7 @@ const AutomationBuilder = ({ initial, busy, onSubmit, onCancel }: AutomationBuil
             `Agent prompt: ${prompt.trim().slice(0, 120)}${prompt.trim().length > 120 ? '…' : ''}`,
             `Result goes to: ${outputChannel === 'telegram' ? 'Telegram' : 'notification + cockpit log'}`,
           ],
-        riskLevel: 'medium',
+        riskLevel: actionRisk('automation-activation'),
       });
       return;
     }

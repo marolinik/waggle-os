@@ -65,6 +65,40 @@ export function isKnownRiskLevel(v: string): v is RiskLevel {
   return v === 'low' || v === 'medium' || v === 'high' || v === 'critical';
 }
 
+/**
+ * Canonical per-action-kind risk (P7/D15 #8). The non-install approval surfaces
+ * (agent elevation, automation activation, connector/MCP revoke, MCP scan
+ * override) used to inline scattered `riskLevel: 'medium'`/`'high'` literals, so
+ * the same conceptual action could be labelled differently in two places. This
+ * is the SINGLE source for those action-kind defaults. (Capability *installs* with
+ * a scan/trust signal go through classifyInstallRisk instead — that's a real
+ * signal, not an action-kind default. A policy-engine TrustAssessment feed for
+ * these non-install actions does not exist; an action-kind default is the honest
+ * model until it does.)
+ */
+export type ActionRiskKind =
+  | 'connector-revoke'
+  | 'agent-elevation'
+  | 'automation-activation'
+  | 'mcp-install-override'
+  | 'mcp-revoke'
+  | 'install-remove';
+
+const ACTION_RISK: Record<ActionRiskKind, RiskLevel> = {
+  // Recoverable state changes (re-auth / re-enable / re-install possible) → medium.
+  'connector-revoke': 'medium',
+  'agent-elevation': 'medium',
+  'automation-activation': 'medium',
+  'mcp-revoke': 'medium',
+  'install-remove': 'medium',
+  // Overriding a security-scan finding to install anyway is genuinely high.
+  'mcp-install-override': 'high',
+};
+
+export function actionRisk(kind: ActionRiskKind): RiskLevel {
+  return ACTION_RISK[kind];
+}
+
 interface RiskBadgeProps {
   level: RiskLevel;
   className?: string;

@@ -26,6 +26,7 @@ import { useService } from '@/providers/ServiceProvider';
 import { useToast } from '@/hooks/use-toast';
 import { useRevalidateOnError } from '@/hooks/useRevalidateOnError';
 import { ApprovalModal, type ApprovalRequest } from '@/components/ui/approval-modal';
+import { actionRisk } from '@/lib/risk-display';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 import McpCatalog from './connectors/McpCatalog';
 import InstalledMcpList from './mcp/InstalledMcpList';
@@ -213,7 +214,7 @@ const MCPHubApp = ({ personaId }: MCPHubAppProps = {}) => {
       ...(pendingApproval.message ? [pendingApproval.message] : []),
       'The override is recorded in the install audit trail',
     ],
-    riskLevel: 'high',
+    riskLevel: actionRisk('mcp-install-override'),
   } : null;
 
   const revokeRequest: ApprovalRequest | null = revokeTarget ? {
@@ -223,7 +224,7 @@ const MCPHubApp = ({ personaId }: MCPHubAppProps = {}) => {
       'Removes the server from the persisted config — it will not restart with Waggle',
       'Writes a revoke entry to the install audit trail',
     ],
-    riskLevel: 'medium',
+    riskLevel: actionRisk('mcp-revoke'),
   } : null;
 
   const handleRevoke = async () => {

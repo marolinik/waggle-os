@@ -3,6 +3,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { BuilderStepper, type BuilderStep } from '@/components/ui/stepper';
 import { ApprovalModal, type ApprovalRequest } from '@/components/ui/approval-modal';
+import { actionRisk } from '@/lib/risk-display';
 import ModelSelector from '@/components/os/ModelSelector';
 import { useProviders } from '@/hooks/useProviders';
 import { adapter } from '@/lib/adapter';
@@ -193,7 +194,7 @@ const AgentBuilder = ({ busy, initial, workspaces, onCreate, onCancel }: AgentBu
           ...connectorIds.map((c) => `Connector: ${connName(c)}`),
           ...mcpIds.map((m) => `MCP server: ${m}`),
         ],
-        riskLevel: 'medium',
+        riskLevel: actionRisk('agent-elevation'),
       });
       return;
     }
