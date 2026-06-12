@@ -6,6 +6,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getPersonaById, PERSONAS } from '@/lib/personas';
 import { adapter } from '@/lib/adapter';
 import type { ChatMessage, ToolExecution, ApprovalRequest } from '@/lib/types';
+import { RiskBadge } from '@/lib/risk-display';
 import { BlockRenderer } from './chat-blocks';
 import WorkspaceBriefing from '@/components/os/WorkspaceBriefing';
 import { useContainerWidth } from '@/hooks/useContainerWidth';
@@ -242,6 +243,9 @@ const ApprovalGate = ({
       <div className="flex items-center gap-2 mb-2">
         <AlertTriangle className="w-4 h-4 text-amber-400" />
         <span className="text-sm font-display font-semibold text-foreground">Approval required</span>
+        {/* P7/D15 A5 (D4(ii)): the risk the server already sends, rendered with the
+            SAME vocabulary as the shared modal so identical risk reads identically. */}
+        {request.riskLevel && <RiskBadge level={request.riskLevel} className="ml-auto" />}
       </div>
       {request.description && (
         <p className="text-xs text-muted-foreground mb-1">{request.description}</p>
@@ -249,6 +253,14 @@ const ApprovalGate = ({
       <p className="text-xs text-muted-foreground mb-1">
         Tool: <span className="text-foreground font-mono">{request.toolName}</span>
       </p>
+      {request.trustSource && (
+        <p className="text-[11px] text-muted-foreground mb-1">
+          Source: <span className="text-foreground/90">{request.trustSource}</span>
+        </p>
+      )}
+      {request.explanation && (
+        <p className="text-[11px] text-muted-foreground/80 mb-2">{request.explanation}</p>
+      )}
       {inputSummary && (
         <p className="text-[11px] text-muted-foreground mb-2 font-mono truncate">→ {inputSummary}</p>
       )}

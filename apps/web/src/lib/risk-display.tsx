@@ -1,0 +1,57 @@
+/**
+ * Shared risk-display vocabulary (P7/D15 A5/A6 — D4(ii) "same taxonomy, not same
+ * component"). The in-chat approval card and the ui/approval-modal must render
+ * an identical risk level identically — same label, same colour. Both import
+ * from here instead of each defining their own (the modal's old map only covered
+ * low/medium/high; the card had none). Keyed on the canonical @waggle/shared
+ * RiskLevel so 'critical' is representable everywhere.
+ */
+import type { RiskLevel, ApprovalClass } from '@waggle/shared';
+
+export const RISK_LABELS: Record<RiskLevel, string> = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  critical: 'Critical',
+};
+
+/** Text colour per risk level. critical is distinguished from high by weight. */
+export const RISK_TEXT_CLASSES: Record<RiskLevel, string> = {
+  low: 'text-emerald-400',
+  medium: 'text-amber-400',
+  high: 'text-destructive',
+  critical: 'text-destructive font-semibold',
+};
+
+/** Chip/badge classes (bg + border + text) per risk level. */
+export const RISK_BADGE_CLASSES: Record<RiskLevel, string> = {
+  low: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+  medium: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+  high: 'bg-destructive/15 text-destructive border-destructive/30',
+  critical: 'bg-destructive/25 text-destructive border-destructive/50 font-semibold',
+};
+
+/**
+ * approvalClass policy helper (A6): 'Always allow' must NOT be offered for the
+ * riskiest approvals — a critical/blocked action can never be permanently granted
+ * in one click (founder-ratified; mirrors MCPHub's CRITICAL-non-overridable rule).
+ */
+export function canAlwaysAllow(approvalClass?: ApprovalClass): boolean {
+  return approvalClass !== 'critical' && approvalClass !== 'blocked';
+}
+
+interface RiskBadgeProps {
+  level: RiskLevel;
+  className?: string;
+}
+
+/** Small risk chip used by both approval surfaces. */
+export function RiskBadge({ level, className = '' }: RiskBadgeProps) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-display uppercase tracking-wide ${RISK_BADGE_CLASSES[level]} ${className}`}
+    >
+      {RISK_LABELS[level]} risk
+    </span>
+  );
+}

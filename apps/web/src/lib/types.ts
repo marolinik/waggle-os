@@ -379,6 +379,18 @@ export interface ApprovalRequest {
   rawJson?: string;
   /** Phase B.3: the source workspace so "Always allow" grants stay scoped. */
   sourceWorkspaceId?: string | null;
+  /**
+   * P7/D15 A5 (D4(ii)): the server emits these trust fields on every
+   * approval_required event (A4), but the type used to drop them so the card
+   * couldn't show risk. They are already on the wire — widening the type is all
+   * that's needed (useChat casts the SSE payload straight to ApprovalRequest).
+   */
+  riskLevel?: import('@waggle/shared').RiskLevel;
+  approvalClass?: import('@waggle/shared').ApprovalClass;
+  trustSource?: import('@waggle/shared').TrustSource;
+  assessmentMode?: import('@waggle/shared').AssessmentMode;
+  explanation?: string;
+  permissions?: Record<string, boolean>;
 }
 
 export interface MemoryFrame {
