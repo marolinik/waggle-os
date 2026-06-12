@@ -178,10 +178,13 @@ export class MindDB {
     // removal is auditable. Same rebuild mechanism, keyed on whether the stored
     // action CHECK already lists 'uninstalled' ('uninstalled' is a safe sentinel —
     // it appears in no other CHECK on this table).
+    // P7/D15 #15 (2026-06-12): trust_source gained a CHECK (was unconstrained).
+    // Sentinel "CHECK (trust_source IN" appears nowhere else.
     const auditNeedsRebuild = auditTableSql !== undefined && (
       !auditTableSql.includes("'marketplace'")
       || !auditTableSql.includes("'low', 'medium', 'high', 'critical'")
       || !auditTableSql.includes("'uninstalled'")
+      || !auditTableSql.includes('CHECK (trust_source IN')
     );
     if (auditNeedsRebuild) {
       this.db.transaction(() => {

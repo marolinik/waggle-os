@@ -11,7 +11,7 @@
 import type { MindDB } from '@waggle/hive-mind-core';
 import {
   sqlInList, RISK_LEVELS, APPROVAL_CLASSES, AUDIT_ACTIONS,
-  AUDIT_CAPABILITY_TYPES, AUDIT_INITIATORS,
+  AUDIT_CAPABILITY_TYPES, AUDIT_INITIATORS, TRUST_SOURCES,
 } from '@waggle/shared';
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -66,8 +66,10 @@ export interface RecordAuditInput {
 // record()"). The mirror DDL in hive-mind-core/src/mind/schema.ts stays a
 // standalone literal (it's the OSS substrate, §7.5) but is locked to these same
 // canonical lists by the parity test in install-audit-check-parity.test.ts.
-// (trust_source CHECK remains absent here — adding it needs a table-rebuild
-//  migration for a LOW-severity hardening; ledgered to P7 follow-up #15.)
+// P7/D15 #15: trust_source now also carries a CHECK (was unconstrained at the DB
+// while the TS type claimed a closed set). Every historical value came from the
+// typed AuditTrustSource (the pre-security-gate 6-set ⊂ the current 7-set), so
+// the rebuild migration's row copy can never violate it.
 export const INSTALL_AUDIT_TABLE_SQL = `
 CREATE TABLE IF NOT EXISTS install_audit (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,7 +79,7 @@ CREATE TABLE IF NOT EXISTS install_audit (
   source TEXT NOT NULL,
   version TEXT,
   risk_level TEXT NOT NULL CHECK (risk_level IN (${sqlInList(RISK_LEVELS)})),
-  trust_source TEXT NOT NULL,
+  trust_source TEXT NOT NULL CHECK (trust_source IN (${sqlInList(TRUST_SOURCES)})),
   approval_class TEXT NOT NULL CHECK (approval_class IN (${sqlInList(APPROVAL_CLASSES)})),
   action TEXT NOT NULL CHECK (action IN (${sqlInList(AUDIT_ACTIONS)})),
   initiator TEXT NOT NULL CHECK (initiator IN (${sqlInList(AUDIT_INITIATORS)})),
@@ -109,7 +111,12 @@ export class InstallAuditStore {
     // P5/D4 migration: pre-'uninstalled' installs carry a narrower action CHECK
     // baked into the table DDL. SQLite can't ALTER a CHECK, so rebuild the table
     // when the stored DDL lacks the new value. Idempotent — a no-op once migrated.
-    if (!existing.sql.includes("'uninstalled'")) {
+    // #15: also rebuild when the stored DDL has no trust_source CHECK (the column
+    // was previously unconstrained). "CHECK (trust_source IN" is a safe sentinel —
+    // it appears nowhere else in this DDL.
+    const needsActionWiden = !existing.sql.includes("'uninstalled'");
+    const needsTrustSourceCheck = !existing.sql.includes('CHECK (trust_source IN');
+    if (needsActionWiden || needsTrustSourceCheck) {
       this.rebuildForWidenedActionCheck(raw);
     }
   }

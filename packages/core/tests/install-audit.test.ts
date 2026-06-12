@@ -96,6 +96,21 @@ describe('InstallAuditStore', () => {
     ).all() as Array<{ name: string }>;
     expect(idx.map(i => i.name).sort()).toEqual(['idx_audit_capability', 'idx_audit_timestamp']);
 
+    // #15: the rebuild also added the trust_source CHECK (the legacy table had
+    // trust_source unconstrained). The migrated DDL now carries it, and the
+    // pre-migration row (trust_source 'starter_pack') survived because every
+    // historical value is in the canonical 7-set.
+    const ddl = raw.prepare(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='install_audit'",
+    ).get() as { sql: string };
+    expect(ddl.sql).toContain('CHECK (trust_source IN');
+    // A bogus trust_source is now rejected at the DB (was previously accepted).
+    expect(() => raw.prepare(
+      `INSERT INTO install_audit
+        (capability_name, capability_type, source, risk_level, trust_source, approval_class, action, initiator, detail)
+        VALUES ('x','skill','s','low','BOGUS_SOURCE','standard','installed','user','')`,
+    ).run()).toThrow();
+
     legacyDb.close();
     fs.rmSync(tmp2, { recursive: true, force: true });
   });

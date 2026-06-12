@@ -144,7 +144,7 @@ CREATE TABLE IF NOT EXISTS install_audit (
   source TEXT NOT NULL,
   version TEXT,
   risk_level TEXT NOT NULL CHECK (risk_level IN ('low', 'medium', 'high', 'critical')),
-  trust_source TEXT NOT NULL,
+  trust_source TEXT NOT NULL CHECK (trust_source IN ('builtin', 'starter_pack', 'local_user', 'third_party_verified', 'third_party_unverified', 'unknown', 'security-gate')),
   approval_class TEXT NOT NULL CHECK (approval_class IN ('standard', 'elevated', 'critical', 'blocked')),
   action TEXT NOT NULL CHECK (action IN ('proposed', 'approved', 'installed', 'rejected', 'failed', 'blocked', 'uninstalled')),
   initiator TEXT NOT NULL CHECK (initiator IN ('agent', 'user', 'system')),

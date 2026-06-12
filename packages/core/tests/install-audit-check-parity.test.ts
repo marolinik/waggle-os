@@ -10,7 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   sqlInList, RISK_LEVELS, APPROVAL_CLASSES, AUDIT_ACTIONS,
-  AUDIT_CAPABILITY_TYPES, AUDIT_INITIATORS,
+  AUDIT_CAPABILITY_TYPES, AUDIT_INITIATORS, TRUST_SOURCES,
 } from '@waggle/shared';
 import { SCHEMA_SQL } from '@waggle/hive-mind-core';
 import { INSTALL_AUDIT_TABLE_SQL } from '../src/install-audit.js';
@@ -18,6 +18,7 @@ import { INSTALL_AUDIT_TABLE_SQL } from '../src/install-audit.js';
 const COLUMNS = [
   { col: 'capability_type', values: AUDIT_CAPABILITY_TYPES },
   { col: 'risk_level', values: RISK_LEVELS },
+  { col: 'trust_source', values: TRUST_SOURCES },
   { col: 'approval_class', values: APPROVAL_CLASSES },
   { col: 'action', values: AUDIT_ACTIONS },
   { col: 'initiator', values: AUDIT_INITIATORS },
