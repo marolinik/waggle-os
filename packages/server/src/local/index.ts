@@ -72,6 +72,7 @@ import { sessionRoutes, findUndistilledSessions, markSessionDistilled } from './
 import { knowledgeRoutes } from './routes/knowledge.js';
 import { litellmRoutes } from './routes/litellm.js';
 import { runMemoryLaneExtraction } from './memory-lane-cron.js';
+import { runVectorBackfill } from './vector-backfill.js';
 import { ingestRoutes, readFileRegistry } from './routes/ingest.js';
 import { mindRoutes } from './routes/mind.js';
 import { agentRoutes } from './routes/agent.js';
@@ -572,6 +573,22 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
       log.warn(` Vec reconciliation deferred: ${(err as Error).message}`);
     }
   }
+
+  // D1 follow-up (2026-06-12): one-time vector repair + chunk backfill for the
+  // personal mind — mock-fingerprinted vectors get re-embedded for real, and
+  // pre-existing frames get chunk-indexed so the (default-ON) chunk lane has
+  // something to retrieve. Idempotent via a meta flag; workspace minds are
+  // covered by the daily memory_lane_extract cron. Fire-and-forget — boot
+  // must never block on (re-)embedding a large mind.
+  void runVectorBackfill(multiMind.personal, embeddingProvider).then((vb) => {
+    if (!vb.skipped) {
+      log.info(
+        ` Vector backfill (personal): repaired=${vb.vectorsRepaired} ` +
+        `reembedded=${vb.framesReembedded} chunks=${vb.chunksCreated}` +
+        (vb.errors.length ? ` errors=${vb.errors.join('; ')}` : '')
+      );
+    }
+  });
 
   // Orchestrator — connects to personal .mind
   const orchestrator = new Orchestrator({
@@ -1543,6 +1560,16 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
             }
             for (const mind of minds) {
               try {
+                // D1 follow-up: one-time vector repair + chunk backfill per
+                // mind (no-op via meta flag after first success; retries here
+                // daily while the embedder is mock).
+                const vb = await runVectorBackfill(mind.db, server.embeddingProvider);
+                if (!vb.skipped) {
+                  log.info(
+                    `[cron] Vector backfill (${mind.label}): repaired=${vb.vectorsRepaired} ` +
+                    `reembedded=${vb.framesReembedded} chunks=${vb.chunksCreated}`
+                  );
+                }
                 const r = await runMemoryLaneExtraction(mind.db, llmCall);
                 if (!r.skipped) {
                   log.info(
