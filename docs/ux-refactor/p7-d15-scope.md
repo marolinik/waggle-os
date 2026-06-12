@@ -229,7 +229,8 @@ risk vocabulary. Concretely:
    (`ChatApp.tsx:267-274`) with NO risk gating** — a critical/high install can be permanently
    granted in one click, which MCPHub's CRITICAL-non-overridable rule (`MCPHubApp.tsx:191-217`)
    explicitly forbids. Gate "Always allow" by `approvalClass` so both surfaces honor the same
-   policy.
+   policy. **→ RATIFIED (founder, 2026-06-12): gate it.** A6 must hide/disable "Always allow"
+   on `critical` (and `high`) approvals — no permanent grant for the riskiest actions.
 5. **Reconcile the plain-language field** — card `description` (never sent) vs modal `action`;
    emit one agreed "what will happen" string server-side (or a shared `describeToolUse`
    formatter) feeding both.
@@ -247,6 +248,9 @@ verify → next). Each step states its verify gate. **`build:packages` first** (
 hive-mind-core → core → agent → server) on any cross-package change — the W4 stale-`dist/`
 class (`open-questions.md:561`, D13). Run `tsc --noEmit` on touched packages; the server is
 `tsx`-transpiled and NOT typechecked by `npm run build` (CLAUDE.md §2).
+
+> **Sequencing RATIFIED (founder, 2026-06-12): Track B (P0 error states) FIRST, then Track A.**
+> **A6 "Always allow" gate RATIFIED: gate by approvalClass (no permanent grant on critical/high).**
 
 ## LAUNCH-BLOCKING (must ship for P7 to close D15)
 
