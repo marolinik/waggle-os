@@ -27,6 +27,7 @@ async function getSecurityGate(): Promise<typeof SecurityGate> {
 }
 import { generateSkillMarkdown, type SkillTemplate } from './skill-creator.js';
 import { redactSkillContent } from './skill-redaction.js';
+import { writeSkill, deleteSkill as deleteSkillWrite } from './skill-write-service.js';
 import {
   parseSkillFrontmatter,
   serializeFrontmatter,
@@ -226,20 +227,20 @@ export function createSkillTools(deps: SkillToolsDeps): ToolDefinition[] {
           return 'Error: Provide either "content" (raw markdown) or "description" + "steps" (structured input).';
         }
 
-        // Strip secrets + user-home paths before persisting — the loop's
-        // "strip secrets/paths" directive, enforced deterministically (not just
-        // model-advisory). Surfaced in the result so the agent/user can see it.
-        const { content: safeContent, redactions } = redactSkillContent(content);
-        const filePath = path.join(skillsDir, `${name}.md`);
-        const exists = fs.existsSync(filePath);
+        // P5/D4(iii): one write path. The shared service strips secrets/paths,
+        // stamps agent provenance, records the install audit row, and fires the
+        // reload callback — same code the HTTP routes run.
+        const result = writeSkill(
+          { skillsDir, auditStore: deps.auditStore, onChange: onSkillsChanged },
+          { name, content, initiator: 'agent', source: 'chat' },
+        );
+        if (!result.ok) return `Error: ${result.error}`;
 
-        fs.writeFileSync(filePath, safeContent, 'utf-8');
-        onSkillsChanged?.();
-
+        const redactions = result.redactions ?? [];
         const redactNote = redactions.length
           ? `\n⚠️ Redacted ${redactions.length} secret(s)/path(s) before saving: ${redactions.join(', ')}.`
           : '';
-        return `${exists ? 'Updated' : 'Created'} skill "${name}" (${safeContent.length} chars).${redactNote}\nLocation: ${filePath}\n\nThe skill is now active and will be included in your system prompt for all future messages.`;
+        return `${result.existed ? 'Updated' : 'Created'} skill "${name}".${redactNote}\nLocation: ${result.path}\n\nThe skill is now active and will be included in your system prompt for all future messages.`;
       },
     },
 
@@ -256,15 +257,12 @@ export function createSkillTools(deps: SkillToolsDeps): ToolDefinition[] {
       },
       execute: async (args) => {
         const name = args.name as string;
-        if (name.includes('..') || name.includes('/') || name.includes('\\')) {
-          return 'Error: Invalid skill name.';
-        }
-        const filePath = path.join(skillsDir, `${name}.md`);
-        if (!fs.existsSync(filePath)) {
-          return `Error: Skill "${name}" not found.`;
-        }
-        fs.unlinkSync(filePath);
-        onSkillsChanged?.();
+        // P5/D4(iii): one delete path — audits 'uninstalled' with agent provenance.
+        const result = deleteSkillWrite(
+          { skillsDir, auditStore: deps.auditStore, onChange: onSkillsChanged },
+          { name, initiator: 'agent', source: 'chat' },
+        );
+        if (!result.ok) return `Error: ${result.error}`;
         return `Deleted skill "${name}".`;
       },
     },

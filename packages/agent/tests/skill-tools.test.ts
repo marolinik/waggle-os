@@ -107,6 +107,10 @@ describe('skill-tools', () => {
     await run('create_skill', { name: 'updatable', content: 'v1' });
     const result = await run('create_skill', { name: 'updatable', content: 'v2' });
     expect(result).toContain('Updated');
-    expect(fs.readFileSync(path.join(skillsDir, 'updatable.md'), 'utf-8')).toBe('v2');
+    // P5/D4(iii): the shared service stamps a provenance frontmatter block, so
+    // the body — not the whole file — carries the content.
+    const written = fs.readFileSync(path.join(skillsDir, 'updatable.md'), 'utf-8');
+    expect(written).toContain('v2');
+    expect(written).toContain('initiator: agent');
   });
 });

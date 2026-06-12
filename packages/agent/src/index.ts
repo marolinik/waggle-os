@@ -378,6 +378,14 @@ export {
 export { getSkillDirForScope } from './skill-tools.js';
 export { redactSkillContent, type SkillRedactionResult } from './skill-redaction.js';
 export {
+  writeSkill,
+  deleteSkill,
+  type SkillWriteDeps,
+  type WriteSkillInput,
+  type DeleteSkillInput,
+  type SkillWriteResult,
+} from './skill-write-service.js';
+export {
   shouldDistillSkill, planSkillDistillation, SKILL_DISTILL_MIN_TOOL_CALLS,
   type SkillDistillationPlan,
 } from './skill-distillation.js';

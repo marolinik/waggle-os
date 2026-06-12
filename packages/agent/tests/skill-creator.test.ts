@@ -377,7 +377,10 @@ describe('create_skill tool — structured input', () => {
 
     expect(result).toContain('Created skill "priority-test"');
     const saved = fs.readFileSync(path.join(skillsDir, 'priority-test.md'), 'utf-8');
-    expect(saved).toBe(rawContent);
+    // P5/D4(iii): raw content is preserved in the body beneath a stamped
+    // provenance frontmatter block (structured input still ignored).
+    expect(saved).toContain('This is raw.');
+    expect(saved).toContain('initiator: agent');
     expect(saved).not.toContain('Should be ignored');
   });
 
