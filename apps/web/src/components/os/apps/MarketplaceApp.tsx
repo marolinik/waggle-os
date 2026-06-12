@@ -16,7 +16,7 @@ import { Store, Search, Loader2, Package } from 'lucide-react';
 import type { ExtensionType } from '@waggle/shared';
 import { EXTENSION_TYPES } from '@waggle/shared';
 import { Input } from '@/components/ui/input';
-import { classifyInstallRisk, actionRisk } from '@/lib/risk-display';
+import { classifyInstallRisk, actionRisk, installTrustSource } from '@/lib/risk-display';
 import { adapter } from '@/lib/adapter';
 import { useService } from '@/providers/ServiceProvider';
 import { useToast } from '@/hooks/use-toast';
@@ -81,12 +81,13 @@ export function buildInstallRequest(ext: Extension): ApprovalRequest {
       `Source: ${ext.source}`,
       ext.scanStatus
         ? `Security scan: ${ext.scanStatus === 'not_scanned' ? 'not scanned' : ext.scanStatus}`
-        : ext.trust
-          ? `Trust: ${ext.trust}`
-          : 'Trust: unknown',
+        : undefined,
       'The install is recorded in the audit trail and can be removed afterwards',
-    ],
+    ].filter((s): s is string => s !== undefined),
     riskLevel: installRiskFor(ext),
+    // #17: provenance via the structured field (rendered consistently by the
+    // modal) instead of a hand-built "Trust: …" scope string.
+    trustSource: installTrustSource(ext),
   };
 }
 

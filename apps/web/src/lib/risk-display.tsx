@@ -6,7 +6,7 @@
  * low/medium/high; the card had none). Keyed on the canonical @waggle/shared
  * RiskLevel so 'critical' is representable everywhere.
  */
-import type { RiskLevel, ApprovalClass } from '@waggle/shared';
+import type { RiskLevel, ApprovalClass, TrustSource } from '@waggle/shared';
 
 export const RISK_LABELS: Record<RiskLevel, string> = {
   low: 'Low',
@@ -97,6 +97,31 @@ const ACTION_RISK: Record<ActionRiskKind, RiskLevel> = {
 
 export function actionRisk(kind: ActionRiskKind): RiskLevel {
   return ACTION_RISK[kind];
+}
+
+/**
+ * Human labels for the canonical TrustSource (P7/D15 #17). The provenance
+ * dimension that JUSTIFIES a risk level was shown on no install surface except a
+ * hand-built MarketplaceApp scope line. This gives the ApprovalModal one
+ * consistent way to render it; mirrors the agent-side TRUST_SOURCE_LABELS.
+ */
+export const TRUST_SOURCE_LABELS: Record<TrustSource, string> = {
+  builtin: 'Built-in',
+  starter_pack: 'Curated starter pack',
+  local_user: 'Created locally',
+  third_party_verified: 'Verified third-party',
+  third_party_unverified: 'Unverified third-party',
+  unknown: 'Unknown source',
+  'security-gate': 'Flagged by security scan',
+};
+
+/** Map a marketplace extension's scan/trust signal to a canonical TrustSource
+ *  so the modal renders provenance the same way the audit trail records it. */
+export function installTrustSource(signal: { scanStatus?: string; trust?: string }): TrustSource {
+  if (signal.scanStatus === 'failed') return 'security-gate';
+  if (signal.trust === 'verified' || signal.scanStatus === 'passed') return 'third_party_verified';
+  if (signal.trust === 'unverified') return 'third_party_unverified';
+  return 'unknown';
 }
 
 interface RiskBadgeProps {

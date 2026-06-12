@@ -1,6 +1,6 @@
 import { useRef } from 'react';
-import type { RiskLevel, ApprovalClass } from '@waggle/shared';
-import { RISK_LABELS, RISK_TEXT_CLASSES } from '@/lib/risk-display';
+import type { RiskLevel, ApprovalClass, TrustSource } from '@waggle/shared';
+import { RISK_LABELS, RISK_TEXT_CLASSES, TRUST_SOURCE_LABELS } from '@/lib/risk-display';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -36,6 +36,12 @@ export interface ApprovalRequest {
   readonly riskLevel: RiskLevel;
   /** Optional gating strength; lets a consumer reflect the approval class. */
   readonly approvalClass?: ApprovalClass;
+  /**
+   * P7/D15 #17: provenance — the dimension that justifies the risk. Rendered as a
+   * labelled line when present, so install surfaces show trust source the same
+   * way the audit trail records it (instead of a hand-built scope string).
+   */
+  readonly trustSource?: TrustSource;
 }
 
 interface ApprovalModalProps {
@@ -78,6 +84,12 @@ export const ApprovalModal = ({ request, approveLabel = 'Approve', busy, onAppro
             <span className="text-muted-foreground">Risk level: </span>
             <span className={`font-medium ${RISK_TEXT_CLASSES[request.riskLevel]}`}>{RISK_LABELS[request.riskLevel]}</span>
           </p>
+          {request.trustSource && (
+            <p className="text-xs">
+              <span className="text-muted-foreground">Trust source: </span>
+              <span className="font-medium text-foreground/90">{TRUST_SOURCE_LABELS[request.trustSource]}</span>
+            </p>
+          )}
           <div>
             <p className="text-[11px] font-display uppercase tracking-wide text-muted-foreground">Requested access</p>
             <ul className="mt-1 space-y-0.5">
