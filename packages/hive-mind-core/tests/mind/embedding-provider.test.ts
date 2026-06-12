@@ -105,12 +105,16 @@ describe('embedding guards (oversized-frame truncation + skip-not-abort)', () =>
     expect(capEmbedText('x'.repeat(20000), 6000)).toHaveLength(6000); // over limit: clamped
   });
 
-  it('maxEmbedCharsForModel returns 24000 for 8k models and 6000 otherwise', () => {
+  it('maxEmbedCharsForModel returns 8000 for 8k-named models and 6000 otherwise', () => {
+    // D1 probe (2026-06-12): the OSS 24k branch was unsafe — '-8k' named
+    // models can be architecture-capped at 2048 tokens (nomic-bert) and 400
+    // well below 24k chars, mock-poisoning every long frame. 8k chars ≈ the
+    // real 2048-token prose budget.
     expect(maxEmbedCharsForModel('nomic-embed-text')).toBe(6000);
     expect(maxEmbedCharsForModel('voyage-3-lite')).toBe(6000);
     expect(maxEmbedCharsForModel('deterministic-mock')).toBe(6000);
-    expect(maxEmbedCharsForModel('nomic-embed-text-8k')).toBe(24000);
-    expect(maxEmbedCharsForModel('custom (num_ctx 8192)')).toBe(24000);
+    expect(maxEmbedCharsForModel('nomic-embed-text-8k')).toBe(8000);
+    expect(maxEmbedCharsForModel('custom (num_ctx 8192)')).toBe(8000);
   });
 
   it('reembedPerText degrades ONLY the failing text, not the whole batch', async () => {

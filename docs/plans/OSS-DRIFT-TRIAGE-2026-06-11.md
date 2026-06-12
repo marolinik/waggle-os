@@ -43,7 +43,7 @@ extract-memory-lanes, multi-mind, proprietary-excluded evolution/traces/signals)
 
 | # | What | Status |
 |---|---|---|
-| D1 | **Chunk-level retrieval stack** — chunker.ts + `memory_frame_chunks`(+`_vec`, dim-parameterized) schema + `indexChunksForFrame` + chunk-vec lane in HybridSearch (over-fetch ×5, best-chunk-per-frame dedup, clean fallback to whole-frame vectors) + `rechunkAllFrames` backfill. | PORTED — **opt-in `WAGGLE_CHUNK_RETRIEVAL=1`, default OFF**: the default flip stays gated on a LoCoMo/recall A/B (reranker precedent). Flag-off behavior regression-locked byte-identical. recreateVecTables covers both vec tables. |
+| D1 | **Chunk-level retrieval stack** — chunker.ts + `memory_frame_chunks`(+`_vec`, dim-parameterized) schema + `indexChunksForFrame` + chunk-vec lane in HybridSearch (over-fetch ×5, best-chunk-per-frame dedup, clean fallback to whole-frame vectors) + `rechunkAllFrames` backfill. | PORTED + **DEFAULT-ON (2026-06-12)** after the long-frame needle probe (kill switch `WAGGLE_CHUNK_RETRIEVAL=0`). See probe record below. |
 | D2 | **LLM KG entity extraction** (replaces the capitalized-n-gram regex as the KG quality path) | PORTED — prompt/parser/batching from OSS llm-extractor; executors rehomed onto `LLMCallFn` 'fast'. Runs in the daily memory-lane cron AFTER the lane pass, same frame window + shared watermark. Writes dedup via `findEntityByName` (R2) + filter via `isNoiseName` (R3); injection-scanned. |
 | D3 | content_hash indexed dedup column | PORTED — **with MONO semantics** (sha256 over `stripHmPrefix(content).trim()`, content-hash.ts): the OSS trim-only hash would have regressed OQ-6 provenance-insensitive dedup. `findDuplicate` now O(1) indexed, NO recency window (old LIMIT-500 scan silently missed older dups). Idempotent migration + backfill. |
 
@@ -58,6 +58,27 @@ HARVEST_FRAME_CONTENT_CAP, harvestSetHash. Note: mono adapters depend on
 - 2026-06-11: R1-R7 reverse-ported (see commits on main).
 - 2026-06-11 (later): founder GO "do all 3" → D1+D2+D3 ported same session
   (3 implementation agents + direct work; D1 flag-gated default-OFF).
-- **Still open:** D1 default-flip eval gate (LoCoMo/recall A/B with
-  WAGGLE_CHUNK_RETRIEVAL=1 + rechunkAllFrames backfill); re-split timing
-  (mirror now strictly behind — forward-port queue above).
+- 2026-06-12 — **D1 eval gate run → DEFAULT-ON.** Pre-registered probe
+  (`benchmarks/chunk-probe/run-probe.mjs`, $0, all-local):
+  - **LoCoMo REJECTED as the ruler** — its frames max ~1,000 chars (below the
+    2,000-char chunk threshold): every frame yields 1 chunk ≡ whole frame, so
+    a LoCoMo A/B measures noise by construction. Epistemic check before spend.
+  - Honest corpus: COPY of the real personal mind (471 frames, 129 >2k chars,
+    max 25.7k), both cells re-embedded from scratch (Ollama
+    nomic-embed-text-8k/1024; original vectors were mock-fingerprinted).
+  - Verbatim deep-position needles (50–90% frame depth), n=52, paired cells:
+    whole-frame `vectorSearch` vs chunk `vectorSearchChunks`.
+  - **Result: hit@5 chunk 46/52 vs whole-frame 17/52; discordant pairs 30-vs-1
+    (McNemar p≈2e-8).** Within-embed-cap stratum: chunk 17/20 vs 13/20 (wins
+    on fair ground); beyond-cap: 29/32 vs 4/32 (whole-frame is structurally
+    blind past the embedder's token window).
+  - **Side-finding (R5 hardening):** model names lie — `nomic-embed-text-8k`
+    is architecture-capped at 2048 tokens (nomic-bert); the OSS 24k-char
+    heuristic 400s and mock-poisons long frames. `maxEmbedCharsForModel`
+    8k-branch reduced 24k→8k chars.
+  - Per-needle detail: `benchmarks/chunk-probe/data/probe-result.json`
+    (data dir gitignored — contains a personal-mind copy).
+- **Still open:** existing minds need a one-time `rechunkAllFrames` backfill
+  to benefit (new frames chunk-index automatically; un-backfilled minds fall
+  back to whole-frame gracefully); re-split timing (mirror strictly behind —
+  forward-port queue above).

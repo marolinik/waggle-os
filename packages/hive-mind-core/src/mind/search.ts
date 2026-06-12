@@ -46,16 +46,22 @@ const log = createCoreLogger('hybrid-search');
 
 // Reverse-ported from OSS hive-mind chunker (oss-drift triage D1, 2026-06-11).
 /**
- * Chunk-level retrieval flag — OPT-IN, default OFF (mirrors how WAGGLE_RERANKER
- * shipped opt-in in W4.2). Gates BOTH the write side (indexFrame /
- * indexFramesBatch also chunk-index the frame) and the read side (search()
- * queries memory_frame_chunks_vec instead of whole-frame vectors). With the
- * flag off, behavior is byte-identical to pre-D1. Default flip is pending a
- * LoCoMo eval gate. `indexChunksForFrame` / `rechunkAllFrames` themselves stay
- * callable regardless of the flag (backfill + eval need them).
+ * Chunk-level retrieval flag — DEFAULT ON since the 2026-06-12 long-frame
+ * needle probe (benchmarks/chunk-probe/): on a copy of the real production
+ * personal mind, paired hit@5 = chunk 46/52 vs whole-frame 17/52 (discordant
+ * pairs 30-vs-1, McNemar p≈2e-8); chunk led even within the embed cap
+ * (17/20 vs 13/20) and dominated beyond it (29/32 vs 4/32 — content past the
+ * embedder's true token context is structurally invisible to whole-frame
+ * vectors). LoCoMo was rejected as the ruler: its frames sit below the
+ * 2000-char chunk threshold, so an A/B there measures noise by construction.
+ * Kill switch: WAGGLE_CHUNK_RETRIEVAL=0. Gates BOTH the write side
+ * (indexFrame / indexFramesBatch also chunk-index the frame) and the read
+ * side (search() queries memory_frame_chunks_vec, falling back to whole-frame
+ * vectors while the chunk index is empty). `indexChunksForFrame` /
+ * `rechunkAllFrames` stay callable regardless of the flag (backfill + eval).
  */
 export function chunkRetrievalEnabled(): boolean {
-  return process.env.WAGGLE_CHUNK_RETRIEVAL === '1';
+  return process.env.WAGGLE_CHUNK_RETRIEVAL !== '0';
 }
 
 function f32ToBlob(f32: Float32Array): Uint8Array {

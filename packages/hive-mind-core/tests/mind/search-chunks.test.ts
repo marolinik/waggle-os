@@ -36,7 +36,9 @@ describe('HybridSearch — chunk-level retrieval lane (D1)', () => {
 
   beforeEach(() => {
     savedFlag = process.env[FLAG];
-    delete process.env[FLAG];
+    // D1 flip (2026-06-12): the flag is now default-ON (unset = enabled), so
+    // "off" in tests must be the explicit kill switch '0', not deletion.
+    process.env[FLAG] = '0';
     db = new MindDB(':memory:');
     frames = new FrameStore(db);
     sessions = new SessionStore(db);
@@ -150,8 +152,9 @@ describe('HybridSearch — chunk-level retrieval lane (D1)', () => {
     });
 
     it('falls back to whole-frame vectors when the chunk index is empty', async () => {
-      // Index with the flag OFF so no chunks are written…
-      delete process.env[FLAG];
+      // Index with the flag OFF (explicit kill switch — default is ON) so no
+      // chunks are written…
+      process.env[FLAG] = '0';
       const f = frames.createIFrame(gopId, longContent('kubernetes'), 'normal', 'user_stated');
       await search.indexFrame(f.id, f.content);
       expect(chunkRowCount()).toBe(0);

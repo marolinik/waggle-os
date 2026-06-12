@@ -31,6 +31,14 @@ if (!process.env.WAGGLE_PROMPT_ASSEMBLER) {
   process.env.WAGGLE_PROMPT_ASSEMBLER = '0';
 }
 
+// D1 (2026-06-12): chunk-level retrieval is default-ON in production (kill
+// switch WAGGLE_CHUNK_RETRIEVAL=0) after the long-frame needle probe. Tests
+// pin it OFF — the broad suites' retrieval assertions predate the chunk lane;
+// chunk behavior has its own suite (search-chunks.test.ts) that opts in.
+if (!process.env.WAGGLE_CHUNK_RETRIEVAL) {
+  process.env.WAGGLE_CHUNK_RETRIEVAL = '0';
+}
+
 // D1: the local sidecar now requires a bearer token even on loopback in production
 // (no localhost-trust). The broad server suite predates this and uses raw inject()
 // without tokens, so default tests to localhost-trust mode. Production keeps the
