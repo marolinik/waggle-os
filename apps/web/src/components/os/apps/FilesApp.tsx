@@ -103,8 +103,13 @@ const FilesApp = ({
   const [renameValue, setRenameValue] = useState('');
   const [creating, setCreating] = useState<'file' | 'folder' | null>(null);
   const [newName, setNewName] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [offline, setOffline] = useState(false);
+  // P7/D15 B4 (review): `files.length` conflates "never loaded", "loaded-empty",
+  // and "stale data from another dir". Track WHICH path the cached `files`
+  // actually belong to so error / empty / cached-banner stay mutually exclusive
+  // regardless of stale cross-directory data. null until the first success.
+  const [loadedPath, setLoadedPath] = useState<string | null>(null);
   const [clipboard, setClipboard] = useState<{ files: FileEntry[]; operation: 'copy' | 'cut' } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [previewFile, setPreviewFile] = useState<FileEntry | null>(null);
@@ -154,13 +159,20 @@ const FilesApp = ({
     try {
       const result = await adapter.listFiles(workspaceId, currentPath);
       setFiles(result);
+      setLoadedPath(currentPath); // this directory now has authoritative data
       setOffline(false);
     } catch {
+      // Leave `files`/`loadedPath` as-is: a refresh failure on a dir we already
+      // loaded keeps showing its cache; a cold-nav failure leaves loadedPath
+      // pointing at the OLD dir, so loadedPath !== currentPath flags the error.
       setOffline(true);
     } finally {
       setLoading(false);
     }
   }, [workspaceId, currentPath]);
+
+  // True when the cached `files` belong to the directory currently in view.
+  const haveCurrentData = loadedPath === currentPath;
 
   useEffect(() => { refreshFiles(); }, [refreshFiles]);
 
@@ -382,10 +394,11 @@ const FilesApp = ({
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
-      {/* Degraded-cache banner — only honest when there actually IS a cache.
-          P7/D15 B4: a cold-load failure (files.length === 0) is a real error and
-          is rendered in the list pane below, NOT mislabelled "showing cached files." */}
-      {offline && files.length > 0 && (
+      {/* Degraded-cache banner — only honest when the cache is for THIS dir.
+          P7/D15 B4: a cold-nav failure leaves stale files from another directory,
+          so gate on haveCurrentData (not files.length) to avoid a "showing cached
+          files" banner over a directory that never loaded. */}
+      {offline && haveCurrentData && files.length > 0 && (
         <div className="absolute top-0 left-0 right-0 z-10 px-4 py-2 text-xs text-center" style={{ backgroundColor: 'var(--hive-800)', borderBottom: '1px solid var(--hive-700)', color: 'var(--honey-500)' }}>
           Server unreachable — showing cached files. <button onClick={refreshFiles} className="underline ml-1">Retry</button>
         </div>
@@ -470,15 +483,18 @@ const FilesApp = ({
 
         {/* File list/grid */}
         <div className="flex-1 overflow-auto p-2" onContextMenu={e => handleContextMenu(e)}>
-          {loading && files.length === 0 ? (
-            /* P7/D15 B4: in-flight cold load — not an empty directory. */
+          {loading && !haveCurrentData ? (
+            /* P7/D15 B4: in-flight cold load (no data for this dir yet) — not empty. */
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2" data-testid="files-loading">
               <Loader2 className="w-8 h-8 opacity-40 animate-spin" />
               <p className="text-xs">Loading files…</p>
             </div>
-          ) : offline && files.length === 0 ? (
-            /* P7/D15 B4: cold-load FAILURE with no cache — a real error, never
-               the "showing cached files"/"empty directory" lie. */
+          ) : offline && !haveCurrentData ? (
+            /* P7/D15 B4 (review): cold-load FAILURE for THIS dir (we never loaded
+               it — loadedPath still points elsewhere or is null). A real error,
+               never the stale "empty directory"/"cached files" lie. A failed
+               REFRESH of an already-loaded dir keeps haveCurrentData true and
+               falls through to its cache instead of this branch. */
             <div role="alert" className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2">
               <AlertTriangle className="w-8 h-8 text-destructive/60" />
               <p className="text-xs text-foreground">Couldn't load files</p>
