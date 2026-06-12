@@ -31,7 +31,7 @@ function getTypeConfig(type: string): TypeConfigEntry {
 const filterTypes: (WaggleSignal['type'] | 'all')[] = ['all', 'discovery', 'handoff', 'insight', 'alert', 'coordination'];
 
 const WaggleDanceApp = () => {
-  const { signals, allSignals, loading, filter, setFilter, refresh, acknowledge } = useWaggleDance();
+  const { signals, allSignals, loading, error, filter, setFilter, refresh, acknowledge } = useWaggleDance();
   const [selectedSignal, setSelectedSignal] = useState<WaggleSignal | null>(null);
   // M-41 / P18 — unacknowledged first, severity desc, then recency.
   const orderedSignals = useMemo(() => sortSignalsForDisplay(signals), [signals]);
@@ -83,7 +83,17 @@ const WaggleDanceApp = () => {
             {loading && signals.length === 0 && (
               <div className="text-xs text-muted-foreground text-center py-8">Loading signals…</div>
             )}
-            {!loading && signals.length === 0 && (
+            {/* P7/D15 B5: the hook already tracks `error` — a load failure must
+                not masquerade as "no signals yet". */}
+            {!loading && error && signals.length === 0 && (
+              <div role="alert" className="flex flex-col items-center gap-2 py-8 text-muted-foreground">
+                <Zap className="w-8 h-8 text-destructive/50" />
+                <p className="text-xs text-foreground">Couldn't load signals</p>
+                <p className="text-[11px] opacity-70 max-w-xs text-center">The Waggle Dance feed is unreachable — this is a load error, not an empty feed.</p>
+                <button onClick={refresh} className="mt-1 text-[11px] px-3 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors">Retry</button>
+              </div>
+            )}
+            {!loading && !error && signals.length === 0 && (
               <div className="flex flex-col items-center gap-2 py-8 text-muted-foreground">
                 <Zap className="w-8 h-8 opacity-30" />
                 <p className="text-xs">No waggle dance signals yet</p>

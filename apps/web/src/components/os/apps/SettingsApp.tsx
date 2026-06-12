@@ -164,11 +164,13 @@ const SettingsApp = () => {
 
     adapter.getTeamStatus().then(s => setTeamConnected(s.connected)).catch(() => {});
 
-    // M2-7: Load telemetry status
+    // M2-7: Load telemetry status. P7/D15 B5: this was the ONE loader missing a
+    // .catch — a getTelemetryStatus rejection became an unhandled promise
+    // rejection (its three siblings above all swallow). Match the local pattern.
     adapter.getTelemetryStatus().then(s => {
       setTelemetryEnabled(s.enabled);
       setTelemetryCount(s.totalEvents);
-    });
+    }).catch(() => {});
   }, []);
 
   const handleSaveModel = async () => {

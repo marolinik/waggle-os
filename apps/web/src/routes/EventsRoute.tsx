@@ -15,7 +15,7 @@ const EventsRoute = () => {
   return (
     <SurfaceBoundary appName="Events">
       <EventsApp steps={events.steps} autoScroll={events.autoScroll} onToggleAutoScroll={events.toggleAutoScroll}
-        filter={events.filter} onFilterChange={events.setFilter}
+        filter={events.filter} onFilterChange={events.setFilter} error={events.error}
         onAbort={() => { if (activeWorkspaceId) adapter.abortAgent(activeWorkspaceId).catch(() => {}); }} />
     </SurfaceBoundary>
   );

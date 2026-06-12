@@ -51,6 +51,8 @@ interface EventsAppProps {
   filter: string | null;
   onFilterChange: (f: string | null) => void;
   onAbort?: () => void;
+  /** P7/D15 B5: a load failure must not read as "No events yet". */
+  error?: string | null;
 }
 
 const StepCard = ({ step, onAbort }: { step: AgentStep; onAbort?: () => void }) => {
@@ -295,7 +297,7 @@ const AgentTreeView = ({ steps }: { steps: AgentStep[] }) => {
 };
 
 /* ── Main Events App ── */
-const EventsApp = ({ steps, autoScroll, onToggleAutoScroll, filter, onFilterChange, onAbort }: EventsAppProps) => {
+const EventsApp = ({ steps, autoScroll, onToggleAutoScroll, filter, onFilterChange, onAbort, error }: EventsAppProps) => {
   const [tab, setTab] = useState<'live' | 'tree' | 'replay'>('live');
   const types = ['think', 'tool_call', 'tool_result', 'response', 'error', 'spawn'];
 
@@ -408,7 +410,16 @@ const EventsApp = ({ steps, autoScroll, onToggleAutoScroll, filter, onFilterChan
           <AgentTreeView steps={steps} />
         ) : tab === 'live' ? (
           <>
-            {filteredSteps.length === 0 && (
+            {/* P7/D15 B5: useEvents already returns `error` — surface it instead
+                of the "No events yet" empty when the load failed. */}
+            {error && filteredSteps.length === 0 && (
+              <div role="alert" className="flex flex-col items-center justify-center h-full text-center">
+                <XCircle className="w-10 h-10 text-destructive/50 mb-3" />
+                <p className="text-sm text-foreground">Couldn't load events</p>
+                <p className="text-xs text-muted-foreground/60 max-w-xs">The activity feed is unreachable — this is a load error, not an empty timeline.</p>
+              </div>
+            )}
+            {!error && filteredSteps.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full text-center">
                 <Activity className="w-10 h-10 text-muted-foreground/20 mb-3" />
                 <p className="text-sm text-muted-foreground">No events yet</p>

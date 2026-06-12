@@ -101,6 +101,7 @@ const MemoryRoute = () => {
           onSearchChange: (q) => memory.setFilters({ ...memory.filters, searchQuery: q }),
           onDeleteFrame: memory.deleteFrame,
           loading: memory.loading,
+          error: memory.error,
           stats: memory.stats,
           typeFilters: memory.filters.types,
           onTypeFiltersChange: (types) => memory.setFilters({ ...memory.filters, types }),

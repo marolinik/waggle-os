@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Brain, Search, Clock, Trash2, Edit3, Filter, Eye, Copy, Loader2 } from 'lucide-react';
+import { Brain, Search, Clock, Trash2, Edit3, Filter, Eye, Copy, Loader2, AlertTriangle } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { Input } from '@/components/ui/input';
 import type { MemoryFrame } from '@/lib/types';
@@ -48,6 +48,9 @@ export interface TimelineTabProps {
   onSearchChange: (q: string) => void;
   onDeleteFrame: (id: string) => void;
   loading: boolean;
+  /** P7/D15 B5: a fetch failure must not render as "No memories found" on the
+      lock-in moat surface. Threaded from useMemory.error via MemoryRoute. */
+  error?: string | null;
   stats: { total: number; filtered: number; entities?: number; relations?: number };
   typeFilters?: string[];
   onTypeFiltersChange?: (types: string[]) => void;
@@ -58,7 +61,7 @@ export interface TimelineTabProps {
 
 const TimelineTab = ({
   frames, selectedFrame, onSelectFrame, searchQuery, onSearchChange,
-  onDeleteFrame, loading, stats, typeFilters = [], onTypeFiltersChange,
+  onDeleteFrame, loading, error, stats, typeFilters = [], onTypeFiltersChange,
   minImportance = 0, onMinImportanceChange, onContextRail,
 }: TimelineTabProps) => {
   const [showFilters, setShowFilters] = useState(false);
@@ -194,7 +197,15 @@ const TimelineTab = ({
               <p className="text-xs text-muted-foreground">Loading memories...</p>
             </div>
           )}
-          {frames.length === 0 && !loading && (
+          {/* P7/D15 B5: a load failure is not an empty memory store. */}
+          {error && !loading && frames.length === 0 && (
+            <div role="alert" className="text-center py-8">
+              <AlertTriangle className="w-8 h-8 text-destructive/50 mx-auto mb-2" />
+              <p className="text-xs text-foreground">Couldn't load memories</p>
+              <p className="text-[11px] text-muted-foreground mt-1 max-w-xs mx-auto">The memory service is unreachable — this is a load error, not an empty store.</p>
+            </div>
+          )}
+          {!error && frames.length === 0 && !loading && (
             <div className="text-center py-8">
               <Brain className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
               <p className="text-xs text-muted-foreground">No memories found</p>
