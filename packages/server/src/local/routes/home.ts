@@ -274,6 +274,10 @@ export const homeRoutes: FastifyPluginAsync = async (server) => {
     const rankedCards: Array<{ card: RecentWorkspaceCard; rankTs: number }> = [];
     const suggestedActions: SuggestedAction[] = [];
     const upNext: UpNextItem[] = [];
+    // Global schedules pass buildUpcomingSchedules' filter for EVERY workspace,
+    // so dedup on label across the whole aggregation — the same system job must
+    // surface once, not once per workspace.
+    const seenUpNextLabels = new Set<string>();
     let anyMemory = false;
 
     // Cron schedules drive the schedule-flavored up-next items.
@@ -335,12 +339,14 @@ export const homeRoutes: FastifyPluginAsync = async (server) => {
       const schedules = buildUpcomingSchedules(cronSchedules, ws.id);
       for (const label of schedules) {
         if (upNext.length >= MAX_UP_NEXT) break;
+        if (seenUpNextLabels.has(label)) continue;
         upNext.push({
           id: `schedule:${ws.id}:${label}`,
           label,
           workspaceId: ws.id,
           kind: 'schedule',
         });
+        seenUpNextLabels.add(label);
       }
     }
 
@@ -348,12 +354,11 @@ export const homeRoutes: FastifyPluginAsync = async (server) => {
     // A global schedule can surface both as schedule:<wsId>:<label> (above) and
     // schedule:global:<label> (here) — de-dup on label so it appears once.
     if (upNext.length < MAX_UP_NEXT) {
-      const seenLabels = new Set(upNext.map((item) => item.label));
       for (const label of buildUpcomingSchedules(cronSchedules)) {
         if (upNext.length >= MAX_UP_NEXT) break;
-        if (seenLabels.has(label)) continue;
+        if (seenUpNextLabels.has(label)) continue;
         upNext.push({ id: `schedule:global:${label}`, label, kind: 'schedule' });
-        seenLabels.add(label);
+        seenUpNextLabels.add(label);
       }
     }
 

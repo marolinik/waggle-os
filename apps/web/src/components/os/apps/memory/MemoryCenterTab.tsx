@@ -69,7 +69,10 @@ export default function MemoryCenterTab({
 
   const [q, setQ] = useState('');
   const [kind, setKind] = useState<'' | MemoryKind>('');
-  const [status, setStatus] = useState<'' | MemoryStatus>('');
+  // Default to the curated Active view: deprecated/superseded frames are
+  // version archaeology — surfacing them by default reads as "my memory is
+  // full of junk" to a first-time user. 'All' stays one click away.
+  const [status, setStatus] = useState<'' | MemoryStatus>('active');
   const [minConfidence, setMinConfidence] = useState(0);
 
   const [selected, setSelected] = useState<Memory | null>(null);

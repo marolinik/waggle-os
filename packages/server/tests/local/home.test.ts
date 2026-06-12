@@ -27,6 +27,10 @@ import {
   type RecentWorkspaceCard,
 } from '../../src/local/routes/home.js';
 import { memoryCenterRoutes } from '../../src/local/routes/memory-center.js';
+import {
+  buildUpcomingSchedules,
+  type CronScheduleLike,
+} from '../../src/local/routes/workspace-context.js';
 
 interface TestWorkspace {
   id: string;
@@ -37,7 +41,11 @@ interface TestWorkspace {
   teamId?: string;
 }
 
-function createTestServer(db: MindDB, workspaces: TestWorkspace[] = []) {
+function createTestServer(
+  db: MindDB,
+  workspaces: TestWorkspace[] = [],
+  cronSchedules: CronScheduleLike[] = [],
+) {
   const server = Fastify({ logger: false });
   server.decorate('multiMind', {
     personal: db,
@@ -56,7 +64,7 @@ function createTestServer(db: MindDB, workspaces: TestWorkspace[] = []) {
     get: (id: string) => workspaces.find((w) => w.id === id),
   });
   server.decorate('cronStore', {
-    list: () => [],
+    list: () => cronSchedules,
     getExecutionHistory: () => [],
   });
   // localConfig intentionally absent — see file header.
@@ -204,5 +212,72 @@ describe('GET /api/home/briefing (P2 — J08 needsReviewCount + greeting)', () =
     const res = await server.inject({ method: 'GET', url: '/api/home/briefing' });
     expect(res.json().userName).toBeUndefined();
     expect(res.json().greeting).not.toContain(',');
+  });
+});
+
+describe('upNext schedule aggregation (global jobs dedup + future-only)', () => {
+  let db: MindDB;
+  let server: ReturnType<typeof Fastify>;
+
+  afterEach(async () => {
+    await server.close();
+    db.close();
+  });
+
+  const FUTURE = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  const PAST = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+  const globalSchedule = (id: number, name: string, nextRunAt: string): CronScheduleLike => ({
+    id,
+    name,
+    cron_expr: '30 3 * * *',
+    enabled: 1,
+    workspace_id: null,
+    next_run_at: nextRunAt,
+  } as CronScheduleLike);
+
+  const threeWorkspaces: TestWorkspace[] = ['a', 'b', 'c'].map((id, i) => ({
+    id,
+    name: `Workspace ${id}`,
+    group: 'Personal',
+    created: new Date(Date.parse('2026-06-11T12:00:00Z') + i * 3_600_000).toISOString(),
+  }));
+
+  it('a global schedule surfaces once across multiple workspaces, not once per workspace', async () => {
+    db = new MindDB(':memory:');
+    server = createTestServer(db, threeWorkspaces, [
+      globalSchedule(1, 'Memory compaction', FUTURE),
+    ]);
+    const res = await server.inject({ method: 'GET', url: '/api/home/briefing' });
+    expect(res.statusCode).toBe(200);
+    const labels = (res.json().upNext as Array<{ label: string }>).map((u) => u.label);
+    const compactions = labels.filter((l) => l.startsWith('Memory compaction'));
+    expect(compactions).toHaveLength(1);
+  });
+
+  it('past-due schedules never display as upcoming', async () => {
+    db = new MindDB(':memory:');
+    server = createTestServer(db, threeWorkspaces, [
+      globalSchedule(1, 'Memory compaction', PAST),
+      globalSchedule(2, 'Harvest sync', FUTURE),
+    ]);
+    const res = await server.inject({ method: 'GET', url: '/api/home/briefing' });
+    const labels = (res.json().upNext as Array<{ label: string }>).map((u) => u.label);
+    expect(labels.some((l) => l.startsWith('Memory compaction'))).toBe(false);
+    expect(labels.filter((l) => l.startsWith('Harvest sync'))).toHaveLength(1);
+  });
+
+  it('buildUpcomingSchedules unit: filters past, keeps future, scopes by workspace', () => {
+    const out = buildUpcomingSchedules(
+      [
+        globalSchedule(1, 'Past job', PAST),
+        globalSchedule(2, 'Future job', FUTURE),
+        { ...globalSchedule(3, 'Other ws job', FUTURE), workspace_id: 'other' } as CronScheduleLike,
+      ],
+      'mine',
+    );
+    expect(out.some((l) => l.startsWith('Past job'))).toBe(false);
+    expect(out.some((l) => l.startsWith('Future job'))).toBe(true);
+    expect(out.some((l) => l.startsWith('Other ws job'))).toBe(false);
   });
 });

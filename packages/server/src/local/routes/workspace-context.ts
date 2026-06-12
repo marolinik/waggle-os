@@ -167,8 +167,12 @@ function extractPendingTasks(progressItems: string[]): string[] {
  * Returns the next 3 enabled schedules sorted by next_run_at.
  */
 export function buildUpcomingSchedules(schedules: CronScheduleLike[], workspaceId?: string): string[] {
+  const nowTs = Date.now();
   const upcoming = schedules
     .filter(s => s.enabled === 1 && s.next_run_at)
+    // A past next_run_at means "due" — the scheduler will run it and recompute
+    // (cron-store getDueSchedules/markRun). Never display a past time as upcoming.
+    .filter(s => new Date(s.next_run_at as string).getTime() > nowTs)
     .filter(s => !s.workspace_id || s.workspace_id === '*' || s.workspace_id === workspaceId)
     .sort((a, b) => {
       const ta = a.next_run_at ? new Date(a.next_run_at).getTime() : Infinity;

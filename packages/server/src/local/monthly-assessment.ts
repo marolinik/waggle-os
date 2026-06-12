@@ -301,6 +301,11 @@ export function saveAssessmentToMind(personalMind: MindDB, assessment: MonthlyAs
   ensureAssessmentSession(personalMind);
   const frames = new FrameStore(personalMind);
 
+  // Replace-on-update: one assessment frame per period. A re-fired overdue
+  // monthly job (every sidecar boot re-runs due schedules) must update the
+  // month's report, not accumulate duplicates.
+  frames.deleteByContentPrefix(`# Monthly Agent Assessment — ${assessment.period}`);
+
   const content = [
     `# Monthly Agent Assessment — ${assessment.period}`,
     '',

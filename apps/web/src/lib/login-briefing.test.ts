@@ -10,7 +10,11 @@ import {
   shouldShowLoginBriefing,
   readLoginBriefingDismissed,
   writeLoginBriefingDismissed,
+  writeLoginBriefingLastDismissedAt,
+  readMinutesSinceLastDismiss,
   LOGIN_BRIEFING_DISMISSED_KEY,
+  LOGIN_BRIEFING_LAST_DISMISSED_AT_KEY,
+  LOGIN_BRIEFING_COOLDOWN_MINUTES,
 } from './login-briefing';
 
 describe('shouldShowLoginBriefing', () => {
@@ -28,6 +32,46 @@ describe('shouldShowLoginBriefing', () => {
 
   it('hides when both gates are active', () => {
     expect(shouldShowLoginBriefing({ skipBriefing: true, permanentlyDismissed: true })).toBe(false);
+  });
+
+  it('hides within the dismiss cooldown — a quick reload must not re-greet', () => {
+    expect(shouldShowLoginBriefing({
+      skipBriefing: false, permanentlyDismissed: false, minutesSinceLastDismiss: 2,
+    })).toBe(false);
+  });
+
+  it('shows again once the cooldown has elapsed', () => {
+    expect(shouldShowLoginBriefing({
+      skipBriefing: false, permanentlyDismissed: false,
+      minutesSinceLastDismiss: LOGIN_BRIEFING_COOLDOWN_MINUTES + 1,
+    })).toBe(true);
+  });
+
+  it('null minutesSinceLastDismiss (never dismissed) shows the briefing', () => {
+    expect(shouldShowLoginBriefing({
+      skipBriefing: false, permanentlyDismissed: false, minutesSinceLastDismiss: null,
+    })).toBe(true);
+  });
+});
+
+describe('last-dismissed-at cooldown storage', () => {
+  beforeEach(() => {
+    window.localStorage.removeItem(LOGIN_BRIEFING_LAST_DISMISSED_AT_KEY);
+  });
+
+  it('returns null when never dismissed', () => {
+    expect(readMinutesSinceLastDismiss()).toBe(null);
+  });
+
+  it('round-trips a dismiss timestamp into minutes', () => {
+    const now = 10_000_000;
+    writeLoginBriefingLastDismissedAt(now - 5 * 60_000);
+    expect(readMinutesSinceLastDismiss(now)).toBe(5);
+  });
+
+  it('returns null for a corrupt stored value', () => {
+    window.localStorage.setItem(LOGIN_BRIEFING_LAST_DISMISSED_AT_KEY, 'not-a-number');
+    expect(readMinutesSinceLastDismiss()).toBe(null);
   });
 });
 

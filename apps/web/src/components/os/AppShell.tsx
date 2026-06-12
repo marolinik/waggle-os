@@ -37,7 +37,7 @@ import UpgradeModal from './overlays/UpgradeModal';
 import TrialExpiredModal from './overlays/TrialExpiredModal';
 import { adapter } from '@/lib/adapter';
 import { stashDeepLink } from '@/lib/app-deeplink';
-import { writeLoginBriefingDismissed } from '@/lib/login-briefing';
+import { writeLoginBriefingDismissed, writeLoginBriefingLastDismissedAt } from '@/lib/login-briefing';
 import { matchNavRoute, queryString, routeFor, routeForSearchResult } from '@/lib/routes';
 import { bootWindowStateMigration, indexLandingRoute } from '@/lib/window-state-migration';
 import { getDockForTier, type AppId, type DockEntry } from '@/lib/dock-tiers';
@@ -358,9 +358,10 @@ const ShellLayout = () => {
         <LoginBriefing
           onDismiss={(permanent) => {
             if (permanent) writeLoginBriefingDismissed(true);
+            writeLoginBriefingLastDismissedAt();
             ov.setShowLoginBriefing(false);
           }}
-          onOpenWorkspace={(wsId) => { selectWorkspace(wsId); navigate(routeFor('chat', { activeWorkspaceId: wsId })); ov.setShowLoginBriefing(false); }}
+          onOpenWorkspace={(wsId) => { writeLoginBriefingLastDismissedAt(); selectWorkspace(wsId); navigate(routeFor('chat', { activeWorkspaceId: wsId })); ov.setShowLoginBriefing(false); }}
         />
       )}
 

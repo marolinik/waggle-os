@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import {
   shouldShowLoginBriefing,
   readLoginBriefingDismissed,
+  readMinutesSinceLastDismiss,
   readSkipBriefingParam,
 } from '@/lib/login-briefing';
 
@@ -28,6 +29,7 @@ export function useOverlayState() {
     shouldShowLoginBriefing({
       skipBriefing: readSkipBriefingParam(),
       permanentlyDismissed: readLoginBriefingDismissed(),
+      minutesSinceLastDismiss: readMinutesSinceLastDismiss(),
     }),
   );
 

@@ -63,6 +63,15 @@ describe('MemoryCenterTab two-mind parameterization (P3/D2)', () => {
     expect(arg.workspaceId).toBeUndefined();
   });
 
+  it('defaults to the curated Active view, not All (deprecated stays hidden)', async () => {
+    mocks.adapter.listMemories.mockResolvedValue([]);
+    await renderTab();
+    await waitFor(() => expect(mocks.adapter.listMemories).toHaveBeenCalled());
+    const arg = mocks.adapter.listMemories.mock.calls[0][0];
+    expect(arg.status).toBe('active');
+    expect(screen.getByRole('button', { name: 'Active' }).getAttribute('aria-pressed')).toBe('true');
+  });
+
   it("mind='workspace' reads with {mind:'workspace', workspaceId}", async () => {
     mocks.adapter.listMemories.mockResolvedValue([]);
     await renderTab({ mind: 'workspace', workspaceId: 'w1', consumeDeepLinks: false });

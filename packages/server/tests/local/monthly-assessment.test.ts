@@ -142,6 +142,34 @@ describe('Monthly Self-Assessment', () => {
       expect(frame.content).toContain('+5%');
       expect(frame.content).toContain('web_search');
     });
+
+    it('re-running the same period replaces the frame instead of duplicating it', () => {
+      const assessment: MonthlyAssessment = {
+        period: '2026-03',
+        totalInteractions: 100,
+        correctionRate: 0.15,
+        improvementTrend: '+5%',
+        topStrengths: ['Low correction rate'],
+        topWeaknesses: [],
+        capabilityGapsDetected: [],
+        skillsInstalled: 0,
+        recommendation: 'Agent is performing well overall.',
+      };
+
+      saveAssessmentToMind(db, assessment);
+      saveAssessmentToMind(db, { ...assessment, totalInteractions: 120 });
+      // A different period must NOT be replaced — one frame per month.
+      saveAssessmentToMind(db, { ...assessment, period: '2026-04' });
+
+      const frames = new FrameStore(db);
+      const assessments = frames
+        .getRecent(10)
+        .filter((f) => f.content.startsWith('# Monthly Agent Assessment'));
+      expect(assessments).toHaveLength(2);
+      const march = assessments.filter((f) => f.content.includes('2026-03'));
+      expect(march).toHaveLength(1);
+      expect(march[0].content).toContain('**Interactions**: 120');
+    });
   });
 
   // ── Cron registration ───────────────────────────────────────────────
