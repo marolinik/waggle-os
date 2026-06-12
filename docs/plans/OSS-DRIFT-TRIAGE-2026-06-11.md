@@ -78,7 +78,27 @@ HARVEST_FRAME_CONTENT_CAP, harvestSetHash. Note: mono adapters depend on
     8k-branch reduced 24k→8k chars.
   - Per-needle detail: `benchmarks/chunk-probe/data/probe-result.json`
     (data dir gitignored — contains a personal-mind copy).
-- **Still open:** existing minds need a one-time `rechunkAllFrames` backfill
-  to benefit (new frames chunk-index automatically; un-backfilled minds fall
-  back to whole-frame gracefully); re-split timing (mirror strictly behind —
-  forward-port queue above).
+- 2026-06-12 — **backfill wiring SHIPPED** (`packages/server/src/local/
+  vector-backfill.ts`): one-time per-mind vector repair (mock-fingerprint
+  cure: recreate + re-embed) + `rechunkAllFrames`, wired at boot (personal)
+  and in the daily memory_lane_extract cron (all minds); idempotent meta
+  flag, skip-without-flag while the embedder is mock (daily retry).
+- 2026-06-12 — **forward-port SHIPPED as
+  [marolinik/hive-mind PR #14](https://github.com/marolinik/hive-mind/pull/14)**
+  (branch `feature/mono-parity-2026-06-12`; merge = founder gate). Three
+  port agents: core fixes (scoring created_at decay, search date-window +
+  LIKE-fallback + chunk flag `HIVE_MIND_CHUNK_RETRIEVAL` + auto-index +
+  rechunkAllFrames, content-hash hm-stripped semantics + one-time rehash
+  migration, embed-cap 24k→8k), harvest parity (captions ×4 + raw-types +
+  content cap + harvestSetHash + extract-memory-lanes + raw-turns), new
+  modules (temporal stack + raw-detail-lane). OSS gates: tsc 0, full repo
+  654/654 (+~90 new co-located tests).
+- **Drift-check after the port (against the parity branch):** structural
+  gaps CLOSED. Residual ONLY-IN-OSS = `llm-extractor.ts` (deliberately
+  kept — the OSS CLI consumes it; mono's D2 rehomed it as
+  extract-kg-entities). Residual ONLY-IN-MONO = proprietary exclusions
+  (evolution-runs/execution-traces/improvement-signals) + mono-specific
+  modules (multi-mind, extract-kg-entities). The long DIFFERS list is
+  PERMANENT-BY-DESIGN cosmetics (branding, env-var names, scrubbed
+  examples, extraction headers) — the check's actionable signals are the
+  ONLY-IN-* buckets plus manual DIFFERS inspection after substrate arcs.
