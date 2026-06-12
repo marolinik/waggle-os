@@ -12,8 +12,8 @@ vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
 
 import FilesApp from '@/components/os/apps/FilesApp';
 
-const render = (props: Record<string, unknown> = { workspaceId: 'ws1' }) =>
-  rtlRender(<TooltipProvider><FilesApp {...props} /></TooltipProvider>);
+const render = () =>
+  rtlRender(<TooltipProvider><FilesApp workspaceId="ws1" /></TooltipProvider>);
 
 beforeEach(() => vi.clearAllMocks());
 afterEach(cleanup);
