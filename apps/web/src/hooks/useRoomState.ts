@@ -8,7 +8,7 @@
  * they don't vanish from view the instant they finish.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { adapter } from '@/lib/adapter';
 import {
   applyStatusEvent,
@@ -22,9 +22,19 @@ export type RoomAgent = _RoomAgent;
 
 export function useRoomState() {
   const [workspaceMap, setWorkspaceMap] = useState<Map<string, WorkspaceAgents>>(() => new Map());
+  // P7/D15 B2: a broken SSE channel must be distinguishable from an idle room.
+  // `connecting` covers the brief subscribe window; `error` flags a subscribe
+  // failure so RoomApp can show reconnect instead of "no agents running".
+  const [connecting, setConnecting] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reconnectNonce, setReconnectNonce] = useState(0);
+
+  const reconnect = useCallback(() => setReconnectNonce((n) => n + 1), []);
 
   useEffect(() => {
     let unsub: (() => void) | undefined;
+    setConnecting(true);
+    setError(null);
     try {
       unsub = adapter.subscribeSubagentStatus((event) => {
         setWorkspaceMap(prev => {
@@ -36,12 +46,17 @@ export function useRoomState() {
           return next;
         });
       });
+      // Subscription established (the SSE contract emits the roster only on a
+      // status change, so absence of events = idle, not still-connecting).
+      setConnecting(false);
     } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to connect to the Room');
+      setConnecting(false);
       console.error('[useRoomState] SSE subscribe failed:', err);
     }
 
     return () => unsub?.();
-  }, []);
+  }, [reconnectNonce]);
 
   // Periodically prune recent entries so stale ones fall off even without new events.
   useEffect(() => {
@@ -71,5 +86,5 @@ export function useRoomState() {
 
   const getWorkspace = (workspaceId: string): WorkspaceAgents | undefined => workspaceMap.get(workspaceId);
 
-  return { workspaceMap, allWorkspaceIds, totalLive, getWorkspace };
+  return { workspaceMap, allWorkspaceIds, totalLive, getWorkspace, connecting, error, reconnect };
 }

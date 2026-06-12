@@ -134,7 +134,7 @@ function AgentTile({ agent, workspaceName }: { agent: RoomAgent; workspaceName?:
 }
 
 const RoomApp = ({ workspaceId, workspaceNames = {} }: RoomAppProps) => {
-  const { workspaceMap, totalLive } = useRoomState();
+  const { workspaceMap, totalLive, connecting, error, reconnect } = useRoomState();
   const [showRecent, setShowRecent] = useState(false);
 
   // Flatten all workspaces (or just the filtered one) into a live list + recent list.
@@ -176,7 +176,32 @@ const RoomApp = ({ workspaceId, workspaceNames = {} }: RoomAppProps) => {
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-4 space-y-4">
-        {liveCount === 0 && recentCount === 0 && (
+        {/* P7/D15 B2: a broken SSE channel is NOT an idle room. Error and
+            connecting take precedence over the "no agents running" empty state. */}
+        {error && (
+          <div role="alert" className="flex flex-col items-center justify-center h-full text-center py-12">
+            <AlertCircle className="w-10 h-10 text-destructive/60 mb-3" />
+            <p className="text-sm font-display text-foreground">Room channel disconnected</p>
+            <p className="text-[11px] text-muted-foreground mt-1 max-w-xs">
+              Lost the live agent feed — this is a connection error, not an empty room. {error}
+            </p>
+            <button
+              onClick={reconnect}
+              className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary/15 text-primary text-[11px] font-display hover:bg-primary/25 transition-colors"
+            >
+              <Loader2 className="w-3.5 h-3.5" /> Reconnect
+            </button>
+          </div>
+        )}
+
+        {!error && connecting && (
+          <div className="flex flex-col items-center justify-center h-full text-center py-12" data-testid="room-connecting">
+            <Loader2 className="w-10 h-10 text-muted-foreground/30 mb-3 animate-spin" />
+            <p className="text-sm font-display text-foreground">Connecting to the Room…</p>
+          </div>
+        )}
+
+        {!error && !connecting && liveCount === 0 && recentCount === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center py-12">
             <Users className="w-10 h-10 text-muted-foreground/30 mb-3" />
             <p className="text-sm font-display text-foreground">No agents running</p>
