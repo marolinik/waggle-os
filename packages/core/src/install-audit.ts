@@ -9,6 +9,10 @@
  */
 
 import type { MindDB } from '@waggle/hive-mind-core';
+import {
+  sqlInList, RISK_LEVELS, APPROVAL_CLASSES, AUDIT_ACTIONS,
+  AUDIT_CAPABILITY_TYPES, AUDIT_INITIATORS,
+} from '@waggle/shared';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -56,22 +60,27 @@ export interface RecordAuditInput {
 
 // ── Table DDL ──────────────────────────────────────────────────────────
 
+// P7/D15 A3: the CHECK lists are generated from the canonical @waggle/shared
+// arrays via sqlInList, so the SQLite constraint and the TS union can no longer
+// drift (divergence #14 — the old comment admitted "drift silently crashes
+// record()"). The mirror DDL in hive-mind-core/src/mind/schema.ts stays a
+// standalone literal (it's the OSS substrate, §7.5) but is locked to these same
+// canonical lists by the parity test in install-audit-check-parity.test.ts.
+// (trust_source CHECK remains absent here — adding it needs a table-rebuild
+//  migration for a LOW-severity hardening; ledgered to P7 follow-up #15.)
 export const INSTALL_AUDIT_TABLE_SQL = `
 CREATE TABLE IF NOT EXISTS install_audit (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   timestamp TEXT NOT NULL DEFAULT (datetime('now')),
   capability_name TEXT NOT NULL,
-  -- CHECK lists MUST stay in sync with AuditCapabilityType / AuditApprovalClass
-  -- / AuditAction above (and with hive-mind-core/src/mind/schema.ts, which also
-  -- declares this table). Drift here silently crashes auditStore.record().
-  capability_type TEXT NOT NULL CHECK (capability_type IN ('native', 'skill', 'plugin', 'mcp', 'connector', 'marketplace')),
+  capability_type TEXT NOT NULL CHECK (capability_type IN (${sqlInList(AUDIT_CAPABILITY_TYPES)})),
   source TEXT NOT NULL,
   version TEXT,
-  risk_level TEXT NOT NULL CHECK (risk_level IN ('low', 'medium', 'high', 'critical')),
+  risk_level TEXT NOT NULL CHECK (risk_level IN (${sqlInList(RISK_LEVELS)})),
   trust_source TEXT NOT NULL,
-  approval_class TEXT NOT NULL CHECK (approval_class IN ('standard', 'elevated', 'critical', 'blocked')),
-  action TEXT NOT NULL CHECK (action IN ('proposed', 'approved', 'installed', 'rejected', 'failed', 'blocked', 'uninstalled')),
-  initiator TEXT NOT NULL CHECK (initiator IN ('agent', 'user', 'system')),
+  approval_class TEXT NOT NULL CHECK (approval_class IN (${sqlInList(APPROVAL_CLASSES)})),
+  action TEXT NOT NULL CHECK (action IN (${sqlInList(AUDIT_ACTIONS)})),
+  initiator TEXT NOT NULL CHECK (initiator IN (${sqlInList(AUDIT_INITIATORS)})),
   detail TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_audit_capability ON install_audit (capability_name, action);
