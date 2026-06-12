@@ -16,6 +16,7 @@ import { Store, Search, Loader2, Package } from 'lucide-react';
 import type { ExtensionType } from '@waggle/shared';
 import { EXTENSION_TYPES } from '@waggle/shared';
 import { Input } from '@/components/ui/input';
+import { classifyInstallRisk } from '@/lib/risk-display';
 import { adapter } from '@/lib/adapter';
 import { useService } from '@/providers/ServiceProvider';
 import { useToast } from '@/hooks/use-toast';
@@ -52,13 +53,11 @@ const FEDERATED_NOTES: Partial<Record<ExtensionType, string>> = {
   template: 'Workspace templates are local — manage them when creating a workspace.',
 };
 
-/** Scan/trust → ApprovalModal risk (honest: we render what the API provides;
- *  a full TrustAssessment/formatTrustSummary feed has no FE data path yet). */
+/** Scan/trust → ApprovalModal risk. P7/D15 A7: delegates to the shared
+ *  classifyInstallRisk so every install surface maps the same scan/trust signal
+ *  to the same risk level (divergence #8). */
 export function installRiskFor(ext: Extension): ApprovalRequest['riskLevel'] {
-  if (ext.scanStatus === 'failed') return 'high';
-  if (ext.scanStatus === 'passed') return 'low';
-  if (ext.trust === 'verified') return 'low';
-  return 'medium';
+  return classifyInstallRisk({ scanStatus: ext.scanStatus, trust: ext.trust });
 }
 
 /** Uninstall confirm — destructive actions must not be one-click while the

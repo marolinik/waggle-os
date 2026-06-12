@@ -40,6 +40,31 @@ export function canAlwaysAllow(approvalClass?: ApprovalClass): boolean {
   return approvalClass !== 'critical' && approvalClass !== 'blocked';
 }
 
+/**
+ * Canonical scan/trust → RiskLevel classifier for installs (P7/D15 A7,
+ * divergence #8). The single place that maps a security-scan / trust signal to a
+ * risk level, so the same conceptual install yields the same risk on every
+ * surface. (A fuller TrustAssessment FE feed — per-surface policy-engine risk —
+ * does not exist yet; the per-surface default literals + trustSource surfacing
+ * are ledgered post-launch.)
+ */
+export function classifyInstallRisk(signal: { scanStatus?: string; trust?: string }): RiskLevel {
+  if (signal.scanStatus === 'failed') return 'high';
+  if (signal.scanStatus === 'passed') return 'low';
+  if (signal.trust === 'verified') return 'low';
+  return 'medium';
+}
+
+/**
+ * Render a raw audit-feed risk string with the shared label + colour when it is a
+ * known canonical level; otherwise pass the raw string through (the feed can
+ * carry 'unknown'). Used by InstallAuditPanel so the audit trail and the approval
+ * surfaces speak one visual language (divergence #16).
+ */
+export function isKnownRiskLevel(v: string): v is RiskLevel {
+  return v === 'low' || v === 'medium' || v === 'high' || v === 'critical';
+}
+
 interface RiskBadgeProps {
   level: RiskLevel;
   className?: string;

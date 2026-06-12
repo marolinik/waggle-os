@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, Loader2, ShieldAlert, X } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { RISK_LABELS, RISK_TEXT_CLASSES, isKnownRiskLevel } from '@/lib/risk-display';
 
 export type ExtendAuditType = 'skill' | 'plugin' | 'mcp' | 'connector' | 'marketplace' | 'native';
 
@@ -140,7 +141,14 @@ const InstallAuditPanel = ({ type, capability, limit = 20, showFilter = false }:
                   <span className="text-xs text-foreground font-display truncate">{entry.capabilityName}</span>
                   <span className="text-[10px] px-1 py-px rounded bg-muted/60 text-muted-foreground">{entry.capabilityType}</span>
                   <span className="text-[10px] text-muted-foreground">{entry.action}</span>
-                  <span className="text-[10px] text-muted-foreground">risk: {entry.riskLevel}</span>
+                  {/* P7/D15 A7 (#16): render the audit-feed risk with the same
+                      label + colour the approval surfaces use when it's a known
+                      level; pass an 'unknown' raw value through unstyled. */}
+                  <span className="text-[10px] text-muted-foreground">
+                    risk: {isKnownRiskLevel(entry.riskLevel)
+                      ? <span className={RISK_TEXT_CLASSES[entry.riskLevel]}>{RISK_LABELS[entry.riskLevel]}</span>
+                      : entry.riskLevel}
+                  </span>
                 </div>
                 {entry.detail && <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">{entry.detail}</p>}
               </div>
