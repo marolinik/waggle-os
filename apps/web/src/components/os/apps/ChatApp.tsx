@@ -6,7 +6,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getPersonaById, PERSONAS } from '@/lib/personas';
 import { adapter } from '@/lib/adapter';
 import type { ChatMessage, ToolExecution, ApprovalRequest } from '@/lib/types';
-import { RiskBadge } from '@/lib/risk-display';
+import { RiskBadge, canAlwaysAllow } from '@/lib/risk-display';
 import { BlockRenderer } from './chat-blocks';
 import WorkspaceBriefing from '@/components/os/WorkspaceBriefing';
 import { useContainerWidth } from '@/hooks/useContainerWidth';
@@ -276,14 +276,19 @@ const ApprovalGate = ({
         >
           Allow once
         </button>
-        <HintTooltip content="Save this decision and skip the prompt next time for this tool + target.">
-          <button
-            onClick={() => onRespond(request.requestId, true, { always: true })}
-            className="px-3 py-1 text-xs rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition-colors"
-          >
-            Always allow
-          </button>
-        </HintTooltip>
+        {/* P7/D15 A6 (founder-ratified): a critical/blocked action can never be
+            permanently granted in one click — mirrors MCPHub's CRITICAL-non-
+            overridable rule. "Always allow" is offered only below that bar. */}
+        {canAlwaysAllow(request.approvalClass) && (
+          <HintTooltip content="Save this decision and skip the prompt next time for this tool + target.">
+            <button
+              onClick={() => onRespond(request.requestId, true, { always: true })}
+              className="px-3 py-1 text-xs rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition-colors"
+            >
+              Always allow
+            </button>
+          </HintTooltip>
+        )}
         <button
           onClick={() => onRespond(request.requestId, false)}
           className="px-3 py-1 text-xs rounded-lg bg-destructive text-foreground hover:bg-destructive/80 transition-colors"

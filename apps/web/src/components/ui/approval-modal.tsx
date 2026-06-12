@@ -1,4 +1,6 @@
 import { useRef } from 'react';
+import type { RiskLevel, ApprovalClass } from '@waggle/shared';
+import { RISK_LABELS, RISK_TEXT_CLASSES } from '@/lib/risk-display';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -25,7 +27,15 @@ export interface ApprovalRequest {
   readonly action: string;
   /** What it touches — one line per granted surface. */
   readonly scope: ReadonlyArray<string>;
-  readonly riskLevel: 'low' | 'medium' | 'high';
+  /**
+   * P7/D15 A6: widened to the canonical RiskLevel (was low|medium|high) so a
+   * CRITICAL install renders as a risk-leveled modal instead of being demoted to
+   * a plain text notice (divergence #4). Existing low|medium|high callers are
+   * unaffected.
+   */
+  readonly riskLevel: RiskLevel;
+  /** Optional gating strength; lets a consumer reflect the approval class. */
+  readonly approvalClass?: ApprovalClass;
 }
 
 interface ApprovalModalProps {
@@ -37,12 +47,9 @@ interface ApprovalModalProps {
   onCancel: () => void;
 }
 
-const RISK_LABELS: Record<ApprovalRequest['riskLevel'], string> = {
-  low: 'Low', medium: 'Medium', high: 'High',
-};
-const RISK_CLASSES: Record<ApprovalRequest['riskLevel'], string> = {
-  low: 'text-emerald-400', medium: 'text-amber-400', high: 'text-destructive',
-};
+// P7/D15 A6: risk label + colour now come from the shared lib/risk-display
+// vocabulary (4-level, incl. critical) so the modal and the in-chat card render
+// an identical risk level identically.
 
 export const ApprovalModal = ({ request, approveLabel = 'Approve', busy, onApprove, onCancel }: ApprovalModalProps) => {
   // Radix's Action/Cancel both auto-close → onOpenChange(false). Make
@@ -69,7 +76,7 @@ export const ApprovalModal = ({ request, approveLabel = 'Approve', busy, onAppro
         <div className="space-y-2">
           <p className="text-xs">
             <span className="text-muted-foreground">Risk level: </span>
-            <span className={`font-medium ${RISK_CLASSES[request.riskLevel]}`}>{RISK_LABELS[request.riskLevel]}</span>
+            <span className={`font-medium ${RISK_TEXT_CLASSES[request.riskLevel]}`}>{RISK_LABELS[request.riskLevel]}</span>
           </p>
           <div>
             <p className="text-[11px] font-display uppercase tracking-wide text-muted-foreground">Requested access</p>
