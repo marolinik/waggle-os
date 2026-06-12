@@ -205,6 +205,9 @@ const CommandCenter = ({ open, onClose, onNavigate, onExecute, workspaceId }: Co
   const [recent, setRecent] = useState<CommandResult[]>([]);
   const [suggestions, setSuggestions] = useState<CommandResult[]>([]);
   const [searching, setSearching] = useState(false);
+  // P7/D15 B3: when the search endpoint fails we fall back to local fuzzy match —
+  // flag it so the user knows results are degraded, not authoritative.
+  const [searchDegraded, setSearchDegraded] = useState(false);
   const [executing, setExecuting] = useState(false);
   const [pending, setPending] = useState<CommandResult | null>(null);
   /** Tracks the last command outcome so we can render success/failure state. */
@@ -250,8 +253,10 @@ const CommandCenter = ({ open, onClose, onNavigate, onExecute, workspaceId }: Co
       try {
         const res = await adapter.commandSearch(q, workspaceId ? 'workspace' : undefined);
         setResults(res.results ?? []);
+        setSearchDegraded(false);
       } catch {
         // Offline fallback: fuzzy-match across recent + suggested.
+        setSearchDegraded(true);
         const pool = [...recent, ...suggestions];
         const seen = new Set<string>();
         const matched: Array<CommandResult & { _score: number }> = [];
@@ -407,6 +412,15 @@ const CommandCenter = ({ open, onClose, onNavigate, onExecute, workspaceId }: Co
               ESC
             </kbd>
           </div>
+
+          {/* P7/D15 B3: surface the silent search-endpoint failure so the user
+              knows these are degraded local matches, not authoritative results. */}
+          {searchDegraded && viewState !== 'permission' && (
+            <div role="status" className="flex items-center gap-2 px-4 py-1.5 text-[11px]" style={{ color: 'var(--honey-500)' }}>
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+              <span>Search service unreachable — showing local matches only.</span>
+            </div>
+          )}
 
           {/* Permission prompt (C9) takes over the body when a gated item is chosen. */}
           {viewState === 'permission' && pending && (

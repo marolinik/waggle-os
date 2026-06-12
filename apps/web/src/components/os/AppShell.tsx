@@ -22,6 +22,7 @@ import BootScreen from './BootScreen';
 import StatusBar from './StatusBar';
 import ChatHost from './ChatHost';
 import CommandCenter from './overlays/CommandCenter';
+import AppErrorBoundary from './ErrorBoundary';
 import CreateWorkspaceDialog from './overlays/CreateWorkspaceDialog';
 import PersonaSwitcher from './overlays/PersonaSwitcher';
 import SpawnAgentDialog from './overlays/SpawnAgentDialog';
@@ -309,13 +310,18 @@ const ShellLayout = () => {
 
       {/* Overlays — Desktop.tsx:569-663 relocated; handlers retarget to
           navigate() per §1.2 / §2.2. */}
-      <CommandCenter
-        open={ov.showGlobalSearch}
-        onClose={() => ov.setShowGlobalSearch(false)}
-        onNavigate={handleSearchNavigate}
-        onExecute={() => { /* post-success hook — overlay closes itself; refresh feeds lazily */ }}
-        workspaceId={activeWorkspaceId ?? undefined}
-      />
+      {/* P7/D15 B3: the Win+K overlay sits outside the SurfaceBoundary-wrapped
+          Outlet, so an un-caught render throw here blanks the whole shell. Wrap
+          it in the same AppErrorBoundary the routes use; onClose dismisses it. */}
+      <AppErrorBoundary appName="Command Center" onClose={() => ov.setShowGlobalSearch(false)}>
+        <CommandCenter
+          open={ov.showGlobalSearch}
+          onClose={() => ov.setShowGlobalSearch(false)}
+          onNavigate={handleSearchNavigate}
+          onExecute={() => { /* post-success hook — overlay closes itself; refresh feeds lazily */ }}
+          workspaceId={activeWorkspaceId ?? undefined}
+        />
+      </AppErrorBoundary>
       <CreateWorkspaceDialog open={ov.showCreateWorkspace} onClose={() => ov.setShowCreateWorkspace(false)} onCreate={createWorkspace} />
       {/* §1.2/§4.2: PersonaSwitcher acts on the active workspace's chat widget
           (widget state, NOT the workspace record — acceptance check 7); the
