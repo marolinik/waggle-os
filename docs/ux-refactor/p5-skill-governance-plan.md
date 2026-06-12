@@ -77,15 +77,32 @@ skills with no frontmatter → treated as `initiator:'user'` (no badge). Name-he
 
 ## Build order (TDD, commit per step)
 
-1. ✅ **D4(i) gating** — `confirmation.ts` sets + tests. (committed `73f2ed5`)
-2. **DEC-1 audit enum** (pending founder pick A/B) — enum + schema CHECKs + migration + tests.
-3. **DEC-3 frontmatter** — `initiator`/`source` in parser/serializer + tests.
-4. **DEC-2 service** — `skill-write-service.ts` + unit tests (redaction+provenance+audit).
-5. **Rewire agent** — `skill-tools.ts` create/delete call the service.
-6. **Rewire HTTP** — `routes/skills.ts` POST/PUT/DELETE call the service; `GET /api/skills`
-   returns `initiator`/`source`.
-7. **UI badge** — `SkillRow.tsx` "created by agent — review" off provenance.
-8. Adversarial review workflow → record → gates (FE + server tsc + lint) → commit.
+1. ✅ **D4(i) gating** — `confirmation.ts` sets + tests. (`73f2ed5`)
+2. ✅ **DEC-1 audit enum** — founder picked **Option A**: `'uninstalled'` + widen-CHECK
+   migration in core `install-audit.ts` (belt-and-suspenders rebuild) AND hive-mind-core
+   `db.ts` runMigrations sentinel + `schema.ts` DDL. (`658884f`)
+3. ✅ **DEC-3 frontmatter** — `initiator`/`source` in parser/serializer. (`f3bda5b`)
+4. ✅ **DEC-2 service** — `skill-write-service.ts` (lossless provenance stamp). (`2b56b78`)
+5. ✅ **Rewire agent** — `skill-tools.ts` create/delete via service. (`2b56b78`)
+6. ✅ **Rewire HTTP** — `routes/skills.ts` POST/create/PUT/DELETE via service; `GET
+   /api/skills` returns provenance. (`29313a9`)
+7. ✅ **UI badge** — `SkillRow.tsx` "agent · review" off provenance. (`48292ef`)
+8. ⏳ Adversarial review workflow → record → final gates. (pending — needs opt-in)
+
+## Status — implementation COMPLETE (2026-06-12)
+
+All four D4 bindings shipped in 7 commits (`73f2ed5`→`48292ef`), NOT pushed.
+Gates: tsc 0 across shared/hive-mind-core/core/agent/server/apps-web · 147 P5 tests
+green (agent 96, core 22, server 20, FE 9) · lint 0.
+
+**Remaining for P5 closeout:**
+- **OSS re-split (§7.5):** `hive-mind-core/src/mind/{schema.ts,db.ts}` changed here first
+  (the `'uninstalled'` CHECK + migration sentinel). The `marolinik/hive-mind` mirror must
+  be regenerated via subtree-split before the next OSS release.
+- **Adversarial review** (step 8) — every prior P-phase ran a multi-agent review workflow;
+  deferred pending explicit opt-in.
+- **Decision-log + open-questions** phase-line update marking P5 done.
+- **D4(ii)** card↔modal risk-taxonomy alignment stays **P7/D15** (out of P5 scope).
 
 ## Out of scope (ledgered)
 
