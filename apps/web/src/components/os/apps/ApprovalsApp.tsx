@@ -63,25 +63,47 @@ function summarizeInput(input: Record<string, unknown>): string {
   return '';
 }
 
+/** Error state for the trust surface — a failed load must never read as empty. */
+const ApprovalsError = ({ message, onRetry, retrying }: { message: string; onRetry: () => void; retrying: boolean }) => (
+  <div role="alert" className="flex flex-col items-center justify-center h-full py-12 text-center">
+    <AlertTriangle className="w-10 h-10 text-destructive/60 mb-3" />
+    <p className="text-sm font-display text-foreground">Couldn't load approvals</p>
+    <p className="text-[11px] text-muted-foreground mt-1 max-w-xs">
+      The approvals service is unreachable. This is a load error — not an empty inbox. {message}
+    </p>
+    <button
+      onClick={onRetry}
+      disabled={retrying}
+      className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary/15 text-primary text-[11px] font-display hover:bg-primary/25 transition-colors disabled:opacity-50"
+    >
+      <RefreshCw className={`w-3.5 h-3.5 ${retrying ? 'animate-spin' : ''}`} /> Retry
+    </button>
+  </div>
+);
+
 const ApprovalsApp = () => {
   const { toast } = useToast();
   const [tab, setTab] = useState<'pending' | 'grants'>('pending');
   const [pending, setPending] = useState<PendingApproval[]>([]);
   const [grants, setGrants] = useState<Grant[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    try {
-      const [pendingRes, grantsRes] = await Promise.all([
-        adapter.getPendingApprovals().catch(() => ({ pending: [], count: 0 })),
-        adapter.getApprovalGrants().catch(() => ({ grants: [], count: 0 })),
-      ]);
-      setPending(pendingRes.pending ?? []);
-      setGrants(grantsRes.grants ?? []);
-    } finally {
-      setLoading(false);
-    }
+    // allSettled (not Promise.all + per-source .catch): a fetch FAILURE must
+    // surface as an error on this trust surface, never be coerced into an empty
+    // inbox. Partial success still renders (a grants failure doesn't hide pending).
+    const [pendingRes, grantsRes] = await Promise.allSettled([
+      adapter.getPendingApprovals(),
+      adapter.getApprovalGrants(),
+    ]);
+    if (pendingRes.status === 'fulfilled') setPending(pendingRes.value.pending ?? []);
+    if (grantsRes.status === 'fulfilled') setGrants(grantsRes.value.grants ?? []);
+    const failure = pendingRes.status === 'rejected' ? pendingRes.reason
+      : grantsRes.status === 'rejected' ? grantsRes.reason : null;
+    setError(failure ? (failure instanceof Error ? failure.message : 'Failed to load approvals') : null);
+    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -177,7 +199,8 @@ const ApprovalsApp = () => {
       {/* Pending tab */}
       {tab === 'pending' && (
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
-          {pending.length === 0 && (
+          {error && <ApprovalsError message={error} onRetry={refresh} retrying={loading} />}
+          {!error && pending.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full py-12 text-center">
               <ShieldCheck className="w-10 h-10 text-emerald-500/40 mb-3" />
               <p className="text-sm font-display text-foreground">No pending approvals</p>
@@ -233,7 +256,8 @@ const ApprovalsApp = () => {
       {/* Grants tab */}
       {tab === 'grants' && (
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
-          {grants.length === 0 && (
+          {error && <ApprovalsError message={error} onRetry={refresh} retrying={loading} />}
+          {!error && grants.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full py-12 text-center">
               <ShieldCheck className="w-10 h-10 text-muted-foreground/30 mb-3" />
               <p className="text-sm font-display text-foreground">No saved grants</p>
