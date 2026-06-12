@@ -150,6 +150,37 @@ export function getApprovalClass(toolName: string, args?: Record<string, unknown
   return 'standard';
 }
 
+/**
+ * P7/D15 A4: classify the risk of ANY gated tool (not just install_capability)
+ * so the approval surface can show a consistent risk badge. A tool reaching the
+ * approval gate already passed needsConfirmation, so it is risk-bearing by
+ * definition; this maps it onto the canonical two-axis model. `install_capability`
+ * is NOT handled here — its richer content-based TrustAssessment is computed at
+ * the call site (chat.ts) and takes precedence.
+ */
+export function classifyGatedToolRisk(
+  toolName: string,
+  args?: Record<string, unknown>,
+): { riskLevel: RiskLevel; approvalClass: ApprovalClass } {
+  // Terminal/destructive ops on the never-autopass blacklist → critical.
+  if (isCriticalNeverAutopass(toolName, args)) {
+    return { riskLevel: 'critical', approvalClass: 'critical' };
+  }
+  // Connector tools carry their risk in the name (write vs read vs high-risk).
+  if (toolName.startsWith('connector_')) {
+    const cls = getApprovalClass(toolName, args);
+    const riskLevel: RiskLevel = cls === 'critical' ? 'high' : cls === 'elevated' ? 'medium' : 'low';
+    return { riskLevel, approvalClass: cls };
+  }
+  // Cross-workspace reads are gated for PRIVACY, not destructiveness → low.
+  if (toolName === 'read_other_workspace' || toolName === 'read_other_workspace_file' || toolName === 'list_workspace_files') {
+    return { riskLevel: 'low', approvalClass: 'standard' };
+  }
+  // Everything else that gated — fs writes, git mutations, bash, docx — is a
+  // state-changing action: medium / elevated.
+  return { riskLevel: 'medium', approvalClass: 'elevated' };
+}
+
 export interface ConfirmationGateConfig {
   interactive?: boolean;
   autoApprove?: string[];

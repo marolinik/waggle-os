@@ -3,6 +3,7 @@ import {
   needsConfirmation,
   needsConfirmationWithAutonomy,
   isCriticalNeverAutopass,
+  classifyGatedToolRisk,
   ConfirmationGate,
 } from '../src/confirmation.js';
 
@@ -71,6 +72,30 @@ describe('D4(i) skill-write autonomy policy', () => {
   it('read_skill never gates at any level', () => {
     expect(needsConfirmationWithAutonomy('read_skill', {}, 'normal')).toBe(false);
     expect(needsConfirmationWithAutonomy('read_skill', {}, 'yolo')).toBe(false);
+  });
+});
+
+describe('A4 classifyGatedToolRisk — risk for ANY gated tool', () => {
+  it('terminal/destructive bash → critical', () => {
+    expect(classifyGatedToolRisk('bash', { command: 'rm -rf /' })).toEqual({ riskLevel: 'critical', approvalClass: 'critical' });
+  });
+  it('ordinary gated bash → medium/elevated', () => {
+    expect(classifyGatedToolRisk('bash', { command: 'npm install' })).toEqual({ riskLevel: 'medium', approvalClass: 'elevated' });
+  });
+  it('fs write → medium/elevated', () => {
+    expect(classifyGatedToolRisk('write_file', { path: '/tmp/x' })).toEqual({ riskLevel: 'medium', approvalClass: 'elevated' });
+  });
+  it('git mutation → medium/elevated', () => {
+    expect(classifyGatedToolRisk('git_commit', {})).toEqual({ riskLevel: 'medium', approvalClass: 'elevated' });
+  });
+  it('cross-workspace read → low/standard (privacy, not destructive)', () => {
+    expect(classifyGatedToolRisk('read_other_workspace', {})).toEqual({ riskLevel: 'low', approvalClass: 'standard' });
+  });
+  it('connector write → medium/elevated; high-risk connector (email) → high/critical', () => {
+    // send_email is in CONNECTOR_HIGH_RISK_ACTIONS → critical.
+    expect(classifyGatedToolRisk('connector_gmail_send_email', {})).toEqual({ riskLevel: 'high', approvalClass: 'critical' });
+    // a plain write matches CONNECTOR_WRITE_PATTERNS → elevated.
+    expect(classifyGatedToolRisk('connector_jira_create_issue', {})).toEqual({ riskLevel: 'medium', approvalClass: 'elevated' });
   });
 });
 

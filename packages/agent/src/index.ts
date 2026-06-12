@@ -305,7 +305,7 @@ export { PermissionManager, READONLY_TOOLS } from './permissions.js';
 export { filterToolsForContext, filterAvailableTools, filterOfflineTools, getOfflineCapableToolNames, type ToolContext, type ToolFilterConfig } from './tool-filter.js';
 export {
   needsConfirmation, needsConfirmationWithAutonomy, isCriticalNeverAutopass,
-  ConfirmationGate, getApprovalClass,
+  ConfirmationGate, getApprovalClass, classifyGatedToolRisk,
   type ConfirmationGateConfig, type ApprovalClass, type AutonomyLevel,
 } from './confirmation.js';
 export { createAuditTools } from './audit-tools.js';

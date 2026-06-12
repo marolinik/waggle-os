@@ -5,7 +5,7 @@ import path from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
-import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, planSkillDistillation, TraceRecorder, generateTurnId, logTurnEvent, checkGrounding, type TraceHandle } from '@waggle/agent';
+import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, classifyGatedToolRisk, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, planSkillDistillation, TraceRecorder, generateTurnId, logTurnEvent, checkGrounding, type TraceHandle } from '@waggle/agent';
 import type { AgentLoopConfig, AgentResponse, Orchestrator, AutonomyLevel } from '@waggle/agent';
 import type { WorkspaceSession } from '../workspace-sessions.js';
 import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
@@ -934,7 +934,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           const toolName = ctx.toolName;
           const input = (ctx.args ?? {}) as Record<string, unknown>;
 
-          // For install_capability, enrich the event with trust metadata
+          // P7/D15 A4: enrich EVERY gated approval with risk metadata so the
+          // in-chat card (D4(ii), A5) can show a consistent risk badge — not just
+          // install_capability. install_capability keeps its richer content-based
+          // TrustAssessment; all other gated tools get the canonical
+          // classifyGatedToolRisk mapping. `description` is the plain-language
+          // "what will happen" line the FE card expects (divergence #10).
           let trustMeta: Record<string, unknown> | undefined;
           if (toolName === 'install_capability') {
             try {
@@ -955,8 +960,20 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 assessmentMode: trust.assessmentMode,
                 explanation: trust.explanation,
                 permissions: trust.permissions,
+                description: describeToolUse(toolName, input),
               };
             } catch { /* trust enrichment is best-effort */ }
+          } else {
+            try {
+              const { riskLevel, approvalClass } = classifyGatedToolRisk(toolName, input);
+              trustMeta = {
+                riskLevel,
+                approvalClass,
+                trustSource: 'local_user',
+                assessmentMode: 'heuristic',
+                description: describeToolUse(toolName, input),
+              };
+            } catch { /* enrichment is best-effort — approval still fires */ }
           }
 
           // Send approval_required SSE event to the client.
