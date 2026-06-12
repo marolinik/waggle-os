@@ -114,8 +114,17 @@ describe('classifyRisk', () => {
     expect(classifyRisk(5)).toBe('high');
   });
 
-  it('classifies 10 points as high', () => {
-    expect(classifyRisk(10)).toBe('high');
+  it('classifies 7 points as high (top of the high band)', () => {
+    expect(classifyRisk(7)).toBe('high');
+  });
+
+  // P7/D15 A2: 8+ points is the new 'critical' tier (was 'high').
+  it('classifies 8 points as critical', () => {
+    expect(classifyRisk(8)).toBe('critical');
+  });
+
+  it('classifies 10 points as critical', () => {
+    expect(classifyRisk(10)).toBe('critical');
   });
 });
 
@@ -132,6 +141,19 @@ describe('deriveApprovalClass', () => {
 
   it('high risk → critical approval', () => {
     expect(deriveApprovalClass('high')).toBe('critical');
+  });
+
+  // P7/D15 A2 (behavior-preserving): critical RISK maps to the 'critical' gate,
+  // NOT 'blocked' — nothing is newly refused.
+  it('critical risk → critical approval (not blocked)', () => {
+    expect(deriveApprovalClass('critical')).toBe('critical');
+  });
+
+  // 'blocked' is only produced via the explicit flag (the SecurityGate path),
+  // never derived from risk points.
+  it('blocked flag → blocked, regardless of risk level', () => {
+    expect(deriveApprovalClass('low', true)).toBe('blocked');
+    expect(deriveApprovalClass('critical', true)).toBe('blocked');
   });
 });
 

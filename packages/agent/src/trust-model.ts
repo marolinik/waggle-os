@@ -14,19 +14,12 @@ import type { CapabilitySourceType } from './capability-acquisition.js';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
-export type RiskLevel = 'low' | 'medium' | 'high';
-
-export type TrustSource =
-  | 'builtin'                 // First-party, ships with Waggle
-  | 'starter_pack'            // Curated starter skills
-  | 'local_user'              // User-created via create_skill
-  | 'third_party_verified'    // Future: verified registry
-  | 'third_party_unverified'  // Future: unknown registry source
-  | 'unknown';                // No provenance information
-
-export type ApprovalClass = 'standard' | 'elevated' | 'critical';
-
-export type AssessmentMode = 'declared' | 'heuristic' | 'mixed';
+// P7/D15 A2: the risk vocabulary is now canonical in @waggle/shared. Re-exported
+// here so the `@waggle/agent` import path keeps working for existing consumers.
+// RiskLevel gains 'critical', ApprovalClass gains 'blocked', TrustSource gains
+// 'security-gate' — see packages/shared/src/risk.ts.
+export type { RiskLevel, TrustSource, ApprovalClass, AssessmentMode } from '@waggle/shared';
+import type { RiskLevel, TrustSource, ApprovalClass, AssessmentMode } from '@waggle/shared';
 
 export type RiskFactor =
   | 'local_code_execution'
@@ -155,6 +148,8 @@ const SOURCE_RISK_POINTS: Record<TrustSource, number> = {
   third_party_verified: 2,
   third_party_unverified: 4,
   unknown: 5,
+  // A2: a capability flagged by the SecurityGate is maximally untrusted.
+  'security-gate': 5,
 };
 
 /** Risk points per permission impact (execution risk) */
@@ -179,25 +174,39 @@ const PERMISSION_TO_FACTOR: Record<keyof PermissionSummary, RiskFactor> = {
 
 /**
  * Classify risk level from total risk points.
- * Low: 0-2, Medium: 3-4, High: 5+
+ * Low: 0-2, Medium: 3-4, High: 5-7, Critical: 8+
+ *
+ * P7/D15 A2: 'critical' added for the worst items (unknown/unverified source +
+ * heavy permissions). Behavior-preserving — nothing that was 'high' drops a
+ * tier; only the genuinely most dangerous (8+ points) escalate to 'critical'.
  */
 export function classifyRisk(points: number): RiskLevel {
   if (points <= 2) return 'low';
   if (points <= 4) return 'medium';
-  return 'high';
+  if (points <= 7) return 'high';
+  return 'critical';
 }
 
 /**
  * Derive approval class from risk level.
  * - standard: normal approval gate
  * - elevated: approval + permission summary
- * - critical: approval + full trust context + warning
+ * - critical: approval + full trust context + warning (never auto-pass)
+ * - blocked:  refused outright — NOT derived from risk points; only the
+ *   SecurityGate refusal path sets it, routed through here (the `blocked` flag)
+ *   so 'blocked' is produced in ONE place instead of a hand-written literal.
+ *
+ * P7/D15 A2 (founder-ratified, behavior-preserving): a 'critical' RISK maps to
+ * the 'critical' approval class (same gate 'high' got before — full warning,
+ * never auto-pass), NOT to 'blocked'. Nothing is newly refused.
  */
-export function deriveApprovalClass(riskLevel: RiskLevel): ApprovalClass {
+export function deriveApprovalClass(riskLevel: RiskLevel, blocked = false): ApprovalClass {
+  if (blocked) return 'blocked';
   switch (riskLevel) {
     case 'low': return 'standard';
     case 'medium': return 'elevated';
     case 'high': return 'critical';
+    case 'critical': return 'critical';
   }
 }
 
@@ -232,6 +241,7 @@ const TRUST_SOURCE_LABELS: Record<TrustSource, string> = {
   third_party_verified: 'Verified third-party source',
   third_party_unverified: 'Unverified third-party source',
   unknown: 'Unknown source',
+  'security-gate': 'Flagged by the security scanner',
 };
 
 function generateExplanation(
@@ -383,6 +393,7 @@ const RISK_LABELS: Record<RiskLevel, string> = {
   low: 'Low',
   medium: 'Medium',
   high: 'High',
+  critical: 'Critical',
 };
 
 /**

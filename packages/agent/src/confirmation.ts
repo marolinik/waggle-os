@@ -5,6 +5,9 @@
  * Only commands that modify state need user approval.
  */
 
+import { RISK_LEVELS, type RiskLevel } from '@waggle/shared';
+import { deriveApprovalClass } from './trust-model.js';
+
 // Tools that ALWAYS need confirmation.
 // Write tools modify state. Cross-workspace reads don't modify state but
 // reach into another workspace's private memory, which is a privacy
@@ -121,7 +124,10 @@ export function needsConfirmation(toolName: string, args?: Record<string, unknow
  * Returns 'standard' for non-install tools. For install_capability,
  * inspects the args for trust metadata to determine the class.
  */
-export type ApprovalClass = 'standard' | 'elevated' | 'critical';
+// A2: ApprovalClass is canonical in @waggle/shared (gains 'blocked'). Re-exported
+// so the `@waggle/agent` import path keeps working.
+export type { ApprovalClass } from '@waggle/shared';
+import type { ApprovalClass } from '@waggle/shared';
 
 export function getApprovalClass(toolName: string, args?: Record<string, unknown>): ApprovalClass {
   // Connector tools: derive approval class from tool NAME, not args
@@ -135,10 +141,12 @@ export function getApprovalClass(toolName: string, args?: Record<string, unknown
 
   if (toolName !== 'install_capability') return 'standard';
 
-  // If trust metadata is passed in args (from the proposal flow), use it
-  const riskLevel = args?._riskLevel as string | undefined;
-  if (riskLevel === 'high') return 'critical';
-  if (riskLevel === 'medium') return 'elevated';
+  // A2: route the proposal-flow risk metadata through the ONE canonical mapper
+  // (deriveApprovalClass) instead of duplicating high→critical/medium→elevated.
+  const riskLevel = args?._riskLevel as RiskLevel | undefined;
+  if (riskLevel && (RISK_LEVELS as readonly string[]).includes(riskLevel)) {
+    return deriveApprovalClass(riskLevel);
+  }
   return 'standard';
 }
 
