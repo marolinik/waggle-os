@@ -27,6 +27,12 @@ export type SkillScope = 'personal' | 'workspace' | 'team' | 'enterprise';
 
 export const SKILL_SCOPE_ORDER: readonly SkillScope[] = ['personal', 'workspace', 'team', 'enterprise'] as const;
 
+/**
+ * P5/D4 provenance: who authored a skill. Mirrors the audit-trail initiator
+ * vocabulary (minus 'system' — skills are authored by a person or an agent).
+ */
+export type SkillInitiator = 'agent' | 'user';
+
 export interface SkillFrontmatter {
   name?: string;
   description?: string;
@@ -40,6 +46,16 @@ export interface SkillFrontmatter {
    * Appended to on each successful promotion. Never rewritten.
    */
   promoted_from?: SkillScope[];
+  /**
+   * P5/D4 provenance: who authored this skill. Stamped at create time.
+   * Absent on legacy skills → treated as 'user' (no "review" badge).
+   */
+  initiator?: SkillInitiator;
+  /**
+   * P5/D4 provenance: where the write originated (e.g. 'chat', 'skill-creator',
+   * 'api', 'distillation'). Free-form, surfaced in the Skills Hub for context.
+   */
+  source?: string;
   permissions?: Partial<{
     fileSystem: boolean;
     network: boolean;
@@ -117,6 +133,8 @@ export function parseSkillFrontmatter(content: string): ParsedSkill {
       if (key === 'name') frontmatter.name = v;
       if (key === 'description') frontmatter.description = v;
       if (key === 'scope' && isSkillScope(v)) frontmatter.scope = v;
+      if (key === 'initiator' && isSkillInitiator(v)) frontmatter.initiator = v;
+      if (key === 'source') frontmatter.source = v;
       if (key === 'promoted_from') {
         // Accept JSON-array form ([a, b, c]) or comma-separated.
         const inner = v.replace(/^\[|\]$/g, '');
@@ -138,6 +156,10 @@ function isSkillScope(s: string): s is SkillScope {
   return SKILL_SCOPE_ORDER.includes(s as SkillScope);
 }
 
+function isSkillInitiator(s: string): s is SkillInitiator {
+  return s === 'agent' || s === 'user';
+}
+
 /**
  * Skills 2.0 gap E: return the next scope up from `current`, or null if
  * already at the top (enterprise).
@@ -157,6 +179,8 @@ export function serializeFrontmatter(fm: SkillFrontmatter, body: string): string
   const lines: string[] = ['---'];
   if (fm.name) lines.push(`name: ${fm.name}`);
   if (fm.description) lines.push(`description: ${fm.description}`);
+  if (fm.initiator) lines.push(`initiator: ${fm.initiator}`);
+  if (fm.source) lines.push(`source: ${fm.source}`);
   if (fm.scope) lines.push(`scope: ${fm.scope}`);
   if (fm.promoted_from && fm.promoted_from.length > 0) {
     lines.push(`promoted_from: [${fm.promoted_from.join(', ')}]`);

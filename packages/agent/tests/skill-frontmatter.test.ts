@@ -199,6 +199,40 @@ body`;
     });
   });
 
+  describe('provenance — initiator + source (P5/D4)', () => {
+    it('parses initiator and source', () => {
+      const content = `---
+name: Agent Skill
+initiator: agent
+source: chat
+---
+body`;
+      const { frontmatter } = parseSkillFrontmatter(content);
+      expect(frontmatter.initiator).toBe('agent');
+      expect(frontmatter.source).toBe('chat');
+    });
+
+    it('ignores an invalid initiator value', () => {
+      const content = `---
+name: X
+initiator: robot
+---
+body`;
+      const { frontmatter } = parseSkillFrontmatter(content);
+      expect(frontmatter.initiator).toBeUndefined();
+    });
+
+    it('leaves initiator/source undefined when absent (legacy = user)', () => {
+      const content = `---
+name: Legacy
+---
+body`;
+      const { frontmatter } = parseSkillFrontmatter(content);
+      expect(frontmatter.initiator).toBeUndefined();
+      expect(frontmatter.source).toBeUndefined();
+    });
+  });
+
   describe('nextScope', () => {
     it('returns the next scope up', () => {
       expect(nextScope('personal')).toBe('workspace');
@@ -231,6 +265,22 @@ body`;
       expect(out).not.toContain('scope:');
       expect(out).not.toContain('promoted_from:');
       expect(out).toContain('name: NoScope');
+    });
+
+    it('round-trips initiator + source through parse (P5/D4)', () => {
+      const out = serializeFrontmatter(
+        { name: 'Prov', initiator: 'agent', source: 'chat' },
+        '# body',
+      );
+      const { frontmatter } = parseSkillFrontmatter(out);
+      expect(frontmatter.initiator).toBe('agent');
+      expect(frontmatter.source).toBe('chat');
+    });
+
+    it('omits initiator/source when absent', () => {
+      const out = serializeFrontmatter({ name: 'NoProv' }, 'body');
+      expect(out).not.toContain('initiator:');
+      expect(out).not.toContain('source:');
     });
   });
 });
