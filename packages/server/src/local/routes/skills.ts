@@ -6,7 +6,7 @@ import type { FastifyPluginAsync } from 'fastify';
 
 const log = createLogger('skills');
 import { PluginManager, getStarterSkillsDir, listStarterSkills, listCapabilityPacks, getPackManifest } from '@waggle/sdk';
-import { loadSkills, SkillRecommender, assessTrust, generateSkillMarkdown, redactSkillContent, type SkillTemplate } from '@waggle/agent';
+import { loadSkills, SkillRecommender, assessTrust, generateSkillMarkdown, writeSkill, deleteSkill as deleteSkillWrite, parseSkillFrontmatter, type SkillTemplate } from '@waggle/agent';
 import { computeSkillHash } from '@waggle/core';
 
 /** Capability family definitions — user-job-first grouping */
@@ -342,15 +342,29 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
     };
   });
 
-  // GET /api/skills — list all installed skills
+  // GET /api/skills — list all installed skills (with P5/D4 provenance)
   server.get('/api/skills', async () => {
     const skills = loadSkills(waggleHome);
     return {
-      skills: skills.map(s => ({
-        name: s.name,
-        length: s.content.length,
-        preview: s.content.slice(0, 200),
-      })),
+      skills: skills.map(s => {
+        // Provenance comes from the on-disk file's frontmatter — loadSkills may
+        // strip it, so read the raw file. Absent provenance ⇒ legacy ⇒ 'user'.
+        let initiator: 'agent' | 'user' = 'user';
+        let provSource: string | undefined;
+        try {
+          const raw = fs.readFileSync(path.join(skillsDir, `${s.name}.md`), 'utf-8');
+          const fm = parseSkillFrontmatter(raw).frontmatter;
+          if (fm.initiator) initiator = fm.initiator;
+          provSource = fm.source;
+        } catch { /* not on disk (starter/builtin) — default to user */ }
+        return {
+          name: s.name,
+          length: s.content.length,
+          preview: s.content.slice(0, 200),
+          initiator,
+          source: provSource,
+        };
+      }),
       count: skills.length,
       directory: skillsDir,
     };
@@ -403,20 +417,23 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
     if (name.includes('..') || name.includes('/') || name.includes('\\') || name.includes(' ')) {
       return reply.status(400).send({ error: 'Invalid skill name (no spaces, slashes, or dots)' });
     }
-    const filePath = path.join(skillsDir, `${name}.md`);
-    // Enforce the "strip secrets/paths" policy on UI-authored skills too.
-    fs.writeFileSync(filePath, redactSkillContent(content).content, 'utf-8');
+    // P5/D4(iii)+(iv): one write path — service redacts, stamps user provenance,
+    // and records the install audit row (raw POST/PUT/DELETE now enter the trail).
+    const result = writeSkill(
+      { skillsDir, auditStore: server.auditStore, onChange: () => {
+        server.agentState.skills.length = 0;
+        server.agentState.skills.push(...loadSkills(waggleHome));
+      } },
+      { name, content, initiator: 'user', source: 'api' },
+    );
+    if (!result.ok) return reply.status(400).send({ error: result.error });
 
-    // Record content hash for change detection
+    // Record content hash for change detection (hash the persisted on-disk content).
     try {
-      server.skillHashStore.setHash(name, computeSkillHash(content));
+      server.skillHashStore.setHash(name, computeSkillHash(fs.readFileSync(result.path!, 'utf-8')));
     } catch { /* best-effort */ }
 
-    // Reload skills into agent state
-    server.agentState.skills.length = 0;
-    server.agentState.skills.push(...loadSkills(waggleHome));
-
-    return { ok: true, name, path: filePath };
+    return { ok: true, name, path: result.path };
   });
 
   // POST /api/skills/create — create a skill from structured template (Skill Creator)
@@ -461,37 +478,25 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
     };
 
     const content = generateSkillMarkdown(template);
-    const filePath = path.join(skillsDir, `${kebabName}.md`);
 
-    fs.writeFileSync(filePath, redactSkillContent(content).content, 'utf-8');
+    // P5/D4: one write path — service stamps user provenance + audits 'installed'.
+    const result = writeSkill(
+      { skillsDir, auditStore: server.auditStore, onChange: () => {
+        server.agentState.skills.length = 0;
+        server.agentState.skills.push(...loadSkills(waggleHome));
+      } },
+      { name: kebabName, content, initiator: 'user', source: 'skill-creator' },
+    );
+    if (!result.ok) return reply.status(400).send({ error: result.error });
 
-    // Record content hash for change detection
+    // Record content hash for change detection (persisted on-disk content).
     try {
-      server.skillHashStore.setHash(kebabName, computeSkillHash(content));
+      server.skillHashStore.setHash(kebabName, computeSkillHash(fs.readFileSync(result.path!, 'utf-8')));
     } catch { /* best-effort */ }
-
-    // Record audit trail
-    try {
-      server.auditStore.record({
-        capabilityName: kebabName,
-        capabilityType: 'skill',
-        source: 'local-created',
-        riskLevel: 'low',
-        trustSource: 'local_user',
-        approvalClass: 'standard',
-        action: 'installed',
-        initiator: 'user',
-        detail: `Created via Skill Creator. Category: ${category ?? 'general'}`,
-      });
-    } catch { /* audit is best-effort */ }
-
-    // Reload skills into agent state
-    server.agentState.skills.length = 0;
-    server.agentState.skills.push(...loadSkills(waggleHome));
 
     return {
       success: true,
-      path: filePath,
+      path: result.path,
       registered: true,
       skill: {
         name: kebabName,
@@ -516,20 +521,23 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
     if (!content) {
       return reply.status(400).send({ error: 'content is required' });
     }
-    const filePath = path.join(skillsDir, `${name}.md`);
-    if (!fs.existsSync(filePath)) {
+    if (!fs.existsSync(path.join(skillsDir, `${name}.md`))) {
       return reply.status(404).send({ error: 'Skill not found' });
     }
-    fs.writeFileSync(filePath, redactSkillContent(content).content, 'utf-8');
+    // P5/D4: service redacts, preserves sticky provenance, audits the update.
+    const result = writeSkill(
+      { skillsDir, auditStore: server.auditStore, onChange: () => {
+        server.agentState.skills.length = 0;
+        server.agentState.skills.push(...loadSkills(waggleHome));
+      } },
+      { name, content, initiator: 'user', source: 'api' },
+    );
+    if (!result.ok) return reply.status(400).send({ error: result.error });
 
-    // Update content hash for change detection
+    // Update content hash for change detection (persisted on-disk content).
     try {
-      server.skillHashStore.setHash(name, computeSkillHash(content));
+      server.skillHashStore.setHash(name, computeSkillHash(fs.readFileSync(result.path!, 'utf-8')));
     } catch { /* best-effort */ }
-
-    // Reload skills into agent state
-    server.agentState.skills.length = 0;
-    server.agentState.skills.push(...loadSkills(waggleHome));
 
     return { ok: true, name };
   });
@@ -542,20 +550,23 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
     if (name.includes('..') || name.includes('/') || name.includes('\\')) {
       return reply.status(400).send({ error: 'Invalid skill name' });
     }
-    const filePath = path.join(skillsDir, `${name}.md`);
-    if (!fs.existsSync(filePath)) {
+    if (!fs.existsSync(path.join(skillsDir, `${name}.md`))) {
       return reply.status(404).send({ error: 'Skill not found' });
     }
-    fs.unlinkSync(filePath);
+    // P5/D4: service audits 'uninstalled' with user provenance + reloads.
+    const result = deleteSkillWrite(
+      { skillsDir, auditStore: server.auditStore, onChange: () => {
+        server.agentState.skills.length = 0;
+        server.agentState.skills.push(...loadSkills(waggleHome));
+      } },
+      { name, initiator: 'user', source: 'api' },
+    );
+    if (!result.ok) return reply.status(400).send({ error: result.error });
 
     // Remove content hash
     try {
       server.skillHashStore.removeHash(name);
     } catch { /* best-effort */ }
-
-    // Reload skills into agent state
-    server.agentState.skills.length = 0;
-    server.agentState.skills.push(...loadSkills(waggleHome));
 
     return { ok: true, name };
   });
