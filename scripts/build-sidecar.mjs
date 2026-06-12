@@ -63,6 +63,18 @@ try {
     format: 'esm',
     outfile: outFile,
     external: EXTERNAL,
+    // P4/D12: @waggle/shared and @waggle/hive-mind-core export ONLY their
+    // gitignored dist/ (unlike core/agent/server, which export src/*.ts).
+    // Without these aliases the bundle silently embeds whatever dist/ was
+    // last compiled — the same stale-server-in-the-binary class D12 exists
+    // to kill — and a clean checkout can't build at all without
+    // build:packages. Alias to source so the bundle ALWAYS compiles from
+    // src, like the vitest aliases do. (No subpath imports of either
+    // package exist — verified before aliasing the bare names.)
+    alias: {
+      '@waggle/shared': path.join(root, 'packages', 'shared', 'src', 'index.ts'),
+      '@waggle/hive-mind-core': path.join(root, 'packages', 'hive-mind-core', 'src', 'index.ts'),
+    },
     sourcemap: true,
     minify: true,
     banner: {

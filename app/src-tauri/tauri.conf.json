@@ -7,7 +7,7 @@
     "frontendDist": "../../apps/web/dist",
     "devUrl": "http://localhost:8080",
     "beforeDevCommand": "cd ../apps/web && npx vite",
-    "beforeBuildCommand": "cd ../apps/web && npx vite build"
+    "beforeBuildCommand": "node ../scripts/build-sidecar.mjs && node ../scripts/check-sidecar-resources.mjs && cd ../apps/web && npx vite build"
   },
   "bundle": {
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico", "icons/icon.png"],

@@ -88,6 +88,7 @@ import { waggleDanceRoutes } from './routes/waggle-dance.js';
 import { commandRoutes } from './routes/commands.js';
 import { commandRoutes as commandCenterRoutes } from './routes/command.js';
 import { homeRoutes } from './routes/home.js';
+import { onboardingRoutes } from './routes/onboarding.js';
 import { cronRoutes } from './routes/cron.js';
 import { notificationRoutes, emitNotification, emitSubagentStatus } from './routes/notifications.js';
 import { marketplaceDevRoutes } from './routes/marketplace-dev.js';
@@ -2103,6 +2104,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   // commandCenterRoutes registers the singular /api/command/* aliases (B4) — it
   // is distinct from the plural commandRoutes (/api/commands/execute) above.
   await server.register(homeRoutes);
+  await server.register(onboardingRoutes);
   await server.register(commandCenterRoutes);
   await server.register(cronRoutes);
   // UX-Refactor Phase 3: Agent entity (S09/S18, B3 agents.json) + the

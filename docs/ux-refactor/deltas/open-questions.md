@@ -658,3 +658,44 @@ Recorded per the single-decision-log rule; full design + live-run findings in
    KnowledgeGraphViewer crashed the surface on untyped entities (54/214 real rows; fixed via
    single-entry node normalization, 'unknown' legend chip); Timeline duplicated React keys on
    cross-mind id 36 (fixed via mind-qualified keys).
+
+---
+
+## P4 implementation notes (D11 + D12 + clean-install onboarding, 2026-06-11)
+
+Recorded per the single-decision-log rule; full record in
+`docs/ux-refactor/p4-launch-integrity-record.md`.
+
+1. **D11 SHIPPED.** `resolveDataDir()` = option > `WAGGLE_DATA_DIR` > `~/.waggle` (split-brain with
+   installer/marketplace/memory-mcp closed); the ratified one-line startup log
+   `Data dir: <resolved> · tier: <effective>` via `readTierFromDataDir` (extracted; same
+   config.json + getEffectiveTier contract as `GET /api/tier`); both stale SOLO comments fixed.
+   Live-verified: env-pointed boot logged the tmp dir + tier FREE.
+2. **D12 SHIPPED — preferred shape (generation + untracking).** `service.js`/`.map` untracked +
+   gitignored; `tauri.conf.json` `beforeBuildCommand` owns the full prep chain so a raw
+   `npx tauri build` ships a CURRENT server (previously: the April copy). Dev mode unaffected
+   (service.rs debug branch spawns service.ts via tsx). Pinned in tauri-config.test.ts.
+3. **S4 founder flag RESOLVED — the clean-install skip was REAL.** `ensureDefault()` at boot +
+   the `getWorkspaces().length > 0` auto-complete evidence meant brand-new production users never
+   saw the wizard. Fix: server-authoritative `GET /api/onboarding/status` (completion flag
+   `<dataDir>/first-launch.flag` — same file as the Tauri IPC stamp — OR legacy evidence: any
+   personal-mind frame / >1 workspaces; the seeded stub is NOT evidence) +
+   `POST /api/onboarding/complete` stamped from `useOnboarding.update()` on completion. Fail
+   direction: toward showing the wizard. Live-verified clean dataDir → `completed:false`.
+   Accepted edge: a pre-flag returning user with zero frames + only the default workspace re-sees
+   the wizard once (no durable signal can distinguish them; class dies as flags stamp).
+4. **FREE→Upgrade e2e re-ran:** Act 4 Tier Wall 6/6 on a fresh FREE install under
+   `WAGGLE_TRUST_LOCALHOST=1`; the unauthenticated first run's 3 failures are the documented
+   dock-era-spec-vs-P1b-bearer-gate class — spec-side token wiring stays ledgered with the P7 e2e
+   band.
+5. **Two-round adversarial review (19 confirmed total / 34 refuted) — all confirmed findings
+   fixed,** headlined by: a HIGH in P4's own first cut (the D12 hook re-ran arch-parameterized
+   bundle scripts arch-blind — cross-arch macOS release legs would ship a non-launching Intel DMG;
+   hook trimmed to the arch-independent sidecar bundle + a fail-loud resources preflight); a
+   verified MED chain where the wizard's own step-1 profile write counted as returning-user
+   evidence (server-durable PENDING latch added — only explicit completion flips status once a
+   dataDir is identified as un-onboarded); the Tauri fs-flag now honors `WAGGLE_DATA_DIR` (Rust)
+   so the IPC fast-path and the server stamp share one file on every install shape; and the
+   sidecar bundle now compiles `@waggle/shared`/`@waggle/hive-mind-core` from SOURCE (esbuild
+   alias — the regenerated bundle used to embed stale gitignored dist silently). Full dispositions:
+   `docs/ux-refactor/p4-launch-integrity-record.md`.

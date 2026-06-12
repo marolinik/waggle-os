@@ -22,7 +22,18 @@ fn home_dir() -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
+/// Resolve the flag location: `WAGGLE_DATA_DIR` (when set and non-empty) else
+/// `~/.waggle` — the SAME resolution order the sidecar's resolveDataDir uses
+/// (UX-Refactor P4/D11). Without this, a custom-data-dir install reads/writes
+/// the flag in `~/.waggle` while the server's completion stamp lives in the
+/// data dir — and a stale `~/.waggle` flag from a prior default install would
+/// auto-skip onboarding against a brand-new data dir (P4 review, 5 findings).
 fn flag_path() -> Result<PathBuf, String> {
+    if let Some(dir) = std::env::var_os("WAGGLE_DATA_DIR") {
+        if !dir.is_empty() {
+            return Ok(PathBuf::from(dir).join(FLAG_FILE));
+        }
+    }
     let home = home_dir().ok_or_else(|| {
         "could not resolve user home directory (USERPROFILE/HOME unset)".to_string()
     })?;
@@ -73,12 +84,37 @@ mod tests {
     use super::*;
 
     #[test]
-    fn flag_path_resolves_to_dot_waggle_subdir() {
-        // Set a temp env var so the test does not touch the real home dir.
+    fn flag_path_resolution_order() {
+        // ONE sequential test — env vars are process-global and cargo runs
+        // tests in parallel threads; split tests would race on WAGGLE_DATA_DIR.
         let tmp = std::env::temp_dir().join(format!("waggle-test-home-{}", std::process::id()));
         std::env::set_var("USERPROFILE", &tmp);
         std::env::set_var("HOME", &tmp);
+
+        // Default: ~/.waggle.
+        std::env::remove_var("WAGGLE_DATA_DIR");
         let path = flag_path().expect("flag_path resolves with USERPROFILE/HOME set");
-        assert!(path.ends_with(".waggle/first-launch.flag") || path.ends_with(".waggle\\first-launch.flag"));
+        assert!(
+            path.ends_with(".waggle/first-launch.flag")
+                || path.ends_with(".waggle\\first-launch.flag")
+        );
+
+        // P4/D11: a custom data dir keeps the flag NEXT TO the server's stamp.
+        let data_dir =
+            std::env::temp_dir().join(format!("waggle-test-datadir-{}", std::process::id()));
+        std::env::set_var("WAGGLE_DATA_DIR", &data_dir);
+        let custom = flag_path().expect("flag_path resolves with WAGGLE_DATA_DIR set");
+        assert!(custom.starts_with(&data_dir));
+        assert!(custom.ends_with("first-launch.flag"));
+
+        // Empty env value falls through to the home default (matches resolveDataDir).
+        std::env::set_var("WAGGLE_DATA_DIR", "");
+        let fallback = flag_path().expect("flag_path resolves with empty WAGGLE_DATA_DIR");
+        assert!(
+            fallback.ends_with(".waggle/first-launch.flag")
+                || fallback.ends_with(".waggle\\first-launch.flag")
+        );
+
+        std::env::remove_var("WAGGLE_DATA_DIR");
     }
 }

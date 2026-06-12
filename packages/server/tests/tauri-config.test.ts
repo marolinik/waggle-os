@@ -97,6 +97,19 @@ describe('Tauri Production Configuration', () => {
     expect(content).toContain('service.ts');
     expect(content).toContain('resources/service.js');
   });
+
+  it('D12: the bundled sidecar is generated at build time, never tracked', () => {
+    // beforeBuildCommand regenerates the bundle on EVERY build path — including
+    // a raw `npx tauri build` that bypasses the npm scripts and CI steps. A
+    // tracked copy goes stale silently; a binary shipping an old server is a
+    // release-stopping defect class (UX-Refactor P4 / D12 ruling).
+    const conf = JSON.parse(fs.readFileSync(path.join(TAURI_DIR, 'tauri.conf.json'), 'utf-8'));
+    expect(conf.build.beforeBuildCommand).toContain('build-sidecar.mjs');
+
+    const gitignore = fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf-8');
+    expect(gitignore).toContain('app/src-tauri/resources/service.js');
+    expect(gitignore).toContain('app/src-tauri/resources/service.js.map');
+  });
 });
 
 describe('CI/CD Configuration', () => {

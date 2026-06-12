@@ -462,6 +462,22 @@ class LocalAdapter {
     return res;
   }
 
+  // --- Onboarding status (P4 — server-authoritative) ---
+  // The returning-user signal. Workspace count is NOT usable for this: the
+  // boot-time wsManager.ensureDefault() stub means a clean install always has
+  // ≥1 workspace, which silently skipped the wizard for brand-new users.
+
+  async getOnboardingStatus(): Promise<{ completed: boolean; source?: string }> {
+    const res = await this.fetch('/api/onboarding/status');
+    if (!res.ok) throw new Error(`getOnboardingStatus failed: ${res.status}`);
+    return res.json();
+  }
+
+  /** Idempotent completion stamp (`<dataDir>/first-launch.flag`). */
+  async markOnboardingComplete(): Promise<void> {
+    await this.fetch('/api/onboarding/complete', { method: 'POST' });
+  }
+
   // --- Workspaces ---
   async getWorkspaces(): Promise<Workspace[]> {
     const res = await this.fetch('/api/workspaces');

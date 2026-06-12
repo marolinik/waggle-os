@@ -9,6 +9,7 @@ import type { LlmHealthStatus } from './index.js';
 import { startLiteLLM, stopLiteLLM, type LiteLLMStatus } from './lifecycle.js';
 import { createLogger } from './logger.js';
 import { resolveBindHost } from './net-config.js';
+import { readTierFromDataDir } from '../middleware/assert-tier.js';
 import {
   readEraseMarker,
   performWipe,
@@ -41,6 +42,19 @@ export interface ServiceResult {
 }
 
 const DEFAULT_PORT = 3333;
+
+/**
+ * Resolve the service data directory: explicit option > WAGGLE_DATA_DIR env >
+ * ~/.waggle. D11 — the installer/launcher set WAGGLE_DATA_DIR; before this,
+ * startService ignored it while other modules (local/index.ts config,
+ * marketplace installer, memory-mcp) honored it, splitting state across two
+ * directories on custom installs.
+ */
+export function resolveDataDir(optionDataDir?: string): string {
+  // `||` on the env leg: WAGGLE_DATA_DIR set-but-empty must fall through to
+  // the default, not yield '' (mkdirSync('') throws / resolves to cwd).
+  return optionDataDir ?? (process.env.WAGGLE_DATA_DIR || path.join(os.homedir(), '.waggle'));
+}
 
 /**
  * Check if this is a fresh install (no personal.mind, no default.mind).
@@ -94,7 +108,7 @@ function hasAnthropicKey(dataDir: string, server?: FastifyInstance): boolean {
 /**
  * Start the Waggle agent service.
  *
- * 1. Resolves/creates dataDir (~/.waggle)
+ * 1. Resolves/creates dataDir (option > WAGGLE_DATA_DIR > ~/.waggle)
  * 2. Runs migration if needed (default.mind -> personal.mind)
  * 3. Creates personal.mind if fresh install
  * 4. Starts LiteLLM proxy (unless skipped)
@@ -105,7 +119,7 @@ function hasAnthropicKey(dataDir: string, server?: FastifyInstance): boolean {
  * for UI splash screen display.
  */
 export async function startService(options?: ServiceOptions): Promise<ServiceResult> {
-  const dataDir = options?.dataDir ?? path.join(os.homedir(), '.waggle');
+  const dataDir = resolveDataDir(options?.dataDir);
   const port = options?.port ?? DEFAULT_PORT;
   const litellmPort = options?.litellmPort ?? 4000;
   const skipLiteLLM = options?.skipLiteLLM ?? false;
@@ -154,6 +168,11 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
       throw new Error(msg);
     }
   }
+
+  // D11: ONE startup line answering "which state am I running against?" —
+  // resolved dataDir + effective tier. Logged after wipe/migration so it
+  // reflects the directory the server will actually serve.
+  log.info(`Data dir: ${dataDir} · tier: ${readTierFromDataDir(dataDir)}`);
 
   // 3. Ensure personal.mind exists
   const personalPath = path.join(dataDir, 'personal.mind');

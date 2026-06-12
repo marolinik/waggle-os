@@ -292,10 +292,10 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
   });
 
   // ── Tier detection ───────────────────────────────────────────────────
-  // Tier is read from config.json → tier field (defaults to SOLO).
-  // Canonical values: SOLO | BASIC | TEAMS | ENTERPRISE (from @waggle/shared)
-  // Legacy lowercase names are auto-migrated via parseTier().
-  // Will be replaced by Stripe webhook in Prompt 04.
+  // Tier is read from config.json → tier field (defaults to FREE).
+  // Canonical values: TRIAL | FREE | PRO | TEAMS | ENTERPRISE (@waggle/shared
+  // tiers.ts). Legacy names (SOLO/BASIC/lowercase) auto-migrate via parseTier().
+  // The Stripe webhook (packages/server/src/stripe/webhook.ts) writes this field.
 
   function readTierConfig(dataDir: string): { tier: Tier; trialStartedAt: string | null } {
     try {
