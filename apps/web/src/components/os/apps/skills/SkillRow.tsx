@@ -34,6 +34,9 @@ const SkillRow = ({ skill, testing, onTest, onEdit }: SkillRowProps) => (
         <span className="block text-[10px] text-muted-foreground truncate">{skill.preview}</span>
       )}
     </span>
+    {skill.initiator === 'agent' && (
+      <StatusBadge tone="attention" label="agent · review" />
+    )}
     <StatusBadge tone={STATUS_TONE[skill.status]} label={skill.status === 'update-available' ? 'Update available' : skill.status} />
     <button
       onClick={() => onTest(skill)}

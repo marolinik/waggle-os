@@ -511,6 +511,13 @@ export interface Skill {
   preview?: string;
   status: SkillStatus;
   scope?: import('@waggle/shared').Scope;
+  /**
+   * P5/D4 provenance from GET /api/skills. Agent-authored skills are badged
+   * "created by agent — review" — replacing the name-heuristic Custom class.
+   * Absent/legacy ⇒ 'user'.
+   */
+  initiator?: 'agent' | 'user';
+  source?: string;
 }
 
 export interface FleetSession {

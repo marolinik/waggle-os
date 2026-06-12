@@ -59,6 +59,18 @@ describe('CapabilitiesApp — Skills Hub', () => {
     expect(screen.getByText('custom')).toBeInTheDocument();
   });
 
+  it('P5/D4: badges an agent-authored skill "agent · review"', async () => {
+    mocks.adapter.getSkills.mockResolvedValue([
+      { id: 'agent-made', name: 'agent-made', preview: 'Authored by the agent', installed: true, initiator: 'agent', source: 'chat' },
+      { id: 'user-made', name: 'user-made', preview: 'Authored by me', installed: true, initiator: 'user' },
+    ]);
+    renderApp();
+    expect(await screen.findByText('agent-made')).toBeInTheDocument();
+    // The agent skill carries the review badge; the user skill does not.
+    expect(screen.getByText('agent · review')).toBeInTheDocument();
+    expect(screen.getAllByText('agent · review')).toHaveLength(1);
+  });
+
   it('the Custom tab shows only user-authored skills (not in any catalog)', async () => {
     renderApp();
     await screen.findByText('deep-research');

@@ -162,10 +162,14 @@ const CapabilitiesApp = () => {
         if (skillsRes.status === 'fulfilled') {
           setSkills(skillsRes.value.map((s) => {
             const name = s.id || s.name;
-            const preview = (s as SkillPack & { preview?: string }).preview;
+            const meta = s as SkillPack & { preview?: string; initiator?: 'agent' | 'user'; source?: string };
             return {
               name,
-              preview,
+              preview: meta.preview,
+              // P5/D4: agent provenance is authoritative — an agent-authored skill
+              // is badged regardless of catalog membership.
+              initiator: meta.initiator ?? 'user',
+              source: meta.source,
               status: !catalogsKnown || catalogNames.has(name)
                 ? 'installed'
                 : (marketplaceNames.has(name) ? 'marketplace' : 'custom'),
