@@ -53,7 +53,7 @@ const AgentDetail = ({ agent, localPersona, allTools, onEdit }: AgentDetailProps
         </h4>
         {agentTools.length === 0 ? (
           <p className="text-[11px] text-muted-foreground italic">
-            Inherits all tools — no explicit allowlist. Tool use is gated by the current workspace autonomy level (Normal / Trusted / YOLO) and any per-agent denylist.
+            Inherits all tools — no explicit allowlist. Tool use is gated by the current workspace autonomy level (Ask first / Trusted / Autopilot) and any per-agent denylist.
           </p>
         ) : (
           <div className="flex flex-wrap gap-1.5">

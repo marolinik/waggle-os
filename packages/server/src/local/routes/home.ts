@@ -102,6 +102,11 @@ const MAX_RANKED_WORKSPACES = 8;
 const MAX_RECENT_CARDS = 6;
 /** Max aggregated suggested actions returned. */
 const MAX_SUGGESTED_ACTIONS = 6;
+/** Suggested actions only come from workspaces touched within this window.
+ *  Stale workspaces resurface month-old raw prompts ("Resume: Reply with the
+ *  literal string PHASE_B_OK…") as today's recommendations — one junk
+ *  suggestion poisons trust in all of them. */
+const SUGGESTION_MAX_IDLE_DAYS = 30;
 /** Max aggregated up-next items returned. */
 const MAX_UP_NEXT = 8;
 /** Default overnight window in hours when `?since` is absent. */
@@ -325,14 +330,19 @@ export const homeRoutes: FastifyPluginAsync = async (server) => {
         },
       });
 
-      // Aggregate next-actions into cross-workspace suggested actions.
-      for (const action of nextActions) {
-        if (suggestedActions.length >= MAX_SUGGESTED_ACTIONS) break;
-        suggestedActions.push({
-          label: action,
-          workspaceId: ws.id,
-          kind: 'next-action',
-        });
+      // Aggregate next-actions into cross-workspace suggested actions —
+      // recent workspaces only (see SUGGESTION_MAX_IDLE_DAYS).
+      const idleMs = ws.lastActiveIso ? now.getTime() - Date.parse(ws.lastActiveIso) : Infinity;
+      const isRecent = idleMs <= SUGGESTION_MAX_IDLE_DAYS * 86_400_000;
+      if (isRecent) {
+        for (const action of nextActions) {
+          if (suggestedActions.length >= MAX_SUGGESTED_ACTIONS) break;
+          suggestedActions.push({
+            label: action,
+            workspaceId: ws.id,
+            kind: 'next-action',
+          });
+        }
       }
 
       // Upcoming cron schedules scoped to this workspace become up-next items.

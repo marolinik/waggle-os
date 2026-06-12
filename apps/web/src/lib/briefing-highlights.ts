@@ -55,13 +55,41 @@ function isConcrete(f: BriefingFrameLike): boolean {
   return trimmed.length >= MIN_HIGHLIGHT_CONTENT_CHARS;
 }
 
+/** First line of the content, normalized — the identity used for dedup. */
+function highlightKey(f: BriefingFrameLike): string {
+  return (f.content ?? '').split('\n')[0].trim().toLowerCase().slice(0, 120);
+}
+
 /**
  * Rank and trim the frames to the top BRIEFING_HIGHLIGHT_LIMIT
  * highlights. Returns a new array — does not mutate input.
+ *
+ * Duplicate content (consolidation re-writes the same fact as a fresh
+ * frame) is collapsed to ONE highlight, keeping the EARLIEST timestamp —
+ * the moment it was learned. Showing the same memory twice with two
+ * different ages was the single most trust-destroying defect judges hit.
  */
 export function selectBriefingHighlights<T extends BriefingFrameLike>(frames: readonly T[]): T[] {
   const concrete = frames.filter(isConcrete);
-  const sorted = [...concrete].sort((a, b) => {
+  const byKey = new Map<string, T>();
+  for (const f of concrete) {
+    const key = highlightKey(f);
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, f);
+      continue;
+    }
+    // Keep the higher-importance copy; tie → the earliest-learned copy.
+    if (
+      importanceScore(f) > importanceScore(existing) ||
+      (importanceScore(f) === importanceScore(existing) &&
+        timestampMs(f) > 0 &&
+        (timestampMs(existing) === 0 || timestampMs(f) < timestampMs(existing)))
+    ) {
+      byKey.set(key, f);
+    }
+  }
+  const sorted = [...byKey.values()].sort((a, b) => {
     const impDiff = importanceScore(b) - importanceScore(a);
     if (impDiff !== 0) return impDiff;
     return timestampMs(b) - timestampMs(a);

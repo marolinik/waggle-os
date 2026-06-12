@@ -348,8 +348,10 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
     return {
       skills: skills.map(s => {
         // Provenance comes from the on-disk file's frontmatter — loadSkills may
-        // strip it, so read the raw file. Absent provenance ⇒ legacy ⇒ 'user'.
-        let initiator: 'agent' | 'user' = 'user';
+        // strip it, so read the raw file. Absent provenance ⇒ legacy/bundled ⇒
+        // 'built-in': attributing stock skills to the user made the user-vs-
+        // agent distinction unfalsifiable for pre-P5 content.
+        let initiator: 'agent' | 'user' | 'built-in' = 'built-in';
         let provSource: string | undefined;
         // Review #3: derive the preview from the parsed BODY, not raw content —
         // stamped provenance frontmatter would otherwise leak into the Hub row.

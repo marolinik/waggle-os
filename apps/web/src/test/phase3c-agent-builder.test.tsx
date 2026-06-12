@@ -6,6 +6,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import type { Agent } from '@/lib/types';
 
@@ -49,11 +50,13 @@ const WORKSPACES = [
 ];
 
 const renderApp = () => render(
-  <ServiceProvider>
-    <TooltipProvider>
-      <AgentsApp workspaces={WORKSPACES} />
-    </TooltipProvider>
-  </ServiceProvider>,
+  <MemoryRouter>
+    <ServiceProvider>
+      <TooltipProvider>
+        <AgentsApp workspaces={WORKSPACES} />
+      </TooltipProvider>
+    </ServiceProvider>
+  </MemoryRouter>,
 );
 
 beforeEach(() => {
@@ -81,7 +84,7 @@ describe('AgentBuilder — S18', () => {
   it('gates the Identity step on name + goal', async () => {
     mocks.adapter.listAgents.mockResolvedValue([]);
     renderApp();
-    await screen.findByText(/No agents yet/);
+    await screen.findByText(/No custom agents yet/);
     await openBuilder();
 
     const next = screen.getByTestId('agent-builder-next');
@@ -99,7 +102,7 @@ describe('AgentBuilder — S18', () => {
     const created = makeAgent({ id: 'a-new', name: 'Scout', workspaceIds: ['ws-1'], skillIds: ['deep-research'] });
     mocks.adapter.createAgent.mockResolvedValue(created);
     renderApp();
-    await screen.findByText(/No agents yet/);
+    await screen.findByText(/No custom agents yet/);
     await openBuilder();
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Scout' } });
@@ -146,7 +149,7 @@ describe('AgentBuilder — S18', () => {
     mocks.adapter.listAgents.mockResolvedValue([]);
     mocks.adapter.createAgent.mockResolvedValue(makeAgent());
     renderApp();
-    await screen.findByText(/No agents yet/);
+    await screen.findByText(/No custom agents yet/);
     await openBuilder();
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Octo' } });

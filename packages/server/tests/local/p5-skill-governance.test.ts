@@ -55,7 +55,9 @@ describe('P5/D4 skill governance routes', () => {
   it('GET /api/skills returns initiator/source provenance', async () => {
     // An agent-authored skill on disk.
     fs.writeFileSync(path.join(skillsDir, 'agent-made.md'), '---\ninitiator: agent\nsource: chat\n---\n\n# Agent skill');
-    // A legacy skill with no frontmatter → defaults to user.
+    // A legacy skill with no frontmatter → 'built-in' (NOT 'user': claiming
+    // user authorship for bundled content made the provenance badge
+    // unfalsifiable for pre-P5 skills).
     fs.writeFileSync(path.join(skillsDir, 'legacy.md'), '# Legacy skill, no frontmatter');
     const res = await server.inject({ method: 'GET', url: '/api/skills' });
     const body = res.json() as { skills: Array<{ name: string; initiator: string; source?: string }> };
@@ -63,7 +65,7 @@ describe('P5/D4 skill governance routes', () => {
     const legacy = body.skills.find(s => s.name === 'legacy');
     expect(agentSkill?.initiator).toBe('agent');
     expect(agentSkill?.source).toBe('chat');
-    expect(legacy?.initiator).toBe('user');
+    expect(legacy?.initiator).toBe('built-in');
   });
 
   it('GET /api/skills preview is the body, not the stamped frontmatter (review #3)', async () => {

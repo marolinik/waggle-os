@@ -43,6 +43,12 @@ export interface DockEntry {
    * parameterized — clicks resolve through routeFor('chat', ctx) (§2.3).
    */
   route?: string;
+  /**
+   * One-line plain-language explanation of the entry, surfaced as a hover
+   * tooltip in the nav — labels like "Waggle Dance" / "MCP Hub" are opaque
+   * to non-technical users without it.
+   */
+  description?: string;
 }
 
 const BILLING_TIER_ORDER: Record<BillingTier, number> = {
@@ -57,55 +63,55 @@ export const DEFAULT_TIER: UserTier = 'simple';
 // Dock renders zone-parents generically off entry.type/entry.key.
 const POWER_CONFIG: DockEntry[] = [
   // ── Work (primary spine, always visible) ──
-  { type: 'app', key: 'home', appId: 'home', icon: LayoutDashboard, label: 'Home', color: 'text-sky-400', route: '/home' },
-  { type: 'app', key: 'chat', appId: 'chat', icon: MessageSquare, label: 'Chat', color: 'text-primary', route: '/workspaces' },
-  { type: 'app', key: 'memory', appId: 'memory', icon: Brain, label: 'Memory', color: 'text-amber-300', route: '/memory' },
-  { type: 'app', key: 'files', appId: 'files', icon: FolderOpen, label: 'Files', color: 'text-amber-300', route: '/files' },
-  { type: 'app', key: 'artifacts', appId: 'artifacts', icon: FileStack, label: 'Artifacts', color: 'text-amber-300', route: '/artifacts' },
+  { type: 'app', key: 'home', appId: 'home', icon: LayoutDashboard, label: 'Home', color: 'text-sky-400', route: '/home', description: 'Your starting point — daily briefing and quick actions' },
+  { type: 'app', key: 'chat', appId: 'chat', icon: MessageSquare, label: 'Chat', color: 'text-primary', route: '/workspaces', description: 'Talk to your AI agents' },
+  { type: 'app', key: 'memory', appId: 'memory', icon: Brain, label: 'Memory', color: 'text-amber-300', route: '/memory', description: 'Everything Waggle remembers about you and your work' },
+  { type: 'app', key: 'files', appId: 'files', icon: FolderOpen, label: 'Files', color: 'text-amber-300', route: '/files', description: 'Browse the files in your workspaces' },
+  { type: 'app', key: 'artifacts', appId: 'artifacts', icon: FileStack, label: 'Artifacts', color: 'text-amber-300', route: '/artifacts', description: 'Documents and files your agents produce' },
   { type: 'separator', key: 'sep-work', label: '' },
   // ── Intelligence ──
   {
-    type: 'zone-parent', key: 'intelligence', icon: Bot, label: 'Intelligence', color: 'text-violet-400',
+    type: 'zone-parent', key: 'intelligence', icon: Bot, label: 'Intelligence', color: 'text-violet-400', description: 'Your agents and what they can do',
     children: [
-      { type: 'app', key: 'agents', appId: 'agents', icon: Bot, label: 'Agent Center', color: 'text-orange-400', route: '/agents' },
-      { type: 'app', key: 'skills', appId: 'capabilities', icon: Package, label: 'Skills Hub', color: 'text-violet-400', route: '/skills' },
-      { type: 'app', key: 'jobs', appId: 'scheduled-jobs', icon: Clock, label: 'Automation Center', color: 'text-amber-400', route: '/automations' },
-      { type: 'app', key: 'room', appId: 'room', icon: Users, label: 'Room', color: 'text-violet-400', route: '/room' },
-      { type: 'app', key: 'dance', appId: 'waggle-dance', icon: Zap, label: 'Waggle Dance', color: 'text-amber-400', route: '/waggle-dance' },
+      { type: 'app', key: 'agents', appId: 'agents', icon: Bot, label: 'Agent Center', color: 'text-orange-400', route: '/agents', description: 'Create and manage your AI agents' },
+      { type: 'app', key: 'skills', appId: 'capabilities', icon: Package, label: 'Skills Hub', color: 'text-violet-400', route: '/skills', description: 'Teach your agents new abilities' },
+      { type: 'app', key: 'jobs', appId: 'scheduled-jobs', icon: Clock, label: 'Automation Center', color: 'text-amber-400', route: '/automations', description: 'Set up tasks that run on a schedule' },
+      { type: 'app', key: 'room', appId: 'room', icon: Users, label: 'Room', color: 'text-violet-400', route: '/room', description: 'Watch your agents work together live' },
+      { type: 'app', key: 'dance', appId: 'waggle-dance', icon: Zap, label: 'Waggle Dance', color: 'text-amber-400', route: '/waggle-dance', description: 'See what your agents learn from each other' },
       // Approvals: TEAMS-tier trust/audit surface (Pro gets inline chat approvals).
-      { type: 'app', key: 'approvals', appId: 'approvals', icon: Shield, label: 'Approvals', color: 'text-amber-400', minBillingTier: 'TEAMS', route: '/approvals' },
+      { type: 'app', key: 'approvals', appId: 'approvals', icon: Shield, label: 'Approvals', color: 'text-amber-400', minBillingTier: 'TEAMS', route: '/approvals', description: 'Review and approve actions your agents want to take' },
     ],
   },
   // ── Extend ──
   {
-    type: 'zone-parent', key: 'extend', icon: Package, label: 'Extend', color: 'text-emerald-400',
+    type: 'zone-parent', key: 'extend', icon: Package, label: 'Extend', color: 'text-emerald-400', description: 'Add tools and connections to Waggle',
     children: [
-      { type: 'app', key: 'connect', appId: 'connectors', icon: Plug, label: 'Connector Hub', color: 'text-emerald-400', route: '/connectors' },
+      { type: 'app', key: 'connect', appId: 'connectors', icon: Plug, label: 'Connector Hub', color: 'text-emerald-400', route: '/connectors', description: 'Link your apps and accounts so agents can use them' },
       // Phase 4B (S08/S21): the dedicated Extend entries landed.
-      { type: 'app', key: 'mcp-hub', appId: 'mcp-hub', icon: Server, label: 'MCP Hub', color: 'text-emerald-400', route: '/mcps' },
-      { type: 'app', key: 'marketplace', appId: 'marketplace', icon: Store, label: 'Marketplace', color: 'text-orange-400', route: '/marketplace' },
-      { type: 'app', key: 'launcher', appId: 'launcher', icon: Rocket, label: 'AI Tools', color: 'text-amber-400', route: '/launcher' },
+      { type: 'app', key: 'mcp-hub', appId: 'mcp-hub', icon: Server, label: 'MCP Hub', color: 'text-emerald-400', route: '/mcps', description: 'Connect outside tools your agents can use' },
+      { type: 'app', key: 'marketplace', appId: 'marketplace', icon: Store, label: 'Marketplace', color: 'text-orange-400', route: '/marketplace', description: 'Browse ready-made skills and add-ons' },
+      { type: 'app', key: 'launcher', appId: 'launcher', icon: Rocket, label: 'AI Tools', color: 'text-amber-400', route: '/launcher', description: 'Launch other AI tools you use, linked to Waggle' },
     ],
   },
   // ── Team (TEAMS-tier; whole zone hidden below TEAMS) ──
   {
-    type: 'zone-parent', key: 'team', icon: Users, label: 'Team', color: 'text-violet-400', minBillingTier: 'TEAMS',
+    type: 'zone-parent', key: 'team', icon: Users, label: 'Team', color: 'text-violet-400', minBillingTier: 'TEAMS', description: 'Shared workspaces and team controls',
     children: [
-      { type: 'app', key: 'governance', appId: 'governance', icon: Shield, label: 'Team Governance', color: 'text-violet-400', minBillingTier: 'TEAMS', route: '/team' },
+      { type: 'app', key: 'governance', appId: 'governance', icon: Shield, label: 'Team Governance', color: 'text-violet-400', minBillingTier: 'TEAMS', route: '/team', description: 'Team rules, permissions, and oversight' },
     ],
   },
   { type: 'separator', key: 'sep-system', label: '' },
   // ── System ──
   {
-    type: 'zone-parent', key: 'system', icon: Settings, label: 'System', color: 'text-muted-foreground',
+    type: 'zone-parent', key: 'system', icon: Settings, label: 'System', color: 'text-muted-foreground', description: 'Settings and system tools',
     children: [
-      { type: 'app', key: 'settings', appId: 'settings', icon: Settings, label: 'Settings', color: 'text-muted-foreground', route: '/settings' },
-      { type: 'app', key: 'vault', appId: 'vault', icon: Lock, label: 'Vault', color: 'text-amber-400', route: '/settings/vault' },
+      { type: 'app', key: 'settings', appId: 'settings', icon: Settings, label: 'Settings', color: 'text-muted-foreground', route: '/settings', description: 'Preferences, account, and app options' },
+      { type: 'app', key: 'vault', appId: 'vault', icon: Lock, label: 'Vault', color: 'text-amber-400', route: '/settings/vault', description: 'Your API keys and secrets, stored locally' },
       // D8 (v2.1): "Command Center" is reserved for the Ctrl+K palette.
-      { type: 'app', key: 'cockpit', appId: 'cockpit', icon: Activity, label: 'Mission Control', color: 'text-emerald-400', route: '/settings/mission-control' },
-      { type: 'app', key: 'timeline', appId: 'timeline', icon: Clock, label: 'Timeline', color: 'text-cyan-400', route: '/settings/timeline' },
-      { type: 'app', key: 'events', appId: 'events', icon: Radio, label: 'Events & Logs', color: 'text-cyan-400', route: '/settings/events' },
-      { type: 'app', key: 'telemetry', appId: 'telemetry', icon: Activity, label: 'Usage & Cost', color: 'text-sky-400', route: '/settings/usage' },
+      { type: 'app', key: 'cockpit', appId: 'cockpit', icon: Activity, label: 'Mission Control', color: 'text-emerald-400', route: '/settings/mission-control', description: 'System health at a glance' },
+      { type: 'app', key: 'timeline', appId: 'timeline', icon: Clock, label: 'Timeline', color: 'text-cyan-400', route: '/settings/timeline', description: 'A history of everything that has happened' },
+      { type: 'app', key: 'events', appId: 'events', icon: Radio, label: 'Events & Logs', color: 'text-cyan-400', route: '/settings/events', description: 'Live activity feed and technical logs' },
+      { type: 'app', key: 'telemetry', appId: 'telemetry', icon: Activity, label: 'Usage & Cost', color: 'text-sky-400', route: '/settings/usage', description: 'What you have used and what it costs' },
       // P23: Backup stays in Settings → Backup (not a dock entry).
     ],
   },
@@ -113,23 +119,23 @@ const POWER_CONFIG: DockEntry[] = [
 
 export const TIER_DOCK_CONFIG: Record<UserTier, DockEntry[]> = {
   simple: [
-    { type: 'app', key: 'home', appId: 'home', icon: LayoutDashboard, label: 'Home', color: 'text-sky-400', route: '/home' },
-    { type: 'app', key: 'chat', appId: 'chat', icon: MessageSquare, label: 'Chat', color: 'text-primary', route: '/workspaces' },
-    { type: 'app', key: 'files', appId: 'files', icon: FolderOpen, label: 'Files', color: 'text-amber-300', route: '/files' },
+    { type: 'app', key: 'home', appId: 'home', icon: LayoutDashboard, label: 'Home', color: 'text-sky-400', route: '/home', description: 'Your starting point — daily briefing and quick actions' },
+    { type: 'app', key: 'chat', appId: 'chat', icon: MessageSquare, label: 'Chat', color: 'text-primary', route: '/workspaces', description: 'Talk to your AI agents' },
+    { type: 'app', key: 'files', appId: 'files', icon: FolderOpen, label: 'Files', color: 'text-amber-300', route: '/files', description: 'Browse the files in your workspaces' },
     { type: 'separator', key: 'sep-1', label: '' },
-    { type: 'app', key: 'vault', appId: 'vault', icon: Lock, label: 'Vault', color: 'text-amber-400', route: '/settings/vault' },
-    { type: 'app', key: 'system', appId: 'settings', icon: Settings, label: 'Settings', color: 'text-muted-foreground', route: '/settings' },
+    { type: 'app', key: 'vault', appId: 'vault', icon: Lock, label: 'Vault', color: 'text-amber-400', route: '/settings/vault', description: 'Your API keys and secrets, stored locally' },
+    { type: 'app', key: 'system', appId: 'settings', icon: Settings, label: 'Settings', color: 'text-muted-foreground', route: '/settings', description: 'Preferences, account, and app options' },
   ],
 
   professional: [
-    { type: 'app', key: 'home', appId: 'home', icon: LayoutDashboard, label: 'Home', color: 'text-sky-400', route: '/home' },
-    { type: 'app', key: 'chat', appId: 'chat', icon: MessageSquare, label: 'Chat', color: 'text-primary', route: '/workspaces' },
-    { type: 'app', key: 'agents', appId: 'agents', icon: Bot, label: 'Agent Center', color: 'text-orange-400', route: '/agents' },
-    { type: 'app', key: 'files', appId: 'files', icon: FolderOpen, label: 'Files', color: 'text-amber-300', route: '/files' },
+    { type: 'app', key: 'home', appId: 'home', icon: LayoutDashboard, label: 'Home', color: 'text-sky-400', route: '/home', description: 'Your starting point — daily briefing and quick actions' },
+    { type: 'app', key: 'chat', appId: 'chat', icon: MessageSquare, label: 'Chat', color: 'text-primary', route: '/workspaces', description: 'Talk to your AI agents' },
+    { type: 'app', key: 'agents', appId: 'agents', icon: Bot, label: 'Agent Center', color: 'text-orange-400', route: '/agents', description: 'Create and manage your AI agents' },
+    { type: 'app', key: 'files', appId: 'files', icon: FolderOpen, label: 'Files', color: 'text-amber-300', route: '/files', description: 'Browse the files in your workspaces' },
     { type: 'separator', key: 'sep-1', label: '' },
-    { type: 'app', key: 'memory', appId: 'memory', icon: Brain, label: 'Memory', color: 'text-amber-300', route: '/memory' },
-    { type: 'app', key: 'vault', appId: 'vault', icon: Lock, label: 'Vault', color: 'text-amber-400', route: '/settings/vault' },
-    { type: 'app', key: 'system', appId: 'settings', icon: Settings, label: 'Settings', color: 'text-muted-foreground', route: '/settings' },
+    { type: 'app', key: 'memory', appId: 'memory', icon: Brain, label: 'Memory', color: 'text-amber-300', route: '/memory', description: 'Everything Waggle remembers about you and your work' },
+    { type: 'app', key: 'vault', appId: 'vault', icon: Lock, label: 'Vault', color: 'text-amber-400', route: '/settings/vault', description: 'Your API keys and secrets, stored locally' },
+    { type: 'app', key: 'system', appId: 'settings', icon: Settings, label: 'Settings', color: 'text-muted-foreground', route: '/settings', description: 'Preferences, account, and app options' },
   ],
 
   power: POWER_CONFIG,

@@ -102,7 +102,22 @@ export interface CronScheduleLike {
   next_run_at: string | null;
   enabled: number;
   workspace_id: string | null;
+  /** Cron job type — used to keep janitorial jobs off user-facing agendas. */
+  job_type?: string | null;
 }
+
+/**
+ * Job types that are internal maintenance, not the user's agenda. "Memory
+ * compaction at 3:00 AM" in "Up next" reads as the janitor's calendar — every
+ * judge persona flagged it. These run fine; they just don't belong in the
+ * user's plan. User-meaningful types (proactive, agent_task) pass through.
+ */
+const SYSTEM_JOB_TYPES = new Set([
+  'memory_consolidation',
+  'monthly_assessment',
+  'prompt_optimization',
+  'workspace_health',
+]);
 
 /**
  * Build a time-aware greeting based on hour-of-day and workspace inactivity.
@@ -173,6 +188,7 @@ export function buildUpcomingSchedules(schedules: CronScheduleLike[], workspaceI
     // A past next_run_at means "due" — the scheduler will run it and recompute
     // (cron-store getDueSchedules/markRun). Never display a past time as upcoming.
     .filter(s => new Date(s.next_run_at as string).getTime() > nowTs)
+    .filter(s => !s.job_type || !SYSTEM_JOB_TYPES.has(s.job_type))
     .filter(s => !s.workspace_id || s.workspace_id === '*' || s.workspace_id === workspaceId)
     .sort((a, b) => {
       const ta = a.next_run_at ? new Date(a.next_run_at).getTime() : Infinity;

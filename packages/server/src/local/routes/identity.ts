@@ -127,17 +127,20 @@ export const identityRoutes: FastifyPluginAsync = async (server) => {
         : personalMindDb;
 
     const layer = new IdentityLayer(targetMindDb);
-    const fields = {
-      name: body.name ?? '',
-      role: body.role ?? '',
-      department: body.department ?? '',
-      personality: body.personality ?? '',
-      capabilities: body.capabilities ?? '',
-      system_prompt: body.system_prompt ?? '',
-    };
-
     try {
-      const id = layer.exists() ? layer.update(fields) : layer.create(fields);
+      // Merge-on-update: an omitted field keeps its stored value. The prior
+      // `body.x ?? ''` semantics meant a partial write (e.g. the onboarding
+      // wizard sending name only) silently WIPED role/department/personality.
+      const existing = layer.exists() ? layer.get() : null;
+      const fields = {
+        name: body.name ?? existing?.name ?? '',
+        role: body.role ?? existing?.role ?? '',
+        department: body.department ?? existing?.department ?? '',
+        personality: body.personality ?? existing?.personality ?? '',
+        capabilities: body.capabilities ?? existing?.capabilities ?? '',
+        system_prompt: body.system_prompt ?? existing?.system_prompt ?? '',
+      };
+      const id = existing ? layer.update(fields) : layer.create(fields);
       return reply.send({
         configured: true,
         name: id.name,

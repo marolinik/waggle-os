@@ -155,7 +155,11 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
             group: ws.group ?? 'Personal',
             memoryCount: ctx.stats?.memoryCount ?? ctx.memoryCount ?? 0,
             sessionCount: ctx.stats?.sessionCount ?? ctx.sessionCount ?? 0,
-            lastActive: ctx.lastActive ?? '',
+            // USER activity from the workspace store — the same source the
+            // Home greeting uses. ctx.lastActive is refreshed by overnight
+            // cron memory writes, so it said "active yesterday" while the
+            // headline said "away 10 days". Machine activity is not "active".
+            lastActive: ws.lastActive ?? '',
             summary: ctx.summary,
             pendingTasks: ctx.pendingTasks,
           };
@@ -349,9 +353,13 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
                         <ChevronRight className="w-3 h-3 text-muted-foreground group-hover:text-primary transition-colors" />
                       </div>
 
-                      {ws.summary && (
+                      {/* An empty workspace gets an honest nudge, not the
+                          brochure line the server emits as its summary. */}
+                      {ws.memoryCount === 0 && ws.sessionCount === 0 ? (
+                        <p className="text-[11px] text-muted-foreground mb-1.5 italic">Nothing here yet — start a chat and I'll remember it.</p>
+                      ) : ws.summary ? (
                         <p className="text-[11px] text-muted-foreground mb-1.5 line-clamp-2">{ws.summary}</p>
-                      )}
+                      ) : null}
 
                       <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
                         <span><Brain className="w-2.5 h-2.5 inline mr-0.5" />{ws.memoryCount}</span>

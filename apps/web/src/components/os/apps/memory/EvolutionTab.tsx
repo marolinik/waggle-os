@@ -171,7 +171,7 @@ export default function EvolutionTab() {
   const [runs, setRuns] = useState<EvolutionRun[]>([]);
   const [status, setStatus] = useState<StatusCounts | null>(null);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<RunStatus | 'all'>('proposed');
+  const [filter, setFilter] = useState<RunStatus | 'all'>('all');
   const [selectedUuid, setSelectedUuid] = useState<string | null>(null);
   const [detail, setDetail] = useState<RunDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -365,11 +365,19 @@ export default function EvolutionTab() {
           ) : runs.length === 0 ? (
             <div className="text-center py-8">
               <Sparkles className="w-7 h-7 text-muted-foreground/30 mx-auto mb-2" />
-              <p className="text-xs text-muted-foreground">No runs {filter === 'all' ? 'yet' : `in ${filter}`}</p>
-              {filter === 'all' && (
-                <p className="text-[11px] text-muted-foreground/60 mt-2 px-2">
-                  Proposals appear here as Waggle evolves its own prompts from your traces.
-                </p>
+              {filter === 'all' ? (
+                <>
+                  <p className="text-xs text-foreground font-display font-medium px-2">
+                    Your agent improves itself here
+                  </p>
+                  <p className="text-[11px] text-muted-foreground/60 mt-2 px-2">
+                    When Waggle finds a better way to do something it does for you, it proposes
+                    an upgrade. You review each proposal and accept or reject it — nothing
+                    changes without you.
+                  </p>
+                </>
+              ) : (
+                <p className="text-xs text-muted-foreground">No runs in {filter}</p>
               )}
             </div>
           ) : (

@@ -124,9 +124,12 @@ export function timeAgo(iso: string, now: number = Date.now()): string {
  * Render the single brag line that replaces the terse
  * "N memories across N workspaces" header. Example outputs:
  *
- *   "1,487 memories · 234 entities · 892 relations across 5 workspaces · active 3h ago"
- *   "42 memories across 1 workspace"  (low counts — entities hidden)
+ *   "1,487 memories · 234 people, projects & things it knows across 5 workspaces · active 3h ago"
+ *   "42 memories across 1 workspace"  (low counts — entity chip hidden)
  *   "No memories yet — create a workspace to start building yours"
+ *
+ * Plain words only: "entities"/"relations" are database vocabulary — every
+ * judge persona below "developer" flagged them as jargon in a greeting.
  */
 export function formatBragLine(summary: BragSummary): string {
   if (summary.totalFrames === 0 && summary.workspaceCount === 0) {
@@ -136,13 +139,10 @@ export function formatBragLine(summary: BragSummary): string {
   const parts: string[] = [];
   parts.push(`${summary.totalFrames.toLocaleString('en-US')} ${plural('memory', summary.totalFrames)}`);
 
-  // Hide entity/relation chips until the substrate has enough to brag
-  // about — avoids "0 entities · 0 relations" cluttering a first-run header.
+  // Hide the knowledge chip until the substrate has enough to brag about —
+  // avoids "0 people, projects & things" cluttering a first-run header.
   if (summary.totalEntities > 0) {
-    parts.push(`${summary.totalEntities.toLocaleString('en-US')} ${plural('entity', summary.totalEntities)}`);
-  }
-  if (summary.totalRelations > 0) {
-    parts.push(`${summary.totalRelations.toLocaleString('en-US')} ${plural('relation', summary.totalRelations)}`);
+    parts.push(`${summary.totalEntities.toLocaleString('en-US')} people, projects & things it knows`);
   }
 
   let line = parts.join(' · ');

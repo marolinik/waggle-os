@@ -96,6 +96,21 @@ describe('HomeCockpit (P2)', () => {
     expect(screen.queryByTestId('home-cockpit-review-banner')).toBeNull();
   });
 
+  it('omits the Up next section when there are no items (zero or absent field)', async () => {
+    await renderHome(briefing({ upNext: [] }));
+    expect(screen.queryByTestId('home-cockpit-upnext')).toBeNull();
+    cleanup();
+    await renderHome(briefing({ upNext: undefined }));
+    expect(screen.queryByTestId('home-cockpit-upnext')).toBeNull();
+  });
+
+  it('renders the Up next section when at least one item exists', async () => {
+    await renderHome(briefing({
+      upNext: [{ id: 'e1', label: 'Weekly digest', kind: 'schedule', at: 'Jun 13, 9:00 AM' }],
+    }));
+    expect(screen.getByTestId('home-cockpit-upnext').textContent).toContain('Weekly digest');
+  });
+
   it('renders the briefing date as a human date, not the raw ISO string', async () => {
     await renderHome(briefing());
     expect(screen.queryByText(RAW_ISO)).toBeNull();

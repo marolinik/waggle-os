@@ -38,6 +38,7 @@ import {
   Circle, FileText, ArrowUpRight, SearchX, RefreshCw,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { humanizeActivitySummary } from '@/lib/activity-labels';
 import { useRoomState } from '@/hooks/useRoomState';
 import { useRevalidateOnError } from '@/hooks/useRevalidateOnError';
 import MemoryCenterTab from './memory/MemoryCenterTab';
@@ -384,7 +385,7 @@ function ActivityWidget({ events }: { events: WorkspaceActivityEvent[] }) {
             <li key={e.id} className="flex items-start gap-2 text-xs">
               <span className="w-1.5 h-1.5 rounded-full bg-violet-400/70 mt-1.5 shrink-0" />
               <div className="min-w-0">
-                <p className="text-foreground truncate">{e.summary}</p>
+                <p className="text-foreground truncate">{humanizeActivitySummary(e.summary)}</p>
                 <p className="text-[10px] text-muted-foreground/60">
                   {e.actor ? `${e.actor} · ` : ''}{relativeTime(e.ts)}
                 </p>
@@ -427,10 +428,10 @@ function WorkspaceInfoPanel({
         )}
         <div className="flex flex-wrap gap-3 mt-3 text-[11px] text-muted-foreground">
           {typeof ctx?.stats?.memoryCount === 'number' && (
-            <span><Brain className="w-3 h-3 inline mr-1" />{ctx.stats.memoryCount} memories</span>
+            <span><Brain className="w-3 h-3 inline mr-1" />{ctx.stats.memoryCount} {ctx.stats.memoryCount === 1 ? 'memory' : 'memories'}</span>
           )}
           {typeof ctx?.stats?.sessionCount === 'number' && (
-            <span><MessageSquare className="w-3 h-3 inline mr-1" />{ctx.stats.sessionCount} sessions</span>
+            <span><MessageSquare className="w-3 h-3 inline mr-1" />{ctx.stats.sessionCount} session{ctx.stats.sessionCount === 1 ? '' : 's'}</span>
           )}
         </div>
       </div>
@@ -463,7 +464,7 @@ function WorkspaceInfoPanel({
         </h3>
         {lastEvent ? (
           <div className="text-xs">
-            <p className="text-foreground">{lastEvent.summary}</p>
+            <p className="text-foreground">{humanizeActivitySummary(lastEvent.summary)}</p>
             <p className="text-[10px] text-muted-foreground/60 mt-0.5">{relativeTime(lastEvent.ts)}</p>
           </div>
         ) : (

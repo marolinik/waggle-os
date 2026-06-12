@@ -2,6 +2,7 @@ import { memo, useMemo, Fragment } from 'react';
 import type { TextContentBlock } from '@/lib/types';
 import CapabilityRequestCard from './CapabilityRequestCard';
 import { segmentText } from './capability-request-parser';
+import { renderChatMarkdown } from '@/lib/render-markdown';
 
 interface TextBlockProps {
   block: TextContentBlock;
@@ -20,7 +21,7 @@ const TextBlock = memo(({ block, isStreaming }: TextBlockProps) => {
   let cursorAttached = false;
 
   return (
-    <div className="whitespace-pre-wrap">
+    <div>
       {segments.map((seg, i) => {
         if (seg.kind === 'capability') {
           return <CapabilityRequestCard key={`cap-${i}`} request={seg.request} />;
@@ -29,7 +30,12 @@ const TextBlock = memo(({ block, isStreaming }: TextBlockProps) => {
         cursorAttached = cursorAttached || isLastTextSegment;
         return (
           <Fragment key={`txt-${i}`}>
-            {seg.content}
+            {/* renderChatMarkdown escapes the full input before emitting any
+                tag (S04-hardened pattern) — headings/bold/lists render like
+                every other chat product instead of literal #/** noise. */}
+            {seg.content && (
+              <span dangerouslySetInnerHTML={{ __html: renderChatMarkdown(seg.content) }} />
+            )}
             {isStreaming && isLastTextSegment && seg.content && (
               <span className="inline-block w-0.5 h-4 bg-primary/70 animate-pulse ml-0.5 align-text-bottom" />
             )}

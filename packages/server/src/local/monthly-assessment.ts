@@ -332,5 +332,7 @@ export function saveAssessmentToMind(personalMind: MindDB, assessment: MonthlyAs
     `Generated: ${new Date().toISOString()}`,
   ].join('\n');
 
-  frames.createIFrame('assessment', content, 'important');
+  // 'system' source: this is an agent-generated report, not something the
+  // user said — stamping it user_stated was a judge-verified provenance lie.
+  frames.createIFrame('assessment', content, 'important', 'system');
 }

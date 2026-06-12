@@ -49,9 +49,12 @@ const CLOSING_TIP = 'Check your Memory tab to see what your agent learns over ti
 interface OnboardingTooltipsProps {
   templateId?: string;
   onDismiss?: () => void;
+  /** Hide the card (keep tour state) while an overlay it describes is open —
+   *  the Ctrl+K tip painting OVER the open palette blocked reading both. */
+  suppressed?: boolean;
 }
 
-const OnboardingTooltips = ({ templateId, onDismiss }: OnboardingTooltipsProps) => {
+const OnboardingTooltips = ({ templateId, onDismiss, suppressed }: OnboardingTooltipsProps) => {
   const [tipIndex, setTipIndex] = useState(0);
   const [dismissed, setDismissed] = useState(() => {
     return localStorage.getItem('waggle:tooltips_done') === 'true';
@@ -84,7 +87,7 @@ const OnboardingTooltips = ({ templateId, onDismiss }: OnboardingTooltipsProps) 
 
   return (
     <AnimatePresence>
-      {!dismissed && (
+      {!dismissed && !suppressed && (
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}

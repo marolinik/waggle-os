@@ -19,8 +19,22 @@ function make(overrides: Partial<BriefingFrameLike> = {}): BriefingFrameLike {
 
 describe('selectBriefingHighlights', () => {
   it('returns at most BRIEFING_HIGHLIGHT_LIMIT items', () => {
-    const input = Array.from({ length: 10 }, () => make());
+    // Distinct contents — identical ones are now collapsed by the dedup.
+    const input = Array.from({ length: 10 }, (_, i) => make({ content: `A reasonably long concrete memory about topic number ${i}.` }));
     expect(selectBriefingHighlights(input)).toHaveLength(BRIEFING_HIGHLIGHT_LIMIT);
+  });
+
+  it('collapses duplicate content to one highlight, keeping the earliest timestamp', () => {
+    const input = [
+      make({ content: 'Session (2026-04-30): What is sovereign AI — 4 messages', timestamp: '2026-06-11T00:00:00Z' }),
+      make({ content: 'Session (2026-04-30): What is sovereign AI — 4 messages', timestamp: '2026-05-01T00:00:00Z' }),
+      make({ content: 'A different, equally concrete memory about the launch.', timestamp: '2026-06-01T00:00:00Z' }),
+    ];
+    const result = selectBriefingHighlights(input);
+    const dupes = result.filter(f => (f.content ?? '').startsWith('Session (2026-04-30)'));
+    expect(dupes).toHaveLength(1);
+    // The kept copy is the moment it was learned, not the consolidation rewrite.
+    expect(dupes[0].timestamp).toBe('2026-05-01T00:00:00Z');
   });
 
   it('filters out content shorter than 20 chars', () => {

@@ -309,12 +309,14 @@ const ApprovalGate = ({
 /**
  * Phase B.5: autonomy toggle — three-level chip in the chat header with a
  * dropdown for TTL. Shows a countdown when elevated. Click to cycle through
- * Normal → Trusted → YOLO → Normal, or pick from the dropdown for specific TTLs.
+ * Ask first → Trusted → Autopilot → Ask first, or pick from the dropdown for
+ * specific TTLs. Labels are plain-language display names only — the internal
+ * level values ('normal' | 'trusted' | 'yolo') are unchanged everywhere.
  */
 const AUTONOMY_CONFIG: Record<AutonomyLevel, { label: string; color: string; bg: string; border: string; icon: React.ComponentType<{ className?: string }>; tagline: string }> = {
-  normal:  { label: 'Normal',  color: 'text-muted-foreground', bg: 'bg-muted/30',         border: 'border-border/40',      icon: Shield, tagline: 'Every write gated' },
-  trusted: { label: 'Trusted', color: 'text-sky-300',          bg: 'bg-sky-500/10',       border: 'border-sky-500/40',     icon: Shield, tagline: 'Writes pass, git/install gate' },
-  yolo:    { label: 'YOLO',    color: 'text-amber-300',        bg: 'bg-amber-500/10',     border: 'border-amber-500/40',   icon: Zap,    tagline: 'Everything passes (except critical ops)' },
+  normal:  { label: 'Ask first', color: 'text-muted-foreground', bg: 'bg-muted/30',         border: 'border-border/40',      icon: Shield, tagline: 'Asks before every change' },
+  trusted: { label: 'Trusted',   color: 'text-sky-300',          bg: 'bg-sky-500/10',       border: 'border-sky-500/40',     icon: Shield, tagline: 'Makes routine changes; still asks for risky ones' },
+  yolo:    { label: 'Autopilot', color: 'text-amber-300',        bg: 'bg-amber-500/10',     border: 'border-amber-500/40',   icon: Zap,    tagline: 'Acts without asking for approval. Use with care.' },
 };
 
 const TTL_OPTIONS: Array<{ label: string; minutes: number | null }> = [

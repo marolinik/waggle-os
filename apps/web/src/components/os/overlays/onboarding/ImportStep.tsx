@@ -22,16 +22,18 @@ const SOURCE_TILES: ReadonlyArray<{
   id: string;
   name: string;
   desc: string;
+  /** One-line how-to: where in the source product the export file comes from. */
+  hint: string;
   glyph: string;
   accent: string;
 }> = [
-  { id: 'chatgpt',    name: 'ChatGPT',    desc: 'OpenAI export (.json)',     glyph: '✦', accent: 'text-emerald-400 bg-emerald-500/10 ring-emerald-500/30' },
-  { id: 'claude',     name: 'Claude',     desc: 'Anthropic export (.json)',  glyph: '✧', accent: 'text-orange-400 bg-orange-500/10 ring-orange-500/30' },
-  { id: 'gemini',     name: 'Gemini',     desc: 'Google Takeout (.json)',    glyph: '✦', accent: 'text-sky-400 bg-sky-500/10 ring-sky-500/30' },
-  { id: 'perplexity', name: 'Perplexity', desc: 'Threads export',            glyph: '◆', accent: 'text-teal-400 bg-teal-500/10 ring-teal-500/30' },
+  { id: 'chatgpt',    name: 'ChatGPT',    desc: 'OpenAI export (.json)',     hint: 'In ChatGPT: Settings → Data controls → Export data. You\'ll get an email with the file.', glyph: '✦', accent: 'text-emerald-400 bg-emerald-500/10 ring-emerald-500/30' },
+  { id: 'claude',     name: 'Claude',     desc: 'Anthropic export (.json)',  hint: 'In Claude: Settings → Privacy → Export data.', glyph: '✧', accent: 'text-orange-400 bg-orange-500/10 ring-orange-500/30' },
+  { id: 'gemini',     name: 'Gemini',     desc: 'Google Takeout (.json)',    hint: 'Go to takeout.google.com, select Gemini, download.', glyph: '✦', accent: 'text-sky-400 bg-sky-500/10 ring-sky-500/30' },
+  { id: 'perplexity', name: 'Perplexity', desc: 'Threads export',            hint: 'In Perplexity: Settings → Account → Export.', glyph: '◆', accent: 'text-teal-400 bg-teal-500/10 ring-teal-500/30' },
   // C34: Cursor / Codex / Hermes have no export adapter yet — fold them into
   // the generic "Other" file picker rather than a dedicated tile.
-  { id: 'unknown',    name: 'Other',      desc: 'Cursor, Codex, any text/JSON', glyph: '·', accent: 'text-muted-foreground bg-muted/30 ring-border/40' },
+  { id: 'unknown',    name: 'Other',      desc: 'Cursor, Codex, any text/JSON', hint: 'Any .txt, .md or .json conversation file works.', glyph: '·', accent: 'text-muted-foreground bg-muted/30 ring-border/40' },
 ];
 
 const ImportStep = ({
@@ -99,6 +101,7 @@ const ImportStep = ({
             </span>
             <h3 className="text-xs font-display font-semibold text-foreground">{src.name}</h3>
             <p className="text-[11px] text-muted-foreground">{src.desc}</p>
+            <p className="text-[10px] text-muted-foreground/70">{src.hint}</p>
             <div className="flex items-center gap-1 text-[11px] text-primary group-hover:text-primary/80 mt-0.5">
               <Upload className="w-3 h-3" /> Choose file
             </div>

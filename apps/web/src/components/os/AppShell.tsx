@@ -41,6 +41,7 @@ import { writeLoginBriefingDismissed, writeLoginBriefingLastDismissedAt } from '
 import { matchNavRoute, queryString, routeFor, routeForSearchResult } from '@/lib/routes';
 import { bootWindowStateMigration, indexLandingRoute } from '@/lib/window-state-migration';
 import { getDockForTier, type AppId, type DockEntry } from '@/lib/dock-tiers';
+import { HintTooltip } from '@/components/ui/hint-tooltip';
 import { ShellProvider, useShell } from '@/providers/ShellContext';
 import { seedChat, useChatWidgetState } from '@/hooks/useChatWidgetState';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
@@ -214,8 +215,8 @@ const ShellLayout = () => {
     const Icon = entry.icon!;
     const isActive = !!entry.route && entry.route === activeRoute;
     return (
+      <HintTooltip key={entry.key} content={entry.description} side="right">
       <button
-        key={entry.key}
         aria-label={entry.label}
         aria-current={isActive ? 'page' : undefined}
         data-testid={`nav-${entry.key}`}
@@ -232,6 +233,7 @@ const ShellLayout = () => {
           </span>
         )}
       </button>
+      </HintTooltip>
     );
   };
 
@@ -275,7 +277,7 @@ const ShellLayout = () => {
             if (entry.type === 'zone-parent') {
               return (
                 <div key={entry.key} className="flex flex-col gap-0.5">
-                  <div className="px-2.5 pt-2 pb-1 text-[10px] font-display font-semibold uppercase tracking-widest text-muted-foreground/70">
+                  <div title={entry.description} className="px-2.5 pt-2 pb-1 text-[10px] font-display font-semibold uppercase tracking-widest text-muted-foreground/70">
                     {entry.label}
                   </div>
                   {entry.children?.filter(c => c.type === 'app').map(child => renderNavItem(child, true))}
@@ -350,11 +352,15 @@ const ShellLayout = () => {
         <OnboardingTooltips
           templateId={onboardingState.templateId}
           onDismiss={() => updateOnboarding({ tooltipsDismissed: true })}
+          suppressed={ov.showGlobalSearch}
         />
       )}
       {/* FR #45: one post-onboarding overlay at a time — Tour first, then the
-          briefing once Tour is dismissed (gating relocated from Desktop.tsx:621-637). */}
-      {onboardingState.completed && onboardingState.tooltipsDismissed && ov.showLoginBriefing && (
+          briefing once Tour is dismissed (gating relocated from Desktop.tsx:621-637).
+          Home-only: the greeting belongs to the cockpit — overlaying Memory or
+          Skills hides the very surfaces that prove the product's claims. */}
+      {onboardingState.completed && onboardingState.tooltipsDismissed && ov.showLoginBriefing
+        && location.pathname.startsWith('/home') && (
         <LoginBriefing
           onDismiss={(permanent) => {
             if (permanent) writeLoginBriefingDismissed(true);

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Bot, Plus, Search, Loader2, AlertCircle, RefreshCw, LibraryBig } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Bot, Plus, Search, Loader2, AlertCircle, RefreshCw, LibraryBig, ChevronRight } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
 import { useService } from '@/providers/ServiceProvider';
@@ -35,6 +36,7 @@ interface AgentsAppProps {
 
 const AgentsApp = ({ workspaces }: AgentsAppProps) => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   // Cold-load race guard (same fix as HomeCockpit): wait for the adapter's
   // initial connect() to settle so a restored window doesn't 401 into a
   // spurious "listAgents failed: 401" panel before the session token exists.
@@ -259,13 +261,45 @@ const AgentsApp = ({ workspaces }: AgentsAppProps) => {
                 </button>
               </div>
             ) : visible.length === 0 ? (
-              <div role="status" aria-live="polite" className="text-center py-12">
-                <Bot className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
-                <p className="text-xs text-muted-foreground">
-                  {q || tab !== 'all'
-                    ? 'No agents match this view.'
-                    : 'No agents yet — create one to put it to work.'}
-                </p>
+              <div role="status" aria-live="polite" className="py-12 px-4">
+                {q || tab !== 'all' ? (
+                  <p className="text-xs text-muted-foreground text-center">No agents match this view.</p>
+                ) : (
+                  <div className="max-w-md mx-auto space-y-4">
+                    {/* The contradiction fix: every workspace already runs a
+                        built-in assistant — an empty custom-agent list must
+                        not read as "nothing is working for you". */}
+                    {workspaces && workspaces.length > 0 && (
+                      <div>
+                        <p className="text-[11px] font-display font-semibold text-primary/80 uppercase tracking-wider mb-1.5">
+                          Already working for you
+                        </p>
+                        <ul className="space-y-1">
+                          {workspaces.slice(0, 5).map((ws) => (
+                            <li key={ws.id}>
+                              <button
+                                onClick={() => navigate(`/workspaces/${ws.id}/chat`)}
+                                className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-secondary/30 border border-border/30 hover:border-primary/30 transition-colors text-left"
+                              >
+                                <span className="text-xs text-foreground truncate">
+                                  {ws.name}
+                                  <span className="text-muted-foreground"> — built-in {ws.persona || 'general'} assistant</span>
+                                </span>
+                                <ChevronRight className="w-3 h-3 text-muted-foreground shrink-0" />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    <div className="text-center">
+                      <Bot className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+                      <p className="text-xs text-muted-foreground">
+                        No custom agents yet — create one to automate something specific.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <ul className="space-y-1">

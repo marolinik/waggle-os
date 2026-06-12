@@ -62,46 +62,28 @@ function labelFor(options: readonly OnboardingOption[], id: string | undefined):
   return options.find(o => o.id === id)?.label ?? id;
 }
 
+/** Time-of-day salutation for the live greeting preview. */
+function salutation(hour: number): string {
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
+}
+
 /**
- * Build a one-line natural-language preview of the profile draft for the live
- * preview under the form. Returns a friendly fallback when nothing is filled in
- * yet so the preview area is never empty. Pure — no React, no side effects.
+ * Build the live greeting preview under the form — a demonstration of the
+ * personalization promise (how Waggle will actually greet the user), not a
+ * profile summary. Degrades gracefully: no name → prompt for one; name only →
+ * the memory promise; name + work type/role → a role-aware greeting. Pure —
+ * `now` is injectable so tests can pin the time of day.
  */
-export function buildProfilePreview(partial: OnboardingProfileDraft): string {
+export function buildProfilePreview(partial: OnboardingProfileDraft, now: Date = new Date()): string {
   const name = partial.name?.trim();
-  const role = partial.role?.trim();
-  const industry = partial.industry?.trim();
-  const workType = labelFor(WORK_TYPES, partial.workType);
-  const teamSize = labelFor(TEAM_SIZES, partial.teamSize);
-  const goals = (partial.goals ?? [])
-    .map(id => labelFor(GOALS, id))
-    .filter((g): g is string => Boolean(g));
+  if (!name) return "Tell me your name and I'll greet you properly.";
 
-  if (!name && !role && !industry && !workType && !teamSize && goals.length === 0) {
-    return 'Tell us about yourself so Waggle can greet you by name and tailor its help.';
-  }
-
-  // Lead clause: "<Name> · <Role> in <Industry>" (each part optional).
-  const lead: string[] = [];
-  if (name) lead.push(name);
-  const roleClause = [role, industry ? `in ${industry}` : undefined].filter(Boolean).join(' ');
-  if (roleClause) lead.push(roleClause);
-
-  const context: string[] = [];
-  if (workType) context.push(`${workType} work`);
-  if (teamSize) context.push(`team of ${teamSize}`);
-
-  const goalsClause =
-    goals.length === 0
-      ? ''
-      : goals.length <= 2
-        ? `Wants to ${goals.map(g => g.toLowerCase()).join(' and ')}.`
-        : `Wants to ${goals.slice(0, 2).map(g => g.toLowerCase()).join(', ')}, and ${goals.length - 2} more.`;
-
-  const sentence1 = [lead.join(' · '), context.length ? `(${context.join(', ')})` : '']
-    .filter(Boolean)
-    .join(' ')
-    .trim();
-
-  return [sentence1 ? `${sentence1}.` : '', goalsClause].filter(Boolean).join(' ').trim();
+  const greeting = `${salutation(now.getHours())}, ${name}`;
+  // Prefer the curated work-type label (clean noun); fall back to the
+  // free-text role so either signal personalizes the clause.
+  const work = labelFor(WORK_TYPES, partial.workType) ?? partial.role?.trim();
+  if (work) return `${greeting} — ready to pick up your ${work.toLowerCase()} work?`;
+  return `${greeting} — your work will be remembered here.`;
 }

@@ -627,7 +627,9 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
 
       <SuggestedActionsPanel actions={briefing.suggestedActions} onRun={onOpenFromAction} />
 
-      <UpNextPanel items={briefing.upNext} onOpen={(id) => { if (id) onOpenWorkspaceDesktop(id); }} />
+      {/* Rendered only when there is at least one item — zero schedule items
+          (or a sidecar omitting the field) must not leave an empty section. */}
+      <UpNextPanel items={briefing.upNext ?? []} onOpen={(id) => { if (id) onOpenWorkspaceDesktop(id); }} />
 
       <QuickCapturePanel />
 

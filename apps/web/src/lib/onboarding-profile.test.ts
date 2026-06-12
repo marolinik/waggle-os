@@ -21,41 +21,39 @@ describe('onboarding-profile option constants', () => {
 });
 
 describe('buildProfilePreview', () => {
-  it('returns a friendly fallback when nothing is filled in', () => {
-    const out = buildProfilePreview({});
-    expect(out).toMatch(/greet you by name/i);
+  const at = (hour: number) => new Date(2026, 5, 12, hour, 0, 0);
+
+  it('prompts for a name when nothing is filled in', () => {
+    expect(buildProfilePreview({})).toBe("Tell me your name and I'll greet you properly.");
   });
 
-  it('treats whitespace-only fields as empty', () => {
-    const out = buildProfilePreview({ name: '   ', role: '', goals: [] });
-    expect(out).toMatch(/greet you by name/i);
+  it('treats a whitespace-only name as empty', () => {
+    const out = buildProfilePreview({ name: '   ', role: 'Consultant', goals: [] });
+    expect(out).toBe("Tell me your name and I'll greet you properly.");
   });
 
-  it('renders name, role and industry in the lead clause', () => {
-    const out = buildProfilePreview({ name: 'Marko', role: 'Consultant', industry: 'Consulting' });
-    expect(out).toContain('Marko');
-    expect(out).toContain('Consultant');
-    expect(out).toContain('in Consulting');
+  it('greets by name with the memory promise when only the name is set', () => {
+    expect(buildProfilePreview({ name: 'Marko' }, at(20)))
+      .toBe('Good evening, Marko — your work will be remembered here.');
   });
 
-  it('maps workType + teamSize ids to their labels', () => {
-    const out = buildProfilePreview({ name: 'A', workType: 'engineering', teamSize: '2-10' });
-    expect(out).toContain('Engineering work');
-    expect(out).toContain('team of 2–10');
+  it('varies the salutation with the time of day', () => {
+    expect(buildProfilePreview({ name: 'Marko' }, at(9))).toMatch(/^Good morning, Marko/);
+    expect(buildProfilePreview({ name: 'Marko' }, at(14))).toMatch(/^Good afternoon, Marko/);
+    expect(buildProfilePreview({ name: 'Marko' }, at(20))).toMatch(/^Good evening, Marko/);
   });
 
-  it('lists one or two goals verbatim and summarizes 3+', () => {
-    const two = buildProfilePreview({ name: 'A', goals: ['remember', 'research'] });
-    expect(two).toMatch(/wants to/i);
-    expect(two).toContain('remember everything i work on');
-    expect(two).toContain('research faster');
-
-    const many = buildProfilePreview({ name: 'A', goals: ['remember', 'research', 'code', 'plan'] });
-    expect(many).toMatch(/and 2 more/i);
+  it('adds a role-aware clause from the selected work type', () => {
+    expect(buildProfilePreview({ name: 'Marko', workType: 'consulting' }, at(20)))
+      .toBe('Good evening, Marko — ready to pick up your consulting work?');
   });
 
-  it('falls back to the raw id for an unknown option id', () => {
-    const out = buildProfilePreview({ name: 'A', workType: 'mystery' });
-    expect(out).toContain('mystery work');
+  it('falls back to the free-text role when no work type is selected', () => {
+    expect(buildProfilePreview({ name: 'Marko', role: 'Strategy Consultant' }, at(9)))
+      .toBe('Good morning, Marko — ready to pick up your strategy consultant work?');
+  });
+
+  it('falls back to the raw id for an unknown work-type id', () => {
+    expect(buildProfilePreview({ name: 'A', workType: 'mystery' }, at(20))).toContain('mystery work');
   });
 });

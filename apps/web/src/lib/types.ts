@@ -528,7 +528,7 @@ export interface Skill {
    * "created by agent — review" — replacing the name-heuristic Custom class.
    * Absent/legacy ⇒ 'user'.
    */
-  initiator?: 'agent' | 'user';
+  initiator?: 'agent' | 'user' | 'built-in';
   source?: string;
 }
 

@@ -146,7 +146,9 @@ describe('formatBragLine', () => {
       lastActiveIso: '2026-04-19T20:00:00Z',
       lastActiveLabel: '2h ago',
     });
-    expect(line).toBe('1,487 memories · 234 entities · 892 relations across 5 workspaces · active 2h ago');
+    // Plain words: "entities"/"relations" are database vocabulary —
+    // judge-flagged as jargon in a greeting.
+    expect(line).toBe('1,487 memories · 234 people, projects & things it knows across 5 workspaces · active 2h ago');
   });
 
   it('hides entity/relation chips when zero (first-run polish)', () => {
@@ -173,7 +175,7 @@ describe('formatBragLine', () => {
       lastActiveLabel: '',
     });
     expect(line).not.toContain('active');
-    expect(line).toBe('100 memories · 20 entities · 30 relations across 2 workspaces');
+    expect(line).toBe('100 memories · 20 people, projects & things it knows across 2 workspaces');
   });
 
   it('suppresses the active-suffix when totalFrames is 0 even if lastActiveLabel is set', () => {
@@ -208,7 +210,7 @@ describe('formatBragLine', () => {
     expect(line).toBe('No memories yet — create a workspace to start building yours');
   });
 
-  it('uses singular "memory" / "entity" / "workspace" when count is 1', () => {
+  it('uses singular "memory" / "workspace" when count is 1', () => {
     const line = formatBragLine({
       totalFrames: 1,
       totalEntities: 1,
@@ -219,8 +221,6 @@ describe('formatBragLine', () => {
       lastActiveLabel: '',
     });
     expect(line).toContain('1 memory');
-    expect(line).toContain('1 entity');
-    expect(line).toContain('1 relation');
     expect(line).toContain('across 1 workspace');
   });
 });
