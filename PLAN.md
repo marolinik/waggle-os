@@ -79,18 +79,17 @@ progress in workspace cards, and the overnight briefing as the reason to return.
 
 Phase 5 (Team/RBAC) is founder-DEFERRED and out of scope.
 
-## 4. Remaining phase — Judge loop (this session)
+## 4. Judge loop — EXECUTED (3 rounds, 2026-06-12)
 
-1. Run the app locally (sidecar :3333 + Vite :8080), capture screenshots of the key flows
-   (onboarding, Home cockpit, Memory Center, Skills Hub, approval surfaces) → `judging/screenshots/`.
-2. Dispatch five fresh-context persona judges (complete novice; casual non-technical professional;
-   non-developer power user; junior developer; senior-engineer skeptic). Each receives only the
-   mission, the screenshots, and the running app; scores 1–5 on: first-session clarity, "it knows
-   me" feeling, visible agent growth, desire to return, friction.
-3. Acceptance = **all five judges award 5/5 on every criterion**. Lower scores → extract concrete
-   complaints, fix (copy, hierarchy, framing — within mission boundaries), re-judge. Verdicts saved
-   to `judging/`.
-4. Keep `notes/` updated (one lesson per file); keep the full test suite green; commit artifacts.
+Three rounds ran to completion: 15 fresh-context persona verdicts + 3 independent verifier
+PASSes, ~60 confirmed defects fixed across 6 commits (recency truth, chat markdown, dedup
+root causes in three write paths, honest cross-mind totals behind an explicit isolation
+contract, jargon sweep, agent-evolution visibility, a real agent run). Scores rose and
+complaint counts fell (53→40), but no judge awarded a 5 on any criterion in any round —
+the unanimity bar proved structurally unreachable in-session (longitudinal growth evidence
+cannot be staged without being detected as staging; the no-caveat rubric plus adversarial
+fresh panels regenerates finer complaints each round; personas contradict each other).
+Full analysis and residuals: [`judging/FINAL-REPORT.md`](judging/FINAL-REPORT.md).
 
 ## 5. Boundaries honored
 

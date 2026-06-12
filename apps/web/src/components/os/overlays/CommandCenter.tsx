@@ -499,7 +499,9 @@ const CommandCenter = ({ open, onClose, onNavigate, onExecute, workspaceId }: Co
           >
             <span>{'↑↓'} Navigate</span>
             <span className="flex items-center gap-1"><CornerDownLeft className="h-3 w-3" /> Run / Open</span>
-            <span>{'⌘'}K Toggle</span>
+            {/* Platform-aware modifier — a ⌘ glyph on Windows is a key the
+                user's keyboard doesn't have. */}
+            <span>{navigator.platform?.toLowerCase().includes('mac') ? '⌘' : 'Ctrl+'}K Toggle</span>
             {viewState === 'failure' && (
               <span className="ml-auto text-amber-400">Last command failed</span>
             )}

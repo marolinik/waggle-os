@@ -121,6 +121,9 @@ export const TIER_DOCK_CONFIG: Record<UserTier, DockEntry[]> = {
   simple: [
     { type: 'app', key: 'home', appId: 'home', icon: LayoutDashboard, label: 'Home', color: 'text-sky-400', route: '/home', description: 'Your starting point — daily briefing and quick actions' },
     { type: 'app', key: 'chat', appId: 'chat', icon: MessageSquare, label: 'Chat', color: 'text-primary', route: '/workspaces', description: 'Talk to your AI agents' },
+    // Memory is the product's flagship — onboarding imports the user's AI
+    // history into it; hiding it from the novice tier orphaned that moment.
+    { type: 'app', key: 'memory', appId: 'memory', icon: Brain, label: 'Memory', color: 'text-amber-300', route: '/memory', description: 'Everything Waggle remembers about you and your work' },
     { type: 'app', key: 'files', appId: 'files', icon: FolderOpen, label: 'Files', color: 'text-amber-300', route: '/files', description: 'Browse the files in your workspaces' },
     { type: 'separator', key: 'sep-1', label: '' },
     { type: 'app', key: 'vault', appId: 'vault', icon: Lock, label: 'Vault', color: 'text-amber-400', route: '/settings/vault', description: 'Your API keys and secrets, stored locally' },

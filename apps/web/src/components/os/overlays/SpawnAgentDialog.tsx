@@ -168,7 +168,7 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-foreground">
             <Rocket className="w-5 h-5 text-primary" />
-            {step === 'config' ? 'Spawn Agent' : 'Confirm Launch'}
+            {step === 'config' ? 'New Agent' : 'Confirm Launch'}
           </DialogTitle>
           <DialogDescription>
             {step === 'config'

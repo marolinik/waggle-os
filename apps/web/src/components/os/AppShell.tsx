@@ -289,13 +289,16 @@ const ShellLayout = () => {
           {/* Spawn affordance survives the killed mission-control surface (§1.1). */}
           <div className="h-px bg-border/30 my-1.5 mx-2" />
           <button
-            aria-label="Spawn Agent"
+            aria-label="New Agent"
             data-testid="nav-spawn-agent"
+            title="Start a new AI agent on a task"
             onClick={() => ov.setShowSpawnAgent(true)}
             className="w-full flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-xs font-display text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-colors"
           >
             <Rocket className="w-4 h-4 shrink-0 text-primary" />
-            <span className="truncate">Spawn Agent</span>
+            {/* "Spawn" is process-management jargon — alarming in the novice
+                tier where this is one of only seven visible words. */}
+            <span className="truncate">New Agent</span>
           </button>
         </nav>
 

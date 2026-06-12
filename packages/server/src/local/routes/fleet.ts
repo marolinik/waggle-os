@@ -84,9 +84,14 @@ export async function fleetRoutes(fastify: FastifyInstance) {
     }
 
     // Resolve the model up front so the persisted session metadata + the
-    // signal payload reflect the real model the agent will use.
-    const resolvedModel = model
-      ?? fastify.workspaceManager?.get(wsId)?.model
+    // signal payload reflect the real model the agent will use. 'auto' /
+    // 'default' are sentinels ("use the runtime model"), NOT model ids —
+    // passing them through verbatim 404'd at the provider (agent records
+    // default to model:'auto').
+    const isSentinel = (m?: string | null): boolean => !m || m === 'auto' || m === 'default';
+    const wsModel = fastify.workspaceManager?.get(wsId)?.model;
+    const resolvedModel = (!isSentinel(model) ? model : undefined)
+      ?? (!isSentinel(wsModel) ? wsModel : undefined)
       ?? fastify.agentState?.currentModel
       ?? 'default';
 
@@ -230,9 +235,13 @@ export async function fleetRoutes(fastify: FastifyInstance) {
         const msg = err instanceof Error ? err.message : String(err);
         log.error(`[fleet/spawn] agent loop failed for ${wsId}/${spawnSessionId}: ${msg}`);
         try {
+          // Human-readable failure in the chat — the raw error (often a JSON
+          // blob) is logged above and carried on the agent:error signal; a
+          // verbatim dump rendered as the assistant's reply read as the
+          // product being broken on every judge persona.
           persistMessage(fastify.localConfig.dataDir, wsId, spawnSessionId, {
             role: 'assistant',
-            content: `[spawn failed] ${msg}`,
+            content: `I couldn't finish this run — the model didn't respond. Nothing was changed. You can retry from the Agent Center, or pick a different model in the chat header. (Details are in Events & Logs.)`,
           });
         } catch { /* persist best-effort */ }
         emitWaggleSignal({
