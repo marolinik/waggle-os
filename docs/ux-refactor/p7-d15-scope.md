@@ -268,12 +268,21 @@ review fixes (`548fbe8`→`9f3cf2a`); adversarial review 2 confirmed/9 refuted
 - A6 `3d9893f` — modal represents critical; **"Always allow" gated by approvalClass**.
 - A7 `7a8c374` — shared `classifyInstallRisk` + audit-panel RISK_LABELS reuse.
 
-**Ledgered post-launch (need a server TrustAssessment FE feed that doesn't exist):**
-per-surface default risk literals in AgentBuilder/AutomationBuilder/ConnectorsApp/MCPHub
-(#8 remainder) + trustSource surfacing on every install surface (#17, LOW) +
-trust_source DDL CHECK (#15, LOW — needs a table rebuild).
+**Post-launch divergences — ALL CLOSED (2026-06-12, founder "close them too"):**
+- **#15** (`6fc8500`) — `install_audit.trust_source` DDL CHECK added (generated +
+  OSS-mirror parity-locked) with a rebuild migration; the column is no longer
+  unconstrained-at-DB while typed-closed in TS.
+- **#8** (`c85c295`) — `actionRisk(kind)` in `risk-display` is now the single source
+  for the non-install approval surfaces' risk; AgentBuilder/AutomationBuilder/
+  ConnectorsApp/MCPHub/MarketplaceApp pull from it (0 scattered literals). The deeper
+  "displayed ≠ policy-engine risk" for these non-install actions stays an honest
+  action-kind default (no server TrustAssessment feed exists for non-install actions).
+- **#17** (`3040a6a`) — `ApprovalModal` renders a structured `trustSource` line via
+  shared `TRUST_SOURCE_LABELS`; MarketplaceApp populates it (was a hand-built scope
+  string). Omitted when absent (no false provenance).
 
-**D15 closure bar = Track A (A1–A7) + Track B P0 (B1–B5): MET.**
+**D15 closure bar = Track A (A1–A7) + Track B P0 (B1–B5): MET. All 17 taxonomy
+divergences now closed (HIGH #1–7 in A1–A6; MED/LOW #8/#14/#15/#16/#17 closed).**
 
 ## LAUNCH-BLOCKING (must ship for P7 to close D15)
 
