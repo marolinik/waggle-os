@@ -57,7 +57,12 @@ interface MemoryHighlight {
 const timeAgo = bragTimeAgo;
 
 function truncateHighlight(content: string): string {
-  const firstLine = content.split('\n')[0].trim();
+  // Plain text only — highlights render as text nodes, so markdown
+  // tokens (**bold**, # headings, `code`) would show literally.
+  const firstLine = content.split('\n')[0].trim()
+    .replace(/^#{1,3}\s+/, '')
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/`(.+?)`/g, '$1');
   return firstLine.length > 120 ? firstLine.slice(0, 117) + '...' : firstLine;
 }
 
