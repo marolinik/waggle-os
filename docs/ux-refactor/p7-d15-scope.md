@@ -252,6 +252,29 @@ class (`open-questions.md:561`, D13). Run `tsc --noEmit` on touched packages; th
 > **Sequencing RATIFIED (founder, 2026-06-12): Track B (P0 error states) FIRST, then Track A.**
 > **A6 "Always allow" gate RATIFIED: gate by approvalClass (no permanent grant on critical/high).**
 
+## STATUS — Track B DONE, Track A DONE (2026-06-12)
+
+**Track B (P0 error states) — SHIPPED + reviewed + pushed.** B1–B5 + the 2 confirmed
+review fixes (`548fbe8`→`9f3cf2a`); adversarial review 2 confirmed/9 refuted
+(`p7-track-b-review-record.md`). FE 897/897.
+
+**Track A (approval/audit taxonomy + D4(ii)) — SHIPPED + pushed (`7bbe5d8`→`7a8c374`):**
+- A1 `7bbe5d8` — canonical `@waggle/shared/risk.ts` (widest-set enums + riskRank/sqlInList).
+- A2a `7675802` — trust-model + confirmation re-pointed; classifyRisk +critical; deriveApprovalClass critical→critical + blocked-flag.
+- A2b `d0b9aaa` — install-audit + team-governance; fixed critical-sorts-below-low RBAC defect.
+- A3 `a412a8e` — install_audit CHECK single-sourced + OSS schema.ts parity test (no migration).
+- A4 `239cc51` — server emits risk metadata for ALL gated tools (was install-only).
+- A5 `dff44b8` — **D4(ii)**: card type widened + RiskBadge render via shared `risk-display`.
+- A6 `3d9893f` — modal represents critical; **"Always allow" gated by approvalClass**.
+- A7 `7a8c374` — shared `classifyInstallRisk` + audit-panel RISK_LABELS reuse.
+
+**Ledgered post-launch (need a server TrustAssessment FE feed that doesn't exist):**
+per-surface default risk literals in AgentBuilder/AutomationBuilder/ConnectorsApp/MCPHub
+(#8 remainder) + trustSource surfacing on every install surface (#17, LOW) +
+trust_source DDL CHECK (#15, LOW — needs a table rebuild).
+
+**D15 closure bar = Track A (A1–A7) + Track B P0 (B1–B5): MET.**
+
 ## LAUNCH-BLOCKING (must ship for P7 to close D15)
 
 **Track A — Approval/audit taxonomy + D4(ii) (HALF 2).** Order matters: the shared type is

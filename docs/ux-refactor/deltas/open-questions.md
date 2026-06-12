@@ -571,7 +571,7 @@ Plus: error states never cache as valid-empty; focus/visibility revalidation on 
 
 ## Phase sequence (unblocked)
 
-**Phase 0** = D1 conversion plan + route map, naming sweep (D8/D9), doc authority (D10). Then **P1**=D3, **P2**=verify + J08 alert, **P3**=D2, **P4**=D11/D12 + FREE→Upgrade e2e re-run, **P5**=D4 ✅ (2026-06-12, 7 commits 73f2ed5→48292ef), **P7**=D15 scope. **Nothing from prior Phases 0–4 is rebuilt.**
+**Phase 0** = D1 conversion plan + route map, naming sweep (D8/D9), doc authority (D10). Then **P1**=D3, **P2**=verify + J08 alert, **P3**=D2, **P4**=D11/D12 + FREE→Upgrade e2e re-run, **P5**=D4 ✅ (2026-06-12, 7 commits 73f2ed5→48292ef), **P7**=D15 scope ✅ (2026-06-12: Track B B1-B5 + Track A A1-A7; D15 closure bar MET). **Nothing from prior Phases 0–4 is rebuilt.**
 
 ---
 
