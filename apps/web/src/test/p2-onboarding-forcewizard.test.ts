@@ -14,7 +14,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, cleanup } from '@testing-library/react';
 
 const mocks = vi.hoisted(() => ({
-  adapter: { getWorkspaces: vi.fn().mockResolvedValue([]) },
+  adapter: {
+    // P4: the auto-complete effect keys on /api/onboarding/status now (the
+    // workspace count counted the boot-seeded default — clean-install skip).
+    getOnboardingStatus: vi.fn().mockResolvedValue({ completed: false }),
+    markOnboardingComplete: vi.fn().mockResolvedValue(undefined),
+  },
 }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
 vi.mock('@/lib/tauri-bindings', () => ({

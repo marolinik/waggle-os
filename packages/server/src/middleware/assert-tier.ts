@@ -14,12 +14,12 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 import { type Tier, assertTierCapability, TierError, parseTier, getEffectiveTier } from '@waggle/shared';
 
 /**
- * Read the current tier from the server's data directory.
+ * Read the effective tier for a data directory.
  * Uses the same config.json source as the GET /api/tier route in settings.ts.
+ * Also consumed by startService's D11 startup log line (no request in scope there).
  */
-export function readTierFromRequest(request: FastifyRequest): Tier {
+export function readTierFromDataDir(dataDir: string | undefined): Tier {
   try {
-    const dataDir = request.server.localConfig?.dataDir;
     if (!dataDir) return 'FREE';
     const configPath = path.join(dataDir, 'config.json');
     if (fs.existsSync(configPath)) {
@@ -27,8 +27,15 @@ export function readTierFromRequest(request: FastifyRequest): Tier {
       const parsed = parseTier(String(raw.tier ?? ''));
       if (parsed) return getEffectiveTier(parsed, raw.trialStartedAt ?? null);
     }
-  } catch { /* default to SOLO */ }
+  } catch { /* unreadable config → fail closed to FREE */ }
   return 'FREE';
+}
+
+/**
+ * Read the current tier from the server's data directory.
+ */
+export function readTierFromRequest(request: FastifyRequest): Tier {
+  return readTierFromDataDir(request.server.localConfig?.dataDir);
 }
 
 /**

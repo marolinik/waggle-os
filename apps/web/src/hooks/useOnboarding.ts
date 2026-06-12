@@ -52,12 +52,11 @@ function loadState(): OnboardingState {
 
     // PM walkthrough bypass (DEV only): ?forceWizard=true forces the wizard to
     // render at step 0 regardless of localStorage state OR the auto-complete
-    // branch in this hook (which fires when /api/workspaces.length > 0,
-    // including the boot-time default-workspace stub from
-    // wsManager.ensureDefault). Mirrors ?skipOnboarding=true above as the
-    // symmetric "always run" counterpart. Gated on import.meta.env.DEV so a
-    // production deployment can't accidentally re-trigger onboarding for
-    // returning users via a stray URL.
+    // branch in this hook (which fires when /api/onboarding/status says a
+    // prior client completed the wizard against this dataDir — P4). Mirrors
+    // ?skipOnboarding=true above as the symmetric "always run" counterpart.
+    // Gated on import.meta.env.DEV so a production deployment can't
+    // accidentally re-trigger onboarding for returning users via a stray URL.
     if (import.meta.env.DEV && params.get('forceWizard') === 'true' && !forceWizardConsumed) {
       forceWizardConsumed = true;
       const fresh: OnboardingState = { ...defaultState, completed: false, step: 0 };
@@ -148,15 +147,27 @@ export const useOnboarding = () => {
   // Bug #2: auto-complete onboarding for returning users.
   // The localStorage flag is per-webview, so a fresh Tauri webview (or a
   // browser switch) always looks "new" even when the sidecar has existing
-  // memory and workspaces. Check the sidecar on mount — if there's already
-  // workspace data, this is clearly a returning user and we should not
-  // re-run the wizard.
+  // memory and workspaces. Ask the sidecar on mount.
+  //
+  // P4 fix (S4 founder flag, confirmed): the evidence used to be
+  // `getWorkspaces().length > 0` — but buildLocalServer's wsManager
+  // .ensureDefault() seeds a default workspace at BOOT, so a clean production
+  // install always had ≥1 workspace and a brand-new user NEVER saw the wizard.
+  // /api/onboarding/status is the server-authoritative signal instead: the
+  // completion flag (stamped below on complete) or legacy usage evidence
+  // (frames in the personal mind / user-created workspaces) — the seeded stub
+  // alone is not evidence.
   useEffect(() => {
     if (state.completed) return;
+    // Mid-wizard guard: step > 0 means THIS webview is actively onboarding —
+    // not a fresh-localStorage returning user. Without it, a C33 import run
+    // during the wizard writes personal-mind frames (= legacy evidence), and
+    // a refresh would auto-complete the wizard out from under the user,
+    // skipping the remaining steps.
+    if (state.step > 0) return;
     // PM walkthrough bypass (DEV only): when ?forceWizard=true is set, skip
-    // the auto-complete branch so the wizard renders even though the
-    // backend's wsManager.ensureDefault has created the default-workspace
-    // stub. Symmetric with the loadState() bypass above.
+    // the auto-complete branch so the wizard renders even for a returning
+    // user. Symmetric with the loadState() bypass above.
     if (import.meta.env.DEV) {
       const params = new URLSearchParams(window.location.search);
       if (params.get('forceWizard') === 'true') return;
@@ -164,11 +175,11 @@ export const useOnboarding = () => {
     let cancelled = false;
     (async () => {
       try {
-        const workspaces = await adapter.getWorkspaces();
+        const status = await adapter.getOnboardingStatus();
         if (cancelled) return;
-        if (Array.isArray(workspaces) && workspaces.length > 0) {
+        if (status?.completed) {
           console.info(
-            `[useOnboarding] returning user detected (${workspaces.length} workspaces on server) — auto-completing wizard`
+            `[useOnboarding] returning user detected (server onboarding status: ${status.source ?? 'flag'}) — auto-completing wizard`
           );
           const next: OnboardingState = {
             ...defaultState,
@@ -194,13 +205,21 @@ export const useOnboarding = () => {
     setState(prev => {
       const next = { ...prev, ...updates };
       saveState(next);
-      // CC Sesija A §2.3 A11: persist completion to filesystem flag in Tauri
-      // mode so onboarding doesn't re-trigger after a webview profile reset.
-      // Fire-and-forget — failure is non-fatal (localStorage still completed).
-      if (next.completed && !prev.completed && isTauri()) {
-        tauriMarkFirstLaunchComplete().catch((err) => {
-          console.warn('[useOnboarding] markFirstLaunchComplete failed:', err);
+      if (next.completed && !prev.completed) {
+        // P4: stamp the server-side completion flag — the durable signal the
+        // auto-complete effect above keys on. Fire-and-forget; failure is
+        // non-fatal (localStorage still says completed for this webview).
+        adapter.markOnboardingComplete().catch((err) => {
+          console.warn('[useOnboarding] markOnboardingComplete failed:', err);
         });
+        // CC Sesija A §2.3 A11: Tauri filesystem flag too (default ~/.waggle
+        // installs share the same file; the IPC path works even when the
+        // sidecar is mid-restart).
+        if (isTauri()) {
+          tauriMarkFirstLaunchComplete().catch((err) => {
+            console.warn('[useOnboarding] markFirstLaunchComplete failed:', err);
+          });
+        }
       }
       return next;
     });
