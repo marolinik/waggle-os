@@ -48,6 +48,51 @@ describe('InstallAuditStore', () => {
     };
   }
 
+  it("records an 'uninstalled' action (P5/D4 — capability removal trail)", () => {
+    const entry = store.record(makeInput({ action: 'uninstalled', initiator: 'agent', detail: 'deleted by agent' }));
+    expect(entry.action).toBe('uninstalled');
+    expect(store.getByAction('uninstalled')).toHaveLength(1);
+  });
+
+  it("migrates a legacy-CHECK table to accept 'uninstalled' (P5/D4)", () => {
+    const tmp2 = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-audit-legacy-'));
+    const legacyDb = new MindDB(path.join(tmp2, 'legacy.mind'));
+    const raw = legacyDb.getDatabase();
+    // Simulate a pre-P5 install: drop the migrated table and recreate it with
+    // the OLD narrower action CHECK (no 'uninstalled'), seeding one row.
+    raw.exec('DROP TABLE IF EXISTS install_audit');
+    raw.exec(`
+      CREATE TABLE install_audit (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+        capability_name TEXT NOT NULL,
+        capability_type TEXT NOT NULL CHECK (capability_type IN ('native','skill','plugin','mcp','connector','marketplace')),
+        source TEXT NOT NULL,
+        version TEXT,
+        risk_level TEXT NOT NULL CHECK (risk_level IN ('low','medium','high','critical')),
+        trust_source TEXT NOT NULL,
+        approval_class TEXT NOT NULL CHECK (approval_class IN ('standard','elevated','critical','blocked')),
+        action TEXT NOT NULL CHECK (action IN ('proposed','approved','installed','rejected','failed','blocked')),
+        initiator TEXT NOT NULL CHECK (initiator IN ('agent','user','system')),
+        detail TEXT NOT NULL DEFAULT ''
+      );
+    `);
+    raw.prepare(`INSERT INTO install_audit
+      (capability_name, capability_type, source, risk_level, trust_source, approval_class, action, initiator, detail)
+      VALUES ('legacy-skill','skill','starter-pack','low','starter_pack','standard','installed','user','pre-migration row')`).run();
+
+    // Constructing the store triggers ensureTable() → rebuild migration.
+    const migrated = new InstallAuditStore(legacyDb);
+    // Pre-existing row survives the rebuild.
+    expect(migrated.getByCapability('legacy-skill')).toHaveLength(1);
+    // The widened CHECK now accepts 'uninstalled' (would throw on a stale table).
+    const entry = migrated.record(makeInput({ capabilityName: 'legacy-skill', action: 'uninstalled', detail: 'removed' }));
+    expect(entry.action).toBe('uninstalled');
+
+    legacyDb.close();
+    fs.rmSync(tmp2, { recursive: true, force: true });
+  });
+
   it('records and retrieves an audit entry', () => {
     const entry = store.record(makeInput());
     expect(entry.id).toBeGreaterThan(0);

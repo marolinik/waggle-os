@@ -12,7 +12,10 @@ import type { MindDB } from '@waggle/hive-mind-core';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
-export type AuditAction = 'proposed' | 'approved' | 'installed' | 'rejected' | 'failed' | 'blocked';
+// 'uninstalled' added in P5/D4 — skill/capability removal is now auditable
+// (previously no removal of any capability could be recorded). Widening the
+// CHECK is additive; existing rows all satisfy the wider constraint.
+export type AuditAction = 'proposed' | 'approved' | 'installed' | 'rejected' | 'failed' | 'blocked' | 'uninstalled';
 export type AuditRiskLevel = 'low' | 'medium' | 'high' | 'critical';
 export type AuditTrustSource =
   | 'builtin' | 'starter_pack' | 'local_user'
@@ -65,7 +68,7 @@ CREATE TABLE IF NOT EXISTS install_audit (
   risk_level TEXT NOT NULL CHECK (risk_level IN ('low', 'medium', 'high', 'critical')),
   trust_source TEXT NOT NULL,
   approval_class TEXT NOT NULL CHECK (approval_class IN ('standard', 'elevated', 'critical', 'blocked')),
-  action TEXT NOT NULL CHECK (action IN ('proposed', 'approved', 'installed', 'rejected', 'failed', 'blocked')),
+  action TEXT NOT NULL CHECK (action IN ('proposed', 'approved', 'installed', 'rejected', 'failed', 'blocked', 'uninstalled')),
   initiator TEXT NOT NULL CHECK (initiator IN ('agent', 'user', 'system')),
   detail TEXT NOT NULL DEFAULT ''
 );
@@ -85,12 +88,42 @@ export class InstallAuditStore {
 
   private ensureTable(): void {
     const raw = this.db.getDatabase();
-    const exists = raw.prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='install_audit'",
-    ).get();
-    if (!exists) {
+    const existing = raw.prepare(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='install_audit'",
+    ).get() as { sql: string } | undefined;
+    if (!existing) {
       raw.exec(INSTALL_AUDIT_TABLE_SQL);
+      return;
     }
+    // P5/D4 migration: pre-'uninstalled' installs carry a narrower action CHECK
+    // baked into the table DDL. SQLite can't ALTER a CHECK, so rebuild the table
+    // when the stored DDL lacks the new value. Idempotent — a no-op once migrated.
+    if (!existing.sql.includes("'uninstalled'")) {
+      this.rebuildForWidenedActionCheck(raw);
+    }
+  }
+
+  /**
+   * Rebuild install_audit with the widened `action` CHECK, preserving all rows.
+   * Classic SQLite 12-step table redefinition, wrapped in a transaction so a
+   * crash mid-rebuild leaves the original table intact.
+   */
+  private rebuildForWidenedActionCheck(raw: ReturnType<MindDB['getDatabase']>): void {
+    const migrate = raw.transaction(() => {
+      raw.exec('ALTER TABLE install_audit RENAME TO install_audit_legacy');
+      raw.exec(INSTALL_AUDIT_TABLE_SQL);
+      raw.exec(`
+        INSERT INTO install_audit (
+          id, timestamp, capability_name, capability_type, source, version,
+          risk_level, trust_source, approval_class, action, initiator, detail
+        )
+        SELECT id, timestamp, capability_name, capability_type, source, version,
+               risk_level, trust_source, approval_class, action, initiator, detail
+        FROM install_audit_legacy
+      `);
+      raw.exec('DROP TABLE install_audit_legacy');
+    });
+    migrate();
   }
 
   /** Record an install audit event. */

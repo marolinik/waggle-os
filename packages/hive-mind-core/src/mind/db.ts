@@ -174,9 +174,14 @@ export class MindDB {
     const auditTableSql = (this.db.prepare(
       "SELECT sql FROM sqlite_master WHERE type='table' AND name='install_audit'"
     ).get() as { sql: string } | undefined)?.sql;
+    // P5/D4 (2026-06-12): AuditAction gained 'uninstalled' so skill/capability
+    // removal is auditable. Same rebuild mechanism, keyed on whether the stored
+    // action CHECK already lists 'uninstalled' ('uninstalled' is a safe sentinel —
+    // it appears in no other CHECK on this table).
     const auditNeedsRebuild = auditTableSql !== undefined && (
       !auditTableSql.includes("'marketplace'")
       || !auditTableSql.includes("'low', 'medium', 'high', 'critical'")
+      || !auditTableSql.includes("'uninstalled'")
     );
     if (auditNeedsRebuild) {
       this.db.transaction(() => {
