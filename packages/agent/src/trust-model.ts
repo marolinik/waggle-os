@@ -274,8 +274,25 @@ function generateExplanation(
     return `${sourceLabel}. Moderate risk — may use: ${activePerms.join(', ')}${modeNote}. Review before approving.`;
   }
 
-  // high
-  return `${sourceLabel}. Elevated risk — may use: ${activePerms.join(', ')}${modeNote}. Carefully review permissions before approving.`;
+  if (riskLevel === 'high') {
+    return `${sourceLabel}. Elevated risk — may use: ${activePerms.join(', ')}${modeNote}. Carefully review permissions before approving.`;
+  }
+
+  // P7/D15 Track A review #1/#2: 'critical' was added to RiskLevel in A2 but this
+  // if-chain fell through to the 'high' ("Elevated risk") string, so a critical
+  // capability's prose contradicted the "Critical" RiskBadge on the same card.
+  // The exhaustive guard below makes a future RiskLevel widening fail tsc here
+  // instead of silently mislabelling.
+  if (riskLevel === 'critical') {
+    return `${sourceLabel}. Critical risk — may use: ${activePerms.join(', ')}${modeNote}. Do not approve unless you fully trust this source.`;
+  }
+
+  return assertNeverRisk(riskLevel);
+}
+
+/** Compile-time exhaustiveness guard for RiskLevel branches. */
+function assertNeverRisk(level: never): string {
+  return `Unknown risk level: ${String(level)}`;
 }
 
 function formatPermissionName(key: string): string {

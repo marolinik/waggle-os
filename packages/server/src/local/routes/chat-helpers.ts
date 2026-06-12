@@ -179,7 +179,27 @@ export function describeToolUse(name: string, input: Record<string, unknown>): s
       return 'Checking sub-agents...';
     case 'get_agent_result':
       return `Getting sub-agent result...`;
+    // P7/D15 Track A review #4: gated tools that previously hit the generic
+    // "Using <name>" default — git mutations, connector writes, cross-workspace
+    // reads — so the A4 approval "description" is specific to the action.
+    case 'git_push':
+      return `Pushing commits to the remote...`;
+    case 'git_merge':
+      return `Merging branches...`;
+    case 'git_pr':
+      return `Opening a pull request...`;
     default:
+      if (name.startsWith('connector_')) {
+        // connector_<id>_<action> → "<action> via <id>"
+        const rest = name.slice('connector_'.length);
+        const us = rest.indexOf('_');
+        const id = us > 0 ? rest.slice(0, us) : rest;
+        const action = us > 0 ? rest.slice(us + 1).replace(/_/g, ' ') : 'action';
+        return `${action} via ${id}...`;
+      }
+      if (name.startsWith('read_other_workspace') || name === 'list_workspace_files') {
+        return `Accessing another workspace: ${input.target_workspace_id ?? input.workspaceId ?? ''}...`;
+      }
       return `Using ${name}...`;
   }
 }

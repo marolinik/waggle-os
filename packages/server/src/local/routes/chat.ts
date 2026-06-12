@@ -962,14 +962,20 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 permissions: trust.permissions,
                 description: describeToolUse(toolName, input),
               };
-            } catch { /* trust enrichment is best-effort */ }
-          } else {
+            } catch { /* content-based assessment failed — fall through to the heuristic */ }
+          }
+          // Track A review: if the install assessment threw, OR for any non-install
+          // gated tool, derive risk heuristically so approvalClass is NEVER absent
+          // (an absent approvalClass would let the FE offer "Always allow" on a
+          // critical op — fail-open). trustSource is OMITTED here: there is no real
+          // provenance signal for a bash/git/connector call, and stamping
+          // 'local_user' was a false claim on the trust surface (review #3).
+          if (!trustMeta) {
             try {
               const { riskLevel, approvalClass } = classifyGatedToolRisk(toolName, input);
               trustMeta = {
                 riskLevel,
                 approvalClass,
-                trustSource: 'local_user',
                 assessmentMode: 'heuristic',
                 description: describeToolUse(toolName, input),
               };

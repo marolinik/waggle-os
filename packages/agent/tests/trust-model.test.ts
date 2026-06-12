@@ -275,6 +275,20 @@ describe('assessTrust', () => {
     expect(result.explanation).toContain('code execution');
   });
 
+  // P7/D15 Track A review #1/#2: a critical assessment must get critical-specific
+  // prose, not the 'high' "Elevated risk" string (which contradicted the Critical
+  // RiskBadge on the same card). unknown source (5) + exec (2) + secrets (2) = 9 → critical.
+  it('critical risk gets critical-specific explanation (not "Elevated risk")', () => {
+    const result = assessTrust({
+      capabilityType: 'skill',
+      source: 'some-unknown-registry',
+      content: 'Use bash to run a shell command and read the secret password / api_key token for auth.',
+    });
+    expect(result.riskLevel).toBe('critical');
+    expect(result.explanation).toContain('Critical risk');
+    expect(result.explanation).not.toContain('Elevated risk');
+  });
+
   it('starter_pack skill with only file access is low risk', () => {
     const result = assessTrust({
       capabilityType: 'skill',

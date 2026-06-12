@@ -453,6 +453,24 @@ describe('describeToolUse', () => {
     expect(describeToolUse('custom_tool', { foo: 'bar' })).toBe('Using custom_tool...');
   });
 
+  // P7/D15 Track A review #4: gated tools that used to hit the generic default.
+  it('describes git mutations specifically', () => {
+    expect(describeToolUse('git_push', {})).toBe('Pushing commits to the remote...');
+    expect(describeToolUse('git_merge', {})).toBe('Merging branches...');
+    expect(describeToolUse('git_pr', {})).toBe('Opening a pull request...');
+  });
+
+  it('describes a connector action as "<action> via <id>"', () => {
+    expect(describeToolUse('connector_jira_create_issue', {})).toBe('create issue via jira...');
+    expect(describeToolUse('connector_gmail_send_email', {})).toBe('send email via gmail...');
+  });
+
+  it('describes cross-workspace reads with the target workspace', () => {
+    expect(describeToolUse('read_other_workspace', { target_workspace_id: 'ws-7' })).toBe(
+      'Accessing another workspace: ws-7...',
+    );
+  });
+
   // ── Missing input fields ──────────────────────────────────────────
 
   it('handles missing query in web_search gracefully', () => {
