@@ -395,7 +395,7 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
 
   // F1: GET /api/memory/stats — dedicated memory statistics endpoint
   server.get<{
-    Querystring: { workspace?: string; workspaceId?: string };
+    Querystring: { workspace?: string; workspaceId?: string; scope?: string };
   }>('/api/memory/stats', async (request) => {
     // P0-4: Accept both 'workspace' and 'workspaceId'
     const workspaceId = request.query.workspace ?? request.query.workspaceId;
@@ -422,10 +422,14 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
 
     if (workspaceId) {
       countMind(server.agentState.getWorkspaceMindDb(workspaceId));
-    } else {
-      // No workspace specified → `total` means across ALL minds. The briefing
-      // header brags this number; counting only the personal mind made it
-      // visibly disagree with the per-workspace cards beneath it.
+    } else if (request.query.scope === 'all-minds') {
+      // === MIND ISOLATION (founder directive 2026-06-12) ===
+      // Workspace minds are SEPARATE stores; no memory may leak between
+      // users. This branch aggregates COUNTS ONLY (never content), is
+      // explicit opt-in via ?scope=all-minds, and is valid ONLY on this
+      // single-user loopback sidecar where every listed workspace belongs
+      // to the local user. Do NOT port this aggregation to the multi-user
+      // cloud server — there, totals must be scoped to the caller's ACL.
       try {
         for (const ws of server.workspaceManager.list()) {
           countMind(server.agentState.getWorkspaceMindDb(ws.id));

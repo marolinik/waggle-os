@@ -2188,7 +2188,10 @@ class LocalAdapter {
       };
     };
     try {
-      const res = await this.fetch('/api/memory/stats');
+      // scope=all-minds: counts-only cross-mind total for the briefing brag.
+      // Single-user local sidecar only — workspace minds stay separate stores;
+      // the server never mixes their CONTENT (founder mind-isolation directive).
+      const res = await this.fetch('/api/memory/stats?scope=all-minds');
       const raw = (await res.json()) as { personal?: unknown; workspace?: unknown; total?: unknown };
       return {
         personal: normalize(raw.personal),
