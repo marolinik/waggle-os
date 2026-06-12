@@ -1,8 +1,37 @@
 #!/usr/bin/env bash
 #
-# oss-subtree-split.sh — emit hive-mind-* packages to OSS export branches.
+# oss-subtree-split.sh — emit hive-mind-* packages to local export branches.
 #
 # Per CC Sesija B brief 2026-04-30 §2.6 Task B20.
+#
+# ============================================================================
+# ⚠️  DO NOT PUSH THE OUTPUT OF THIS SCRIPT DIRECTLY TO THE PUBLIC OSS MIRROR.
+# ============================================================================
+# This script produces RAW per-package subtree branches. They are NOT
+# OSS-publishable as-is, for three reasons established by the 2026-06-12 drift
+# analysis (docs/ux-refactor/oss-sync-finding-2026-06-12.md):
+#
+#   1. PROPRIETARY FILES. `packages/hive-mind-core/src/mind/` contains
+#      evolution-runs.ts, execution-traces.ts, improvement-signals.ts — Waggle
+#      proprietary, EXCLUDED from the public mirror. A raw split carries them.
+#      (The hard abort guard below refuses to emit a branch that contains them,
+#      so the leak can't happen silently — but the guard is a backstop, not the
+#      sync mechanism.)
+#   2. INTERLEAVED PROPRIETARY CONTENT. The `install_audit` table DDL + its
+#      rebuild migration live INSIDE mind/{schema.ts,db.ts} (not as separate
+#      files), and are also OSS-excluded. A file-level filter cannot strip them
+#      — only a curated edit can. The guard cannot catch this.
+#   3. WRONG LAYOUT. The public mirror (github.com/marolinik/hive-mind) uses a
+#      curated layout (`packages/core`, co-located tests, rewritten imports),
+#      NOT `packages/hive-mind-core`. A raw split has the wrong root.
+#
+# THE REAL SYNC is a hand-curated forward-port onto a maintainer feature branch
+# in the OSS clone (e.g. the `feature/mono-parity-YYYY-MM-DD` model), which
+# adapts the layout, strips install_audit + the proprietary files, and rewrites
+# imports. See packages/hive-mind-core/CONTRIBUTING.md and the finding doc.
+#
+# This script remains useful ONLY for: inspecting a package's isolated history,
+# or as the starting point for a curated port. The push step is the maintainer's.
 #
 # What this does:
 #   For each `packages/hive-mind-*` directory, run `git subtree split` to produce
@@ -10,23 +39,11 @@
 #   The resulting branches are named `oss-<package>-export` and live LOCAL ONLY
 #   in this clone — they are NOT pushed automatically.
 #
-# After this script runs, the maintainer (Marko / Egzakta) can `git push` each
-# `oss-<package>-export` branch to `github.com/marolinik/hive-mind` (or the
-# package-specific OSS mirror) for Day 0 launch.
-#
 # Usage:
 #   bash scripts/oss-subtree-split.sh                   # split all hive-mind-* packages
 #   bash scripts/oss-subtree-split.sh hive-mind-core    # split only one package
 #
 # Idempotent: re-running drops + recreates the export branches with current state.
-#
-# Why subtree-split (not git-filter-repo or BFG):
-#   - subtree-split is built into git, no extra tooling required for maintainers
-#   - Preserves commit-level attribution + dates (BFG/filter-repo also preserve, but
-#     subtree-split is the simplest mental model: "give me a branch where this dir
-#     is the root")
-#   - The script is what runs on Marko's machine when ready for Day 0 push;
-#     CI does NOT auto-push (manual gate per OSS launch playbook)
 
 set -euo pipefail
 
@@ -88,7 +105,36 @@ for pkg in "${PACKAGES[@]}"; do
     fi
   done
 
-  echo "[oss-subtree-split]   ✓ $BRANCH split complete (no monorepo-level leak detected)"
+  # ── Proprietary-file ABORT guard (2026-06-12) ────────────────────────────
+  # Hard backstop against the IP-leak failure mode: these files are Waggle
+  # proprietary and must NEVER reach the public OSS mirror. They live inside
+  # packages/hive-mind-core/src/mind/, so a raw subtree-split of that package
+  # WILL carry them. CLAUDE.md §7.5 previously claimed a "subtree-split filter"
+  # handled this — it did not exist; this guard is that protection, made real.
+  # The guard ABORTS (does not silently scrub) — a leaky export branch must
+  # never be produced, and the real OSS sync is a curated forward-port anyway.
+  FORBIDDEN_FILES=(
+    "src/mind/evolution-runs.ts"
+    "src/mind/execution-traces.ts"
+    "src/mind/improvement-signals.ts"
+    "src/vault.ts"
+    "src/compliance"
+  )
+  BRANCH_FILES=$(git ls-tree -r --name-only "$BRANCH")
+  for pf in "${FORBIDDEN_FILES[@]}"; do
+    if echo "$BRANCH_FILES" | grep -qE "(^|/)${pf}(/|\$|\.ts\$)"; then
+      echo "[oss-subtree-split]   ERROR: $BRANCH contains PROPRIETARY path '$pf'." >&2
+      echo "[oss-subtree-split]   This export is NOT safe to push to the public OSS mirror." >&2
+      echo "[oss-subtree-split]   These files are Waggle-proprietary (§7.5) and must be removed" >&2
+      echo "[oss-subtree-split]   by the curated forward-port, not pushed raw. ABORTING." >&2
+      echo "[oss-subtree-split]   See docs/ux-refactor/oss-sync-finding-2026-06-12.md." >&2
+      exit 3
+    fi
+  done
+
+  echo "[oss-subtree-split]   ✓ $BRANCH split complete (no monorepo-level leak, no proprietary files)"
+  echo "[oss-subtree-split]   NOTE: this is a RAW history branch — NOT OSS-publishable as-is"
+  echo "[oss-subtree-split]   (wrong layout + interleaved install_audit). Curate before any push."
   echo
 done
 
@@ -97,9 +143,11 @@ for pkg in "${PACKAGES[@]}"; do
   echo "  oss-${pkg}-export"
 done
 echo
-echo "[oss-subtree-split] Next step (manual, NOT done by this script):"
-echo "  For each branch, push to the OSS mirror, e.g.:"
-echo "    git push <oss-mirror-remote> oss-hive-mind-core-export:main"
-echo "  Or to the consolidated OSS repo (github.com/marolinik/hive-mind):"
-echo "    git push origin-hive-mind oss-hive-mind-core-export:packages/hive-mind-core"
-echo "  See packages/hive-mind-core/CONTRIBUTING.md for distribution model."
+echo "[oss-subtree-split] These branches are for INSPECTION / as a curation starting"
+echo "[oss-subtree-split] point only. DO NOT push them raw to the public OSS mirror —"
+echo "[oss-subtree-split] they carry the wrong layout and interleaved install_audit"
+echo "[oss-subtree-split] (the proprietary FILES are blocked by the guard above, but"
+echo "[oss-subtree-split] the install_audit DDL/migration inside schema.ts/db.ts is not)."
+echo "[oss-subtree-split] The real sync is a curated forward-port onto the OSS clone's"
+echo "[oss-subtree-split] maintainer feature branch — see CONTRIBUTING.md + the finding"
+echo "[oss-subtree-split] doc: docs/ux-refactor/oss-sync-finding-2026-06-12.md."

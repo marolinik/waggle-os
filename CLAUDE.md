@@ -414,7 +414,9 @@ Target: Two-tier layout — "UNIVERSAL MODES" (8) + "YOUR WORKSPACE SPECIALISTS"
 The memory substrate lives at **`packages/hive-mind-core/src/{mind,harvest}/`** (moved from
 `packages/core/src/` in the 2026-04-30 monorepo migration). The public OSS mirror at
 [`marolinik/hive-mind`](https://github.com/marolinik/hive-mind) is **generated FROM** this monorepo
-via **`git subtree split`**.
+via a **maintainer-curated forward-port** (NOT a mechanical `git subtree split` — see the
+correction below). The mirror uses its own curated layout (`packages/core`, co-located tests,
+rewritten imports) and **excludes** Waggle-proprietary content (see the exclusion list below).
 
 === CRITICAL — sync policy (founder-ratified 2026-06-11) ===
 **The monorepo is the SOLE source of truth for the substrate. Never author substrate features
@@ -432,12 +434,36 @@ reverse-ported in W4.2 (`f47ee8f`). Rules:
    subtree-pull, then re-splits.
 === END CRITICAL ===
 
+=== CORRECTION — how the sync ACTUALLY works (2026-06-12 drift analysis) ===
+The prior text here claimed the mirror is produced by `scripts/oss-subtree-split.sh` and that a
+"subtree-split filter" handles the must-not-export files. **Both were false** (verified
+2026-06-12, `docs/ux-refactor/oss-sync-finding-2026-06-12.md`):
+- `scripts/oss-subtree-split.sh` produces RAW per-package branches with the WRONG layout
+  (`packages/hive-mind-core`, not the mirror's `packages/core`) and **no file filter ever
+  existed**. A raw split + push would have **leaked proprietary IP**. The script now carries a
+  hard ABORT guard (refuses to emit a branch containing the proprietary files) + a deprecation
+  header; it is for inspection / as a curation starting point ONLY, never a direct push source.
+- **The real sync is a hand-curated forward-port** onto a maintainer feature branch in the OSS
+  clone (e.g. `feature/mono-parity-YYYY-MM-DD`): adapt the layout, rewrite imports, and STRIP the
+  excluded content. That curation — not a filter — is what keeps proprietary content out.
+
+**OSS-EXCLUDED (must NOT reach the public mirror):**
+- Files: `vault.ts`, `evolution-runs.ts`, `execution-traces.ts`, `improvement-signals.ts`,
+  `compliance/**` (vault/compliance live in `@waggle/core`; the other three are barrel-exported
+  from `hive-mind-core` but stripped on export). Enforced by the script's abort guard.
+- **Interleaved:** the `install_audit` table DDL + its rebuild migration inside
+  `mind/{schema.ts,db.ts}` are ALSO excluded (capability-install trust trail / EU-AI-Act
+  compliance — Waggle governance, not generic substrate). A file filter cannot catch this; only
+  the curated edit strips it. **Consequence:** substrate changes confined to `install_audit`
+  (e.g. P5/D4 `'uninstalled'`, #15 `trust_source` CHECK) have **nowhere to land on the mirror —
+  do NOT treat them as a pending OSS port.**
+=== END CORRECTION ===
+
 **To work on the substrate or publish the OSS mirror:** see
 [`packages/hive-mind-core/CONTRIBUTING.md`](./packages/hive-mind-core/CONTRIBUTING.md),
-[`scripts/oss-subtree-split.sh`](./scripts/oss-subtree-split.sh), and
-[`scripts/oss-drift-check.sh`](./scripts/oss-drift-check.sh). Files that must NOT export to the
-OSS mirror (vault.ts, evolution-runs.ts, execution-traces.ts, improvement-signals.ts, compliance/**)
-are handled by the subtree-split filter — keep that list in sync there.
+[`scripts/oss-subtree-split.sh`](./scripts/oss-subtree-split.sh) (inspection/guard only), and
+[`scripts/oss-drift-check.sh`](./scripts/oss-drift-check.sh) (run before every release; note its
+~50 "DIFFERS" are mostly OSS-adaptation noise — layout + import rewrites — not true drift).
 
 **Deprecated (do not rely on; do not delete):** the old dual-repo bidirectional-sync workflows
 `.github/workflows/{mind-parity-check,sync-mind}.yml` and the `.github/sync.md` manual are **preserved
