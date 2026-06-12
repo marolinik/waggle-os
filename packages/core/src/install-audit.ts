@@ -12,17 +12,19 @@ import type { MindDB } from '@waggle/hive-mind-core';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
-// 'uninstalled' added in P5/D4 — skill/capability removal is now auditable
-// (previously no removal of any capability could be recorded). Widening the
-// CHECK is additive; existing rows all satisfy the wider constraint.
-export type AuditAction = 'proposed' | 'approved' | 'installed' | 'rejected' | 'failed' | 'blocked' | 'uninstalled';
-export type AuditRiskLevel = 'low' | 'medium' | 'high' | 'critical';
-export type AuditTrustSource =
-  | 'builtin' | 'starter_pack' | 'local_user'
-  | 'third_party_verified' | 'third_party_unverified' | 'unknown' | 'security-gate';
-export type AuditApprovalClass = 'standard' | 'elevated' | 'critical' | 'blocked';
-export type AuditInitiator = 'agent' | 'user' | 'system';
-export type AuditCapabilityType = 'native' | 'skill' | 'plugin' | 'mcp' | 'connector' | 'marketplace';
+// P7/D15 A2b: the audit vocabulary is now canonical in @waggle/shared. The
+// Audit*-prefixed names are kept as aliases (re-exported) so every downstream
+// `import { AuditAction, ... } from '@waggle/core'` keeps working unchanged.
+// All six sets were already byte-identical to the shared ones (incl. P5/D4's
+// 'uninstalled'), so this is a pure structural re-point — no value change.
+export type {
+  AuditAction, AuditCapabilityType, AuditInitiator,
+  RiskLevel as AuditRiskLevel, ApprovalClass as AuditApprovalClass, TrustSource as AuditTrustSource,
+} from '@waggle/shared';
+import type {
+  AuditAction, AuditCapabilityType, AuditInitiator,
+  RiskLevel as AuditRiskLevel, ApprovalClass as AuditApprovalClass, TrustSource as AuditTrustSource,
+} from '@waggle/shared';
 
 export interface InstallAuditEntry {
   id: number;

@@ -1,4 +1,5 @@
 import { eq, and, desc } from 'drizzle-orm';
+import { RISK_LEVELS, riskRank, type RiskLevel } from '@waggle/shared';
 import {
   teamCapabilityPolicies,
   teamCapabilityOverrides,
@@ -20,12 +21,19 @@ export type PermissionResult =
   | 'needs_approval'
   | 'source_not_allowed';
 
-const RISK_LEVELS: Record<string, number> = {
-  none: 0,
-  low: 1,
-  medium: 2,
-  high: 3,
-};
+/**
+ * Rank a governance risk string on the canonical scale (P7/D15 A2b). The
+ * governance domain adds a 'none' tier (below 'low') that the canonical set
+ * doesn't have. Anything else falls back to canonical riskRank, so 'critical'
+ * (rank 3) correctly outranks 'low' (0) — the previous local map omitted
+ * 'critical', so `?? 0` sorted a critical risk BELOW low (a silent RBAC defect).
+ */
+function governanceRiskRank(level: string): number {
+  if (level === 'none') return -1;
+  return (RISK_LEVELS as readonly string[]).includes(level)
+    ? riskRank(level as RiskLevel)
+    : -1;
+}
 
 /**
  * Check if a given risk level exceeds the threshold.
@@ -33,9 +41,7 @@ const RISK_LEVELS: Record<string, number> = {
  */
 export function riskExceedsThreshold(risk: string, threshold: string): boolean {
   if (threshold === 'none') return false;
-  const riskVal = RISK_LEVELS[risk] ?? 0;
-  const thresholdVal = RISK_LEVELS[threshold] ?? 0;
-  return riskVal > thresholdVal;
+  return governanceRiskRank(risk) > governanceRiskRank(threshold);
 }
 
 /**

@@ -41,6 +41,23 @@ describe('riskExceedsThreshold', () => {
     expect(riskExceedsThreshold('medium', 'low')).toBe(true);
   });
 
+  // P7/D15 A2b regression: 'critical' was omitted from the local risk map, so
+  // `?? 0` sorted it BELOW 'low' and a critical capability slipped past a 'low'
+  // approval threshold. Now ranked on the canonical scale.
+  it('critical exceeds every lower threshold', () => {
+    expect(riskExceedsThreshold('critical', 'low')).toBe(true);
+    expect(riskExceedsThreshold('critical', 'medium')).toBe(true);
+    expect(riskExceedsThreshold('critical', 'high')).toBe(true);
+  });
+
+  it('critical does not exceed critical', () => {
+    expect(riskExceedsThreshold('critical', 'critical')).toBe(false);
+  });
+
+  it('nothing exceeds the none threshold, including critical', () => {
+    expect(riskExceedsThreshold('critical', 'none')).toBe(false);
+  });
+
   it('low does not exceed low', () => {
     expect(riskExceedsThreshold('low', 'low')).toBe(false);
   });
