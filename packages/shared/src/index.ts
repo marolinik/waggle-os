@@ -6,3 +6,4 @@ export * from './tiers.js';
 export * from './mcp-catalog.js';
 export * from './connector-recommendations.js';
 export * from './tool-detection.js';
+export * from './risk.js';
