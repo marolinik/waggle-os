@@ -351,16 +351,20 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
         // strip it, so read the raw file. Absent provenance ⇒ legacy ⇒ 'user'.
         let initiator: 'agent' | 'user' = 'user';
         let provSource: string | undefined;
+        // Review #3: derive the preview from the parsed BODY, not raw content —
+        // stamped provenance frontmatter would otherwise leak into the Hub row.
+        let preview = s.content.slice(0, 200);
         try {
           const raw = fs.readFileSync(path.join(skillsDir, `${s.name}.md`), 'utf-8');
-          const fm = parseSkillFrontmatter(raw).frontmatter;
-          if (fm.initiator) initiator = fm.initiator;
-          provSource = fm.source;
-        } catch { /* not on disk (starter/builtin) — default to user */ }
+          const parsed = parseSkillFrontmatter(raw);
+          if (parsed.frontmatter.initiator) initiator = parsed.frontmatter.initiator;
+          provSource = parsed.frontmatter.source;
+          preview = parsed.body.slice(0, 200);
+        } catch { /* not on disk (starter/builtin) — keep the content-based preview */ }
         return {
           name: s.name,
           length: s.content.length,
-          preview: s.content.slice(0, 200),
+          preview,
           initiator,
           source: provSource,
         };

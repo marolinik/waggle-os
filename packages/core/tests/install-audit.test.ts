@@ -88,6 +88,13 @@ describe('InstallAuditStore', () => {
     // The widened CHECK now accepts 'uninstalled' (would throw on a stale table).
     const entry = migrated.record(makeInput({ capabilityName: 'legacy-skill', action: 'uninstalled', detail: 'removed' }));
     expect(entry.action).toBe('uninstalled');
+    // Review #1: the rebuild must NOT drop the declared indexes (SQLite RENAME
+    // carries index names to the legacy table; without an explicit DROP INDEX
+    // they get destroyed with it, leaving the audit table index-less).
+    const idx = raw.prepare(
+      "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='install_audit' AND name LIKE 'idx_audit_%'",
+    ).all() as Array<{ name: string }>;
+    expect(idx.map(i => i.name).sort()).toEqual(['idx_audit_capability', 'idx_audit_timestamp']);
 
     legacyDb.close();
     fs.rmSync(tmp2, { recursive: true, force: true });

@@ -69,6 +69,9 @@ describe('CapabilitiesApp — Skills Hub', () => {
     // The agent skill carries the review badge; the user skill does not.
     expect(screen.getByText('agent · review')).toBeInTheDocument();
     expect(screen.getAllByText('agent · review')).toHaveLength(1);
+    // Review #5: the agent skill must NOT also wear the name-heuristic 'custom'
+    // status — provenance supersedes it (D4(iv)). The user skill keeps 'custom'.
+    expect(screen.queryAllByText('custom')).toHaveLength(1);
   });
 
   it('the Custom tab shows only user-authored skills (not in any catalog)', async () => {

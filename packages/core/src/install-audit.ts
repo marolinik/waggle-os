@@ -111,6 +111,12 @@ export class InstallAuditStore {
   private rebuildForWidenedActionCheck(raw: ReturnType<MindDB['getDatabase']>): void {
     const migrate = raw.transaction(() => {
       raw.exec('ALTER TABLE install_audit RENAME TO install_audit_legacy');
+      // SQLite carries indexes along with RENAME (still named idx_audit_*), so
+      // INSTALL_AUDIT_TABLE_SQL's CREATE INDEX IF NOT EXISTS would no-op and the
+      // DROP below would take the indexes with the legacy table. Drop them first
+      // (mirrors hive-mind-core db.ts) so they get recreated on the new table.
+      raw.exec('DROP INDEX IF EXISTS idx_audit_capability');
+      raw.exec('DROP INDEX IF EXISTS idx_audit_timestamp');
       raw.exec(INSTALL_AUDIT_TABLE_SQL);
       raw.exec(`
         INSERT INTO install_audit (

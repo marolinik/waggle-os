@@ -113,20 +113,23 @@ export function writeSkill(deps: SkillWriteDeps, input: WriteSkillInput): SkillW
   const filePath = path.join(skillsDir, `${name}.md`);
   const existed = fs.existsSync(filePath);
 
-  // Provenance is sticky: if the skill already exists with an author, preserve
-  // it so an edit (by user OR agent) can't reclassify who created it.
-  let initiator = input.initiator;
-  let source = input.source;
+  // FILE provenance is sticky: if the skill already exists with an author,
+  // preserve it so an edit (by user OR agent) can't reclassify who CREATED it.
+  // The AUDIT row, by contrast, must record who performed THIS write (the actual
+  // actor) — D4(i) requires agent writes to audit initiator:'agent' even when
+  // editing a user-authored skill. The two must NOT share a variable.
+  let fileInitiator = input.initiator;
+  let fileSource = input.source;
   if (existed) {
     try {
       const prior = parseSkillFrontmatter(fs.readFileSync(filePath, 'utf-8')).frontmatter;
-      if (prior.initiator) initiator = prior.initiator;
-      if (prior.source) source = prior.source;
+      if (prior.initiator) fileInitiator = prior.initiator;
+      if (prior.source) fileSource = prior.source;
     } catch { /* unreadable prior — fall back to the input provenance */ }
   }
 
   const { content: safe, redactions } = redactSkillContent(content);
-  const stamped = stampProvenance(safe, initiator, source);
+  const stamped = stampProvenance(safe, fileInitiator, fileSource);
 
   if (!fs.existsSync(skillsDir)) fs.mkdirSync(skillsDir, { recursive: true });
   fs.writeFileSync(filePath, stamped, 'utf-8');
@@ -135,13 +138,13 @@ export function writeSkill(deps: SkillWriteDeps, input: WriteSkillInput): SkillW
     auditStore?.record({
       capabilityName: name,
       capabilityType: 'skill',
-      source,
+      source: input.source,
       riskLevel: 'low',
       trustSource: 'local_user',
       approvalClass: 'standard',
       action: 'installed',
-      initiator,
-      detail: `${existed ? 'Updated' : 'Created'} skill via ${source}${redactions.length ? ` (redacted ${redactions.length})` : ''}.`,
+      initiator: input.initiator,
+      detail: `${existed ? 'Updated' : 'Created'} skill via ${input.source}${redactions.length ? ` (redacted ${redactions.length})` : ''}.`,
     });
   } catch { /* audit is best-effort */ }
 

@@ -61,6 +61,20 @@ describe('skill-write-service (P5/D4 iii)', () => {
     expect(fm.initiator).toBe('agent'); // not relaundered to 'user'
   });
 
+  it('audit row reflects the ACTUAL actor, not the sticky file author (review #2/#4)', () => {
+    // A user-authored skill exists; the AGENT then updates it.
+    writeSkill(deps, { name: 'y', content: 'v1', initiator: 'user', source: 'api' });
+    audit.length = 0;
+    writeSkill(deps, { name: 'y', content: 'v2 by agent', initiator: 'agent', source: 'chat' });
+    // File provenance stays sticky to the original user author...
+    const fm = parseSkillFrontmatter(fs.readFileSync(path.join(skillsDir, 'y.md'), 'utf-8')).frontmatter;
+    expect(fm.initiator).toBe('user');
+    // ...but the audit row records the AGENT as the actor (D4(i) governance trail).
+    expect(audit).toHaveLength(1);
+    expect(audit[0].initiator).toBe('agent');
+    expect(audit[0].source).toBe('chat');
+  });
+
   it('cannot spoof provenance via the content body', () => {
     const res = writeSkill(deps, {
       name: 'spoof',

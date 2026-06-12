@@ -66,6 +66,16 @@ describe('P5/D4 skill governance routes', () => {
     expect(legacy?.initiator).toBe('user');
   });
 
+  it('GET /api/skills preview is the body, not the stamped frontmatter (review #3)', async () => {
+    fs.writeFileSync(path.join(skillsDir, 'stamped.md'), '---\ninitiator: agent\nsource: chat\n---\n\n# Real Heading\nThe actual skill body.');
+    const res = await server.inject({ method: 'GET', url: '/api/skills' });
+    const body = res.json() as { skills: Array<{ name: string; preview?: string }> };
+    const s = body.skills.find(x => x.name === 'stamped');
+    expect(s?.preview).not.toContain('initiator:');
+    expect(s?.preview).not.toContain('---');
+    expect(s?.preview).toContain('Real Heading');
+  });
+
   it('DELETE /api/skills/:name audits uninstalled', async () => {
     await server.inject({ method: 'POST', url: '/api/skills', payload: { name: 'doomed', content: 'x' } });
     audit.length = 0;

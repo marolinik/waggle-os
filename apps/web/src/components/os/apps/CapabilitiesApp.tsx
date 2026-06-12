@@ -170,7 +170,10 @@ const CapabilitiesApp = () => {
               // is badged regardless of catalog membership.
               initiator: meta.initiator ?? 'user',
               source: meta.source,
-              status: !catalogsKnown || catalogNames.has(name)
+              // Review #5: agent provenance supersedes the name-heuristic 'custom'
+              // class (D4(iv)) — an agent skill reads as 'installed' + carries the
+              // 'agent · review' badge, never the user-authored 'custom' label.
+              status: meta.initiator === 'agent' || !catalogsKnown || catalogNames.has(name)
                 ? 'installed'
                 : (marketplaceNames.has(name) ? 'marketplace' : 'custom'),
             } satisfies Skill;
