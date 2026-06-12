@@ -14,6 +14,10 @@ const ALWAYS_CONFIRM = new Set([
   'write_file', 'edit_file', 'generate_docx',
   'git_commit', 'git_push', 'git_pr', 'git_merge',
   'install_capability',
+  // D4(i) skill-write governance: create_skill gates at normal (auto-passes at
+  // trusted/yolo via TRUSTED_AUTOPASS); delete_skill gates at every level via
+  // isCriticalNeverAutopass — destructive ops do not inherit autonomy.
+  'create_skill', 'delete_skill',
   // Cross-workspace reads (Phase B.2 + L-21)
   'read_other_workspace', 'list_workspace_files', 'read_other_workspace_file',
 ]);
@@ -165,6 +169,8 @@ const TRUSTED_AUTOPASS = new Set<string>([
   'generate_docx',
   'read_other_workspace',
   'read_other_workspace_file',
+  // D4(i): create_skill is a non-destructive write — trusted/yolo auto-execute.
+  'create_skill',
 ]);
 
 /**
@@ -190,6 +196,8 @@ const CRITICAL_NEVER_AUTOPASS: RegExp[] = [
  * Used by the autonomy gate to keep the safety net intact at the top level.
  */
 export function isCriticalNeverAutopass(toolName: string, args?: Record<string, unknown>): boolean {
+  // D4(i): deleting a skill is destructive — always ask, every autonomy level.
+  if (toolName === 'delete_skill') return true;
   if (toolName === 'bash') {
     const command = String(args?.command ?? '').trim();
     for (const pat of CRITICAL_NEVER_AUTOPASS) {

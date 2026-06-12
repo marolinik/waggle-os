@@ -1,5 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
-import { needsConfirmation, ConfirmationGate } from '../src/confirmation.js';
+import {
+  needsConfirmation,
+  needsConfirmationWithAutonomy,
+  isCriticalNeverAutopass,
+  ConfirmationGate,
+} from '../src/confirmation.js';
 
 describe('needsConfirmation', () => {
   it('returns true for bash', () => {
@@ -20,6 +25,52 @@ describe('needsConfirmation', () => {
 
   it('returns false for read_file', () => {
     expect(needsConfirmation('read_file')).toBe(false);
+  });
+
+  // D4(i) — skill-write governance
+  it('returns true for create_skill (agent skill write gates at normal)', () => {
+    expect(needsConfirmation('create_skill')).toBe(true);
+  });
+
+  it('returns true for delete_skill (destructive)', () => {
+    expect(needsConfirmation('delete_skill')).toBe(true);
+  });
+
+  it('returns false for read_skill (ungated)', () => {
+    expect(needsConfirmation('read_skill')).toBe(false);
+  });
+});
+
+describe('D4(i) skill-write autonomy policy', () => {
+  // create_skill: normal = ask, trusted/yolo = auto-execute
+  it('create_skill gates at normal', () => {
+    expect(needsConfirmationWithAutonomy('create_skill', {}, 'normal')).toBe(true);
+  });
+  it('create_skill auto-passes at trusted', () => {
+    expect(needsConfirmationWithAutonomy('create_skill', {}, 'trusted')).toBe(false);
+  });
+  it('create_skill auto-passes at yolo', () => {
+    expect(needsConfirmationWithAutonomy('create_skill', {}, 'yolo')).toBe(false);
+  });
+
+  // delete_skill: always ask, EVERY autonomy level (destructive, never inherits autonomy)
+  it('delete_skill gates at normal', () => {
+    expect(needsConfirmationWithAutonomy('delete_skill', {}, 'normal')).toBe(true);
+  });
+  it('delete_skill still gates at trusted', () => {
+    expect(needsConfirmationWithAutonomy('delete_skill', {}, 'trusted')).toBe(true);
+  });
+  it('delete_skill still gates at yolo', () => {
+    expect(needsConfirmationWithAutonomy('delete_skill', {}, 'yolo')).toBe(true);
+  });
+  it('delete_skill is classified critical-never-autopass', () => {
+    expect(isCriticalNeverAutopass('delete_skill', {})).toBe(true);
+  });
+
+  // read_skill never gates regardless of level
+  it('read_skill never gates at any level', () => {
+    expect(needsConfirmationWithAutonomy('read_skill', {}, 'normal')).toBe(false);
+    expect(needsConfirmationWithAutonomy('read_skill', {}, 'yolo')).toBe(false);
   });
 });
 
