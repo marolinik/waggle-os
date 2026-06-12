@@ -22,7 +22,16 @@ export interface BriefingFrameLike {
   readonly importance?: string | number | null;
   readonly timestamp?: string | number | null;
   readonly workspaceName?: string | null;
+  /** Frame lifecycle status — deprecated/archived frames must never headline. */
+  readonly status?: string | null;
 }
+
+/**
+ * Extraction echoes ("User asked: …", "User preference: …") are machine
+ * paraphrases of the user's own prompts — showing them under "I remember"
+ * reads as a log, not a memory, and talks about the user in the third person.
+ */
+const JUNK_HIGHLIGHT_PREFIXES = /^(user asked|user preference|user requested|user identity)\s*:/i;
 
 export const BRIEFING_HIGHLIGHT_LIMIT = 3;
 const MIN_HIGHLIGHT_CONTENT_CHARS = 20;
@@ -52,7 +61,12 @@ function timestampMs(f: BriefingFrameLike): number {
 function isConcrete(f: BriefingFrameLike): boolean {
   if (typeof f.content !== 'string') return false;
   const trimmed = f.content.trim();
-  return trimmed.length >= MIN_HIGHLIGHT_CONTENT_CHARS;
+  if (trimmed.length < MIN_HIGHLIGHT_CONTENT_CHARS) return false;
+  if (JUNK_HIGHLIGHT_PREFIXES.test(trimmed)) return false;
+  // Only living memories headline the greeting — a deprecated/superseded
+  // frame in "I remember" is the product visibly misremembering itself.
+  if (f.status === 'deprecated' || f.status === 'archived') return false;
+  return true;
 }
 
 /** First line of the content, normalized — the identity used for dedup. */

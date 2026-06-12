@@ -120,6 +120,18 @@ const SYSTEM_JOB_TYPES = new Set([
 ]);
 
 /**
+ * Seeded proactive jobs carry engineer-speak names ("Stale workspace check").
+ * On user-facing agendas they should read as promises, not ops tickets.
+ * Unknown names pass through unchanged (user-created automations keep theirs).
+ */
+const FRIENDLY_JOB_NAMES: Record<string, string> = {
+  'Stale workspace check': "I'll check in on quiet projects",
+  'Capability suggestion': "I'll suggest a new skill for you",
+  'Morning briefing': 'Your morning briefing',
+  'Task reminder': 'Task reminders',
+};
+
+/**
  * Build a time-aware greeting based on hour-of-day and workspace inactivity.
  *
  * Branch precedence (highest first):
@@ -202,7 +214,7 @@ export function buildUpcomingSchedules(schedules: CronScheduleLike[], workspaceI
     const timeStr = nextDate
       ? nextDate.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
       : 'unknown';
-    return `${s.name} at ${timeStr}`;
+    return `${FRIENDLY_JOB_NAMES[s.name] ?? s.name} at ${timeStr}`;
   });
 }
 

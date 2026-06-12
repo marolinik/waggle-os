@@ -130,16 +130,18 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
       ]);
 
       // L-22: rank by importance desc, break ties by recency. Concrete
-      // content only (≥20 chars). Limit 3.
-      const ranked = selectBriefingHighlights(frames as unknown as Array<{
-        content?: string | null;
-        importance?: string | number | null;
-        timestamp?: string | number | null;
-        workspaceName?: string | null;
-      }>);
+      // content only (≥20 chars), living frames only — deprecated/archived
+      // and extraction echoes are filtered inside the ranker.
+      const ranked = selectBriefingHighlights(
+        (frames as Array<{ content?: string; importance?: number; timestamp?: string; metadata?: Record<string, unknown> }>).map((f) => ({
+          content: f.content,
+          importance: f.importance,
+          timestamp: f.timestamp,
+          status: typeof f.metadata?.status === 'string' ? f.metadata.status : undefined,
+        })),
+      );
       const topFrames = ranked.map((f) => ({
         content: truncateHighlight(f.content ?? ''),
-        workspace: f.workspaceName ?? undefined,
         timestamp: (typeof f.timestamp === 'string' ? f.timestamp : '') ?? '',
       }));
       setHighlights(topFrames);
@@ -181,6 +183,9 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
       });
 
       const resolved = await Promise.all(contextPromises);
+      // Most recent first — listing a two-month-stale workspace above
+      // yesterday's work contradicted the Home grid's recency ordering.
+      resolved.sort((a, b) => Date.parse(b.lastActive || '0') - Date.parse(a.lastActive || '0'));
       setSummaries(resolved);
 
       // L-22: build the richer "N memories · N entities · N relations
@@ -225,9 +230,12 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
                 <Brain className="w-3 h-3 inline mr-0.5 shrink-0" />
                 <span>{bragLine ?? (errored ? 'Briefing unavailable' : 'Loading…')}</span>
                 {totalPending > 0 && (
-                  <span className="text-amber-400 inline-flex items-center gap-0.5">
+                  <span
+                    className="text-amber-400 inline-flex items-center gap-0.5"
+                    title="Tasks or approvals waiting for you inside the workspaces below."
+                  >
                     <AlertTriangle className="w-3 h-3" />
-                    {totalPending} pending
+                    {totalPending} awaiting your OK
                   </span>
                 )}
               </p>

@@ -329,7 +329,7 @@ const AutomationCenterApp = () => {
                       <p className="text-[10px] font-display uppercase tracking-wide text-muted-foreground mb-1.5">Next up</p>
                       {(() => {
                         const upcoming = automations
-                          .filter(a => a.nextRun && (a.status === 'active' || a.status === 'running'))
+                          .filter(a => a.nextRun && (a.status === 'active' || a.status === 'running') && Date.parse(a.nextRun) > Date.now())
                           .sort((a, b) => Date.parse(a.nextRun as string) - Date.parse(b.nextRun as string))
                           .slice(0, 3);
                         return upcoming.length === 0 ? (

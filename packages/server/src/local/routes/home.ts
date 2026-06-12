@@ -276,7 +276,7 @@ export const homeRoutes: FastifyPluginAsync = async (server) => {
     // loop (recency + bounded pending-item boost — PRD §12.1 "recency AND
     // priority"), so a workspace carrying blocked work can outrank a fresher
     // empty one within the boost window.
-    const rankedCards: Array<{ card: RecentWorkspaceCard; rankTs: number }> = [];
+    const rankedCards: Array<{ card: RecentWorkspaceCard; rankTs: number; hasContent: boolean }> = [];
     const suggestedActions: SuggestedAction[] = [];
     const upNext: UpNextItem[] = [];
     // Global schedules pass buildUpcomingSchedules' filter for EVERY workspace,
@@ -297,6 +297,7 @@ export const homeRoutes: FastifyPluginAsync = async (server) => {
       let pendingCount = 0;
       let nextActions: string[] = [];
       let summary: string | undefined;
+      let anyStateForWs = false;
 
       try {
         const state = buildWorkspaceState({
@@ -307,6 +308,7 @@ export const homeRoutes: FastifyPluginAsync = async (server) => {
         });
         if (state) {
           anyMemory = true;
+          anyStateForWs = true;
           pendingCount = state.pending.length + state.blocked.length;
           nextActions = state.nextActions;
           if (state.recentDecisions.length > 0) {
@@ -320,6 +322,7 @@ export const homeRoutes: FastifyPluginAsync = async (server) => {
 
       rankedCards.push({
         rankTs: ws.rankTs,
+        hasContent: anyStateForWs || pendingCount > 0,
         card: {
           id: ws.id,
           name: ws.name,
@@ -385,7 +388,15 @@ export const homeRoutes: FastifyPluginAsync = async (server) => {
       log.warn('briefing: needs-review scan failed', (err as Error).message);
     }
 
-    const recentWorkspaces = applyPriorityRanking(rankedCards);
+    // "You were working on" requires actual work. A contentless workspace
+    // showing a Continue card contradicted the welcome panel's own "Nothing
+    // here yet" copy for the same workspace — but when NOTHING has content
+    // yet (fresh install), keep all cards so new users still see their
+    // workspaces.
+    const contentful = rankedCards.filter((r) => r.hasContent);
+    const recentWorkspaces = applyPriorityRanking(
+      contentful.length > 0 ? contentful : rankedCards,
+    );
 
     const greeting = personalizeGreeting(
       buildTimeAwareGreeting(

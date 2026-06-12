@@ -11,7 +11,7 @@ import {
   Heart, ChevronRight, Zap, Network, Lightbulb, Download, Upload,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
-import { renderSimpleMarkdown } from '@/lib/render-markdown';
+import { renderChatMarkdown } from '@/lib/render-markdown';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 
 interface WikiPage {
@@ -417,7 +417,7 @@ export default function WikiTab() {
           </div>
         ) : pageContent ? (
           <div className="p-4">
-            {/* Safe: renderSimpleMarkdown escapes HTML entities before applying formatting */}
+            {/* Safe: renderChatMarkdown escapes HTML entities before applying formatting */}
             <div
               className="prose prose-sm prose-invert max-w-none text-sm leading-relaxed
                 prose-headings:font-display prose-headings:text-foreground
@@ -427,7 +427,7 @@ export default function WikiTab() {
                 prose-a:text-primary prose-a:no-underline hover:prose-a:underline
                 prose-table:text-xs prose-th:text-left prose-th:p-2 prose-td:p-2
                 prose-blockquote:border-primary/30 prose-blockquote:text-muted-foreground"
-              dangerouslySetInnerHTML={{ __html: renderSimpleMarkdown(pageContent) }}
+              dangerouslySetInnerHTML={{ __html: renderChatMarkdown(pageContent) }}
             />
           </div>
         ) : (

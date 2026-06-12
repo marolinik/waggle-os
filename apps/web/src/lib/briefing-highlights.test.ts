@@ -24,6 +24,18 @@ describe('selectBriefingHighlights', () => {
     expect(selectBriefingHighlights(input)).toHaveLength(BRIEFING_HIGHLIGHT_LIMIT);
   });
 
+  it('filters deprecated/archived frames and extraction echoes', () => {
+    const input = [
+      make({ content: 'A deprecated but otherwise concrete memory.', status: 'deprecated' }),
+      make({ content: 'An archived but otherwise concrete memory.', status: 'archived' }),
+      make({ content: 'User asked: Review recent decisions and next steps' }),
+      make({ content: 'A living, concrete memory about the launch plan.', status: 'active' }),
+    ];
+    const result = selectBriefingHighlights(input);
+    expect(result).toHaveLength(1);
+    expect(result[0].content).toContain('living');
+  });
+
   it('collapses duplicate content to one highlight, keeping the earliest timestamp', () => {
     const input = [
       make({ content: 'Session (2026-04-30): What is sovereign AI — 4 messages', timestamp: '2026-06-11T00:00:00Z' }),

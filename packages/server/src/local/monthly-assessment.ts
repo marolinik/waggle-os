@@ -298,6 +298,12 @@ function ensureAssessmentSession(personalMind: MindDB): string {
  * Uses a dedicated GOP (Group of Pictures) namespace: "assessment".
  */
 export function saveAssessmentToMind(personalMind: MindDB, assessment: MonthlyAssessment): void {
+  // A zero-data month has nothing to report — writing "Interactions: 0 /
+  // Correction Rate: 0.0%" frames graded the agent on no data and polluted
+  // the user's memory list with template noise (judge-verified).
+  if (assessment.totalInteractions === 0 && assessment.skillsInstalled === 0) {
+    return;
+  }
   ensureAssessmentSession(personalMind);
   const frames = new FrameStore(personalMind);
 

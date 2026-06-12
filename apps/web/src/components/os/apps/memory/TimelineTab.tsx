@@ -3,7 +3,7 @@ import { Brain, Search, Clock, Trash2, Edit3, Filter, Eye, Copy, Loader2, AlertT
 import { AnimatePresence } from 'framer-motion';
 import { Input } from '@/components/ui/input';
 import type { MemoryFrame } from '@/lib/types';
-import { renderSimpleMarkdown } from '@/lib/render-markdown';
+import { renderChatMarkdown } from '@/lib/render-markdown';
 import ContextMenu, { type ContextMenuItem } from '@/components/os/ContextMenu';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 
@@ -240,10 +240,10 @@ const TimelineTab = ({
               <span>Importance: {selectedFrame.importance}/5</span>
               <span>{new Date(selectedFrame.timestamp).toLocaleString()}</span>
             </div>
-            {/* Safe: renderSimpleMarkdown escapes HTML entities before applying formatting */}
+            {/* Safe: renderChatMarkdown escapes HTML entities before applying formatting */}
             <div
               className="text-sm text-foreground leading-relaxed"
-              dangerouslySetInnerHTML={{ __html: renderSimpleMarkdown(selectedFrame.content) }}
+              dangerouslySetInnerHTML={{ __html: renderChatMarkdown(selectedFrame.content) }}
             />
             {selectedFrame.metadata && Object.keys(selectedFrame.metadata).length > 0 && (
               <div className="mt-4 p-3 rounded-lg bg-secondary/30 border border-border/30">

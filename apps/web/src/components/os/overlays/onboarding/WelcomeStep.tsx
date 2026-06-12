@@ -40,7 +40,7 @@ const WelcomeStep = ({ onClickAnywhere, offline }: WelcomeStepProps) => {
       Welcome to the Hive
     </h1>
     <p className="text-muted-foreground text-sm max-w-md mx-auto mb-6">
-      Persistent memory. Workspace-native. Built for knowledge work.
+      Remembers everything. Improves itself. Built for knowledge work.
     </p>
 
     {/* C28: static, disabled language chip — no i18n exists yet, so this is a
@@ -68,7 +68,7 @@ const WelcomeStep = ({ onClickAnywhere, offline }: WelcomeStepProps) => {
     {/* Local-first / privacy note (C28 companion). */}
     <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground/70 mt-5 max-w-md mx-auto">
       <ShieldCheck className="w-3.5 h-3.5 text-primary/70 shrink-0" />
-      Your memory and data stay on your device. Nothing leaves without your say-so.
+      Your memory and data stay on your device. Nothing leaves unless you say so.
     </p>
     {offline && (
       <p className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground/60 mt-2">

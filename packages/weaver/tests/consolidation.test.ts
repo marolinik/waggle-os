@@ -209,6 +209,21 @@ describe('Memory Weaver (Consolidation)', () => {
       expect(frame.content).toContain('agreed on $50k budget');
     });
 
+    it('re-distilling the same session replaces the frame instead of duplicating it', () => {
+      weaver.distillSessionContent('2026-03-10', 'Discussed Q2 marketing strategy', ['point A']);
+      weaver.distillSessionContent('2026-03-10', 'Discussed Q2 marketing strategy', ['point A', 'point B']);
+      // A different session the same day must NOT be replaced.
+      weaver.distillSessionContent('2026-03-10', 'Separate standup recap', []);
+
+      const distilled = frames
+        .getRecent(20)
+        .filter((f) => f.content.startsWith('Session (2026-03-10)'));
+      expect(distilled).toHaveLength(2);
+      const strategy = distilled.filter((f) => f.content.includes('Q2 marketing strategy'));
+      expect(strategy).toHaveLength(1);
+      expect(strategy[0].content).toContain('point B');
+    });
+
     it('creates a frame even without key points', () => {
       const frame = weaver.distillSessionContent(
         '2026-03-11',

@@ -567,7 +567,7 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
   };
 
   return (
-    <div className="h-full overflow-auto p-6 max-w-3xl mx-auto" data-testid="home-cockpit">
+    <div className="h-full overflow-auto p-6 max-w-4xl mx-auto" data-testid="home-cockpit">
       <GreetingHeader greeting={greeting} date={briefing.date} offline={offline} />
 
       {failureCount > 0 && (

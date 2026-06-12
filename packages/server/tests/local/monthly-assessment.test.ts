@@ -143,6 +143,16 @@ describe('Monthly Self-Assessment', () => {
       expect(frame.content).toContain('web_search');
     });
 
+    it('a zero-data month writes nothing — no template-noise frames', () => {
+      saveAssessmentToMind(db, {
+        period: '2026-03', totalInteractions: 0, correctionRate: 0,
+        improvementTrend: '0%', topStrengths: ['Stable operation'], topWeaknesses: [],
+        capabilityGapsDetected: [], skillsInstalled: 0,
+        recommendation: 'No corrections recorded.',
+      });
+      expect(new FrameStore(db).getRecent(10)).toHaveLength(0);
+    });
+
     it('re-running the same period replaces the frame instead of duplicating it', () => {
       const assessment: MonthlyAssessment = {
         period: '2026-03',

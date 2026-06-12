@@ -145,7 +145,14 @@ function normalizeFrame(raw: any): MemoryFrame {
     importance: typeof raw.importance === 'number' ? raw.importance : (IMPORTANCE_MAP[raw.importance] ?? 2),
     timestamp: raw.timestamp ?? raw.created_at ?? '',
     workspaceId: raw.mind ?? raw.workspaceId ?? '',
-    metadata: { source: raw.source, gop: raw.gop, accessCount: raw.accessCount },
+    metadata: {
+      source: raw.source,
+      gop: raw.gop,
+      accessCount: raw.accessCount,
+      // Lifecycle status — consumers (e.g. briefing highlights) must keep
+      // deprecated/archived frames off hero surfaces.
+      status: raw.status ?? raw.metadata?.status,
+    },
   };
 }
 

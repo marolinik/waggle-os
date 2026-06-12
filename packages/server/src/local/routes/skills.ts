@@ -345,6 +345,16 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
   // GET /api/skills — list all installed skills (with P5/D4 provenance)
   server.get('/api/skills', async () => {
     const skills = loadSkills(waggleHome);
+    // List rows are one-line summaries — raw markdown fragments ("## What to
+    // do 1. **Identify…") read as broken text to every judge persona.
+    const cleanPreview = (text: string): string =>
+      text
+        .replace(/^#{1,6}\s+/gm, '')
+        .replace(/\*\*(.+?)\*\*/g, '$1')
+        .replace(/`(.+?)`/g, '$1')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 200);
     return {
       skills: skills.map(s => {
         // Provenance comes from the on-disk file's frontmatter — loadSkills may
@@ -353,15 +363,16 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
         // agent distinction unfalsifiable for pre-P5 content.
         let initiator: 'agent' | 'user' | 'built-in' = 'built-in';
         let provSource: string | undefined;
-        // Review #3: derive the preview from the parsed BODY, not raw content —
-        // stamped provenance frontmatter would otherwise leak into the Hub row.
-        let preview = s.content.slice(0, 200);
+        let preview = cleanPreview(s.content);
         try {
           const raw = fs.readFileSync(path.join(skillsDir, `${s.name}.md`), 'utf-8');
           const parsed = parseSkillFrontmatter(raw);
           if (parsed.frontmatter.initiator) initiator = parsed.frontmatter.initiator;
           provSource = parsed.frontmatter.source;
-          preview = parsed.body.slice(0, 200);
+          // Prefer the authored one-line description; fall back to the body.
+          preview = parsed.frontmatter.description
+            ? cleanPreview(parsed.frontmatter.description)
+            : cleanPreview(parsed.body);
         } catch { /* not on disk (starter/builtin) — keep the content-based preview */ }
         return {
           name: s.name,

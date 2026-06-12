@@ -44,6 +44,9 @@ const WorkspaceCreateStep = ({
       <p className="text-sm text-muted-foreground">
         Each workspace is its own brain — memory, files, and agents stay isolated.
       </p>
+      <p className="text-xs text-muted-foreground/70 mt-1.5">
+        Your agent learns each workspace's patterns and can propose new skills — you approve every change.
+      </p>
     </div>
 
     <div className="grid grid-cols-2 gap-2.5 mb-5">

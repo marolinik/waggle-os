@@ -211,6 +211,12 @@ export class MemoryWeaver {
     }
     const content = parts.join('. ');
 
+    // Replace-on-update: re-distilling the same session (same date+summary,
+    // evolving key points) must update the one distilled frame. createIFrame's
+    // exact-content dedup can't catch the drifting key-points tail — every
+    // cron re-run appended another near-identical "Session (…)" frame.
+    this.frames.deleteByContentPrefix(`Session (${sessionDate}): ${summary}`);
+
     // Create a session for the distilled content (or reuse an active one)
     const active = this.sessions.getActive();
     let gopId: string;

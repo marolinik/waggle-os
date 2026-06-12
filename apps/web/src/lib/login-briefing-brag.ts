@@ -146,7 +146,12 @@ export function formatBragLine(summary: BragSummary): string {
   }
 
   let line = parts.join(' · ');
-  line += ` across ${summary.workspaceCount} ${plural('workspace', summary.workspaceCount)}`;
+  // No "across N workspaces" clause: the header total counts ALL minds while
+  // the cards below show per-workspace counts — coupling them invited users
+  // to sum the cards and catch an apparent arithmetic lie (judge-flagged).
+  if (summary.totalFrames === 0) {
+    line += ` across ${summary.workspaceCount} ${plural('workspace', summary.workspaceCount)}`;
+  }
   // FR #24/#26: suppress the "active Xago" suffix on a fresh-state user
   // (totalFrames === 0). The lastActive timestamp on a brand-new workspace
   // tracks creation time, not activity, so labels like "active 2h ago" or

@@ -67,8 +67,8 @@ const ImportStep = ({
             <Zap className="w-4 h-4 text-primary shrink-0" />
             <div className="min-w-0">
               <p className="text-xs font-display font-medium text-foreground">Claude Code detected</p>
-              <p className="text-[11px] text-muted-foreground truncate">
-                Found {claudeCodeDetected.itemCount} items at {claudeCodeDetected.path}
+              <p className="text-[11px] text-muted-foreground truncate" title={claudeCodeDetected.path}>
+                Found {claudeCodeDetected.itemCount} items from Claude Code
               </p>
             </div>
           </div>
@@ -79,7 +79,7 @@ const ImportStep = ({
               aria-busy={importing}
               className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-display font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 shrink-0"
             >
-              {importing ? <Loader2 aria-label="Harvesting" className="w-3 h-3 animate-spin" /> : 'Harvest'}
+              {importing ? <Loader2 aria-label="Importing" className="w-3 h-3 animate-spin" /> : 'Import my history'}
             </button>
           )}
         </div>

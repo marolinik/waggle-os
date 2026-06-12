@@ -407,19 +407,30 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
     let workspaceEntities = 0;
     let workspaceRelations = 0;
 
-    if (workspaceId) {
-      const wsDb = server.agentState.getWorkspaceMindDb(workspaceId);
-      if (wsDb) {
-        const wsFrames = new FrameStore(wsDb);
-        workspaceCount = wsFrames.list({ limit: 100000 }).length;
-        const wsKg = new KnowledgeGraph(wsDb);
-        const entities = wsKg.getEntitiesByType('');
-        workspaceEntities = entities.length;
-        // Count relations from all entities
-        for (const e of entities) {
-          workspaceRelations += wsKg.getRelationsFrom(e.id).length;
-        }
+    const countMind = (wsDb: ReturnType<typeof server.agentState.getWorkspaceMindDb>) => {
+      if (!wsDb) return;
+      const wsFrames = new FrameStore(wsDb);
+      workspaceCount += wsFrames.list({ limit: 100000 }).length;
+      const wsKg = new KnowledgeGraph(wsDb);
+      const entities = wsKg.getEntitiesByType('');
+      workspaceEntities += entities.length;
+      // Count relations from all entities
+      for (const e of entities) {
+        workspaceRelations += wsKg.getRelationsFrom(e.id).length;
       }
+    };
+
+    if (workspaceId) {
+      countMind(server.agentState.getWorkspaceMindDb(workspaceId));
+    } else {
+      // No workspace specified → `total` means across ALL minds. The briefing
+      // header brags this number; counting only the personal mind made it
+      // visibly disagree with the per-workspace cards beneath it.
+      try {
+        for (const ws of server.workspaceManager.list()) {
+          countMind(server.agentState.getWorkspaceMindDb(ws.id));
+        }
+      } catch { /* workspace enumeration unavailable — personal-only total */ }
     }
 
     const personalKg = new KnowledgeGraph(personalDb);

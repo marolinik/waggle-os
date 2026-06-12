@@ -10,7 +10,7 @@ import { ConfidenceBadge } from '@/components/ui/confidence-badge';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { EvidencePanel } from '@/components/ui/evidence-panel';
 import { Input } from '@/components/ui/input';
-import { renderSimpleMarkdown } from '@/lib/render-markdown';
+import { renderChatMarkdown } from '@/lib/render-markdown';
 import { cn } from '@/lib/utils';
 
 /**
@@ -397,10 +397,10 @@ export default function MemoryCenterTab({
                 className="mt-1 block w-full text-sm rounded-md border border-border bg-background px-2 py-1.5 leading-relaxed resize-y"
               />
               {/* Read-only rendered preview below the editor for markdown context.
-                  Safe: renderSimpleMarkdown escapes &/</> before formatting (same
+                  Safe: renderChatMarkdown escapes &/</> before formatting (same
                   established escaper TimelineTab uses), so harvested content can't
                   inject markup. */}
-              <div className="mt-2 text-xs text-muted-foreground/80 max-h-32 overflow-auto" dangerouslySetInnerHTML={{ __html: renderSimpleMarkdown(draftContent) }} />
+              <div className="mt-2 text-xs text-muted-foreground/80 max-h-32 overflow-auto" dangerouslySetInnerHTML={{ __html: renderChatMarkdown(draftContent) }} />
             </div>
 
             <EvidencePanel source={selected.source} sourceId={selected.sourceId} sourceUrl={selected.sourceUrl} evidence={selected.evidence} />
