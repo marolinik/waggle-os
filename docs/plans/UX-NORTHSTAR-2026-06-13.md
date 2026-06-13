@@ -100,13 +100,17 @@ defect named: **manipulating workspaces is not possible**. Mental model to land:
 | `c7e85a3` | Live-smoke fixes: portal menu/dialogs out of transformed ancestors (archived-row menu was off-viewport); CreateWorkspaceDialog AnimatePresence unkeyed-children React error storm (pre-existing) |
 | (3rd) | Phase B: G8 real task board in Desktop Tasks tab (server CRUD was UI-orphaned — add / cycle status / delete + memory signals); G5 creation copy "What project or area is this for?"; toStateItemViews key-collision fix (pre-existing live React errors) |
 
+| (4th) | Phase C2: artifact-first chat — completed write_file/edit_file blocks render as openable artifact cards (icon + name + Open in Files); AppDeepLink gains `path`; FilesApp consumes it (navigate + select + preview). C1 heartbeat digest verified ALREADY SHIPPED (setup-crons + proactive-handlers → notification eventBus → Home "Up next") |
+
 All flows live-verified in the running app (full lifecycle + task persistence,
-0 console errors). Gates: FE 956/956, server-local 931/931 + 9 lifecycle, tsc 0+0, lint clean.
+0 console errors). Gates: FE 964/964, server-local 931/931 + 9 lifecycle, tsc 0+0, lint clean.
 
 **Residuals:** G6 reorder/pin (P1, needs an `order` field — defer until demand);
 G9 evolution-run hang (separate debug arc); Phase B item "away-loop deepening"
-largely pre-existing (LoginBriefing already leads with away-summary); Phase C
-delight items unstarted.
+largely pre-existing (LoginBriefing already leads with away-summary). Phase C
+artifact card: live render against a REAL agent file-write not yet observed
+(historical sessions had no persisted tool blocks) — covered by 8 unit tests
+on the exact BlockRenderer path; worth one glance during the next real agent run.
 
 *Verified file evidence in section 3; recon agents' raw reports superseded by direct
 reads (two of their "CRITICAL missing screens" were stale-doc artifacts — Workspace
