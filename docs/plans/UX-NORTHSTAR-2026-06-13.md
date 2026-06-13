@@ -60,8 +60,9 @@ defect named: **manipulating workspaces is not possible**. Mental model to land:
 | G5 | "One project/area = one workspace" mental model not stated anywhere in UI copy | switcher/create dialog copy | P1 |
 | G6 | No workspace reorder/pin; no archived section | data model has no `order`; switcher flat | P1 |
 | G7 | Archived workspaces (once settable) would still show everywhere — list consumers don't filter status | switcher, home briefing | P0 (ships with G1) |
-| G8 | Tasks CRUD adapter gap; MCP logs disabled; cross-ws file copy stub | recon report | P2 |
+| G8 | Tasks CRUD adapter gap — server board (routes/tasks.ts) had full CRUD, zero adapter methods, read-only tab | verified | P1 |
 | G9 | /api/evolution/run hang (carried from 0613 S1) | prior handoff | P2 (separate arc) |
+| ~~G10~~ | ~~MCP logs disabled / ChatHost leak~~ — recon claims, did NOT verify against code (no disabled logs affordance in MCPHubApp; no interval/listener in ChatHost) | grep 2026-06-13 | dropped |
 
 ## 4. Plan
 
@@ -91,6 +92,22 @@ defect named: **manipulating workspaces is not possible**. Mental model to land:
 - G8 items; G9 evolution hang (separate debug arc).
 
 ---
+## 5. Shipped this session (2026-06-13 S2)
+
+| Commit | What |
+|---|---|
+| `1b8948d` | Phase A complete: G1-G4+G7 — WorkspaceActionsMenu (rename / archive·restore / export / type-to-confirm delete) on Home cards + switcher rows + Desktop header; server status/description on PUT+PATCH (validated) + PATCH audit parity; deleteWorkspace exposed through ShellContext; error-honest hooks; switcher + New workspace, Archived section, mental-model copy |
+| `c7e85a3` | Live-smoke fixes: portal menu/dialogs out of transformed ancestors (archived-row menu was off-viewport); CreateWorkspaceDialog AnimatePresence unkeyed-children React error storm (pre-existing) |
+| (3rd) | Phase B: G8 real task board in Desktop Tasks tab (server CRUD was UI-orphaned — add / cycle status / delete + memory signals); G5 creation copy "What project or area is this for?"; toStateItemViews key-collision fix (pre-existing live React errors) |
+
+All flows live-verified in the running app (full lifecycle + task persistence,
+0 console errors). Gates: FE 956/956, server-local 931/931 + 9 lifecycle, tsc 0+0, lint clean.
+
+**Residuals:** G6 reorder/pin (P1, needs an `order` field — defer until demand);
+G9 evolution-run hang (separate debug arc); Phase B item "away-loop deepening"
+largely pre-existing (LoginBriefing already leads with away-summary); Phase C
+delight items unstarted.
+
 *Verified file evidence in section 3; recon agents' raw reports superseded by direct
 reads (two of their "CRITICAL missing screens" were stale-doc artifacts — Workspace
 Desktop and Artifact Center both exist and are routed).*
