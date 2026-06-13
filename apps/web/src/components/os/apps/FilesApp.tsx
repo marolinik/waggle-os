@@ -14,7 +14,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import type { FileEntry, StorageType, Workspace } from '@/lib/types';
 import { adapter } from '@/lib/adapter';
-import { getFileIcon, formatSize, STORAGE_LABELS } from './files/file-utils';
+import { getFileIcon, formatSize, STORAGE_LABELS, normalizeWorkspacePath } from './files/file-utils';
 import { consumeDeepLink } from '@/lib/app-deeplink';
 import { useToast } from '@/hooks/use-toast';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
@@ -178,11 +178,16 @@ const FilesApp = ({
   useEffect(() => { refreshFiles(); }, [refreshFiles]);
 
   // C2 (UX-Northstar): chat artifact cards deep-link here with a file path —
-  // navigate to its directory, select it, and open the preview.
+  // navigate to its directory, select it, and open the preview. The path
+  // originates from an agent tool-call input, so it is UNTRUSTED: normalize
+  // lexically (strip ../.) before use so a traversal payload can't set a
+  // bogus currentPath/selection. The backend file store is the authoritative
+  // containment guard; this is defense-in-depth.
   useEffect(() => {
     const dl = consumeDeepLink('files');
     if (!dl?.path) return;
-    const filePath = dl.path.startsWith('/') ? dl.path : `/${dl.path}`;
+    const filePath = normalizeWorkspacePath(dl.path);
+    if (filePath === '/') return; // path resolved to root → nothing to preselect
     const parent = filePath.substring(0, filePath.lastIndexOf('/')) || '/';
     const name = filePath.split('/').pop() ?? filePath;
     setCurrentPath(parent);

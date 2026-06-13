@@ -31,6 +31,24 @@ export const formatSize = (bytes?: number): string => {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 };
 
+/**
+ * Lexically normalize a workspace-relative path into a safe absolute form,
+ * stripping `.`/`..`/empty segments so it can never escape the workspace root.
+ * Client-side defense-in-depth: the backend file store (resolveSafe in
+ * @waggle/core file-store.ts) is the authoritative traversal guard, but a
+ * deep-linked path (e.g. from a chat artifact card whose source is an agent
+ * tool-call input) must not set a `..`-laden currentPath/selection before the
+ * backend rejects it. Always returns a leading-slash path; '/' for empty.
+ */
+export const normalizeWorkspacePath = (input: string): string => {
+  const segments = input.split('/').reduce<string[]>((acc, seg) => {
+    if (seg === '..') acc.pop();
+    else if (seg && seg !== '.') acc.push(seg);
+    return acc;
+  }, []);
+  return '/' + segments.join('/');
+};
+
 export const STORAGE_LABELS: Record<StorageType, { label: string; icon: ElementType; color: string }> = {
   virtual: { label: 'Virtual', icon: Cloud, color: 'text-violet-400' },
   local: { label: 'Local', icon: HardDrive, color: 'text-emerald-400' },

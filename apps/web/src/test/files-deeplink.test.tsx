@@ -59,4 +59,31 @@ describe('Files deep-link (chat artifact → Open in Files)', () => {
     });
     expect(mocks.adapter.downloadFile).not.toHaveBeenCalled();
   });
+
+  // Security (push review MEDIUM): the deep-link path originates from an agent
+  // tool-call input — a traversal payload must be neutralized before it can set
+  // currentPath/selection or reach the adapter.
+  it('strips ../ traversal from a malicious deep-link path', async () => {
+    stashDeepLink({ appId: 'files', path: '/reports/../../etc/passwd' });
+    render();
+    await waitFor(() => {
+      // '/reports/../../etc/passwd' normalizes to '/etc/passwd' → parent '/etc'.
+      // No '..' ever reaches the adapter; backend resolveSafe is the hard guard.
+      expect(mocks.adapter.listFiles).toHaveBeenCalledWith('ws1', '/etc');
+    });
+    const calledPaths = mocks.adapter.listFiles.mock.calls.map(c => c[1]);
+    expect(calledPaths.some(p => String(p).includes('..'))).toBe(false);
+    const dlPaths = mocks.adapter.downloadFile.mock.calls.map(c => c[1]);
+    expect(dlPaths.some(p => String(p).includes('..'))).toBe(false);
+  });
+
+  it('a path that resolves to root preselects nothing', async () => {
+    stashDeepLink({ appId: 'files', path: '/reports/..' });
+    render();
+    await waitFor(() => {
+      expect(mocks.adapter.listFiles).toHaveBeenCalledWith('ws1', '/');
+    });
+    // Resolved to '/', so no file is selected/previewed.
+    expect(mocks.adapter.downloadFile).not.toHaveBeenCalled();
+  });
 });
