@@ -938,10 +938,11 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
 
             {/* ── Workspace Name ── */}
             <div>
-              <label className="text-xs text-muted-foreground block mb-1.5">Workspace Name</label>
-              <Input value={name} onChange={e => setName(e.target.value)} placeholder="My Workspace"
+              <label className="text-xs text-muted-foreground block mb-1.5">What project or area is this for?</label>
+              <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Acme Client, Q3 Launch, Home Renovation"
                 className="w-full bg-muted/50 rounded-xl"
                 autoFocus onKeyDown={e => e.key === 'Enter' && handleCreate()} />
+              <p className="text-[11px] text-muted-foreground/60 mt-1">One workspace per project or area — it builds its own memory as you work.</p>
             </div>
 
             {/* ── Group ── */}

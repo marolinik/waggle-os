@@ -18,7 +18,7 @@ import type {
   ModelPricing, WaggleSignal, FileEntry, WorkspaceTemplate,
   TimelineEvent,
   HomeBriefing, OvernightSummary, QuickCaptureInput,
-  WorkspaceStateView, WorkspaceActivityEvent,
+  WorkspaceStateView, WorkspaceActivityEvent, WorkspaceTask,
   Artifact, RelatedSearchResult,
   Agent, AgentTrace, Automation, AutomationLog,
 } from './types';
@@ -555,6 +555,28 @@ class LocalAdapter {
   async exportWorkspaceBriefing(id: string): Promise<Blob> {
     const res = await this.fetch(`/api/workspaces/${id}/export?format=briefing`);
     return res.blob();
+  }
+
+  // ── Workspace task board (routes/tasks.ts) — adapter methods were missing
+  //    entirely, leaving the server-side CRUD unreachable from the UI. ──
+  async getWorkspaceTasks(id: string): Promise<WorkspaceTask[]> {
+    const res = await this.fetch(`/api/workspaces/${id}/tasks`);
+    const data = await res.json();
+    return data.tasks ?? [];
+  }
+
+  async createWorkspaceTask(id: string, title: string): Promise<WorkspaceTask> {
+    const res = await this.fetch(`/api/workspaces/${id}/tasks`, { method: 'POST', body: JSON.stringify({ title }) });
+    return res.json();
+  }
+
+  async patchWorkspaceTask(id: string, taskId: string, data: Partial<Pick<WorkspaceTask, 'title' | 'status'>>): Promise<WorkspaceTask> {
+    const res = await this.fetch(`/api/workspaces/${id}/tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify(data) });
+    return res.json();
+  }
+
+  async deleteWorkspaceTask(id: string, taskId: string): Promise<void> {
+    await this.fetch(`/api/workspaces/${id}/tasks/${taskId}`, { method: 'DELETE' });
   }
 
   async getWorkspaceContext(id: string): Promise<WorkspaceContext> {

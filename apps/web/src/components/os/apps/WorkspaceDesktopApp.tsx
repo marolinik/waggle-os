@@ -42,6 +42,7 @@ import { humanizeActivitySummary } from '@/lib/activity-labels';
 import { useRoomState } from '@/hooks/useRoomState';
 import { useRevalidateOnError } from '@/hooks/useRevalidateOnError';
 import MemoryCenterTab from './memory/MemoryCenterTab';
+import TasksTab from './workspace/TasksTab';
 import WorkspaceActionsMenu from '../WorkspaceActionsMenu';
 import type {
   WorkspaceContext,
@@ -562,73 +563,8 @@ function TabPlaceholder({
   );
 }
 
-/** Tasks tab — full list seeded from WorkspaceState (C7). */
-function TasksTabBody({ state }: { state: WorkspaceStateView | null }) {
-  const pending = state?.pending ?? [];
-  const blocked = state?.blocked ?? [];
-  const completed = state?.completed ?? [];
-  const total = pending.length + blocked.length + completed.length;
-
-  if (total === 0) {
-    return (
-      <TabPlaceholder
-        icon={ListTodo}
-        title="No tasks yet"
-        body="Tasks are seeded from this workspace's active state — pending and blocked items will show here as work accrues."
-      />
-    );
-  }
-
-  return (
-    <div className="p-4 space-y-4 overflow-auto h-full" data-testid="ws-tasks-tab">
-      {blocked.length > 0 && (
-        <section>
-          <h3 className="text-xs font-display font-semibold text-destructive mb-2">
-            <AlertTriangle className="w-3.5 h-3.5 inline mr-1" />Blocked ({blocked.length})
-          </h3>
-          <ul className="space-y-1.5">
-            {blocked.map(t => (
-              <li key={t.id} className="flex items-start gap-2 text-xs p-2 rounded-lg bg-destructive/5 border border-destructive/20">
-                <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-destructive" />
-                <span className="text-foreground">{t.content}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      {pending.length > 0 && (
-        <section>
-          <h3 className="text-xs font-display font-semibold text-amber-400 mb-2">
-            <Circle className="w-3.5 h-3.5 inline mr-1" />Pending ({pending.length})
-          </h3>
-          <ul className="space-y-1.5">
-            {pending.map(t => (
-              <li key={t.id} className="flex items-start gap-2 text-xs p-2 rounded-lg bg-secondary/30 border border-border/30">
-                <Circle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-400" />
-                <span className="text-foreground">{t.content}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      {completed.length > 0 && (
-        <section>
-          <h3 className="text-xs font-display font-semibold text-emerald-400 mb-2">
-            <CheckCircle2 className="w-3.5 h-3.5 inline mr-1" />Completed ({completed.length})
-          </h3>
-          <ul className="space-y-1.5 opacity-70">
-            {completed.slice(0, 10).map(t => (
-              <li key={t.id} className="flex items-start gap-2 text-xs">
-                <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0 text-emerald-400" />
-                <span className="text-muted-foreground line-through">{t.content}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-    </div>
-  );
-}
+// Tasks tab body extracted to ./workspace/TasksTab.tsx (G8): the read-only
+// state-seeded list became a real task board (adapter CRUD) + memory signals.
 
 // ── Main shell ───────────────────────────────────────────────────────────
 
@@ -965,7 +901,7 @@ const WorkspaceDesktopApp = ({
             )
           )}
 
-          {activeTab === 'tasks' && <TasksTabBody state={state} />}
+          {activeTab === 'tasks' && <TasksTab workspaceId={workspaceId} state={state} />}
 
           {activeTab === 'research' && (
             <TabPlaceholder

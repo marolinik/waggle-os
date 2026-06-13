@@ -18,7 +18,8 @@ import os from 'node:os';
 import path from 'node:path';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { WorkspaceManager } from '@waggle/core';
-import { workspaceRoutes } from '../../src/local/routes/workspaces.js';
+import { workspaceRoutes, toStateItemViews } from '../../src/local/routes/workspaces.js';
+import type { StateItem } from '../../src/local/workspace-state.js';
 
 describe('workspace lifecycle routes', () => {
   let tmpDir: string;
@@ -122,6 +123,19 @@ describe('workspace lifecycle routes', () => {
       payload: { status: 'archived' },
     });
     expect(res.statusCode).toBe(404);
+  });
+
+  it('toStateItemViews produces unique ids when items share a sourceId', () => {
+    // Multiple completed items from one session all carry the same sourceId —
+    // the FE uses these ids as React keys, so collisions are a rendering bug
+    // (live-observed as `completed:default-workspace` duplicate-key errors).
+    const items: StateItem[] = [
+      { content: 'a', sourceId: 'default-workspace' },
+      { content: 'b', sourceId: 'default-workspace' },
+      { content: 'c' },
+    ] as StateItem[];
+    const ids = toStateItemViews(items, 'completed').map(v => v.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 
   it('DELETE closes the workspace mind, removes the directory, and 404s after', async () => {

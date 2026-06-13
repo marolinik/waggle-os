@@ -222,6 +222,19 @@ export interface WorkspaceTemplate {
   category?: TemplateCategory;
 }
 
+/** Workspace task-board item (server: routes/tasks.ts TeamTask, tasks.jsonl). */
+export interface WorkspaceTask {
+  id: string;
+  title: string;
+  status: 'open' | 'in_progress' | 'done';
+  assigneeId?: string;
+  assigneeName?: string;
+  creatorId?: string;
+  creatorName?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface WorkspaceContext {
   workspace: Workspace;
   summary?: string;

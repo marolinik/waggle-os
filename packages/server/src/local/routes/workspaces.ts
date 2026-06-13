@@ -80,14 +80,17 @@ function composeWorkspaceSummary(
 // `nextActions` as SuggestedAction[]. Map the server StateItem → that shape.
 
 /** Map a server StateItem list into the contract's `{ id, content, date?, freshness? }` rows. */
-function toStateItemViews(items: StateItem[], prefix: string): Array<{
+export function toStateItemViews(items: StateItem[], prefix: string): Array<{
   id: string;
   content: string;
   date?: string;
   freshness?: StateItem['freshness'];
 }> {
+  // Index suffix always: multiple items routinely share a sourceId (e.g. all
+  // completed items from one session), and the FE uses these ids as React
+  // keys — `prefix:sourceId` alone produced duplicate-key collisions.
   return items.map((item, i) => ({
-    id: item.sourceId ? `${prefix}:${item.sourceId}` : `${prefix}:${i}`,
+    id: item.sourceId ? `${prefix}:${item.sourceId}:${i}` : `${prefix}:${i}`,
     content: item.content,
     ...(item.dateLastTouched ? { date: item.dateLastTouched } : {}),
     ...(item.freshness ? { freshness: item.freshness } : {}),

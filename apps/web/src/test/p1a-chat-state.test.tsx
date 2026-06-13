@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => ({
     getWorkspaceActivity: vi.fn(),
     getTeamMembers: vi.fn(),
     getWorkspaceFiles: vi.fn(),
+    getWorkspaceTasks: vi.fn().mockResolvedValue([]),
   },
 }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));

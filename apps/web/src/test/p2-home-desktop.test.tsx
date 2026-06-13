@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
     getWorkspaceActivity: vi.fn(),
     getTeamMembers: vi.fn(),
     getWorkspaceFiles: vi.fn(),
+    getWorkspaceTasks: vi.fn().mockResolvedValue([]),
     listMemories: vi.fn(),
     patchMemory: vi.fn(),
     archiveMemory: vi.fn(),
