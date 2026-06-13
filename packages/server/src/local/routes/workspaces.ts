@@ -13,6 +13,9 @@ import { emitAuditEvent, getAuditDb } from './events.js';
 import { createLogger } from '../logger.js';
 const log = createLogger('workspaces');
 
+// G2 (UX-Northstar 2026-06-13): lifecycle statuses settable over PUT/PATCH
+const VALID_WORKSPACE_STATUSES = new Set(['active', 'paused', 'archived']);
+
 // BUG-R3-03: Known model IDs for validation
 /** Accept any reasonable model string — provider registry is the authority, not a hardcoded set */
 function isValidModelId(model: string): boolean {
@@ -752,7 +755,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
   // PUT /api/workspaces/:id — update workspace
   server.put<{
     Params: { id: string };
-    Body: { name?: string; group?: string; icon?: string; model?: string; personaId?: string | null; agentGroupId?: string | null; directory?: string; tone?: 'professional' | 'casual' | 'technical' | 'legal' | 'marketing'; budget?: number | null };
+    Body: { name?: string; group?: string; icon?: string; model?: string; personaId?: string | null; agentGroupId?: string | null; directory?: string; tone?: 'professional' | 'casual' | 'technical' | 'legal' | 'marketing'; budget?: number | null; status?: 'active' | 'paused' | 'archived'; description?: string };
   }>('/api/workspaces/:id', async (request, reply) => {
     assertSafeSegment(request.params.id, 'id');
     const existing = server.workspaceManager.get(request.params.id);
@@ -765,6 +768,9 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
         error: `Invalid model ID "${request.body.model}". Examples: claude-sonnet-4-6, gpt-4o, gemini-2.0-flash`,
 
       });
+    }
+    if (request.body.status !== undefined && !VALID_WORKSPACE_STATUSES.has(request.body.status)) {
+      return reply.status(400).send({ error: `Invalid status "${request.body.status}". Must be one of: active, paused, archived` });
     }
     const { personaId, agentGroupId, ...rest } = request.body;
     server.workspaceManager.update(request.params.id, {
@@ -779,7 +785,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
   // PATCH /api/workspaces/:id — partial update (same as PUT but PATCH method)
   server.patch<{
     Params: { id: string };
-    Body: { name?: string; group?: string; icon?: string; model?: string; personaId?: string | null; agentGroupId?: string | null; directory?: string; tone?: 'professional' | 'casual' | 'technical' | 'legal' | 'marketing'; budget?: number | null };
+    Body: { name?: string; group?: string; icon?: string; model?: string; personaId?: string | null; agentGroupId?: string | null; directory?: string; tone?: 'professional' | 'casual' | 'technical' | 'legal' | 'marketing'; budget?: number | null; status?: 'active' | 'paused' | 'archived'; description?: string };
   }>('/api/workspaces/:id', async (request, reply) => {
     assertSafeSegment(request.params.id, 'id');
     const existing = server.workspaceManager.get(request.params.id);
@@ -789,12 +795,16 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
     if (request.body.model && !isValidModelId(request.body.model)) {
       return reply.status(400).send({ error: `Invalid model ID "${request.body.model}"` });
     }
+    if (request.body.status !== undefined && !VALID_WORKSPACE_STATUSES.has(request.body.status)) {
+      return reply.status(400).send({ error: `Invalid status "${request.body.status}". Must be one of: active, paused, archived` });
+    }
     const { personaId, agentGroupId, ...rest } = request.body;
     server.workspaceManager.update(request.params.id, {
       ...rest,
       ...(personaId !== undefined ? { personaId: personaId ?? undefined } : {}),
       ...(agentGroupId !== undefined ? { agentGroupId: agentGroupId ?? undefined } : {}),
     });
+    emitAuditEvent(server, { workspaceId: request.params.id, eventType: 'workspace_update', input: JSON.stringify(request.body) });
     return server.workspaceManager.get(request.params.id);
   });
 

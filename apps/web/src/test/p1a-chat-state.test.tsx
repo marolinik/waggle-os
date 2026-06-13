@@ -34,6 +34,11 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
 vi.mock('@/hooks/useRoomState', () => ({ useRoomState: () => ({ workspaceMap: new Map() }) }));
+// WorkspaceActionsMenu (G1) reads ShellContext for patch/delete — these tests
+// render the desktop bare, so stub the shell surface the menu needs.
+vi.mock('@/providers/ShellContext', () => ({
+  useShell: () => ({ patchWorkspace: vi.fn().mockResolvedValue(true), deleteWorkspace: vi.fn().mockResolvedValue(true) }),
+}));
 
 import WorkspaceDesktopApp from '@/components/os/apps/WorkspaceDesktopApp';
 

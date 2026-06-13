@@ -26,6 +26,7 @@ import {
 import { adapter } from '@/lib/adapter';
 import { useOfflineStatus } from '@/hooks/useOfflineStatus';
 import { useService } from '@/providers/ServiceProvider';
+import WorkspaceActionsMenu from '../WorkspaceActionsMenu';
 import type {
   HomeBriefing,
   OvernightSummary,
@@ -159,11 +160,13 @@ function GreetingHeader({ greeting, date, offline }: { greeting: string; date: s
 
 // ── Recent workspaces ────────────────────────────────────────────────────
 function RecentWorkspacesPanel({
-  cards, onContinue, onOpenDesktop,
+  cards, onContinue, onOpenDesktop, onWorkspaceChanged,
 }: {
   cards: RecentWorkspaceCard[];
   onContinue: (id: string, sessionId?: string) => void;
   onOpenDesktop: (id: string) => void;
+  /** G1: reload the briefing after rename/archive/delete from a card's kebab. */
+  onWorkspaceChanged: () => void;
 }) {
   if (cards.length === 0) return null;
   return (
@@ -201,14 +204,21 @@ function RecentWorkspacesPanel({
                 )}
               </div>
             </button>
-            <button
-              type="button"
-              onClick={() => onContinue(ws.id, ws.continueSessionId)}
-              className="mt-2.5 inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-display rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
-              data-testid={`home-cockpit-continue-${ws.id}`}
-            >
-              Continue <ChevronRight className="w-3 h-3" />
-            </button>
+            <div className="mt-2.5 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => onContinue(ws.id, ws.continueSessionId)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-display rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                data-testid={`home-cockpit-continue-${ws.id}`}
+              >
+                Continue <ChevronRight className="w-3 h-3" />
+              </button>
+              <WorkspaceActionsMenu
+                workspace={{ id: ws.id, name: ws.name }}
+                onChanged={onWorkspaceChanged}
+                buttonClassName="opacity-0 group-hover:opacity-100 focus:opacity-100"
+              />
+            </div>
           </div>
         ))}
       </div>
@@ -615,6 +625,7 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
       )}
 
       <RecentWorkspacesPanel
+        onWorkspaceChanged={() => { void load(); }}
         cards={briefing.recentWorkspaces ?? []}
         onContinue={onContinue}
         onOpenDesktop={onOpenWorkspaceDesktop}

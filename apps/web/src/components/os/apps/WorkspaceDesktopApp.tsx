@@ -42,6 +42,7 @@ import { humanizeActivitySummary } from '@/lib/activity-labels';
 import { useRoomState } from '@/hooks/useRoomState';
 import { useRevalidateOnError } from '@/hooks/useRevalidateOnError';
 import MemoryCenterTab from './memory/MemoryCenterTab';
+import WorkspaceActionsMenu from '../WorkspaceActionsMenu';
 import type {
   WorkspaceContext,
   WorkspaceStateView,
@@ -841,22 +842,35 @@ const WorkspaceDesktopApp = ({
           )}
         </div>
 
-        {/* Members stack */}
-        <div className="flex items-center -space-x-2 shrink-0" data-testid="ws-members-stack">
-          {members.slice(0, 5).map(m => (
-            <span
-              key={m.id}
-              title={m.name}
-              className="w-6 h-6 rounded-full bg-primary/15 text-primary text-[10px] flex items-center justify-center font-display border border-background"
-            >
-              {initialsOf(m.name)}
-            </span>
-          ))}
-          {members.length > 5 && (
-            <span className="w-6 h-6 rounded-full bg-muted text-muted-foreground text-[10px] flex items-center justify-center font-display border border-background">
-              +{members.length - 5}
-            </span>
-          )}
+        {/* Members stack + workspace actions */}
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center -space-x-2" data-testid="ws-members-stack">
+            {members.slice(0, 5).map(m => (
+              <span
+                key={m.id}
+                title={m.name}
+                className="w-6 h-6 rounded-full bg-primary/15 text-primary text-[10px] flex items-center justify-center font-display border border-background"
+              >
+                {initialsOf(m.name)}
+              </span>
+            ))}
+            {members.length > 5 && (
+              <span className="w-6 h-6 rounded-full bg-muted text-muted-foreground text-[10px] flex items-center justify-center font-display border border-background">
+                +{members.length - 5}
+              </span>
+            )}
+          </div>
+          {/* G1 (UX-Northstar 2026-06-13): manage the workspace from its own header */}
+          <WorkspaceActionsMenu
+            workspace={{ id: workspaceId, name: displayName, status: wsStatus }}
+            onChanged={(action) => {
+              if (action === 'delete') {
+                window.dispatchEvent(new CustomEvent('waggle:open-app', { detail: { appId: 'home' } }));
+              } else {
+                retry();
+              }
+            }}
+          />
         </div>
       </header>
 

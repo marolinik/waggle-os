@@ -38,6 +38,11 @@ vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
 vi.mock('@/providers/ServiceProvider', () => ({ useService: () => ({ connecting: false, connected: true }) }));
 vi.mock('@/hooks/useOfflineStatus', () => ({ useOfflineStatus: () => false }));
 vi.mock('@/hooks/useRoomState', () => ({ useRoomState: () => ({ workspaceMap: new Map() }) }));
+// WorkspaceActionsMenu (G1) reads ShellContext for patch/delete — these tests
+// render screens bare, so stub the shell surface the menu needs.
+vi.mock('@/providers/ShellContext', () => ({
+  useShell: () => ({ patchWorkspace: vi.fn().mockResolvedValue(true), deleteWorkspace: vi.fn().mockResolvedValue(true) }),
+}));
 
 /** AdapterHttpError stand-in — components duck-type on error.name + status. */
 function httpError(status: number, message = `HTTP ${status}`) {

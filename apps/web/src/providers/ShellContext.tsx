@@ -55,6 +55,10 @@ export interface ShellContextValue {
   selectWorkspace: WorkspacesBundle['selectWorkspace'];
   createWorkspace: WorkspacesBundle['createWorkspace'];
   patchWorkspace: WorkspacesBundle['patchWorkspace'];
+  /** G3 (UX-Northstar 2026-06-13): existed in useWorkspaces but was never
+   *  forwarded by the P1a provider extraction — workspace delete was
+   *  unreachable from any UI. */
+  deleteWorkspace: WorkspacesBundle['deleteWorkspace'];
   refreshWorkspaces: WorkspacesBundle['refresh'];
   /** P1b D3: load-failure surface — an errored empty list must not render as "no workspaces". */
   workspacesError: WorkspacesBundle['error'];
@@ -102,7 +106,7 @@ export const useShell = () => {
 export const ShellProvider = ({ children }: { children: ReactNode }) => {
   const {
     workspaces, activeWorkspace, activeWorkspaceId,
-    selectWorkspace, createWorkspace, patchWorkspace, refresh: refreshWorkspaces,
+    selectWorkspace, createWorkspace, patchWorkspace, deleteWorkspace, refresh: refreshWorkspaces,
     error: workspacesError,
   } = useWorkspaces();
   const agentStatus = useAgentStatus();
@@ -163,7 +167,7 @@ export const ShellProvider = ({ children }: { children: ReactNode }) => {
   return (
     <ShellContext.Provider value={{
       workspaces, activeWorkspace, activeWorkspaceId,
-      selectWorkspace, createWorkspace, patchWorkspace, refreshWorkspaces, workspacesError,
+      selectWorkspace, createWorkspace, patchWorkspace, deleteWorkspace, refreshWorkspaces, workspacesError,
       currentTier, billingTier, tierResolved, tierError, trialInfo, refreshTier, showTrialExpired, setShowTrialExpired,
       defaultAutonomy,
       notifications, unreadCount, markRead, markAllRead,

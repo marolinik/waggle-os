@@ -57,19 +57,33 @@ export const useWorkspaces = () => {
     }
   }, []);
 
-  const deleteWorkspace = useCallback(async (id: string) => {
-    try { await adapter.deleteWorkspace(id); } catch (err) { console.error('[useWorkspaces] delete failed:', err); }
+  // G4 (UX-Northstar 2026-06-13): state mutates ONLY on server success — a failed
+  // delete/patch must not pretend it happened (error-as-empty antipattern).
+  // Returns success so menu-style callers can toast; legacy fire-and-forget
+  // callers (AppShell persona/group switch) keep working without throw.
+  const deleteWorkspace = useCallback(async (id: string): Promise<boolean> => {
+    try {
+      await adapter.deleteWorkspace(id);
+    } catch (err) {
+      console.error('[useWorkspaces] delete failed:', err);
+      return false;
+    }
     setWorkspaces(prev => prev.filter(w => w.id !== id));
     if (activeWorkspaceId === id) {
       setActiveWorkspaceId(workspaces.find(w => w.id !== id)?.id || null);
     }
+    return true;
   }, [activeWorkspaceId, workspaces]);
 
-  const patchWorkspace = useCallback(async (id: string, data: Partial<Pick<Workspace, 'persona' | 'agentGroupId' | 'name' | 'group' | 'model'>>) => {
+  const patchWorkspace = useCallback(async (id: string, data: Partial<Pick<Workspace, 'persona' | 'agentGroupId' | 'name' | 'group' | 'model' | 'status' | 'description'>>): Promise<boolean> => {
     try {
       await adapter.patchWorkspace(id, data);
-    } catch (err) { console.error('[useWorkspaces] patch failed:', err); }
+    } catch (err) {
+      console.error('[useWorkspaces] patch failed:', err);
+      return false;
+    }
     setWorkspaces(prev => prev.map(w => w.id === id ? { ...w, ...data } : w));
+    return true;
   }, []);
 
   const selectWorkspace = useCallback((id: string) => {

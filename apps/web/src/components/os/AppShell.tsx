@@ -346,6 +346,7 @@ const ShellLayout = () => {
       <WorkspaceSwitcher open={ov.showWorkspaceSwitcher} onClose={() => ov.setShowWorkspaceSwitcher(false)}
         workspaces={workspaces} activeWorkspaceId={activeWorkspaceId}
         error={workspacesError} onRetry={() => { void refreshWorkspaces(); }}
+        onCreateNew={() => ov.setShowCreateWorkspace(true)}
         onSelect={(id) => { selectWorkspace(id); navigate(`/workspaces/${id}`); }} />
       <NotificationInbox open={ov.showNotifications} onClose={() => ov.setShowNotifications(false)} notifications={notifications} onMarkRead={markRead} onMarkAllRead={markAllRead} />
       <KeyboardShortcutsHelp open={ov.showKeyboardHelp} onClose={() => ov.setShowKeyboardHelp(false)} />

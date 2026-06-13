@@ -542,13 +542,19 @@ class LocalAdapter {
     return res.json();
   }
 
-  async patchWorkspace(id: string, data: Partial<Pick<Workspace, 'persona' | 'agentGroupId' | 'templateId' | 'name' | 'group' | 'model'>>): Promise<Workspace> {
+  async patchWorkspace(id: string, data: Partial<Pick<Workspace, 'persona' | 'agentGroupId' | 'templateId' | 'name' | 'group' | 'model' | 'status' | 'description'>>): Promise<Workspace> {
     const res = await this.fetch(`/api/workspaces/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
     return res.json();
   }
 
   async deleteWorkspace(id: string): Promise<void> {
     await this.fetch(`/api/workspaces/${id}`, { method: 'DELETE' });
+  }
+
+  /** Markdown briefing export (GET /export?format=briefing) for download. */
+  async exportWorkspaceBriefing(id: string): Promise<Blob> {
+    const res = await this.fetch(`/api/workspaces/${id}/export?format=briefing`);
+    return res.blob();
   }
 
   async getWorkspaceContext(id: string): Promise<WorkspaceContext> {
