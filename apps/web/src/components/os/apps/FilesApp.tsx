@@ -15,6 +15,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import type { FileEntry, StorageType, Workspace } from '@/lib/types';
 import { adapter } from '@/lib/adapter';
 import { getFileIcon, formatSize, STORAGE_LABELS } from './files/file-utils';
+import { consumeDeepLink } from '@/lib/app-deeplink';
 import { useToast } from '@/hooks/use-toast';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 
@@ -175,6 +176,23 @@ const FilesApp = ({
   const haveCurrentData = loadedPath === currentPath;
 
   useEffect(() => { refreshFiles(); }, [refreshFiles]);
+
+  // C2 (UX-Northstar): chat artifact cards deep-link here with a file path —
+  // navigate to its directory, select it, and open the preview.
+  useEffect(() => {
+    const dl = consumeDeepLink('files');
+    if (!dl?.path) return;
+    const filePath = dl.path.startsWith('/') ? dl.path : `/${dl.path}`;
+    const parent = filePath.substring(0, filePath.lastIndexOf('/')) || '/';
+    const name = filePath.split('/').pop() ?? filePath;
+    setCurrentPath(parent);
+    setSelectedFiles(new Set([filePath]));
+    if (isPreviewable(name)) {
+      void openPreview({ name, path: filePath, type: 'file' } as FileEntry);
+    }
+    // Mount-only: the stash is read-and-clear; deps would replay a consumed link.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* ── Navigation ── */
   const handleNavigate = (path: string) => {

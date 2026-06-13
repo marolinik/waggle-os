@@ -3,6 +3,7 @@ import TextBlock from './TextBlock';
 import StepBlock from './StepBlock';
 import ToolUseBlock from './ToolUseBlock';
 import ModelSwitchBlock from './ModelSwitchBlock';
+import ArtifactBlock, { isArtifactBlock } from './ArtifactBlock';
 
 interface BlockRendererProps {
   blocks: ContentBlock[];
@@ -27,7 +28,12 @@ const BlockRenderer = ({ blocks, isStreaming }: BlockRendererProps) => {
           case 'step':
             return <StepBlock key={key} block={block} />;
           case 'tool_use':
-            return <ToolUseBlock key={key} block={block} />;
+            // C2: a completed file-write IS the deliverable — render an
+            // openable artifact card; in-flight/failed calls keep the
+            // generic tool row so progress and errors stay visible.
+            return isArtifactBlock(block)
+              ? <ArtifactBlock key={key} block={block} />
+              : <ToolUseBlock key={key} block={block} />;
           case 'model_switch':
             return <ModelSwitchBlock key={key} block={block} />;
           case 'error':

@@ -16,6 +16,9 @@ export interface AppDeepLink {
   /** J08: a list-filter to preselect in the target app (validated by the
    *  consumer — e.g. Memory Center seeds its status filter from this). */
   filter?: string;
+  /** C2 (UX-Northstar): a file path to preselect/preview — Files app
+   *  navigates to its directory and opens the preview (chat artifact cards). */
+  path?: string;
 }
 
 const pending = new Map<string, AppDeepLink>();
