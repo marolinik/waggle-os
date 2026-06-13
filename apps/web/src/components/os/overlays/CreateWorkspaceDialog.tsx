@@ -734,7 +734,10 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
 
   return (
     <AnimatePresence>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      {/* AnimatePresence assigns unkeyed children the implicit key '' — with
+          three siblings here that collided (React duplicate-key error on every
+          re-render while open). Each direct child needs an explicit key. */}
+      <motion.div key="create-workspace-dialog" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="fixed inset-0 z-[100] flex items-center justify-center" onClick={onClose}>
         <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
         <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
@@ -1102,10 +1105,11 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
         </motion.div>
       </motion.div>
 
-      <FolderPickerModal open={showFolderPicker} storageType={storageType} currentPath={storagePath}
+      <FolderPickerModal key="folder-picker" open={showFolderPicker} storageType={storageType} currentPath={storagePath}
         onSelect={(path) => setStoragePath(path)} onClose={() => setShowFolderPicker(false)} />
 
       <TemplateCreatorModal
+        key="template-creator"
         open={showTemplateCreator}
         onClose={() => { setShowTemplateCreator(false); setEditingTemplate(null); setDuplicatingTemplate(null); }}
         availableConnectors={connectorChipOptions}

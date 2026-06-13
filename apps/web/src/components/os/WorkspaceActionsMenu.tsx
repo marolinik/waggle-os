@@ -9,6 +9,7 @@
  * views (Home briefing) refresh via `onChanged`.
  */
 import { useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { MoreHorizontal, Pencil, Archive, ArchiveRestore, Download, Trash2 } from 'lucide-react';
 import ContextMenu, { type ContextMenuItem } from './ContextMenu';
 import { useShell } from '@/providers/ShellContext';
@@ -158,6 +159,11 @@ const WorkspaceActionsMenu = ({ workspace, onChanged, buttonClassName }: Workspa
         <MoreHorizontal className="w-4 h-4" />
       </button>
 
+      {/* Portal: hosts include transformed ancestors (the switcher modal's
+          framer-motion scale), which turn position:fixed into position-
+          relative-to-ancestor — the menu/dialogs must escape to the body
+          (same fix class as the dock-tray portal, 0de190f). */}
+      {createPortal(<>
       {menuPos && (
         <ContextMenu items={items} position={menuPos} onClose={() => setMenuPos(null)} />
       )}
@@ -230,6 +236,7 @@ const WorkspaceActionsMenu = ({ workspace, onChanged, buttonClassName }: Workspa
           </div>
         </div>
       )}
+      </>, document.body)}
     </>
   );
 };
