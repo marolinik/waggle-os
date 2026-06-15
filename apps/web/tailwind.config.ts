@@ -79,9 +79,15 @@ export default {
         'display': 'var(--text-display)',
       },
       borderRadius: {
+        xl: "var(--r-xl)",
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      fontFamily: {
+        sans: ["Hanken Grotesk", "Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
+        display: ["Hanken Grotesk", "Inter", "sans-serif"],
+        mono: ["JetBrains Mono", "Cascadia Code", "Fira Code", "ui-monospace", "monospace"],
       },
       keyframes: {
         "accordion-down": { from: { height: "0" }, to: { height: "var(--radix-accordion-content-height)" } },
@@ -100,8 +106,12 @@ export default {
         },
         /* ── Hive DS Animations ─────────────────────────────────────── */
         "honey-pulse": {
-          "0%, 100%": { boxShadow: "0 0 0 0 rgba(229, 160, 0, 0)" },
-          "50%": { boxShadow: "0 0 12px 4px rgba(229, 160, 0, 0.3)" },
+          "0%, 100%": { boxShadow: "0 0 0 0 rgba(233, 165, 44, 0)" },
+          "50%": { boxShadow: "0 0 12px 4px rgba(233, 165, 44, 0.3)" },
+        },
+        "breathe": {
+          "0%, 100%": { opacity: "1", transform: "scale(1)" },
+          "50%": { opacity: "0.55", transform: "scale(0.82)" },
         },
         "heartbeat": {
           "0%, 100%": { opacity: "1", transform: "scale(1)" },
@@ -136,6 +146,7 @@ export default {
         "fade-up": "fade-up 0.4s ease-out",
         /* ── Hive DS Animations ─────────────────────────────────────── */
         "honey-pulse": "honey-pulse 0.6s ease-in-out",
+        "breathe": "breathe 2.4s ease-in-out infinite",
         "heartbeat": "heartbeat 2s ease-in-out infinite",
         "float": "float 3s ease-in-out infinite",
         "hex-spin": "hex-spin 2s linear infinite",

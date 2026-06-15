@@ -78,8 +78,8 @@
     --waggle-text-muted: var(--text-muted);
     --waggle-border: hsl(var(--border));
 
-    /* ── Font stacks ──────────────────────────────────────────────── */
-    --font-sans: 'DM Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    /* ── Font stacks (warm-Hive: Hanken Grotesk display+body, JetBrains mono) ── */
+    --font-sans: 'Hanken Grotesk', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', ui-monospace, monospace;
   }
 }
@@ -130,4 +130,36 @@
 .waggle-press:active {
   transform: scale(0.97);
   transition: transform 0.08s ease;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Warm-Hive shared atoms (ported from design-files/styles/waggle.css)
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Hexagon clip — brandmark, agent/workspace avatars, icon tiles */
+.hex { clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%); }
+
+/* Honeycomb texture — very subtle, decorative only */
+.comb {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='98' viewBox='0 0 56 98'%3E%3Cpath d='M28 18.5l26 15v30l-26 15-26-15v-30z M28 53.5l26 15v30l-26 15-26-15v-30z' fill='none' stroke='%23e9a52c' stroke-opacity='0.05' stroke-width='1'/%3E%3C/svg%3E");
+}
+:root[data-theme="light"] .comb {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='98' viewBox='0 0 56 98'%3E%3Cpath d='M28 18.5l26 15v30l-26 15-26-15v-30z M28 53.5l26 15v30l-26 15-26-15v-30z' fill='none' stroke='%23b57d12' stroke-opacity='0.06' stroke-width='1'/%3E%3C/svg%3E");
+}
+
+/* Pill — small status / filter chip */
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 500; letter-spacing: 0.01em;
+  border: 1px solid var(--line); color: var(--text-2);
+  background: hsl(var(--card));
+}
+
+/* Kbd — keyboard hint chip */
+.kbd {
+  font-family: var(--font-mono); font-size: 11px;
+  padding: 2px 7px; border-radius: 6px;
+  border: 1px solid var(--line-strong); background: hsl(var(--secondary));
+  color: var(--text-2); box-shadow: 0 1px 0 var(--line);
 }

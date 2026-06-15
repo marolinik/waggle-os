@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -9,113 +9,111 @@
 
 @layer base {
   :root {
-    /* ── shadcn Core Variables ────────────────────────────────────────── */
-    --background: 222 20% 4%;
-    --foreground: 228 12% 92%;
-
-    --card: 222 18% 8%;
-    --card-foreground: 228 12% 92%;
-
-    --popover: 222 18% 8%;
-    --popover-foreground: 228 12% 92%;
-
-    --primary: 40 100% 45%;
-    --primary-foreground: 222 20% 4%;
-
-    --secondary: 222 16% 10%;
-    --secondary-foreground: 228 12% 92%;
-
-    --muted: 222 16% 10%;
-    --muted-foreground: 225 12% 65%;
-
-    --accent: 270 60% 68%;
-    --accent-foreground: 228 12% 92%;
-
-    --destructive: 0 72% 63%;
-    --destructive-foreground: 0 0% 100%;
-
-    --border: 222 14% 16%;
-    --input: 222 14% 16%;
-    --ring: 40 100% 45%;
-
-    --radius: 0.75rem;
-
-    /* ── Chart colors ─────────────────────────────────────────────────── */
-    --chart-1: 40 100% 45%;
-    --chart-2: 270 60% 68%;
-    --chart-3: 160 51% 49%;
-    --chart-4: 45 93% 56%;
-    --chart-5: 0 72% 63%;
-
-    /* ── Glass (web-specific) ─────────────────────────────────────────── */
-    --glass: 222 18% 8% / 0.7;
-    --glass-strong-bg: 222 18% 8% / 0.85;
-    --glass-border: 40 40% 30% / 0.3;
-    --glow: 40 100% 45%;
-
-    /* ── Sidebar ──────────────────────────────────────────────────────── */
-    --sidebar-background: 222 20% 4%;
-    --sidebar-foreground: 228 12% 92%;
-    --sidebar-primary: 40 100% 45%;
-    --sidebar-primary-foreground: 222 20% 4%;
-    --sidebar-accent: 222 16% 10%;
-    --sidebar-accent-foreground: 228 12% 92%;
-    --sidebar-border: 222 14% 16%;
-    --sidebar-ring: 40 100% 45%;
-
     /* ═══════════════════════════════════════════════════════════════════
-     * Hive DS Extended Palette
-     * Ported from app/src/styles/globals.css — canonical Hive Design System
+     * WARM-HIVE design tokens — default = warm graphite (dark)
+     * Source of truth: docs/design_handoff_waggle_app/design-files/styles/waggle.css
+     * The shadcn HSL core vars below are the warm-hex values converted to HSL
+     * channels, so the 57 themed shadcn/ui components restyle automatically.
      * ═══════════════════════════════════════════════════════════════════ */
 
-    /* ── Hive grays (cold undertone scale) ────────────────────────────── */
-    --hive-950: #08090c;
-    --hive-900: #0c0e14;
-    --hive-850: #11141c;
-    --hive-800: #171b26;
-    --hive-700: #1f2433;
-    --hive-600: #2a3044;
-    --hive-500: #3d4560;
-    --hive-400: #5a6380;
-    --hive-300: #7d869e;
-    --hive-200: #b0b7cc;
-    --hive-100: #dce0eb;
-    --hive-50:  #f0f2f7;
+    /* ── shadcn Core (warm) ───────────────────────────────────────────── */
+    --background: 40 29% 6%;          /* --bg        #14110b */
+    --foreground: 43 50% 93%;         /* --text      #f6f1e4 */
 
-    /* ── Honey scale ──────────────────────────────────────────────────── */
-    --honey-600: #b87a00;
-    --honey-500: #e5a000;
-    --honey-400: #f5b731;
-    --honey-300: #fcd34d;
-    --honey-200: #fde68a;
-    --honey-100: #fef3c7;
-    --honey-50:  #fffbeb;
-    --honey-glow: rgba(229, 160, 0, 0.12);
-    --honey-pulse: rgba(229, 160, 0, 0.06);
+    --card: 37 27% 10%;               /* --surface   #1f1a12 */
+    --card-foreground: 43 50% 93%;
 
-    /* ── Status colors ────────────────────────────────────────────────── */
+    --popover: 37 27% 10%;            /* --surface   #1f1a12 */
+    --popover-foreground: 43 50% 93%;
+
+    --primary: 38 81% 54%;            /* --honey     #e9a52c */
+    --primary-foreground: 41 58% 6%;  /*             #1a1407 */
+
+    --secondary: 38 26% 12%;          /* --surface-2 #272117 */
+    --secondary-foreground: 43 50% 93%;
+
+    --muted: 37 27% 15%;              /* --surface-3 #322a1d */
+    --muted-foreground: 42 13% 52%;   /* --text-muted #948a73 */
+
+    --accent: 38 26% 12%;             /* warm-neutral hover (was purple) */
+    --accent-foreground: 43 50% 93%;
+
+    --destructive: 13 62% 63%;        /* --risk      #db8068 */
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 41 29% 17%;             /* --line      #38301f */
+    --input: 41 29% 17%;
+    --ring: 38 81% 54%;               /* --honey     #e9a52c */
+
+    --radius: 0.75rem;                /* 12px = --r */
+
+    /* ── Chart colors (warm semantics) ────────────────────────────────── */
+    --chart-1: 38 81% 54%;            /* honey         */
+    --chart-2: 263 51% 73%;           /* intel #b196dd */
+    --chart-3: 146 34% 57%;           /* healthy #6cb78c */
+    --chart-4: 41 90% 66%;            /* honey-bright #f6c45a */
+    --chart-5: 13 62% 63%;            /* risk #db8068  */
+
+    /* ── Glass (web-specific) ──────────────────────────────────────────── */
+    --glass: 37 27% 10% / 0.7;
+    --glass-strong-bg: 37 27% 10% / 0.85;
+    --glass-border: 38 81% 45% / 0.28;
+    --glow: 38 81% 54%;
+
+    /* ── Sidebar ───────────────────────────────────────────────────────── */
+    --sidebar-background: 40 29% 6%;
+    --sidebar-foreground: 43 50% 93%;
+    --sidebar-primary: 38 81% 54%;
+    --sidebar-primary-foreground: 41 58% 6%;
+    --sidebar-accent: 38 26% 12%;
+    --sidebar-accent-foreground: 43 50% 93%;
+    --sidebar-border: 41 29% 17%;
+    --sidebar-ring: 38 81% 54%;
+
+    /* ═══════════════════════════════════════════════════════════════════
+     * Hive DS Extended Palette (warm)
+     * ═══════════════════════════════════════════════════════════════════ */
+
+    /* ── Hive grays — warm graphite scale ─────────────────────────────── */
+    --hive-950: #0e0c07;
+    --hive-900: #14110b;   /* = --bg          */
+    --hive-850: #1a160f;   /* = --bg-2        */
+    --hive-800: #1f1a12;   /* = --surface     */
+    --hive-700: #272117;   /* = --surface-2   */
+    --hive-600: #4a4030;   /* = --line-strong (scrollbar thumb) */
+    --hive-500: #6b6250;   /* = --text-dim    (scrollbar hover) */
+    --hive-400: #948a73;   /* = --text-muted  */
+    --hive-300: #c8bfa9;   /* = --text-2      */
+    --hive-200: #d8cfba;
+    --hive-100: #ece3d0;
+    --hive-50:  #f6f1e4;   /* = --text        */
+
+    /* ── Honey scale — the warm accent ────────────────────────────────── */
+    --honey-600: #c07e16;  /* deep   */
+    --honey-500: #e9a52c;  /* honey (the accent) */
+    --honey-400: #f6c45a;  /* bright */
+    --honey-300: #f9d27e;
+    --honey-200: #fbe0a8;
+    --honey-100: #fdeccb;
+    --honey-50:  #fef7e8;
+    --honey-glow: rgba(233, 165, 44, 0.12);
+    --honey-pulse: rgba(233, 165, 44, 0.06);
+
+    /* ── Status colors (kept AA-safe; desaturated --work/--intel/... below) ── */
     --status-healthy: #34d399;
     --status-warning: #fbbf24;
     --status-error: #f87171;
     --status-info: #60a5fa;
     --status-ai: #a78bfa;
 
-    /* ── UX-Refactor IA color semantics (PRD §19 / Blueprint design system) ──
-       Aliases to the status palette above so the new IA surfaces speak one
-       vocabulary: blue=work, purple=intelligence, green=healthy/complete,
-       orange=attention/automation, red=risk/failure. Defined as var()
-       indirections — they resolve lazily, so the light-theme --status-*
-       overrides flow through automatically (no per-theme duplication). */
+    /* ── IA color semantics (alias to status palette) ─────────────────── */
     --sem-work: var(--status-info);
     --sem-intelligence: var(--status-ai);
     --sem-healthy: var(--status-healthy);
     --sem-attention: var(--status-warning);
     --sem-risk: var(--status-error);
 
-    /* ── Knowledge-graph node colors ──────────────────────────────────────
-       Referenced via var(--kg-*, <fallback>) in KnowledgeGraphViewer.tsx /
-       kg-export.ts. Defined here (dark) so the token — not the inline fallback
-       — is the source of truth and the light block can override per theme. */
+    /* ── Knowledge-graph node colors ──────────────────────────────────── */
     --kg-person: #4A90D9;
     --kg-project: #50C878;
     --kg-concept: #9B59B6;
@@ -123,20 +121,20 @@
     --kg-default: #95A5A6;
 
     /* ── Semantic surfaces ────────────────────────────────────────────── */
-    --surface-card: var(--hive-850);
-    --surface-panel: var(--hive-800);
-    --surface-overlay: rgba(8, 9, 12, 0.88);
+    --surface-card: var(--hive-800);
+    --surface-panel: var(--hive-850);
+    --surface-overlay: rgba(20, 17, 11, 0.88);
     --surface-hover: var(--honey-pulse);
     --surface-selected: var(--honey-glow);
 
-    /* ── Shadows ──────────────────────────────────────────────────────── */
+    /* ── Named shadows (legacy components) + warm honey glow ──────────── */
     --shadow-card: 0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
     --shadow-elevated: 0 4px 16px rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.3);
     --shadow-overlay: 0 8px 32px rgba(0,0,0,0.7);
-    --shadow-honey: 0 0 24px rgba(229,160,0,0.12), 0 0 4px rgba(229,160,0,0.08);
-    --shadow-focus: 0 0 0 2px var(--honey-500), 0 0 8px rgba(229,160,0,0.2);
+    --shadow-honey: 0 0 0 1px rgba(233,165,44,0.25), 0 8px 30px -10px rgba(233,165,44,0.35);
+    --shadow-focus: 0 0 0 2px var(--honey-500), 0 0 8px rgba(233,165,44,0.2);
 
-    /* ── Type Scale ───────────────────────────────────────────────────── */
+    /* ── Type scale ───────────────────────────────────────────────────── */
     --text-micro: 11px;
     --text-caption: 12px;
     --text-body-sm: 13px;
@@ -145,91 +143,173 @@
     --text-heading: 20px;
     --text-display: 24px;
 
-    font-family: 'DM Sans', sans-serif;
+    /* ═══════════════════════════════════════════════════════════════════
+     * Warm-Hive named tokens (design source of truth — used by new screens)
+     * ═══════════════════════════════════════════════════════════════════ */
+    --bg-2:        #1a160f;
+    --line:        #38301f;
+    --line-soft:   #2a2417;
+    --line-strong: #4a4030;
+    --text-2:      #c8bfa9;
+
+    --honey:        #e9a52c;
+    --honey-bright: #f6c45a;
+    --honey-deep:   #c07e16;
+    --honey-wash:   rgba(233, 165, 44, 0.10);
+    --honey-line:   rgba(233, 165, 44, 0.28);
+
+    --work:      #7aa6d6;   /* dusty blue   — tasks / workspaces */
+    --intel:     #b196dd;   /* muted violet — intelligence / memory / provenance */
+    --healthy:   #6cb78c;   /* sage         — complete / healthy */
+    --attention: #e9a52c;   /* honey        — attention / automation */
+    --risk:      #db8068;   /* terracotta   — risk / failure */
+    --work-wash:    rgba(122, 166, 214, 0.12);
+    --intel-wash:   rgba(177, 150, 221, 0.12);
+    --healthy-wash: rgba(108, 183, 140, 0.12);
+    --risk-wash:    rgba(219, 128, 104, 0.12);
+
+    --shadow-sm:  0 1px 2px rgba(0,0,0,0.4);
+    --shadow:     0 4px 24px -8px rgba(0,0,0,0.55), 0 1px 2px rgba(0,0,0,0.4);
+    --shadow-lg:  0 24px 60px -20px rgba(0,0,0,0.7), 0 2px 8px rgba(0,0,0,0.4);
+    --shadow-pop: 0 30px 80px -24px rgba(0,0,0,0.8);
+
+    --r-sm: 8px;
+    --r:    12px;
+    --r-lg: 18px;
+    --r-xl: 26px;
+
+    --sans:  'Hanken Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --serif: var(--sans);
+    --mono:  'JetBrains Mono', ui-monospace, monospace;
+
+    color-scheme: dark;
+    font-family: var(--sans);
   }
 
-  /* ── Light theme ───────────────────────────────────────────────────── */
+  /* ── Warm-Hive light (warm paper) ──────────────────────────────────── */
   :root[data-theme="light"] {
-    --background: 40 18% 97%;
-    --foreground: 36 12% 10%;
-    --card: 40 12% 93%;
-    --card-foreground: 36 12% 10%;
-    --popover: 40 12% 93%;
-    --popover-foreground: 36 12% 10%;
+    /* ── shadcn Core (warm light) ─────────────────────────────────────── */
+    --background: 41 54% 93%;         /* --bg        #f7f1e4 */
+    --foreground: 38 32% 10%;         /* --text      #211b11 */
+    --card: 43 80% 99%;               /* --surface   #fffdf8 */
+    --card-foreground: 38 32% 10%;
+    --popover: 43 80% 99%;
+    --popover-foreground: 38 32% 10%;
 
-    --primary: 37 100% 39%;
+    --primary: 39 82% 39%;            /* --honey     #b57d12 */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 40 10% 89%;
-    --secondary-foreground: 36 12% 10%;
-    --muted: 40 10% 89%;
-    --muted-foreground: 36 8% 40%;
+    --secondary: 41 55% 92%;          /* --surface-2 #f6efe0 */
+    --secondary-foreground: 38 32% 10%;
+    --muted: 41 48% 88%;              /* --surface-3 #efe6d2 */
+    --muted-foreground: 41 14% 45%;   /* --text-muted #847a64 */
 
-    --accent: 270 60% 68%;
-    --accent-foreground: 36 12% 10%;
+    --accent: 41 55% 92%;             /* warm-neutral hover */
+    --accent-foreground: 38 32% 10%;
 
-    --destructive: 0 72% 63%;
+    --destructive: 12 52% 49%;        /* --risk      #c0573c */
     --destructive-foreground: 0 0% 100%;
 
-    --border: 40 8% 81%;
-    --input: 40 8% 81%;
-    --ring: 37 100% 39%;
+    --border: 41 41% 82%;             /* --line      #e4d8be */
+    --input: 41 41% 82%;
+    --ring: 39 82% 39%;
 
-    /* Light hive scale */
-    --hive-950: #fdfcf9;
-    --hive-900: #f8f6f0;
-    --hive-850: #f0ede4;
-    --hive-800: #e8e4d9;
-    --hive-700: #d9d4c5;
-    --hive-600: #c4bfae;
-    --hive-500: #9b9585;
-    --hive-400: #736d60;
-    --hive-300: #57524a;
-    --hive-200: #3a3630;
-    --hive-100: #1f1c18;
-    --hive-50:  #0e0d0a;
+    /* ── Chart colors (warm light) ────────────────────────────────────── */
+    --chart-1: 39 82% 39%;
+    --chart-2: 263 38% 53%;
+    --chart-3: 146 40% 39%;
+    --chart-4: 39 70% 44%;
+    --chart-5: 12 52% 49%;
 
-    /* Honey adjusts for contrast on light bg */
-    --honey-600: #a06800;
-    --honey-500: #c78500;
-    --honey-400: #e5a000;
-    --honey-glow: rgba(199, 133, 0, 0.08);
-    --honey-pulse: rgba(199, 133, 0, 0.04);
+    /* ── Hive grays — warm paper scale (inverts) ──────────────────────── */
+    --hive-950: #fffdf8;
+    --hive-900: #f7f1e4;   /* = --bg        */
+    --hive-850: #f1e9d8;   /* = --bg-2      */
+    --hive-800: #efe6d2;   /* = --surface-3 */
+    --hive-700: #e4d8be;   /* = --line      */
+    --hive-600: #d2c3a2;   /* = --line-strong */
+    --hive-500: #a99e85;   /* = --text-dim  */
+    --hive-400: #847a64;   /* = --text-muted */
+    --hive-300: #5a5140;   /* = --text-2    */
+    --hive-200: #3a3327;
+    --hive-100: #2a2419;
+    --hive-50:  #211b11;   /* = --text      */
 
-    /* Semantic surfaces */
-    --surface-card: var(--hive-850);
-    --surface-panel: var(--hive-800);
-    --surface-overlay: rgba(253, 252, 249, 0.92);
-    --surface-hover: rgba(199, 133, 0, 0.04);
-    --surface-selected: rgba(199, 133, 0, 0.08);
+    /* ── Honey (warm light) ───────────────────────────────────────────── */
+    --honey-600: #92620a;  /* deep   */
+    --honey-500: #b57d12;  /* honey  */
+    --honey-400: #cf932a;  /* bright */
+    --honey-300: #e0b25e;
+    --honey-200: #ecd09a;
+    --honey-100: #f5e6c7;
+    --honey-50:  #fbf4e3;
+    --honey-glow: rgba(181, 125, 18, 0.08);
+    --honey-pulse: rgba(181, 125, 18, 0.04);
 
-    /* Light glass */
-    --glass: 40 14% 96% / 0.78;
-    --glass-strong-bg: 40 14% 97% / 0.88;
-    --glass-border: 36 8% 50% / 0.18;
-
-    /* Status colors — darkened for ≥4.5:1 (WCAG AA text) on the cream surface.
-       Ratios vs hsl(40 18% 97%): healthy 5.16, warning 4.72, error 6.09,
-       info 6.30, ai 6.68. */
+    /* ── Status colors — darkened for ≥4.5:1 (WCAG AA) on the warm-paper
+       surface hsl(41 54% 93%) ≈ #f7f1e4. The orange tokens (warning, kg-org)
+       are deepened vs the prior cream so they clear AA on the (slightly
+       darker) design paper. Guarded by light-mode-tokens.test.ts. ──────────── */
     --status-healthy: #047857;
-    --status-warning: #b45309;
+    --status-warning: #a14a07;
     --status-error: #b91c1c;
     --status-info: #1d4ed8;
     --status-ai: #6d28d9;
 
-    /* Knowledge-graph node colors — darkened for AA on cream (ratios: person
-       6.30, project 5.16, concept 5.36, org 4.87, default 7.11). */
+    /* ── Knowledge-graph node colors — darkened for AA on warm paper ───── */
     --kg-person: #1d4ed8;
     --kg-project: #047857;
     --kg-concept: #7c3aed;
-    --kg-org: #c2410c;
+    --kg-org: #b03c0a;
     --kg-default: #4b5563;
 
-    /* Light shadows */
-    --shadow-card: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-    --shadow-elevated: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
-    --shadow-overlay: 0 8px 32px rgba(0,0,0,0.15);
-    --shadow-honey: 0 0 16px rgba(199,133,0,0.08), 0 0 4px rgba(199,133,0,0.04);
+    /* ── Semantic surfaces (light) ────────────────────────────────────── */
+    --surface-card: var(--hive-950);
+    --surface-panel: var(--hive-850);
+    --surface-overlay: rgba(247, 241, 228, 0.92);
+    --surface-hover: rgba(181, 125, 18, 0.04);
+    --surface-selected: rgba(181, 125, 18, 0.08);
+
+    /* ── Glass (light) ────────────────────────────────────────────────── */
+    --glass: 43 60% 98% / 0.78;
+    --glass-strong-bg: 43 60% 99% / 0.88;
+    --glass-border: 39 50% 45% / 0.22;
+
+    /* ── Shadows (warm light) ─────────────────────────────────────────── */
+    --shadow-card: 0 1px 3px rgba(60,45,20,0.06), 0 1px 2px rgba(60,45,20,0.04);
+    --shadow-elevated: 0 4px 12px rgba(60,45,20,0.08), 0 2px 4px rgba(60,45,20,0.04);
+    --shadow-overlay: 0 8px 32px rgba(60,45,20,0.15);
+    --shadow-honey: 0 0 0 1px rgba(181,125,18,0.22), 0 8px 30px -12px rgba(181,125,18,0.30);
+
+    /* ── Warm-Hive named tokens (light) ───────────────────────────────── */
+    --bg-2:        #f1e9d8;
+    --line:        #e4d8be;
+    --line-soft:   #ede3cd;
+    --line-strong: #d2c3a2;
+    --text-2:      #5a5140;
+
+    --honey:        #b57d12;
+    --honey-bright: #cf932a;
+    --honey-deep:   #92620a;
+    --honey-wash:   rgba(181, 125, 18, 0.10);
+    --honey-line:   rgba(181, 125, 18, 0.30);
+
+    --work:      #3f72b0;
+    --intel:     #7d57b8;
+    --healthy:   #3c8a5f;
+    --attention: #b57d12;
+    --risk:      #c0573c;
+    --work-wash:    rgba(63, 114, 176, 0.10);
+    --intel-wash:   rgba(125, 87, 184, 0.10);
+    --healthy-wash: rgba(60, 138, 95, 0.10);
+    --risk-wash:    rgba(192, 87, 60, 0.10);
+
+    --shadow-sm:  0 1px 2px rgba(60,45,20,0.06);
+    --shadow:     0 6px 24px -10px rgba(60,45,20,0.18), 0 1px 2px rgba(60,45,20,0.06);
+    --shadow-lg:  0 24px 60px -22px rgba(60,45,20,0.22), 0 2px 8px rgba(60,45,20,0.08);
+    --shadow-pop: 0 30px 80px -26px rgba(60,45,20,0.28);
+
+    color-scheme: light;
   }
 }
 
@@ -240,10 +320,13 @@
 
   body {
     @apply bg-background text-foreground overflow-hidden;
+    font-family: var(--sans);
+    line-height: 1.55;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: var(--sans);
+    letter-spacing: -0.02em;
   }
 }
 
@@ -271,7 +354,7 @@
   }
 
   .font-display {
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: var(--sans);
   }
 
   /* ── Desktop wallpaper overlay — stronger wash in light mode ────────── */
@@ -284,10 +367,10 @@
 
   /* ── Honeycomb background pattern (the hex mesh) ────────────────────── */
   .honeycomb-bg {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9z' fill='%23e5a000' fill-opacity='0.03'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9z' fill='%23e9a52c' fill-opacity='0.03'/%3E%3C/svg%3E");
   }
   :root[data-theme="light"] .honeycomb-bg {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9z' fill='%23b8860b' fill-opacity='0.06'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9z' fill='%23b57d12' fill-opacity='0.06'/%3E%3C/svg%3E");
   }
 
   /* ── Hex avatar clip path ───────────────────────────────────────────── */
@@ -298,27 +381,36 @@
 
 /* ── Selection ────────────────────────────────────────────────────────── */
 ::selection {
-  background: rgba(229, 160, 0, 0.3);
+  background: rgba(233, 165, 44, 0.28);
   color: hsl(var(--foreground));
 }
 
-/* ── Scrollbar — thin, minimal ────────────────────────────────────────── */
-::-webkit-scrollbar { width: 5px; height: 5px; }
+/* ── Focus ────────────────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--honey-500);
+  outline-offset: 2px;
+}
+
+/* ── Scrollbar — warm, thin ───────────────────────────────────────────── */
+::-webkit-scrollbar { width: 9px; height: 9px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
   background: var(--hive-600);
-  border-radius: 3px;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--hive-500);
+  background-clip: padding-box;
 }
 
 /* ── Hive Animations ──────────────────────────────────────────────────── */
 
 /* Honey pulse — memory save, badge update */
 @keyframes honey-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(229, 160, 0, 0); }
-  50% { box-shadow: 0 0 12px 4px rgba(229, 160, 0, 0.3); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(233, 165, 44, 0); }
+  50% { box-shadow: 0 0 12px 4px rgba(233, 165, 44, 0.3); }
 }
 .honey-pulse {
   animation: honey-pulse 0.6s ease-in-out;
@@ -331,6 +423,15 @@
 }
 .heartbeat {
   animation: heartbeat 2s ease-in-out infinite;
+}
+
+/* Breathe — live dot (active / running status) */
+@keyframes breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.82); }
+}
+.dot-live {
+  animation: breathe 2.4s ease-in-out infinite;
 }
 
 /* Float — bee mascot gentle hover */
