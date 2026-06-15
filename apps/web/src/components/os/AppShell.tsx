@@ -42,6 +42,7 @@ import { writeLoginBriefingDismissed, writeLoginBriefingLastDismissedAt } from '
 import { matchNavRoute, queryString, routeFor, routeForSearchResult } from '@/lib/routes';
 import { bootWindowStateMigration, indexLandingRoute } from '@/lib/window-state-migration';
 import { getDockForTier, type AppId, type DockEntry } from '@/lib/dock-tiers';
+import { buildCommandCatalog, type CatalogCommand } from '@/lib/command-catalog';
 import { ShellProvider, useShell } from '@/providers/ShellContext';
 import { seedChat, useChatWidgetState } from '@/hooks/useChatWidgetState';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
@@ -242,6 +243,16 @@ const ShellLayout = () => {
     return billingTier.charAt(0) + billingTier.slice(1).toLowerCase();
   }, [billingTier, trialInfo.trialDaysRemaining, trialInfo.trialExpired]);
 
+  // ⌘K curated catalog (Jump to / Do / Power tools + Pro "Pinned") → real routes.
+  const commandCatalog = useMemo(
+    () => buildCommandCatalog({ chatHref: routeFor('chat', { activeWorkspaceId }), isPro, billingRank }),
+    [activeWorkspaceId, isPro, billingRank],
+  );
+  const handleCatalogSelect = useCallback((cmd: CatalogCommand) => {
+    if (cmd.action === 'spawn') { ov.setShowSpawnAgent(true); return; }
+    if (cmd.to) navigate(cmd.to);
+  }, [navigate, ov]);
+
   // FR #33: when the onboarding wizard is active, render ONLY the wizard —
   // no nav, no canvas, no overlays (§1.2 OnboardingWizard row: full-screen
   // takeover at the layout level, any URL). Hooks above keep running so
@@ -309,6 +320,8 @@ const ShellLayout = () => {
           onNavigate={handleSearchNavigate}
           onExecute={() => { /* post-success hook — overlay closes itself; refresh feeds lazily */ }}
           workspaceId={activeWorkspaceId ?? undefined}
+          catalog={commandCatalog}
+          onCatalogSelect={handleCatalogSelect}
         />
       </AppErrorBoundary>
       <CreateWorkspaceDialog open={ov.showCreateWorkspace} onClose={() => ov.setShowCreateWorkspace(false)} onCreate={createWorkspace} />
