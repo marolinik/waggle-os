@@ -59,16 +59,16 @@ export function buildCommandCatalog(ctx: CatalogContext): CatalogGroup[] {
   const { chatHref, isPro, billingRank } = ctx;
 
   const jump: CatalogCommand[] = [
-    { id: "home", group: "jump", name: "Home", subtitle: "your daily briefing", icon: Home, to: "/home", meta: "G H" },
-    { id: "chat", group: "jump", name: "Chat", subtitle: "the work surface", icon: MessageSquare, to: chatHref, meta: "G C" },
-    { id: "memory", group: "jump", name: "Memory", subtitle: "what Waggle knows · provenance kept", icon: Brain, to: "/memory", meta: "G M" },
-    { id: "agents", group: "jump", name: "Agents & tasks", subtitle: "running · scheduled · finished", icon: ListTodo, to: "/agents", meta: "G A" },
-    { id: "library", group: "jump", name: "Library", subtitle: "artifacts · files · skills", icon: Library, to: "/artifacts", meta: "G L" },
+    { id: "home", group: "jump", name: "Home", subtitle: "your daily briefing", icon: Home, to: "/home" },
+    { id: "chat", group: "jump", name: "Chat", subtitle: "the work surface", icon: MessageSquare, to: chatHref },
+    { id: "memory", group: "jump", name: "Memory", subtitle: "what Waggle knows · provenance kept", icon: Brain, to: "/memory" },
+    { id: "agents", group: "jump", name: "Agents & tasks", subtitle: "running · scheduled · finished", icon: ListTodo, to: "/agents" },
+    { id: "library", group: "jump", name: "Library", subtitle: "artifacts · files · skills", icon: Library, to: "/artifacts" },
     { id: "profile", group: "jump", name: "Your profile", subtitle: "what Waggle knows about you", icon: UserCircle, to: "/settings/profile" },
   ];
 
   const doGroup: CatalogCommand[] = [
-    { id: "start-task", group: "do", name: "Start a task", subtitle: "new agent run", icon: Plus, action: "spawn", meta: "⌘N" },
+    { id: "start-task", group: "do", name: "Start a task", subtitle: "new agent run", icon: Plus, action: "spawn" },
     { id: "launch-agent", group: "do", name: "Launch a coding agent", subtitle: "Claude Code · Cursor · Codex — shares this hive", icon: Rocket, to: "/launcher" },
     { id: "settings", group: "do", name: "Settings", subtitle: "models · failover · permissions · plan", icon: Settings, to: "/settings" },
     { id: "upgrade", group: "do", name: "Upgrade to Pro", subtitle: "plans · billing · invoices", icon: Sparkles, to: "/settings" },

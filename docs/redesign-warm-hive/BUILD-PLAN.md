@@ -174,3 +174,18 @@ from ⌘K; active-state highlight via `matchNavRoute`.
 - `next-themes` is a dependency but unused; PR1 either adopts or removes it.
 - All 19 screen HTMLs + per-screen "ship this variation" notes are in
   `docs/design_handoff_waggle_app/SCREENS.md` — consult per PR.
+
+## 9. PR1 adversarial-review follow-ups (deferred LOW, tracked)
+A 17-agent adversarial review of PR1 confirmed 10 findings; 8 were fixed in-PR
+(1 HIGH light-mode honey-button contrast + WCAG ratchet extension, 1 MEDIUM
+spine/pinned `/approvals` double-active collision, duplicate Agents/swarm badge,
+unbacked ⌘K shortcut hints, platform-aware ⌘K glyph). Two LOW items are
+deferred to PR3 with rationale:
+- **Chat spine item, no-workspace state** — `routeFor('chat')` falls back to
+  `/home` when there's no real workspace, so the clicked Chat item isn't
+  highlighted (Home wins). Semi-intentional: Home **is** the workspace selector
+  (`routes.ts` §9.7). PR3 can dim Chat or route it to the workspace switcher
+  when `!hasRealActiveWorkspace`.
+- **Sidebar user row `userName={null}`** — renders "Account" + "W" avatar. A real
+  display name exists in the `/api/home/briefing` contract (`HomeBriefing.userName`);
+  thread it through when the user-identity surface lands (PR3).

@@ -221,19 +221,19 @@ const ShellLayout = () => {
     { key: 'home', label: 'Home', icon: Home, to: '/home', match: ['/home'] },
     { key: 'chat', label: 'Chat', icon: MessageSquare, to: routeFor('chat', { activeWorkspaceId }), match: ['/workspaces'] },
     { key: 'memory', label: 'Memory', icon: Brain, to: '/memory', match: ['/memory'] },
-    { key: 'agents', label: 'Agents & tasks', icon: ListTodo, to: '/agents', match: ['/agents', '/automations', '/approvals'], badge: waggleUnacknowledged || undefined },
+    { key: 'agents', label: 'Agents & tasks', icon: ListTodo, to: '/agents', match: ['/agents', '/automations'], badge: waggleUnacknowledged || undefined },
     { key: 'library', label: 'Library', icon: Library, to: '/artifacts', match: ['/artifacts', '/files', '/skills'] },
   ], [activeWorkspaceId, waggleUnacknowledged]);
   const pinned: SidebarNavItem[] = useMemo(() => {
     if (!isPro) return [];
     const items: SidebarNavItem[] = [
-      { key: 'swarm', label: 'Agent swarm', icon: Network, to: '/waggle-dance', match: ['/waggle-dance'], badge: waggleUnacknowledged || undefined },
+      { key: 'swarm', label: 'Agent swarm', icon: Network, to: '/waggle-dance', match: ['/waggle-dance'] },
       { key: 'connectors', label: 'Connectors', icon: Plug, to: '/connectors', match: ['/connectors'] },
     ];
     // Approvals is a TEAMS-tier surface (parity with dock-tiers minBillingTier).
     if (billingRank >= 3) items.push({ key: 'approvals', label: 'Approvals', icon: Shield, to: '/approvals', match: ['/approvals'] });
     return items;
-  }, [isPro, billingRank, waggleUnacknowledged]);
+  }, [isPro, billingRank]);
 
   // Plan label for the user row (e.g. "Trial · 9d", "Pro").
   const tierLabel = useMemo(() => {

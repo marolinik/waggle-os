@@ -197,7 +197,7 @@
     --popover-foreground: 38 32% 10%;
 
     --primary: 39 82% 39%;            /* --honey     #b57d12 */
-    --primary-foreground: 0 0% 100%;
+    --primary-foreground: 41 58% 6%;  /* #1a1407 — dark ink on honey (design §3.2; AA 5.15:1) */
 
     --secondary: 41 55% 92%;          /* --surface-2 #f6efe0 */
     --secondary-foreground: 38 32% 10%;

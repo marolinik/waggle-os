@@ -53,6 +53,12 @@ const Sidebar = ({
 }: SidebarProps) => {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  // Platform-aware ⌘K hint — a ⌘ glyph on Windows is a key the keyboard lacks
+  // (mirrors CommandCenter's footer; Waggle ships on Windows + macOS).
+  const cmdKLabel =
+    typeof navigator !== "undefined" && navigator.platform?.toLowerCase().includes("mac")
+      ? "⌘K"
+      : "Ctrl K";
 
   const isActive = (item: SidebarNavItem): boolean =>
     item.match.some((p) => pathname === p || pathname.startsWith(`${p}/`));
@@ -141,7 +147,7 @@ const Sidebar = ({
         <Search className="h-[18px] w-[18px] shrink-0" strokeWidth={1.7} />
         <span className="flex-1 text-[13px] font-semibold">Search &amp; commands</span>
         <kbd className="rounded-md border border-[var(--line-strong)] bg-card px-[7px] py-0.5 font-mono text-[11px] text-[var(--text-2)]">
-          ⌘K
+          {cmdKLabel}
         </kbd>
       </button>
 
