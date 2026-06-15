@@ -1,0 +1,481 @@
+% =====================================================================
+% Hive Mind: LoCoMo SOTA paper — arXiv DRAFT v0.1 (2026-06-12)
+% Compile: pdflatex main / latexmk -pdf
+% Source of truth for all numbers: benchmarks/results/memori-phase22-RESULT.md
+% and docs/plans/MEMORY-SOTA-PROPOSAL-2026-06-10.md (corrected baselines).
+% DRAFT STATUS: numbers verified against the result record; author list,
+% affiliation footnotes, and bibliography keys need a final pass.
+% =====================================================================
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{graphicx}
+\usepackage[hidelinks]{hyperref}
+\usepackage{xcolor}
+\usepackage{enumitem}
+
+\newcommand{\system}{Hive Mind}
+\newcommand{\best}[1]{\textbf{#1}}
+
+\title{\system: A Fully Local, Layered Memory Substrate Achieves\\
+State-of-the-Art Long-Term Conversational Memory on LoCoMo}
+
+\author{
+  Marko Markovi\'c\\
+  Egzakta Group\\
+  \texttt{marko.markovic@egzakta.com}
+  % TODO: final author list / contributors footnote
+}
+
+\date{June 2026 — DRAFT v0.1, not yet submitted}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We present \system, a fully local long-term memory substrate for
+conversational agents: SQLite-backed frame storage with hybrid
+vector+lexical retrieval, write-time memory distillation, and a
+multi-lane context assembler --- no cloud services on the memory path.
+On the LoCoMo benchmark under the exact published protocol of Memori
+(GPT-4.1-mini answerer and judge, $N{=}1{,}540$ questions), \system{}
+scores \best{87.66\%} overall --- \best{+5.71pp} above the best
+previously published memory system (Memori, 81.95\%; one-sample
+$z{=}4.42$, $p{<}10^{-5}$) --- and leads or ties every question
+category among memory systems, with open-domain accuracy statistically
+indistinguishable from the full-context ceiling. We reproduce Memori's
+own pipeline to within 0.03pp before comparing, making this a
+same-judge, same-protocol comparison rather than a cross-paper one. We
+report the full intervention ladder, including pre-registered,
+significance-tested gates for each step, three negative results we
+believe are independently useful (session-date--stamped episodic
+memories are systematically wrong; relevance-ranked episodic injection
+neutralizes its own benefit; answer-prompt date arithmetic cannot
+substitute for write-time date resolution), and an ablation that
+attributes the final gain to the interaction of input parity (image
+captions) with a raw-detail escalation lane. We also document a
+column-scrambling error in the baseline table of the Memori paper that
+has propagated through recent literature, and re-derive the corrected
+field. The substrate, including the benchmark harness, is open source.
+Token cost (3{,}747 tokens/question vs.\ Memori's 1{,}294) remains the
+one axis where prior work dominates; we discuss the planned packing
+work.
+\end{abstract}
+
+% =====================================================================
+\section{Introduction}
+% =====================================================================
+
+Long-term memory is the load-bearing capability for personal AI
+assistants: a system that cannot remember what its user told it three
+weeks ago cannot act as a durable collaborator. The LoCoMo benchmark
+\cite{locomo} evaluates exactly this --- question answering over very
+long multi-session dialogues --- and has become the de facto ruler for
+memory systems, with published results for Mem0 \cite{mem0}, Zep
+\cite{zep}, LangMem, and most recently Memori \cite{memori}, which
+reported state-of-the-art accuracy at low token cost.
+
+This paper makes four contributions:
+
+\begin{enumerate}[leftmargin=1.4em]
+\item \textbf{A SOTA result under a reproduced protocol.} We score
+  \best{87.66\%} overall on LoCoMo under Memori's own published
+  protocol and judge, $+5.71$pp over Memori's 81.95\% ($z{=}4.42$,
+  $p{<}10^{-5}$), leading every category among memory systems
+  (Table~\ref{tab:field}). Before comparing, we reproduced Memori's
+  own released pipeline to 81.98\% vs.\ their published 81.95\% ---
+  the comparison is same-judge and same-protocol, not cross-paper.
+\item \textbf{A fully local substrate.} All memory operations ---
+  storage, embedding, retrieval, reranking, distillation --- run
+  locally (SQLite + sqlite-vec, FTS5, Ollama embeddings, in-process
+  ONNX cross-encoder). No memory content leaves the machine. To our
+  knowledge this is the strongest published LoCoMo result for a
+  system with this deployment property.
+\item \textbf{A disciplined experimental ladder with negative
+  results.} Every intervention was gated by a full-$N$
+  two-proportion $z$-test against the previous configuration; bundled
+  changes that failed attribution were decomposed and re-run. We
+  report what failed as well as what worked
+  (Section~\ref{sec:ladder}).
+\item \textbf{A correction to the published field.} The baseline rows
+  of Memori's comparison table are column-scrambled relative to their
+  source (Du et al.\ \cite{memr3}); e.g.\ LangMem's published
+  ``temporal 86.92'' is actually its single-hop score (its true
+  temporal score is 61.06). We re-derive the corrected landscape
+  (Section~\ref{sec:correction}).
+\end{enumerate}
+
+% =====================================================================
+\section{Related work}
+% =====================================================================
+
+\textbf{Memory systems on LoCoMo.} Mem0 \cite{mem0} extracts and
+consolidates atomic facts; Zep \cite{zep} builds a temporal knowledge
+graph (Graphiti) with entity summaries; LangMem maintains structured
+profiles; Memori \cite{memori} stores timestamped triples and
+retrieves them into a lean single-message prompt, reporting 81.95\%
+overall --- the best published memory-system score prior to this work.
+Hindsight \cite{hindsight} reported 85.67\% with a local answering
+model under a related but not identical protocol. MemR3 \cite{memr3}
+is an agentic reflective-retrieval pipeline (multiple retrieval rounds
+at answer time) rather than a memory substrate; we cite its numbers
+but class it separately.
+
+\textbf{Where \system{} differs.} Most systems above commit to one
+dominant representation (triples, graph, profiles, atomic facts).
+\system{} layers several representations over a common frame store and
+lets the context assembler draw from each in a fixed order of
+authority. The results suggest the categories of LoCoMo are won by
+\emph{different} representations --- profiles win open-domain
+synthesis, dated episodic timelines win temporal, verbatim raw detail
+wins fine-grained single-hop --- and a substrate that can serve all of
+them simultaneously outperforms any single-representation system.
+
+% =====================================================================
+\section{The \system{} substrate}
+\label{sec:system}
+% =====================================================================
+
+\subsection{Storage and retrieval core}
+
+Memory is stored as \emph{frames} (typed text records with importance,
+creation time, and provenance) in SQLite. Retrieval is hybrid:
+dense vectors (sqlite-vec; Ollama \texttt{nomic-embed-text}
+embeddings) fused with FTS5 BM25 lexical search, with chunk-level
+embedding for frames that exceed the embedder's effective window, and
+an in-process ONNX cross-encoder for final reranking. Long frames are
+chunked at $\sim$2{,}000 characters; chunk-level retrieval was
+validated on deep-position needle probes (hit@5 46/52 vs.\ 17/52 for
+whole-frame embedding; McNemar $p{\approx}2{\times}10^{-8}$).
+
+\subsection{Write-time distillation}
+
+At ingest, local LLM passes distill three derived layers from raw
+conversation:
+\begin{itemize}[leftmargin=1.4em]
+\item \textbf{Distilled facts} --- atomic preferences, decisions,
+  attributes, each dated.
+\item \textbf{Episodic events} --- datable things that happened, with
+  \emph{write-time relative-date resolution}: ``I went hiking
+  yesterday'' in a session dated 8~May~2023 is stored as an event on
+  \emph{7~May~2023}, not on the session date
+  (Section~\ref{sec:ladder}, P4).
+\item \textbf{Profile cards} --- a rolling abstractive profile per
+  speaker, updated incrementally.
+\end{itemize}
+Raw turns are additionally stored verbatim (per-turn frames keyed by
+conversation and turn index), which enables the escalation lane below.
+
+\subsection{The multi-lane context assembler}
+
+At question time the assembler renders up to seven lanes, in order:
+(1) \emph{profile cards}; (2) \emph{distilled facts}, date-prefixed;
+(3) \emph{episodic events}, rendered as a wholesale chronological
+timeline (deliberately \emph{not} relevance-ranked --- see the P5
+negative result); (4) a \emph{date-window lane} --- when the question
+names an explicit period, a deterministic parser converts it to
+since/until filters and surfaces the events inside that window; (5) an
+\emph{importance lane} (critical/important frames regardless of
+semantic match); (6) \emph{semantic snippets} --- hybrid-retrieval
+top-$K$ frames, cross-encoder reranked, date-prefixed; and (7) a
+\emph{raw-detail escalation lane} --- a pool of verbatim raw turns
+(date-window-restricted when the question names a period, else BM25
+top-60), cross-encoder reranked to top-6, expanded by $\pm1$ dialogue
+neighbors (gold answers frequently sit adjacent to the best-matching
+turn --- question--answer adjacency), rendered last as
+``raw dialogue excerpts.''
+
+\subsection{Answer policy}
+
+The answering prompt adds: conditional abstention (committed
+best-effort inference on speculative questions; abstention retained
+for factual ones), granularity-calibrated dates (exact day only when
+explicitly stated), duration brevity, commit-to-one-option on
+either/or questions, and parametric-knowledge gating for
+world-knowledge bridging questions.
+
+% =====================================================================
+\section{Experimental setup}
+% =====================================================================
+
+\textbf{Benchmark.} LoCoMo: 10 very-long multi-session conversations;
+$N{=}1{,}540$ questions in four categories --- single-hop (841),
+multi-hop (282), temporal (321), open-domain (96). Following Memori's
+protocol the adversarial category is excluded.
+
+\textbf{Protocol.} GPT-4.1-mini as both answerer and judge
+(LLM-as-judge), exactly as released in Memori's notebooks. We first
+reproduced Memori's own pipeline end-to-end: our run of their nb02
+scores 81.98\% vs.\ their published 81.95\%, validating the harness
+before any comparison. Image-sharing turns are ingested with their
+caption text (\texttt{[Shared image: \dots]}), matching Memori's
+published ingest (Section~\ref{sec:ladder}, W3.3).
+
+\textbf{Statistics.} Each intervention was gated on a full-$N$ re-run
+scored by the same judge, evaluated with two-proportion $z$-tests
+against the previous configuration; the headline comparison to
+Memori's published score uses a one-sample $z$-test at $N{=}1{,}540$.
+We explicitly did not use mid-run proxies after two early proxy
+readings proved spurious. Per-question answers and judgments for every
+wave are archived.
+
+\textbf{Cost.} Each full evaluation cycle (1{,}540 answers + 1{,}540
+judgments, both arms where applicable) cost ${\sim}\$6$ in
+GPT-4.1-mini API usage. All substrate-side computation ran locally.
+
+% =====================================================================
+\section{The intervention ladder}
+\label{sec:ladder}
+% =====================================================================
+
+Table~\ref{tab:ladder} summarizes the arc. We highlight the
+mechanistically interesting steps, including the negative results.
+
+\begin{table}[t]
+\centering
+\small
+\caption{Milestone ladder on LoCoMo ($N{=}1{,}540$, GPT-4.1-mini
+answerer+judge, same harness throughout). All accuracy in \%.}
+\label{tab:ladder}
+\begin{tabular}{lcccccc}
+\toprule
+Configuration & single & multi & temporal & open & \textbf{overall} & tok/q\\
+\midrule
+Memori (published) & 87.87 & 72.70 & 80.37 & 63.54 & 81.95 & \best{1{,}294}\\
+\midrule
+P4: write-time date resolution & 88.59 & 79.43 & 80.06 & 60.42 & 83.38 & 2{,}742\\
+W1: + answer policy & 89.18 & 79.43 & 81.62 & 67.71 & 84.48 & 2{,}742\\
+W2a: + profile cards & 88.11 & 79.79 & 83.80 & 70.83 & 84.61 & 3{,}069\\
+W3.1: + date-window lane & 88.23 & 80.85 & 84.74 & 69.79 & 85.00 & 3{,}076\\
+\textbf{W3.3: + captions + raw-detail lane} & \best{92.75} & \best{82.98} & 83.49 & 70.83 & \best{87.66} & 3{,}747\\
+\midrule
+Full-context ceiling & 93.73 & 86.43 & 86.82 & 71.88 & --- & ---\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Negative result 1: session-date--stamped episodic memory
+is systematically wrong (P2.2)}
+
+Our first episodic layer stamped events with the \emph{session} date
+(when the event was discussed). Most ``when did X happen?'' questions
+concern events recounted in past tense, so the stored date is wrong by
+the unresolved relative reference (``yesterday'' $\Rightarrow$
+session\_date $-$ 1). The layer was inert at best and misleading at
+worst: temporal accuracy was byte-identical with the layer on or off,
+and open-domain dropped 9.4pp from context crowding. Any system that
+timestamps memories with ingestion time inherits this defect.
+
+\subsection{P4: write-time relative-date resolution closes the
+temporal gap}
+
+Re-extracting episodic events while resolving relative cues
+(``yesterday,'' ``last Saturday,'' ``last year'') against the session
+date --- storing the \emph{true event date} --- lifted temporal
+accuracy to 80.06\%, statistically indistinguishable from Memori's
+80.37\% ($z{=}{-}0.14$), while multi-hop rose to 79.43\% (best in
+field). This is the design-level vindication of write-time dating: by
+contrast LangMem's extractor never receives conversation timestamps,
+and its corrected temporal score is 61.06\% (Section~\ref{sec:correction}).
+
+\subsection{Negative result 2: relevance-ranking episodic memory
+neutralizes it (P5)}
+
+Replacing the wholesale chronological episodic block with
+cross-encoder top-$K$ injection (only events relevant to the question)
+made the system behave as if the layer were \emph{off} --- every
+P5-vs-no-episodic delta was ${\approx}0$. The temporal benefit comes
+from the full block acting as a \emph{dated timeline scaffold} the
+model uses to anchor events in time, not from individually relevant
+events; the open-domain crowding cost and the temporal benefit are the
+same mechanism and cannot be separated by relevance filtering. We
+believe this is a general caution for memory systems that aggressively
+filter context by query relevance.
+
+\subsection{Negative result 3: answer-prompt date arithmetic cannot
+substitute for substrate dating (P3)}
+
+Before P4, we ported explicit relative-date-arithmetic instructions
+(with worked examples) into the answer prompt. Temporal moved
+$+2.18$pp ($z{=}0.65$, ns) --- the lever was exhausted at the prompt
+level. The information has to be correct \emph{in the substrate};
+asking the model to repair it at answer time does not work.
+
+\subsection{W1--W3.1: answer policy, profile cards, date-window lane}
+
+Answer-policy fixes (W1) recovered the measured ``prompt tax'' ---
+notably 16/34 open-domain failures were guaranteed-zero abstentions on
+speculative questions --- lifting open-domain $+7.3$pp and crossing
+the first significance milestone vs.\ Memori (84.48\%, $z{=}2.58$,
+$p{<}0.01$). Per-speaker profile cards (W2a) added the open-domain
+synthesis layer (70.83\%, statistically at the full-context ceiling of
+71.88\%, $z{=}{-}0.23$) after a bundled W2 attempt failed its gate and
+was decomposed --- the bundled episodic-v2 rewrite had over-coarsened
+date labels and was reverted. The deterministic date-window lane
+(W3.1) reached 85.00\% overall ($z{=}3.11$ vs.\ Memori). An
+enumeration-instruction variant (W3.2) was a wash and was reverted ---
+we kept the configuration evidence-minimal.
+
+\subsection{W3.3: input parity + raw-detail escalation --- the final
+step}
+\label{sec:w33}
+
+Failure mining of the remaining single-hop errors showed the gold
+answers frequently lived in \emph{image captions}: Memori's published
+ingest prepends \texttt{[Shared image: \dots]} caption text to every
+image-sharing turn, while our ingest had used the bare turn text ---
+we had been benchmarking against a handicapped corpus. Patching 1{,}226
+turns restored \emph{input parity} (this is protocol compliance, not
+an architecture change). On top, the raw-detail escalation lane
+(Section~\ref{sec:system}) surfaces verbatim turns --- with
+$\pm1$-neighbor expansion exploiting question--answer adjacency ---
+for fine-grained details that distillation necessarily abstracts away
+(gold: ``a painting of a sunset with a pink sky''; distilled fact:
+``an abstract painting'').
+
+Result: single-hop $92.75\%$ ($+4.52$, $z{=}3.16$, $p{<}0.002$;
+within 1pp of the 93.73\% full-context ceiling), overall
+\best{87.66\%} ($+2.66$ over W3.1, $z{=}2.15$, $p{<}0.05$).
+
+\textbf{Ablation (W3.4) --- attribution resolved.} Captions alone
+(raw-detail lane off): $+0.26$pp overall ($z{=}0.20$, ns). The
+raw-detail lane on top of captions: $+2.40$pp ($z{=}1.95$). The lane
+is the delivery mechanism; the captions are the payload --- neither
+suffices alone (caption-dependent golds were absent from every raw
+turn pre-patch). One cell remains unmeasured: the raw-detail lane
+\emph{without} captions.
+
+% =====================================================================
+\section{The corrected LoCoMo field}
+\label{sec:correction}
+% =====================================================================
+
+While auditing baselines we found that the comparison table in the
+Memori paper prints its baseline rows \emph{column-scrambled} relative
+to their declared source (Du et al.\ \cite{memr3}): MemR3's column
+order Multi\,$|$\,Temporal\,$|$\,Open\,$|$\,Single was transplanted
+under Single\,$|$\,Multi\,$|$\,Open\,$|$\,Temporal headers. The most
+consequential artifact: LangMem's widely-cited ``temporal 86.92'' is
+actually its \emph{single-hop} score; its true temporal score is
+61.06. (MemR3's \S C.3 itself notes that ``existing works have
+misaligned category labels.'') We verified our own harness labels
+against the canonical category counts ($n{=}841/282/321/96$) and
+semantic spot-checks. Table~\ref{tab:field} gives the corrected
+landscape.
+
+\begin{table}[t]
+\centering
+\small
+\caption{Corrected LoCoMo landscape (GPT-4.1-mini protocol, \%).
+Baselines corrected per Du et al.~\cite{memr3}; only the Memori row is
+same-harness with ours (we reproduced their pipeline at 81.98 vs.\
+published 81.95). MemR3 is an agentic retrieval pipeline, not a memory
+substrate; shown for reference. Best memory-system score per column in
+bold.}
+\label{tab:field}
+\begin{tabular}{lccccc}
+\toprule
+Method & single & multi & temporal & open & \textbf{overall}\\
+\midrule
+\textbf{\system{} (ours, W3.3)} & \best{92.75} & \best{82.98} & \best{83.49} & \best{70.83} & \best{87.66}\\
+Memori \cite{memori} & 87.87 & 72.70 & 80.37 & 63.54 & 81.95\\
+Zep$^\dagger$ \cite{zep} & 83.49 & 72.34 & 77.26 & 64.58 & ---\\
+LangMem$^\dagger$ & 86.92 & 74.47 & 61.06 & 67.71 & 78.05\\
+Mem0 \cite{mem0} & 66.47 & 62.41 & 57.32 & 44.79 & 62.47\\
+\midrule
+MemR3 (agentic; ref.) & 92.17 & 81.20 & 82.14 & 71.53 & ---\\
+Full-context ceiling & 93.73 & 86.43 & 86.82 & 71.88 & ---\\
+\bottomrule
+\end{tabular}
+
+\smallskip
+\raggedright\footnotesize $^\dagger$Cross-sourced from Du et
+al.~\cite{memr3}, not re-run in our harness; cross-lab LoCoMo numbers
+are noisy, which is precisely why our headline claim rests on the
+same-judge Memori comparison.
+\end{table}
+
+Against the corrected field, \system{} leads every category among
+memory systems, exceeds the agentic MemR3 pipeline on single-hop and
+multi-hop, and sits at the full-context ceiling on open-domain. The
+headline statistical claim remains the same-judge comparison:
+\textbf{87.66 vs.\ 81.95, $+5.71$pp, $z{=}4.42$, $p{<}10^{-5}$}. Our
+result also exceeds Hindsight's 85.67\% \cite{hindsight}, reported
+with a local answering model under a related protocol.
+
+% =====================================================================
+\section{Limitations}
+% =====================================================================
+
+\begin{itemize}[leftmargin=1.4em]
+\item \textbf{Token cost.} 3{,}747 tokens/question vs.\ Memori's
+  1{,}294 ($\approx 2.9\times$). Memori's thesis --- strong reasoning
+  at low cost --- still wins the efficiency axis. The heavy lanes are
+  by construction the semantic snippets (full frame bodies) and the
+  raw-detail excerpts; per-lane token budgeting is the planned next
+  step, targeting $\le$1{,}500/q at iso-accuracy.
+\item \textbf{LLM-as-judge.} All scores are GPT-4.1-mini judgments;
+  we mitigate by holding the judge fixed across every cell, archiving
+  all per-question judgments, and reproducing the baseline pipeline,
+  but absolute numbers should be read as protocol-relative.
+\item \textbf{Cross-sourced baselines.} Zep/LangMem/Mem0 rows are not
+  same-harness; only the Memori comparison carries the statistical
+  claim. Re-running the major baselines in our harness is planned.
+\item \textbf{One benchmark.} LoCoMo is the field's ruler but a single
+  ruler; an internal LongMemEval spot-check (earlier substrate
+  generation: 75.2\% trio-strict, $N{=}100$) needs to be re-run on the
+  final configuration.
+\item \textbf{Single answerer model.} All cells use GPT-4.1-mini per
+  the published protocol; model-generality of the lane design is
+  untested in this record.
+\item \textbf{One unmeasured ablation cell.} Raw-detail lane without
+  caption parity (Section~\ref{sec:w33}).
+\end{itemize}
+
+% =====================================================================
+\section{Conclusion}
+% =====================================================================
+
+A layered, fully local memory substrate --- profiles for synthesis,
+write-time-dated episodic timelines for temporal anchoring, hybrid
+retrieval with reranking for relevance, and a verbatim raw-detail
+escalation lane for fine-grained recall --- achieves 87.66\% on LoCoMo
+under the strictest comparison standard available: the prior SOTA
+system's own protocol, reproduced and re-judged in-harness. The
+category structure of the result supports the central design thesis:
+no single memory representation wins long-term conversational memory;
+a substrate that layers several, each rendered in its place, does. All
+code, including the benchmark harness and per-question artifacts, is
+open source at \url{https://github.com/marolinik/hive-mind}.
+
+% =====================================================================
+% Bibliography — TODO: replace with final .bib; keys/years verified
+% against the papers cited in the result record.
+% =====================================================================
+\begin{thebibliography}{9}
+
+\bibitem{locomo} A. Maharana et al.
+\emph{Evaluating Very Long-Term Conversational Memory of LLM Agents}
+(LoCoMo). 2024.
+
+\bibitem{memori} % TODO verify author list
+GibsonAI et al. \emph{Memori: SQL-Native Memory for AI Agents}.
+arXiv:2603.19935, 2026.
+
+\bibitem{memr3} Du et al. \emph{MemR3: Reflective Retrieval and
+Reasoning for Conversational Memory}. arXiv:2512.20237, 2025.
+
+\bibitem{mem0} P. Chhikara et al. \emph{Mem0: Building Production-Ready
+AI Agents with Scalable Long-Term Memory}. 2025.
+
+\bibitem{zep} P. Rasmussen et al. \emph{Zep: A Temporal Knowledge
+Graph Architecture for Agent Memory}. 2025.
+
+\bibitem{hindsight} % TODO verify citation
+\emph{Hindsight: local-model long-term memory}. 2026.
+
+\end{thebibliography}
+
+\end{document}
