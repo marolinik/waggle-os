@@ -5,8 +5,8 @@ import { cn } from '@/lib/utils';
 interface AskBarProps {
   placeholder?: string;
   onSubmit: (text: string) => void;
-  /** Optional "+" affordance (quick-capture / attach). */
-  onPlus?: () => void;
+  /** Optional "+" affordance — receives the current trimmed input (quick note). */
+  onPlus?: (text: string) => void;
   cmdkHint?: boolean;
   className?: string;
 }
@@ -41,7 +41,11 @@ export function AskBar({
         <button
           type="button"
           aria-label="Quick capture"
-          onClick={onPlus}
+          onClick={() => {
+            const text = value.trim();
+            onPlus(text);
+            if (text) setValue('');
+          }}
           className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[var(--honey)] hover:bg-[var(--honey-wash)]"
         >
           <Plus className="h-5 w-5" />

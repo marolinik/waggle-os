@@ -1,32 +1,36 @@
 /**
- * HomeCockpit — the daily executive briefing and launch surface (S01, PRD §12.1).
+ * HomeCockpit — the daily landing (S01, warm-Hive Editorial / Variation A).
  *
- * This is the new default `home` surface that replaces the interim DashboardApp
- * under the "home" route. It greets the user by name + date, ranks active/recent
- * workspaces with a one-click Continue, surfaces the overnight summary, lists
- * suggested next actions + "Up next", and offers quick capture (note/task/link/
- * file) — all WITHOUT opening a workspace.
+ * Opens with one human sentence, tells the overnight story, and offers one
+ * obvious next move, in a calm single 920px column: greeting (mono date row +
+ * live dot) → "While you slept" overnight hero → "Pick up where you left off"
+ * → "Waggle suggests" → "Up next" → ask bar.
  *
- * Cross-workspace aggregation lives server-side (GET /api/home/briefing,
- * /api/home/overnight) per the gap card §5 privacy gate — the FE never re-runs
- * the N+1 fan-out the old LoginBriefing did. Personal-only in v1 (founder
- * decision A2): no team/shared slice is requested or rendered.
+ * Cross-workspace aggregation stays server-side (GET /api/home/briefing,
+ * /api/home/overnight) per the §5 privacy gate — the FE never re-runs the old
+ * N+1 fan-out. Personal-only in v1 (founder A2). Render states (PRD §12.1 /
+ * §14.2): Loading · Permission-denied · Error/offline · First-run · Normal.
  *
- * States (PRD §12.1 + §14.2): Loading (skeleton) · First-run empty · Normal ·
- * Attention required · Offline/local-only. Status colour-coding uses the new
- * Hive DS --sem-* semantic tokens (index.css §IA color semantics).
+ * Honesty (PR3-BUILD-PLAN §5): the overnight story sentence + run chips are
+ * COMPOSED client-side from the real OvernightSummary counts (no narrative
+ * producer); the 🔥 streak has no backend field yet (SHOW_STREAK gate, below);
+ * "Continue" lands at chat root because the server omits continueSessionId.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import {
   Sparkles, ChevronRight, Clock, Brain, AlertTriangle, Plus,
-  CheckCircle2, Lightbulb, Calendar, ListTodo, Loader2, WifiOff,
-  StickyNote, Link2, Paperclip, Command, RefreshCw,
+  Lightbulb, Calendar, ListTodo, WifiOff, RefreshCw,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { useOfflineStatus } from '@/hooks/useOfflineStatus';
 import { useService } from '@/providers/ServiceProvider';
+import { useToast } from '@/hooks/use-toast';
 import WorkspaceActionsMenu from '../WorkspaceActionsMenu';
+import {
+  HexAvatar, SectionLabel, DotLive, RunChip, IconTile, OvernightHero, AskBar,
+  StreakChip, type RunChipProps,
+} from '../warm';
 import type {
   HomeBriefing,
   OvernightSummary,
@@ -36,29 +40,14 @@ import type {
   QuickCaptureInput,
 } from '@/lib/types';
 
-interface HomeCockpitProps {
-  /** Continue a workspace → open its chat runtime (founder A-flow: continue→openChat). */
-  onContinue: (workspaceId: string, sessionId?: string) => void;
-  /** Open the full Workspace Desktop for a workspace (S02). */
-  onOpenWorkspaceDesktop: (workspaceId: string) => void;
-  /** Start the new-workspace flow (first-run + empty-state CTA). */
-  onCreateWorkspace: () => void;
-  /**
-   * Fallback display name when the briefing has no userName yet (e.g. before
-   * onboarding seeds identity — founder B8). Optional; the greeting from the
-   * server wins when present.
-   */
-  userName?: string;
-}
-
-// Quick-capture kinds rendered as a small segmented selector. Each maps to a
-// QuickCaptureInput.kind the server route understands (gap card §5).
-const CAPTURE_KINDS: ReadonlyArray<{ kind: QuickCaptureInput['kind']; label: string; icon: typeof StickyNote; placeholder: string }> = [
-  { kind: 'note', label: 'Note', icon: StickyNote, placeholder: 'Jot a note to remember…' },
-  { kind: 'task', label: 'Task', icon: ListTodo, placeholder: 'Add a task…' },
-  { kind: 'link', label: 'Link', icon: Link2, placeholder: 'Paste a URL to keep…' },
-  { kind: 'file', label: 'File', icon: Paperclip, placeholder: 'Path or note about a file…' },
-];
+/**
+ * The 🔥 streak is a designed habit-loop mechanic (SCREENS §15) but no backend
+ * streak field exists yet (PR3-BUILD-PLAN §5). Keep the wiring ready, gated off,
+ * so it lights up when a real field lands — never ship a fabricated number.
+ * TODO(backend): expose a real streak on HomeBriefing, then flip this to true.
+ */
+const SHOW_STREAK = false;
+const STREAK_DAYS = 0;
 
 const UP_NEXT_ICON: Record<UpNextItem['kind'], typeof Calendar> = {
   event: Calendar,
@@ -80,19 +69,39 @@ function formatRelative(iso?: string): string {
   return `${days}d ago`;
 }
 
+/** The briefing ships `date` as a raw ISO string — render it as a human date.
+ *  KEEP this exact format: the P2 test asserts `getByText(toLocaleDateString(
+ *  undefined,{weekday,month,day}))`, an exact full-node match, so the date must
+ *  stay in its own text node (the time is a separate sibling). */
+function formatBriefingDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+}
+
+function formatClock(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
+/** Honey-accented key number inside a composed sentence. */
+function honey(n: ReactNode): ReactNode {
+  return <span className="font-semibold text-[var(--honey)]">{n}</span>;
+}
+
 // ── Loading skeleton ─────────────────────────────────────────────────────
 function CockpitSkeleton() {
   return (
-    <div className="h-full overflow-auto p-6 max-w-3xl mx-auto animate-pulse" data-testid="home-cockpit-loading">
-      <div className="h-7 w-56 rounded-lg bg-muted/60 mb-2" />
-      <div className="h-4 w-40 rounded bg-muted/40 mb-6" />
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-        {[0, 1, 2, 3].map(i => (
-          <div key={i} className="h-20 rounded-xl bg-secondary/30 border border-border/30" />
+    <div className="mx-auto h-full max-w-[920px] animate-pulse overflow-auto px-8 pb-20 pt-[46px]" data-testid="home-cockpit-loading">
+      <div className="mb-2 h-4 w-44 rounded bg-[var(--surface-2)]" />
+      <div className="mb-8 h-12 w-80 rounded-lg bg-[var(--surface-2)]" />
+      <div className="mb-8 h-40 rounded-[26px] border border-[var(--line-soft)] bg-[var(--surface)]" />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {[0, 1].map(i => (
+          <div key={i} className="h-28 rounded-[18px] border border-[var(--line-soft)] bg-[var(--surface)]" />
         ))}
       </div>
-      <div className="h-24 rounded-xl bg-secondary/20 border border-border/30 mb-4" />
-      <div className="h-32 rounded-xl bg-secondary/20 border border-border/30" />
     </div>
   );
 }
@@ -100,124 +109,114 @@ function CockpitSkeleton() {
 // ── First-run empty state ────────────────────────────────────────────────
 function FirstRunEmpty({ greeting, onCreateWorkspace }: { greeting: string; onCreateWorkspace: () => void }) {
   return (
-    <div className="h-full overflow-auto p-6 max-w-3xl mx-auto" data-testid="home-cockpit-empty">
-      <h1 className="text-2xl font-display font-bold text-foreground mb-1">{greeting}</h1>
-      <p className="text-sm text-muted-foreground mb-6">Let's set up your first workspace.</p>
+    <div className="mx-auto h-full max-w-[920px] overflow-auto px-8 pb-20 pt-[46px]" data-testid="home-cockpit-empty">
+      <h1 className="mb-1 font-display text-[clamp(28px,4vw,40px)] font-semibold leading-tight text-[var(--text)]">{greeting}</h1>
+      <p className="mb-8 text-[15px] text-[var(--text-muted)]">Let's set up your first workspace.</p>
 
-      <div className="rounded-2xl border border-primary/20 bg-primary/5 p-6 text-center">
-        <Sparkles className="w-10 h-10 mx-auto mb-3" style={{ color: 'var(--sem-intelligence)' }} />
-        <h2 className="text-base font-display font-semibold text-foreground mb-1">Your cockpit is empty — for now</h2>
-        <p className="text-sm text-muted-foreground max-w-md mx-auto mb-5">
-          Create a workspace and Waggle starts remembering your work. Tomorrow this screen
-          greets you with what you did, what ran overnight, and what to do next.
-        </p>
-        <button
-          type="button"
-          onClick={onCreateWorkspace}
-          className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-display rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 transition-colors"
-          data-testid="home-cockpit-create-first"
-        >
-          <Plus className="w-4 h-4" /> Create your first workspace
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ── Greeting header ──────────────────────────────────────────────────────
-/** The briefing ships `date` as a raw ISO string — render it as a human date
- *  (P2 fix: the header showed "2026-06-11T07:42:13.512Z" verbatim). */
-function formatBriefingDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
-}
-
-function GreetingHeader({ greeting, date, offline }: { greeting: string; date: string; offline: boolean }) {
-  return (
-    <div className="mb-6 flex items-start justify-between gap-3">
-      <div className="min-w-0">
-        <h1 className="text-2xl font-display font-bold text-foreground leading-tight">{greeting}</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">{formatBriefingDate(date)}</p>
-      </div>
-      <div className="flex items-center gap-2 shrink-0">
-        {offline && (
-          <span
-            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-display"
-            style={{ color: 'var(--sem-attention)', backgroundColor: 'color-mix(in srgb, var(--sem-attention) 12%, transparent)' }}
-            data-testid="home-cockpit-offline-pill"
+      <div className="relative overflow-hidden rounded-[26px] border border-[var(--line-soft)] bg-[linear-gradient(150deg,var(--surface),var(--surface-2))] p-8 text-center shadow-[var(--shadow)]">
+        <span aria-hidden className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[radial-gradient(circle,var(--honey-glow),transparent_70%)]" />
+        <div className="relative">
+          <HexAvatar label="W" size={48} className="mx-auto mb-4" />
+          <h2 className="mb-1.5 font-display text-[19px] font-semibold text-[var(--text)]">Your hive is empty — for now</h2>
+          <p className="mx-auto mb-6 max-w-md text-[14px] leading-relaxed text-[var(--text-muted)]">
+            Create a workspace and Waggle starts remembering your work. Tomorrow this screen
+            greets you with what you did, what ran overnight, and what to do next.
+          </p>
+          <button
+            type="button"
+            onClick={onCreateWorkspace}
+            className="inline-flex items-center gap-1.5 rounded-[12px] bg-[var(--honey)] px-5 py-2.5 text-[14px] font-medium text-[#1a1407] transition-opacity hover:opacity-90"
+            data-testid="home-cockpit-create-first"
           >
-            <WifiOff className="w-3 h-3" /> Local only
-          </span>
-        )}
-        <span className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-display text-muted-foreground bg-secondary/40 border border-border/30">
-          <Command className="w-3 h-3" /> Ctrl+K
-        </span>
+            <Plus className="h-4 w-4" /> Create your first workspace
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-// ── Recent workspaces ────────────────────────────────────────────────────
+// ── Greeting (mono date row + live dot + streak + two-line H1) ────────────
+function GreetingHeader({
+  greeting, date, workspaceCount,
+}: { greeting: string; date: string; workspaceCount: number }) {
+  return (
+    <header className="mb-9">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--honey)]">
+          <DotLive tone="healthy" size={7} />
+          <span>{formatBriefingDate(date)}</span>
+          {formatClock(date) && <span className="text-[var(--text-dim)]">· {formatClock(date)}</span>}
+        </div>
+        {SHOW_STREAK && <StreakChip days={STREAK_DAYS} />}
+      </div>
+      <h1 className="font-display text-[clamp(34px,5vw,52px)] font-semibold leading-[1.04] tracking-[-0.02em] text-[var(--text)]">
+        {greeting}
+      </h1>
+      {workspaceCount > 0 && (
+        <p className="mt-2 text-[clamp(17px,2.2vw,22px)] font-medium text-[var(--text-2)]">
+          {honey(`${workspaceCount} ${workspaceCount === 1 ? 'workspace' : 'workspaces'}`)} waiting for you.
+        </p>
+      )}
+    </header>
+  );
+}
+
+// ── "Pick up where you left off" ─────────────────────────────────────────
 function RecentWorkspacesPanel({
   cards, onContinue, onOpenDesktop, onWorkspaceChanged,
 }: {
   cards: RecentWorkspaceCard[];
   onContinue: (id: string, sessionId?: string) => void;
   onOpenDesktop: (id: string) => void;
-  /** G1: reload the briefing after rename/archive/delete from a card's kebab. */
   onWorkspaceChanged: () => void;
 }) {
   if (cards.length === 0) return null;
   return (
-    <section className="mb-6" data-testid="home-cockpit-recent">
-      <h2 className="text-xs font-display font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-        You were working on
-      </h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+    <section className="mb-9" data-testid="home-cockpit-recent">
+      <SectionLabel rule className="mb-3.5">Pick up where you left off</SectionLabel>
+      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
         {cards.map(ws => (
           <div
             key={ws.id}
-            className="group relative text-left p-3 rounded-xl border border-border/50 bg-secondary/30 hover:bg-secondary/50 hover:border-border transition-all"
+            className="group relative rounded-[18px] border border-[var(--line-soft)] bg-card p-4 transition-all hover:-translate-y-0.5 hover:border-[var(--honey-line)] hover:shadow-[var(--shadow)]"
             data-testid={`home-cockpit-ws-${ws.id}`}
           >
-            <button
-              type="button"
-              onClick={() => onOpenDesktop(ws.id)}
-              className="block w-full text-left"
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-sm font-display font-medium text-foreground truncate flex-1">{ws.name}</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0">{ws.group}</span>
+            <button type="button" onClick={() => onOpenDesktop(ws.id)} className="block w-full text-left">
+              <div className="mb-2 flex items-start gap-2.5">
+                <HexAvatar label={ws.name} size={32} />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[15.5px] font-semibold leading-tight text-[var(--text)]">{ws.name}</div>
+                  {ws.lastActive && (
+                    <div className="mt-0.5 font-mono text-[11px] text-[var(--text-dim)]">{formatRelative(ws.lastActive)}</div>
+                  )}
+                </div>
               </div>
               {ws.summary && (
-                <p className="text-[11px] text-muted-foreground line-clamp-2 mb-1.5">{ws.summary}</p>
+                <p className="mb-2 line-clamp-2 text-[13.5px] leading-snug text-[var(--text-muted)]">{ws.summary}</p>
               )}
-              <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                {ws.lastActive && (
-                  <span className="inline-flex items-center gap-0.5"><Clock className="w-2.5 h-2.5" />{formatRelative(ws.lastActive)}</span>
-                )}
-                {ws.pendingCount > 0 && (
-                  <span className="inline-flex items-center gap-0.5" style={{ color: 'var(--sem-attention)' }}>
-                    <AlertTriangle className="w-2.5 h-2.5" />{ws.pendingCount} pending
-                  </span>
-                )}
-              </div>
             </button>
-            <div className="mt-2.5 flex items-center justify-between">
+            <div className="mt-2 flex items-center justify-between">
               <button
                 type="button"
                 onClick={() => onContinue(ws.id, ws.continueSessionId)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-display rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                className="inline-flex items-center gap-0.5 text-[13px] font-medium text-[var(--honey)] transition-opacity hover:opacity-80"
                 data-testid={`home-cockpit-continue-${ws.id}`}
               >
-                Continue <ChevronRight className="w-3 h-3" />
+                Continue <ChevronRight className="h-3.5 w-3.5" />
               </button>
-              <WorkspaceActionsMenu
-                workspace={{ id: ws.id, name: ws.name }}
-                onChanged={onWorkspaceChanged}
-                buttonClassName="opacity-0 group-hover:opacity-100 focus:opacity-100"
-              />
+              <div className="flex items-center gap-2">
+                {ws.pendingCount > 0 && (
+                  <span className="rounded-full border border-[var(--honey-line)] bg-[var(--honey-wash)] px-2 py-0.5 text-[11px] text-[var(--attention)]">
+                    {ws.pendingCount} to review
+                  </span>
+                )}
+                <WorkspaceActionsMenu
+                  workspace={{ id: ws.id, name: ws.name }}
+                  onChanged={onWorkspaceChanged}
+                  buttonClassName="opacity-0 group-hover:opacity-100 focus:opacity-100"
+                />
+              </div>
             </div>
           </div>
         ))}
@@ -226,63 +225,39 @@ function RecentWorkspacesPanel({
   );
 }
 
-// ── Overnight summary ────────────────────────────────────────────────────
-function OvernightPanel({ summary }: { summary: OvernightSummary | null }) {
-  if (!summary) return null;
-  const hasActivity =
-    summary.consolidated > 0 || summary.artifactsCreated > 0 ||
-    summary.automationsCompleted > 0 || summary.failures.length > 0;
-  if (!hasActivity) return null;
-
-  const counters: ReadonlyArray<{ label: string; value: number; color: string }> = [
-    { label: 'Memories consolidated', value: summary.consolidated, color: 'var(--sem-intelligence)' },
-    { label: 'Artifacts created', value: summary.artifactsCreated, color: 'var(--sem-work)' },
-    { label: 'Automations completed', value: summary.automationsCompleted, color: 'var(--sem-healthy)' },
-  ];
-
+// ── "Waggle suggests" — stacked move rows ─────────────────────────────────
+function SuggestedActionsPanel({
+  actions, subFor, onRun,
+}: {
+  actions: SuggestedAction[];
+  subFor: (a: SuggestedAction) => string | undefined;
+  onRun: (a: SuggestedAction) => void;
+}) {
+  if (actions.length === 0) return null;
   return (
-    <section className="mb-4 p-3 rounded-xl bg-secondary/20 border border-border/30" data-testid="home-cockpit-overnight">
-      <h2 className="text-xs font-display font-semibold text-foreground mb-2.5 flex items-center gap-1.5">
-        <Sparkles className="w-3.5 h-3.5" style={{ color: 'var(--sem-intelligence)' }} /> Overnight
-      </h2>
-      <div className="grid grid-cols-3 gap-2 mb-2">
-        {counters.map(c => (
-          <div key={c.label} className="rounded-lg bg-background/40 px-2.5 py-2">
-            <div className="text-lg font-display font-semibold tabular-nums" style={{ color: c.color }}>{c.value}</div>
-            <div className="text-[10px] text-muted-foreground leading-tight">{c.label}</div>
-          </div>
-        ))}
+    <section className="mb-9" data-testid="home-cockpit-suggested">
+      <SectionLabel rule className="mb-3.5">Waggle suggests</SectionLabel>
+      <div className="space-y-2">
+        {actions.slice(0, 4).map((a, i) => {
+          const sub = subFor(a);
+          return (
+            <button
+              key={`${a.workspaceId}-${a.kind}-${a.label}`}
+              type="button"
+              onClick={() => onRun(a)}
+              className="group flex w-full items-center gap-3 rounded-[14px] border border-[var(--line-soft)] bg-card px-3.5 py-3 text-left transition-colors hover:border-[var(--honey-line)]"
+              data-testid={`home-cockpit-action-${i}`}
+            >
+              <IconTile icon={Lightbulb} tone="attention" size={36} />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[14.5px] font-semibold text-[var(--text)]">{a.label}</div>
+                {sub && <div className="mt-0.5 truncate text-[12.5px] text-[var(--text-muted)]">{sub}</div>}
+              </div>
+              <ChevronRight className="h-4 w-4 shrink-0 text-[var(--text-dim)] transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none" />
+            </button>
+          );
+        })}
       </div>
-      {summary.failures.length > 0 && (
-        <div
-          className="mt-2 rounded-lg px-2.5 py-2"
-          style={{ backgroundColor: 'color-mix(in srgb, var(--sem-risk) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--sem-risk) 25%, transparent)' }}
-          data-testid="home-cockpit-overnight-failures"
-        >
-          <h3 className="text-[11px] font-display font-semibold mb-1.5 flex items-center gap-1" style={{ color: 'var(--sem-risk)' }}>
-            <AlertTriangle className="w-3 h-3" /> {summary.failures.length} failure{summary.failures.length === 1 ? '' : 's'}
-          </h3>
-          <ul className="space-y-1">
-            {summary.failures.slice(0, 4).map(f => (
-              <li key={f.id}>
-                {/* Journey 16: a failed automation deep-links into the
-                    Automation Center's Logs tab (retry/pause/edit live there).
-                    automationId preselects the failing automation's log. */}
-                <button
-                  type="button"
-                  onClick={() => window.dispatchEvent(new CustomEvent('waggle:open-app', {
-                    detail: { appId: 'scheduled-jobs', tab: 'logs', automationId: f.automationId },
-                  }))}
-                  className="w-full text-left text-[11px] text-foreground hover:text-primary rounded px-1 py-0.5 hover:bg-muted/40 transition-colors"
-                >
-                  <span className="font-medium">{f.label}</span>
-                  <span className="text-muted-foreground"> — {f.error}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
     </section>
   );
 }
@@ -291,10 +266,8 @@ function OvernightPanel({ summary }: { summary: OvernightSummary | null }) {
 function UpNextPanel({ items, onOpen }: { items: UpNextItem[]; onOpen: (id?: string) => void }) {
   if (items.length === 0) return null;
   return (
-    <section className="mb-4 p-3 rounded-xl bg-secondary/20 border border-border/30" data-testid="home-cockpit-upnext">
-      <h2 className="text-xs font-display font-semibold text-foreground mb-2 flex items-center gap-1.5">
-        <Calendar className="w-3.5 h-3.5" style={{ color: 'var(--sem-work)' }} /> Up next
-      </h2>
+    <section className="mb-9" data-testid="home-cockpit-upnext">
+      <SectionLabel rule className="mb-3.5">Up next</SectionLabel>
       <ul className="space-y-1">
         {items.slice(0, 6).map(item => {
           const Icon = UP_NEXT_ICON[item.kind];
@@ -303,11 +276,11 @@ function UpNextPanel({ items, onOpen }: { items: UpNextItem[]; onOpen: (id?: str
               <button
                 type="button"
                 onClick={() => onOpen(item.workspaceId)}
-                className="w-full flex items-center gap-2 text-xs text-foreground hover:text-primary px-1.5 py-1 rounded hover:bg-muted/40 transition-colors text-left"
+                className="flex w-full items-center gap-2.5 rounded-[10px] px-2 py-1.5 text-left text-[13.5px] text-[var(--text-2)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
               >
-                <Icon className="w-3 h-3 text-muted-foreground shrink-0" />
+                <Icon className="h-3.5 w-3.5 shrink-0 text-[var(--text-dim)]" />
                 <span className="flex-1 truncate">{item.label}</span>
-                {item.at && <span className="text-[10px] text-muted-foreground shrink-0">{item.at}</span>}
+                {item.at && <span className="shrink-0 font-mono text-[11px] text-[var(--text-dim)]">{item.at}</span>}
               </button>
             </li>
           );
@@ -317,134 +290,43 @@ function UpNextPanel({ items, onOpen }: { items: UpNextItem[]; onOpen: (id?: str
   );
 }
 
-// ── Suggested next actions ───────────────────────────────────────────────
-function SuggestedActionsPanel({ actions, onRun }: { actions: SuggestedAction[]; onRun: (a: SuggestedAction) => void }) {
-  if (actions.length === 0) return null;
-  return (
-    <section className="mb-4 p-3 rounded-xl bg-secondary/20 border border-border/30" data-testid="home-cockpit-suggested">
-      <h2 className="text-xs font-display font-semibold text-foreground mb-2 flex items-center gap-1.5">
-        <Lightbulb className="w-3.5 h-3.5" style={{ color: 'var(--sem-attention)' }} /> Suggested next actions
-      </h2>
-      <div className="flex flex-wrap gap-2">
-        {actions.slice(0, 6).map((a, i) => (
-          <button
-            key={`${a.workspaceId}-${a.kind}-${a.label}`}
-            type="button"
-            onClick={() => onRun(a)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
-            data-testid={`home-cockpit-action-${i}`}
-          >
-            <CheckCircle2 className="w-3 h-3" /> {a.label}
-          </button>
-        ))}
-      </div>
-    </section>
-  );
+// ── Overnight story / run-chip composition (honest, from real counts) ─────
+function overnightHasActivity(o: OvernightSummary | null): o is OvernightSummary {
+  return !!o && (o.consolidated > 0 || o.artifactsCreated > 0 || o.automationsCompleted > 0 || o.failures.length > 0);
 }
 
-// ── Quick capture ────────────────────────────────────────────────────────
-function QuickCapturePanel() {
-  const [kind, setKind] = useState<QuickCaptureInput['kind']>('note');
-  const [content, setContent] = useState('');
-  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  // Track the "saved → idle" reset timer so it can't fire setState after unmount.
-  const resetTimer = useRef<number | null>(null);
-
-  const active = CAPTURE_KINDS.find(k => k.kind === kind) ?? CAPTURE_KINDS[0];
-
-  const submit = useCallback(async () => {
-    const trimmed = content.trim();
-    if (!trimmed) return;
-    setStatus('saving');
-    try {
-      await adapter.quickCapture({ kind, content: trimmed });
-      setContent('');
-      setStatus('saved');
-      if (resetTimer.current !== null) window.clearTimeout(resetTimer.current);
-      resetTimer.current = window.setTimeout(() => {
-        resetTimer.current = null;
-        setStatus('idle');
-      }, 1800);
-    } catch {
-      setStatus('error');
-    }
-  }, [content, kind]);
-
-  // Clear any pending reset timer on unmount (avoids setState-on-unmount).
-  useEffect(() => () => {
-    if (resetTimer.current !== null) window.clearTimeout(resetTimer.current);
-  }, []);
+function composeOvernightStory(o: OvernightSummary): ReactNode {
+  const clauses: ReactNode[] = [];
+  if (o.consolidated > 0)
+    clauses.push(<>folded {honey(o.consolidated)} new {o.consolidated === 1 ? 'memory' : 'memories'} into the hive</>);
+  if (o.artifactsCreated > 0)
+    clauses.push(<>created {honey(o.artifactsCreated)} {o.artifactsCreated === 1 ? 'artifact' : 'artifacts'}</>);
+  if (o.automationsCompleted > 0)
+    clauses.push(<>ran {honey(o.automationsCompleted)} {o.automationsCompleted === 1 ? 'automation' : 'automations'}</>);
+  if (o.failures.length > 0)
+    clauses.push(<>ran into {honey(o.failures.length)} {o.failures.length === 1 ? 'snag' : 'snags'} worth a look</>);
 
   return (
-    <section className="mb-4 p-3 rounded-xl bg-secondary/20 border border-border/30" data-testid="home-cockpit-quickcapture">
-      <h2 className="text-xs font-display font-semibold text-foreground mb-2">Quick capture</h2>
-      <div className="flex flex-wrap gap-1.5 mb-2">
-        {CAPTURE_KINDS.map(k => {
-          const Icon = k.icon;
-          const selected = k.kind === kind;
-          return (
-            <button
-              key={k.kind}
-              type="button"
-              onClick={() => setKind(k.kind)}
-              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-display transition-colors ${
-                selected ? 'bg-primary text-primary-foreground' : 'bg-secondary/50 text-muted-foreground hover:text-foreground'
-              }`}
-              data-testid={`home-cockpit-capture-kind-${k.kind}`}
-            >
-              <Icon className="w-3 h-3" /> {k.label}
-            </button>
-          );
-        })}
-      </div>
-      <div className="flex items-center gap-2">
-        <input
-          type="text"
-          value={content}
-          onChange={e => { setContent(e.target.value); if (status === 'error' || status === 'saved') setStatus('idle'); }}
-          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void submit(); } }}
-          placeholder={active.placeholder}
-          aria-label={active.placeholder}
-          className="flex-1 min-w-0 px-3 py-1.5 text-xs rounded-lg bg-background/60 border border-border/40 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
-          data-testid="home-cockpit-capture-input"
-        />
-        <button
-          type="button"
-          onClick={() => void submit()}
-          disabled={status === 'saving' || content.trim().length === 0}
-          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-display rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          data-testid="home-cockpit-capture-submit"
-        >
-          {status === 'saving' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-          Capture
-        </button>
-      </div>
-      {status === 'saved' && (
-        <p className="mt-1.5 text-[11px] flex items-center gap-1" style={{ color: 'var(--sem-healthy)' }}>
-          <CheckCircle2 className="w-3 h-3" /> Captured
-        </p>
-      )}
-      {status === 'error' && (
-        <p className="mt-1.5 text-[11px] flex items-center gap-1" style={{ color: 'var(--sem-risk)' }}>
-          <AlertTriangle className="w-3 h-3" /> Couldn't capture — try again
-        </p>
-      )}
-    </section>
-  );
-}
-
-// ── Active models tile (only when relevant — PRD §12.1 "do not clutter") ──
-function ActiveModelsTile({ models }: { models?: string[] }) {
-  if (!models || models.length === 0) return null;
-  return (
-    <div className="mt-2 text-[11px] text-muted-foreground flex items-center gap-1.5 flex-wrap" data-testid="home-cockpit-models">
-      <Brain className="w-3 h-3" style={{ color: 'var(--sem-intelligence)' }} />
-      <span>Active models:</span>
-      {models.slice(0, 3).map(m => (
-        <span key={m} className="px-1.5 py-0.5 rounded bg-secondary/40 text-foreground">{m}</span>
+    <>
+      Overnight, Waggle{' '}
+      {clauses.map((c, i) => (
+        <span key={i}>
+          {i > 0 && (i === clauses.length - 1 ? (clauses.length === 2 ? ' and ' : ', and ') : ', ')}
+          {c}
+        </span>
       ))}
-    </div>
+      .
+    </>
   );
+}
+
+function buildRunChips(o: OvernightSummary): RunChipProps[] {
+  const chips: RunChipProps[] = [];
+  if (o.consolidated > 0) chips.push({ label: `${o.consolidated} memories consolidated`, tone: 'intel' });
+  if (o.artifactsCreated > 0) chips.push({ label: `${o.artifactsCreated} artifacts created`, tone: 'work' });
+  if (o.automationsCompleted > 0) chips.push({ label: `${o.automationsCompleted} automations completed`, tone: 'healthy' });
+  if (o.failures.length > 0) chips.push({ label: `${o.failures.length} ${o.failures.length === 1 ? 'run' : 'runs'} failed`, tone: 'risk' });
+  return chips;
 }
 
 // ── Root ─────────────────────────────────────────────────────────────────
@@ -455,13 +337,11 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
   const [loadError, setLoadError] = useState(false);
   const [permissionDenied, setPermissionDenied] = useState(false);
   const offline = useOfflineStatus();
+  const { toast } = useToast();
   // Cold-load race guard: the adapter attaches the session token during its
   // initial connect(); firing authed briefing/overnight calls before that 401s
   // and yields malformed data. Defer load() until the attempt has settled.
   const { connecting } = useService();
-  // Guards every async set* against firing after unmount (mirrors
-  // WorkspaceDesktopApp's `cancelled` flag — but ref-scoped since `load` is a
-  // reusable callback driven by both the effect and the Retry button).
   const cancelled = useRef(false);
 
   const load = useCallback(async () => {
@@ -506,18 +386,30 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
     return () => { cancelled.current = true; };
   }, [load, connecting]);
 
+  // Ask bar → quick-capture the typed intent (the real backend the old
+  // QuickCapture panel used). Send = a task to pick up; "+" = a quick note.
+  // NOTE: a future "start a chat from this prompt" flow could replace the task
+  // capture once Home can seed a workspace-less chat.
+  const captureAsk = useCallback(async (text: string, kind: QuickCaptureInput['kind']) => {
+    try {
+      await adapter.quickCapture({ kind, content: text });
+      toast({ description: kind === 'task' ? 'Added to your hive — a task to pick up.' : 'Noted — saved to your hive.' });
+    } catch {
+      toast({ variant: 'destructive', description: "Couldn't save that — try again." });
+    }
+  }, [toast]);
+
   if (loading) return <CockpitSkeleton />;
 
   // PERMISSION-DENIED (PRD §12.1): the briefing route rejected with 403 — a
-  // distinct, non-retry message so the user understands it's an access gate,
-  // not an outage.
+  // distinct, non-retry message so the user understands it's an access gate.
   if (permissionDenied) {
     return (
-      <div className="h-full overflow-auto p-6 max-w-3xl mx-auto" data-testid="home-cockpit-permission-denied">
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <AlertTriangle className="w-10 h-10 mb-3" style={{ color: 'var(--sem-attention)' }} />
-          <p className="text-sm font-display font-semibold text-foreground mb-1">Access not permitted</p>
-          <p className="text-sm text-muted-foreground max-w-md">
+      <div className="mx-auto h-full max-w-[920px] overflow-auto px-8 pt-[46px]" data-testid="home-cockpit-permission-denied">
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <AlertTriangle className="mb-3 h-10 w-10 text-[var(--attention)]" />
+          <p className="mb-1 text-[15px] font-semibold text-[var(--text)]">Access not permitted</p>
+          <p className="max-w-md text-[14px] text-[var(--text-muted)]">
             Your account doesn't have permission to view this briefing. Check your workspace
             access or sign in with an authorized account.
           </p>
@@ -530,23 +422,21 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
   // than a blank screen. Offline-aware copy so local-only isn't read as a crash.
   if (loadError || !briefing) {
     return (
-      <div className="h-full overflow-auto p-6 max-w-3xl mx-auto" data-testid="home-cockpit-error">
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          {offline ? (
-            <WifiOff className="w-10 h-10 mb-3" style={{ color: 'var(--sem-attention)' }} />
-          ) : (
-            <AlertTriangle className="w-10 h-10 mb-3" style={{ color: 'var(--sem-risk)' }} />
-          )}
-          <p className="text-sm text-muted-foreground mb-3">
+      <div className="mx-auto h-full max-w-[920px] overflow-auto px-8 pt-[46px]" data-testid="home-cockpit-error">
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          {offline
+            ? <WifiOff className="mb-3 h-10 w-10 text-[var(--attention)]" />
+            : <AlertTriangle className="mb-3 h-10 w-10 text-[var(--risk)]" />}
+          <p className="mb-3 text-[14px] text-[var(--text-muted)]">
             {offline ? "You're offline — your daily briefing needs the local service." : "Couldn't load your briefing."}
           </p>
           <button
             type="button"
             onClick={() => void load()}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-display rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-[10px] bg-[var(--honey)] px-3.5 py-1.5 text-[13px] font-medium text-[#1a1407] transition-opacity hover:opacity-90"
             data-testid="home-cockpit-retry"
           >
-            <RefreshCw className="w-3.5 h-3.5" /> Retry
+            <RefreshCw className="h-3.5 w-3.5" /> Retry
           </button>
         </div>
       </div>
@@ -559,16 +449,30 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
     return <FirstRunEmpty greeting={greeting} onCreateWorkspace={onCreateWorkspace} />;
   }
 
+  const recentWorkspaces = briefing.recentWorkspaces ?? [];
   const onOpenFromAction = (a: SuggestedAction) => onContinue(a.workspaceId, a.sessionId);
 
-  // ATTENTION-REQUIRED (PRD §12.1): overnight failures get a visible top banner
-  // regardless of the OvernightPanel — which is suppressed when offline and
-  // hidden when there's no activity, so failures would otherwise go unseen.
-  const failureCount = overnight?.failures?.length ?? 0;
+  // Suggestion sub-line, composed from the linked workspace (label-only server
+  // payload has no sub — derive an honest one from the workspace + recency).
+  const wsById = new Map(recentWorkspaces.map(w => [w.id, w]));
+  const subForAction = (a: SuggestedAction): string | undefined => {
+    const w = wsById.get(a.workspaceId);
+    if (!w) return undefined;
+    const rel = formatRelative(w.lastActive);
+    return rel ? `${w.name} · ${rel}` : w.name;
+  };
 
-  // J08 (D6, Journey 6): imported memories awaiting review get a sibling
-  // attention banner that deep-links to the Memory Center "Needs review"
-  // filter via the established waggle:open-app shim.
+  // ATTENTION (PRD §12.1): overnight failures surface as a visible banner that
+  // deep-links into the Automation Center logs (where retry/pause/edit live).
+  const failureCount = overnight?.failures?.length ?? 0;
+  const openAutomationLogs = () => {
+    window.dispatchEvent(new CustomEvent('waggle:open-app', {
+      detail: { appId: 'scheduled-jobs', tab: 'logs' },
+    }));
+  };
+
+  // J08 (D6, Journey 6): imported memories awaiting review deep-link to the
+  // Memory Center "Needs review" filter via the established waggle:open-app shim.
   const needsReviewCount = briefing.needsReviewCount ?? 0;
   const openMemoryReview = () => {
     window.dispatchEvent(new CustomEvent('waggle:open-app', {
@@ -576,77 +480,90 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
     }));
   };
 
-  return (
-    <div className="h-full overflow-auto p-6 max-w-4xl mx-auto" data-testid="home-cockpit">
-      <GreetingHeader greeting={greeting} date={briefing.date} offline={offline} />
+  // Overnight hero copy: compose the story from real counts; degrade to a quiet
+  // line when there's no activity (the test stubs overnight → null).
+  const hasOvernight = overnightHasActivity(overnight);
+  const overnightStatement = hasOvernight ? composeOvernightStory(overnight) : null;
+  const runChips = hasOvernight ? buildRunChips(overnight) : [];
+  const overnightEmpty = offline
+    ? 'Your overnight summary needs the local service.'
+    : 'A calm night — nothing ran while you were away.';
 
-      {failureCount > 0 && (
-        <div
-          className="mb-4 flex items-start gap-2 rounded-xl px-3 py-2.5"
-          style={{
-            color: 'var(--sem-attention)',
-            backgroundColor: 'color-mix(in srgb, var(--sem-attention) 10%, transparent)',
-            border: '1px solid color-mix(in srgb, var(--sem-attention) 30%, transparent)',
-          }}
-          role="alert"
-          data-testid="home-cockpit-attention-banner"
-        >
-          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-          <p className="text-xs font-display">
-            {failureCount} overnight {failureCount === 1 ? 'task needs' : 'tasks need'} your attention.
-          </p>
-        </div>
-      )}
+  return (
+    <div className="relative mx-auto h-full max-w-[920px] overflow-auto px-8 pb-20 pt-[46px]" data-testid="home-cockpit">
+      <GreetingHeader greeting={greeting} date={briefing.date} workspaceCount={recentWorkspaces.length} />
 
       {needsReviewCount > 0 && (
         <div
-          className="mb-4 flex items-center gap-2 rounded-xl px-3 py-2.5"
-          style={{
-            color: 'var(--sem-attention)',
-            backgroundColor: 'color-mix(in srgb, var(--sem-attention) 10%, transparent)',
-            border: '1px solid color-mix(in srgb, var(--sem-attention) 30%, transparent)',
-          }}
+          className="mb-6 flex items-center gap-2.5 rounded-[14px] border border-[var(--honey-line)] bg-[var(--honey-wash)] px-4 py-3"
           role="alert"
           data-testid="home-cockpit-review-banner"
         >
-          <Brain className="w-4 h-4 shrink-0" />
-          <p className="text-xs font-display flex-1">
+          <Brain className="h-4 w-4 shrink-0 text-[var(--attention)]" />
+          <p className="flex-1 text-[13.5px] text-[var(--text-2)]">
             {needsReviewCount} imported {needsReviewCount === 1 ? 'memory needs' : 'memories need'} your review.
           </p>
           <button
             type="button"
             onClick={openMemoryReview}
-            className="inline-flex items-center gap-0.5 px-2 py-1 text-[11px] font-display rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors shrink-0"
+            className="inline-flex shrink-0 items-center gap-0.5 text-[13px] font-medium text-[var(--honey)] transition-opacity hover:opacity-80"
             data-testid="home-cockpit-review-cta"
           >
-            Review <ChevronRight className="w-3 h-3" />
+            Review <ChevronRight className="h-3.5 w-3.5" />
           </button>
         </div>
       )}
 
+      <div className="mb-9">
+        <OvernightHero statement={overnightStatement ?? overnightEmpty} runs={runChips} emptyText={overnightEmpty} />
+        {failureCount > 0 && (
+          <button
+            type="button"
+            onClick={openAutomationLogs}
+            className="mt-2.5 inline-flex items-center gap-1.5 text-[13px] text-[var(--risk)] transition-opacity hover:opacity-80"
+            data-testid="home-cockpit-attention-banner"
+          >
+            <AlertTriangle className="h-3.5 w-3.5" />
+            View {failureCount === 1 ? 'the snag' : `${failureCount} snags`} in the Automation Center
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+
       <RecentWorkspacesPanel
         onWorkspaceChanged={() => { void load(); }}
-        cards={briefing.recentWorkspaces ?? []}
+        cards={recentWorkspaces}
         onContinue={onContinue}
         onOpenDesktop={onOpenWorkspaceDesktop}
       />
 
-      {/* Overnight is suppressed when offline (it aggregates cron/automation
-          history the local-only session can't trust); the offline pill in the
-          header already signals the degraded surface. */}
-      {!offline && <OvernightPanel summary={overnight} />}
-
-      <SuggestedActionsPanel actions={briefing.suggestedActions} onRun={onOpenFromAction} />
+      <SuggestedActionsPanel actions={briefing.suggestedActions} subFor={subForAction} onRun={onOpenFromAction} />
 
       {/* Rendered only when there is at least one item — zero schedule items
           (or a sidecar omitting the field) must not leave an empty section. */}
       <UpNextPanel items={briefing.upNext ?? []} onOpen={(id) => { if (id) onOpenWorkspaceDesktop(id); }} />
 
-      <QuickCapturePanel />
-
-      <ActiveModelsTile models={briefing.activeModels} />
+      <AskBar
+        onSubmit={(text) => void captureAsk(text, 'task')}
+        onPlus={(text) => { if (text) void captureAsk(text, 'note'); }}
+      />
     </div>
   );
 };
+
+interface HomeCockpitProps {
+  /** Continue a workspace → open its chat runtime (founder A-flow: continue→openChat). */
+  onContinue: (workspaceId: string, sessionId?: string) => void;
+  /** Open the full Workspace Desktop for a workspace (S02). */
+  onOpenWorkspaceDesktop: (workspaceId: string) => void;
+  /** Start the new-workspace flow (first-run + empty-state CTA). */
+  onCreateWorkspace: () => void;
+  /**
+   * Fallback display name when the briefing has no userName yet (e.g. before
+   * onboarding seeds identity — founder B8). Optional; the greeting from the
+   * server wins when present.
+   */
+  userName?: string;
+}
 
 export default HomeCockpit;
