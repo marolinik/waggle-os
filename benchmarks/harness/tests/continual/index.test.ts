@@ -6,9 +6,12 @@
  * TOST (the H2/H3 endpoints this protocol exists to power). The Plan-04 import
  * is guarded so a not-yet-landed sibling is skipped, not a hard failure.
  */
-import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import * as continual from '../../src/continual/index.js';
+import {
+  computePairedDiffClusterBootstrapCI,
+  tostEquivalence,
+} from '../../src/stats/equivalence-tost.js';
 
 describe('continual barrel', () => {
   it('re-exports the full public surface', () => {
@@ -22,32 +25,18 @@ describe('continual barrel', () => {
   });
 });
 
-describe('Plan-04 stats wiring (guarded)', () => {
-  const req = createRequire(import.meta.url);
-  let stats: {
-    computePairedDiffClusterBootstrapCI?: (i: unknown) => { ci_lower: number; ci_upper: number };
-    tostEquivalence?: (i: unknown) => { equivalent: boolean };
-  } | null = null;
-  try {
-    stats = req('../../src/stats/equivalence-tost.js');
-  } catch {
-    stats = null;
-  }
-
-  it.runIf(stats?.computePairedDiffClusterBootstrapCI)(
-    'paired diff CI consumes {cluster_id, arm_a, arm_b} rows built from pass^1 results',
-    () => {
-      // Build PairedRow[] from two arms' per-task pass^1, clustered by family.
-      const rows = [
-        { cluster_id: 'returns', arm_a: 1 as const, arm_b: 1 as const },
-        { cluster_id: 'returns', arm_a: 1 as const, arm_b: 0 as const },
-        { cluster_id: 'rebooking', arm_a: 1 as const, arm_b: 1 as const },
-        { cluster_id: 'rebooking', arm_a: 0 as const, arm_b: 0 as const },
-      ];
-      const ci = stats!.computePairedDiffClusterBootstrapCI!({ rows, n_bootstrap: 200, seed: 42 });
-      expect(ci.ci_lower).toBeLessThanOrEqual(ci.ci_upper);
-      const tost = stats!.tostEquivalence!({ diffCI: ci, margin: 0.5 });
-      expect(typeof tost.equivalent).toBe('boolean');
-    },
-  );
+describe('Plan-04 stats wiring', () => {
+  it('paired diff CI + TOST consume {cluster_id, arm_a, arm_b} rows built from pass^1 results', () => {
+    // Build PairedRow[] from two arms' per-task pass^1, clustered by family.
+    const rows = [
+      { cluster_id: 'returns', arm_a: 1 as const, arm_b: 1 as const },
+      { cluster_id: 'returns', arm_a: 1 as const, arm_b: 0 as const },
+      { cluster_id: 'rebooking', arm_a: 1 as const, arm_b: 1 as const },
+      { cluster_id: 'rebooking', arm_a: 0 as const, arm_b: 0 as const },
+    ];
+    const ci = computePairedDiffClusterBootstrapCI({ rows, n_bootstrap: 200, seed: 42 });
+    expect(ci.ci_lower).toBeLessThanOrEqual(ci.ci_upper);
+    const tost = tostEquivalence({ diffCI: ci, margin: 0.5 });
+    expect(typeof tost.equivalent).toBe('boolean');
+  });
 });
