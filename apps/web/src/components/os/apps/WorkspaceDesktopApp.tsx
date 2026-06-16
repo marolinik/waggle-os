@@ -42,7 +42,8 @@ import { useRevalidateOnError } from '@/hooks/useRevalidateOnError';
 import MemoryCenterTab from './memory/MemoryCenterTab';
 import TasksTab from './workspace/TasksTab';
 import WorkspaceActionsMenu from '../WorkspaceActionsMenu';
-import { HexAvatar, DotLive, SectionLabel, HexCheckTile, IconTile } from '../warm';
+import { HexAvatar, DotLive, SectionLabel, HexCheckTile, IconTile, ProvenanceLine } from '../warm';
+import { frameSourceLabel } from '@/lib/frame-source';
 import type {
   WorkspaceContext,
   WorkspaceStateView,
@@ -144,13 +145,13 @@ interface ArtifactRow {
 // ── Overview tab body ────────────────────────────────────────────────────
 
 /** "What Waggle knows" — decisions + memories the workspace has recorded.
- *  The design's ⬡ source · when provenance needs frame.source projected onto
- *  these rows (recon §2/G14 — the PR3.5 keystone); until then we show the REAL
- *  date only, never a fabricated source. */
+ *  Renders the ⬡ source · when provenance pill from the projected frame.source
+ *  (PR3.5 keystone). Rows whose source is absent fall back to the REAL date
+ *  only — never a fabricated source. */
 function FactsSection({ ctx }: { ctx: WorkspaceContext | null }) {
   const facts = [
-    ...(ctx?.recentDecisions ?? []).map((d) => ({ text: d.content, when: relativeTime(d.date) })),
-    ...(ctx?.recentMemories ?? []).map((m) => ({ text: m.content, when: relativeTime(m.date) })),
+    ...(ctx?.recentDecisions ?? []).map((d) => ({ text: d.content, source: d.source, when: relativeTime(d.date) })),
+    ...(ctx?.recentMemories ?? []).map((m) => ({ text: m.content, source: m.source, when: relativeTime(m.date) })),
   ].slice(0, 6);
   if (facts.length === 0) return null;
   return (
@@ -162,7 +163,13 @@ function FactsSection({ ctx }: { ctx: WorkspaceContext | null }) {
             <HexCheckTile tone="healthy" size={26} className="mt-0.5" />
             <div className="min-w-0 flex-1">
               <p className="text-[13.5px] leading-snug text-[var(--text)]">{f.text}</p>
-              {f.when && <div className="mt-1 font-mono text-[10.5px] text-[var(--text-dim)]">{f.when}</div>}
+              {frameSourceLabel(f.source) ? (
+                <div className="mt-1">
+                  <ProvenanceLine source={frameSourceLabel(f.source)!} when={f.when} />
+                </div>
+              ) : f.when ? (
+                <div className="mt-1 font-mono text-[10.5px] text-[var(--text-dim)]">{f.when}</div>
+              ) : null}
             </div>
           </li>
         ))}

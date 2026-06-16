@@ -245,8 +245,8 @@ export interface WorkspaceContext {
   agentActive?: boolean;
   greeting?: string;
   recentThreads?: Array<{ id: string; title: string; lastActive: string }>;
-  recentDecisions?: Array<{ content: string; date: string }>;
-  recentMemories?: Array<{ content: string; importance: string; date: string }>;
+  recentDecisions?: Array<{ content: string; source?: string; date: string }>;
+  recentMemories?: Array<{ content: string; importance: string; source?: string; date: string }>;
   suggestedPrompts?: string[];
   pendingTasks?: string[];
   upcomingSchedules?: string[];
