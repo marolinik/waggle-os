@@ -13,6 +13,19 @@ pre-registration and the harness manifest (`preregistration.ts` hash anchor). Co
 > Founder ratification = check each section. Anything you change, I update here; then we freeze at a git SHA and emit
 > the manifest hash. **No parameter may change after freeze** (deviation ⇒ halt-and-restart, per `03`/manifest §10).
 
+### FOUNDER RATIFICATION — 2026-06-16
+- **Checklist items 1–3, 5–8: RATIFIED** (model facts as registered; ruler-reference approach; pilot-measure
+  discordance/ICC; calibrate embedding cutoff; firewall implemented + SHA-frozen — firewall is already BUILT, Plan 06).
+- **Item 4 (τ² license/commit): RESOLVED** — `sierra-research/tau2-bench` is **MIT** (verified) → vendor + redistribute
+  freely; the exact commit SHA is pinned at vendor time during Plan 07 and reported back for ratification.
+- **Item 10 (equivalence margin): δ = ±3pp** (founder choice). **Feasibility caveat (must read):** a *binary* TOST
+  "equivalent" verdict at ±3pp needs ≈ **5,500–9,300 paired items** (§6.1) — infeasible at any realistic task pool.
+  Therefore ±3pp is registered as the **primary accuracy margin reported as a DESCRIPTIVE 90% paired-CI against the
+  ±3pp band** (no binary verdict claimed), with **±5pp retained as the margin where a binary TOST verdict IS powered**
+  (pooled N≈1,500). The **headline is unaffected** — it leads on efficiency + pass^k, which need only ~150–300/cell.
+- **Item 9 (AppWorld credibility arm): STILL OPEN** — and now higher-value, since AppWorld adds held-out tasks that
+  help reach the larger pooled N the ±3pp margin wants. Recommend **YES**. Awaiting confirmation.
+
 ---
 
 ## 1. Hypotheses (restated, with primary/secondary split)
@@ -21,7 +34,7 @@ pre-registration and the harness manifest (`preregistration.ts` hash anchor). Co
 |---|---|---|---|
 | **H1** | `Waggle-harness(M) > raw(M)` (fixed model) | superiority, 1-sided | confirmatory |
 | **H2** | `harness+memory(M) > harness(M)` — **efficiency** primary, accuracy secondary | superiority/non-inferiority | confirmatory |
-| **H3** | `Qwen+stack ≈ Opus+stack` — **efficiency + pass^k** primary; accuracy-TOST(±5pp) secondary, divergent cells only | equivalence | confirmatory (efficiency) / secondary (accuracy) |
+| **H3** | `Qwen+stack ≈ Opus+stack` — **efficiency + pass^k** primary; accuracy-equiv (**±3pp descriptive CI** / ±5pp binary) secondary, divergent cells only | equivalence | confirmatory (efficiency) / secondary (accuracy) |
 | H3′ | same for GPT-5.5, Gemini ceilings | equivalence | secondary |
 | H-supp | `Qwen+stack > {Opus,GPT,Gemini} raw` (B>C) | superiority | supporting row |
 | H4 | `Waggle+memory > {Claude Code, Hermes, OpenClaw}` (iso-model) | superiority | **Phase 2** |
@@ -70,7 +83,7 @@ co-primary for the Opus ceiling. [REC]
 | Primary substrate | **τ²-bench** (Sierra) — native `pass^k`, local OSS, no Docker | [REC] |
 | τ² domains | **retail + airline**; **DROP telecom** (saturated ~99%, non-discriminative) | [REC] (`03` A1) |
 | τ² commit pin | from `vendor.sh` probe (Plan 07) → paste into `TAU2_PINNED_COMMIT` | [CONFIRM] SHA |
-| τ² license | verify `sierra-research/tau2-bench` SPDX before redistribution | [CONFIRM] |
+| τ² license | **MIT** (verified 2026-06-16) — vendor + redistribute freely | [LOCKED] |
 | Secondary substrate | **GAIA2 / ARE**, ≥2 splits: **search + adaptability** (adaptability rewards re-planning) | [REC] |
 | Credibility arm (optional) | SWE-bench Verified slice (N≈100) or SWE-bench-Pro-private for contamination | [REC] |
 | **Headline model-comparison** | runs on the **native unmodified distribution** (`03` D1); the continual protocol is the **memory mechanism** demo | [REC] |
@@ -148,7 +161,7 @@ single substrate (τ² ~360 after dropping telecom; GAIA2 ~400/2 splits). Theref
 |---|---|---|
 | H1/H2 superiority | paired, **cluster-bootstrap** CI (Plan 04) + **McNemar (mid-p)** on paired pass/fail, 1-sided | [REC] |
 | H3 equivalence | **TOST** — 90% CI of paired diff ⊆ [−δ,+δ] (Plan 04 `tostEquivalence`) | [REC] |
-| δ (margin) | **±5pp primary, ±3pp secondary** (decision-relevance: gap at which a buyer would pay for premium) | [REC] |
+| δ (margin) | **±3pp primary** (founder) — reported as a **descriptive 90% paired-CI vs the ±3pp band** (binary verdict infeasible at ±3pp, §6.1); **±5pp** = the powered binary-verdict margin | [LOCKED] |
 | CI engine | paired cluster-bootstrap, n_bootstrap 10,000, seed 42 | [REC] |
 | Small N (<~300 clusters) | Wilson / Bayesian, not CLT | [REC] (`03` minor) |
 
