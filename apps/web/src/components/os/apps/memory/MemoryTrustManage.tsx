@@ -52,7 +52,9 @@ function freshness(createdAt: string): Freshness {
   const days = (Date.now() - new Date(createdAt).getTime()) / DAY_MS;
   if (!Number.isFinite(days) || days <= FRESH_DAYS) return { state: 'fresh', label: 'fresh' };
   const weeks = Math.max(1, Math.round(days / 7));
-  return { state: 'aging', label: `aging — last seen ${weeks}w ago` };
+  // "added" not "last seen" — decay anchors on created_at (write time), not
+  // last_accessed (review M: the label must match what it measures).
+  return { state: 'aging', label: `aging — added ${weeks}w ago` };
 }
 
 /** A memory is "stale · worth a review" when it's aged past a half-life and
@@ -164,6 +166,7 @@ function MemoryRow({ memory, onOpen, onForget, onConfirm, busy }: MemoryRowProps
               onClick={onConfirm}
               disabled={busy}
               title="Confirm this memory"
+              aria-label={`Confirm memory M-${memory.id}`}
               className="grid h-[30px] w-[30px] place-items-center rounded-[8px] border border-[var(--line-soft)] bg-[var(--surface-2)] text-[var(--text-muted)] hover:border-[var(--healthy)] hover:text-[var(--healthy)] disabled:opacity-50"
             >
               <Check className="h-[15px] w-[15px]" strokeWidth={1.8} />
@@ -173,6 +176,7 @@ function MemoryRow({ memory, onOpen, onForget, onConfirm, busy }: MemoryRowProps
             type="button"
             onClick={onOpen}
             title="Edit / correct"
+            aria-label={`Edit or correct memory M-${memory.id}`}
             className="grid h-[30px] w-[30px] place-items-center rounded-[8px] border border-[var(--line-soft)] bg-[var(--surface-2)] text-[var(--text-muted)] hover:border-[var(--honey-line)] hover:text-[var(--honey)]"
           >
             <Pencil className="h-[15px] w-[15px]" strokeWidth={1.8} />
@@ -182,6 +186,7 @@ function MemoryRow({ memory, onOpen, onForget, onConfirm, busy }: MemoryRowProps
             onClick={onForget}
             disabled={busy}
             title="Forget this"
+            aria-label={`Forget memory M-${memory.id}`}
             className="grid h-[30px] w-[30px] place-items-center rounded-[8px] border border-[var(--line-soft)] bg-[var(--surface-2)] text-[var(--text-muted)] hover:border-[color-mix(in_srgb,var(--risk)_45%,transparent)] hover:text-[var(--risk)] disabled:opacity-50"
           >
             <Trash2 className="h-[15px] w-[15px]" strokeWidth={1.8} />
@@ -222,19 +227,24 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
     }
     setLoading(true); setError(null);
     try {
-      const res = await adapter.listMemories({ mind, workspaceId: wsParam, q: q.trim() || undefined, limit: FETCH_LIMIT });
+      // Fetch the whole working set (no q) so the stat bar reflects the HIVE,
+      // not the current search (review M). Search filters client-side below.
+      const res = await adapter.listMemories({ mind, workspaceId: wsParam, limit: FETCH_LIMIT });
       if (seq === loadSeq.current) setMemories(res);
     } catch (e) {
       if (seq === loadSeq.current) setError(e instanceof Error ? e.message : 'Failed to load memories');
     } finally {
       if (seq === loadSeq.current) setLoading(false);
     }
-  }, [mind, wsParam, q]);
+  }, [mind, wsParam]);
 
+  // Defer to a macrotask so load() captures loadSeq AFTER the mind-reset effect
+  // below bumps it on mount — otherwise the reset invalidates the in-flight load
+  // and the list never commits. (The old q-debounce is gone; the deferral isn't.)
   useEffect(() => {
-    const t = setTimeout(load, q ? 250 : 0);
+    const t = setTimeout(() => { void load(); }, 0);
     return () => clearTimeout(t);
-  }, [load, q, reloadTick]);
+  }, [load, reloadTick]);
 
   // Mind switch clears everything in flight + on screen (ids collide across stores).
   useEffect(() => {
@@ -277,10 +287,13 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
   }, [live]);
 
   const shown = useMemo(() => {
-    if (filter === 'stale') return live.filter(isStale);
-    if (filter === 'needs_confirm') return live.filter((m) => m.status === 'unreviewed');
-    return live;
-  }, [live, filter]);
+    let set = live;
+    if (filter === 'stale') set = set.filter(isStale);
+    else if (filter === 'needs_confirm') set = set.filter((m) => m.status === 'unreviewed');
+    const ql = q.trim().toLowerCase();
+    if (ql) set = set.filter((m) => m.content.toLowerCase().includes(ql) || (m.title?.toLowerCase().includes(ql) ?? false));
+    return set;
+  }, [live, filter, q]);
 
   // One-shot: open a specific memory's editor when asked (the Why view's
   // "that memory is wrong → correct it" hands the id back here).
@@ -299,16 +312,21 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
       setReloadTick((t) => t + 1);
       onToast(toast);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Action failed');
+      // A failed ACTION must not blow away the list (that's the load-error
+      // branch) — surface it transiently instead (review L).
+      onToast(e instanceof Error ? `Couldn't complete that — ${e.message}` : 'Action failed');
     } finally {
       setBusy(false);
     }
   };
 
-  const forget = (m: Memory) =>
-    void mutate(() => adapter.deleteMemoryById(m.id, wsParam, mind), `Forgotten M-${m.id} — removed from recall`);
-  const confirm = (m: Memory) =>
-    void mutate(() => adapter.confirmMemory(m.id, wsParam, mind), `Confirmed M-${m.id} — freshness reset`);
+  // Row-level actions keep the drawer untouched; drawer-initiated ones pass
+  // closeDrawer=true so the editor doesn't strand on a deleted/confirmed memory
+  // (review M).
+  const forget = (m: Memory, closeDrawer = false) =>
+    void mutate(() => adapter.deleteMemoryById(m.id, wsParam, mind), `Forgotten M-${m.id} — removed from recall`, closeDrawer);
+  const confirm = (m: Memory, closeDrawer = false) =>
+    void mutate(() => adapter.confirmMemory(m.id, wsParam, mind), `Confirmed M-${m.id} — marked reviewed`, closeDrawer);
   const saveCorrection = () => {
     if (!selected) return;
     if (draft === selected.content) { setSelected(null); return; }
@@ -334,6 +352,7 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
+            aria-label="Search memories"
             placeholder="Search what Waggle knows… or ask it to forget something"
             className="w-full bg-transparent text-[14px] text-[var(--text)] placeholder:text-[var(--text-dim)] focus:outline-none"
           />
@@ -360,7 +379,8 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
         {/* "Forgotten" is gated off — hard delete leaves no tombstone (no list to show). */}
         <button
           type="button"
-          disabled
+          aria-disabled="true"
+          aria-label="Forgotten filter unavailable — forgetting is permanent, there's no recoverable list (hard delete, by design)"
           title="Forgetting is permanent — there's no recoverable list (hard delete, by design)"
           className="cursor-not-allowed rounded-[9px] border border-[var(--line-soft)] bg-[var(--surface)] px-3 py-2 text-[12.5px] font-semibold text-[var(--text-dim)] opacity-50"
         >
@@ -432,7 +452,7 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
             )}
             {selected.status === 'unreviewed' && (
               <button
-                onClick={() => confirm(selected)}
+                onClick={() => confirm(selected, true)}
                 disabled={busy}
                 className="inline-flex items-center gap-1 rounded-lg border border-[var(--line-soft)] px-2.5 py-1 text-xs hover:bg-[var(--surface-2)]"
               >
@@ -440,7 +460,7 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
               </button>
             )}
             <button
-              onClick={() => forget(selected)}
+              onClick={() => forget(selected, true)}
               disabled={busy}
               className="ml-auto inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs text-[var(--risk)] hover:bg-[var(--risk-wash)]"
             >

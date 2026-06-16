@@ -33,9 +33,12 @@ export function ConfidenceRing({ value, className }: ConfidenceRingProps) {
   return (
     <div className={cn('flex w-[42px] flex-none flex-col items-center', className)}>
       <div
+        role="img"
         className="grid h-[38px] w-[38px] place-items-center rounded-full font-mono text-[11px] font-semibold"
         style={{ color, border: `2px solid ${color}` }}
-        aria-label={known ? `Confidence ${Math.round(value)} percent` : 'Confidence unknown'}
+        aria-label={known
+          ? `Confidence ${Math.round(value)} percent (${value >= 85 ? 'high' : value >= 60 ? 'medium' : 'low'})`
+          : 'Confidence unknown'}
       >
         {known ? Math.round(value) : '—'}
       </div>

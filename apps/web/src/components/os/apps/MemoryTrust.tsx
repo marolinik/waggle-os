@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { ShieldCheck, Info } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { SectionLabel } from '../warm';
@@ -122,7 +122,11 @@ export default function MemoryTrust({ mind, workspaceId }: MemoryTrustProps) {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 2400);
   }, []);
+  // Clear a pending toast timer on unmount (e.g. leaving the Trust tab) so it
+  // can't fire setState after unmount (review L).
+  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
 
+  const clearPendingOpen = useCallback(() => setPendingOpenId(null), []);
   const goToTrace = useCallback((id: string) => { setTraceMemoryId(id); setView('why'); }, []);
   const correctFromTrace = useCallback((id: string) => { setPendingOpenId(id); setView('manage'); }, []);
   const forgetFromTrace = useCallback(async (id: string) => {
@@ -141,14 +145,17 @@ export default function MemoryTrust({ mind, workspaceId }: MemoryTrustProps) {
       {/* Sticky segmented control (§1) */}
       <div className="sticky top-0 z-10 flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-[var(--line-soft)] bg-[var(--bg)]/80 px-5 py-3 backdrop-blur">
         <SectionLabel>Memory Trust · view</SectionLabel>
-        <div role="tablist" aria-label="Memory Trust view" className="flex gap-0.5 rounded-[10px] border border-[var(--line-soft)] bg-[var(--surface-2)] p-[3px]">
+        {/* Plain toggle buttons (aria-pressed), NOT a role=tablist: it's nested
+            inside the MemoryCenterApp tab bar and has no arrow-key tablist
+            semantics — toggle buttons are natively keyboard-operable (review HIGH). */}
+        <div role="group" aria-label="Memory Trust view" className="flex gap-0.5 rounded-[10px] border border-[var(--line-soft)] bg-[var(--surface-2)] p-[3px]">
           {SEGMENTS.map((s) => {
             const on = view === s.id;
             return (
               <button
                 key={s.id}
-                role="tab"
-                aria-selected={on}
+                type="button"
+                aria-pressed={on}
                 onClick={() => setView(s.id)}
                 className={cn(
                   'rounded-[8px] px-3 py-1.5 text-[12.5px] font-medium transition-colors',
@@ -181,7 +188,7 @@ export default function MemoryTrust({ mind, workspaceId }: MemoryTrustProps) {
                 onToast={showToast}
                 onWhy={goToTrace}
                 openMemoryId={pendingOpenId}
-                onOpenConsumed={() => setPendingOpenId(null)}
+                onOpenConsumed={clearPendingOpen}
               />
             </>
           ) : (
@@ -202,9 +209,10 @@ export default function MemoryTrust({ mind, workspaceId }: MemoryTrustProps) {
 
       <TrustPrincipleFooter view={view} />
 
-      {/* Shared toast (§7) — green slide-up confirmation for forget/correct/confirm. */}
+      {/* Shared toast (§7) — green slide-up confirmation for forget/correct/confirm.
+          Sits above the persistent principle footer (review L). */}
       {toast && (
-        <div className="pointer-events-none absolute bottom-6 left-1/2 z-50 -translate-x-1/2" role="status" aria-live="polite">
+        <div className="pointer-events-none absolute bottom-20 left-1/2 z-50 -translate-x-1/2" role="status" aria-live="polite">
           <div className="flex items-center gap-2 rounded-full border border-[var(--healthy)] bg-[var(--surface)] px-4 py-2 text-[13px] text-[var(--text)] shadow-lg">
             <span className="h-2 w-2 rounded-full bg-[var(--healthy)]" aria-hidden="true" />
             {toast}

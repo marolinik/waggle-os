@@ -79,7 +79,7 @@ describe('MemoryTrustManage stats + filters + actions (PR3.5 Phase B+C)', () => 
     render(<MemoryTrustManage mind="personal" onToast={() => {}} />);
     await waitFor(() => expect(screen.getByText('⬡ M-1')).toBeTruthy());
     const forgotten = screen.getByText('Forgotten').closest('button')!;
-    expect(forgotten.hasAttribute('disabled')).toBe(true);
+    expect(forgotten.getAttribute('aria-disabled')).toBe('true');
   });
 
   it('Forget hits deleteMemoryById and fires a toast', async () => {
