@@ -110,7 +110,9 @@ describe('emitPreregistrationManifest (criteria 2, 10)', () => {
   let infoSpy: MockInstance;
 
   beforeEach(() => {
-    infoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    // createCoreLogger(...).info() routes to console.error (stderr) so library
+    // log lines never corrupt stdout machine-consumers (hive-mind-core/src/logger.ts).
+    infoSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
   });
   afterEach(() => {
     infoSpy.mockRestore();
@@ -290,7 +292,9 @@ describe('judge_models B3 addendum pinning (Sub-deliverable C)', () => {
   let infoSpy: MockInstance;
 
   beforeEach(() => {
-    infoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    // createCoreLogger(...).info() routes to console.error (stderr) so library
+    // log lines never corrupt stdout machine-consumers (hive-mind-core/src/logger.ts).
+    infoSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
   });
   afterEach(() => {
     infoSpy.mockRestore();
