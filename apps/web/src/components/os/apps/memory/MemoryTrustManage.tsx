@@ -27,6 +27,12 @@ interface MemoryTrustManageProps {
   mind: 'personal' | 'workspace';
   workspaceId?: string;
   onToast: (msg: string) => void;
+  /** "Why is this here?" — hand the memory id to the trace (Why) view. */
+  onWhy?: (id: string) => void;
+  /** When set (e.g. from the Why view's "correct it"), open that memory's editor. */
+  openMemoryId?: string | null;
+  /** Called once the openMemoryId request has been handled (one-shot). */
+  onOpenConsumed?: () => void;
 }
 
 type TrustFilter = 'all' | 'stale' | 'needs_confirm';
@@ -194,7 +200,7 @@ const FILTERS: { id: TrustFilter; label: string }[] = [
   { id: 'needs_confirm', label: 'Needs confirm' },
 ];
 
-export default function MemoryTrustManage({ mind, workspaceId, onToast }: MemoryTrustManageProps) {
+export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, openMemoryId, onOpenConsumed }: MemoryTrustManageProps) {
   const wsParam = mind === 'workspace' ? workspaceId : undefined;
   const [memories, setMemories] = useState<Memory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -275,6 +281,15 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast }: Memory
     if (filter === 'needs_confirm') return live.filter((m) => m.status === 'unreviewed');
     return live;
   }, [live, filter]);
+
+  // One-shot: open a specific memory's editor when asked (the Why view's
+  // "that memory is wrong → correct it" hands the id back here).
+  useEffect(() => {
+    if (!openMemoryId) return;
+    const m = live.find((x) => x.id === openMemoryId);
+    if (m) { setSelected(m); setDraft(m.content); onOpenConsumed?.(); }
+    else if (!loading) { onOpenConsumed?.(); }
+  }, [openMemoryId, live, loading, onOpenConsumed]);
 
   const mutate = async (fn: () => Promise<unknown>, toast: string, closeDrawer = false) => {
     setBusy(true);
@@ -407,6 +422,14 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast }: Memory
             >
               <Save className="h-3 w-3" /> Save correction
             </button>
+            {onWhy && (
+              <button
+                onClick={() => onWhy(selected.id)}
+                className="inline-flex items-center gap-1 rounded-lg border border-[var(--line-soft)] px-2.5 py-1 text-xs hover:bg-[var(--surface-2)]"
+              >
+                Why is this here?
+              </button>
+            )}
             {selected.status === 'unreviewed' && (
               <button
                 onClick={() => confirm(selected)}

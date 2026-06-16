@@ -1,7 +1,9 @@
 import { useState, useRef, useCallback } from 'react';
 import { ShieldCheck, Info } from 'lucide-react';
+import { adapter } from '@/lib/adapter';
 import { SectionLabel } from '../warm';
 import MemoryTrustManage from './memory/MemoryTrustManage';
+import MemoryTrustWhy from './memory/MemoryTrustWhy';
 import { cn } from '@/lib/utils';
 
 /**
@@ -76,21 +78,6 @@ function WhyHero() {
   );
 }
 
-/** Phase D will render the real trace here. Until then: honest empty state. */
-function WhyEmptyState() {
-  return (
-    <div className="rounded-[18px] border border-dashed border-[var(--line-soft)] bg-[var(--bg-2)] px-6 py-10 text-center">
-      <Info className="mx-auto mb-3 h-6 w-6 text-[var(--intel)]" strokeWidth={1.8} />
-      <p className="text-[14px] text-[var(--text-2)]">Open a memory&rsquo;s ⬡ trace to see why Waggle acted on it.</p>
-      <p className="mx-auto mt-1.5 max-w-[52ch] text-[12.5px] leading-relaxed text-[var(--text-muted)]">
-        The goal → recalled memories → checks → action chain is recorded with every agentic turn.
-        Memories written by the agent link back to that trace; manually added or imported memories
-        won&rsquo;t have one yet.
-      </p>
-    </div>
-  );
-}
-
 /** §7 trust-principle footnote — rendered as a persistent footer in both views. */
 function TrustPrincipleFooter({ view }: { view: TrustView }) {
   const Icon = view === 'manage' ? ShieldCheck : Info;
@@ -123,12 +110,31 @@ function TrustPrincipleFooter({ view }: { view: TrustView }) {
 export default function MemoryTrust({ mind, workspaceId }: MemoryTrustProps) {
   const [view, setView] = useState<TrustView>('manage');
   const [toast, setToast] = useState<string | null>(null);
+  // Cross-view accountability loop: Manage row → "Why?" sets the trace target +
+  // switches to Why; the Why view's "correct it" hands an id back to Manage's editor.
+  const [traceMemoryId, setTraceMemoryId] = useState<string | null>(null);
+  const [pendingOpenId, setPendingOpenId] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const wsParam = mind === 'workspace' ? workspaceId : undefined;
+
   const showToast = useCallback((msg: string) => {
     setToast(msg);
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 2400);
   }, []);
+
+  const goToTrace = useCallback((id: string) => { setTraceMemoryId(id); setView('why'); }, []);
+  const correctFromTrace = useCallback((id: string) => { setPendingOpenId(id); setView('manage'); }, []);
+  const forgetFromTrace = useCallback(async (id: string) => {
+    try {
+      await adapter.deleteMemoryById(id, wsParam, mind);
+      showToast(`Forgotten M-${id} — removed from recall`);
+      setTraceMemoryId(null);
+      setView('manage');
+    } catch {
+      showToast('Could not forget that memory');
+    }
+  }, [wsParam, mind, showToast]);
 
   return (
     <div className="relative flex h-full flex-col">
@@ -169,12 +175,26 @@ export default function MemoryTrust({ mind, workspaceId }: MemoryTrustProps) {
           {view === 'manage' ? (
             <>
               <ManageHero />
-              <MemoryTrustManage mind={mind} workspaceId={workspaceId} onToast={showToast} />
+              <MemoryTrustManage
+                mind={mind}
+                workspaceId={workspaceId}
+                onToast={showToast}
+                onWhy={goToTrace}
+                openMemoryId={pendingOpenId}
+                onOpenConsumed={() => setPendingOpenId(null)}
+              />
             </>
           ) : (
             <>
               <WhyHero />
-              <WhyEmptyState />
+              <MemoryTrustWhy
+                mind={mind}
+                workspaceId={workspaceId}
+                memoryId={traceMemoryId}
+                onToast={showToast}
+                onCorrect={correctFromTrace}
+                onForget={forgetFromTrace}
+              />
             </>
           )}
         </div>
