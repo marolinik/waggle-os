@@ -1,0 +1,52 @@
+{
+  "split_id": "gate-smoke-tau2-retail-v1",
+  "substrate": "tau2-bench",
+  "split": "retail",
+  "phase_a_task_ids": ["A-001", "A-002", "A-003", "A-004"],
+  "phase_b": [
+    {
+      "instance_id": "B-001",
+      "conversation_id": "proc-return",
+      "cluster_id": "proc-return",
+      "question": "Process the return for order A-2001 and state the refund total.",
+      "context": "Order A-2001: 1 item, $19.99, within 30-day window.",
+      "expected": ["19.99"],
+      "gold": "The refund total for order A-2001 is $19.99",
+      "arm_a": 1,
+      "arm_b": 1
+    },
+    {
+      "instance_id": "B-002",
+      "conversation_id": "proc-return",
+      "cluster_id": "proc-return",
+      "question": "Process the return for order A-2002 and state the refund total.",
+      "context": "Order A-2002: 1 item, $34.00, within 30-day window.",
+      "expected": ["34.00"],
+      "gold": "The refund total for order A-2002 is $34.00",
+      "arm_a": 1,
+      "arm_b": 0
+    },
+    {
+      "instance_id": "B-003",
+      "conversation_id": "proc-exchange",
+      "cluster_id": "proc-exchange",
+      "question": "Exchange item in order A-2003 for the larger size; confirm the new order id.",
+      "context": "Order A-2003: size M in stock as L.",
+      "expected": ["A-2003-X"],
+      "gold": "Exchange complete; new order id A-2003-X",
+      "arm_a": 1,
+      "arm_b": 1
+    },
+    {
+      "instance_id": "B-004",
+      "conversation_id": "proc-exchange",
+      "cluster_id": "proc-exchange",
+      "question": "Exchange item in order A-2004 for a different color; confirm the new order id.",
+      "context": "Order A-2004: color swap available.",
+      "expected": ["A-2004-X"],
+      "gold": "Exchange complete; new order id A-2004-X",
+      "arm_a": 1,
+      "arm_b": 1
+    }
+  ]
+}
