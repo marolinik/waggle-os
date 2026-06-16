@@ -50,3 +50,6 @@ export { runPreregChecklist, defaultGitProbe } from './prereg-checklist.js';
 export type {
   GitState, GitProbe, PreregChecklistInput, PreregChecklistResult,
 } from './prereg-checklist.js';
+
+export { runPreflight } from './preflight.js';
+export type { PreflightInput, PreflightResult, PreflightRuler } from './preflight.js';
