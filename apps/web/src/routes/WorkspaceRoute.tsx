@@ -15,10 +15,11 @@ import { ChatSlot } from '@/components/os/ChatHost';
 import SurfaceBoundary from './SurfaceBoundary';
 import { useShell } from '@/providers/ShellContext';
 
-// The 8 PRD §12.2 tabs, pinned to WorkspaceDesktopApp's TABS. Unknown `:tab?`
-// values fall back to the overview default instead of an empty panel.
+// The warm-Hive 6-tab bar + `tasks` (deep-link-reachable, not shown in the bar
+// — the Overview "Up next" card routes to it). Dropped Research/Timeline/
+// Settings fall through to the overview default instead of an empty panel.
 const WS_TABS: readonly WorkspaceTabId[] = [
-  'overview', 'chat', 'research', 'artifacts', 'memory', 'tasks', 'timeline', 'settings',
+  'overview', 'chat', 'memory', 'artifacts', 'files', 'team', 'tasks',
 ];
 
 const WorkspaceRoute = () => {

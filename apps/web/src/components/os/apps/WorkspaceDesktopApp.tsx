@@ -32,8 +32,8 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  LayoutGrid, MessageSquare, BookOpen, FileBox, Brain, ListTodo,
-  Clock, Settings as SettingsIcon, Loader2, CheckCircle2, AlertTriangle,
+  LayoutGrid, MessageSquare, FileBox, Brain, ListTodo,
+  Clock, Loader2, CheckCircle2, AlertTriangle,
   Lightbulb, Sparkles, Users, Activity, WifiOff, ShieldAlert, ChevronRight,
   Circle, FileText, ArrowUpRight, SearchX, RefreshCw,
 } from 'lucide-react';
@@ -44,6 +44,7 @@ import { useRevalidateOnError } from '@/hooks/useRevalidateOnError';
 import MemoryCenterTab from './memory/MemoryCenterTab';
 import TasksTab from './workspace/TasksTab';
 import WorkspaceActionsMenu from '../WorkspaceActionsMenu';
+import { HexAvatar, DotLive } from '../warm';
 import type {
   WorkspaceContext,
   WorkspaceStateView,
@@ -55,9 +56,13 @@ import type {
 // The 8 PRD §12.2 tabs (Settings included). The shell renders Overview
 // itself; the other tabs are embedded by the integrator (Chat / Memory /
 // Timeline / Settings have hosts; Research / Artifacts are interim panels).
+// Warm-Hive (SCREENS §03): the calm 6-tab bar. `tasks` stays a valid id (so
+// /workspaces/:id/tasks still deep-links the full TasksTab + the Overview "Up
+// next" card can route to it) but is NOT shown in the bar — Research / Timeline
+// / Settings are dropped (their URLs fall back to Overview, see WorkspaceRoute).
 export type WorkspaceTabId =
-  | 'overview' | 'chat' | 'research' | 'artifacts'
-  | 'memory' | 'tasks' | 'timeline' | 'settings';
+  | 'overview' | 'chat' | 'memory' | 'artifacts'
+  | 'files' | 'team' | 'tasks';
 
 interface WorkspaceTabDef {
   id: WorkspaceTabId;
@@ -68,12 +73,10 @@ interface WorkspaceTabDef {
 const TABS: readonly WorkspaceTabDef[] = [
   { id: 'overview', label: 'Overview', icon: LayoutGrid },
   { id: 'chat', label: 'Chat', icon: MessageSquare },
-  { id: 'research', label: 'Research', icon: BookOpen },
-  { id: 'artifacts', label: 'Artifacts', icon: FileBox },
   { id: 'memory', label: 'Memory', icon: Brain },
-  { id: 'tasks', label: 'Tasks', icon: ListTodo },
-  { id: 'timeline', label: 'Timeline', icon: Clock },
-  { id: 'settings', label: 'Settings', icon: SettingsIcon },
+  { id: 'artifacts', label: 'Artifacts', icon: FileBox },
+  { id: 'files', label: 'Files', icon: FileText },
+  { id: 'team', label: 'Team', icon: Users },
 ] as const;
 
 // ── Member view-model (from adapter.getTeamMembers) ──────────────────────
@@ -113,17 +116,6 @@ interface WorkspaceDesktopAppProps {
 }
 
 // ── Small presentational helpers ─────────────────────────────────────────
-
-function statusPillClass(status: WorkspaceContext['workspace']['status']): string {
-  switch (status) {
-    case 'paused':
-      return 'bg-amber-500/10 text-amber-300 border-amber-500/20';
-    case 'archived':
-      return 'bg-muted/40 text-muted-foreground border-border/30';
-    default:
-      return 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20';
-  }
-}
 
 function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -679,7 +671,6 @@ const WorkspaceDesktopApp = ({
   }, [workspaceId, reloadKey]);
 
   const displayName = ctx?.workspace?.name ?? workspaceName;
-  const wsType = ctx?.workspace?.type;
   const wsStatus = ctx?.workspace?.status ?? 'active';
   const hasMemory = (ctx?.stats?.memoryCount ?? ctx?.memoryCount ?? 0) > 0
     || (ctx?.recentMemories?.length ?? 0) > 0;
@@ -756,65 +747,84 @@ const WorkspaceDesktopApp = ({
   return (
     <div className="h-full flex flex-col overflow-hidden bg-background" data-testid="ws-desktop-root" data-workspace-id={workspaceId}>
       {/* Header */}
-      <header className="shrink-0 flex items-center justify-between px-4 py-2.5 border-b border-border/30">
-        <div className="flex items-center gap-3 min-w-0">
-          <h2 className="text-sm font-display font-semibold text-foreground truncate">{displayName}</h2>
-          {wsType && (
-            <span className="px-1.5 py-0.5 rounded text-[10px] border border-border/30 bg-muted/30 text-muted-foreground font-display uppercase tracking-wide capitalize">
-              {wsType}
-            </span>
-          )}
-          <span
-            className={`px-1.5 py-0.5 rounded text-[10px] border font-display capitalize ${statusPillClass(wsStatus)}`}
-            data-testid="ws-status-pill"
-          >
-            {wsStatus}
-          </span>
-          {agentsRunning > 0 && (
-            <span className="flex items-center gap-1.5 text-[11px] text-primary" data-testid="ws-agents-running">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-              {agentsRunning} running
-            </span>
-          )}
-        </div>
-
-        {/* Members stack + workspace actions */}
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="flex items-center -space-x-2" data-testid="ws-members-stack">
-            {members.slice(0, 5).map(m => (
-              <span
-                key={m.id}
-                title={m.name}
-                className="w-6 h-6 rounded-full bg-primary/15 text-primary text-[10px] flex items-center justify-center font-display border border-background"
-              >
-                {initialsOf(m.name)}
-              </span>
-            ))}
-            {members.length > 5 && (
-              <span className="w-6 h-6 rounded-full bg-muted text-muted-foreground text-[10px] flex items-center justify-center font-display border border-background">
-                +{members.length - 5}
-              </span>
-            )}
+      <header className="shrink-0 border-b border-[var(--line-soft)] px-5 py-3.5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <HexAvatar label={displayName} size={46} />
+            <div className="min-w-0">
+              <div className="mb-0.5 flex items-center gap-1.5 font-mono text-[11px] text-[var(--text-dim)]">
+                <button
+                  type="button"
+                  onClick={() => window.dispatchEvent(new CustomEvent('waggle:open-app', { detail: { appId: 'home' } }))}
+                  className="transition-colors hover:text-[var(--text-2)]"
+                >
+                  Home
+                </button>
+                <span aria-hidden>›</span>
+                <span className="truncate text-[var(--text-2)]">{displayName}</span>
+              </div>
+              <h2 className="truncate font-display text-[clamp(20px,2.4vw,28px)] font-semibold leading-tight tracking-[-0.02em] text-[var(--text)]">
+                {displayName}
+              </h2>
+              <div className="mt-1 flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[13px] text-[var(--text-muted)]">
+                {agentsRunning > 0 && (
+                  <span className="inline-flex items-center gap-1.5" data-testid="ws-agents-running">
+                    <DotLive tone="healthy" size={7} />
+                    {agentsRunning} agent{agentsRunning === 1 ? '' : 's'} live
+                  </span>
+                )}
+                {typeof ctx?.stats?.memoryCount === 'number' && (
+                  <span>{ctx.stats.memoryCount} {ctx.stats.memoryCount === 1 ? 'memory' : 'memories'}</span>
+                )}
+                {relativeTime(lastEvent?.ts) && <span>updated {relativeTime(lastEvent?.ts)}</span>}
+                {wsStatus !== 'active' && (
+                  <span className="capitalize text-[var(--attention)]" data-testid="ws-status-pill" data-status={wsStatus}>{wsStatus}</span>
+                )}
+              </div>
+            </div>
           </div>
-          {/* G1 (UX-Northstar 2026-06-13): manage the workspace from its own header */}
-          <WorkspaceActionsMenu
-            workspace={{ id: workspaceId, name: displayName, status: wsStatus }}
-            onChanged={(action) => {
-              if (action === 'delete') {
-                window.dispatchEvent(new CustomEvent('waggle:open-app', { detail: { appId: 'home' } }));
-              } else {
-                retry();
-              }
-            }}
-          />
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab('memory')}
+              className="rounded-[10px] border border-[var(--line-strong)] bg-[var(--surface)] px-3 py-1.5 text-[13px] text-[var(--text-2)] transition-colors hover:text-[var(--text)]"
+            >
+              Memory
+            </button>
+            <button
+              type="button"
+              onClick={openChat}
+              className="inline-flex items-center gap-1 rounded-[10px] bg-[var(--honey)] px-3.5 py-1.5 text-[13px] font-medium text-[#1a1407] transition-opacity hover:opacity-90"
+            >
+              Continue <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+            {/* G1 (UX-Northstar 2026-06-13): manage the workspace from its own header */}
+            <WorkspaceActionsMenu
+              workspace={{ id: workspaceId, name: displayName, status: wsStatus }}
+              onChanged={(action) => {
+                if (action === 'delete') {
+                  window.dispatchEvent(new CustomEvent('waggle:open-app', { detail: { appId: 'home' } }));
+                } else {
+                  retry();
+                }
+              }}
+            />
+          </div>
         </div>
       </header>
 
       {/* Tab bar */}
-      <nav className="shrink-0 flex items-center gap-1 px-3 border-b border-border/30 overflow-x-auto" role="tablist" data-testid="ws-tab-bar">
+      <nav className="shrink-0 flex items-center gap-1 border-b border-[var(--line-soft)] px-3 overflow-x-auto" role="tablist" data-testid="ws-tab-bar">
         {TABS.map(tab => {
           const Icon = tab.icon;
           const isActive = tab.id === activeTab;
+          const count =
+            tab.id === 'chat' ? ctx?.stats?.sessionCount
+            : tab.id === 'memory' ? ctx?.stats?.memoryCount
+            : tab.id === 'artifacts' ? (artifacts.length || undefined)
+            : tab.id === 'files' ? ctx?.stats?.fileCount
+            : tab.id === 'team' ? (members.length || undefined)
+            : undefined;
           return (
             <button
               key={tab.id}
@@ -824,15 +834,18 @@ const WorkspaceDesktopApp = ({
               aria-selected={isActive}
               aria-controls="ws-tabpanel"
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-display whitespace-nowrap border-b-2 transition-colors ${
+              className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-[13px] transition-colors ${
                 isActive
-                  ? 'border-primary text-foreground'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
+                  ? 'border-[var(--honey)] text-[var(--text)]'
+                  : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text)]'
               }`}
               data-testid={`ws-tab-${tab.id}`}
             >
-              <Icon className="w-3.5 h-3.5" />
+              <Icon className="h-3.5 w-3.5" />
               {tab.label}
+              {typeof count === 'number' && count > 0 && (
+                <span className="font-mono text-[11px] text-[var(--text-dim)]">{count}</span>
+              )}
             </button>
           );
         })}
@@ -903,14 +916,6 @@ const WorkspaceDesktopApp = ({
 
           {activeTab === 'tasks' && <TasksTab workspaceId={workspaceId} state={state} />}
 
-          {activeTab === 'research' && (
-            <TabPlaceholder
-              icon={BookOpen}
-              title="Research & Notes"
-              body="Notes and research for this workspace live here. This surface is wired in a later phase."
-            />
-          )}
-
           {activeTab === 'artifacts' && (
             artifacts.length === 0 ? (
               <TabPlaceholder
@@ -919,12 +924,12 @@ const WorkspaceDesktopApp = ({
                 body="Files and documents created in this workspace appear here. The full Artifact Center arrives in a later phase."
               />
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4 overflow-auto h-full" data-testid="ws-artifacts-tab">
+              <div className="grid h-full grid-cols-1 gap-3 overflow-auto p-5 sm:grid-cols-2 lg:grid-cols-3" data-testid="ws-artifacts-tab">
                 {artifacts.map(a => (
-                  <div key={a.id} className="p-3 rounded-xl bg-secondary/30 border border-border/30">
-                    <FileText className="w-4 h-4 text-sky-400 mb-2" />
-                    <p className="text-xs text-foreground truncate">{a.name}</p>
-                    {a.subtitle && <p className="text-[10px] text-muted-foreground/70 truncate">{a.subtitle}</p>}
+                  <div key={a.id} className="rounded-[14px] border border-[var(--line-soft)] bg-card p-3.5 transition-colors hover:border-[var(--honey-line)]">
+                    <FileText className="mb-2 h-4 w-4 text-[var(--intel)]" />
+                    <p className="truncate text-[13px] text-[var(--text)]">{a.name}</p>
+                    {a.subtitle && <p className="truncate text-[11px] text-[var(--text-muted)]">{a.subtitle}</p>}
                   </div>
                 ))}
               </div>
@@ -940,20 +945,48 @@ const WorkspaceDesktopApp = ({
             </div>
           )}
 
-          {activeTab === 'timeline' && (
-            <TabPlaceholder
-              icon={Clock}
-              title="Timeline"
-              body="The execution timeline for this workspace embeds here."
-            />
+          {/* Files = the workspace file registry (getWorkspaceFiles); the
+              distinct artifact entity is a later phase, so both surfaces read
+              the same registry today. */}
+          {activeTab === 'files' && (
+            artifacts.length === 0 ? (
+              <TabPlaceholder
+                icon={FileText}
+                title="No files yet"
+                body="Files in this workspace appear here as you and your agents create them."
+              />
+            ) : (
+              <div className="h-full overflow-auto p-5" data-testid="ws-files-tab">
+                <ul className="divide-y divide-[var(--line-soft)] overflow-hidden rounded-[14px] border border-[var(--line-soft)]">
+                  {artifacts.map(a => (
+                    <li key={a.id} className="flex items-center gap-3 bg-card px-4 py-2.5">
+                      <FileText className="h-4 w-4 shrink-0 text-[var(--text-dim)]" />
+                      <span className="flex-1 truncate text-[13.5px] text-[var(--text)]">{a.name}</span>
+                      {a.subtitle && <span className="shrink-0 font-mono text-[11px] text-[var(--text-dim)]">{a.subtitle}</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )
           )}
 
-          {activeTab === 'settings' && (
-            <TabPlaceholder
-              icon={SettingsIcon}
-              title="Workspace Settings"
-              body="Configuration for this workspace embeds here."
-            />
+          {/* Team — global roster today (TODO: workspace-scoped membership). */}
+          {activeTab === 'team' && (
+            <div className="h-full overflow-auto p-5" data-testid="ws-team-tab">
+              {members.length === 0 ? (
+                <TabPlaceholder icon={Users} title="Just you for now" body="Team members with access to this workspace will appear here." />
+              ) : (
+                <ul className="space-y-2">
+                  {members.map(m => (
+                    <li key={m.id} className="flex items-center gap-3 rounded-[14px] border border-[var(--line-soft)] bg-card px-4 py-3">
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--surface-3)] font-mono text-[12px] text-[var(--text-2)]">{initialsOf(m.name)}</span>
+                      <span className="flex-1 truncate text-[14px] text-[var(--text)]">{m.name}</span>
+                      {m.status && <span className="shrink-0 font-mono text-[11px] capitalize text-[var(--text-dim)]">{m.status}</span>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
         </main>
 
