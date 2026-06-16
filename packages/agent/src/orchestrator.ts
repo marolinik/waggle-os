@@ -831,7 +831,11 @@ export class Orchestrator {
    * Routes preferences/corrections/style to personal mind; decisions and
    * work-output to workspace (or personal when no workspace is active).
    */
-  async autoSaveFromExchange(userMsg: string, assistantMsg: string): Promise<string[]> {
+  async autoSaveFromExchange(
+    userMsg: string,
+    assistantMsg: string,
+    opts?: { traceId?: string },
+  ): Promise<string[]> {
     return runPatternWriteBack(
       {
         personal: { db: this.db, frames: this.frames, sessions: this.sessions },
@@ -846,6 +850,7 @@ export class Orchestrator {
       },
       userMsg,
       assistantMsg,
+      opts,
     );
   }
 

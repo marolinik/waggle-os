@@ -385,6 +385,97 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
     return reply.status(404).send({ error: 'Memory not found' });
   });
 
+  // POST /api/memory/:id/confirm — PR3.5 Memory-Trust: mark a memory reviewed.
+  // Clears the 'unreviewed' lifecycle state (set by harvest import) by moving
+  // status → 'active'. Mirrors /archive; the "Awaiting your confirm" queue is
+  // GET /api/memory?status=unreviewed.
+  server.post<{
+    Params: { id: string };
+    Querystring: { workspace?: string; workspaceId?: string; mind?: string };
+  }>('/api/memory/:id/confirm', async (request, reply) => {
+    const frameId = parseInt(request.params.id, 10);
+    if (isNaN(frameId)) return reply.status(400).send({ error: 'Invalid memory id' });
+    const workspace = request.query.workspace ?? request.query.workspaceId;
+    const parsed = parseMind(request.query.mind, workspace);
+    if (!parsed.ok) return reply.status(400).send({ error: parsed.error });
+
+    for (const c of candidateStores(workspace, parsed.mind)) {
+      const existing = c.store.getById(frameId);
+      if (!existing) continue;
+      const merged = parseFrameMetadata(existing.metadata);
+      merged.status = 'active' satisfies MemoryStatus;
+      merged.confirmedAt = new Date().toISOString();
+      merged.updatedAt = new Date().toISOString();
+      c.store.setMetadata(frameId, JSON.stringify(merged));
+
+      emitAuditEvent(server, {
+        workspaceId: c.mind === 'workspace' && workspace ? workspace : 'personal',
+        eventType: 'memory_write',
+        input: JSON.stringify({ frameId, action: 'confirm' }),
+        output: JSON.stringify({ frameId, mind: c.mind, status: 'active' }),
+      });
+
+      const updated = c.store.getById(frameId);
+      return updated
+        ? normalizeToMemory(updated, c.mind, c.mind === 'workspace' ? workspace : undefined)
+        : reply.status(500).send({ error: 'Failed to read back memory' });
+    }
+    return reply.status(404).send({ error: 'Memory not found' });
+  });
+
+  // GET /api/memory/:id/trace — PR3.5 "Why did you do that?": resolve the
+  // execution trace that wrote this memory, via the metadata.trace_id backlink
+  // stamped at chat write-back time. Returns { trace: null } honestly when the
+  // frame has no linked trace (manual / harvested / pre-PR3.5 frames) — never a
+  // synthesized reason. Traces live in the single global server.traceStore
+  // (tagged by workspace_id), so the lookup is mind-agnostic.
+  server.get<{
+    Params: { id: string };
+    Querystring: { workspace?: string; workspaceId?: string; mind?: string };
+  }>('/api/memory/:id/trace', async (request, reply) => {
+    const frameId = parseInt(request.params.id, 10);
+    if (isNaN(frameId)) return reply.status(400).send({ error: 'Invalid memory id' });
+    const workspace = request.query.workspace ?? request.query.workspaceId;
+    const parsed = parseMind(request.query.mind, workspace);
+    if (!parsed.ok) return reply.status(400).send({ error: parsed.error });
+
+    for (const c of candidateStores(workspace, parsed.mind)) {
+      const existing = c.store.getById(frameId);
+      if (!existing) continue;
+      const meta = parseFrameMetadata(existing.metadata);
+      const traceId = typeof meta.trace_id === 'string' ? parseInt(meta.trace_id, 10) : NaN;
+      if (!server.traceStore || isNaN(traceId)) {
+        return { trace: null };
+      }
+      const t = server.traceStore.getParsed(traceId);
+      if (!t) return { trace: null };
+      return {
+        trace: {
+          id: t.id,
+          sessionId: t.session_id,
+          workspaceId: t.workspace_id,
+          model: t.model,
+          outcome: t.outcome,
+          costUsd: t.cost_usd,
+          durationMs: t.duration_ms,
+          createdAt: t.created_at,
+          finalizedAt: t.finalized_at,
+          input: t.payload.input,
+          output: t.payload.output,
+          reasoning: t.payload.reasoning,
+          toolCalls: t.payload.toolCalls.map((call) => ({
+            tool: call.tool,
+            ok: call.ok,
+            durationMs: call.durationMs,
+            timestamp: call.timestamp,
+          })),
+          tokens: t.payload.tokens,
+        },
+      };
+    }
+    return reply.status(404).send({ error: 'Memory not found' });
+  });
+
   // DELETE /api/memory/:id — hard delete (A8 — no tombstone). Alias of the
   // legacy DELETE /api/memory/frames/:id, on the bare-id contract.
   server.delete<{

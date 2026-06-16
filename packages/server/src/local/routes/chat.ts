@@ -1446,7 +1446,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           const agentAlreadySaved = (result.toolsUsed ?? []).includes('save_memory');
           if (!agentAlreadySaved) {
             try {
-              const saved = await sessionOrch.autoSaveFromExchange(message, result.content);
+              const saved = await sessionOrch.autoSaveFromExchange(message, result.content, {
+                // PR3.5 frame↔trace backlink — link auto-saved frames to the
+                // turn's execution trace so Memory-Trust can answer "why is this
+                // memory here?". Undefined when no trace recorder (legacy/tests).
+                traceId: traceHandle ? String(traceHandle.id) : undefined,
+              });
               if (saved.length > 0) {
                 sendEvent('step', { content: `Auto-saved ${saved.length} memor${saved.length === 1 ? 'y' : 'ies'} from this exchange.` });
               }

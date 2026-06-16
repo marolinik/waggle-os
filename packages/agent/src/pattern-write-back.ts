@@ -134,6 +134,7 @@ export async function runPatternWriteBack(
   deps: PatternWriteBackDeps,
   userMsg: string,
   assistantMsg: string,
+  opts?: { traceId?: string },
 ): Promise<string[]> {
   const saved: string[] = [];
 
@@ -176,6 +177,19 @@ export async function runPatternWriteBack(
         : frames.createIFrame(gopId, content, importance);
     }
     saved.push(content.slice(0, DEDUP_SLICE_LENGTH));
+
+    // PR3.5 frame↔trace backlink: stamp the execution-trace id that produced
+    // this frame so the Memory-Trust "Why did you do that?" view can resolve
+    // the real decision (GET /api/memory/:id/trace). Additive metadata only —
+    // never touches content/importance/dedup, so it's byte-identical for any
+    // caller that doesn't pass a traceId (every benchmark path).
+    if (opts?.traceId && createdFrame) {
+      let existingMeta: Record<string, unknown> = {};
+      try {
+        existingMeta = createdFrame.metadata ? JSON.parse(createdFrame.metadata) as Record<string, unknown> : {};
+      } catch { /* malformed metadata → start clean */ }
+      frames.setMetadata(createdFrame.id, JSON.stringify({ ...existingMeta, trace_id: opts.traceId }));
+    }
 
     if (deps.teamSync && useWorkspace && createdFrame) {
       deps.teamSync.pushFrame(createdFrame).catch(() => { /* non-blocking */ });
