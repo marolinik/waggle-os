@@ -431,6 +431,22 @@ model_list:
       model: openai/gpt-5.4-pro
       api_key: os.environ/OPENAI_API_KEY
 
+  # Plan 05 frontier baseline — GPT-5.5 (subject, not judge).
+  # Direct OpenAI Chat Completions via the local alias (same direct-not-OpenRouter
+  # rationale as gpt-5.4 above: preserves token-level telemetry). Snapshot
+  # gpt-5.5-2026-04-23 recorded in models.json carve-out; pin it in the manifest.
+  - model_name: gpt-5.5
+    litellm_params:
+      model: openai/gpt-5.5
+      api_key: os.environ/OPENAI_API_KEY
+
+  # Explicit dated-snapshot alias for the per-row pinning audit. Same upstream;
+  # use this alias when the manifest needs the snapshot encoded in the route name.
+  - model_name: gpt-5.5-2026-04-23
+    litellm_params:
+      model: openai/gpt-5.5-2026-04-23
+      api_key: os.environ/OPENAI_API_KEY
+
   # Grok 4.20 — xAI frontier with reasoning toggle (released Mar 31, 2026)
   # 2M context, lowest hallucination rate on market. Fully outside
   # Claude/Qwen/Gemma training lineage.

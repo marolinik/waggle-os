@@ -213,3 +213,38 @@ describe('Plan 05 — claude-opus-4-8 frontier subject', () => {
     expect(opus48.litellmModel).toBe('claude-opus-4-8');
   });
 });
+
+describe('Plan 05 — gpt-5.5 frontier subject', () => {
+  it('is present and key === id', () => {
+    const models = loadModels();
+    const gpt55 = models['gpt-5.5'];
+    expect(gpt55, 'gpt-5.5 missing from registry').toBeDefined();
+    expect(gpt55.id).toBe('gpt-5.5');
+  });
+
+  it('is a floating_alias subject with a B3-addendum carve-out and NO judge_role', () => {
+    const models = loadModels();
+    const gpt55 = models['gpt-5.5'];
+    expect(gpt55.provider).toBe('openai_via_openrouter');
+    expect(gpt55.pinning_surface).toBe('floating_alias');
+    const reason = gpt55.pinning_surface_carve_out_reason;
+    expect(reason, 'floating_alias requires a non-null carve-out reason').not.toBeNull();
+    expect(typeof reason).toBe('string');
+    // The strict contract: every floating_alias reason MUST cite the addendum
+    // so an audit grep surfaces it (models-config.test.ts:115).
+    expect(reason as string).toMatch(/B3 addendum/);
+    // Subject, not a judge.
+    expect(gpt55.judge_role).toBeUndefined();
+  });
+
+  it('carries the recon-pinned price ($5/$30) and records the snapshot in its carve-out', () => {
+    const models = loadModels();
+    const gpt55 = models['gpt-5.5'];
+    expect(gpt55.pricePerMillionInput).toBe(5.0);
+    expect(gpt55.pricePerMillionOutput).toBe(30.0);
+    expect(gpt55.litellmModel).toBe('gpt-5.5');
+    // The dated snapshot (gpt-5.5-2026-04-23) is recorded in the carve-out for
+    // the per-row pinning audit (design-spec §5 + redteam E1).
+    expect(gpt55.pinning_surface_carve_out_reason as string).toMatch(/gpt-5\.5-2026-04-23/);
+  });
+});

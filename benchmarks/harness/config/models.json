@@ -126,6 +126,17 @@
     "pinning_surface_carve_out_reason": "Sprint 12 Task 2 C3 Stage 2 mini (2026-04-23): routing pivoted from OpenRouter bridge to direct OpenAI Chat Completions via LiteLLM local alias `gpt-5.4` → `openai/gpt-5.4` (eliminates ~5-15% OpenRouter middleware markup + preserves token-level telemetry for EU AI Act Art. 14 replay). OpenAI does not expose immutable model snapshots for the gpt-5.x family; floating alias mandated by B3 addendum § 5.",
     "judge_role": "primary"
   },
+  "gpt-5.5": {
+    "id": "gpt-5.5",
+    "displayName": "GPT-5.5 (Plan 05 frontier baseline subject — additional frontier ceiling for H3)",
+    "provider": "openai_via_openrouter",
+    "litellmModel": "gpt-5.5",
+    "pricePerMillionInput": 5.0,
+    "pricePerMillionOutput": 30.0,
+    "contextWindow": 400000,
+    "pinning_surface": "floating_alias",
+    "pinning_surface_carve_out_reason": "Plan 05 (2026-06-16): GPT-5.5 frontier baseline subject. Route is the LiteLLM local alias `gpt-5.5` -> `openai/gpt-5.5` (direct OpenAI Chat Completions; same direct-not-OpenRouter rationale as the gpt-5.4 sibling — preserves token-level telemetry for EU AI Act Art. 14 replay). OpenAI does not expose immutable model snapshots for the gpt-5.x family; the dated snapshot is `gpt-5.5-2026-04-23` (recorded here for the per-row pinning audit per design-spec §5 / redteam E1 — pin + record the exact snapshot in the run manifest). Price $5 in / $30 out per recon model-roster-and-cost-feasibility.md §5 (0.50 cached). Floating alias mandated by B3 addendum § 5."
+  },
   "gemini-3.1": {
     "id": "gemini-3.1",
     "displayName": "Gemini 3.1 Pro Preview (legacy OpenRouter bridge route)",
