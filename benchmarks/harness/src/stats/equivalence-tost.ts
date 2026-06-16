@@ -192,3 +192,77 @@ export function tostEquivalence(input: TostInput): TostResult {
   const equivalent = ci_lower >= -margin && ci_upper <= margin;
   return { equivalent, margin, ci_lower, ci_upper };
 }
+
+export interface TostSampleSizeInput {
+  /** Equivalence margin δ (e.g. 0.05). */
+  margin: number;
+  /** Planning value for the true paired gap |μ_A − μ_B| (e.g. 0.01–0.02). MUST be < margin. */
+  expectedTrueGap: number;
+  /** SD of the paired per-item difference. For paired pass/fail this ≈
+   *  sqrt(discordance_rate); e.g. 0.45 for ~20% discordance. Pilot-measure it. */
+  sdDiff: number;
+  /** Target power (0.80 or 0.90 supported). */
+  power: number;
+  /** One-sided α per TOST sub-test (0.05 supported). */
+  alpha: number;
+  /** Cluster design effect DEFF = 1 + (m−1)·ICC. 1 = no clustering. */
+  designEffect: number;
+}
+
+export interface TostSampleSizeResult {
+  /** Required paired items (ceil), already multiplied by designEffect. */
+  n_required: number;
+  /** Required items BEFORE the design-effect multiplier (informational). */
+  n_unclustered: number;
+  margin: number;
+  expectedTrueGap: number;
+  sdDiff: number;
+  power: number;
+  alpha: number;
+  designEffect: number;
+}
+
+/** Standard normal upper-quantiles z_{1−p}. Fixed table (matches the repo's
+ *  hardcoded-z convention in wilson-ci.ts) — extend deliberately, never guess. */
+const Z_UPPER: Readonly<Record<string, number>> = {
+  '0.05': 1.6448536269514722, // z_{0.95}
+  '0.10': 1.2815515594457831, // z_{0.90}  (power 0.90 → z_β)
+  '0.20': 0.8416212335729143, // z_{0.80}  (power 0.80 → z_β)
+};
+
+export function computeTostSampleSizePaired(input: TostSampleSizeInput): TostSampleSizeResult {
+  const { margin, expectedTrueGap, sdDiff, power, alpha, designEffect } = input;
+
+  if (!Number.isFinite(margin) || margin <= 0) throw new Error(`margin > 0 required; got ${margin}`);
+  if (!Number.isFinite(expectedTrueGap) || expectedTrueGap < 0) {
+    throw new Error(`expectedTrueGap ≥ 0 required; got ${expectedTrueGap}`);
+  }
+  if (expectedTrueGap >= margin) {
+    throw new Error(`equivalence cannot be powered unless expectedTrueGap < margin; got gap=${expectedTrueGap} margin=${margin}`);
+  }
+  if (!Number.isFinite(sdDiff) || sdDiff <= 0) throw new Error(`sdDiff > 0 required; got ${sdDiff}`);
+  if (!Number.isFinite(designEffect) || designEffect < 1) throw new Error(`designEffect ≥ 1 required; got ${designEffect}`);
+  if (alpha !== 0.05) throw new Error(`alpha must be 0.05 (only the TOST z is tabled); got ${alpha}`);
+  // For TOST at power 1−β, the standard approximation uses z_{1−β/2}? No — the
+  // common Chow/Liu TOST formula uses z_{1−α} + z_{1−β}. Power 0.80 → z_{0.80}.
+  const powerKey = power === 0.8 ? '0.20' : power === 0.9 ? '0.10' : null;
+  if (powerKey === null) throw new Error(`power must be one of {0.80, 0.90}; got ${power}`);
+
+  const zAlpha = Z_UPPER['0.05'];
+  const zBeta = Z_UPPER[powerKey];
+  const denom = margin - Math.abs(expectedTrueGap);
+  const nRaw = ((zAlpha + zBeta) * sdDiff / denom) ** 2;
+  const n_unclustered = Math.ceil(nRaw);
+  const n_required = Math.ceil(n_unclustered * designEffect);
+
+  return {
+    n_required,
+    n_unclustered,
+    margin,
+    expectedTrueGap,
+    sdDiff,
+    power,
+    alpha,
+    designEffect,
+  };
+}

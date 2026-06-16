@@ -210,3 +210,50 @@ describe('computePairedDiffClusterBootstrapCI — empirical coverage ≈ 90%', (
     expect(coverage).toBeLessThanOrEqual(0.97);
   });
 });
+
+import {
+  computeTostSampleSizePaired,
+  type TostSampleSizeInput,
+} from '../../src/stats/equivalence-tost.js';
+
+describe('computeTostSampleSizePaired — powered N', () => {
+  it('returns a positive integer N and echoes inputs', () => {
+    const r = computeTostSampleSizePaired({
+      margin: 0.05, expectedTrueGap: 0.01, sdDiff: 0.45, power: 0.8, alpha: 0.05, designEffect: 1,
+    });
+    expect(Number.isInteger(r.n_required)).toBe(true);
+    expect(r.n_required).toBeGreaterThan(0);
+    expect(r.margin).toBe(0.05);
+    expect(r.designEffect).toBe(1);
+  });
+
+  it('a non-zero planning gap inflates N vs gap=0 (the key red-team point)', () => {
+    const base = { margin: 0.05, sdDiff: 0.45, power: 0.8, alpha: 0.05, designEffect: 1 } as const;
+    const atZero = computeTostSampleSizePaired({ ...base, expectedTrueGap: 0 });
+    const atTwo = computeTostSampleSizePaired({ ...base, expectedTrueGap: 0.02 });
+    expect(atTwo.n_required).toBeGreaterThan(atZero.n_required);
+  });
+
+  it('design effect multiplies N (clustering inflates required N)', () => {
+    const base = { margin: 0.05, expectedTrueGap: 0.01, sdDiff: 0.45, power: 0.8, alpha: 0.05 } as const;
+    const deff1 = computeTostSampleSizePaired({ ...base, designEffect: 1 });
+    const deff2 = computeTostSampleSizePaired({ ...base, designEffect: 2 });
+    expect(deff2.n_required).toBe(deff1.n_required * 2);
+  });
+
+  it('throws when the planning gap ≥ margin (equivalence impossible to power)', () => {
+    expect(() =>
+      computeTostSampleSizePaired({
+        margin: 0.05, expectedTrueGap: 0.05, sdDiff: 0.45, power: 0.8, alpha: 0.05, designEffect: 1,
+      }),
+    ).toThrow(/expectedTrueGap < margin/);
+  });
+
+  it('rejects unsupported power / alpha (z-table is fixed)', () => {
+    expect(() =>
+      computeTostSampleSizePaired({
+        margin: 0.05, expectedTrueGap: 0.01, sdDiff: 0.45, power: 0.5, alpha: 0.05, designEffect: 1,
+      }),
+    ).toThrow(/power must be one of/);
+  });
+});
