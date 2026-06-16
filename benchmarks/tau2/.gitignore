@@ -1,0 +1,6 @@
+# The vendored τ²-bench upstream checkout is NOT committed (MIT source tree is
+# re-clonable at the pinned SHA via scripts/vendor.sh). Ignore the whole tree;
+# only our adapter code + vendor-pin.ts + VENDOR.md + scripts/ are tracked.
+upstream/
+bridge/node_modules/
+*.pyc
