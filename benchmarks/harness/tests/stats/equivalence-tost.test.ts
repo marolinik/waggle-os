@@ -164,3 +164,49 @@ describe('tostEquivalence — decision rule', () => {
     expect(() => tostEquivalence({ diffCI: { ci_lower: 0.05, ci_upper: -0.05 }, margin: 0.05 })).toThrow(/ci_lower ≤ ci_upper/);
   });
 });
+
+import { computePairedDiffClusterBootstrapCI as ciFn } from '../../src/stats/equivalence-tost.js';
+
+/** Local Mulberry32 for deterministic synthetic-data generation in the test. */
+function rng(seed: number): () => number {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+describe('computePairedDiffClusterBootstrapCI — empirical coverage ≈ 90%', () => {
+  it('a 90% CI covers the true paired difference ~90% of the time (independent items)', () => {
+    // Independent items (one item per cluster), true marginals pA=0.70, pB=0.65,
+    // with positive within-item correlation (shared latent difficulty) so the
+    // PAIRED diff is the right target. True diff = pA − pB = 0.05.
+    const pA = 0.7;
+    const pB = 0.65;
+    const trueDiff = pA - pB;
+    const nReplicates = 300;
+    const nItems = 200;
+    let covered = 0;
+    for (let rep = 0; rep < nReplicates; rep++) {
+      const gen = rng(1000 + rep);
+      const rows: PairedRow[] = [];
+      for (let i = 0; i < nItems; i++) {
+        // shared difficulty u induces positive A/B correlation (realistic pairing)
+        const u = gen();
+        const a = u < pA ? 1 : 0;
+        const b = u < pB ? 1 : 0;
+        rows.push({ cluster_id: `item-${i}`, arm_a: a as 0 | 1, arm_b: b as 0 | 1 });
+      }
+      const r = ciFn({ rows, n_bootstrap: 600, seed: 42, confidence: 0.9 });
+      if (r.ci_lower <= trueDiff && trueDiff <= r.ci_upper) covered++;
+    }
+    const coverage = covered / nReplicates;
+    // Nominal 0.90; allow Monte-Carlo + discreteness slack. A value far outside
+    // this band means the CI is miscalibrated — block the priced run.
+    expect(coverage).toBeGreaterThanOrEqual(0.85);
+    expect(coverage).toBeLessThanOrEqual(0.97);
+  });
+});
