@@ -21,6 +21,7 @@ import type {
   WorkspaceStateView, WorkspaceActivityEvent, WorkspaceTask,
   Artifact, RelatedSearchResult,
   Agent, AgentTrace, Automation, AutomationLog,
+  MemoryTrace,
 } from './types';
 import type {
   Command, CommandResult, WorkspaceType,
@@ -915,6 +916,20 @@ class LocalAdapter {
   /** Hard delete (A8) via the bare-id route — distinct from deleteMemoryFrame. */
   async deleteMemoryById(id: string, workspaceId?: string, mind?: 'personal' | 'workspace'): Promise<void> {
     await this.fetch(`/api/memory/${encodeURIComponent(id)}${this.memoryScopeQs(workspaceId, mind)}`, { method: 'DELETE' });
+  }
+
+  /** PR3.5 Memory-Trust: clear the 'unreviewed' lifecycle state (status→active). */
+  async confirmMemory(id: string, workspaceId?: string, mind?: 'personal' | 'workspace'): Promise<Memory> {
+    const res = await this.fetch(`/api/memory/${encodeURIComponent(id)}/confirm${this.memoryScopeQs(workspaceId, mind)}`, { method: 'POST' });
+    return res.json();
+  }
+
+  /** PR3.5 "Why did you do that?": resolve the execution trace that wrote a
+   *  memory (via the metadata.trace_id backlink). Returns { trace: null } when
+   *  the frame has no linked trace — the caller shows an honest empty state. */
+  async getMemoryTrace(id: string, workspaceId?: string, mind?: 'personal' | 'workspace'): Promise<{ trace: MemoryTrace | null }> {
+    const res = await this.fetch(`/api/memory/${encodeURIComponent(id)}/trace${this.memoryScopeQs(workspaceId, mind)}`);
+    return res.json();
   }
 
   async mergeMemories(ids: string[], opts: { workspaceId?: string; title?: string; mind?: 'personal' | 'workspace' } = {}): Promise<Memory> {

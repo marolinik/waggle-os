@@ -17,4 +17,5 @@ export { OvernightHero } from './OvernightHero';
 export { AskBar } from './AskBar';
 export { ActivityStream, type ActivityStep } from './ActivityStream';
 export { InlineApprovalCard } from './InlineApprovalCard';
+export { ConfidenceRing, confidenceColor } from './ConfidenceRing';
 export { TONE_COLOR, TONE_WASH, type WarmTone } from './tones';

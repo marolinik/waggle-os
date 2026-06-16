@@ -93,6 +93,29 @@ export interface AgentTrace {
   tools: string[];
 }
 
+/**
+ * PR3.5 Memory-Trust "Why did you do that?" — the execution trace that wrote a
+ * memory, resolved via GET /api/memory/:id/trace (metadata.trace_id backlink).
+ * Richer than AgentTrace: carries the goal (input), reasoning chain, and tool
+ * calls so the trace view can render goal → recalled → checked → acted.
+ */
+export interface MemoryTrace {
+  id: number;
+  sessionId: string | null;
+  workspaceId: string | null;
+  model: string | null;
+  outcome: 'success' | 'corrected' | 'abandoned' | 'verified' | 'pending';
+  costUsd: number;
+  durationMs: number;
+  createdAt: string;
+  finalizedAt: string | null;
+  input: string;
+  output: string;
+  reasoning: Array<{ content: string; timestamp: string }>;
+  toolCalls: Array<{ tool: string; ok: boolean; durationMs: number; timestamp: string }>;
+  tokens: { input: number; output: number };
+}
+
 /** One row of `GET /api/automations/:id/logs` (cron_execution_history). */
 export interface AutomationLog {
   id: number;

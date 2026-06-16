@@ -23,6 +23,8 @@ import {
   AskBar,
   ActivityStream,
   InlineApprovalCard,
+  ConfidenceRing,
+  confidenceColor,
 } from '@/components/os/warm';
 import type { ApprovalRequest } from '@/components/ui/approval-modal';
 
@@ -52,6 +54,23 @@ describe('warm primitives — render smoke', () => {
   it('RunChip renders its label', () => {
     render(<RunChip label="14 memories consolidated" tone="intel" />);
     expect(screen.getByText('14 memories consolidated')).toBeInTheDocument();
+  });
+
+  it('ConfidenceRing renders the value + CONF caption, and a neutral dash when unknown', () => {
+    const { rerender } = render(<ConfidenceRing value={94} />);
+    expect(screen.getByText('94')).toBeInTheDocument();
+    expect(screen.getByText('conf')).toBeInTheDocument();
+    // Unknown confidence (harvest-only signal absent) → "—", never a fabricated number.
+    rerender(<ConfidenceRing value={undefined} />);
+    expect(screen.getByText('—')).toBeInTheDocument();
+  });
+
+  it('confidenceColor maps bands ≥85 healthy / ≥60 attention / <60 risk', () => {
+    expect(confidenceColor(94)).toBe('var(--healthy)');
+    expect(confidenceColor(85)).toBe('var(--healthy)');
+    expect(confidenceColor(61)).toBe('var(--attention)');
+    expect(confidenceColor(60)).toBe('var(--attention)');
+    expect(confidenceColor(47)).toBe('var(--risk)');
   });
 
   it('ModelPill renders mode · model', () => {
