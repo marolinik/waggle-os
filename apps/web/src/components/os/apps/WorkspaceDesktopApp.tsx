@@ -44,7 +44,7 @@ import { useRevalidateOnError } from '@/hooks/useRevalidateOnError';
 import MemoryCenterTab from './memory/MemoryCenterTab';
 import TasksTab from './workspace/TasksTab';
 import WorkspaceActionsMenu from '../WorkspaceActionsMenu';
-import { HexAvatar, DotLive } from '../warm';
+import { HexAvatar, DotLive, SectionLabel, HexCheckTile, IconTile } from '../warm';
 import type {
   WorkspaceContext,
   WorkspaceStateView,
@@ -507,31 +507,156 @@ function WorkspaceInfoPanel({
 
 // ── Overview tab body ────────────────────────────────────────────────────
 
+/** "What Waggle knows" — decisions + memories the workspace has recorded.
+ *  The design's ⬡ source · when provenance needs frame.source projected onto
+ *  these rows (recon §2/G14 — the PR3.5 keystone); until then we show the REAL
+ *  date only, never a fabricated source. */
+function FactsSection({ ctx }: { ctx: WorkspaceContext | null }) {
+  const facts = [
+    ...(ctx?.recentDecisions ?? []).map((d) => ({ text: d.content, when: relativeTime(d.date) })),
+    ...(ctx?.recentMemories ?? []).map((m) => ({ text: m.content, when: relativeTime(m.date) })),
+  ].slice(0, 6);
+  if (facts.length === 0) return null;
+  return (
+    <section>
+      <SectionLabel rule className="mb-3">What Waggle knows</SectionLabel>
+      <ul className="space-y-2.5">
+        {facts.map((f, i) => (
+          <li key={i} className="flex items-start gap-3 rounded-[14px] border border-[var(--line-soft)] bg-card px-3.5 py-3">
+            <HexCheckTile tone="healthy" size={26} className="mt-0.5" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[13.5px] leading-snug text-[var(--text)]">{f.text}</p>
+              {f.when && <div className="mt-1 font-mono text-[10.5px] text-[var(--text-dim)]">{f.when}</div>}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function RecentWorkSection({ artifacts }: { artifacts: ArtifactRow[] }) {
+  if (artifacts.length === 0) return null;
+  return (
+    <section>
+      <SectionLabel rule className="mb-3">Recent work</SectionLabel>
+      <ul className="space-y-2">
+        {artifacts.slice(0, 5).map((a) => (
+          <li key={a.id} className="flex items-center gap-3 rounded-[14px] border border-[var(--line-soft)] bg-card px-3.5 py-2.5 transition-colors hover:border-[var(--honey-line)]">
+            <IconTile icon={FileText} tone="intel" size={32} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[13.5px] text-[var(--text)]">{a.name}</p>
+              {a.subtitle && <p className="truncate text-[11.5px] text-[var(--text-muted)]">{a.subtitle}</p>}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function StatusCard({ ctx, agentsRunning }: { ctx: WorkspaceContext | null; agentsRunning: number }) {
+  const model = ctx?.workspace?.model;
+  return (
+    <div className="rounded-[18px] border border-[var(--line-soft)] bg-card p-4">
+      <SectionLabel className="mb-3">Status</SectionLabel>
+      <dl className="space-y-2.5 text-[13px]">
+        <div className="flex items-center justify-between gap-2">
+          <dt className="text-[var(--text-muted)]">Agent</dt>
+          <dd className="inline-flex items-center gap-1.5 text-[var(--text-2)]">
+            {agentsRunning > 0 ? <><DotLive tone="healthy" size={6} /> live</> : <span className="text-[var(--text-dim)]">idle</span>}
+          </dd>
+        </div>
+        {model && (
+          <div className="flex items-center justify-between gap-2">
+            <dt className="text-[var(--text-muted)]">Model</dt>
+            <dd className="max-w-[55%] truncate font-mono text-[12px] text-[var(--text-2)]">{model.split('/').pop()}</dd>
+          </div>
+        )}
+        {typeof ctx?.stats?.memoryCount === 'number' && (
+          <div className="flex items-center justify-between gap-2">
+            <dt className="text-[var(--text-muted)]">Memories</dt>
+            <dd className="text-[var(--text-2)]">{ctx.stats.memoryCount}</dd>
+          </div>
+        )}
+      </dl>
+    </div>
+  );
+}
+
+function UpNextCard({ state, onOpenTab }: { state: WorkspaceStateView | null; onOpenTab: (tab: WorkspaceTabId) => void }) {
+  const items = [
+    ...(state?.blocked ?? []).map((t) => ({ id: `b-${t.id}`, text: t.content, tone: 'risk' as const, status: 'blocked' })),
+    ...(state?.nextActions ?? []).map((t, i) => ({ id: `n-${i}`, text: t.label, tone: 'attention' as const, status: 'next' })),
+    ...(state?.pending ?? []).map((t) => ({ id: `p-${t.id}`, text: t.content, tone: 'work' as const, status: '' })),
+  ].slice(0, 5);
+  if (items.length === 0) return null;
+  return (
+    <div className="rounded-[18px] border border-[var(--line-soft)] bg-card p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <SectionLabel>Up next</SectionLabel>
+        <button type="button" onClick={() => onOpenTab('tasks')} className="font-mono text-[11px] text-[var(--text-dim)] transition-colors hover:text-[var(--text-2)]">all →</button>
+      </div>
+      <ul className="space-y-2">
+        {items.map((it) => (
+          <li key={it.id} className="flex items-start gap-2.5 text-[13px]">
+            <DotLive tone={it.tone} live={false} size={7} className="mt-1.5" />
+            <span className="flex-1 text-[var(--text-2)]">{it.text}</span>
+            {it.status && <span className="shrink-0 font-mono text-[11px] text-[var(--text-dim)]">{it.status}</span>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function TeamCard({ members }: { members: WorkspaceMember[] }) {
+  if (members.length === 0) return null;
+  return (
+    <div className="rounded-[18px] border border-[var(--line-soft)] bg-card p-4">
+      <SectionLabel className="mb-3">Team</SectionLabel>
+      <ul className="space-y-2.5">
+        {members.slice(0, 6).map((m) => (
+          <li key={m.id} className="flex items-center gap-2.5 text-[13px]">
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[var(--surface-3)] font-mono text-[11px] text-[var(--text-2)]">{initialsOf(m.name)}</span>
+            <span className="flex-1 truncate text-[var(--text)]">{m.name}</span>
+            {m.status && <span className="font-mono text-[11px] capitalize text-[var(--text-dim)]">{m.status}</span>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function OverviewTab({
-  ctx, state, artifacts, activity, artifactReady, onOpenChat, onOpenTab,
+  ctx, state, artifacts, members, agentsRunning, onOpenTab,
 }: {
   ctx: WorkspaceContext | null;
   state: WorkspaceStateView | null;
   artifacts: ArtifactRow[];
-  activity: WorkspaceActivityEvent[];
-  artifactReady: boolean;
-  onOpenChat: () => void;
+  members: WorkspaceMember[];
+  agentsRunning: number;
   onOpenTab: (tab: WorkspaceTabId) => void;
 }) {
   return (
     <div
-      className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 auto-rows-[minmax(0,16rem)] p-4"
+      className="mx-auto grid max-w-[1100px] grid-cols-1 gap-5 p-5 lg:grid-cols-[1.7fr_1fr]"
       data-testid="ws-overview-grid"
     >
-      <ChatPreviewWidget ctx={ctx} onOpenChat={onOpenChat} />
-      <ArtifactsWidget artifacts={artifacts} ready={artifactReady} onOpenTab={() => onOpenTab('artifacts')} />
-      <TasksWidget
-        pending={state?.pending ?? []}
-        blocked={state?.blocked ?? []}
-        onOpenTab={() => onOpenTab('tasks')}
-      />
-      <MemoryHighlightsWidget ctx={ctx} />
-      <ActivityWidget events={activity} />
+      <div className="space-y-5">
+        {ctx?.summary && (
+          <div className="rounded-[18px] border border-[var(--line-soft)] bg-card p-5">
+            <p className="text-[15.5px] leading-[1.6] text-[var(--text-2)]">{ctx.summary}</p>
+          </div>
+        )}
+        <FactsSection ctx={ctx} />
+        <RecentWorkSection artifacts={artifacts} />
+      </div>
+      <div className="space-y-4">
+        <StatusCard ctx={ctx} agentsRunning={agentsRunning} />
+        <UpNextCard state={state} onOpenTab={onOpenTab} />
+        <TeamCard members={members} />
+      </div>
     </div>
   );
 }
@@ -674,7 +799,6 @@ const WorkspaceDesktopApp = ({
   const wsStatus = ctx?.workspace?.status ?? 'active';
   const hasMemory = (ctx?.stats?.memoryCount ?? ctx?.memoryCount ?? 0) > 0
     || (ctx?.recentMemories?.length ?? 0) > 0;
-  const artifactReady = artifacts.length > 0;
   const lastEvent = activity[0];
 
   // ── Whole-screen states ────────────────────────────────────────────────
@@ -884,9 +1008,8 @@ const WorkspaceDesktopApp = ({
                 ctx={ctx}
                 state={state}
                 artifacts={artifacts}
-                activity={activity}
-                artifactReady={artifactReady}
-                onOpenChat={openChat}
+                members={members}
+                agentsRunning={agentsRunning}
                 onOpenTab={setActiveTab}
               />
             )
@@ -989,16 +1112,6 @@ const WorkspaceDesktopApp = ({
             </div>
           )}
         </main>
-
-        <WorkspaceInfoPanel
-          ctx={ctx}
-          workspaceName={workspaceName}
-          members={members}
-          lastEvent={lastEvent}
-          agentsRunning={agentsRunning}
-          onOpenChat={openChat}
-          onOpenTab={setActiveTab}
-        />
       </div>
     </div>
   );
