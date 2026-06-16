@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { ShieldCheck, Info } from 'lucide-react';
 import { SectionLabel } from '../warm';
-import MemoryCenterTab from './memory/MemoryCenterTab';
+import MemoryTrustManage from './memory/MemoryTrustManage';
 import { cn } from '@/lib/utils';
 
 /**
@@ -10,13 +10,12 @@ import { cn } from '@/lib/utils';
  *   - "Manage memory" (default): confidence/freshness + forget/correct/confirm.
  *   - "Why did you do that?": the goal→recall→checks→action trace.
  *
- * PR3.5 PHASING — this is **Phase A** (the shell): segmented control + per-view
- * editorial hero + trust-principle footer, wired as the new default Memory view.
- * The Manage body embeds the existing, functional `MemoryCenterTab` for now;
- * Phase B folds in the screen-19 stat bar + filter chips and Phase C replaces
- * the list with the native confidence-ring rows in a single editorial scroll.
- * Phase D builds the real "Why?" trace from `adapter.getMemoryTrace`. Until then
- * the Why view shows an honest empty state — never a synthesized reason.
+ * PR3.5 PHASING — Phase A shipped the shell; **Phase B+C** built the native
+ * Manage body (`MemoryTrustManage`: stat bar + filter chips + confidence-ring
+ * rows with the 3-segment ⬡ provenance and forget/correct/confirm) in a single
+ * editorial scroll. Phase D builds the real "Why?" trace from
+ * `adapter.getMemoryTrace`. Until then the Why view shows an honest empty state
+ * — never a synthesized reason.
  *
  * Theme toggle (the mock's ☾/☀) is intentionally omitted — PR1's global
  * ThemeProvider already owns theme; a screen-local toggle would be redundant.
@@ -123,9 +122,16 @@ function TrustPrincipleFooter({ view }: { view: TrustView }) {
 
 export default function MemoryTrust({ mind, workspaceId }: MemoryTrustProps) {
   const [view, setView] = useState<TrustView>('manage');
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const showToast = useCallback((msg: string) => {
+    setToast(msg);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 2400);
+  }, []);
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="relative flex h-full flex-col">
       {/* Sticky segmented control (§1) */}
       <div className="sticky top-0 z-10 flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-[var(--line-soft)] bg-[var(--bg)]/80 px-5 py-3 backdrop-blur">
         <SectionLabel>Memory Trust · view</SectionLabel>
@@ -157,30 +163,34 @@ export default function MemoryTrust({ mind, workspaceId }: MemoryTrustProps) {
         </span>
       </div>
 
-      {/* Stage */}
-      <div className="flex-1 min-h-0 flex flex-col">
-        {view === 'manage' ? (
-          <>
-            <div className="mx-auto w-full max-w-[920px] shrink-0 px-8 pt-7">
+      {/* Stage — single editorial scroll per view (§ screen-19 layout) */}
+      <div className="min-h-0 flex-1 overflow-auto">
+        <div className="mx-auto w-full max-w-[920px] space-y-6 px-8 py-7">
+          {view === 'manage' ? (
+            <>
               <ManageHero />
-            </div>
-            {/* Phase B/C replace this embed with the screen-19 stat bar + native
-                confidence-ring rows in a single editorial scroll. */}
-            <div className="mt-4 min-h-0 flex-1">
-              <MemoryCenterTab mind={mind} workspaceId={workspaceId} />
-            </div>
-          </>
-        ) : (
-          <div className="flex-1 overflow-auto">
-            <div className="mx-auto w-full max-w-[920px] space-y-6 px-8 py-7">
+              <MemoryTrustManage mind={mind} workspaceId={workspaceId} onToast={showToast} />
+            </>
+          ) : (
+            <>
               <WhyHero />
               <WhyEmptyState />
-            </div>
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </div>
 
       <TrustPrincipleFooter view={view} />
+
+      {/* Shared toast (§7) — green slide-up confirmation for forget/correct/confirm. */}
+      {toast && (
+        <div className="pointer-events-none absolute bottom-6 left-1/2 z-50 -translate-x-1/2" role="status" aria-live="polite">
+          <div className="flex items-center gap-2 rounded-full border border-[var(--healthy)] bg-[var(--surface)] px-4 py-2 text-[13px] text-[var(--text)] shadow-lg">
+            <span className="h-2 w-2 rounded-full bg-[var(--healthy)]" aria-hidden="true" />
+            {toast}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

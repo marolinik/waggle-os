@@ -51,6 +51,11 @@ vi.mock('@/hooks/useKnowledgeGraph', () => ({
 }));
 
 // Stub the tab children — these tests pin the SHELL contract, not tab internals.
+vi.mock('@/components/os/apps/MemoryTrust', () => ({
+  default: (props: { mind?: string; workspaceId?: string }) => (
+    <div data-testid="stub-trust" data-mind={String(props.mind)} data-ws={String(props.workspaceId)} />
+  ),
+}));
 vi.mock('@/components/os/apps/memory/MemoryCenterTab', () => ({
   default: (props: { mind?: string; workspaceId?: string; consumeDeepLinks?: boolean }) => (
     <div
@@ -93,17 +98,15 @@ afterEach(() => { cleanup(); vi.clearAllMocks(); mocks.shell.activeWorkspaceId =
 describe('MemoryRoute + MemoryCenterApp URL wiring (P3/D2)', () => {
   it('/memory defaults to the personal mind on the Trust view (PR3.5 new front door)', async () => {
     await renderRoute('/memory');
-    // Trust is the new default: its segmented control + the (embedded) per-mind
-    // list both render, and the personal mind pill is pressed.
-    expect(screen.getByText('Manage memory')).toBeTruthy();
-    const tab = screen.getByTestId('stub-mc-tab');
-    expect(tab.getAttribute('data-mind')).toBe('personal');
+    // Trust is the new default front door; the personal mind pill is pressed.
+    expect(screen.getByTestId('stub-trust').getAttribute('data-mind')).toBe('personal');
     expect(screen.getByTestId('memory-mind-personal').getAttribute('aria-pressed')).toBe('true');
   });
 
   it('/memory/workspace selects the workspace mind with the active workspace', async () => {
     await renderRoute('/memory/workspace');
-    const tab = screen.getByTestId('stub-mc-tab');
+    // Default view is Trust now — assert the mind via the Trust front-door stub.
+    const tab = screen.getByTestId('stub-trust');
     expect(tab.getAttribute('data-mind')).toBe('workspace');
     expect(tab.getAttribute('data-ws')).toBe('w1');
     expect(screen.getByTestId('memory-mind-workspace').getAttribute('aria-pressed')).toBe('true');
@@ -111,7 +114,7 @@ describe('MemoryRoute + MemoryCenterApp URL wiring (P3/D2)', () => {
 
   it('an unknown :mindScope degrades to personal', async () => {
     await renderRoute('/memory/garbage');
-    expect(screen.getByTestId('stub-mc-tab').getAttribute('data-mind')).toBe('personal');
+    expect(screen.getByTestId('stub-trust').getAttribute('data-mind')).toBe('personal');
   });
 
   it('?tab=graph mounts the Graph view and hides the mind pills', async () => {
@@ -123,16 +126,15 @@ describe('MemoryRoute + MemoryCenterApp URL wiring (P3/D2)', () => {
 
   it('an unknown ?tab= degrades to the Trust default', async () => {
     await renderRoute('/memory?tab=bogus');
-    expect(screen.getByText('Manage memory')).toBeTruthy();
-    expect(screen.getByTestId('stub-mc-tab')).toBeTruthy();
+    expect(screen.getByTestId('stub-trust')).toBeTruthy();
   });
 
   it('?tab=memories mounts the legacy Memories list view (now secondary)', async () => {
     await renderRoute('/memory?tab=memories');
-    // The legacy list is reachable as a secondary view; the Trust segmented
-    // control is NOT present (we're on the plain Memories list).
+    // The legacy list is reachable as a secondary view; the Trust front door is
+    // NOT present (we're on the plain Memories list).
     expect(screen.getByTestId('stub-mc-tab')).toBeTruthy();
-    expect(screen.queryByText('Manage memory')).toBeNull();
+    expect(screen.queryByTestId('stub-trust')).toBeNull();
   });
 
   it.each([
@@ -186,7 +188,7 @@ describe('MemoryRoute + MemoryCenterApp URL wiring (P3/D2)', () => {
     // Trust clears ?tab= (the canonical default).
     fireEvent.click(screen.getByText('Trust'));
     await waitFor(() => expect(screen.getByTestId('loc').textContent).toBe('/memory'));
-    expect(screen.getByText('Manage memory')).toBeTruthy();
+    expect(screen.getByTestId('stub-trust')).toBeTruthy();
   });
 
   it('the workspace pill is inert without an active workspace', async () => {
