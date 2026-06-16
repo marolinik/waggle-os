@@ -235,7 +235,10 @@ describe('Trust model — capability installation risk journeys', () => {
     expect(classifyRisk(3)).toBe('medium');
     expect(classifyRisk(4)).toBe('medium');
     expect(classifyRisk(5)).toBe('high');
-    expect(classifyRisk(10)).toBe('high');
+    expect(classifyRisk(7)).toBe('high');
+    // P7/D15 A2: 8+ points escalate to the 'critical' tier (assertion was stale).
+    expect(classifyRisk(8)).toBe('critical');
+    expect(classifyRisk(10)).toBe('critical');
   });
 });
 

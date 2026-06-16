@@ -12,6 +12,7 @@ import { adapter } from '@/lib/adapter';
 import { Input } from '@/components/ui/input';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 import { useProviders } from '@/hooks/useProviders';
+import { useTheme } from '@/providers/ThemeProvider';
 import { useOnboarding } from '@/hooks/useOnboarding';
 import { useDeveloperMode } from '@/hooks/useDeveloperMode';
 import { useDockLabels } from '@/hooks/useDockLabels';
@@ -59,19 +60,10 @@ const SettingsApp = () => {
   // once A3.1 ships (currently ignored — selection still survives reloads).
   const [selectedShape, setSelectedShape] = useSelectedShape();
 
-  // Theme
-  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
-    return (document.documentElement.getAttribute('data-theme') as 'dark' | 'light') || 'dark';
-  });
-  const applyTheme = (t: 'dark' | 'light') => {
-    setTheme(t);
-    if (t === 'light') {
-      document.documentElement.setAttribute('data-theme', 'light');
-    } else {
-      document.documentElement.removeAttribute('data-theme');
-    }
-    localStorage.setItem('waggle-theme', t);
-  };
+  // Theme — owned by ThemeProvider (single source of truth: data-theme + localStorage).
+  // `theme` is the resolved value; `applyTheme` accepts 'dark' | 'light' (a subset
+  // of ThemeMode), so the existing theme-card onClick handlers are unchanged.
+  const { resolvedTheme: theme, setTheme: applyTheme } = useTheme();
 
   // Provider data from single source of truth
   const { providers, search, activeSearch, loading: providersLoading } = useProviders();

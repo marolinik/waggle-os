@@ -15,13 +15,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Rocket } from 'lucide-react';
+import { Home, MessageSquare, Brain, ListTodo, Library, Network, Plug, Shield } from 'lucide-react';
 import wallpaperDark from '@/assets/wallpaper.jpg';
 import wallpaperLight from '@/assets/wallpaper-light.jpg';
 import BootScreen from './BootScreen';
 import StatusBar from './StatusBar';
 import ChatHost from './ChatHost';
 import CommandCenter from './overlays/CommandCenter';
+import Sidebar, { type SidebarNavItem } from './Sidebar';
 import AppErrorBoundary from './ErrorBoundary';
 import CreateWorkspaceDialog from './overlays/CreateWorkspaceDialog';
 import PersonaSwitcher from './overlays/PersonaSwitcher';
@@ -41,7 +42,7 @@ import { writeLoginBriefingDismissed, writeLoginBriefingLastDismissedAt } from '
 import { matchNavRoute, queryString, routeFor, routeForSearchResult } from '@/lib/routes';
 import { bootWindowStateMigration, indexLandingRoute } from '@/lib/window-state-migration';
 import { getDockForTier, type AppId, type DockEntry } from '@/lib/dock-tiers';
-import { HintTooltip } from '@/components/ui/hint-tooltip';
+import { buildCommandCatalog, type CatalogCommand } from '@/lib/command-catalog';
 import { ShellProvider, useShell } from '@/providers/ShellContext';
 import { seedChat, useChatWidgetState } from '@/hooks/useChatWidgetState';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
@@ -199,43 +200,58 @@ const ShellLayout = () => {
     refreshWorkspaces();
   }, [selectWorkspace, navigate, refreshWorkspaces]);
 
-  // Nav model = the same data the dock renders (§1.3).
-  const navEntries = useMemo(() => getDockForTier(currentTier, billingTier), [currentTier, billingTier]);
-  const appEntries = useMemo(() => flattenAppEntries(navEntries), [navEntries]);
+  // Warm-Hive calm spine (ia.html): the always-visible nav is five fixed places;
+  // everything else lives one keystroke away in ⌘K. The StatusBar breadcrumb
+  // still derives from the full dock route table — every route is now reachable
+  // via ⌘K regardless of tier, so the label map must cover them all.
+  const labelEntries = useMemo(() => flattenAppEntries(getDockForTier('power', billingTier)), [billingTier]);
   const activeRoute = useMemo(
-    () => matchNavRoute(location.pathname, appEntries.map(e => e.route).filter((r): r is string => !!r)),
-    [location.pathname, appEntries],
+    () => matchNavRoute(location.pathname, labelEntries.map(e => e.route).filter((r): r is string => !!r)),
+    [location.pathname, labelEntries],
   );
-  // §3.1: the StatusBar breadcrumb derives from the matched route's title
-  // (the old status-bar focus builder + focused-window state died with the
-  // window manager).
-  const surfaceLabel = appEntries.find(e => e.route === activeRoute)?.label ?? null;
+  const surfaceLabel = labelEntries.find(e => e.route === activeRoute)?.label ?? null;
 
-  const renderNavItem = (entry: DockEntry, indent: boolean) => {
-    const Icon = entry.icon!;
-    const isActive = !!entry.route && entry.route === activeRoute;
-    return (
-      <HintTooltip key={entry.key} content={entry.description} side="right">
-      <button
-        aria-label={entry.label}
-        aria-current={isActive ? 'page' : undefined}
-        data-testid={`nav-${entry.key}`}
-        onClick={() => entry.appId && navigate(routeFor(entry.appId, { activeWorkspaceId }))}
-        className={`relative w-full flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-xs font-display transition-colors ${
-          indent ? 'pl-7' : ''
-        } ${isActive ? 'bg-muted/60 text-foreground' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
-      >
-        <Icon className={`w-4 h-4 shrink-0 ${entry.color ?? ''}`} />
-        <span className="truncate">{entry.label}</span>
-        {entry.appId === 'waggle-dance' && waggleUnacknowledged > 0 && (
-          <span className="ml-auto min-w-[16px] h-4 flex items-center justify-center text-[10px] font-bold bg-destructive text-destructive-foreground rounded-full px-1">
-            {waggleUnacknowledged > 99 ? '99+' : waggleUnacknowledged}
-          </span>
-        )}
-      </button>
-      </HintTooltip>
-    );
-  };
+  // Five-place spine + a power-tier "Pinned" group. Chat resolves to the active
+  // workspace's chat tab (routeFor falls back to /home with no workspace). The
+  // Agents & tasks badge surfaces unacknowledged coordination signals for now;
+  // PR3 refines it to the real pending-approvals/tasks count.
+  const isPro = currentTier === 'power' || currentTier === 'admin';
+  const billingRank = { FREE: 0, TRIAL: 1, PRO: 2, TEAMS: 3, ENTERPRISE: 4 }[billingTier] ?? 0;
+  const spine: SidebarNavItem[] = useMemo(() => [
+    { key: 'home', label: 'Home', icon: Home, to: '/home', match: ['/home'] },
+    { key: 'chat', label: 'Chat', icon: MessageSquare, to: routeFor('chat', { activeWorkspaceId }), match: ['/workspaces'] },
+    { key: 'memory', label: 'Memory', icon: Brain, to: '/memory', match: ['/memory'] },
+    { key: 'agents', label: 'Agents & tasks', icon: ListTodo, to: '/agents', match: ['/agents', '/automations'], badge: waggleUnacknowledged || undefined },
+    { key: 'library', label: 'Library', icon: Library, to: '/artifacts', match: ['/artifacts', '/files', '/skills'] },
+  ], [activeWorkspaceId, waggleUnacknowledged]);
+  const pinned: SidebarNavItem[] = useMemo(() => {
+    if (!isPro) return [];
+    const items: SidebarNavItem[] = [
+      { key: 'swarm', label: 'Agent swarm', icon: Network, to: '/waggle-dance', match: ['/waggle-dance'] },
+      { key: 'connectors', label: 'Connectors', icon: Plug, to: '/connectors', match: ['/connectors'] },
+    ];
+    // Approvals is a TEAMS-tier surface (parity with dock-tiers minBillingTier).
+    if (billingRank >= 3) items.push({ key: 'approvals', label: 'Approvals', icon: Shield, to: '/approvals', match: ['/approvals'] });
+    return items;
+  }, [isPro, billingRank]);
+
+  // Plan label for the user row (e.g. "Trial · 9d", "Pro").
+  const tierLabel = useMemo(() => {
+    if (billingTier === 'TRIAL' || (trialInfo.trialDaysRemaining > 0 && !trialInfo.trialExpired)) {
+      return trialInfo.trialDaysRemaining > 0 ? `Trial · ${trialInfo.trialDaysRemaining}d` : 'Trial';
+    }
+    return billingTier.charAt(0) + billingTier.slice(1).toLowerCase();
+  }, [billingTier, trialInfo.trialDaysRemaining, trialInfo.trialExpired]);
+
+  // ⌘K curated catalog (Jump to / Do / Power tools + Pro "Pinned") → real routes.
+  const commandCatalog = useMemo(
+    () => buildCommandCatalog({ chatHref: routeFor('chat', { activeWorkspaceId }), isPro, billingRank }),
+    [activeWorkspaceId, isPro, billingRank],
+  );
+  const handleCatalogSelect = useCallback((cmd: CatalogCommand) => {
+    if (cmd.action === 'spawn') { ov.setShowSpawnAgent(true); return; }
+    if (cmd.to) navigate(cmd.to);
+  }, [navigate, ov]);
 
   // FR #33: when the onboarding wizard is active, render ONLY the wizard —
   // no nav, no canvas, no overlays (§1.2 OnboardingWizard row: full-screen
@@ -268,39 +284,18 @@ const ShellLayout = () => {
         onSearchClick={() => ov.setShowGlobalSearch(true)} onNotificationClick={ov.toggleNotifications} />
 
       <div className="absolute inset-x-0 top-8 bottom-0 flex">
-        {/* Left nav — renders the same zone data the dock renders (§1.3). */}
-        <nav aria-label="Primary" className="relative z-10 w-52 shrink-0 glass-strong border-r border-border/30 overflow-y-auto py-3 px-2 flex flex-col gap-0.5">
-          {navEntries.map((entry) => {
-            if (entry.type === 'separator') {
-              return <div key={entry.key} className="h-px bg-border/30 my-1.5 mx-2" />;
-            }
-            if (entry.type === 'zone-parent') {
-              return (
-                <div key={entry.key} className="flex flex-col gap-0.5">
-                  <div title={entry.description} className="px-2.5 pt-2 pb-1 text-[10px] font-display font-semibold uppercase tracking-widest text-muted-foreground/70">
-                    {entry.label}
-                  </div>
-                  {entry.children?.filter(c => c.type === 'app').map(child => renderNavItem(child, true))}
-                </div>
-              );
-            }
-            return renderNavItem(entry, false);
-          })}
-          {/* Spawn affordance survives the killed mission-control surface (§1.1). */}
-          <div className="h-px bg-border/30 my-1.5 mx-2" />
-          <button
-            aria-label="New Agent"
-            data-testid="nav-spawn-agent"
-            title="Start a new AI agent on a task"
-            onClick={() => ov.setShowSpawnAgent(true)}
-            className="w-full flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-xs font-display text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-colors"
-          >
-            <Rocket className="w-4 h-4 shrink-0 text-primary" />
-            {/* "Spawn" is process-management jargon — alarming in the novice
-                tier where this is one of only seven visible words. */}
-            <span className="truncate">New Agent</span>
-          </button>
-        </nav>
+        {/* Warm-Hive calm spine (ia.html) — five places + workspace pill +
+            ⌘K tile + user row; all remaining depth lives in ⌘K. */}
+        <Sidebar
+          workspaceName={activeWorkspace?.name ?? null}
+          spine={spine}
+          pinned={pinned}
+          onOpenWorkspaceSwitcher={ov.toggleWorkspaceSwitcher}
+          onOpenCommand={() => ov.setShowGlobalSearch(true)}
+          onSpawnAgent={() => ov.setShowSpawnAgent(true)}
+          userName={null}
+          tierLabel={tierLabel}
+        />
 
         {/* Single canvas (§2.1 rule 1). Route wrappers bring their own
             AppErrorBoundary, mirroring Desktop.tsx:556-558. */}
@@ -325,6 +320,8 @@ const ShellLayout = () => {
           onNavigate={handleSearchNavigate}
           onExecute={() => { /* post-success hook — overlay closes itself; refresh feeds lazily */ }}
           workspaceId={activeWorkspaceId ?? undefined}
+          catalog={commandCatalog}
+          onCatalogSelect={handleCatalogSelect}
         />
       </AppErrorBoundary>
       <CreateWorkspaceDialog open={ov.showCreateWorkspace} onClose={() => ov.setShowCreateWorkspace(false)} onCreate={createWorkspace} />

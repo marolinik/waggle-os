@@ -15,6 +15,7 @@ import { adapter } from '@/lib/adapter';
 import { fuzzyMatch } from '@/lib/fuzzy-match';
 import { useToast } from '@/hooks/use-toast';
 import type { CommandCategory, CommandResultType, CommandResult } from '@/lib/types';
+import type { CatalogCommand, CatalogGroup } from '@/lib/command-catalog';
 import type { Command } from '@waggle/shared';
 
 /* ── Verb sections (PRD §12.3) ──
@@ -163,6 +164,36 @@ const ResultRow = ({ result, onSelect }: { result: CommandResult; onSelect: () =
   );
 };
 
+/* ── Group heading (mono, uppercase; honey for the Pinned group) ── */
+const groupHeading = (label: string, pinned = false) => (
+  <span className={`font-mono text-[10px] uppercase tracking-[0.12em] ${pinned ? 'text-[var(--honey)]' : 'text-[var(--text-dim)]'}`}>
+    {label}
+  </span>
+);
+
+/* ── Catalog row — a curated place/action: plain name + mono subtitle (ia.html). ── */
+const CatalogRow = ({ cmd, onSelect }: { cmd: CatalogCommand; onSelect: () => void }) => {
+  const Icon = cmd.icon;
+  return (
+    <CommandItem
+      value={`cat:${cmd.id}`}
+      onSelect={onSelect}
+      className="group flex items-center gap-3 rounded-[9px] px-3 py-2 aria-selected:bg-[var(--honey-wash)]"
+    >
+      <Icon className="h-[18px] w-[18px] shrink-0 text-[var(--text-2)] group-aria-selected:text-[var(--honey)]" strokeWidth={1.7} />
+      <span className="min-w-0 flex-1 truncate">
+        <span className="text-sm text-[var(--text)]">{cmd.name}</span>
+        {cmd.subtitle && (
+          <span className="ml-2 font-mono text-[11px] text-[var(--text-dim)]">{cmd.subtitle}</span>
+        )}
+      </span>
+      {cmd.meta && (
+        <span className="shrink-0 font-mono text-[10.5px] text-[var(--text-dim)]">{cmd.meta}</span>
+      )}
+    </CommandItem>
+  );
+};
+
 /* ── Props (integrator wires to Desktop) ── */
 interface CommandCenterProps {
   open: boolean;
@@ -171,6 +202,11 @@ interface CommandCenterProps {
   onExecute: (result: CommandResult) => void;
   /** Active workspace for execute scoping (C7/C5 deep-links + execute payloads). */
   workspaceId?: string;
+  /** Curated places & actions (Jump to / Do / Power tools + Pinned). Optional —
+   *  when absent (isolated/standalone render) the palette falls back to the
+   *  backend recent/suggested strips. */
+  catalog?: CatalogGroup[];
+  onCatalogSelect?: (cmd: CatalogCommand) => void;
 }
 
 type ViewState =
@@ -196,7 +232,7 @@ function groupByCategory(results: readonly CommandResult[]): Array<{ category: C
 }
 
 /* ── Component ── */
-const CommandCenter = ({ open, onClose, onNavigate, onExecute, workspaceId }: CommandCenterProps) => {
+const CommandCenter = ({ open, onClose, onNavigate, onExecute, workspaceId, catalog, onCatalogSelect }: CommandCenterProps) => {
   const { toast } = useToast();
 
   const [query, setQuery] = useState('');
@@ -301,6 +337,17 @@ const CommandCenter = ({ open, onClose, onNavigate, onExecute, workspaceId }: Co
     const live = nlResult ? [...results, nlResult] : results;
     return groupByCategory(live);
   }, [query, results, recent, suggestions, nlResult]);
+
+  // Curated catalog, filtered client-side by the query (the backend search runs
+  // in parallel and contributes federated object hits below).
+  const catalogSections = useMemo<CatalogGroup[]>(() => {
+    if (!catalog) return [];
+    const q = query.trim().toLowerCase();
+    if (!q) return catalog;
+    return catalog
+      .map((g) => ({ ...g, items: g.items.filter((i) => fuzzyMatch(q, `${i.name} ${i.subtitle ?? ''}`).match) }))
+      .filter((g) => g.items.length > 0);
+  }, [catalog, query]);
 
   // Keep an id→result lookup in sync with whatever is currently rendered so a
   // cmdk onSelect (which yields the value/id) can resolve back to the object.
@@ -442,8 +489,22 @@ const CommandCenter = ({ open, onClose, onNavigate, onExecute, workspaceId }: Co
                 </span>
               </CommandEmpty>
 
-              {/* Idle: surface Recent + Suggested strips (PRD §12.3). */}
-              {viewState === 'idle' && recent.length > 0 && (
+              {/* Curated places & actions (Jump to / Do / Power tools + Pinned). */}
+              {catalogSections.map((g) => (
+                <CommandGroup key={`cat-${g.key}`} heading={groupHeading(g.heading, g.key === 'pinned')}>
+                  {g.items.map((cmd) => (
+                    <CatalogRow
+                      key={cmd.id}
+                      cmd={cmd}
+                      onSelect={() => { onCatalogSelect?.(cmd); onClose(); }}
+                    />
+                  ))}
+                </CommandGroup>
+              ))}
+
+              {/* Idle: backend Recent + Suggested strips — only when no curated
+                  catalog is wired (isolated/standalone render). */}
+              {!catalog && viewState === 'idle' && recent.length > 0 && (
                 <CommandGroup
                   heading={
                     <span className="flex items-center gap-1.5">
@@ -457,7 +518,7 @@ const CommandCenter = ({ open, onClose, onNavigate, onExecute, workspaceId }: Co
                 </CommandGroup>
               )}
 
-              {viewState === 'idle' && suggestions.length > 0 && (
+              {!catalog && viewState === 'idle' && suggestions.length > 0 && (
                 <CommandGroup
                   heading={
                     <span className="flex items-center gap-1.5">

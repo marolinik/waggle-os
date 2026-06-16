@@ -5,6 +5,11 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 import { initPostHog } from "@/lib/posthog";
+import { applyStoredThemeEarly } from "@/providers/ThemeProvider";
+
+// Apply the persisted theme before first paint to avoid a flash of the wrong
+// theme (warm graphite/dark default; warm paper for light).
+applyStoredThemeEarly();
 
 // Initialize PostHog cloud analytics (DAY0-04).
 // Non-blocking — PostHog init failure must not prevent app boot.

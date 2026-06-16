@@ -4,6 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ServiceProvider } from "@/providers/ServiceProvider";
+import { ThemeProvider } from "@/providers/ThemeProvider";
 import AppErrorBoundary from "@/components/os/ErrorBoundary";
 import AppShell, { IndexRedirect } from "@/components/os/AppShell";
 import NotFound from "./pages/NotFound.tsx";
@@ -33,12 +34,8 @@ import {
   UsageRoute,
 } from "@/routes";
 
-// 9f: Restore saved theme on load (relocated from the retired pages/Index.tsx
-// with the P1a Stage-C flip).
-const savedTheme = localStorage.getItem('waggle-theme');
-if (savedTheme === 'light') {
-  document.documentElement.setAttribute('data-theme', 'light');
-}
+// Theme is now owned by <ThemeProvider>; the pre-paint apply lives in main.tsx
+// (applyStoredThemeEarly) to avoid a flash of the wrong theme on load.
 
 const queryClient = new QueryClient();
 
@@ -49,7 +46,8 @@ const queryClient = new QueryClient();
  * route rendered into the shell's single canvas via the §5.1 wrappers.
  */
 const App = () => (
-  <ServiceProvider>
+  <ThemeProvider>
+    <ServiceProvider>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
@@ -98,7 +96,8 @@ const App = () => (
         </BrowserRouter>
       </TooltipProvider>
     </QueryClientProvider>
-  </ServiceProvider>
+    </ServiceProvider>
+  </ThemeProvider>
 );
 
 export default App;

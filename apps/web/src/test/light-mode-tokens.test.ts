@@ -95,3 +95,28 @@ describe('R5-006 light-mode token contrast', () => {
     expect(r, `${token} = ${val} → ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
   });
 });
+
+// ── Honey button text contrast (--primary-foreground on --primary) ──
+// The default shadcn button/badge render `bg-primary text-primary-foreground`,
+// and the design mandates dark ink (#1a1407) on the honey accent. Guard the
+// ratio in BOTH themes so a light-mode regression (white-on-honey ≈ 3.6:1)
+// can't ship green again.
+function hslTriple(body: string, name: string): [number, number, number] | null {
+  const m = body.match(new RegExp(`${name}:\\s*([\\d.]+)\\s+([\\d.]+)%\\s+([\\d.]+)%`));
+  return m ? hslToRgb(Number(m[1]), Number(m[2]), Number(m[3])) : null;
+}
+
+describe('honey button text contrast (--primary-foreground on --primary)', () => {
+  it.each([
+    ['dark', ':root'],
+    ['light', ':root[data-theme="light"]'],
+  ])('%s primary button text meets WCAG AA (>=4.5:1)', (label, selector) => {
+    const body = block(selector);
+    const primary = hslTriple(body, '--primary');
+    const fg = hslTriple(body, '--primary-foreground');
+    expect(primary, `${selector} --primary must be HSL`).not.toBeNull();
+    expect(fg, `${selector} --primary-foreground must be HSL`).not.toBeNull();
+    const r = ratio(primary!, fg!);
+    expect(r, `${label} primary-foreground → ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
+  });
+});
