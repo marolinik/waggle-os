@@ -320,6 +320,24 @@ model_list:
       model: anthropic/claude-opus-4-7
       api_key: os.environ/ANTHROPIC_API_KEY
 
+  # Plan 05 frontier baseline — Claude Opus 4.8 (premium ceiling subject).
+  # Native Anthropic route; plain family alias (NOT a dated -2026xxxx suffix —
+  # speculative date suffixes 404'd for 4.6/4.7, see notes at lines 5-7 + 316-317).
+  # Pricing per recon model-roster-and-cost-feasibility.md §2: $5/$25 (3x drop
+  # vs 4.6/4.7 $15/$75) — confirm against the canonical Anthropic price page
+  # before locking the pre-registration manifest.
+  - model_name: claude-opus-4-8
+    litellm_params:
+      model: anthropic/claude-opus-4-8
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  # OpenRouter bridge failover for Opus 4.8 (mirrors the 4-7 bridge at lines
+  # 110-113). Used only when the native Anthropic key is missing/rate-limited.
+  - model_name: claude-opus-4-8-via-openrouter
+    litellm_params:
+      model: openrouter/anthropic/claude-opus-4.8
+      api_key: os.environ/OPENROUTER_API_KEY
+
   # Gemma 4 31B Dense — OpenRouter (verified live 2026-04-17)
   - model_name: gemma-4-31b
     litellm_params:

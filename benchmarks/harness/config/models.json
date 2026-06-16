@@ -103,6 +103,17 @@
     "pinning_surface_carve_out_reason": null,
     "judge_role": "primary"
   },
+  "claude-opus-4-8": {
+    "id": "claude-opus-4-8",
+    "displayName": "Claude Opus 4.8 (Plan 05 frontier baseline subject — premium ceiling, arms A/C/E)",
+    "provider": "anthropic",
+    "litellmModel": "claude-opus-4-8",
+    "pricePerMillionInput": 5.0,
+    "pricePerMillionOutput": 25.0,
+    "contextWindow": 1000000,
+    "pinning_surface": "anthropic_immutable",
+    "pinning_surface_carve_out_reason": null
+  },
   "gpt-5.4": {
     "id": "gpt-5.4",
     "displayName": "GPT-5.4 (Sprint 11 Task 2.2 primary judge, direct via LiteLLM→OpenAI)",

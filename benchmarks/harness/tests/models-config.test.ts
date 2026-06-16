@@ -184,3 +184,32 @@ describe('ModelSpec shape invariants', () => {
     }
   });
 });
+
+// ── Plan 05: frontier baseline subjects (Opus 4.8 / GPT-5.5 / Gemini fallback) ──
+describe('Plan 05 — claude-opus-4-8 frontier subject', () => {
+  it('is present and key === id', () => {
+    const models = loadModels();
+    const opus48 = models['claude-opus-4-8'];
+    expect(opus48, 'claude-opus-4-8 missing from registry').toBeDefined();
+    expect(opus48.id).toBe('claude-opus-4-8');
+  });
+
+  it('is an anthropic_immutable subject with null carve-out and NO judge_role', () => {
+    const models = loadModels();
+    const opus48 = models['claude-opus-4-8'];
+    expect(opus48.provider).toBe('anthropic');
+    expect(opus48.pinning_surface).toBe('anthropic_immutable');
+    expect(opus48.pinning_surface_carve_out_reason).toBeNull();
+    // Subject model, not a judge — vendor-circularity guard (recon §5.6).
+    expect(opus48.judge_role).toBeUndefined();
+  });
+
+  it('carries the recon-pinned price ($5/$25) and 1M context, not the 4.6/4.7 $15/$75', () => {
+    const models = loadModels();
+    const opus48 = models['claude-opus-4-8'];
+    expect(opus48.pricePerMillionInput).toBe(5.0);
+    expect(opus48.pricePerMillionOutput).toBe(25.0);
+    expect(opus48.contextWindow).toBe(1_000_000);
+    expect(opus48.litellmModel).toBe('claude-opus-4-8');
+  });
+});
