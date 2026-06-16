@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CostTracker, type ModelPricing } from '../src/cost-tracker.js';
+import { CostTracker, DEFAULT_MODEL_PRICING, type ModelPricing } from '../src/cost-tracker.js';
 
 describe('CostTracker', () => {
   const pricing: Record<string, ModelPricing> = {
@@ -51,5 +51,29 @@ describe('CostTracker', () => {
       expect(total).toBeGreaterThan(0);
       expect(total).toBe(tracker.getStats().estimatedCost);
     });
+  });
+});
+
+describe('cost-tracker — Opus 4.7 / 4.8 pricing (Plan 05)', () => {
+  it('knows claude-opus-4-8 at $5/$25 per MTok (0.005 / 0.025 per 1K)', () => {
+    expect(DEFAULT_MODEL_PRICING['claude-opus-4-8']).toEqual({
+      inputPer1k: 0.005,
+      outputPer1k: 0.025,
+    });
+  });
+
+  it('knows claude-opus-4-7 at $15/$75 per MTok (0.015 / 0.075 per 1K)', () => {
+    expect(DEFAULT_MODEL_PRICING['claude-opus-4-7']).toEqual({
+      inputPer1k: 0.015,
+      outputPer1k: 0.075,
+    });
+  });
+
+  it('does NOT fall back to Sonnet pricing for Opus 4.8', () => {
+    const tracker = new CostTracker();
+    // 1M in + 1M out at Opus 4.8 = $5 + $25 = $30. Sonnet fallback would be
+    // $3 + $15 = $18 — so a wrong fallback is detectable here.
+    const cost = tracker.calculateCost(1_000_000, 1_000_000, 'claude-opus-4-8');
+    expect(cost).toBeCloseTo(30, 6);
   });
 });

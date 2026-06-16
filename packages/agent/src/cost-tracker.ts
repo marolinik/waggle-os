@@ -26,6 +26,11 @@ export const DEFAULT_MODEL_PRICING: Record<string, ModelPricing> = {
   'claude-haiku-3-5': { inputPer1k: 0.00025, outputPer1k: 0.00125 },
   'claude-3-5-haiku-20241022': { inputPer1k: 0.00025, outputPer1k: 0.00125 },
   'claude-opus-4-6': { inputPer1k: 0.015, outputPer1k: 0.075 },
+  // Plan 05: Opus 4.7 stays at the 4.6 list price; Opus 4.8 is the $5/$25
+  // generation (3x drop) — without these rows, Opus usage silently bills at
+  // the Sonnet fallback (calculateCost ~line 98). Per-1K = per-MTok / 1000.
+  'claude-opus-4-7': { inputPer1k: 0.015, outputPer1k: 0.075 },
+  'claude-opus-4-8': { inputPer1k: 0.005, outputPer1k: 0.025 },
   'claude-3-5-sonnet-20241022': { inputPer1k: 0.003, outputPer1k: 0.015 },
 };
 
