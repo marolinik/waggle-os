@@ -257,3 +257,13 @@ describe('computeTostSampleSizePaired — powered N', () => {
     ).toThrow(/power must be one of/);
   });
 });
+
+import * as stats from '../../src/stats/index.js';
+
+describe('stats barrel exposes the equivalence surface', () => {
+  it('re-exports the three equivalence functions', () => {
+    expect(typeof stats.computePairedDiffClusterBootstrapCI).toBe('function');
+    expect(typeof stats.tostEquivalence).toBe('function');
+    expect(typeof stats.computeTostSampleSizePaired).toBe('function');
+  });
+});

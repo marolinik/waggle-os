@@ -24,3 +24,18 @@ export type { WilsonInput, WilsonResult } from './wilson-ci.js';
 
 export { computeClusterBootstrapCI } from './cluster-bootstrap.js';
 export type { CorrectnessRow, BootstrapInput, BootstrapResult } from './cluster-bootstrap.js';
+
+export {
+  computePairedDiffClusterBootstrapCI,
+  tostEquivalence,
+  computeTostSampleSizePaired,
+} from './equivalence-tost.js';
+export type {
+  PairedRow,
+  PairedDiffInput,
+  PairedDiffResult,
+  TostInput,
+  TostResult,
+  TostSampleSizeInput,
+  TostSampleSizeResult,
+} from './equivalence-tost.js';
