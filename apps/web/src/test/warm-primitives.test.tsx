@@ -1,0 +1,129 @@
+/**
+ * PR3 Phase 0 — warm-Hive shared primitives render smoke.
+ *
+ * Locks the foundation atoms in `components/os/warm/` so a broken import,
+ * token typo, or runtime error surfaces before the three screens consume them.
+ * Behavioural atoms (AskBar submit, ActivityStream toggle, InlineApprovalCard
+ * Always-allow gating) get a real assertion; the rest assert mount + content.
+ */
+import { describe, it, expect, afterEach } from 'vitest';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { Sparkles } from 'lucide-react';
+import {
+  HexAvatar,
+  SectionLabel,
+  DotLive,
+  ProvenanceLine,
+  RunChip,
+  IconTile,
+  HexCheckTile,
+  StreakChip,
+  ModelPill,
+  OvernightHero,
+  AskBar,
+  ActivityStream,
+  InlineApprovalCard,
+} from '@/components/os/warm';
+import type { ApprovalRequest } from '@/components/ui/approval-modal';
+
+afterEach(cleanup);
+
+describe('warm primitives — render smoke', () => {
+  it('HexAvatar shows the derived initial', () => {
+    render(<HexAvatar label="Competitive Intelligence" />);
+    expect(screen.getByText('C')).toBeInTheDocument();
+  });
+
+  it('SectionLabel renders its text', () => {
+    render(<SectionLabel rule>What Waggle knows</SectionLabel>);
+    expect(screen.getByText('What Waggle knows')).toBeInTheDocument();
+  });
+
+  it('StreakChip renders an N-day streak', () => {
+    render(<StreakChip days={12} />);
+    expect(screen.getByText('12-day streak')).toBeInTheDocument();
+  });
+
+  it('ProvenanceLine renders the ⬡ source · when label', () => {
+    render(<ProvenanceLine source="web · mem0.ai" when="2h ago" />);
+    expect(screen.getByText('⬡ web · mem0.ai · 2h ago')).toBeInTheDocument();
+  });
+
+  it('RunChip renders its label', () => {
+    render(<RunChip label="14 memories consolidated" tone="intel" />);
+    expect(screen.getByText('14 memories consolidated')).toBeInTheDocument();
+  });
+
+  it('ModelPill renders mode · model', () => {
+    render(<ModelPill mode="auto" model="Claude Sonnet" />);
+    expect(screen.getByText('Claude Sonnet')).toBeInTheDocument();
+    expect(screen.getByText(/auto/)).toBeInTheDocument();
+  });
+
+  it('OvernightHero shows the statement when runs exist, empty text otherwise', () => {
+    const { rerender } = render(
+      <OvernightHero statement={<>Folded 14 memories</>} runs={[{ label: 'x' }]} />,
+    );
+    expect(screen.getByText('Folded 14 memories')).toBeInTheDocument();
+    rerender(<OvernightHero statement={<>Folded 14 memories</>} runs={[]} emptyText="A calm night" />);
+    expect(screen.getByText('A calm night')).toBeInTheDocument();
+  });
+
+  it('AskBar submits trimmed text and clears the input', () => {
+    let sent = '';
+    render(<AskBar onSubmit={(t) => (sent = t)} />);
+    const input = screen.getByLabelText('Ask Waggle') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '  draft the board update  ' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(sent).toBe('draft the board update');
+    expect(input.value).toBe('');
+  });
+
+  it('ActivityStream is collapsed by default and reveals steps on click', () => {
+    render(
+      <ActivityStream
+        summary="Worked across memory, web & files"
+        durationMs={38000}
+        steps={[{ text: 'Recalled 6 frames', provenance: { source: 'mem://hive' } }]}
+      />,
+    );
+    expect(screen.getByText(/Worked across memory/)).toBeInTheDocument();
+    expect(screen.queryByText('Recalled 6 frames')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { expanded: false }));
+    expect(screen.getByText('Recalled 6 frames')).toBeInTheDocument();
+  });
+
+  it('InlineApprovalCard renders the target and gates Always-allow on critical', () => {
+    const base: ApprovalRequest = {
+      action: 'Export to Salesforce',
+      scope: ['Q2 Pricing'],
+      riskLevel: 'high',
+    };
+    const { rerender } = render(
+      <InlineApprovalCard request={base} onApprove={() => {}} onDecline={() => {}} onAlwaysAllow={() => {}} />,
+    );
+    expect(screen.getByText('Export to Salesforce › Q2 Pricing')).toBeInTheDocument();
+    expect(screen.getByText('Always allow')).toBeInTheDocument();
+    rerender(
+      <InlineApprovalCard
+        request={{ ...base, approvalClass: 'critical' }}
+        onApprove={() => {}}
+        onDecline={() => {}}
+        onAlwaysAllow={() => {}}
+      />,
+    );
+    expect(screen.queryByText('Always allow')).not.toBeInTheDocument();
+  });
+
+  it('IconTile / DotLive / HexCheckTile mount without throwing', () => {
+    expect(() =>
+      render(
+        <>
+          <IconTile icon={Sparkles} tone="work" />
+          <DotLive tone="healthy" />
+          <HexCheckTile tone="healthy" />
+        </>,
+      ),
+    ).not.toThrow();
+  });
+});
