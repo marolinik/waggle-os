@@ -35,9 +35,11 @@ const MemoryRoute = () => {
 
   const mind: MindScope = mindScope === 'workspace' ? 'workspace' : 'personal';
   const tabParam = searchParams.get('tab');
+  // PR3.5: 'trust' (screen 19) is the new default landing; ?tab= still selects
+  // any view (incl. the legacy 'memories' list and the 6 secondary views).
   const view: MemoryView = MEMORY_VIEWS.includes(tabParam as MemoryView)
     ? (tabParam as MemoryView)
-    : 'memories';
+    : 'trust';
 
   // Stash once per mount, during render, so it precedes the child's mount
   // effect (the ref keeps StrictMode double-render from double-stashing).
@@ -48,7 +50,11 @@ const MemoryRoute = () => {
   if (!stashedRef.current) {
     stashedRef.current = true;
     const filter = searchParams.get('filter') ?? undefined;
-    if (filter && view === 'memories') {
+    // J08 "N need review" deep-links here with ?filter=unreviewed and no tab →
+    // lands on the default 'trust' view, whose Manage body embeds the same
+    // MemoryCenterTab that consumes the stash. 'memories' (the secondary list)
+    // also consumes it when explicitly targeted. Other tabs must not strand it.
+    if (filter && (view === 'trust' || view === 'memories')) {
       stashDeepLink({ appId: 'memory', filter });
     }
   }
@@ -87,7 +93,9 @@ const MemoryRoute = () => {
         onViewChange={(v) => {
           setSearchParams((prev) => {
             const next = new URLSearchParams(prev);
-            if (v === 'memories') next.delete('tab'); else next.set('tab', v);
+            // 'trust' is the canonical no-tab default now; everything else (incl.
+            // the legacy 'memories' list) carries an explicit ?tab=.
+            if (v === 'trust') next.delete('tab'); else next.set('tab', v);
             return next;
           }, { replace: true });
         }}

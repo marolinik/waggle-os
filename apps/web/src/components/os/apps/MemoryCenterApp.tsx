@@ -1,7 +1,8 @@
-import { Brain, Clock, Network, Download, Activity, BookOpen, Sparkles, User, Briefcase } from 'lucide-react';
+import { Brain, Clock, Network, Download, Activity, BookOpen, Sparkles, User, Briefcase, ShieldCheck } from 'lucide-react';
 import type { KGNode, KGEdge } from '@/lib/types';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 import { cn } from '@/lib/utils';
+import MemoryTrust from './MemoryTrust';
 import KnowledgeGraphViewer from './memory/KnowledgeGraphViewer';
 import HarvestTab from './memory/HarvestTab';
 import WeaverPanel from './memory/WeaverPanel';
@@ -31,13 +32,16 @@ import { useOnboarding } from '@/hooks/useOnboarding';
  */
 
 export type MindScope = 'personal' | 'workspace';
-export type MemoryView = 'memories' | 'timeline' | 'graph' | 'harvest' | 'weaver' | 'wiki' | 'evolution';
+export type MemoryView = 'trust' | 'memories' | 'timeline' | 'graph' | 'harvest' | 'weaver' | 'wiki' | 'evolution';
 
+// PR3.5: 'trust' (screen 19) is the new PRIMARY front door — first + default;
+// the legacy views demote to secondary (after the divider).
 export const MEMORY_VIEWS: readonly MemoryView[] = [
-  'memories', 'timeline', 'graph', 'harvest', 'weaver', 'wiki', 'evolution',
+  'trust', 'memories', 'timeline', 'graph', 'harvest', 'weaver', 'wiki', 'evolution',
 ];
 
 const MEMORY_TABS: { id: MemoryView; label: string; icon: React.ComponentType<{ className?: string }>; tooltip: string }[] = [
+  { id: 'trust', label: 'Trust', icon: ShieldCheck, tooltip: 'Memory Trust — confidence & freshness, forget / correct / confirm, and "why did you do that?"' },
   { id: 'memories', label: 'Memories', icon: Brain, tooltip: 'Memory Center — inspect, edit, review, merge' },
   { id: 'timeline', label: 'Timeline', icon: Clock, tooltip: 'Chronological frame list' },
   { id: 'graph', label: 'Graph', icon: Network, tooltip: 'Knowledge Graph — entities and relations' },
@@ -116,7 +120,7 @@ const MemoryCenterApp = ({
           workspace pill is never pressed AND disabled at once: without a
           workspace there is no workspace mind to be "on", even if the URL says
           /memory/workspace (the list shows the no-workspace hint instead). */}
-      {view === 'memories' && (
+      {(view === 'memories' || view === 'trust') && (
         <div role="group" aria-label="Which mind to show" className="flex items-center gap-1.5 px-2.5 py-2 border-b border-border/30 bg-background/40">
           <button
             onClick={() => onMindChange('personal')}
@@ -152,7 +156,9 @@ const MemoryCenterApp = ({
       )}
 
       <div className="flex-1 overflow-auto">
-        {view === 'memories' ? (
+        {view === 'trust' ? (
+          <MemoryTrust mind={mind} workspaceId={workspaceId} />
+        ) : view === 'memories' ? (
           <MemoryCenterTab mind={mind} workspaceId={workspaceId} />
         ) : view === 'timeline' ? (
           <TimelineTab {...timeline} onContextRail={onContextRail} />
