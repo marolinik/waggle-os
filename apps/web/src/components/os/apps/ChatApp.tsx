@@ -8,6 +8,7 @@ import { adapter } from '@/lib/adapter';
 import type { ChatMessage, ToolExecution, ApprovalRequest } from '@/lib/types';
 import { RiskBadge, canAlwaysAllow } from '@/lib/risk-display';
 import { BlockRenderer } from './chat-blocks';
+import ChatWorkCanvas, { selectCanvasArtifact } from './chat-blocks/ChatWorkCanvas';
 import { DotLive } from '../warm';
 import WorkspaceBriefing from '@/components/os/WorkspaceBriefing';
 import { useContainerWidth } from '@/hooks/useContainerWidth';
@@ -473,6 +474,10 @@ const ChatApp = ({
   const [showPersonaPicker, setShowPersonaPicker] = useState(false);
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showHeaderOverflow, setShowHeaderOverflow] = useState(false);
+  // B3: the right work canvas opens on a fresh artifact and survives navigation
+  // (it lives inside ChatApp's kept-alive flex root).
+  const [canvasOpen, setCanvasOpen] = useState(false);
+  const lastCanvasPath = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -496,6 +501,16 @@ const ChatApp = ({
     if (!last || last.role !== 'assistant' || !last.content) return [];
     return extractSuggestedActions(last.content);
   }, [messages, isLoading]);
+
+  // B3: the latest completed file-write becomes the work-canvas doc; auto-open
+  // the canvas when a NEW artifact appears (the user can close it; reopening is
+  // implicit on the next artifact).
+  const canvasArtifact = useMemo(() => selectCanvasArtifact(messages), [messages]);
+  useEffect(() => {
+    const path = canvasArtifact?.path ?? null;
+    if (path && path !== lastCanvasPath.current) setCanvasOpen(true);
+    lastCanvasPath.current = path;
+  }, [canvasArtifact]);
 
   // M-22 / ENG-1: surface a relevant memory on the 5th user message of
   // a session. Reset when the workspace or session changes so each
@@ -1120,7 +1135,7 @@ const ChatApp = ({
                     ? 'rounded-[4px_14px_14px_14px] bg-[var(--surface)] px-3.5 py-2.5 leading-[1.55] text-[var(--text)]'
                     : msg.role === 'system'
                     ? 'rounded-[12px] bg-[var(--surface-2)] px-3 py-2 text-[12px] italic text-[var(--text-muted)]'
-                    : 'rounded-[14px] bg-[var(--bg-2)] px-3.5 py-2.5 leading-[1.6] text-[var(--text)]'
+                    : 'rounded-[14px] px-3.5 py-2.5 leading-[1.6] text-[var(--text)]'
                 }`}>
                   {msg.role === 'assistant' && msg.blocks && msg.blocks.length > 0 ? (
                     <BlockRenderer
@@ -1249,6 +1264,14 @@ const ChatApp = ({
           </div>
         </div>
       </div>
+
+      {canvasOpen && canvasArtifact && (
+        <ChatWorkCanvas
+          artifact={canvasArtifact}
+          isStreaming={isLoading}
+          onClose={() => setCanvasOpen(false)}
+        />
+      )}
     </div>
   );
 };
