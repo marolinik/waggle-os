@@ -4,6 +4,7 @@ import type {
   KnowledgeGraph,
   HybridSearch,
   Importance,
+  FrameSource,
 } from '@waggle/core';
 import { createCoreLogger } from '@waggle/core';
 import { extractEntities, extractRelations, type ExtractedEntity } from './entity-extractor.js';
@@ -53,6 +54,10 @@ export class CognifyPipeline {
     importance: Importance = 'normal',
     gopId?: string,
     turnId?: string,
+    /** Provenance class for the written frame (PR3.5 honesty: agent-extracted
+     *  memories must NOT inherit the schema default 'user_stated'). Omit to let
+     *  FrameStore's default apply (back-compat for callers that don't classify). */
+    source?: FrameSource,
   ): Promise<CognifyResult> {
     logTurnEvent(turnId, { stage: 'cognify.enter', contentChars: content.length, importance, gopId });
     // 1. Ensure a session exists
@@ -61,8 +66,8 @@ export class CognifyPipeline {
     // 2. Save a frame (I-frame if none exists, P-frame otherwise)
     const latestI = this.frames.getLatestIFrame(resolvedGopId);
     const frame = latestI
-      ? this.frames.createPFrame(resolvedGopId, content, latestI.id, importance)
-      : this.frames.createIFrame(resolvedGopId, content, importance);
+      ? this.frames.createPFrame(resolvedGopId, content, latestI.id, importance, source)
+      : this.frames.createIFrame(resolvedGopId, content, importance, source);
 
     // 3. Extract entities from content (guard against very long content)
     const maxContentLength = 10_000;

@@ -779,16 +779,20 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               const resultText = `${recall.count} memories recalled:\n${snippetText}`;
               // PR3.5: distinct provenance sources of the recalled memories
               // (raw frame.source values; the FE owns the friendly label map).
-              // 'unknown' is excluded — never a fabricated source. Omitted
-              // entirely when nothing carries a known source.
+              // Review M-4: emit the breakdown ONLY when it covers EVERY recalled
+              // frame — a partial breakdown next to "Recalled N memories" would
+              // imply all N share these sources. Any 'unknown' (e.g. the rare
+              // catch-up lane, which doesn't carry source) suppresses the pill
+              // rather than undercount. Never a fabricated source.
+              const recalledFrames = recall.recalledFrames ?? [];
+              const hasUnknownSource = recalledFrames.some(f => !f.source || f.source === 'unknown');
               const provenanceSources = [...new Set(
-                (recall.recalledFrames ?? [])
-                  .map(f => f.source)
-                  .filter((s): s is string => !!s && s !== 'unknown'),
+                recalledFrames.map(f => f.source).filter((s): s is string => !!s && s !== 'unknown'),
               )];
+              const emitProvenance = !hasUnknownSource && provenanceSources.length > 0;
               sendEvent('step', {
                 content: `Recalled ${recall.count} relevant memor${recall.count === 1 ? 'y' : 'ies'}.`,
-                ...(provenanceSources.length > 0 ? { provenance: { sources: provenanceSources } } : {}),
+                ...(emitProvenance ? { provenance: { sources: provenanceSources } } : {}),
               });
               sendEvent('tool_result', { name: 'auto_recall', result: resultText, duration: recallDuration, isError: false });
             } else {

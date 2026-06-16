@@ -22,6 +22,7 @@ import {
   type FrameStore,
   type SessionStore,
   type Importance,
+  type FrameSource,
   type MemoryFrame,
   type MindDB,
   type TeamSync,
@@ -146,6 +147,12 @@ export async function runPatternWriteBack(
     content: string,
     importance: Importance,
     target: SaveTarget = 'workspace',
+    // PR3.5 honesty (review H-1): this is a heuristic EXTRACTOR, so its writes
+    // default to 'agent_inferred' — NOT the schema default 'user_stated', which
+    // would make the Memory-Trust provenance pill claim the user said things the
+    // agent inferred. Genuinely user-authored frames (preferences, corrections)
+    // pass 'user_stated' explicitly at their call sites.
+    source: FrameSource = 'agent_inferred',
   ): Promise<MemoryFrame | null> => {
     // R2 sign gate (DEFECT-2): self-incapacity assertions persist at
     // 'temporary' so they're audit-visible but cannot re-enter the prompt as
@@ -164,7 +171,7 @@ export async function runPatternWriteBack(
     let createdFrame: MemoryFrame | null = null;
 
     if (cognify) {
-      const result = await cognify.cognify(content, importance);
+      const result = await cognify.cognify(content, importance, undefined, undefined, source);
       createdFrame = frames.getById(result.frameId) ?? null;
     } else {
       // ensureActive is transaction-wrapped — concurrent saves on a fresh
@@ -173,8 +180,8 @@ export async function runPatternWriteBack(
       const gopId = session.gop_id;
       const latestI = frames.getLatestIFrame(gopId);
       createdFrame = latestI
-        ? frames.createPFrame(gopId, content, latestI.id, importance)
-        : frames.createIFrame(gopId, content, importance);
+        ? frames.createPFrame(gopId, content, latestI.id, importance, source)
+        : frames.createIFrame(gopId, content, importance, source);
     }
     saved.push(content.slice(0, DEDUP_SLICE_LENGTH));
 
@@ -188,7 +195,13 @@ export async function runPatternWriteBack(
       try {
         existingMeta = createdFrame.metadata ? JSON.parse(createdFrame.metadata) as Record<string, unknown> : {};
       } catch { /* malformed metadata → start clean */ }
-      frames.setMetadata(createdFrame.id, JSON.stringify({ ...existingMeta, trace_id: opts.traceId }));
+      // Preserve an existing backlink (review L-1): createIFrame dedups on
+      // content hash, so createdFrame may be an OLDER frame already linked to
+      // the trace that originally wrote it. Keep that originating trace rather
+      // than re-pointing it to this turn's re-assertion.
+      if (existingMeta.trace_id === undefined) {
+        frames.setMetadata(createdFrame.id, JSON.stringify({ ...existingMeta, trace_id: opts.traceId }));
+      }
     }
 
     if (deps.teamSync && useWorkspace && createdFrame) {
@@ -216,7 +229,8 @@ export async function runPatternWriteBack(
     if (pat.test(userMsg)) {
       const sentences = userMsg.split(/[.!?\n]+/).filter(s => pat.test(s));
       if (sentences.length > 0) {
-        await save(`User preference: ${sentences[0].trim()}`, 'normal', 'personal');
+        // User stated the preference directly → genuine 'user_stated' provenance.
+        await save(`User preference: ${sentences[0].trim()}`, 'normal', 'personal', 'user_stated');
       }
       break;
     }
@@ -272,7 +286,8 @@ export async function runPatternWriteBack(
 
   // ── Pattern: user correction ──
   if (CORRECTION_PATTERNS.some(p => p.test(userMsg))) {
-    await save(`Correction from user: ${userMsg.slice(0, CONTEXT_PREVIEW_LENGTH)}`, 'important', 'personal');
+    // User stated the correction directly → genuine 'user_stated' provenance.
+    await save(`Correction from user: ${userMsg.slice(0, CONTEXT_PREVIEW_LENGTH)}`, 'important', 'personal', 'user_stated');
   }
 
   // ── Pattern: research output with external sources ──

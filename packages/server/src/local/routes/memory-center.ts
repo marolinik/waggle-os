@@ -2,8 +2,20 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { Importance, MemoryFrame } from '@waggle/core';
 import { FrameStore, SessionStore } from '@waggle/core';
 import type { Memory, MemoryKind, MemoryStatus, Scope } from '@waggle/shared';
+import { redactSkillContent } from '@waggle/agent';
 import { emitAuditEvent } from './events.js';
 import { sanitizeFrameContent } from './memory.js';
+
+/**
+ * Redact secrets/home-paths and cap length before returning trace conversation
+ * content to the FE (review H-3: input/output/reasoning bypass the tool-arg
+ * scrubbing the trace recorder applies). Pure; safe on undefined.
+ */
+const TRACE_CONTENT_CAP = 2000;
+function safeTraceText(s: string | undefined): string {
+  if (!s) return '';
+  return redactSkillContent(s).content.slice(0, TRACE_CONTENT_CAP);
+}
 
 /**
  * UX-Refactor Phase 2B — Memory Center REST surface (S04, PRD §16.4).
@@ -428,7 +440,8 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
   // stamped at chat write-back time. Returns { trace: null } honestly when the
   // frame has no linked trace (manual / harvested / pre-PR3.5 frames) — never a
   // synthesized reason. Traces live in the single global server.traceStore
-  // (tagged by workspace_id), so the lookup is mind-agnostic.
+  // (tagged by workspace_id); a workspace-mind frame is bound to its own
+  // workspace's traces below (mind-isolation), so no cross-workspace read.
   server.get<{
     Params: { id: string };
     Querystring: { workspace?: string; workspaceId?: string; mind?: string };
@@ -449,6 +462,14 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
       }
       const t = server.traceStore.getParsed(traceId);
       if (!t) return { trace: null };
+      // Review H-2 (mind isolation): a workspace-mind frame must only resolve a
+      // trace tagged for THAT workspace — the global traceStore holds every
+      // mind's traces, so without this a stale/colliding trace_id could surface
+      // another workspace's conversation. Personal-mind traces carry whatever
+      // workspace was active when written, so they aren't constrained here.
+      if (c.mind === 'workspace' && t.workspace_id !== workspace) {
+        return { trace: null };
+      }
       return {
         trace: {
           id: t.id,
@@ -460,9 +481,14 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
           durationMs: t.duration_ms,
           createdAt: t.created_at,
           finalizedAt: t.finalized_at,
-          input: t.payload.input,
-          output: t.payload.output,
-          reasoning: t.payload.reasoning,
+          // Review H-3: redact secrets/home-paths + cap — the trace recorder only
+          // scrubs tool-call args, leaving input/output/reasoning raw.
+          input: safeTraceText(t.payload.input),
+          output: safeTraceText(t.payload.output),
+          reasoning: t.payload.reasoning.map((r) => ({
+            content: safeTraceText(r.content),
+            timestamp: r.timestamp,
+          })),
           toolCalls: t.payload.toolCalls.map((call) => ({
             tool: call.tool,
             ok: call.ok,

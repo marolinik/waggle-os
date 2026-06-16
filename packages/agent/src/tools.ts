@@ -541,7 +541,10 @@ export function createMindTools(deps: MindToolDeps): ToolDefinition[] {
 
         // Use cognify pipeline if available (extracts entities + indexes for search)
         if (targetCognify) {
-          const result = await targetCognify.cognify(content, importance);
+          // PR3.5 (review H-1): pass the agent's chosen source through cognify —
+          // dropping it stored every cognify-path memory as 'user_stated' while
+          // the response string still claimed the real source (a provenance lie).
+          const result = await targetCognify.cognify(content, importance, undefined, undefined, source);
           return `Memory saved to ${mindLabel} mind (importance: ${importance}, source: ${source}, confidence: ${confidence}${dramaticFlag}${conflictFlag}, entities: ${result.entitiesExtracted}, relations: ${result.relationsCreated}).`;
         }
 

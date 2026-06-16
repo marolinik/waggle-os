@@ -602,18 +602,23 @@ export class Orchestrator {
       // Active mind only; caps keep the rendered block token-bounded:
       // facts most-recent 60, events most-recent 40 (chronological render —
       // the wholesale chronological block is load-bearing; cap, don't rank).
-      type LaneFrameRow = { id: number; content: string; importance: string; created_at: string };
+      // PR3.5 (review M-4): `source` added to all three lane SELECTs (column-only,
+      // no WHERE/ORDER/LIMIT change → rendered recall text byte-identical) so the
+      // auto_recall provenance breakdown reflects EVERY recalled frame, not just
+      // the semantic + importance lanes (otherwise these dominant lanes drop to
+      // 'unknown' and the pill undercounts).
+      type LaneFrameRow = { id: number; content: string; importance: string; source: string; created_at: string };
       const laneMindDb = (this.workspaceLayers?.db ?? this.db).getDatabase();
       const profileFrames = laneMindDb.prepare(
-        `SELECT id, content, importance, created_at FROM memory_frames
+        `SELECT id, content, importance, source, created_at FROM memory_frames
          WHERE content LIKE '${MIND_PROFILE_PREFIX} %' ORDER BY id ASC`
       ).all() as LaneFrameRow[];
       const factFrames = (laneMindDb.prepare(
-        `SELECT id, content, importance, created_at FROM memory_frames
+        `SELECT id, content, importance, source, created_at FROM memory_frames
          WHERE content LIKE '${MIND_FACT_PREFIX}%' ORDER BY id DESC LIMIT 60`
       ).all() as LaneFrameRow[]).reverse();
       const eventFramesAll = laneMindDb.prepare(
-        `SELECT id, content, importance, created_at FROM memory_frames
+        `SELECT id, content, importance, source, created_at FROM memory_frames
          WHERE content LIKE '${MIND_EVENT_PREFIX}%' ORDER BY created_at ASC, id ASC`
       ).all() as LaneFrameRow[];
       const eventFrames = eventFramesAll.slice(-40);
