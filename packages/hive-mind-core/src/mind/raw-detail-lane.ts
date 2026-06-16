@@ -35,6 +35,9 @@ const WINDOW_POOL_MAX = 120;
 export interface RawTurnHit {
   id: number;
   content: string;
+  /** Provenance class (memory_frames.source) — carried for the auto_recall
+   *  provenance breakdown (raw-turn frames are harvest imports). */
+  source: string;
   created_at: string;
   conv: string;
   turn: number;
@@ -50,7 +53,7 @@ export interface RawDetailLaneOptions {
   excludeIds?: Set<number>;
 }
 
-type FrameRow = { id: number; content: string; created_at: string };
+type FrameRow = { id: number; content: string; source: string; created_at: string };
 
 /** Body of a raw-turn frame (everything after the header line). */
 export function rawTurnBody(content: string): string {
@@ -84,7 +87,7 @@ function ftsPool(db: DatabaseType, query: string, limit: number): FrameRow[] {
   if (!match) return [];
   try {
     return db.prepare(
-      `SELECT mf.id, mf.content, mf.created_at
+      `SELECT mf.id, mf.content, mf.source, mf.created_at
        FROM memory_frames_fts fts
        JOIN memory_frames mf ON mf.id = fts.rowid
        WHERE fts.content MATCH ? AND mf.content LIKE '${MIND_RAWTURN_PREFIX} %'
@@ -99,7 +102,7 @@ function ftsPool(db: DatabaseType, query: string, limit: number): FrameRow[] {
 /** All raw-turn frames whose created_at date falls inside [since..until]. */
 function windowPool(db: DatabaseType, since: string, until: string): FrameRow[] {
   return db.prepare(
-    `SELECT id, content, created_at FROM memory_frames
+    `SELECT id, content, source, created_at FROM memory_frames
      WHERE content LIKE '${MIND_RAWTURN_PREFIX} %'
        AND substr(created_at, 1, 10) >= ? AND substr(created_at, 1, 10) <= ?
      ORDER BY id ASC`
@@ -112,7 +115,7 @@ function convTurnMap(db: DatabaseType, conv: string): Map<number, FrameRow> {
   // metacharacters can appear, so direct interpolation into the pattern
   // parameter (still a BOUND parameter) is safe.
   const rows = db.prepare(
-    `SELECT id, content, created_at FROM memory_frames
+    `SELECT id, content, source, created_at FROM memory_frames
      WHERE content LIKE ?`
   ).all(`${MIND_RAWTURN_PREFIX} conv:${conv} %`) as FrameRow[];
   const map = new Map<number, FrameRow>();

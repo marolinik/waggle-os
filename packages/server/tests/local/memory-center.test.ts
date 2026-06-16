@@ -135,6 +135,40 @@ describe('Memory Center routes (Phase 2B.2)', () => {
     expect(restore.json().status).toBe('active');
   });
 
+  it('POST /:id/confirm clears the unreviewed lifecycle state (PR3.5)', async () => {
+    const mem = await createMemory({ content: 'Imported claim pending review.', kind: 'fact' });
+    // Simulate the harvest-import lifecycle: land as unreviewed.
+    await server.inject({
+      method: 'PATCH', url: `/api/memory/${mem.id}`, payload: { status: 'unreviewed' },
+    });
+    const pending = await server.inject({ method: 'GET', url: '/api/memory?status=unreviewed' });
+    expect(pending.json().count).toBe(1);
+
+    const confirmed = await server.inject({ method: 'POST', url: `/api/memory/${mem.id}/confirm` });
+    expect(confirmed.statusCode).toBe(200);
+    expect(confirmed.json().status).toBe('active');
+
+    const stillPending = await server.inject({ method: 'GET', url: '/api/memory?status=unreviewed' });
+    expect(stillPending.json().count).toBe(0);
+  });
+
+  it('POST /:id/confirm 404s unknown, 400s non-numeric', async () => {
+    expect((await server.inject({ method: 'POST', url: '/api/memory/99999/confirm' })).statusCode).toBe(404);
+    expect((await server.inject({ method: 'POST', url: '/api/memory/abc/confirm' })).statusCode).toBe(400);
+  });
+
+  it('GET /:id/trace returns { trace: null } for a frame with no linked trace (PR3.5)', async () => {
+    const mem = await createMemory({ content: 'Manually created — no execution trace.', kind: 'fact' });
+    const res = await server.inject({ method: 'GET', url: `/api/memory/${mem.id}/trace` });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ trace: null });
+  });
+
+  it('GET /:id/trace 404s unknown, 400s non-numeric', async () => {
+    expect((await server.inject({ method: 'GET', url: '/api/memory/99999/trace' })).statusCode).toBe(404);
+    expect((await server.inject({ method: 'GET', url: '/api/memory/abc/trace' })).statusCode).toBe(400);
+  });
+
   it('POST /api/memory/merge concatenates and archives the originals (C11)', async () => {
     const a = await createMemory({ content: 'Fact A about Germany GTM.', kind: 'fact' });
     const b = await createMemory({ content: 'Fact B about Germany GTM.', kind: 'fact' });

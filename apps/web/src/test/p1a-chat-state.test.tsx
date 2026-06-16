@@ -205,11 +205,15 @@ describe('WorkspaceDesktopApp two-seam edit (§5.2, founder-ratified, test-pinne
       />,
     );
 
+    // Tasks is reachable but NOT a bar tab in the warm-Hive 6-tab set, so a
+    // controlled activeTab='tasks' still renders the Tasks body (the seam is
+    // tab-agnostic) while no bar tab is selected.
     expect(await screen.findByTestId('ws-tasks-tab')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('ws-tab-chat'));
     expect(onTabChange).toHaveBeenCalledWith('chat');
-    // Still controlled by the prop — the panel did not flip internally.
-    expect(screen.getByTestId('ws-tab-tasks')).toHaveAttribute('aria-selected', 'true');
+    // Still controlled by the prop — the panel did not flip internally (the
+    // click fired onTabChange but the controlled body stays on Tasks).
+    expect(screen.getByTestId('ws-tab-chat')).toHaveAttribute('aria-selected', 'false');
     expect(screen.getByTestId('ws-tasks-tab')).toBeInTheDocument();
   });
 
@@ -217,9 +221,11 @@ describe('WorkspaceDesktopApp two-seam edit (§5.2, founder-ratified, test-pinne
     render(<WorkspaceDesktopApp workspaceId="ws-1" workspaceName="Acme" />);
     expect(await screen.findByTestId('ws-tab-bar')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId('ws-tab-tasks'));
-    expect(screen.getByTestId('ws-tasks-tab')).toBeInTheDocument();
-    expect(screen.getByTestId('ws-tab-tasks')).toHaveAttribute('aria-selected', 'true');
+    // Drive the internal tab via a bar tab (Tasks is no longer in the bar);
+    // the chat tab's deep-link body (no slot) confirms the internal switch.
+    fireEvent.click(screen.getByTestId('ws-tab-chat'));
+    expect(screen.getByTestId('ws-chat-tab-open')).toBeInTheDocument();
+    expect(screen.getByTestId('ws-tab-chat')).toHaveAttribute('aria-selected', 'true');
   });
 
   it('seam (b): the chat tab renders the provided chatSlot instead of the placeholder', async () => {

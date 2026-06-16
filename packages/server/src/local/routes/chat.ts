@@ -777,7 +777,23 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               const snippets = (recall.recalled ?? []).slice(0, 3);
               const snippetText = snippets.map(s => `  - ${s}`).join('\n');
               const resultText = `${recall.count} memories recalled:\n${snippetText}`;
-              sendEvent('step', { content: `Recalled ${recall.count} relevant memor${recall.count === 1 ? 'y' : 'ies'}.` });
+              // PR3.5: distinct provenance sources of the recalled memories
+              // (raw frame.source values; the FE owns the friendly label map).
+              // Review M-4: emit the breakdown ONLY when it covers EVERY recalled
+              // frame — a partial breakdown next to "Recalled N memories" would
+              // imply all N share these sources. Any 'unknown' (e.g. the rare
+              // catch-up lane, which doesn't carry source) suppresses the pill
+              // rather than undercount. Never a fabricated source.
+              const recalledFrames = recall.recalledFrames ?? [];
+              const hasUnknownSource = recalledFrames.some(f => !f.source || f.source === 'unknown');
+              const provenanceSources = [...new Set(
+                recalledFrames.map(f => f.source).filter((s): s is string => !!s && s !== 'unknown'),
+              )];
+              const emitProvenance = !hasUnknownSource && provenanceSources.length > 0;
+              sendEvent('step', {
+                content: `Recalled ${recall.count} relevant memor${recall.count === 1 ? 'y' : 'ies'}.`,
+                ...(emitProvenance ? { provenance: { sources: provenanceSources } } : {}),
+              });
               sendEvent('tool_result', { name: 'auto_recall', result: resultText, duration: recallDuration, isError: false });
             } else {
               sendEvent('tool_result', { name: 'auto_recall', result: 'No relevant memories found', duration: recallDuration, isError: false });
@@ -1434,7 +1450,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           const agentAlreadySaved = (result.toolsUsed ?? []).includes('save_memory');
           if (!agentAlreadySaved) {
             try {
-              const saved = await sessionOrch.autoSaveFromExchange(message, result.content);
+              const saved = await sessionOrch.autoSaveFromExchange(message, result.content, {
+                // PR3.5 frame↔trace backlink — link auto-saved frames to the
+                // turn's execution trace so Memory-Trust can answer "why is this
+                // memory here?". Undefined when no trace recorder (legacy/tests).
+                traceId: traceHandle ? String(traceHandle.id) : undefined,
+              });
               if (saved.length > 0) {
                 sendEvent('step', { content: `Auto-saved ${saved.length} memor${saved.length === 1 ? 'y' : 'ies'} from this exchange.` });
               }

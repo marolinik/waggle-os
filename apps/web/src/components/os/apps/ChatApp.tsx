@@ -8,6 +8,8 @@ import { adapter } from '@/lib/adapter';
 import type { ChatMessage, ToolExecution, ApprovalRequest } from '@/lib/types';
 import { RiskBadge, canAlwaysAllow } from '@/lib/risk-display';
 import { BlockRenderer } from './chat-blocks';
+import ChatWorkCanvas, { selectCanvasArtifact } from './chat-blocks/ChatWorkCanvas';
+import { DotLive } from '../warm';
 import WorkspaceBriefing from '@/components/os/WorkspaceBriefing';
 import { useContainerWidth } from '@/hooks/useContainerWidth';
 import { shouldCollapseChatHeader } from '@/lib/chat-header-layout';
@@ -239,68 +241,70 @@ const ApprovalGate = ({
     (typeof input.query === 'string' ? (input.query as string).slice(0, 80) : '');
 
   return (
-    <div className="my-2 rounded-xl border-2 border-amber-500/50 bg-amber-500/10 p-3">
-      <div className="flex items-center gap-2 mb-2">
-        <AlertTriangle className="w-4 h-4 text-amber-400" />
-        <span className="text-sm font-display font-semibold text-foreground">Approval required</span>
-        {/* P7/D15 A5 (D4(ii)): the risk the server already sends, rendered with the
-            SAME vocabulary as the shared modal so identical risk reads identically. */}
-        {request.riskLevel && <RiskBadge level={request.riskLevel} className="ml-auto" />}
-      </div>
-      {request.description && (
-        <p className="text-xs text-muted-foreground mb-1">{request.description}</p>
-      )}
-      <p className="text-xs text-muted-foreground mb-1">
-        Tool: <span className="text-foreground font-mono">{request.toolName}</span>
-      </p>
-      {request.trustSource && (
-        <p className="text-[11px] text-muted-foreground mb-1">
-          Source: <span className="text-foreground/90">{request.trustSource}</span>
-        </p>
-      )}
-      {request.explanation && (
-        <p className="text-[11px] text-muted-foreground/80 mb-2">{request.explanation}</p>
-      )}
-      {inputSummary && (
-        <p className="text-[11px] text-muted-foreground mb-2 font-mono truncate">→ {inputSummary}</p>
-      )}
-      {showJson && (
-        <pre className="text-[11px] text-muted-foreground bg-background/50 rounded p-2 mb-2 overflow-auto max-h-32">
-          {request.rawJson ?? JSON.stringify(request.input, null, 2)}
-        </pre>
-      )}
-      <div className="flex flex-wrap gap-1.5">
-        <button
-          onClick={() => onRespond(request.requestId, true)}
-          className="px-3 py-1 text-xs rounded-lg bg-emerald-600 text-foreground hover:bg-emerald-500 transition-colors"
-        >
-          Allow once
-        </button>
-        {/* P7/D15 A6 (founder-ratified): a critical/blocked action can never be
-            permanently granted in one click — mirrors MCPHub's CRITICAL-non-
-            overridable rule. "Always allow" is offered only below that bar. */}
-        {canAlwaysAllow(request.approvalClass) && (
-          <HintTooltip content="Save this decision and skip the prompt next time for this tool + target.">
+    <div className="my-2 rounded-[14px] border border-[var(--honey-line)] bg-[var(--honey-wash)] p-4" data-testid="chat-approval-gate">
+      <div className="flex items-start gap-3">
+        <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-[var(--attention)]" strokeWidth={1.8} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[14px] font-semibold text-[var(--text)]">Approve before I continue</span>
+            {/* P7/D15 A5 (D4(ii)): the risk the server already sends, rendered with the
+                SAME vocabulary as the shared modal so identical risk reads identically. */}
+            {request.riskLevel && <RiskBadge level={request.riskLevel} className="ml-auto" />}
+          </div>
+          {request.description && (
+            <p className="mt-1 text-[12.5px] text-[var(--text-2)]">{request.description}</p>
+          )}
+          <p className="mt-1 break-words font-mono text-[12px] text-[var(--text-2)]">
+            {request.toolName}
+            {inputSummary && <span className="text-[var(--text-dim)]"> › {inputSummary}</span>}
+          </p>
+          {request.trustSource && (
+            <p className="mt-1 text-[11px] text-[var(--text-dim)]">
+              Source: <span className="text-[var(--text-2)]">{request.trustSource}</span>
+            </p>
+          )}
+          {request.explanation && (
+            <p className="mt-1 text-[11.5px] text-[var(--text-dim)]">{request.explanation}</p>
+          )}
+          {showJson && (
+            <pre className="mt-2 max-h-32 overflow-auto rounded-[8px] bg-[var(--bg-2)] p-2 text-[11px] text-[var(--text-muted)]">
+              {request.rawJson ?? JSON.stringify(request.input, null, 2)}
+            </pre>
+          )}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             <button
-              onClick={() => onRespond(request.requestId, true, { always: true })}
-              className="px-3 py-1 text-xs rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition-colors"
+              onClick={() => onRespond(request.requestId, true)}
+              className="rounded-[10px] bg-[var(--honey)] px-3.5 py-1.5 text-[13px] font-medium text-[#1a1407] transition-opacity hover:opacity-90"
             >
-              Always allow
+              Approve
             </button>
-          </HintTooltip>
-        )}
-        <button
-          onClick={() => onRespond(request.requestId, false)}
-          className="px-3 py-1 text-xs rounded-lg bg-destructive text-foreground hover:bg-destructive/80 transition-colors"
-        >
-          Deny
-        </button>
-        <button
-          onClick={() => setShowJson(!showJson)}
-          className="px-3 py-1 text-xs rounded-lg bg-secondary text-foreground hover:bg-secondary/70 transition-colors ml-auto"
-        >
-          {showJson ? 'Hide' : 'Show'} details
-        </button>
+            {/* P7/D15 A6 (founder-ratified): a critical/blocked action can never be
+                permanently granted in one click — mirrors MCPHub's CRITICAL-non-
+                overridable rule. "Always allow" is offered only below that bar. */}
+            {canAlwaysAllow(request.approvalClass) && (
+              <HintTooltip content="Save this decision and skip the prompt next time for this tool + target.">
+                <button
+                  onClick={() => onRespond(request.requestId, true, { always: true })}
+                  className="rounded-[10px] border border-[var(--line-strong)] bg-[var(--surface)] px-3.5 py-1.5 text-[13px] text-[var(--text-2)] transition-colors hover:text-[var(--text)]"
+                >
+                  Always allow
+                </button>
+              </HintTooltip>
+            )}
+            <button
+              onClick={() => onRespond(request.requestId, false)}
+              className="rounded-[10px] px-3.5 py-1.5 text-[13px] text-[var(--text-2)] transition-colors hover:text-[var(--risk)]"
+            >
+              Not now
+            </button>
+            <button
+              onClick={() => setShowJson(!showJson)}
+              className="ml-auto text-[12px] text-[var(--text-dim)] transition-colors hover:text-[var(--text-2)]"
+            >
+              {showJson ? 'Hide' : 'Show'} details
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -470,6 +474,10 @@ const ChatApp = ({
   const [showPersonaPicker, setShowPersonaPicker] = useState(false);
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showHeaderOverflow, setShowHeaderOverflow] = useState(false);
+  // B3: the right work canvas opens on a fresh artifact and survives navigation
+  // (it lives inside ChatApp's kept-alive flex root).
+  const [canvasOpen, setCanvasOpen] = useState(false);
+  const lastCanvasPath = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -493,6 +501,16 @@ const ChatApp = ({
     if (!last || last.role !== 'assistant' || !last.content) return [];
     return extractSuggestedActions(last.content);
   }, [messages, isLoading]);
+
+  // B3: the latest completed file-write becomes the work-canvas doc; auto-open
+  // the canvas when a NEW artifact appears (the user can close it; reopening is
+  // implicit on the next artifact).
+  const canvasArtifact = useMemo(() => selectCanvasArtifact(messages), [messages]);
+  useEffect(() => {
+    const path = canvasArtifact?.path ?? null;
+    if (path && path !== lastCanvasPath.current) setCanvasOpen(true);
+    lastCanvasPath.current = path;
+  }, [canvasArtifact]);
 
   // M-22 / ENG-1: surface a relevant memory on the 5th user message of
   // a session. Reset when the workspace or session changes so each
@@ -931,13 +949,14 @@ const ChatApp = ({
           <div className={`relative ${onAutonomyChange ? '' : 'ml-auto'}`} ref={modelPickerRef}>
             <button
               onClick={() => { setShowModelPicker(p => !p); setShowPersonaPicker(false); }}
-              className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-muted/50 transition-colors"
+              title="Waggle picked the model — click to override"
+              className="flex items-center gap-1.5 rounded-full border border-[var(--line-soft)] bg-[var(--surface)] px-2.5 py-1 transition-colors hover:border-[var(--honey-line)]"
             >
-              <Cpu className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="text-[11px] font-display text-muted-foreground truncate max-w-[120px]">
-                {currentModel || 'Model'}
+              <DotLive tone="healthy" size={7} />
+              <span className="max-w-[140px] truncate font-mono text-[12px] text-[var(--text-2)]">
+                {currentModel ? currentModel.split('/').pop() : 'auto'}
               </span>
-              <ChevronDown className="w-3 h-3 text-muted-foreground" />
+              <ChevronDown className="h-3 w-3 text-[var(--text-dim)]" />
             </button>
             {showModelPicker && (
               <div className="absolute top-full right-0 mt-1 w-64 bg-card border border-border rounded-xl shadow-xl z-20 overflow-hidden max-h-64 overflow-y-auto">
@@ -1103,15 +1122,21 @@ const ChatApp = ({
                   <AvatarFallback className="text-[11px] bg-primary/20">{persona.name[0]}</AvatarFallback>
                 </Avatar>
               )}
-              <div className={`max-w-[80%]`}>
-                <div className={`px-3 py-2 rounded-xl text-sm select-text cursor-text group/msg relative ${
+              <div className="max-w-[80%]">
+                {msg.role === 'assistant' && (
+                  <div className="mb-1 flex items-center gap-1.5 font-mono text-[11px] text-[var(--text-dim)]">
+                    <span className="font-semibold text-[var(--text-2)]">Waggle</span>
+                    {persona?.name && <span>· {persona.name}</span>}
+                    {currentModel && <span>· {currentModel.split('/').pop()}</span>}
+                  </div>
+                )}
+                <div className={`relative select-text cursor-text group/msg text-sm ${
                   msg.role === 'user'
-                    ? 'bg-primary text-primary-foreground'
+                    ? 'rounded-[4px_14px_14px_14px] bg-[var(--surface)] px-3.5 py-2.5 leading-[1.55] text-[var(--text)]'
                     : msg.role === 'system'
-                    ? 'bg-muted/50 text-muted-foreground italic text-xs'
-                    : 'bg-secondary text-foreground'
+                    ? 'rounded-[12px] bg-[var(--surface-2)] px-3 py-2 text-[12px] italic text-[var(--text-muted)]'
+                    : 'rounded-[14px] px-3.5 py-2.5 leading-[1.6] text-[var(--text)]'
                 }`}>
-                  {msg.role === 'assistant' && <Sparkles className="w-3 h-3 text-primary inline mr-1.5 -mt-0.5" />}
                   {msg.role === 'assistant' && msg.blocks && msg.blocks.length > 0 ? (
                     <BlockRenderer
                       blocks={msg.blocks}
@@ -1207,12 +1232,12 @@ const ChatApp = ({
               ))}
             </div>
           )}
-          <div className="flex items-end gap-2 bg-muted/50 rounded-xl px-3 py-2 border border-border/30">
+          <div className="flex items-end gap-2 rounded-[16px] border border-[var(--line)] bg-[var(--surface)] px-3 py-2.5 transition-colors focus-within:border-[var(--honey-line)] focus-within:shadow-[var(--shadow-honey)]">
             <button
               onClick={handleFileSelect}
               aria-label="Attach file"
               title="Attach file (CSV, PDF, image, …)"
-              className="text-muted-foreground hover:text-foreground transition-colors pb-0.5"
+              className="pb-1 text-[var(--text-dim)] transition-colors hover:text-[var(--text-2)]"
             >
               <Paperclip className="w-4 h-4" />
             </button>
@@ -1221,20 +1246,32 @@ const ChatApp = ({
               value={input}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              placeholder="Message Waggle... (/ for commands)"
-              className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground resize-none min-h-[64px] max-h-[300px] py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              placeholder="Reply, or ask Waggle to take the next step…"
+              className="min-h-[64px] max-h-[300px] flex-1 resize-none bg-transparent py-1 text-[14.5px] text-[var(--text)] placeholder:text-[var(--text-dim)] focus-visible:outline-none"
               rows={3}
             />
-            <button
-              onClick={handleSend}
-              disabled={!input.trim() || isLoading}
-              className="text-primary hover:text-primary/80 transition-colors disabled:opacity-30 pb-0.5"
-            >
-              <Send className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-2.5 pb-0.5">
+              <span className="hidden font-mono text-[11px] text-[var(--text-dim)] sm:inline">⏎ send · ⌘K</span>
+              <button
+                onClick={handleSend}
+                disabled={!input.trim() || isLoading}
+                aria-label="Send"
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--honey)] text-[#1a1407] transition-opacity hover:opacity-90 disabled:opacity-30"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
+
+      {canvasOpen && canvasArtifact && (
+        <ChatWorkCanvas
+          artifact={canvasArtifact}
+          isStreaming={isLoading}
+          onClose={() => setCanvasOpen(false)}
+        />
+      )}
     </div>
   );
 };

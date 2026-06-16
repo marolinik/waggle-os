@@ -91,6 +91,23 @@ const ShellLayout = () => {
   const { entry: activeChatEntry, setPersona: setActiveChatPersona } =
     useChatWidgetState(activeWorkspaceId ?? 'local-default');
 
+  // User display name for the sidebar user row (PR1 LOW #2). Best-effort via the
+  // existing identity surface; re-fetched on connect-settle because the first
+  // call can race the session-token attach and 401 → name:null. Falls back to
+  // "Account" in the row when unconfigured.
+  const [userName, setUserName] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const loadIdentity = () => {
+      adapter.getIdentity()
+        .then(r => { if (!cancelled) setUserName(r.name ?? null); })
+        .catch(() => { /* identity is optional — the row degrades to "Account" */ });
+    };
+    loadIdentity();
+    window.addEventListener('waggle:connect-settled', loadIdentity);
+    return () => { cancelled = true; window.removeEventListener('waggle:connect-settled', loadIdentity); };
+  }, []);
+
   // Theme reactivity — watch for data-theme mutations on <html>
   // (relocated from Desktop.tsx:131-139).
   const [theme, setTheme] = useState(() => document.documentElement.getAttribute('data-theme') ?? 'dark');
@@ -219,11 +236,19 @@ const ShellLayout = () => {
   const billingRank = { FREE: 0, TRIAL: 1, PRO: 2, TEAMS: 3, ENTERPRISE: 4 }[billingTier] ?? 0;
   const spine: SidebarNavItem[] = useMemo(() => [
     { key: 'home', label: 'Home', icon: Home, to: '/home', match: ['/home'] },
-    { key: 'chat', label: 'Chat', icon: MessageSquare, to: routeFor('chat', { activeWorkspaceId }), match: ['/workspaces'] },
+    // Chat resolves to the active workspace's chat tab; with no real workspace,
+    // routeFor falls back to /home (which Home already owns → the click feels
+    // dead, PR1 LOW #1). In that case open the workspace switcher instead so the
+    // user picks a workspace to chat in.
+    {
+      key: 'chat', label: 'Chat', icon: MessageSquare,
+      to: routeFor('chat', { activeWorkspaceId }), match: ['/workspaces'],
+      onClick: hasRealActiveWorkspace ? undefined : ov.toggleWorkspaceSwitcher,
+    },
     { key: 'memory', label: 'Memory', icon: Brain, to: '/memory', match: ['/memory'] },
     { key: 'agents', label: 'Agents & tasks', icon: ListTodo, to: '/agents', match: ['/agents', '/automations'], badge: waggleUnacknowledged || undefined },
     { key: 'library', label: 'Library', icon: Library, to: '/artifacts', match: ['/artifacts', '/files', '/skills'] },
-  ], [activeWorkspaceId, waggleUnacknowledged]);
+  ], [activeWorkspaceId, waggleUnacknowledged, hasRealActiveWorkspace, ov.toggleWorkspaceSwitcher]);
   const pinned: SidebarNavItem[] = useMemo(() => {
     if (!isPro) return [];
     const items: SidebarNavItem[] = [
@@ -293,7 +318,7 @@ const ShellLayout = () => {
           onOpenWorkspaceSwitcher={ov.toggleWorkspaceSwitcher}
           onOpenCommand={() => ov.setShowGlobalSearch(true)}
           onSpawnAgent={() => ov.setShowSpawnAgent(true)}
-          userName={null}
+          userName={userName}
           tierLabel={tierLabel}
         />
 

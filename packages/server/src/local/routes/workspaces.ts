@@ -373,8 +373,8 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
     // ── Gather workspace memory context ──────────────────────
     let summary = '';
     let memoryCount = 0;
-    let recentMemories: Array<{ content: string; importance: string; date: string }> = [];
-    let recentDecisions: Array<{ content: string; date: string }> = [];
+    let recentMemories: Array<{ content: string; importance: string; source: string; date: string }> = [];
+    let recentDecisions: Array<{ content: string; source: string; date: string }> = [];
 
     const mindPath = server.workspaceManager.getMindPath(id);
     if (fs.existsSync(mindPath)) {
@@ -391,30 +391,31 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
         // Get recent important memories for the summary
         // D2: Order by importance first (matching A3 preloaded-context fix), then recency
         const frames = raw.prepare(
-          `SELECT content, importance, created_at FROM memory_frames
+          `SELECT content, importance, source, created_at FROM memory_frames
            WHERE importance != 'deprecated' AND importance != 'temporary'
            ORDER BY CASE importance
              WHEN 'critical' THEN 1 WHEN 'important' THEN 2
              WHEN 'normal' THEN 3 ELSE 4 END,
            id DESC LIMIT 8`
-        ).all() as Array<{ content: string; importance: string; created_at: string }>;
+        ).all() as Array<{ content: string; importance: string; source: string; created_at: string }>;
 
         recentMemories = frames.map(f => ({
           content: f.content.slice(0, 200),
           importance: f.importance,
+          source: f.source,
           date: f.created_at?.slice(0, 10) ?? 'unknown',
         }));
 
         // Extract decision-like memories (moved before summary so we can pass them)
         const decisionFrames = raw.prepare(
-          `SELECT content, created_at FROM memory_frames
+          `SELECT content, source, created_at FROM memory_frames
            WHERE importance != 'deprecated' AND importance != 'temporary'
              AND (content LIKE 'Decision%' OR content LIKE '%decided%'
                OR content LIKE '%decision made%' OR content LIKE '%chose %'
                OR content LIKE '%selected %' OR content LIKE '%agreed %'
                OR importance = 'critical')
            ORDER BY id DESC LIMIT 5`
-        ).all() as Array<{ content: string; created_at: string }>;
+        ).all() as Array<{ content: string; source: string; created_at: string }>;
 
         recentDecisions = decisionFrames.map(f => {
           const firstLine = f.content.split('\n')[0];
@@ -424,6 +425,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
             : (firstLine.length > 150 ? firstLine.slice(0, 147) + '...' : firstLine);
           return {
             content: text.replace(/\.\s*$/, ''),
+            source: f.source,
             date: f.created_at?.slice(0, 10) ?? 'unknown',
           };
         });
