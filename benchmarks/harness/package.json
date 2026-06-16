@@ -14,7 +14,8 @@
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
-    "bench": "tsx src/runner.ts"
+    "bench": "tsx src/runner.ts",
+    "gate": "tsx src/gate/preflight.ts"
   },
   "dependencies": {
     "@waggle/agent": "0.1.0",
