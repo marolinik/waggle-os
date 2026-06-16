@@ -160,3 +160,35 @@ export function computePairedDiffClusterBootstrapCI(
     n_rows: rows.length,
   };
 }
+
+export interface TostInput {
+  /** The (1−2α)=90% CI of the paired difference, from
+   *  computePairedDiffClusterBootstrapCI. */
+  diffCI: Pick<PairedDiffResult, 'ci_lower' | 'ci_upper'>;
+  /** Equivalence margin δ (e.g. 0.05 for ±5pp). Pre-register BEFORE the run. */
+  margin: number;
+}
+
+export interface TostResult {
+  /** True iff [ci_lower, ci_upper] ⊆ [−margin, +margin]. */
+  equivalent: boolean;
+  margin: number;
+  ci_lower: number;
+  ci_upper: number;
+}
+
+export function tostEquivalence(input: TostInput): TostResult {
+  const { diffCI, margin } = input;
+  if (!Number.isFinite(margin) || margin <= 0) {
+    throw new Error(`tostEquivalence requires margin > 0; got ${margin}`);
+  }
+  const { ci_lower, ci_upper } = diffCI;
+  if (!Number.isFinite(ci_lower) || !Number.isFinite(ci_upper)) {
+    throw new Error('tostEquivalence requires finite ci_lower and ci_upper');
+  }
+  if (ci_lower > ci_upper) {
+    throw new Error(`tostEquivalence requires ci_lower ≤ ci_upper; got [${ci_lower}, ${ci_upper}]`);
+  }
+  const equivalent = ci_lower >= -margin && ci_upper <= margin;
+  return { equivalent, margin, ci_lower, ci_upper };
+}

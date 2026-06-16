@@ -122,3 +122,45 @@ describe('computePairedDiffClusterBootstrapCI — validation', () => {
     expect(() => computePairedDiffClusterBootstrapCI({ rows, seed: 1.5 })).toThrow(/integer seed/);
   });
 });
+
+import {
+  tostEquivalence,
+  type TostInput,
+} from '../../src/stats/equivalence-tost.js';
+
+describe('tostEquivalence — decision rule', () => {
+  it('equivalent when the diff CI lies entirely inside [−δ, +δ]', () => {
+    const r = tostEquivalence({ diffCI: { ci_lower: -0.021, ci_upper: 0.034 }, margin: 0.05 });
+    expect(r.equivalent).toBe(true);
+    expect(r.margin).toBe(0.05);
+  });
+
+  it('NOT equivalent when the CI crosses the upper bound', () => {
+    const r = tostEquivalence({ diffCI: { ci_lower: -0.01, ci_upper: 0.062 }, margin: 0.05 });
+    expect(r.equivalent).toBe(false);
+  });
+
+  it('NOT equivalent when the CI crosses the lower bound', () => {
+    const r = tostEquivalence({ diffCI: { ci_lower: -0.06, ci_upper: 0.01 }, margin: 0.05 });
+    expect(r.equivalent).toBe(false);
+  });
+
+  it('boundary: CI exactly touching ±δ counts as equivalent (⊆ is inclusive)', () => {
+    const r = tostEquivalence({ diffCI: { ci_lower: -0.05, ci_upper: 0.05 }, margin: 0.05 });
+    expect(r.equivalent).toBe(true);
+  });
+
+  it('echoes the CI bounds it was given', () => {
+    const r = tostEquivalence({ diffCI: { ci_lower: -0.02, ci_upper: 0.03 }, margin: 0.05 });
+    expect(r.ci_lower).toBe(-0.02);
+    expect(r.ci_upper).toBe(0.03);
+  });
+
+  it('rejects a non-positive margin', () => {
+    expect(() => tostEquivalence({ diffCI: { ci_lower: -0.01, ci_upper: 0.01 }, margin: 0 })).toThrow(/margin > 0/);
+  });
+
+  it('rejects an inverted CI (lower > upper)', () => {
+    expect(() => tostEquivalence({ diffCI: { ci_lower: 0.05, ci_upper: -0.05 }, margin: 0.05 })).toThrow(/ci_lower ≤ ci_upper/);
+  });
+});
