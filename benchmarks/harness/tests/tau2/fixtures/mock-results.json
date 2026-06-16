@@ -1,0 +1,84 @@
+{
+  "timestamp": "2026-06-16T00:00:00Z",
+  "info": { "domain": "mock", "agent": "waggle", "agent_llm": "stub", "user_llm": "gpt-5.5" },
+  "tasks": [{ "id": "task-A" }, { "id": "task-B" }],
+  "simulations": [
+    {
+      "id": "sim-1", "task_id": "task-A", "trial": 0, "seed": 42,
+      "agent_cost": 0.0100, "duration": 3.2, "termination_reason": "agent_stop",
+      "reward_info": {
+        "reward": 1.0, "reward_basis": ["DB", "ACTION"],
+        "db_check": { "db_match": true },
+        "action_checks": [{ "action_id": "a1", "name": "create_order", "action_match": true }],
+        "reward_breakdown": { "DB": 1.0, "ACTION": 1.0 }
+      },
+      "messages": [
+        { "role": "assistant", "content": "", "tool_calls": [{ "id": "c1", "function": { "name": "create_order" } }], "usage": { "prompt_tokens": 100, "completion_tokens": 20 } },
+        { "role": "tool", "content": "ok" },
+        { "role": "assistant", "content": "done", "usage": { "prompt_tokens": 130, "completion_tokens": 10 } }
+      ]
+    },
+    {
+      "id": "sim-2", "task_id": "task-A", "trial": 1, "seed": 43,
+      "agent_cost": 0.0120, "duration": 3.5, "termination_reason": "agent_stop",
+      "reward_info": {
+        "reward": 0.0, "reward_basis": ["DB", "ACTION"],
+        "db_check": { "db_match": false },
+        "action_checks": [{ "action_id": "a1", "name": "create_order", "action_match": false }],
+        "reward_breakdown": { "DB": 0.0, "ACTION": 1.0 }
+      },
+      "messages": [
+        { "role": "assistant", "content": "hmm", "tool_calls": [{ "id": "c2", "function": { "name": "search" } }], "usage": { "prompt_tokens": 100, "completion_tokens": 25 } },
+        { "role": "tool", "content": "none" },
+        { "role": "assistant", "content": "give up", "usage": { "prompt_tokens": 140, "completion_tokens": 8 } }
+      ]
+    },
+    {
+      "id": "sim-3", "task_id": "task-A", "trial": 2, "seed": 44,
+      "agent_cost": 0.0110, "duration": 3.3, "termination_reason": "agent_stop",
+      "reward_info": {
+        "reward": 1.0, "reward_basis": ["DB", "ACTION"],
+        "db_check": { "db_match": true },
+        "action_checks": [{ "action_id": "a1", "name": "create_order", "action_match": true }]
+      },
+      "messages": [
+        { "role": "assistant", "content": "", "tool_calls": [{ "id": "c3", "function": { "name": "create_order" } }], "usage": { "prompt_tokens": 105, "completion_tokens": 21 } },
+        { "role": "tool", "content": "ok" },
+        { "role": "assistant", "content": "done", "usage": { "prompt_tokens": 132, "completion_tokens": 9 } }
+      ]
+    },
+    {
+      "id": "sim-4", "task_id": "task-B", "trial": 0, "seed": 42,
+      "agent_cost": 0.0200, "duration": 5.0, "termination_reason": "agent_stop",
+      "reward_info": {
+        "reward": 1.0, "reward_basis": ["COMMUNICATE"],
+        "communicate_checks": [{ "met": true }]
+      },
+      "messages": [
+        { "role": "assistant", "content": "the fee is $50", "usage": { "prompt_tokens": 80, "completion_tokens": 12 } }
+      ]
+    },
+    {
+      "id": "sim-5", "task_id": "task-B", "trial": 1, "seed": 43,
+      "agent_cost": 0.0210, "duration": 5.1, "termination_reason": "agent_stop",
+      "reward_info": {
+        "reward": 1.0, "reward_basis": ["COMMUNICATE"],
+        "communicate_checks": [{ "met": true }]
+      },
+      "messages": [
+        { "role": "assistant", "content": "the fee is $50", "usage": { "prompt_tokens": 82, "completion_tokens": 13 } }
+      ]
+    },
+    {
+      "id": "sim-6", "task_id": "task-B", "trial": 2, "seed": 44,
+      "agent_cost": 0.0205, "duration": 5.0, "termination_reason": "agent_stop",
+      "reward_info": {
+        "reward": 1.0, "reward_basis": ["COMMUNICATE"],
+        "communicate_checks": [{ "met": true }]
+      },
+      "messages": [
+        { "role": "assistant", "content": "the fee is $50", "usage": { "prompt_tokens": 81, "completion_tokens": 12 } }
+      ]
+    }
+  ]
+}
