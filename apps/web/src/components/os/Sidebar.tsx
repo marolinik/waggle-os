@@ -22,6 +22,10 @@ export interface SidebarNavItem {
   match: string[];
   /** Optional attention count; only rendered when > 0. */
   badge?: number;
+  /** Optional click override — e.g. open the workspace switcher when there is
+   *  no real workspace to chat in (avoids a dead nav to `to`). Falls back to
+   *  navigating to `to` when absent. */
+  onClick?: () => void;
 }
 
 interface SidebarProps {
@@ -72,7 +76,7 @@ const Sidebar = ({
         data-testid={`nav-${item.key}`}
         aria-label={item.label}
         aria-current={active ? "page" : undefined}
-        onClick={() => navigate(item.to)}
+        onClick={() => (item.onClick ? item.onClick() : navigate(item.to))}
         className={`relative flex items-center gap-3 rounded-[10px] px-2.5 py-2.5 text-left transition-colors ${
           active
             ? "bg-[var(--honey-wash)] text-[var(--text)]"
