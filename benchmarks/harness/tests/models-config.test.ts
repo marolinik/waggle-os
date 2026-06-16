@@ -248,3 +248,25 @@ describe('Plan 05 — gpt-5.5 frontier subject', () => {
     expect(gpt55.pinning_surface_carve_out_reason as string).toMatch(/gpt-5\.5-2026-04-23/);
   });
 });
+
+describe('Plan 05 — Gemini fallback (gemini-3.1-pro) is the registered subject route', () => {
+  it('gemini-3.1-pro exists, key === id, and resolves to a Google route', () => {
+    const models = loadModels();
+    const gemini = models['gemini-3.1-pro'];
+    expect(gemini, 'gemini-3.1-pro (the registered Gemini-3.5 fallback) missing').toBeDefined();
+    expect(gemini.id).toBe('gemini-3.1-pro');
+    expect(gemini.provider).toBe('google_via_openrouter');
+    expect(gemini.litellmModel).toBe('gemini-3.1-pro');
+    // floating_alias (Google ships 3.1 Pro as -preview only — no immutable snapshot).
+    expect(gemini.pinning_surface).toBe('floating_alias');
+    expect(gemini.pinning_surface_carve_out_reason as string).toMatch(/B3 addendum/);
+  });
+
+  it('the unverified gemini-3.5-pro-preview is NOT a separate registry key (fallback policy)', () => {
+    const models = loadModels();
+    // Plan 05 deliberately does NOT register the unverified Gemini 3.5 preview as
+    // its own key; the fallback gemini-3.1-pro carries the Gemini subject arm.
+    // If a verified GA id lands, add it in a follow-up (see open_questions).
+    expect(models['gemini-3.5-pro-preview']).toBeUndefined();
+  });
+});
