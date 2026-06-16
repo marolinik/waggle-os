@@ -3,6 +3,7 @@ import {
   buildTau2RunArgv,
   type Tau2RunSpec,
 } from '../../src/tau2/tau2-cli.js';
+import * as tau2 from '../../src/tau2/index.js';
 
 const BASE: Tau2RunSpec = {
   domain: 'retail',
@@ -72,5 +73,16 @@ describe('buildTau2RunArgv — validation', () => {
   });
   it('rejects a non-integer seed', () => {
     expect(() => buildTau2RunArgv({ ...BASE, seed: 1.5 })).toThrow(/integer seed/);
+  });
+});
+
+describe('τ² barrel surface', () => {
+  it('re-exports the adapter functions + the REWARD_PASS oracle constant', () => {
+    expect(typeof tau2.buildTau2RunArgv).toBe('function');
+    expect(typeof tau2.computeTaskOutcomes).toBe('function');
+    expect(typeof tau2.toTau2JsonlRecords).toBe('function');
+    expect(typeof tau2.runTau2).toBe('function');
+    expect(tau2.REWARD_PASS).toBe(1.0);
+    expect(tau2.TAU2_LICENSE_SPDX).toBe('MIT');
   });
 });
