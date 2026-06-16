@@ -5,6 +5,7 @@ import ToolUseBlock from './ToolUseBlock';
 import ModelSwitchBlock from './ModelSwitchBlock';
 import ArtifactBlock, { isArtifactBlock } from './ArtifactBlock';
 import { ActivityStream, type ActivityStep } from '../../warm';
+import { frameSourceLabel } from '@/lib/frame-source';
 
 interface BlockRendererProps {
   blocks: ContentBlock[];
@@ -21,16 +22,23 @@ function getBlockKey(block: ContentBlock, index: number): string {
  * Group a consecutive run of "thinking" steps into one collapsible Activity
  * card — the design's "the magic" surface (SCREENS §02). Default-open on the
  * active (streaming) turn; collapsed on prior turns (history loads with
- * isStreaming=false). Provenance pills are intentionally omitted: the SSE
- * `step` payload carries no structured source field today (recon chat.md §4) —
- * we render the affordance, never fabricated provenance.
+ * isStreaming=false). Memory-recall steps carry provenance (PR3.5): the
+ * distinct sources of what was recalled, composed into a ⬡ pill via the FE
+ * label map. Non-memory steps stay provenance-less by design — never a
+ * fabricated source.
  */
 function renderStepGroup(steps: StepContentBlock[], key: string, isStreaming: boolean): ReactNode {
   const anyRunning = steps.some(s => s.status === 'running');
-  const activitySteps: ActivityStep[] = steps.map(s => ({
-    tone: s.status === 'running' ? 'honey' : 'intel',
-    text: s.description,
-  }));
+  const activitySteps: ActivityStep[] = steps.map(s => {
+    const sourceLabels = (s.provenance?.sources ?? [])
+      .map(frameSourceLabel)
+      .filter((l): l is string => !!l);
+    return {
+      tone: s.status === 'running' ? 'honey' : 'intel',
+      text: s.description,
+      ...(sourceLabels.length > 0 ? { provenance: { source: sourceLabels.join(' · ') } } : {}),
+    };
+  });
   return (
     <ActivityStream
       key={key}

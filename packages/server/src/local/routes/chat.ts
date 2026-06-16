@@ -777,7 +777,19 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               const snippets = (recall.recalled ?? []).slice(0, 3);
               const snippetText = snippets.map(s => `  - ${s}`).join('\n');
               const resultText = `${recall.count} memories recalled:\n${snippetText}`;
-              sendEvent('step', { content: `Recalled ${recall.count} relevant memor${recall.count === 1 ? 'y' : 'ies'}.` });
+              // PR3.5: distinct provenance sources of the recalled memories
+              // (raw frame.source values; the FE owns the friendly label map).
+              // 'unknown' is excluded — never a fabricated source. Omitted
+              // entirely when nothing carries a known source.
+              const provenanceSources = [...new Set(
+                (recall.recalledFrames ?? [])
+                  .map(f => f.source)
+                  .filter((s): s is string => !!s && s !== 'unknown'),
+              )];
+              sendEvent('step', {
+                content: `Recalled ${recall.count} relevant memor${recall.count === 1 ? 'y' : 'ies'}.`,
+                ...(provenanceSources.length > 0 ? { provenance: { sources: provenanceSources } } : {}),
+              });
               sendEvent('tool_result', { name: 'auto_recall', result: resultText, duration: recallDuration, isError: false });
             } else {
               sendEvent('tool_result', { name: 'auto_recall', result: 'No relevant memories found', duration: recallDuration, isError: false });

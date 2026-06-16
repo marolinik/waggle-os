@@ -151,6 +151,10 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
 
             case 'step': {
               const description = typeof data === 'string' ? data : (data?.content as string ?? '');
+              // PR3.5: carry memory-recall provenance (distinct raw source
+              // values) onto the step block; absent on non-memory steps.
+              const stepProvenance = (data?.provenance as { sources?: string[] } | undefined);
+              const stepSources = Array.isArray(stepProvenance?.sources) ? stepProvenance.sources : undefined;
               if (description) {
                 // Mark previous running steps as done
                 for (let i = 0; i < blocks.length; i++) {
@@ -159,7 +163,13 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
                     blocks[i] = { ...b, status: 'done' };
                   }
                 }
-                blocks.push({ type: 'step', blockId: nextBlockId('step'), description, status: 'running' });
+                blocks.push({
+                  type: 'step',
+                  blockId: nextBlockId('step'),
+                  description,
+                  status: 'running',
+                  ...(stepSources && stepSources.length > 0 ? { provenance: { sources: stepSources } } : {}),
+                });
               }
               break;
             }

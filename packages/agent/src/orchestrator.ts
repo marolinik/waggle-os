@@ -454,7 +454,7 @@ export class Orchestrator {
     query: string,
     limit = 10,
     opts?: RecallOptions,
-  ): Promise<{ text: string; count: number; recalled?: string[] }> {
+  ): Promise<{ text: string; count: number; recalled?: string[]; recalledFrames?: Array<{ source: string }> }> {
     const profile: ScoringProfile = opts?.profile ?? 'balanced';
     const scoreFloor = opts?.scoreFloor;
     logTurnEvent(opts?.turnId, { stage: 'orchestrator.recallMemory.enter', queryChars: query.length, limit, profile });
@@ -552,9 +552,12 @@ export class Orchestrator {
         // frame id so a frame surfaced by both lanes renders once.
         const IMPORTANCE_LANE_K = 5;
         const laneDb = this.workspaceLayers?.db ?? this.db;
-        type LaneRow = { id: number; content: string; frame_type: string; importance: string; created_at: string };
+        type LaneRow = { id: number; content: string; frame_type: string; importance: string; source: string; created_at: string };
         const laneRows = laneDb.getDatabase().prepare(
-          `SELECT id, content, frame_type, importance, created_at
+          // PR3.5: source added (additive column — no WHERE/ORDER/LIMIT change,
+          // so the rendered recall text stays byte-identical) so the importance
+          // lane's frames carry provenance for the auto_recall step pill.
+          `SELECT id, content, frame_type, importance, source, created_at
            FROM memory_frames
            WHERE importance IN ('critical', 'important')
            ORDER BY
@@ -742,16 +745,24 @@ export class Orchestrator {
       const totalCount = personalResults.length + workspaceResults.length + laneCount;
       if (totalCount === 0) {
         logTurnEvent(opts?.turnId, { stage: 'orchestrator.recallMemory.exit', totalCount: 0, blocked: false });
-        return { text: '', count: 0, recalled: [] };
+        return { text: '', count: 0, recalled: [], recalledFrames: [] };
       }
 
       // Collect content snippets for UI display (B5 fix)
       const recalled: string[] = [];
+      // PR3.5: per-frame provenance for the auto_recall step pill. Source is
+      // read defensively — full MemoryFrames (semantic results) and importance-
+      // lane rows carry it; frames from lanes that don't SELECT source fall back
+      // to 'unknown' (the FE excludes 'unknown' from the breakdown — never a
+      // fabricated source).
+      const recalledFrames: Array<{ source: string }> = [];
       for (const r of [...workspaceResults, ...personalResults]) {
         recalled.push(r.frame.content.slice(0, RECALLED_SNIPPET_LENGTH));
+        recalledFrames.push({ source: (r.frame as { source?: string }).source ?? 'unknown' });
       }
       for (const f of [...profileFrames, ...factFrames, ...eventFrames, ...rawDetailHits]) {
         recalled.push(f.content.slice(0, RECALLED_SNIPPET_LENGTH));
+        recalledFrames.push({ source: (f as { source?: string }).source ?? 'unknown' });
       }
 
       // Scan recalled memory for injection — a poisoned harvest frame
@@ -766,7 +777,7 @@ export class Orchestrator {
           count: totalCount,
         });
         logTurnEvent(opts?.turnId, { stage: 'orchestrator.recallMemory.exit', totalCount, blocked: true, injectionScore: scan.score });
-        return { text: '', count: 0, recalled: [] };
+        return { text: '', count: 0, recalled: [], recalledFrames: [] };
       }
 
       // W4.1 (#1): anchor = max created_at across all rendered frames.
@@ -800,7 +811,7 @@ export class Orchestrator {
         personalHits: personalResults.length,
         textChars: text.length,
       });
-      return { text, count: totalCount, recalled };
+      return { text, count: totalCount, recalled, recalledFrames };
     } catch (err) {
       // Surface failures visibly — silent empty results train the model
       // to confabulate "I don't remember" instead of recalling real memory.
@@ -809,6 +820,7 @@ export class Orchestrator {
         text: '[Memory recall temporarily unavailable. Proceed without prior context.]',
         count: 0,
         recalled: [],
+        recalledFrames: [],
       };
     }
   }

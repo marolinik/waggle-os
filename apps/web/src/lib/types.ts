@@ -476,6 +476,12 @@ export interface StepContentBlock {
   blockId: string;
   description: string;
   status: 'running' | 'done';
+  /**
+   * PR3.5: provenance for memory-recall steps — the distinct raw frame.source
+   * values of the recalled memories (the FE owns the friendly label map in
+   * `lib/frame-source.ts`). Absent on non-memory steps (no fabricated source).
+   */
+  provenance?: { sources: string[] };
 }
 
 export interface ToolUseContentBlock {
