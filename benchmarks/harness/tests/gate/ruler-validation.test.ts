@@ -77,3 +77,17 @@ describe('validateRuler — validation', () => {
     expect(() => validateRuler(TAU2_RETAIL, Number.NaN)).toThrow(/measured ∈ \[0, 1\]/);
   });
 });
+
+import * as gate from '../../src/gate/index.js';
+
+describe('gate barrel exposes the three gate surfaces', () => {
+  it('re-exports validateRuler, the firewall surface, and runPreregChecklist', () => {
+    expect(typeof gate.validateRuler).toBe('function');
+    // Leakage firewall surface (Plan 06) re-exported from the gate barrel.
+    expect(typeof gate.assertNoGoldSubstring).toBe('function');
+    expect(typeof gate.normalizeForMatch).toBe('function');
+    expect(typeof gate.emitFirewallAssertion).toBe('function');
+    expect(typeof gate.runPreregChecklist).toBe('function');
+    expect(typeof gate.defaultGitProbe).toBe('function');
+  });
+});
