@@ -79,7 +79,11 @@ export async function buildAndFreezeMind(input: BuildMindInput): Promise<BuildMi
   if (typeof builderId !== 'string' || builderId.trim().length === 0) {
     throw new Error('buildAndFreezeMind requires a non-empty builderId (provenance)');
   }
-  if (!Array.isArray(artifacts) || artifacts.length === 0) {
+  // NOTE: do NOT use `Array.isArray(artifacts)` here — it is a type guard that
+  // narrows the typed `readonly PhaseAArtifact[]` to `any[]`, which then makes
+  // every `art` (and `art.mechanism`) `any` and breaks the typed index access
+  // into MECHANISM_IMPORTANCE / mechanismCounts under `strict` (TS7053).
+  if (artifacts.length === 0) {
     throw new Error('buildAndFreezeMind requires a non-empty artifacts stream');
   }
 

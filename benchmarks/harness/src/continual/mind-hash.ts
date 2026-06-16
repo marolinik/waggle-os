@@ -43,9 +43,39 @@ import type { MindDB } from '@waggle/core';
 const NON_CONTENT_TABLES: ReadonlySet<string> = new Set(['meta']);
 
 /**
+ * Per-row columns excluded from the digest: wall-clock + access-bookkeeping
+ * fields that vary with WHEN the mind was built / read, not with its content.
+ * The Mode-1 "byte-identical mind across arms" claim is about CONTENT identity
+ * (frame text, importance, source, gop, knowledge, identity, awareness), so two
+ * builds of the same artifact stream a millisecond apart MUST hash equal, and a
+ * Phase-B recall that bumps `access_count` MUST NOT change the frozen-mind hash.
+ * (Discovered 2026-06-16: `memory_frames.{created_at,last_accessed,access_count}`
+ * + `sessions.started_at` made the digest time-dependent under suite ordering.)
+ */
+const VOLATILE_COLUMNS: ReadonlySet<string> = new Set([
+  'created_at',
+  'last_accessed',
+  'started_at',
+  'ended_at',
+  'updated_at',
+  'first_run_at',
+  'access_count',
+]);
+
+/** Strip volatile columns from a row before it enters the digest. */
+function contentRow(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(row).sort()) {
+    if (!VOLATILE_COLUMNS.has(key)) out[key] = row[key];
+  }
+  return out;
+}
+
+/**
  * Local contract implementation: a deterministic logical-content digest of the
  * mind. Hashes every ordinary (non-virtual) table's rows, excluding the
- * non-content `meta` table, in a stable order.
+ * non-content `meta` table and per-row wall-clock / access-bookkeeping columns,
+ * in a stable order.
  */
 export function hashMindBytes(mind: MindDB): string {
   const raw = mind.getDatabase();
@@ -62,8 +92,8 @@ export function hashMindBytes(mind: MindDB): string {
   const hash = crypto.createHash('sha256');
   for (const t of ordinary) {
     hash.update(` TABLE:${t} `);
-    const rows = raw.prepare(`SELECT * FROM "${t}"`).all();
-    hash.update(JSON.stringify(rows));
+    const rows = raw.prepare(`SELECT * FROM "${t}"`).all() as Record<string, unknown>[];
+    hash.update(JSON.stringify(rows.map(contentRow)));
   }
   return hash.digest('hex');
 }
