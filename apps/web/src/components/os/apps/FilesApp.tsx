@@ -488,7 +488,7 @@ const FilesApp = ({
           {creating === 'folder' && (
             <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="px-3 border-b border-border/20 overflow-hidden">
               <div className="flex items-center gap-2 py-1.5">
-                <Folder className="w-4 h-4 text-amber-400" />
+                <Folder className="w-4 h-4" style={{ color: 'var(--honey)' }} />
                 <input
                   value={newName}
                   onChange={e => setNewName(e.target.value)}
@@ -539,6 +539,12 @@ const FilesApp = ({
               <thead>
                 <tr className="text-[11px] text-muted-foreground border-b border-border/20">
                   <th className="text-left font-normal pb-1 pl-1">Name</th>
+                  {/* D11 (no-fabrication): the file store carries no creator/
+                      provenance field (core FileEntry = name/path/size/modified/
+                      isDirectory), so every row honestly reads "—". When the
+                      backend later attaches an authored-by source, render it
+                      here ("made by Claude Code", "you uploaded") — never invent. */}
+                  <th className="text-left font-normal pb-1 w-32">Source</th>
                   <th className="text-right font-normal pb-1 w-20">Size</th>
                   <th className="text-right font-normal pb-1 w-28 pr-1">Modified</th>
                 </tr>
@@ -559,7 +565,7 @@ const FilesApp = ({
                       className={`group text-xs cursor-pointer transition-colors ${isSelected ? 'bg-primary/15' : 'hover:bg-muted/30'}`}
                     >
                       <td className="py-1 pl-1 flex items-center gap-2">
-                        <Icon className={`w-4 h-4 ${file.type === 'directory' ? 'text-amber-400' : 'text-muted-foreground'}`} />
+                        <Icon className={`w-4 h-4 ${file.type === 'directory' ? '' : 'text-muted-foreground'}`} style={file.type === 'directory' ? { color: 'var(--honey)' } : undefined} />
                         {renaming === file.path ? (
                           <input
                             value={renameValue}
@@ -574,6 +580,8 @@ const FilesApp = ({
                           <span className="truncate">{file.name}</span>
                         )}
                       </td>
+                      {/* D11: no provenance in the file metadata \u2192 honest "\u2014". */}
+                      <td className="py-1 text-left text-muted-foreground/60 text-[11px]" data-testid="file-source">{'\u2014'}</td>
                       <td className="py-1 text-right text-muted-foreground text-[11px]">{file.type === 'file' ? formatSize(file.size) : '\u2014'}</td>
                       <td className="py-1 text-right text-muted-foreground text-[11px] pr-1">{file.modifiedAt ? new Date(file.modifiedAt).toLocaleDateString() : '\u2014'}</td>
                     </tr>
@@ -597,7 +605,7 @@ const FilesApp = ({
                     onContextMenu={e => handleContextMenu(e, file)}
                     className={`flex flex-col items-center gap-1 p-3 rounded-xl transition-colors ${isSelected ? 'bg-primary/15 border border-primary/30' : 'hover:bg-muted/30 border border-transparent'}`}
                   >
-                    <Icon className={`w-8 h-8 ${file.type === 'directory' ? 'text-amber-400' : 'text-muted-foreground'}`} />
+                    <Icon className={`w-8 h-8 ${file.type === 'directory' ? '' : 'text-muted-foreground'}`} style={file.type === 'directory' ? { color: 'var(--honey)' } : undefined} />
                     <span className="text-[11px] text-foreground truncate w-full text-center">{file.name}</span>
                     {file.type === 'file' && <span className="text-[11px] text-muted-foreground">{formatSize(file.size)}</span>}
                   </button>
@@ -667,7 +675,7 @@ const FilesApp = ({
                 </button>
                 {treeDirs.filter(d => !selectedFiles.has(d.path)).map(dir => (
                   <button key={dir.path} onClick={() => handleBulkMove(dir.path)} className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs hover:bg-muted/50 transition-colors ${dir.path === currentPath ? 'opacity-40 pointer-events-none' : ''}`}>
-                    <Folder className="w-3.5 h-3.5 text-amber-400" />
+                    <Folder className="w-3.5 h-3.5" style={{ color: 'var(--honey)' }} />
                     <span>{dir.name}</span>
                     <span className="text-[11px] text-muted-foreground ml-auto font-mono">{dir.path}</span>
                   </button>
@@ -731,7 +739,7 @@ const FilesApp = ({
               <div className="flex items-center gap-3 px-5 py-4 border-b border-border/20 bg-muted/20">
                 {(() => {
                   const Icon = propertiesFile.type === 'directory' ? Folder : getFileIcon(propertiesFile.name);
-                  return <Icon className={`w-8 h-8 ${propertiesFile.type === 'directory' ? 'text-amber-400' : 'text-primary'}`} />;
+                  return <Icon className={`w-8 h-8 ${propertiesFile.type === 'directory' ? '' : 'text-primary'}`} style={propertiesFile.type === 'directory' ? { color: 'var(--honey)' } : undefined} />;
                 })()}
                 <div className="min-w-0 flex-1">
                   <h3 className="text-sm font-semibold text-foreground truncate">{propertiesFile.name}</h3>
@@ -773,8 +781,8 @@ const FilesApp = ({
                   <h4 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Permissions</h4>
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 text-xs"><Shield className="w-3.5 h-3.5 text-muted-foreground shrink-0" /><span className="text-muted-foreground w-20">Access</span><span className="text-foreground">{storageType === 'team' ? 'Team (shared)' : storageType === 'local' ? 'Local (private)' : 'Virtual (session)'}</span></div>
-                    <div className="flex items-center gap-2 text-xs">{storageType === 'team' ? <Unlock className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> : <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />}<span className="text-muted-foreground w-20">Visibility</span><span className="text-foreground">{storageType === 'team' ? 'Shared with team' : 'Only you'}</span></div>
-                    <div className="flex items-center gap-2 text-xs"><Edit className="w-3.5 h-3.5 text-muted-foreground shrink-0" /><span className="text-muted-foreground w-20">Writable</span><span className="inline-flex items-center gap-1 text-emerald-400 text-[11px]"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Yes</span></div>
+                    <div className="flex items-center gap-2 text-xs">{storageType === 'team' ? <Unlock className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--healthy)' }} /> : <Lock className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--honey)' }} />}<span className="text-muted-foreground w-20">Visibility</span><span className="text-foreground">{storageType === 'team' ? 'Shared with team' : 'Only you'}</span></div>
+                    <div className="flex items-center gap-2 text-xs"><Edit className="w-3.5 h-3.5 text-muted-foreground shrink-0" /><span className="text-muted-foreground w-20">Writable</span><span className="inline-flex items-center gap-1 text-[11px]" style={{ color: 'var(--healthy)' }}><span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--healthy)' }} /> Yes</span></div>
                   </div>
                 </div>
                 {propertiesFile.type === 'file' && <VersionHistory workspaceId={workspaceId} fileName={propertiesFile.name} />}
