@@ -4,12 +4,16 @@ import HomeCockpit from '@/components/os/apps/HomeCockpit';
 import SurfaceBoundary from './SurfaceBoundary';
 import { useShell } from '@/providers/ShellContext';
 import { routeFor } from '@/lib/routes';
+import { NoModelBanner } from '@/components/os/model-gate/NoModelBanner';
 
 const HomeRoute = () => {
   const navigate = useNavigate();
   const { selectWorkspace, overlays } = useShell();
   return (
     <SurfaceBoundary appName="Home">
+      {/* PR5 D2 — persists on Home until a working model exists (the soft-escape
+          safety net for the onboarding model gate). */}
+      <NoModelBanner onSetup={() => navigate(routeFor('settings'))} />
       <HomeCockpit
         onContinue={(workspaceId, sessionId) => {
           selectWorkspace(workspaceId);

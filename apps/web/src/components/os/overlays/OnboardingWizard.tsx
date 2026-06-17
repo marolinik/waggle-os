@@ -8,6 +8,7 @@ import type { UserProfile, ClassifiedHarvestItem } from '@/lib/types';
 import {
   WelcomeStep,
   WhoAreYouStep,
+  ModelGateStep,
   ImportStep,
   WorkspaceCreateStep,
   ReadyStep,
@@ -29,10 +30,12 @@ function trackTelemetry(_serverBaseUrl: string, event: string, properties?: Reco
   adapter.trackTelemetry(event, properties);
 }
 
-/* ─── Phase 2D 5-step chain (S12→S17, C33). `ready` is terminal. ──
-   All navigation is driven off STEP_NAMES.indexOf(name) — never a magic
-   number — so re-keying the chain can't strand the user mid-flow. */
-const STEP_NAMES = ['first-launch', 'who-are-you', 'memory-import', 'workspace-create', 'ready'] as const;
+/* ─── PR5 6-step chain (S12→S17, C33) with the hard model gate at step 3.
+   `ready` is terminal. All navigation is driven off STEP_NAMES.indexOf(name) —
+   never a magic number — so re-keying the chain can't strand the user mid-flow.
+   The model-gate sits between who-are-you and memory-import (D4 order: Welcome ·
+   About-you · Model · Import · Template · First-task). */
+const STEP_NAMES = ['first-launch', 'who-are-you', 'model-gate', 'memory-import', 'workspace-create', 'ready'] as const;
 type StepName = typeof STEP_NAMES[number];
 const stepIndex = (name: StepName): number => STEP_NAMES.indexOf(name);
 const LAST_INDEX = STEP_NAMES.length - 1;
@@ -144,7 +147,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
         hasRole: Boolean(payload.role),
         goalCount: payload.goals?.length ?? 0,
       });
-      goToName('memory-import');
+      goToName('model-gate');
     } finally {
       setSavingProfile(false);
     }
@@ -354,6 +357,17 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
                 saving={savingProfile}
               />
             )}
+            {step === stepIndex('model-gate') && (
+              <ModelGateStep
+                onContinue={() => goToName('memory-import')}
+                onBack={() => goToName('who-are-you')}
+                onLater={() => {
+                  clearTimeout(autoTimer.current);
+                  trackTelemetry(serverBaseUrl, 'onboarding_skip', { atStep: step, via: 'model-gate-later' });
+                  onDismiss();
+                }}
+              />
+            )}
             {step === stepIndex('memory-import') && (
               <ImportStep
                 importSource={importSource}
@@ -364,7 +378,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
                 onImportCommit={handleImportCommit}
                 claudeCodeDetected={claudeCodeDetected}
                 onClaudeCodeHarvest={handleClaudeCodeHarvest}
-                onBack={() => goToName('who-are-you')}
+                onBack={() => goToName('model-gate')}
                 onContinue={() => goToName('workspace-create')}
               />
             )}

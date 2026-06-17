@@ -67,6 +67,15 @@ export interface WorkspaceCreateStepProps {
   readonly createError: string | null;
 }
 
+/* ─── ModelGateStep (PR5 D2 — the hard model gate) ─── */
+export interface ModelGateStepProps {
+  /** Advance to Import — only reachable once a working model exists (hard gate). */
+  readonly onContinue: () => void;
+  readonly onBack: () => void;
+  /** Soft escape: dismiss onboarding to Home (the NoModelBanner persists there). */
+  readonly onLater: () => void;
+}
+
 /* ─── ReadyStep ─── */
 export interface ReadyStepProps {
   readonly createError: string | null;
