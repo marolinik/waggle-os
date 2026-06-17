@@ -13,13 +13,16 @@ import {
 
 type Call = { url: string; init?: RequestInit };
 
-/** A fake fetch that records calls and returns a fixed status — never hits the network. */
-function fakeFetch(status: number, calls?: Call[]): typeof fetch {
+/** A fake fetch that records calls and returns a fixed status + body — never hits the network. */
+function fakeFetch(status: number, calls?: Call[], body = ''): typeof fetch {
   return (async (url: string | URL | Request, init?: RequestInit) => {
     calls?.push({ url: String(url), init });
-    return { status } as Response;
+    return { status, text: async () => body } as unknown as Response;
   }) as unknown as typeof fetch;
 }
+
+const goodGoogle = 'AIza' + 'x'.repeat(30);
+const GOOGLE_INVALID_BODY = JSON.stringify({ error: { code: 400, status: 'INVALID_ARGUMENT', message: 'API key not valid. Please pass a valid API key.', reason: 'API_KEY_INVALID' } });
 
 const goodAnthropic = 'sk-ant-' + 'x'.repeat(30);
 const goodOpenai = 'sk-' + 'x'.repeat(40);
@@ -61,6 +64,28 @@ describe('probeProviderKey', () => {
 
   it('a 400 (bad request, but key authenticates) → valid:true, verified:true', async () => {
     const r = await probeProviderKey('anthropic', goodAnthropic, { fetchImpl: fakeFetch(400) });
+    expect(r).toMatchObject({ valid: true, verified: true });
+  });
+
+  it('a Google 400 API_KEY_INVALID → valid:false, verified:true (never a false "verified")', async () => {
+    // Google signals a bad key with 400 + API_KEY_INVALID, not 401/403 (review HIGH).
+    const r = await probeProviderKey('google', goodGoogle, { fetchImpl: fakeFetch(400, undefined, GOOGLE_INVALID_BODY) });
+    expect(r).toMatchObject({ valid: false, verified: true });
+  });
+
+  it('a Google 200 (valid key) → valid:true, verified:true', async () => {
+    const r = await probeProviderKey('google', goodGoogle, { fetchImpl: fakeFetch(200) });
+    expect(r).toEqual({ valid: true, verified: true });
+  });
+
+  it('a Google 400 for an unrelated reason (key still authenticates) → valid:true, verified:true', async () => {
+    const r = await probeProviderKey('google', goodGoogle, { fetchImpl: fakeFetch(400, undefined, JSON.stringify({ error: { message: 'bad request shape' } })) });
+    expect(r).toMatchObject({ valid: true, verified: true });
+  });
+
+  it('a non-Google 400 is NOT treated as a rejection (no body read) — anthropic 400 = key works', async () => {
+    const calls: Call[] = [];
+    const r = await probeProviderKey('anthropic', goodAnthropic, { fetchImpl: fakeFetch(400, calls) });
     expect(r).toMatchObject({ valid: true, verified: true });
   });
 

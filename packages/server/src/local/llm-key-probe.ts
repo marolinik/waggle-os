@@ -164,14 +164,15 @@ export async function probeProviderKey(
     return { valid: false, verified: false, error: fmt.error };
   }
 
-  const spec = PROBE_SPECS[provider.toLowerCase()];
+  const p = provider.toLowerCase();
+  const spec = PROBE_SPECS[p];
   if (!spec) {
     // No cheap live probe for this provider — accept on format, but be honest.
     return { valid: true, verified: false };
   }
 
   const now = opts.now ?? Date.now;
-  const cacheKey = `${provider.toLowerCase()}:${hashKey(apiKey)}`;
+  const cacheKey = `${p}:${hashKey(apiKey)}`;
   const cached = cache.get(cacheKey);
   if (cached && now() - cached.at < PROBE_TTL_MS) {
     return cached.result;
@@ -184,9 +185,17 @@ export async function probeProviderKey(
       ...spec.init(apiKey),
       signal: AbortSignal.timeout(timeoutMs),
     });
-    const rejected = res.status === 401 || res.status === 403;
+    let rejected = res.status === 401 || res.status === 403;
+    // Google/Gemini are the outlier: an INVALID key returns HTTP 400 with body
+    // reason API_KEY_INVALID (not 401/403, and the key rides in the query string),
+    // so the 401/403-only rule would mis-report a bad Google key as "verified".
+    // Read the body ONLY on a Google 400 — the happy path stays body-free.
+    if (!rejected && res.status === 400 && (p === 'google' || p === 'gemini')) {
+      const body = await res.text().catch(() => '');
+      if (/API_KEY_INVALID|API key not valid/i.test(body)) rejected = true;
+    }
     const result: KeyProbeResult = rejected
-      ? { valid: false, verified: true, error: 'Key was rejected by the provider (401/403).' }
+      ? { valid: false, verified: true, error: 'Key was rejected by the provider.' }
       : { valid: true, verified: true };
     cache.set(cacheKey, { result, at: now() });
     return result;
