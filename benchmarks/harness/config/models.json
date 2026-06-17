@@ -148,6 +148,17 @@
     "pinning_surface": "floating_alias",
     "pinning_surface_carve_out_reason": "Plan 05 (2026-06-16): GPT-5.5 frontier baseline subject. Route is the LiteLLM local alias `gpt-5.5` -> `openai/gpt-5.5` (direct OpenAI Chat Completions; same direct-not-OpenRouter rationale as the gpt-5.4 sibling — preserves token-level telemetry for EU AI Act Art. 14 replay). OpenAI does not expose immutable model snapshots for the gpt-5.x family; the dated snapshot is `gpt-5.5-2026-04-23` (recorded here for the per-row pinning audit per design-spec §5 / redteam E1 — pin + record the exact snapshot in the run manifest). Price $5 in / $30 out per recon model-roster-and-cost-feasibility.md §5 (0.50 cached). Floating alias mandated by B3 addendum § 5."
   },
+  "gpt-5.5-responses": {
+    "id": "gpt-5.5-responses",
+    "displayName": "GPT-5.5 via OpenAI /v1/responses (REQUIRED for tool-using agentic cells)",
+    "provider": "openai_via_openrouter",
+    "litellmModel": "gpt-5.5-responses",
+    "pricePerMillionInput": 5.0,
+    "pricePerMillionOutput": 30.0,
+    "contextWindow": 400000,
+    "pinning_surface": "floating_alias",
+    "pinning_surface_carve_out_reason": "Added 2026-06-17 (pilot). gpt-5.5 REJECTS function-tools + reasoning_effort on /v1/chat/completions ('use /v1/responses instead'); every agentic τ² cell would silently all-error. This alias = LiteLLM route `openai/responses/gpt-5.5`, whose `responses/` prefix triggers litellm's chat→responses bridge (main.py::responses_api_bridge_check, litellm 1.81.9), so tau2's plain completion() call transparently routes to OpenAI /responses with tools+reasoning intact. USE THIS as the gpt-5.5 agent for every tool-using benchmark cell (the plain `gpt-5.5` alias is chat-completions-only — fine for non-tool judge/pings). Same price/snapshot as `gpt-5.5`. OpenAI does not expose immutable snapshots for gpt-5.x; floating alias per B3 addendum § 5."
+  },
   "gemini-3.1": {
     "id": "gemini-3.1",
     "displayName": "Gemini 3.1 Pro Preview (legacy OpenRouter bridge route)",

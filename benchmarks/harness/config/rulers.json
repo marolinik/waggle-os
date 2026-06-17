@@ -21,10 +21,10 @@
       "spec": {
         "substrate": "tau2-bench",
         "split": "banking_knowledge",
-        "model": "gpt-5.5",
+        "model": "gpt-5.5-responses",
         "published_score": 0.3737,
         "tolerance_abs": 0.10,
-        "source": "Sierra τ²-bench leaderboard submission gpt-5-5_sierra_2026-05-05 (results.banking_knowledge.pass_1=37.37; v0.2.1-dev, user_simulator gpt-5.2; arXiv:2506.07982). n=97 -> tolerance = 95% Clopper-Pearson ~ ±10pp (binomial SE ~ 4.9pp at p=0.3737)."
+        "source": "Sierra τ²-bench leaderboard submission gpt-5-5_sierra_2026-05-05 (results.banking_knowledge.pass_1=37.37; v0.2.1-dev, user_simulator gpt-5.2; arXiv:2506.07982). n=97 -> tolerance = 95% Clopper-Pearson ~ ±10pp (binomial SE ~ 4.9pp at p=0.3737). MUST route via the `gpt-5.5-responses` alias (OpenAI /v1/responses) — gpt-5.5 rejects tools+reasoning on /chat/completions (2026-06-17 pilot)."
       },
       "n_tasks": 97,
       "measured": null

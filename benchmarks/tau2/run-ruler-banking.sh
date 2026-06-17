@@ -14,7 +14,7 @@ set -euo pipefail
 docker exec harness-tau2-linux bash -lc '
   cd /work && PYTHONUTF8=1 NO_COLOR=1 TERM=dumb \
   uv run tau2 run --domain banking_knowledge --agent llm_agent \
-    --agent-llm openai/gpt-5.5 --agent-llm-args "{\"reasoning_effort\":\"high\"}" \
+    --agent-llm openai/gpt-5.5-responses --agent-llm-args "{\"reasoning_effort\":\"high\"}" \
     --user-llm  openai/gpt-5.2 --user-llm-args  "{\"reasoning_effort\":\"low\"}" \
     --num-trials 4 --max-concurrency 4 --max-steps 200 --max-errors 10 --seed 42 \
     --save-to waggle_ruler_banking_gpt55_high_n97k4
