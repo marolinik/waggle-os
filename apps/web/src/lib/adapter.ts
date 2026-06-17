@@ -1834,9 +1834,29 @@ class LocalAdapter {
     await this.fetch('/api/settings/permissions', { method: 'PUT', body: JSON.stringify(data) });
   }
 
-  async testApiKey(provider: string, key: string): Promise<{ valid: boolean }> {
-    const res = await this.fetch('/api/settings/test-key', { method: 'POST', body: JSON.stringify({ provider, apiKey: key }) });
+  async testApiKey(
+    provider: string,
+    key: string,
+    opts: { live?: boolean } = {},
+  ): Promise<{ valid: boolean; verified?: boolean; error?: string }> {
+    const res = await this.fetch('/api/settings/test-key', {
+      method: 'POST',
+      body: JSON.stringify({ provider, apiKey: key, live: opts.live }),
+    });
     return res.json();
+  }
+
+  /**
+   * Write a provider API key to the Vault via PUT /api/settings (keyed by provider id —
+   * the same name GET /api/providers reads `hasKey` from — which also invalidates the
+   * server's key-validation cache). This is the canonical key→vault path; do NOT use the
+   * generic POST /api/vault for provider keys (it skips the cache invalidation).
+   */
+  async setProviderKey(providerId: string, apiKey: string, models?: string[]): Promise<void> {
+    await this.fetch('/api/settings', {
+      method: 'PUT',
+      body: JSON.stringify({ providers: { [providerId]: { apiKey, ...(models ? { models } : {}) } } }),
+    });
   }
 
   async getModels(): Promise<string[]> {

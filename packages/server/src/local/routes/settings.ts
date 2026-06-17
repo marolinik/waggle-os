@@ -5,6 +5,7 @@ import { WaggleConfig } from '@waggle/core';
 import { type Tier, TIERS, TIER_CAPABILITIES, parseTier, getCapabilities, getEffectiveTier, trialDaysRemaining } from '@waggle/shared';
 import type { AutonomyLevel } from '@waggle/agent';
 import { requireTier } from '../../middleware/assert-tier.js';
+import { probeProviderKey, validateKeyFormat } from '../llm-key-probe.js';
 
 const VALID_AUTONOMY: AutonomyLevel[] = ['normal', 'trusted', 'yolo'];
 
@@ -197,19 +198,27 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
     return { updated: true, onboardingCompleted: raw.onboardingCompleted };
   });
 
-  // POST /api/settings/test-key — test an API key by validating its format
+  // POST /api/settings/test-key — validate an API key.
+  //
+  // D3: `live: true` does a real 1-token / cheap-auth probe against the provider
+  // (generalised from the private Anthropic `/health` probe) and reports
+  // `verified: true` only when the provider actually accepted the key. Without
+  // `live`, or for a provider with no cheap probe, it is format-only and reports
+  // `verified: false` — never a confident "valid" on an unchecked key.
   server.post<{
-    Body: { provider: string; apiKey: string };
+    Body: { provider: string; apiKey: string; live?: boolean };
   }>('/api/settings/test-key', async (request, reply) => {
-    const { provider, apiKey } = request.body ?? {};
+    const { provider, apiKey, live } = request.body ?? {};
 
     if (!provider || !apiKey) {
       return reply.status(400).send({ error: 'provider and apiKey are required' });
     }
 
-    // Validate key format per provider
-    const result = validateApiKeyFormat(provider, apiKey);
-    return result;
+    if (live) {
+      return await probeProviderKey(provider, apiKey);
+    }
+    const fmt = validateKeyFormat(provider, apiKey);
+    return { ...fmt, verified: false };
   });
 
   // ── Permission settings ─────────────────────────────────────────────
@@ -517,44 +526,4 @@ interface PermissionsData {
   defaultAutonomy: AutonomyLevel;
   externalGates: string[];
   workspaceOverrides: Record<string, string[]>;
-}
-
-/**
- * Validate API key format without making real API calls.
- * In production, actual validation would go through LiteLLM.
- */
-function validateApiKeyFormat(provider: string, apiKey: string): { valid: boolean; error?: string } {
-  switch (provider.toLowerCase()) {
-    case 'openai':
-      if (!apiKey.startsWith('sk-')) {
-        return { valid: false, error: 'OpenAI keys must start with "sk-"' };
-      }
-      if (apiKey.length < 20) {
-        return { valid: false, error: 'API key is too short' };
-      }
-      return { valid: true };
-
-    case 'anthropic':
-      if (!apiKey.startsWith('sk-ant-')) {
-        return { valid: false, error: 'Anthropic keys must start with "sk-ant-"' };
-      }
-      if (apiKey.length < 20) {
-        return { valid: false, error: 'API key is too short' };
-      }
-      return { valid: true };
-
-    case 'google':
-    case 'gemini':
-      if (apiKey.length < 10) {
-        return { valid: false, error: 'API key is too short' };
-      }
-      return { valid: true };
-
-    default:
-      // For unknown providers, just check it's non-empty and reasonable length
-      if (apiKey.length < 8) {
-        return { valid: false, error: 'API key is too short' };
-      }
-      return { valid: true };
-  }
 }
