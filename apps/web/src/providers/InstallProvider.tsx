@@ -109,20 +109,20 @@ export const InstallProvider = ({ children }: { children: ReactNode }) => {
     setInstalled(prev => {
       const next = new Set<string>();
       if (conn.status === 'fulfilled') {
-        for (const c of conn.value) if (c.status === 'connected') next.add(`connector:${c.id}`);
+        for (const c of conn.value ?? []) if (c?.status === 'connected') next.add(`connector:${c.id}`);
       } else {
         for (const id of prev) if (id.startsWith('connector:')) next.add(id);
       }
       if (mcps.status === 'fulfilled') {
-        for (const m of mcps.value) if (m.installed) next.add(`mcp:${m.id}`);
+        for (const m of mcps.value ?? []) if (m?.installed) next.add(`mcp:${m.id}`);
       } else {
         for (const id of prev) if (id.startsWith('mcp:')) next.add(id);
       }
       if (skillPkgs.status === 'fulfilled' || mcpPkgs.status === 'fulfilled') {
         for (const r of [skillPkgs, mcpPkgs]) {
           if (r.status !== 'fulfilled') continue;
-          const pkgs = (r.value.packages ?? []) as MarketplacePackageRow[];
-          for (const p of pkgs) if (p.installed) next.add(`pkg:${p.id}`);
+          const pkgs = (r.value?.packages ?? []) as MarketplacePackageRow[];
+          for (const p of pkgs) if (p?.installed) next.add(`pkg:${p.id}`);
         }
         // Only carry over previous pkg ids when BOTH package reads failed.
         if (skillPkgs.status === 'rejected' && mcpPkgs.status === 'rejected') {

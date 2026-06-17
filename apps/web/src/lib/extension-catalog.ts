@@ -43,8 +43,11 @@ export interface Extension {
   scanStatus?: 'passed' | 'failed' | 'not_scanned';
   trust?: string;
   category?: string;
-  /** Deep-link CTA for federated (non-marketplace) entries. */
+  /** Deep-link CTA for federated entries / advanced management (e.g. the Hub). */
   openIn?: { appId: string; label: string };
+  /** Connector auth method — drives token-paste (bearer/api_key/basic) vs
+   *  OAuth-redirect (the Hub) in the grid's in-place Connect flow (PR4 D3). */
+  authType?: ConnectorDefinition['authType'];
 }
 
 /** Marketplace registry row (numeric-id /api/marketplace search envelope).
@@ -146,8 +149,12 @@ export function fromConnector(conn: ConnectorDefinition): Extension {
     source: 'local registry',
     installed,
     lifecycle: lifecycle(installed),
-    installable: false,
+    // PR4 D3: connectable in-place — token-paste (bearer/api_key/basic) writes
+    // the credential to the vault here; OAuth-only falls back to the Hub (the
+    // card branches on authType). The Hub deep-link stays for management.
+    installable: true,
     kind: 'federated',
+    authType: conn.authType,
     ...(conn.category ? { category: conn.category } : {}),
     openIn: { appId: 'connectors', label: 'Connector Hub' },
   };
@@ -208,7 +215,10 @@ export function fromMcpCatalogRow(row: McpCatalogRow): Extension {
     source: 'MCP catalog',
     installed: row.installed,
     lifecycle: lifecycle(row.installed),
-    installable: false, // installs run through the MCP Hub's risk/approval flow
+    // PR4 D3: enableable in-place — installMcp still rides the real
+    // SecurityGate + PRO gate server-side; the Hub deep-link stays for
+    // managing running servers.
+    installable: true,
     kind: 'federated',
     category: row.category,
     openIn: { appId: 'mcp-hub', label: 'MCP Hub' },
