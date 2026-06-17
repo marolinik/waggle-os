@@ -2,6 +2,7 @@
 
 > Source design: `docs/design_handoff_waggle_app/SCREENS.md §11` (Settings) + `§10` (Onboarding). Roadmap: `BUILD-PLAN.md §6` (PR5 = screens 11·10). Branch: `feature/warm-hive-pr5` (off main @ 8b4ba60a). Status: **plan — §3 decisions need founder ratification before feature code.**
 > Recon: 5-reader workflow `wf_11242c36-d4a` (5/5 areas), grounded vs live code.
+> **Status update (founder-ratified): D1 = BYO-key; D2–D12 proceed as recommended. Building.**
 
 ## 1. The design contract
 - **§11 Settings:** calm, progressive-disclosure; **Models leads.** Left rail General·Models·Permissions·Plan·Team·Backup·Advanced + a top-right **Show: Essential/Standard/Everything** (Advanced only at Everything). **Models:** a "≥1 working model" banner + the **Model-pilot failover chain** Primary→(if it errors)→Fallback→(daily budget)→Budget + a daily-budget input (switch at 80%) + read-only provider-key list (manage in Vault) + a local-models list. Maps to `defaultModel/fallbackModel/budgetModel + budgetThreshold/dailyBudget`.
