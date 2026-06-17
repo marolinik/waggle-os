@@ -361,7 +361,7 @@ const AutomationCenterApp = () => {
                             {recent.map(({ a, log }) => (
                               <li key={a.id} className="flex items-center justify-between gap-2 text-[11px]">
                                 <span className="text-foreground truncate">{a.name}</span>
-                                <span className={`shrink-0 ${log.success ? 'text-emerald-400' : 'text-destructive'}`}>
+                                <span className={`shrink-0 ${log.success ? 'text-[var(--healthy)]' : 'text-[var(--risk)]'}`}>
                                   {log.success ? 'OK' : 'failed'} · {new Date(log.executedAt).toLocaleString()}
                                 </span>
                               </li>

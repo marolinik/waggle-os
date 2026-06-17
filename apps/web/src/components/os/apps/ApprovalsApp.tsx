@@ -18,6 +18,7 @@ import { Shield, ShieldCheck, Clock, X as XIcon, AlertTriangle, CheckCircle2, Re
 import { adapter } from '@/lib/adapter';
 import { useToast } from '@/hooks/use-toast';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
+import { RiskBadge, riskToneForTool } from './power/power-primitives';
 
 interface PendingApproval {
   requestId: string;
@@ -172,7 +173,7 @@ const ApprovalsApp = () => {
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
             }`}
           >
-            Pending {pending.length > 0 && <span className="ml-1 px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-[10px] font-semibold">{pending.length}</span>}
+            Pending {pending.length > 0 && <span className="ml-1 px-1.5 py-0.5 rounded-full bg-[var(--honey-wash)] text-[var(--attention)] text-[10px] font-semibold">{pending.length}</span>}
           </button>
           <button
             onClick={() => setTab('grants')}
@@ -202,7 +203,7 @@ const ApprovalsApp = () => {
           {error && <ApprovalsError message={error} onRetry={refresh} retrying={loading} />}
           {!error && pending.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full py-12 text-center">
-              <ShieldCheck className="w-10 h-10 text-emerald-500/40 mb-3" />
+              <ShieldCheck className="w-10 h-10 text-[var(--healthy)] opacity-50 mb-3" />
               <p className="text-sm font-display text-foreground">No pending approvals</p>
               <p className="text-[11px] text-muted-foreground mt-1 max-w-xs">
                 When an agent tries to run a gated tool, the request will land here for your decision.
@@ -211,38 +212,52 @@ const ApprovalsApp = () => {
           )}
           {pending.map(req => {
             const inputSummary = summarizeInput(req.input);
+            // Risk is DERIVED from the real tool name (the backend payload carries
+            // no risk field) — a transparent classification, not fabricated data.
+            const risk = riskToneForTool(req.toolName, req.input);
+            const isElevated = risk !== 'low';
             return (
-              <div key={req.requestId} className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/20">
+              <div
+                key={req.requestId}
+                className={`p-3 rounded-[14px] border ${
+                  isElevated
+                    ? 'bg-[var(--honey-wash)] border-[var(--honey-line)]'
+                    : 'bg-[var(--surface)] border-[var(--line-soft)]'
+                }`}
+              >
                 <div className="flex items-start justify-between gap-3 mb-2">
                   <div className="flex items-center gap-2 min-w-0">
-                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                    <AlertTriangle className={`w-4 h-4 shrink-0 ${isElevated ? 'text-[var(--attention)]' : 'text-[var(--text-muted)]'}`} />
                     <div className="min-w-0">
-                      <p className="text-xs font-display font-semibold text-foreground">{req.toolName}</p>
+                      <div className="flex items-center gap-2">
+                        <RiskBadge level={risk} />
+                        <p className="text-xs font-display font-semibold text-[var(--text)] truncate">{req.toolName}</p>
+                      </div>
                       {inputSummary && (
-                        <p className="text-[11px] text-muted-foreground font-mono truncate">{inputSummary}</p>
+                        <p className="mt-1 text-[11px] text-[var(--text-muted)] font-mono truncate">{inputSummary}</p>
                       )}
                     </div>
                   </div>
-                  <span className="text-[10px] text-muted-foreground flex items-center gap-1 shrink-0">
+                  <span className="text-[10px] text-[var(--text-dim)] flex items-center gap-1 shrink-0">
                     <Clock className="w-2.5 h-2.5" /> {formatRelative(req.timestamp)}
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => respond(req, true, false)}
-                    className="flex-1 px-2 py-1 rounded-md bg-primary text-primary-foreground text-[11px] font-display hover:bg-primary/90 transition-colors"
+                    className="flex-1 px-2 py-1 rounded-md bg-[var(--honey)] text-[#1a1407] text-[11px] font-display font-semibold hover:bg-[var(--honey-bright)] transition-colors"
                   >
                     Allow once
                   </button>
                   <button
                     onClick={() => respond(req, true, true)}
-                    className="flex-1 px-2 py-1 rounded-md bg-emerald-500/20 text-emerald-400 text-[11px] font-display hover:bg-emerald-500/30 transition-colors"
+                    className="flex-1 px-2 py-1 rounded-md bg-[var(--healthy-wash)] text-[var(--healthy)] text-[11px] font-display hover:brightness-110 transition-[filter]"
                   >
                     Always allow
                   </button>
                   <button
                     onClick={() => respond(req, false, false)}
-                    className="flex-1 px-2 py-1 rounded-md bg-destructive/20 text-destructive text-[11px] font-display hover:bg-destructive/30 transition-colors"
+                    className="flex-1 px-2 py-1 rounded-md bg-[var(--risk-wash)] text-[var(--risk)] text-[11px] font-display hover:brightness-110 transition-[filter]"
                   >
                     Deny
                   </button>
@@ -281,7 +296,7 @@ const ApprovalsApp = () => {
           )}
           {grants.map(grant => (
             <div key={grant.id} className="p-3 rounded-xl bg-secondary/30 border border-border/30 flex items-start gap-3">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+              <CheckCircle2 className="w-4 h-4 text-[var(--healthy)] shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-display font-medium text-foreground">{grant.description}</p>
                 <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
