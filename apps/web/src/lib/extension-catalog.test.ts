@@ -61,7 +61,7 @@ describe('extension-catalog normalizers', () => {
     expect(ext).toMatchObject({ id: 'pack:research', kind: 'pack', trust: 'verified', installed: true, installable: false });
   });
 
-  it('connectors federate as NON-installable with the Connector Hub deep link (A5 honesty)', () => {
+  it('connectors are connectable in-place (PR4 D3), carry authType, and keep the Hub deep link', () => {
     const conn: ConnectorDefinition = {
       id: 'github', name: 'GitHub', description: 'Code', service: 'github',
       authType: 'bearer', status: 'connected', capabilities: ['read'],
@@ -69,15 +69,15 @@ describe('extension-catalog normalizers', () => {
     };
     const ext = fromConnector(conn);
     expect(ext).toMatchObject({
-      id: 'connector:github', type: 'connector', installable: false,
-      kind: 'federated', installed: true, source: 'local registry',
+      id: 'connector:github', type: 'connector', installable: true,
+      kind: 'federated', installed: true, source: 'local registry', authType: 'bearer',
     });
     expect(ext.openIn).toEqual({ appId: 'connectors', label: 'Connector Hub' });
   });
 
-  it('mcp catalog rows deep-link to the MCP Hub instead of faking a direct install', () => {
+  it('mcp catalog rows are enableable in-place (PR4 D3) and keep the MCP Hub deep link', () => {
     const ext = fromMcpCatalogRow({ id: 'postgres', name: 'PostgreSQL', description: '', category: 'Database', installed: false });
-    expect(ext.installable).toBe(false);
+    expect(ext.installable).toBe(true);
     expect(ext.openIn?.appId).toBe('mcp-hub');
     expect(ext.lifecycle).toBe('available');
   });

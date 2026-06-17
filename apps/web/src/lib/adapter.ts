@@ -1,5 +1,6 @@
 // LocalAdapter — HTTP/SSE/WS client for Waggle backend
 import { fetchWithTimeout, TimeoutError } from './fetch-utils';
+import type { AgentSearchResponse } from './agent-search';
 import {
   isTauri,
   recallMemory as tauriRecallMemory,
@@ -1340,6 +1341,16 @@ class LocalAdapter {
       method: 'POST',
       body: JSON.stringify({ packageId }),
     });
+  }
+
+  /** PR4 agent-pick (screen 09): natural-language need → ranked suggestions
+   *  across connector/skill/tool, each with a "why" + install descriptor. */
+  async agentSearch(need: string): Promise<AgentSearchResponse> {
+    const res = await this.fetch('/api/marketplace/agent-search', {
+      method: 'POST',
+      body: JSON.stringify({ need }),
+    });
+    return res.json();
   }
 
   async uninstallMarketplacePackage(packageId: number): Promise<Response> {

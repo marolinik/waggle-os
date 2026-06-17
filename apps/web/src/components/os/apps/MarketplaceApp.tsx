@@ -1,67 +1,65 @@
 /**
- * MarketplaceApp — the consolidated Marketplace / Extend surface (UX-Refactor
- * Phase 4B, S21; PRD §12.13 "power users can extend Waggle without hunting
- * through settings").
+ * MarketplaceApp — the Warm-Hive Marketplace surface (PR4 Variation A; screen
+ * 09). "Skills + connectors + MCP as one shelf, agent-searchable." The four
+ * shelves (D2) — All / Skills / Connectors / MCP — federate AT READ; agents,
+ * models and templates keep their dedicated hubs (deep-linked from elsewhere).
  *
- * Phase-4B rework: the old two-tab package browser became the SINGLE faceted
- * Extend surface — the B7 six-domain facets (skill · agent · connector · mcp ·
- * model · template) federate AT READ (A5): marketplace-backed facets hit the
- * registry; the rest pull from their dedicated local routes and say so
- * honestly (no fake remote entries). CapabilitiesApp's duplicate marketplace
- * tab now points here. Installs confirm through the shared ApprovalModal with
- * the scan-derived risk; the Audit tab is the C18 shared install-audit feed.
+ * Installs are one-click + type-aware (D3, §1): the ExtensionCard drives
+ * Add / Connect / Enable through the shared install store, so installing in
+ * ANY view reflects in ALL (the count bar + inline chat). Security is
+ * preserved server-side — a SecurityGate block surfaces as a destructive
+ * toast, tier routes to Upgrade — and the destructive Remove direction keeps
+ * its ApprovalModal consequence dialog. The Audit tab is the C18 shared feed.
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Store, Search, Loader2, Package } from 'lucide-react';
 import type { ExtensionType } from '@waggle/shared';
-import { EXTENSION_TYPES } from '@waggle/shared';
 import { Input } from '@/components/ui/input';
 import { classifyInstallRisk, actionRisk, installTrustSource } from '@/lib/risk-display';
 import { adapter } from '@/lib/adapter';
 import { useService } from '@/providers/ServiceProvider';
-import { useToast } from '@/hooks/use-toast';
+import { useInstallStore } from '@/providers/InstallProvider';
 import { ApprovalModal, type ApprovalRequest } from '@/components/ui/approval-modal';
 import { dedupePacks } from '@/lib/dedupe-packs';
 import {
   filterExtensions, sortExtensions,
-  fromConnector, fromMarketplacePackage, fromMcpCatalogRow, fromModel,
-  fromPersona, fromSkillPack, fromTemplate,
+  fromConnector, fromMarketplacePackage, fromMcpCatalogRow, fromSkillPack,
   type Extension, type MarketplacePackageRow, type McpCatalogRow,
 } from '@/lib/extension-catalog';
 import ExtensionCard from './extend/ExtensionCard';
 import InstallAuditPanel from './extend/InstallAuditPanel';
+import AgentSearchBox from './extend/AgentSearchBox';
 
-type Facet = 'all' | ExtensionType;
+/** The four shelves (D2) — the design's "one simple shelf" set. */
+const SHELVES = ['all', 'skill', 'connector', 'mcp'] as const;
+type Facet = (typeof SHELVES)[number];
 type Tab = 'browse' | 'audit';
 
 const FACET_LABELS: Record<Facet, string> = {
   all: 'All',
   skill: 'Skills',
-  agent: 'Agents',
   connector: 'Connectors',
   mcp: 'MCPs',
-  model: 'Models',
-  template: 'Templates',
 };
 
-/** A5 honesty: where each non-marketplace facet actually lives. */
-const FEDERATED_NOTES: Partial<Record<ExtensionType, string>> = {
-  agent: 'Agents are not marketplace-backed — these are your local personas, managed in the Agent Center.',
-  connector: 'Connectors are not marketplace-backed — this is your local connector registry, managed in the Connector Hub.',
-  mcp: 'Catalog MCP servers install through the MCP Hub (security scan + scope + approval flow); registry-listed MCP packages install right here.',
-  model: 'Models come from your configured providers via the LLM router — manage them in Settings.',
-  template: 'Workspace templates are local — manage them when creating a workspace.',
+/** Honest in-place note for the connectable/enableable shelves (D3). */
+const SHELF_NOTES: Partial<Record<Facet, string>> = {
+  connector: 'Connect with an API token here — it goes straight to your vault. OAuth connectors open in the Connector Hub.',
+  mcp: 'Enable MCP servers here (security-scanned, Pro). Manage running servers in the MCP Hub.',
 };
 
 /** Scan/trust → ApprovalModal risk. P7/D15 A7: delegates to the shared
  *  classifyInstallRisk so every install surface maps the same scan/trust signal
- *  to the same risk level (divergence #8). */
+ *  to the same risk level (divergence #8). Intentionally retained as the
+ *  canonical install-risk mapping, regression-locked by p7-a7-install-risk; it
+ *  has NO production render-path caller (install is one-click, §1) — do not
+ *  re-wire an install ApprovalModal off this chain without a design decision. */
 export function installRiskFor(ext: Extension): ApprovalRequest['riskLevel'] {
   return classifyInstallRisk({ scanStatus: ext.scanStatus, trust: ext.trust });
 }
 
 /** Uninstall confirm — destructive actions must not be one-click while the
- *  non-destructive install direction gets a full consequence dialog. */
+ *  non-destructive install direction is (§1). */
 export function buildRemoveRequest(ext: Extension): ApprovalRequest {
   return {
     action: `Remove "${ext.name}"?`,
@@ -73,6 +71,7 @@ export function buildRemoveRequest(ext: Extension): ApprovalRequest {
   };
 }
 
+/** Structured install risk/provenance (regression-locked by p7-issue17). */
 export function buildInstallRequest(ext: Extension): ApprovalRequest {
   return {
     action: `Install "${ext.name}" from the marketplace?`,
@@ -85,32 +84,24 @@ export function buildInstallRequest(ext: Extension): ApprovalRequest {
       'The install is recorded in the audit trail and can be removed afterwards',
     ].filter((s): s is string => s !== undefined),
     riskLevel: installRiskFor(ext),
-    // #17: provenance via the structured field (rendered consistently by the
-    // modal) instead of a hand-built "Trust: …" scope string.
     trustSource: installTrustSource(ext),
   };
 }
 
 const MarketplaceApp = () => {
-  const { toast } = useToast();
-  // Connect-settled gating (BUG #7 / HomeCockpit lesson): wait for the initial
-  // connect attempt to SETTLE before firing authed calls. Gating on
-  // `connecting` (not `connected`) means a FAILED connect still runs the
-  // fetches, whose rejections surface as the error+Retry state below instead
-  // of a permanent healthy-looking empty catalog.
   const { connecting } = useService();
+  // The shared install store owns installed/installing state + the count (D1).
+  const { installedCount, hydrate, uninstall } = useInstallStore();
   const [tab, setTab] = useState<Tab>('browse');
   const [facet, setFacet] = useState<Facet>('all');
   const [query, setQuery] = useState('');
   const [extensions, setExtensions] = useState<Extension[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [installing, setInstalling] = useState<string | null>(null);
-  const [confirmTarget, setConfirmTarget] = useState<Extension | null>(null);
   const [removeTarget, setRemoveTarget] = useState<Extension | null>(null);
-  const [federatedNote, setFederatedNote] = useState<string | null>(null);
-  // Monotonic request token — only the LATEST loadFacet call may commit state
-  // (rapid facet clicks / debounced queries can settle out of order).
+  const [removing, setRemoving] = useState(false);
+  const [shelfNote, setShelfNote] = useState<string | null>(null);
+  // Monotonic request token — only the LATEST loadFacet call may commit state.
   const requestSeq = useRef(0);
 
   const loadFacet = useCallback(async (f: Facet, q: string) => {
@@ -127,12 +118,7 @@ const MarketplaceApp = () => {
             adapter.getMarketplace({ type: 'skill', ...(q ? { query: q } : {}), limit: 30 }),
             adapter.getMarketplacePacks(),
           ]);
-          if (pkgs.status === 'rejected' && packs.status === 'rejected') {
-            // Both skill sources down — propagate so the all-rejected
-            // detection below can render error+Retry instead of a
-            // healthy-looking empty facet.
-            throw pkgs.reason;
-          }
+          if (pkgs.status === 'rejected' && packs.status === 'rejected') throw pkgs.reason;
           if (pkgs.status === 'fulfilled') {
             out.push(...((pkgs.value.packages ?? []) as MarketplacePackageRow[]).map(fromMarketplacePackage));
           }
@@ -142,38 +128,25 @@ const MarketplaceApp = () => {
           return out;
         })());
       }
+      if (want('connector')) {
+        jobs.push(adapter.getConnectors().then(cs => cs.map(fromConnector)));
+      }
       if (want('mcp')) {
-        // Local MCP Hub catalog (federated — installs run through S08)…
+        // Local MCP Hub catalog (enableable in-place via the store, D3)…
         jobs.push(adapter.getMcps().then(rows => (rows as McpCatalogRow[]).map(fromMcpCatalogRow)));
-        // …plus registry packages with waggle_install_type='mcp', which DO
-        // install here through the real package route. ('plugin'-typed
-        // registry packages have no B7 facet and are deliberately not
-        // surfaced pending a ratified home — see the B7 delta doc.)
+        // …plus registry packages with waggle_install_type='mcp', which install
+        // through the real package route.
         jobs.push(
           adapter.getMarketplace({ type: 'mcp', ...(q ? { query: q } : {}), limit: 30 })
             .then(r => ((r.packages ?? []) as MarketplacePackageRow[]).map(fromMarketplacePackage)),
         );
-      }
-      if (want('agent')) {
-        jobs.push(adapter.getPersonas().then(ps => ps.map(fromPersona)));
-      }
-      if (want('connector')) {
-        jobs.push(adapter.getConnectors().then(cs => cs.map(fromConnector)));
-      }
-      if (want('model')) {
-        jobs.push(adapter.getModels().then(ms => ms.map(fromModel)));
-      }
-      if (want('template')) {
-        jobs.push(adapter.getWorkspaceTemplates().then(t => (t.templates ?? []).map(fromTemplate)));
       }
 
       const settled = await Promise.allSettled(jobs);
       if (seq !== requestSeq.current) return; // stale — a newer request owns the state
       const merged = settled.flatMap(s => (s.status === 'fulfilled' ? s.value : []));
       setExtensions(sortExtensions(merged));
-      setFederatedNote(f !== 'all' && f !== 'skill' ? FEDERATED_NOTES[f] ?? null : null);
-      // All-rejected = the backend is down/unreachable — say so honestly
-      // instead of rendering a healthy-looking empty catalog.
+      setShelfNote(f !== 'all' ? SHELF_NOTES[f] ?? null : null);
       setLoadError(settled.length > 0 && settled.every(s => s.status === 'rejected')
         ? 'Could not load extensions — the server may be unreachable.'
         : null);
@@ -187,18 +160,16 @@ const MarketplaceApp = () => {
     }
   }, []);
 
-  // Fetch once the connect attempt has settled AND on facet change.
+  // Fetch once the connect attempt has settled AND on facet change. Re-hydrate
+  // the store too (D4) so installs made in the Hubs reconcile into the grid.
   useEffect(() => {
     if (connecting) return;
     void loadFacet(facet, query);
+    void hydrate();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- query is read live; query EDITS go through the debounced effect below
-  }, [connecting, facet, loadFacet]);
+  }, [connecting, facet, loadFacet, hydrate]);
 
-  // Debounced search — server query for marketplace facets, client filter
-  // below. Runs ONLY when the query actually changed (skipping mount and
-  // facet clicks avoids double-fetching the effect above); the cleanup clears
-  // any pending timer when the facet flips mid-debounce, so a stale timer can
-  // never load the OLD facet over the new one.
+  // Debounced search — server query for marketplace facets, client filter below.
   const lastQueryRef = useRef(query);
   useEffect(() => {
     if (connecting) return;
@@ -208,56 +179,14 @@ const MarketplaceApp = () => {
     return () => clearTimeout(t);
   }, [connecting, facet, query, loadFacet]);
 
-  const dispatchTierEvent = (detail: { required?: string; actual?: string }, name: string) => {
-    window.dispatchEvent(new CustomEvent('waggle:tier-insufficient', {
-      detail: {
-        required: detail.required ?? 'PRO',
-        actual: detail.actual ?? 'FREE',
-        message: `Installing "${name}" needs a Pro plan or active trial.`,
-      },
-    }));
-  };
-
-  /** Runs AFTER the ApprovalModal confirm. Only kind 'package' is installable
-   *  here — packs render browse-only (no pack-install route exists; see
-   *  fromSkillPack) and federated kinds deep-link to their owning app. */
-  const handleInstall = async (ext: Extension) => {
-    if (ext.kind !== 'package' || ext.packageId == null) return;
-    setInstalling(ext.id);
-    try {
-      const res = await adapter.installMarketplacePackage(ext.packageId);
-      if (res.ok) {
-        toast({ title: 'Installed', description: `${ext.name} installed successfully` });
-        setExtensions(prev => prev.map(e => e.id === ext.id ? { ...e, installed: true, lifecycle: 'installed' } : e));
-        return;
-      }
-      const err = await res.json().catch(() => ({ error: 'Install failed' }));
-      // Only a REAL tier rejection routes to the UpgradeModal — a 403 can
-      // also be a route-level SecurityGate block ({blocked, severity, message}),
-      // which must surface as a security failure, not an upsell.
-      if (res.status === 403 && err.error === 'TIER_INSUFFICIENT') {
-        dispatchTierEvent(err as { required?: string; actual?: string }, ext.name);
-        return;
-      }
-      const blockedMsg = err.blocked
-        ? `Security scan blocked install (severity: ${err.severity}). ${err.message ?? ''}`
-        : (err.error ?? err.message ?? 'Unknown error');
-      toast({ title: 'Install failed', description: blockedMsg, variant: 'destructive' });
-    } catch {
-      toast({ title: 'Install failed', description: 'Server unreachable', variant: 'destructive' });
-    } finally {
-      setInstalling(null);
-    }
-  };
-
+  /** Remove confirmed → uninstall through the store so the count bar + every
+   *  other view reflect it. The store toasts + reconciles on failure. */
   const handleUninstall = async (ext: Extension) => {
-    if (ext.kind !== 'package' || ext.packageId == null) return;
+    setRemoving(true);
     try {
-      await adapter.uninstallMarketplacePackage(ext.packageId);
-      toast({ title: 'Uninstalled', description: `${ext.name} removed` });
-      setExtensions(prev => prev.map(e => e.id === ext.id ? { ...e, installed: false, lifecycle: 'available' } : e));
-    } catch {
-      toast({ title: 'Uninstall failed', variant: 'destructive' });
+      await uninstall(ext);
+    } finally {
+      setRemoving(false);
     }
   };
 
@@ -274,12 +203,12 @@ const MarketplaceApp = () => {
         <div className="flex items-center gap-3 mb-3">
           <Store className="w-5 h-5" style={{ color: 'var(--honey-500)' }} />
           <h2 className="text-sm font-display font-semibold text-foreground">Marketplace</h2>
-          <span className="text-[11px] text-muted-foreground ml-auto">{visible.length} extensions</span>
+          {/* D1: honest global count of installed/connected/enabled capabilities. */}
+          <span data-testid="install-count" className="text-[11px] text-muted-foreground ml-auto">
+            {installedCount} installed
+          </span>
         </div>
 
-        {/* All tabs stay in the Tab order (FilesAppTabs pattern) — a roving
-            tabIndex without arrow-key handling makes every inactive tab
-            keyboard-unreachable (WCAG 2.1.1). */}
         <div className="flex gap-1 mb-3" role="tablist" aria-label="Marketplace sections">
           {(['browse', 'audit'] as Tab[]).map(t => (
             <button
@@ -298,9 +227,9 @@ const MarketplaceApp = () => {
 
         {tab === 'browse' && (
           <>
-            {/* B7 facet rail */}
+            {/* Four-shelf rail (D2) */}
             <div className="flex flex-wrap gap-1.5 mb-3" data-testid="extension-facets">
-              {(['all', ...EXTENSION_TYPES] as Facet[]).map(f => (
+              {SHELVES.map(f => (
                 <button
                   key={f}
                   onClick={() => setFacet(f)}
@@ -321,7 +250,7 @@ const MarketplaceApp = () => {
               <Input
                 value={query}
                 onChange={e => setQuery(e.target.value)}
-                placeholder="Search skills, agents, connectors, MCPs, models, templates..."
+                placeholder="Search skills, connectors, MCP servers..."
                 className="flex-1 bg-transparent text-sm border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0"
               />
               {loading && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
@@ -336,9 +265,14 @@ const MarketplaceApp = () => {
           <InstallAuditPanel showFilter limit={30} />
         ) : (
           <>
-            {federatedNote && (
+            {/* Screen-09 agent-search bar — ask for a capability; the three-up
+                suggestion installs through the same store as the grid below. */}
+            <AgentSearchBox />
+            <div className="border-t border-border/20 my-1" />
+
+            {shelfNote && (
               <p data-testid="federated-note" className="text-[11px] text-muted-foreground bg-muted/40 border border-border/30 rounded-lg px-2.5 py-1.5">
-                {federatedNote}
+                {shelfNote}
               </p>
             )}
 
@@ -374,9 +308,7 @@ const MarketplaceApp = () => {
               <ExtensionCard
                 key={ext.id}
                 ext={ext}
-                installing={installing === ext.id}
-                onInstall={setConfirmTarget}
-                onUninstall={setRemoveTarget}
+                onRemove={setRemoveTarget}
                 onOpenIn={handleOpenIn}
               />
             ))}
@@ -384,25 +316,12 @@ const MarketplaceApp = () => {
         )}
       </div>
 
-      {/* Install confirm — shared ApprovalModal with scan-derived risk */}
-      <ApprovalModal
-        request={confirmTarget ? buildInstallRequest(confirmTarget) : null}
-        approveLabel="Install"
-        busy={installing !== null}
-        onApprove={() => {
-          const target = confirmTarget;
-          setConfirmTarget(null);
-          if (target) void handleInstall(target);
-        }}
-        onCancel={() => setConfirmTarget(null)}
-      />
-
-      {/* Remove confirm — destructive direction gets the same consequence
-          dialog the install direction does */}
+      {/* Remove confirm — destructive direction keeps its consequence dialog
+          even though install is one-click. */}
       <ApprovalModal
         request={removeTarget ? buildRemoveRequest(removeTarget) : null}
         approveLabel="Remove"
-        busy={installing !== null}
+        busy={removing}
         onApprove={() => {
           const target = removeTarget;
           setRemoveTarget(null);

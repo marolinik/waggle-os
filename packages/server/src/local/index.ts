@@ -93,6 +93,7 @@ import { cronRoutes } from './routes/cron.js';
 import { notificationRoutes, emitNotification, emitSubagentStatus } from './routes/notifications.js';
 import { marketplaceDevRoutes } from './routes/marketplace-dev.js';
 import { marketplaceRoutes } from './routes/marketplace.js';
+import { agentSearchRoutes } from './routes/agent-search.js';
 import { connectorRoutes } from './routes/connectors.js';
 import { mcpRoutes } from './routes/mcps.js';
 import { extendRoutes } from './routes/extend.js';
@@ -757,6 +758,11 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
 
   // Collect all non-subagent tools first (sub-agent tools need the full list)
   const baseTools = [...mindTools, ...systemTools, ...planTools, ...gitTools, ...documentTools, ...skillTools, ...cronTools, ...searchTools, ...browserTools, ...lspTools, ...cliTools, ...insightsTools, ...connectorSearchTools, ...defaultConnectorTools];
+
+  // PR4: expose the full native-tool name union to the agent-search route so
+  // its "you already have a tool for this" lane isn't blind to search/browser/
+  // cli/cron/connector tools (the agent's own union omits them).
+  server.decorate('agentToolNames', baseTools.map(t => t.name));
 
   // Sub-agent tools — let the main agent spawn specialist sub-agents.
   // onSubAgentStatus relays start/done/error transitions to the notifications
@@ -2117,6 +2123,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(notificationRoutes);
   await server.register(marketplaceDevRoutes);
   await server.register(marketplaceRoutes);
+  await server.register(agentSearchRoutes);
   await server.register(connectorRoutes);
   // UX-Refactor Phase 4 (Extend layer): MCP Hub (S08) + the marketplace
   // bare-path alias / shared install-audit read (S21, C18). extendRoutes

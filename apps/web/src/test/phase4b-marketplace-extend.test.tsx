@@ -1,8 +1,11 @@
 /**
- * Phase 4B (S21) — consolidated Marketplace/Extend surface: B7 facet
- * switching with federate-at-read (A5), the honest federated provenance
- * notes, the ApprovalModal install confirm with scan-derived risk, and the
- * C18 shared audit feed with its type filter.
+ * PR4 Variation A (screen 09) — the Warm-Hive Marketplace surface. Supersedes
+ * the Phase-4B contract: four shelves (D2: All/Skills/Connectors/MCP),
+ * type-aware ONE-CLICK install via the shared store (D3 — Add/Connect/Enable,
+ * no pre-emptive ApprovalModal), the in-place connector token-paste (OAuth →
+ * Hub), the store-derived install count (D1), and the destructive Remove that
+ * KEEPS its consequence dialog. Security regressions (tier vs SecurityGate) are
+ * pinned in pr4-install-store; this file pins the surface wiring.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
@@ -10,170 +13,158 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 
 const mocks = vi.hoisted(() => ({
   adapter: {
-    isConnected: true,
     connect: vi.fn().mockResolvedValue(undefined),
+    forceReconnect: vi.fn().mockResolvedValue(undefined),
     getMarketplace: vi.fn(),
     getMarketplacePacks: vi.fn(),
     getMcps: vi.fn(),
-    getPersonas: vi.fn(),
     getConnectors: vi.fn(),
-    getModels: vi.fn(),
-    getWorkspaceTemplates: vi.fn(),
     installMarketplacePackage: vi.fn(),
     uninstallMarketplacePackage: vi.fn(),
-    installMarketplacePack: vi.fn(),
+    connectConnector: vi.fn().mockResolvedValue(undefined),
+    disconnectConnector: vi.fn().mockResolvedValue(undefined),
+    installMcp: vi.fn(),
+    revokeMcp: vi.fn().mockResolvedValue({ ok: true }),
     getExtendAudit: vi.fn(),
-    fetch: vi.fn(),
   },
 }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
 
 import MarketplaceApp from '@/components/os/apps/MarketplaceApp';
 import { ServiceProvider } from '@/providers/ServiceProvider';
+import { InstallProvider } from '@/providers/InstallProvider';
 
 const renderApp = () => render(
-  <ServiceProvider><TooltipProvider><MarketplaceApp /></TooltipProvider></ServiceProvider>,
+  <ServiceProvider><InstallProvider><TooltipProvider><MarketplaceApp /></TooltipProvider></InstallProvider></ServiceProvider>,
 );
+
+const skillRows = (installed = false) => ([
+  { id: 7, name: 'web-scraper', description: 'Scrape pages', waggle_install_type: 'skill', installed, scanStatus: 'passed', source: 'registry' },
+]);
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.adapter.isConnected = true;
   mocks.adapter.connect.mockResolvedValue(undefined);
-  // Real search-envelope rows discriminate via waggle_install_type (the
-  // packages table has no `type` column) — the type facet is a server-side
-  // SQL filter, so the mock branches on the requested type.
+  mocks.adapter.forceReconnect.mockResolvedValue(undefined);
   mocks.adapter.getMarketplace.mockImplementation(async (params?: { type?: string }) => (
     params?.type === 'mcp'
-      ? {
-          packages: [
-            { id: 9, name: 'pg-mcp-pkg', description: 'Registry MCP server', waggle_install_type: 'mcp', installed: false, scanStatus: 'passed', source: 'registry' },
-          ],
-          total: 1,
-        }
-      : {
-          packages: [
-            { id: 7, name: 'web-scraper', description: 'Scrape pages', waggle_install_type: 'skill', installed: false, scanStatus: 'passed', source: 'registry' },
-          ],
-          total: 1,
-        }
+      ? { packages: [{ id: 9, name: 'pg-mcp-pkg', description: 'Registry MCP server', waggle_install_type: 'mcp', installed: false, scanStatus: 'passed', source: 'registry' }], total: 1 }
+      : { packages: skillRows(), total: 1 }
   ));
-  // RAW MarketplacePack row shape — the route returns db.listPacks()
-  // verbatim: NO name/installed/trust fields (the bug this pins).
   mocks.adapter.getMarketplacePacks.mockResolvedValue([
     { id: 1, slug: 'research-pack', display_name: 'Research Pack', description: 'Research skills', target_roles: '["researcher"]', icon: 'book', priority: 1, connectors_needed: '[]', created_at: '2026-06-01' },
   ]);
   mocks.adapter.getMcps.mockResolvedValue([
     { id: 'postgres', name: 'PostgreSQL', description: 'Query databases', category: 'Database', installed: false },
   ]);
-  mocks.adapter.getPersonas.mockResolvedValue([
-    { id: 'researcher', name: 'Researcher', description: 'Deep research persona' },
-  ]);
   mocks.adapter.getConnectors.mockResolvedValue([
     { id: 'github', name: 'GitHub', description: 'Code hosting', service: 'github', authType: 'bearer', status: 'connected', capabilities: [], substrate: 'waggle', tools: [], category: 'development' },
   ]);
-  mocks.adapter.getModels.mockResolvedValue(['claude-fable-5']);
-  mocks.adapter.getWorkspaceTemplates.mockResolvedValue({
-    templates: [{ id: 'tpl-1', name: 'Research Workspace', description: 'Template', persona: 'researcher', connectors: [], suggestedCommands: [], starterMemory: [], builtIn: true }],
-    count: 1,
-  });
+  mocks.adapter.installMarketplacePackage.mockResolvedValue(new Response('{}', { status: 200 }));
+  mocks.adapter.uninstallMarketplacePackage.mockResolvedValue(new Response('{}', { status: 200 }));
+  mocks.adapter.installMcp.mockResolvedValue({ installed: true });
   mocks.adapter.getExtendAudit.mockResolvedValue([]);
 });
 afterEach(cleanup);
 
-describe('MarketplaceApp — consolidated Extend surface (S21)', () => {
-  it('the All facet federates every domain at read and renders merged entries', async () => {
+describe('MarketplaceApp — Warm-Hive Marketplace (PR4 Variation A)', () => {
+  it('the All shelf federates skills + connectors + MCP (and only those three)', async () => {
     renderApp();
     expect(await screen.findByText('web-scraper')).toBeInTheDocument();
-    // Raw pack row normalized at the boundary: display_name renders, and the
-    // pack is browse-only (no pack-install route exists — A4 honesty).
+    // Browse-only pack: display_name renders, no install affordance (A4).
     expect(screen.getByText('Research Pack')).toBeInTheDocument();
     expect(screen.queryByTestId('extension-install-pack:research-pack')).not.toBeInTheDocument();
     expect(screen.getByText('PostgreSQL')).toBeInTheDocument();
-    // Registry packages with waggle_install_type='mcp' surface and stay
-    // installable through the real package route.
     expect(screen.getByText('pg-mcp-pkg')).toBeInTheDocument();
-    expect(screen.getByTestId('extension-install-pkg:9')).toBeInTheDocument();
-    expect(screen.getByText('Researcher')).toBeInTheDocument();
     expect(screen.getByText('GitHub')).toBeInTheDocument();
-    expect(screen.getByText('claude-fable-5')).toBeInTheDocument();
-    expect(screen.getByText('Research Workspace')).toBeInTheDocument();
-    // The marketplace read used the B7 type facets.
+    // Agents/models/templates are NOT in the marketplace shelf (D2).
+    expect(screen.queryByText('Researcher')).not.toBeInTheDocument();
     expect(mocks.adapter.getMarketplace).toHaveBeenCalledWith({ type: 'skill', limit: 30 });
     expect(mocks.adapter.getMarketplace).toHaveBeenCalledWith({ type: 'mcp', limit: 30 });
   });
 
-  it('the connector facet shows the honest federated note and an Open-in CTA, never an Install button', async () => {
+  it('exposes exactly the four shelves (D2)', async () => {
+    renderApp();
+    await screen.findByText('web-scraper');
+    const rail = screen.getByTestId('extension-facets');
+    expect(rail).toHaveTextContent('All');
+    expect(rail).toHaveTextContent('Skills');
+    expect(rail).toHaveTextContent('Connectors');
+    expect(rail).toHaveTextContent('MCPs');
+    expect(rail).not.toHaveTextContent('Agents');
+    expect(rail).not.toHaveTextContent('Models');
+    expect(rail).not.toHaveTextContent('Templates');
+  });
+
+  it('the install count bar reflects the store (a connected connector counts) (D1)', async () => {
+    renderApp();
+    // GitHub is connected in the mock → the store hydrates it → count = 1.
+    await waitFor(() => expect(screen.getByTestId('install-count')).toHaveTextContent('1 installed'));
+  });
+
+  it('Add installs a package one-click through the store — no ApprovalModal', async () => {
+    renderApp();
+    await screen.findByText('web-scraper');
+    fireEvent.click(screen.getByTestId('extension-install-pkg:7'));
+    await waitFor(() => expect(mocks.adapter.installMarketplacePackage).toHaveBeenCalledWith(7));
+    // One-click: the pre-emptive consequence dialog is gone for installs.
+    expect(screen.queryByTestId('approval-modal')).not.toBeInTheDocument();
+    // Reflected: the count bar ticks up (GitHub + web-scraper).
+    await waitFor(() => expect(screen.getByTestId('install-count')).toHaveTextContent('2 installed'));
+  });
+
+  it('a blocked install (SecurityGate 403) leaves the item installable — not silently added', async () => {
+    mocks.adapter.installMarketplacePackage.mockResolvedValue(
+      new Response(JSON.stringify({ blocked: true, severity: 'CRITICAL', message: 'Blocked' }), { status: 403 }));
+    renderApp();
+    await screen.findByText('web-scraper');
+    fireEvent.click(screen.getByTestId('extension-install-pkg:7'));
+    await waitFor(() => expect(mocks.adapter.installMarketplacePackage).toHaveBeenCalledWith(7));
+    // Still offers Add — a gate-rejected item never enters the installed count.
+    expect(await screen.findByTestId('extension-install-pkg:7')).toBeInTheDocument();
+    expect(screen.getByTestId('install-count')).toHaveTextContent('1 installed');
+  });
+
+  it('a disconnected connector offers Connect → token-paste → connectConnector (D3 in-place)', async () => {
+    mocks.adapter.getConnectors.mockResolvedValue([
+      { id: 'slack', name: 'Slack', description: 'Chat', service: 'slack', authType: 'bearer', status: 'disconnected', capabilities: [], substrate: 'waggle', tools: [], category: 'comms' },
+    ]);
     renderApp();
     await screen.findByText('web-scraper');
     fireEvent.click(screen.getByRole('button', { name: 'Connectors' }));
 
-    expect(await screen.findByTestId('federated-note')).toHaveTextContent(/not marketplace-backed/);
-    expect(await screen.findByText('GitHub')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Connector Hub/ })).toBeInTheDocument();
-    expect(screen.queryByText('web-scraper')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /^Install$/ })).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByTestId('extension-install-connector:slack'));
+    const input = await screen.findByTestId('connector-token-input');
+    fireEvent.change(input, { target: { value: 'xoxb-123' } });
+    fireEvent.click(screen.getByTestId('connector-token-submit'));
+    await waitFor(() => expect(mocks.adapter.connectConnector).toHaveBeenCalledWith('slack', { token: 'xoxb-123' }));
   });
 
-  it('an empty federated facet renders the honest empty state, not fake entries', async () => {
-    mocks.adapter.getModels.mockResolvedValue([]);
-    renderApp();
-    await screen.findByText('web-scraper');
-    fireEvent.click(screen.getByRole('button', { name: 'Models' }));
-    expect(await screen.findByText(/No extensions available for this facet/)).toBeInTheDocument();
-  });
-
-  it('installing a marketplace package confirms via the ApprovalModal with scan-derived risk', async () => {
-    mocks.adapter.installMarketplacePackage.mockResolvedValue({ ok: true, json: async () => ({}) });
-    renderApp();
-    await screen.findByText('web-scraper');
-    fireEvent.click(screen.getByTestId('extension-install-pkg:7'));
-
-    const modal = await screen.findByTestId('approval-modal');
-    expect(modal).toHaveTextContent('Install "web-scraper" from the marketplace?');
-    expect(modal).toHaveTextContent('Security scan: passed');
-    expect(modal).toHaveTextContent('Type: skill');
-
-    fireEvent.click(screen.getByTestId('approval-modal-approve'));
-    await waitFor(() => expect(mocks.adapter.installMarketplacePackage).toHaveBeenCalledWith(7));
-  });
-
-  it('a 403 tier package install dispatches the upgrade event instead of a raw failure', async () => {
-    mocks.adapter.installMarketplacePackage.mockResolvedValue({
-      ok: false, status: 403, json: async () => ({ error: 'TIER_INSUFFICIENT', required: 'PRO', actual: 'FREE' }),
-    });
+  it('an OAuth connector routes Connect to the Hub (no inline token field)', async () => {
+    mocks.adapter.getConnectors.mockResolvedValue([
+      { id: 'gcal', name: 'Google Calendar', description: 'Cal', service: 'google', authType: 'oauth2', status: 'disconnected', capabilities: [], substrate: 'waggle', tools: [], category: 'productivity' },
+    ]);
     const events: CustomEvent[] = [];
     const listener = (e: Event) => events.push(e as CustomEvent);
-    window.addEventListener('waggle:tier-insufficient', listener);
+    window.addEventListener('waggle:open-app', listener);
     try {
       renderApp();
       await screen.findByText('web-scraper');
-      fireEvent.click(screen.getByTestId('extension-install-pkg:7'));
-      fireEvent.click((await screen.findAllByTestId('approval-modal-approve'))[0]);
-      await waitFor(() => expect(events.length).toBeGreaterThan(0));
-      expect(events[0].detail.required).toBe('PRO');
+      fireEvent.click(screen.getByRole('button', { name: 'Connectors' }));
+      fireEvent.click(await screen.findByTestId('extension-install-connector:gcal'));
+      await waitFor(() => expect(events.some(e => e.detail.appId === 'connectors')).toBe(true));
+      expect(screen.queryByTestId('connector-token-input')).not.toBeInTheDocument();
+      expect(mocks.adapter.connectConnector).not.toHaveBeenCalled();
     } finally {
-      window.removeEventListener('waggle:tier-insufficient', listener);
+      window.removeEventListener('waggle:open-app', listener);
     }
   });
 
-  it('a 403 SecurityGate block surfaces as a security failure — NOT the upgrade modal', async () => {
-    mocks.adapter.installMarketplacePackage.mockResolvedValue({
-      ok: false, status: 403, json: async () => ({ blocked: true, severity: 'CRITICAL', message: 'Blocked by security gate' }),
-    });
-    const events: CustomEvent[] = [];
-    const listener = (e: Event) => events.push(e as CustomEvent);
-    window.addEventListener('waggle:tier-insufficient', listener);
-    try {
-      renderApp();
-      await screen.findByText('web-scraper');
-      fireEvent.click(screen.getByTestId('extension-install-pkg:7'));
-      fireEvent.click((await screen.findAllByTestId('approval-modal-approve'))[0]);
-      await waitFor(() => expect(mocks.adapter.installMarketplacePackage).toHaveBeenCalledWith(7));
-      // The block body has no TIER_INSUFFICIENT marker — no upsell event.
-      expect(events).toHaveLength(0);
-    } finally {
-      window.removeEventListener('waggle:tier-insufficient', listener);
-    }
+  it('the connector shelf shows the honest in-place note', async () => {
+    renderApp();
+    await screen.findByText('web-scraper');
+    fireEvent.click(screen.getByRole('button', { name: 'Connectors' }));
+    expect(await screen.findByTestId('federated-note')).toHaveTextContent(/vault/i);
   });
 
   it('all backends down renders the error + Retry state, never a healthy-looking empty catalog', async () => {
@@ -181,10 +172,7 @@ describe('MarketplaceApp — consolidated Extend surface (S21)', () => {
     mocks.adapter.getMarketplace.mockRejectedValue(down);
     mocks.adapter.getMarketplacePacks.mockRejectedValue(down);
     mocks.adapter.getMcps.mockRejectedValue(down);
-    mocks.adapter.getPersonas.mockRejectedValue(down);
     mocks.adapter.getConnectors.mockRejectedValue(down);
-    mocks.adapter.getModels.mockRejectedValue(down);
-    mocks.adapter.getWorkspaceTemplates.mockRejectedValue(down);
     renderApp();
     expect(await screen.findByText(/Could not load extensions/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
@@ -193,14 +181,11 @@ describe('MarketplaceApp — consolidated Extend surface (S21)', () => {
 
   it('Remove confirms through the ApprovalModal before uninstalling (no one-click destroy)', async () => {
     mocks.adapter.getMarketplace.mockImplementation(async (params?: { type?: string }) => (
-      params?.type === 'mcp'
-        ? { packages: [], total: 0 }
-        : { packages: [{ id: 7, name: 'web-scraper', description: 'Scrape pages', waggle_install_type: 'skill', installed: true, scanStatus: 'passed', source: 'registry' }], total: 1 }
+      params?.type === 'mcp' ? { packages: [], total: 0 } : { packages: skillRows(true), total: 1 }
     ));
-    mocks.adapter.uninstallMarketplacePackage.mockResolvedValue({ ok: true });
     renderApp();
     await screen.findByText('web-scraper');
-    fireEvent.click(screen.getByRole('button', { name: /Remove/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Remove/ }));
 
     const modal = await screen.findByTestId('approval-modal');
     expect(modal).toHaveTextContent('Remove "web-scraper"?');
@@ -211,25 +196,20 @@ describe('MarketplaceApp — consolidated Extend surface (S21)', () => {
     await waitFor(() => expect(mocks.adapter.uninstallMarketplacePackage).toHaveBeenCalledWith(7));
   });
 
-  it('P1b: a FAILED uninstall shows the failure toast and does NOT flip installed:false', async () => {
-    // Pre-P1b the adapter resolved error Responses, so a 500 uninstall toasted
-    // "Uninstalled" and desynced UI state; the throwing fetch routes it to the
-    // catch. Pinned at the component level (the adapter is mocked here).
+  it('a FAILED uninstall keeps the item installed (the store does not flip on error)', async () => {
     mocks.adapter.getMarketplace.mockImplementation(async (params?: { type?: string }) => (
-      params?.type === 'mcp'
-        ? { packages: [], total: 0 }
-        : { packages: [{ id: 7, name: 'web-scraper', description: 'Scrape pages', waggle_install_type: 'skill', installed: true, scanStatus: 'passed', source: 'registry' }], total: 1 }
+      params?.type === 'mcp' ? { packages: [], total: 0 } : { packages: skillRows(true), total: 1 }
     ));
     mocks.adapter.uninstallMarketplacePackage.mockRejectedValue(
       Object.assign(new Error('boom'), { name: 'AdapterHttpError', status: 500 }),
     );
     renderApp();
     await screen.findByText('web-scraper');
-    fireEvent.click(screen.getByRole('button', { name: /Remove/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Remove/ }));
     fireEvent.click(await screen.findByTestId('approval-modal-approve'));
     await waitFor(() => expect(mocks.adapter.uninstallMarketplacePackage).toHaveBeenCalledWith(7));
     // Still installed: the Remove affordance survives the failed uninstall.
-    expect(screen.getByRole('button', { name: /Remove/ })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Remove/ })).toBeInTheDocument();
   });
 
   it('the Audit tab reads the C18 shared feed and the type filter re-queries', async () => {

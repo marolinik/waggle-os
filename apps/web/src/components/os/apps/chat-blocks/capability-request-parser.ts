@@ -22,6 +22,8 @@ function parseRequest(jsonRaw: string): CapabilityRequest | null {
       source: String(obj.source),
       kind: obj.kind,
       reason: obj.reason ? String(obj.reason) : undefined,
+      ...(obj.connectorId ? { connectorId: String(obj.connectorId) } : {}),
+      ...(obj.authType ? { authType: String(obj.authType) } : {}),
     };
   } catch {
     return null;
