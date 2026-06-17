@@ -130,8 +130,9 @@ const ExtensionCard = ({ ext, onRemove, onOpenIn }: ExtensionCardProps) => {
 
       <div className="shrink-0">
         {!verb ? (
-          // Browse-only (pack) — no install path exists; nothing to act on.
-          null
+          // Browse-only (pack) — no install path exists. Label it so the
+          // absent button reads as intentional, not broken.
+          <span className="text-[11px] text-muted-foreground/60">Browse only</span>
         ) : installed ? (
           ext.kind === 'package' && onRemove ? (
             <button

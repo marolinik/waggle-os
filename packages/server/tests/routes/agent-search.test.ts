@@ -105,4 +105,15 @@ describe('pickThreeUp', () => {
     expect(picks.skill?.name).toBe('pdf-skill'); // first skill-ish by order
     expect(picks.tool?.name).toBe('web_search');
   });
+
+  it('never places one candidate in two slots (an mcp-package fills skill OR tool, not both)', () => {
+    const mcpPkg: AgentSearchCandidate = {
+      name: 'pg-mcp', type: 'marketplace', availability: 'installable', description: '', source: 'marketplace',
+      matchScore: 0.8, matchReason: 'why', installAction: 'install_capability',
+      install: { mode: 'store', extensionId: 'pkg:9', type: 'mcp', kind: 'package', packageId: 9 },
+    };
+    const picks = pickThreeUp([mcpPkg]);
+    expect(picks.skill?.name).toBe('pg-mcp'); // satisfies the skill predicate first
+    expect(picks.tool).toBeUndefined();        // already used → not duplicated into tool
+  });
 });

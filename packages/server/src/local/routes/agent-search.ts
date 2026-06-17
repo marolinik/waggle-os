@@ -102,12 +102,20 @@ export function annotateEngineCandidate(
   return { ...c, install: { mode: 'active' } };
 }
 
-/** One-of-each-kind grouping for the three-up suggestion box (§09). */
+/** One-of-each-kind grouping for the three-up suggestion box (§09). A
+ *  candidate fills at most ONE slot — an mcp-package satisfies both the skill
+ *  and tool predicates, so without this it could appear twice. */
 export function pickThreeUp(all: AgentSearchCandidate[]): AgentSearchPicks {
+  const used = new Set<AgentSearchCandidate>();
+  const take = (pred: (c: AgentSearchCandidate) => boolean): AgentSearchCandidate | undefined => {
+    const c = all.find(x => !used.has(x) && pred(x));
+    if (c) used.add(c);
+    return c;
+  };
   return {
-    connector: all.find(c => c.type === 'connector'),
-    skill: all.find(c => c.type === 'skill' || c.type === 'marketplace'),
-    tool: all.find(c => c.type === 'native' || (c.install.mode === 'store' && c.install.type === 'mcp')),
+    connector: take(c => c.type === 'connector'),
+    skill: take(c => c.type === 'skill' || c.type === 'marketplace'),
+    tool: take(c => c.type === 'native' || (c.install.mode === 'store' && c.install.type === 'mcp')),
   };
 }
 
@@ -140,13 +148,22 @@ export async function agentSearchRoutes(fastify: FastifyInstance) {
       marketplaceCandidates,
     });
 
-    const engine = proposal.candidates.map(c => annotateEngineCandidate(c, mpByName));
+    const engine = proposal.candidates
+      // Connected connectors generate `connector_<id>_<action>` native tools;
+      // those would double-surface (the dedicated connector lane already shows
+      // them, actionably). Drop them so the three-up isn't polluted.
+      .filter(c => !(c.type === 'native' && c.name.startsWith('connector_')))
+      .map(c => annotateEngineCandidate(c, mpByName));
     const connectors = scoreConnectors(fastify.connectorRegistry?.getDefinitions() ?? [], need);
     const all = [...engine, ...connectors].sort((a, b) => b.matchScore - a.matchScore);
 
+    // gapDetected over the MERGED set (the engine computes it over skills only,
+    // so a connector-only match would wrongly read gapDetected:false).
+    const hasInstallable = all.some(c => c.availability === 'installable');
+
     return {
       need,
-      gapDetected: proposal.gapDetected,
+      gapDetected: !proposal.alreadyHandled && hasInstallable,
       alreadyHandled: proposal.alreadyHandled,
       recommendation: proposal.recommendation,
       candidates: all.slice(0, 12),

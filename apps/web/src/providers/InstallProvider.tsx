@@ -87,10 +87,15 @@ export const InstallProvider = ({ children }: { children: ReactNode }) => {
   const clearInstalling = useCallback((id: string) => {
     setInstalling(prev => { const n = new Set(prev); n.delete(id); return n; });
   }, []);
+  // A confirmed flip invalidates any in-flight hydrate: bumping the seq makes a
+  // hydrate whose reads predate this flip fail its commit guard (line below),
+  // so a stale reconcile can never clobber a just-confirmed install/uninstall.
   const markInstalled = useCallback((id: string) => {
+    hydrateSeq.current += 1;
     setInstalled(prev => { const n = new Set(prev); n.add(id); return n; });
   }, []);
   const markUninstalled = useCallback((id: string) => {
+    hydrateSeq.current += 1;
     setInstalled(prev => { const n = new Set(prev); n.delete(id); return n; });
   }, []);
 
@@ -118,17 +123,18 @@ export const InstallProvider = ({ children }: { children: ReactNode }) => {
       } else {
         for (const id of prev) if (id.startsWith('mcp:')) next.add(id);
       }
-      if (skillPkgs.status === 'fulfilled' || mcpPkgs.status === 'fulfilled') {
-        for (const r of [skillPkgs, mcpPkgs]) {
-          if (r.status !== 'fulfilled') continue;
-          const pkgs = (r.value?.packages ?? []) as MarketplacePackageRow[];
-          for (const p of pkgs) if (p?.installed) next.add(`pkg:${p.id}`);
-        }
-        // Only carry over previous pkg ids when BOTH package reads failed.
-        if (skillPkgs.status === 'rejected' && mcpPkgs.status === 'rejected') {
-          for (const id of prev) if (id.startsWith('pkg:')) next.add(id);
-        }
-      } else {
+      // Add every fulfilled package read as authoritative for its type.
+      for (const r of [skillPkgs, mcpPkgs]) {
+        if (r.status !== 'fulfilled') continue;
+        const pkgs = (r.value?.packages ?? []) as MarketplacePackageRow[];
+        for (const p of pkgs) if (p?.installed) next.add(`pkg:${p.id}`);
+      }
+      // The two package reads are disjoint type-filtered sets sharing ONE `pkg:`
+      // namespace, so a single failed read leaves the namespace incomplete. If
+      // EITHER rejected, carry over prior pkg ids — over-retaining a stale pkg
+      // (corrected on the next clean hydrate) is safer than dropping a confirmed
+      // install from the count. Mirrors the connector/mcp per-domain carry-over.
+      if (skillPkgs.status === 'rejected' || mcpPkgs.status === 'rejected') {
         for (const id of prev) if (id.startsWith('pkg:')) next.add(id);
       }
       return next;

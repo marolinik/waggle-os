@@ -226,4 +226,42 @@ describe('InstallProvider — uninstall + reconcile', () => {
     expect(result.current.isInstalled('pkg:7')).toBe(true);
     expect(result.current.installedCount).toBe(2);
   });
+
+  it('a confirmed install survives a concurrent in-flight hydrate (HIGH race regression)', async () => {
+    const { result } = await mountStore();
+    // Arm a hydrate whose marketplace reads are held open (issued BEFORE the install).
+    let releaseSkill = () => {};
+    let releaseMcp = () => {};
+    mocks.adapter.getMarketplace.mockImplementation((p: { type?: string }) =>
+      p?.type === 'skill'
+        ? new Promise(res => { releaseSkill = () => res({ packages: [] }); })
+        : new Promise(res => { releaseMcp = () => res({ packages: [] }); }));
+
+    let hydratePromise!: Promise<void>;
+    act(() => { hydratePromise = result.current.hydrate(); }); // in-flight; reads held
+    // Confirm an install while the stale hydrate is mid-flight.
+    await act(async () => { await result.current.install(pkg(9, 'Foo')); });
+    expect(result.current.isInstalled('pkg:9')).toBe(true);
+
+    // Release the stale reads — the hydrate's commit must ABORT (the flip bumped
+    // the seq), so it cannot wipe the just-confirmed install.
+    await act(async () => { releaseSkill(); releaseMcp(); await hydratePromise; });
+    expect(result.current.isInstalled('pkg:9')).toBe(true);
+    expect(result.current.installedCount).toBe(1);
+  });
+
+  it('an asymmetric package-read failure preserves the failed domain pkg ids (MEDIUM regression)', async () => {
+    mocks.adapter.getMarketplace.mockImplementation((p: { type?: string }) =>
+      Promise.resolve({ packages: p?.type === 'skill' ? [{ id: 7, installed: true }] : [{ id: 99, installed: true }] }));
+    const { result } = await mountStore();
+    expect(result.current.installedCount).toBe(2);
+
+    // Re-hydrate: skill read OK, mcp read REJECTS → pkg:99 must NOT be dropped.
+    mocks.adapter.getMarketplace.mockImplementation((p: { type?: string }) =>
+      p?.type === 'skill' ? Promise.resolve({ packages: [{ id: 7, installed: true }] }) : Promise.reject(new Error('500')));
+    await act(async () => { await result.current.hydrate(); });
+    expect(result.current.isInstalled('pkg:7')).toBe(true);
+    expect(result.current.isInstalled('pkg:99')).toBe(true);
+    expect(result.current.installedCount).toBe(2);
+  });
 });

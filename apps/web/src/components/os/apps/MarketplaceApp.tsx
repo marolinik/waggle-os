@@ -50,9 +50,10 @@ const SHELF_NOTES: Partial<Record<Facet, string>> = {
 
 /** Scan/trust → ApprovalModal risk. P7/D15 A7: delegates to the shared
  *  classifyInstallRisk so every install surface maps the same scan/trust signal
- *  to the same risk level (divergence #8). Kept (regression-locked by
- *  p7-a7-install-risk) even though install is now one-click — it documents the
- *  canonical risk mapping and is reused by buildInstallRequest. */
+ *  to the same risk level (divergence #8). Intentionally retained as the
+ *  canonical install-risk mapping, regression-locked by p7-a7-install-risk; it
+ *  has NO production render-path caller (install is one-click, §1) — do not
+ *  re-wire an install ApprovalModal off this chain without a design decision. */
 export function installRiskFor(ext: Extension): ApprovalRequest['riskLevel'] {
   return classifyInstallRisk({ scanStatus: ext.scanStatus, trust: ext.trust });
 }
