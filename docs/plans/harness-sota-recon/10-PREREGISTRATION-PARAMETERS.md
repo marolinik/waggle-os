@@ -142,7 +142,7 @@ co-primary for the Opus ceiling. [REC]
 |---|---|---|
 | `k` | **4** (τ² leaderboard reports pass^1..4) | [REC] |
 | Trial stochasticity | Qwen: **temperature 0.7**; Opus 4.8 / GPT-5.5 (no temp): use native sampling at a **fixed reasoning effort** (§ below) — report **observed inter-trial trajectory diversity for BOTH arms** so reliability isn't "won" by variance collapse | [REC] (`03` B5) |
-| Reasoning/thinking effort | pin a single level per model (Opus `effort=high`, GPT-5.5 `reasoning_effort=medium`, Qwen thinking=on) **AND sweep it** (publish the curve — HAL: more effort often hurts) | [REC] (`03` D5) |
+| Reasoning/thinking effort | pin a single level per model (Opus `effort=high`, GPT-5.5 `reasoning_effort=medium`, Qwen thinking=on) **AND sweep it** (publish the curve — HAL: more effort often hurts). **Pilot-confirmed 2026-06-17:** omitting `reasoning_effort` is NOT "default medium" for τ²'s `llm_agent` — tau2's default agent `llm_args` is temperature-only and `drop_params` strips it, so gpt-5.x runs with reasoning effectively OFF (`reasoning_tokens=0`), costing ~6.6pp on τ²-retail. **Effort MUST be passed explicitly via `--agent-llm-args`.** The RULER reproduction uses `high` (matches the published `*_HIGH` leaderboard numbers); the study arms pin per-model + sweep. | [REC] (`03` D5; docs/12) |
 | Turn/latency budget | **maxTurns = 30** (pinned constant) + a **sensitivity run at maxTurns = 20** | [PILOT] (`03` B3) |
 
 ---

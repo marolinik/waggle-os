@@ -9,8 +9,10 @@
     "user_simulator": "gpt-5.2",
     "num_trials": 4,
     "metric": "pass_1",
+    "agent_reasoning_effort": "high",
+    "max_steps": 200,
     "leaderboard": "Sierra τ²-bench (taubench.com); arXiv:2506.07982",
-    "note": "user_simulator MUST equal gpt-5.2 — every published number below is conditioned on it; a different user-sim invalidates the comparison."
+    "note": "user_simulator MUST equal gpt-5.2 AND the agent MUST run reasoning_effort=high with max_steps=200 (the published gpt-5.x numbers are the *_HIGH variants; the board's gpt-5.2 'none' retail = 75.00 vs 'high' = 81.58). The 2026-06-17 pilot proved that omitting reasoning_effort (tau2's default agent llm_args is temperature-only, dropped for gpt-5.x → reasoning OFF) + max_steps=30 cost ~13pp (docs/12 forensics). A different user-sim, effort, or step budget invalidates the comparison."
   },
   "anchors": [
     {

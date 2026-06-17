@@ -15,10 +15,25 @@
 
 | Anchor | Status | Reproduced pass^1 | Published | Verdict |
 |---|---|---|---|---|
-| retail × gpt-5.2 | ran 456 sims (402 valid, **54 infra-errored on quota**) | **68.16%** | 81.58% | **INVALID — contaminated** |
+| retail × gpt-5.2 | ran 456 sims (402 valid, 54 infra-errored) | **68.16%** | 81.58% | **INVALID — config gap (reasoning OFF + max_steps 30)** |
 | banking × gpt-5.5 | smoke only; **2/2 sims quota-errored** | — | 37.37% | not yet run |
 
-**The retail 68.16% is NOT a usable ruler verdict.** The run was throttled throughout (680 rate-limit log lines, 54 infra errors); rate-limits firing *mid-conversation* break tool calls and depress pass-rate (a throttled mid-task call = a failed task that would otherwise pass). The 13pp gap cannot be attributed to the substrate until a CLEAN re-run. Cost of this run: **$19.45** (agent $14.83 + user $4.62), ≈ $0.048/valid-sim.
+### Root cause of the retail gap — FORENSICS 2026-06-17 (NOT contamination)
+
+A 3-analyst forensic pass on the existing run data proved the 13.4pp gap is a **config-apparatus mismatch**, not rate-limit contamination and **not a substrate failure** (this was the stock `llm_agent`; the Waggle bridge was never in the path). Two additive levers fully account for it:
+
+1. **`reasoning_effort` was never sent.** τ²'s default agent `llm_args = {temperature:0.0}` only; `litellm.drop_params=True` discards `temperature` for gpt-5.2 and **nothing else is sent**, so gpt-5.2 ran at default effort — `reasoning_tokens=0` on **all 3,940 assistant turns** (57 median completion tokens, 1.9s/turn = a reasoning model not thinking). The published `gpt-5-2_sierra` retail run was `reasoning_effort:high` (81.58); the board's own `none` variant = 75.00 → **high−none ≈ 6.6pp**.
+2. **`max_steps=30` vs τ² `DEFAULT_MAX_STEPS=200`** (`config.py:4`). 35/402 valid sims hit the ceiling (force-scored 0); excluding them lifts pass^1 to **74.66% (+6.5pp)**.
+
+~6.6pp (effort) + ~6.5pp (truncation) ≈ the full 13.4pp. The 54 infra-errors were correctly excluded; τ² retries are transparent so the 402 valid sims were an unbiased sample (the gap is real config, which a clean re-run with the fix resolves). Cost of the (now-superseded) run: **$19.45**.
+
+**Broader implication (benchmark-wide):** every gpt-5.x / reasoning arm (Opus, Gemini too) MUST pin `reasoning_effort` + use `max_steps=200`, or every number is wrong. This empirically validates param-sheet §5.3 ("pin a single effort level per model").
+
+### Corrected, committed run recipe
+
+- `benchmarks/tau2/run-ruler-retail.sh` — retail × gpt-5.2, `--agent-llm-args '{"reasoning_effort":"high"}'`, `--max-steps 200`, `--max-concurrency 4`.
+- `benchmarks/tau2/run-ruler-banking.sh` — banking × gpt-5.5 (`alltools`) inside `harness-tau2-linux`, same effort/steps.
+- Score from τ²'s own per-task pass^1, not a flat mean. Run anchors **sequentially** at concurrency 4 (the account's RPM tier throttled at combined concurrency 8 — separate from the now-resolved credit cap).
 
 ## BLOCKER (founder action)
 
