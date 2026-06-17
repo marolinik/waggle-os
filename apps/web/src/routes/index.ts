@@ -53,3 +53,6 @@ export { default as MissionControlRoute } from './MissionControlRoute';
 export { default as TimelineRoute } from './TimelineRoute';
 export { default as EventsRoute } from './EventsRoute';
 export { default as UsageRoute } from './UsageRoute';
+// PR6a — ⌘K-only static surfaces (Benchmarks · Platform)
+export { default as BenchmarkRoute } from './BenchmarkRoute';
+export { default as PlatformRoute } from './PlatformRoute';

@@ -4,6 +4,7 @@ import {
   Plus, Rocket, Settings, Sparkles,
   Network, Server, Plug, Store, Package, Shield, Clock, FolderOpen,
   Lock, Activity, History, BarChart3, Users, Radio,
+  Gauge, Monitor,
 } from "lucide-react";
 
 /**
@@ -89,6 +90,8 @@ export function buildCommandCatalog(ctx: CatalogContext): CatalogGroup[] {
     { id: "timeline", group: "power", name: "Timeline", subtitle: "activity history", icon: History, to: "/settings/timeline" },
     { id: "events", group: "power", name: "Events & logs", subtitle: "live activity feed", icon: Radio, to: "/settings/events" },
     { id: "usage", group: "power", name: "Usage & cost", subtitle: "tokens · spend", icon: BarChart3, to: "/settings/usage" },
+    { id: "benchmarks", group: "power", name: "Benchmarks", subtitle: "capabilities · memory SOTA", icon: Gauge, to: "/benchmarks" },
+    { id: "platform", group: "power", name: "Platform & roadmap", subtitle: "desktop · what's coming", icon: Monitor, to: "/platform" },
     { id: "team", group: "power", name: "Team governance", subtitle: "rules · permissions · oversight", icon: Shield, to: "/team", minBillingRank: TEAMS_RANK },
   ];
 

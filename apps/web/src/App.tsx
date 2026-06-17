@@ -33,6 +33,8 @@ import {
   TimelineRoute,
   EventsRoute,
   UsageRoute,
+  BenchmarkRoute,
+  PlatformRoute,
 } from "@/routes";
 
 // Theme is now owned by <ThemeProvider>; the pre-paint apply lives in main.tsx
@@ -90,6 +92,9 @@ const App = () => (
                 <Route path="settings/timeline" element={<TimelineRoute />} />
                 <Route path="settings/events" element={<EventsRoute />} />
                 <Route path="settings/usage" element={<UsageRoute />} />
+                {/* ── PR6a: ⌘K-only static surfaces ── */}
+                <Route path="benchmarks" element={<BenchmarkRoute />} />
+                <Route path="platform" element={<PlatformRoute />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Route>
