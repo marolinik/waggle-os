@@ -28,6 +28,7 @@ import {
 } from '@/lib/extension-catalog';
 import ExtensionCard from './extend/ExtensionCard';
 import InstallAuditPanel from './extend/InstallAuditPanel';
+import AgentSearchBox from './extend/AgentSearchBox';
 
 /** The four shelves (D2) — the design's "one simple shelf" set. */
 const SHELVES = ['all', 'skill', 'connector', 'mcp'] as const;
@@ -263,6 +264,11 @@ const MarketplaceApp = () => {
           <InstallAuditPanel showFilter limit={30} />
         ) : (
           <>
+            {/* Screen-09 agent-search bar — ask for a capability; the three-up
+                suggestion installs through the same store as the grid below. */}
+            <AgentSearchBox />
+            <div className="border-t border-border/20 my-1" />
+
             {shelfNote && (
               <p data-testid="federated-note" className="text-[11px] text-muted-foreground bg-muted/40 border border-border/30 rounded-lg px-2.5 py-1.5">
                 {shelfNote}
