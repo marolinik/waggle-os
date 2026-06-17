@@ -68,7 +68,7 @@ const CockpitApp = () => {
   const HEALTHY = new Set(['healthy', 'ok', 'green', 'up', 'online']);
   const DEGRADED = new Set(['degraded', 'warning', 'warn', 'amber', 'yellow']);
   const _healthStatus = (data.health?.status ?? '').toLowerCase();
-  const healthColor = HEALTHY.has(_healthStatus) ? 'text-emerald-400' : DEGRADED.has(_healthStatus) ? 'text-amber-400' : 'text-destructive';
+  const healthColor = HEALTHY.has(_healthStatus) ? 'text-[var(--healthy)]' : DEGRADED.has(_healthStatus) ? 'text-[var(--attention)]' : 'text-destructive';
 
   return (
     <div className="h-full overflow-auto p-4">
@@ -108,8 +108,8 @@ const CockpitApp = () => {
           {data.health?.status === 'degraded' && data.health.services && data.health.services.filter(s => s.status !== 'healthy').length > 0 && (
             <div className="mt-2 space-y-0.5">
               {data.health.services.filter(s => s.status !== 'healthy').map(s => (
-                <p key={s.name} className="text-[11px] text-amber-400/80 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+                <p key={s.name} className="text-[11px] text-[var(--attention)]/80 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--attention)] shrink-0" />
                   {s.name}: {s.status}
                 </p>
               ))}
@@ -146,7 +146,7 @@ const CockpitApp = () => {
               <span className="text-xs font-display font-medium text-foreground">Memory Weaver</span>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Status: <span className={data.weaver.status === 'active' ? 'text-green-400' : 'text-muted-foreground'}>{data.weaver.status}</span>
+              Status: <span className={data.weaver.status === 'active' ? 'text-[var(--healthy)]' : 'text-muted-foreground'}>{data.weaver.status}</span>
             </p>
             {data.weaver.lastConsolidation && (
               <p className="text-[11px] text-muted-foreground">
@@ -188,7 +188,7 @@ const CockpitApp = () => {
               {data.crons.slice(0, 3).map(c => (
                 <div key={c.id} className="flex items-center justify-between text-xs">
                   <span className="text-foreground truncate">{c.name}</span>
-                  <span className={c.enabled ? 'text-emerald-400' : 'text-muted-foreground'}>{c.schedule}</span>
+                  <span className={c.enabled ? 'text-[var(--healthy)]' : 'text-muted-foreground'}>{c.schedule}</span>
                 </div>
               ))}
               {data.crons.length > 3 && (
@@ -213,7 +213,7 @@ const CockpitApp = () => {
               {data.connectors.map(c => (
                 <div key={c.id} className="flex items-center justify-between text-xs">
                   <span className="text-foreground">{c.name}</span>
-                  <span className={c.status === 'connected' ? 'text-emerald-400' : 'text-muted-foreground'}>{c.status}</span>
+                  <span className={c.status === 'connected' ? 'text-[var(--healthy)]' : 'text-muted-foreground'}>{c.status}</span>
                 </div>
               ))}
             </div>
@@ -254,7 +254,7 @@ const CockpitApp = () => {
                 {data.health.services.map(s => (
                   <div key={s.name} className="flex items-center justify-between text-xs">
                     <span className="text-foreground">{s.name}</span>
-                    <span className={s.status === 'running' ? 'text-emerald-400' : 'text-destructive'}>{s.status}</span>
+                    <span className={s.status === 'running' ? 'text-[var(--healthy)]' : 'text-destructive'}>{s.status}</span>
                   </div>
                 ))}
               </div>
