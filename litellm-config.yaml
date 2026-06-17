@@ -417,6 +417,16 @@ model_list:
       api_key: os.environ/GEMINI_API_KEY
       rpm: 20
 
+  # GPT-5.2 — the τ²-bench v0.2.1-dev USER SIMULATOR pinned by the published
+  # leaderboard protocol (every reproduced number is conditioned on it), AND the
+  # retail ruler cross-check agent. Direct OpenAI Chat Completions via the local
+  # alias (same direct-not-OpenRouter rationale as gpt-5.4/5.5). Added 2026-06-17
+  # for the harness-SOTA ruler reproduction (docs/plans/harness-sota-recon/11).
+  - model_name: gpt-5.2
+    litellm_params:
+      model: openai/gpt-5.2
+      api_key: os.environ/OPENAI_API_KEY
+
   # GPT-5.4 — OpenAI's flagship (released Mar 5, 2026)
   # Strong judgment on structured outputs. Neutral to all candidates.
   - model_name: gpt-5.4
@@ -446,6 +456,16 @@ model_list:
     litellm_params:
       model: openai/gpt-5.5-2026-04-23
       api_key: os.environ/OPENAI_API_KEY
+
+  # text-embedding-3-large — the τ²-bench banking_knowledge KB embedder (the RAG
+  # front-end over the 700-doc knowledge base). Required to reproduce the banking
+  # ruler anchor with the published retrieval config. Added 2026-06-17 (docs/11).
+  - model_name: text-embedding-3-large
+    litellm_params:
+      model: openai/text-embedding-3-large
+      api_key: os.environ/OPENAI_API_KEY
+    model_info:
+      mode: embedding
 
   # Grok 4.20 — xAI frontier with reasoning toggle (released Mar 31, 2026)
   # 2M context, lowest hallucination rate on market. Fully outside

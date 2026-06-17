@@ -126,6 +126,17 @@
     "pinning_surface_carve_out_reason": "Sprint 12 Task 2 C3 Stage 2 mini (2026-04-23): routing pivoted from OpenRouter bridge to direct OpenAI Chat Completions via LiteLLM local alias `gpt-5.4` → `openai/gpt-5.4` (eliminates ~5-15% OpenRouter middleware markup + preserves token-level telemetry for EU AI Act Art. 14 replay). OpenAI does not expose immutable model snapshots for the gpt-5.x family; floating alias mandated by B3 addendum § 5.",
     "judge_role": "primary"
   },
+  "gpt-5.2": {
+    "id": "gpt-5.2",
+    "displayName": "GPT-5.2 (τ²-bench v0.2.1-dev user-simulator + retail ruler cross-check agent)",
+    "provider": "openai_via_openrouter",
+    "litellmModel": "gpt-5.2",
+    "pricePerMillionInput": 5.0,
+    "pricePerMillionOutput": 30.0,
+    "contextWindow": 400000,
+    "pinning_surface": "floating_alias",
+    "pinning_surface_carve_out_reason": "Added 2026-06-17 for the harness-SOTA ruler reproduction (docs/plans/harness-sota-recon/11). LiteLLM local alias `gpt-5.2` -> `openai/gpt-5.2` (direct OpenAI Chat Completions). This is the τ²-bench v0.2.1-dev USER SIMULATOR pinned by the published leaderboard protocol (every reproduced number is conditioned on user_simulator=gpt-5.2) AND the agent for the retail ruler cross-check (published retail pass^1=81.58). Price/ctx mirrored from the gpt-5.5 sibling — verify vs OpenAI docs before the cost-accounting freeze. OpenAI does not expose immutable model snapshots for the gpt-5.x family; floating alias mandated by B3 addendum § 5."
+  },
   "gpt-5.5": {
     "id": "gpt-5.5",
     "displayName": "GPT-5.5 (Plan 05 frontier baseline subject — additional frontier ceiling for H3)",
