@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { rawId, isTogglable, describeError } from './install-store';
+import { rawId, isTogglable, describeError, isTierError } from './install-store';
 
 describe('rawId', () => {
   it('strips the namespace prefix', () => {
@@ -41,5 +41,17 @@ describe('describeError', () => {
   it('falls back for non-errors', () => {
     expect(describeError('nope')).toBe('Server unreachable');
     expect(describeError(undefined)).toBe('Server unreachable');
+  });
+});
+
+describe('isTierError', () => {
+  it('is true for a 403 with the TIER_INSUFFICIENT marker', () => {
+    expect(isTierError({ status: 403, body: { error: 'TIER_INSUFFICIENT' } })).toBe(true);
+  });
+  it('is false for other 403s, other statuses, and non-errors', () => {
+    expect(isTierError({ status: 403, body: { error: 'blocked' } })).toBe(false);
+    expect(isTierError({ status: 500, body: { error: 'TIER_INSUFFICIENT' } })).toBe(false);
+    expect(isTierError(new Error('boom'))).toBe(false);
+    expect(isTierError(undefined)).toBe(false);
   });
 });

@@ -1,6 +1,28 @@
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
 import type { FastifyInstance } from 'fastify';
 import type { ConnectorHealth } from '@waggle/shared';
+import { getCapabilities, parseTier, type Tier } from '@waggle/shared';
 import type { RecordAuditInput } from '@waggle/core';
+
+/**
+ * Tier cap for connecting connectors (CLAUDE.md moat: skills + connectors are
+ * the upgrade trigger). FREE has a finite connectorLimit; PRO+ is unlimited
+ * (-1). Re-connecting an already-connected connector (token refresh) does NOT
+ * count against the cap. Returns the 403 payload data if the cap is exceeded,
+ * else null. Pure (no IO) so it is unit-testable.
+ */
+export function connectorCapExceeded(
+  tier: Tier,
+  connectedIds: string[],
+  id: string,
+): { limit: number; current: number } | null {
+  const limit = getCapabilities(tier).connectorLimit;
+  if (limit <= 0) return null; // unlimited
+  if (connectedIds.includes(id)) return null; // already connected — token refresh
+  if (connectedIds.length >= limit) return { limit, current: connectedIds.length };
+  return null;
+}
 
 /** Vault sub-key holding the C16 manual-sync stamp. Matches the
  *  `connector:{id}:*` prefix so disconnect/revoke auto-clean it. */
@@ -115,6 +137,31 @@ export async function connectorRoutes(fastify: FastifyInstance) {
     if (!value) return reply.code(400).send({ error: 'token or apiKey required' });
 
     if (!fastify.vault) return reply.code(503).send({ error: 'Vault not available' });
+
+    // Tier cap — FREE limits connectors; PRO+ unlimited. Count REAL credentialed
+    // connections (getDefinitions status==='connected' excludes the always-on
+    // mock channels). Marker `error:'TIER_INSUFFICIENT'` so the adapter's tier
+    // event + the install store's tier classification light up. Fail-open if the
+    // tier read throws (matches the workspace-limit gate).
+    try {
+      const configPath = join(fastify.localConfig.dataDir, 'config.json');
+      const tierRaw = existsSync(configPath) ? JSON.parse(readFileSync(configPath, 'utf-8')).tier : '';
+      const tier = parseTier(String(tierRaw ?? '')) ?? 'FREE';
+      const connectedIds = registry
+        ? registry.getDefinitions().filter(d => d.status === 'connected').map(d => d.id)
+        : [];
+      const cap = connectorCapExceeded(tier, connectedIds, id);
+      if (cap) {
+        return reply.code(403).send({
+          error: 'TIER_INSUFFICIENT',
+          required: 'PRO',
+          actual: tier,
+          message: `Connector limit reached for ${tier} (${cap.limit} max). Upgrade to connect more.`,
+          limit: cap.limit,
+          current: cap.current,
+        });
+      }
+    } catch { /* tier read failed — allow the connect (fail-open) */ }
 
     const connector = registry?.get(id);
     const authType = connector?.authType ?? 'bearer';

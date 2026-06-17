@@ -71,3 +71,11 @@ export function describeError(e: unknown): string {
   if (e instanceof Error && e.message) return e.message;
   return 'Server unreachable';
 }
+
+/** A thrown AdapterHttpError that is a 403 tier rejection (the adapter has
+ *  already dispatched waggle:tier-insufficient). The connector connect path
+ *  throws (vs the fetchRaw install paths whose tier body is inspected inline). */
+export function isTierError(e: unknown): boolean {
+  const err = e as { status?: number; body?: { error?: unknown } } | undefined;
+  return err?.status === 403 && err?.body?.error === 'TIER_INSUFFICIENT';
+}

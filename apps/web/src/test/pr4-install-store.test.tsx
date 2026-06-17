@@ -52,6 +52,15 @@ const connector = (id: string, name = id): InstallTarget =>
 const catalogMcp = (id: string, name = id): InstallTarget =>
   ({ id: `mcp:${id}`, type: 'mcp', kind: 'federated', name });
 
+/** AdapterHttpError stand-in (the connect path throws on !ok). */
+function httpError(status: number, body: unknown): Error {
+  const e = new Error('http') as Error & { status: number; body: unknown };
+  e.name = 'AdapterHttpError';
+  e.status = status;
+  e.body = body;
+  return e;
+}
+
 // clearAllMocks resets call history but NOT implementations, so re-establish
 // the default adapter responses before each test (otherwise a per-test
 // mockResolvedValue override leaks into the next test).
@@ -148,6 +157,16 @@ describe('InstallProvider — install dispatcher', () => {
     expect(mocks.adapter.connectConnector).toHaveBeenCalledWith('slack', { token: 'xoxb' });
     expect(result.current.isInstalled('connector:slack')).toBe(true);
     expect(mocks.toast).toHaveBeenCalledWith(expect.objectContaining({ title: 'Connected' }));
+  });
+
+  it('a connector 403 tier rejection is classified as tier (no destructive toast)', async () => {
+    mocks.adapter.connectConnector.mockRejectedValue(httpError(403, { error: 'TIER_INSUFFICIENT' }));
+    const { result } = await mountStore();
+    let outcome;
+    await act(async () => { outcome = await result.current.install(connector('slack'), { token: 'xoxb' }); });
+    expect(outcome).toEqual({ ok: false, reason: 'tier' });
+    expect(result.current.isInstalled('connector:slack')).toBe(false);
+    expect(mocks.toast).not.toHaveBeenCalled(); // the adapter dispatched the upgrade event
   });
 
   it('catalog MCP enable success flips installed', async () => {

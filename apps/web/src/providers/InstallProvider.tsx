@@ -25,7 +25,7 @@ import { useToast } from '@/hooks/use-toast';
 import { CONNECT_SETTLED_EVENT } from '@/hooks/useRevalidateOnError';
 import type { MarketplacePackageRow } from '@/lib/extension-catalog';
 import {
-  describeError, isTogglable, rawId,
+  describeError, isTierError, isTogglable, rawId,
   type InstallCredentials, type InstallOutcome, type InstallTarget,
 } from '@/lib/install-store';
 
@@ -160,6 +160,9 @@ export const InstallProvider = ({ children }: { children: ReactNode }) => {
         toast({ title: 'Connected', description: `${target.name} is connected.` });
         return { ok: true };
       } catch (e) {
+        // A 403 tier rejection — the adapter already dispatched the upgrade
+        // event; classify as tier and don't toast over it.
+        if (isTierError(e)) return { ok: false, reason: 'tier' };
         toast({ title: 'Connection failed', description: describeError(e), variant: 'destructive' });
         return { ok: false, reason: 'error' };
       } finally {
