@@ -15,8 +15,16 @@
 
 | Anchor | Status | Reproduced pass^1 | Published | Verdict |
 |---|---|---|---|---|
-| retail × gpt-5.2 | ran 456 sims (402 valid, 54 infra-errored) | **68.16%** | 81.58% | **INVALID — config gap (reasoning OFF + max_steps 30)** |
-| banking × gpt-5.5 | smoke only; **2/2 sims quota-errored** | — | 37.37% | not yet run |
+| retail × gpt-5.2 (attempt 1) | 456 sims, reasoning OFF + max_steps 30 | **68.16%** | 81.58% | INVALID — config gap (superseded) |
+| **retail × gpt-5.2 (clean)** | 456 sims, reasoning=high, steps=200 | **77.70%** | 81.58% | **✅ PASS — |Δ|=3.88pp, within ±8pp. RETAIL RULER VALIDATED** ($30.21) |
+| banking × gpt-5.5 (chat API) | 388 sims **all-errored, $0** | — | 37.37% | VOID — gpt-5.5 needs /v1/responses (→ docs/13, FIXED) |
+| **banking × gpt-5.5-responses** | running (gpt-5.5 via responses bridge) | _in progress_ | 37.37% | the real pinned primary anchor; gpt-5.5 fix verified live through tau2 |
+
+### Status 2026-06-17 (latest)
+- **Retail ruler PASSED** with the corrected config (77.70% vs 81.58%). The apparatus is validated for the dual-control machinery.
+- **gpt-5.5 responses-API blocker SOLVED** (docs/13): new `gpt-5.5-responses` litellm alias (chat→responses bridge); verified end-to-end through tau2 (tool calls execute, 0 errors). Was a benchmark-wide bug — gpt-5.5 is a study *arm*, would have all-zeroed every tool cell.
+- **Banking primary anchor now running** via `gpt-5.5-responses`.
+- **Op note:** do NOT restart the litellm proxy while a run is live — it kills in-flight connections and wedges sims in a retry loop (cost a banking re-launch this session).
 
 ### Root cause of the retail gap — FORENSICS 2026-06-17 (NOT contamination)
 
