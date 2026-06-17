@@ -27,6 +27,7 @@ import {
 } from '@/lib/settings-tier-filter';
 import ModelSelector from '@/components/os/ModelSelector';
 import ModelPilotCard from '@/components/os/ModelPilotCard';
+import { ModelGate } from '@/components/os/model-gate/ModelGate';
 import EraseDataDialog from '@/components/os/overlays/EraseDataDialog';
 import TelegramDigestCard from '@/components/os/settings/TelegramDigestCard';
 import CoverageCompassCard from '@/components/os/settings/CoverageCompassCard';
@@ -37,7 +38,7 @@ type SettingsTab = 'general' | 'models' | 'billing' | 'permissions' | 'team' | '
 const tabs: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
   { id: 'general', label: 'General', icon: Palette },
   { id: 'models', label: 'Models', icon: Cpu },
-  { id: 'billing', label: 'Billing', icon: DollarSign },
+  { id: 'billing', label: 'Plan', icon: DollarSign },
   { id: 'permissions', label: 'Permissions', icon: Shield },
   { id: 'team', label: 'Team', icon: Users },
   { id: 'backup', label: 'Backup', icon: Database },
@@ -46,7 +47,10 @@ const tabs: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
 ];
 
 const SettingsApp = () => {
-  const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+  // PR5 §11 "Models leads" — Settings opens on Models (the model gate + failover
+  // chain), the primary thing a user configures. 'models' is Essential-tier, so it
+  // is always visible regardless of the dock disclosure level.
+  const [activeTab, setActiveTab] = useState<SettingsTab>('models');
   const [defaultModel, setDefaultModel] = useState('');
   const [fallbackModel, setFallbackModel] = useState<string | null>(null);
   const [budgetModel, setBudgetModel] = useState<string | null>(null);
@@ -66,7 +70,7 @@ const SettingsApp = () => {
   const { resolvedTheme: theme, setTheme: applyTheme } = useTheme();
 
   // Provider data from single source of truth
-  const { providers, search, activeSearch, loading: providersLoading } = useProviders();
+  const { providers, search, activeSearch, loading: providersLoading, refresh: refreshProviders } = useProviders();
 
   // Dock tier
   const { state: onboardingState, update: updateOnboarding, replayTour, reset: resetOnboarding } = useOnboarding();
@@ -218,6 +222,34 @@ const SettingsApp = () => {
       {/* Content */}
       <div className="flex-1 p-4 overflow-auto" role="tabpanel">
 
+        {/* PR5 D6 — global "Show:" disclosure control (relocated from the General
+            tab's Dock Experience select). One dial governs both the dock and this
+            Settings rail's depth; reuses useOnboarding().tier — no second key. */}
+        <div className="flex items-center justify-end gap-2 mb-4">
+          <span className="text-[11px] text-muted-foreground">Show</span>
+          <div className="inline-flex rounded-lg bg-muted/40 p-0.5" role="group" aria-label="Settings detail level">
+            {([
+              { id: 'simple', label: 'Essential' },
+              { id: 'professional', label: 'Standard' },
+              { id: 'power', label: 'Everything' },
+            ] as const).map(opt => (
+              <button
+                key={opt.id}
+                type="button"
+                aria-pressed={(onboardingState.tier || 'simple') === opt.id}
+                onClick={() => updateOnboarding({ tier: opt.id as UserTier })}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                  (onboardingState.tier || 'simple') === opt.id
+                    ? 'bg-card text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* ═══ GENERAL ═══ */}
         {activeTab === 'general' && (
           <div className="space-y-5">
@@ -241,21 +273,14 @@ const SettingsApp = () => {
               </div>
             </div>
 
-            {/* Dock Experience */}
-            <div>
-              <p className="text-xs font-display font-medium text-foreground mb-2">Dock Experience</p>
-              <select
-                value={onboardingState.tier || 'simple'}
-                onChange={(e) => updateOnboarding({ tier: e.target.value as UserTier })}
-                className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-              >
-                <option value="simple">Essential — essentials only</option>
-                <option value="professional">Standard — full workspace tools</option>
-                <option value="power">Everything — all apps visible</option>
-              </select>
-              {/* QW-5: dock tier ≠ billing plan. Make that explicit. */}
-              <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">
-                Dock layout — controls which apps appear in your dock. Independent of your Pro/Teams billing plan. All apps remain accessible via Ctrl+K.
+            {/* PR5 D10 — local-first reassurance + the dock/plan distinction. The
+                disclosure selector that used to live here is now the top-right
+                "Show" control (D6); QW-5's "dock tier ≠ billing plan" note is
+                preserved here so the distinction isn't lost. */}
+            <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
+              <p className="text-xs font-display font-medium text-foreground mb-1">Local-first</p>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Waggle runs on your machine — your memory and data stay local, always. The <strong className="text-foreground">Show</strong> control (top-right) sets how much of the app and these settings you see; it’s independent of your Pro/Teams plan, and every app stays reachable via Ctrl+K.
               </p>
             </div>
 
@@ -361,6 +386,12 @@ const SettingsApp = () => {
         {/* ═══ MODELS ═══ */}
         {activeTab === 'models' && (
           <div className="space-y-5">
+            {/* PR5 — the shared ModelGate leads Models: BYO cloud key (live-validated
+                → vault) OR a local model, with the "≥1 working model" banner. onModelReady
+                refreshes this app's provider list so ModelPilotCard + the key list below
+                reflect a just-added key. */}
+            <ModelGate variant="settings" onModelReady={() => { void refreshProviders(); }} />
+
             <ModelPilotCard
               defaultModel={defaultModel}
               fallbackModel={fallbackModel}
@@ -432,7 +463,7 @@ const SettingsApp = () => {
               <div className="flex items-start gap-2.5 p-3 mb-3 rounded-lg bg-primary/10 border border-primary/30">
                 <Lock className="w-4 h-4 mt-0.5 text-primary shrink-0" />
                 <p className="text-xs text-foreground leading-relaxed">
-                  Keys are encrypted in the <strong className="text-primary">Vault</strong>. This list is read-only — to add, update, or remove a key, open the <strong className="text-primary">Vault</strong> app from the dock.
+                  Keys are encrypted in the <strong className="text-primary">Vault</strong>. Add or replace a key above, or manage every secret in the <strong className="text-primary">Vault</strong> app from the dock.
                 </p>
               </div>
 
@@ -440,16 +471,16 @@ const SettingsApp = () => {
                 {providers.filter(p => p.requiresKey).map(p => (
                   <div key={p.id} className="flex items-center justify-between p-2 rounded-lg bg-secondary/30 border border-border/30">
                     <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${p.hasKey ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
+                      <div className={`w-2 h-2 rounded-full ${p.hasKey ? 'bg-primary' : 'bg-muted-foreground/40'}`} />
                       <span className="text-xs text-foreground">{p.name}</span>
                       {p.badge && <span className="text-[11px] text-primary/60">({p.badge})</span>}
                       <span className="text-[11px] text-muted-foreground">{p.models.length} models</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                       {p.hasKey ? (
-                        <span className="text-[11px] text-emerald-400">✓ Key configured</span>
+                        <span className="text-[11px] text-primary">✓ Key configured</span>
                       ) : (
-                        <span className="text-[11px] text-amber-400">No key</span>
+                        <span className="text-[11px] text-muted-foreground">No key</span>
                       )}
                     </div>
                   </div>
@@ -466,9 +497,9 @@ const SettingsApp = () => {
                 {search.map(s => (
                   <div key={s.id} className="flex items-center gap-2 text-xs">
                     <span className="text-[11px] text-muted-foreground w-4">#{s.priority}</span>
-                    <div className={`w-1.5 h-1.5 rounded-full ${s.hasKey ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
+                    <div className={`w-1.5 h-1.5 rounded-full ${s.hasKey ? 'bg-primary' : 'bg-muted-foreground/40'}`} />
                     <span className={s.hasKey ? 'text-foreground' : 'text-muted-foreground'}>{s.name}</span>
-                    {!s.hasKey && s.id !== 'duckduckgo' && <span className="text-[11px] text-amber-400">No key</span>}
+                    {!s.hasKey && s.id !== 'duckduckgo' && <span className="text-[11px] text-muted-foreground">No key</span>}
                     {s.id === 'duckduckgo' && <span className="text-[11px] text-muted-foreground">(free, always available)</span>}
                   </div>
                 ))}
@@ -480,7 +511,7 @@ const SettingsApp = () => {
         {/* ═══ BILLING ═══ */}
         {activeTab === 'billing' && (
           <div className="space-y-5">
-            <h3 className="text-sm font-display font-semibold text-foreground">Billing & Subscription</h3>
+            <h3 className="text-sm font-display font-semibold text-foreground">Plan & Subscription</h3>
 
             {/* F4 from the 2026-05-28 addictiveness audit — visible
                 value-prop framing so users see they're replacing 7-ish
@@ -1038,7 +1069,7 @@ const SettingsApp = () => {
 
         {/* Save status toast */}
         {saveMsg && (
-          <div className="mt-3 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-400 inline-block">
+          <div className="mt-3 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-[11px] text-primary inline-block">
             {saveMsg}
           </div>
         )}

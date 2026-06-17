@@ -67,7 +67,39 @@ export interface WorkspaceCreateStepProps {
   readonly createError: string | null;
 }
 
-/* ─── ReadyStep ─── */
+/* ─── ModelGateStep (PR5 D2 — the hard model gate) ─── */
+export interface ModelGateStepProps {
+  /** Advance to Import — only reachable once a working model exists (hard gate). */
+  readonly onContinue: () => void;
+  readonly onBack: () => void;
+  /** Soft escape: dismiss onboarding to Home (the NoModelBanner persists there). */
+  readonly onLater: () => void;
+}
+
+/* ─── TemplateStep (PR5 D4/D5 — curated 6; selecting one creates the workspace) ─── */
+export interface TemplateStepProps {
+  readonly templates: readonly OnboardingTemplate[];
+  /** Create the workspace from this template (persona + templateId), then advance. */
+  readonly onSelect: (templateId: string) => void;
+  readonly onBack: () => void;
+  readonly creating: boolean;
+  /** The template id currently being created (for a per-card spinner). */
+  readonly creatingId: string | null;
+  readonly createError: string | null;
+}
+
+/* ─── FirstTaskStep (PR5 — terminal: seed the first message, open the workspace) ─── */
+export interface FirstTaskStepProps {
+  readonly message: string;
+  readonly onMessageChange: (message: string) => void;
+  /** Suggested first prompts (the curated templates' hints). */
+  readonly suggestions: readonly string[];
+  readonly onPickSuggestion: (suggestion: string) => void;
+  readonly onLetsGo: () => void;
+  readonly createError: string | null;
+}
+
+/* ─── ReadyStep (superseded by FirstTaskStep; kept for any standalone reuse) ─── */
 export interface ReadyStepProps {
   readonly createError: string | null;
   readonly onLetsGo: () => void;

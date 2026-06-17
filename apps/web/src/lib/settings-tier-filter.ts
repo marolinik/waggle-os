@@ -22,18 +22,23 @@ export const ESSENTIAL_SETTINGS_TAB_IDS = [
   'billing',  // Trial / Pro / Teams subscription (visibility within depends on user's billing tier)
 ] as const;
 
-/** 7 tabs visible at Standard — Essential + workspace ops. */
+/** 6 tabs visible at Standard — Essential + workspace ops. */
 export const STANDARD_SETTINGS_TAB_IDS = [
   ...ESSENTIAL_SETTINGS_TAB_IDS,
   'permissions',  // Default autonomy + external gates (Tools surface)
   'team',         // Team Sync URL + token (still gated by billing TEAMS LOCKED_TABS layer)
   'backup',       // Memory backup + restore
-  'advanced',     // MCP servers + dev mode + telemetry export
 ] as const;
 
-/** All 8 tabs visible at Power — full access. */
+/**
+ * All 8 tabs visible at Power — full access. PR5 D7: `advanced` (MCP servers +
+ * dev mode + telemetry export) moves here from Standard so Standard stays calm —
+ * "depth when you ask for it" (Everything/Power only). `enterprise` was already
+ * Power-only.
+ */
 export const POWER_SETTINGS_TAB_IDS = [
   ...STANDARD_SETTINGS_TAB_IDS,
+  'advanced',     // MCP servers + dev mode + telemetry export (D7: Everything-only)
   'enterprise',   // Compliance + audit trail + governance (gated by feature flag too)
 ] as const;
 
@@ -46,7 +51,7 @@ const STANDARD_SET = new Set<string>(STANDARD_SETTINGS_TAB_IDS);
  * so callers don't lose their array sort.
  *
  * - `simple`        → 3 essentials only
- * - `professional`  → 7 standard tabs
+ * - `professional`  → 6 standard tabs (Advanced is Everything-only per D7)
  * - `power` / `admin` → all input tabs (including unknowns — least-surprise)
  */
 export function getSettingsTabsForTier<T extends { id: string }>(

@@ -48,15 +48,16 @@ describe('ESSENTIAL_SETTINGS_TAB_IDS', () => {
 });
 
 describe('STANDARD_SETTINGS_TAB_IDS', () => {
-  it('extends Essential with operational tabs (no enterprise)', () => {
+  it('extends Essential with operational tabs (no enterprise, no advanced)', () => {
     expect(STANDARD_SETTINGS_TAB_IDS).toEqual([
       'general', 'models', 'billing',
-      'permissions', 'team', 'backup', 'advanced',
+      'permissions', 'team', 'backup',
     ]);
   });
 
-  it('does NOT include enterprise (compliance/governance is Power-only)', () => {
+  it('does NOT include enterprise or advanced (both are Everything/Power-only)', () => {
     expect(STANDARD_SETTINGS_TAB_IDS).not.toContain('enterprise');
+    expect(STANDARD_SETTINGS_TAB_IDS).not.toContain('advanced'); // PR5 D7
   });
 });
 
@@ -75,11 +76,11 @@ describe('getSettingsTabsForTier', () => {
     expect(result.map(t => t.id)).toEqual(['general', 'models', 'billing']);
   });
 
-  it('returns 7 standard tabs for professional tier (no enterprise)', () => {
+  it('returns 6 standard tabs for professional tier (no enterprise, no advanced)', () => {
     const result = getSettingsTabsForTier('professional', ALL_TABS);
     expect(result.map(t => t.id)).toEqual([
       'general', 'models', 'billing',
-      'permissions', 'team', 'backup', 'advanced',
+      'permissions', 'team', 'backup',
     ]);
   });
 
@@ -151,6 +152,11 @@ describe('resolveActiveSettingsTab', () => {
 
   it('drops enterprise when on professional tier (Power-only tab)', () => {
     const result = resolveActiveSettingsTab('professional', 'enterprise', ALL_TABS);
+    expect(result).toBe('general');
+  });
+
+  it('drops advanced when on professional tier (PR5 D7: Everything-only)', () => {
+    const result = resolveActiveSettingsTab('professional', 'advanced', ALL_TABS);
     expect(result).toBe('general');
   });
 

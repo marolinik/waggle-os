@@ -8,11 +8,13 @@ import type { UserProfile, ClassifiedHarvestItem } from '@/lib/types';
 import {
   WelcomeStep,
   WhoAreYouStep,
+  ModelGateStep,
   ImportStep,
-  WorkspaceCreateStep,
-  ReadyStep,
+  TemplateStep,
+  FirstTaskStep,
 } from './onboarding';
-import type { OnboardingProfileFields, OnboardingWorkspaceType } from './onboarding';
+import type { OnboardingProfileFields } from './onboarding';
+import { CURATED_ONBOARDING_TEMPLATES, TEMPLATE_PERSONA } from './onboarding/constants';
 
 /* ─── Props ─── */
 interface OnboardingWizardProps {
@@ -29,17 +31,19 @@ function trackTelemetry(_serverBaseUrl: string, event: string, properties?: Reco
   adapter.trackTelemetry(event, properties);
 }
 
-/* ─── Phase 2D 5-step chain (S12→S17, C33). `ready` is terminal. ──
-   All navigation is driven off STEP_NAMES.indexOf(name) — never a magic
-   number — so re-keying the chain can't strand the user mid-flow. */
-const STEP_NAMES = ['first-launch', 'who-are-you', 'memory-import', 'workspace-create', 'ready'] as const;
+/* ─── PR5 6-step chain (S12→S17, C33) with the hard model gate at step 3.
+   `ready` is terminal. All navigation is driven off STEP_NAMES.indexOf(name) —
+   never a magic number — so re-keying the chain can't strand the user mid-flow.
+   The model-gate sits between who-are-you and memory-import (D4 order: Welcome ·
+   About-you · Model · Import · Template · First-task). */
+const STEP_NAMES = ['first-launch', 'who-are-you', 'model-gate', 'memory-import', 'template', 'first-task'] as const;
 type StepName = typeof STEP_NAMES[number];
 const stepIndex = (name: StepName): number => STEP_NAMES.indexOf(name);
 const LAST_INDEX = STEP_NAMES.length - 1;
 /** Steps that show the Back affordance + numbered dots (every interactive step
- *  after first-launch, excluding the terminal ready). */
+ *  after first-launch, excluding the terminal first-task). */
 const FIRST_NAV_INDEX = stepIndex('who-are-you');
-const LAST_NAV_INDEX = stepIndex('workspace-create');
+const LAST_NAV_INDEX = stepIndex('template');
 
 const DEFAULT_FIRST_MESSAGE = 'Hello! What can you help me with?';
 
@@ -67,11 +71,12 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
   const [importDone, setImportDone] = useState(false);
   const [claudeCodeDetected, setClaudeCodeDetected] = useState<{ found: boolean; itemCount: number; path: string } | null>(null);
 
-  /* ── Workspace (S17 thin / C6) ── */
-  const [workspaceType, setWorkspaceType] = useState<OnboardingWorkspaceType>('project');
+  /* ── Workspace + first task (PR5 Template → First-task steps) ── */
   const [workspaceName, setWorkspaceName] = useState('');
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
+  const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [firstMessage, setFirstMessage] = useState(DEFAULT_FIRST_MESSAGE);
 
   /* ── Connect on mount + track start; hydrate any existing profile ── */
   useEffect(() => {
@@ -144,7 +149,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
         hasRole: Boolean(payload.role),
         goalCount: payload.goals?.length ?? 0,
       });
-      goToName('memory-import');
+      goToName('model-gate');
     } finally {
       setSavingProfile(false);
     }
@@ -171,7 +176,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
     try {
       await adapter.harvestCommit(importData, importSource);
       setImportDone(true);
-      setTimeout(() => goToName('workspace-create'), 800);
+      setTimeout(() => goToName('template'), 800);
     } catch { /* ignore */ }
     finally { setImporting(false); }
   };
@@ -194,24 +199,29 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
     try {
       await adapter.harvestCommit({ scanLocal: true }, 'claude-code');
       setImportDone(true);
-      setTimeout(() => goToName('workspace-create'), 800);
+      setTimeout(() => goToName('template'), 800);
     } catch { /* ignore */ }
     finally { setImporting(false); }
   };
 
-  /* ── S17 thin: create workspace via the existing create path ── */
-  const handleCreateWorkspace = useCallback(async () => {
-    const wsName = workspaceName.trim() || 'My Workspace';
+  /* ── PR5 Template step: create the first workspace from the chosen template
+       (matching specialist persona + template id), then seed the first task. The
+       template names + types the workspace (D4 folds the old workspace-create step). ── */
+  const handleCreateFromTemplate = useCallback(async (templateId: string) => {
+    const tmpl = CURATED_ONBOARDING_TEMPLATES.find(t => t.id === templateId);
+    const persona = TEMPLATE_PERSONA[templateId] ?? 'general-purpose';
+    const wsName = tmpl?.name || 'My Workspace';
     setCreatingWorkspace(true);
+    setCreatingTemplateId(templateId);
     try {
       let wsId: string;
       try {
         const ws = await adapter.createWorkspace({
           name: wsName,
           group: 'Personal',
-          // C6: record the chosen workspace type (personal-scope subset).
-          type: workspaceType,
-          persona: 'general-purpose',
+          type: 'project',
+          persona,
+          templateId,
         });
         wsId = ws.id;
         setCreateError(null);
@@ -219,21 +229,18 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
         setCreateError('Could not connect to server — workspace created locally. Connect to sync later.');
         wsId = `local-${Date.now()}`;
       }
-      onUpdate({ workspaceId: wsId, personaId: 'general-purpose' });
-      trackTelemetry(serverBaseUrl, 'onboarding_complete', {
-        workspaceType,
-        importedMemory: importDone,
-      });
-      captureOnboardingComplete({
-        templateId: null,
-        personaId: 'general-purpose',
-        model: null,
-      });
-      goToName('ready');
+      setWorkspaceName(wsName);
+      // Seed the first task with the template's hint — the user can edit it.
+      setFirstMessage(tmpl?.hint?.trim() || DEFAULT_FIRST_MESSAGE);
+      onUpdate({ workspaceId: wsId, personaId: persona });
+      trackTelemetry(serverBaseUrl, 'onboarding_complete', { templateId, importedMemory: importDone });
+      captureOnboardingComplete({ templateId, personaId: persona, model: null });
+      goToName('first-task');
     } finally {
       setCreatingWorkspace(false);
+      setCreatingTemplateId(null);
     }
-  }, [workspaceName, workspaceType, importDone, onUpdate, serverBaseUrl, goToName]);
+  }, [importDone, onUpdate, serverBaseUrl, goToName]);
 
   const handleLetsGo = useCallback(() => {
     clearTimeout(autoTimer.current);
@@ -241,16 +248,8 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
     const wsId = state.workspaceId || `local-${Date.now()}`;
     const wsName = workspaceName.trim() || 'My Workspace';
     const personaId = state.personaId || 'general-purpose';
-    onFinish(wsId, wsName, DEFAULT_FIRST_MESSAGE, personaId);
-  }, [serverBaseUrl, onComplete, onFinish, state.workspaceId, state.personaId, workspaceName]);
-
-  /* ── Auto-finish on the terminal ready step after 2s ── */
-  useEffect(() => {
-    if (step === LAST_INDEX) {
-      autoTimer.current = setTimeout(handleLetsGo, 2000);
-      return () => clearTimeout(autoTimer.current);
-    }
-  }, [step, handleLetsGo]);
+    onFinish(wsId, wsName, firstMessage.trim() || DEFAULT_FIRST_MESSAGE, personaId);
+  }, [serverBaseUrl, onComplete, onFinish, state.workspaceId, state.personaId, workspaceName, firstMessage]);
 
   if (state.completed) return null;
 
@@ -354,6 +353,17 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
                 saving={savingProfile}
               />
             )}
+            {step === stepIndex('model-gate') && (
+              <ModelGateStep
+                onContinue={() => goToName('memory-import')}
+                onBack={() => goToName('who-are-you')}
+                onLater={() => {
+                  clearTimeout(autoTimer.current);
+                  trackTelemetry(serverBaseUrl, 'onboarding_skip', { atStep: step, via: 'model-gate-later' });
+                  onDismiss();
+                }}
+              />
+            )}
             {step === stepIndex('memory-import') && (
               <ImportStep
                 importSource={importSource}
@@ -364,26 +374,28 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
                 onImportCommit={handleImportCommit}
                 claudeCodeDetected={claudeCodeDetected}
                 onClaudeCodeHarvest={handleClaudeCodeHarvest}
-                onBack={() => goToName('who-are-you')}
-                onContinue={() => goToName('workspace-create')}
+                onBack={() => goToName('model-gate')}
+                onContinue={() => goToName('template')}
               />
             )}
-            {step === stepIndex('workspace-create') && (
-              <WorkspaceCreateStep
-                workspaceType={workspaceType}
-                workspaceName={workspaceName}
-                onSelectType={setWorkspaceType}
-                onNameChange={setWorkspaceName}
-                onCreate={handleCreateWorkspace}
+            {step === stepIndex('template') && (
+              <TemplateStep
+                templates={CURATED_ONBOARDING_TEMPLATES}
+                onSelect={handleCreateFromTemplate}
                 onBack={() => goToName('memory-import')}
                 creating={creatingWorkspace}
+                creatingId={creatingTemplateId}
                 createError={createError}
               />
             )}
-            {step === stepIndex('ready') && (
-              <ReadyStep
-                createError={createError}
+            {step === stepIndex('first-task') && (
+              <FirstTaskStep
+                message={firstMessage}
+                onMessageChange={setFirstMessage}
+                suggestions={CURATED_ONBOARDING_TEMPLATES.map(t => t.hint)}
+                onPickSuggestion={setFirstMessage}
                 onLetsGo={handleLetsGo}
+                createError={createError}
               />
             )}
           </AnimatePresence>
