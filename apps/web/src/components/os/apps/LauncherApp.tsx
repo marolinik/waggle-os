@@ -13,14 +13,18 @@
  *   adapter.launchTool()   → /api/tools/launch
  *   adapter.manageHooks()  → /api/tools/hooks
  *
- * Minimal-viable UI. Polish (provenance details, version timeline,
- * advanced flags) is Phase 4.
+ * Warm-Hive PR6b (B1): two views behind a segmented toggle —
+ *   Variation A · Launch — the live detect/launch/hooks/processes UI (below).
+ *   Variation B · How memory is shared — a pure-UI explainer (flow diagram +
+ *     three cards + a provenance example). Static, no backend, mirrors
+ *     docs/design_handoff_waggle_app/design-files/screens/launcher.html.
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Rocket, RefreshCw, CheckCircle2, XCircle, AlertTriangle,
   Play, Download, ShieldCheck, Trash2, Loader2, MessageSquare, Square,
+  Workflow, ArrowDownToLine, ArrowRight, ShieldCheck as ShieldCheckIcon, Hexagon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -71,6 +75,9 @@ interface DetectionResult {
 
 type ToolAction = 'launch' | 'install' | 'verify' | 'uninstall';
 
+/** Segmented-toggle view: A = the live launch UI; B = the memory-sharing explainer. */
+type LauncherView = 'a' | 'b';
+
 interface ActionState {
   toolId: string;
   action: ToolAction;
@@ -89,6 +96,7 @@ interface LauncherAppProps {
 }
 
 const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
+  const [view, setView] = useState<LauncherView>('a');
   const [detection, setDetection] = useState<DetectionResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -276,22 +284,49 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
 
   return (
     <div className="flex flex-col h-full bg-background text-foreground">
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border/50">
+      {/* Header — title + A/B segmented toggle + (Variation A only) refresh */}
+      <div className="flex items-center gap-3 px-3 py-2 border-b border-border/50">
         <div className="flex items-center gap-2">
-          <Rocket className="w-4 h-4 text-amber-400" />
+          <Rocket className="w-4 h-4" style={{ color: 'var(--honey)' }} />
           <span className="text-sm font-display font-semibold">Tool Launcher</span>
-          {detection && (
+          {view === 'a' && detection && (
             <Badge variant="secondary" className="text-[11px] px-1.5 py-0 h-4">
               {detection.platform}
             </Badge>
           )}
         </div>
-        <Button variant="ghost" size="sm" onClick={refresh} className="h-7 w-7 p-0">
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-        </Button>
+        <div
+          role="tablist"
+          aria-label="Launcher view"
+          className="inline-flex gap-1 p-[3px] rounded-[10px]"
+          style={{ background: 'var(--secondary, hsl(var(--secondary)))', border: '1px solid var(--line-soft)' }}
+        >
+          {(['a', 'b'] as LauncherView[]).map((v) => (
+            <button
+              key={v}
+              role="tab"
+              aria-selected={view === v}
+              onClick={() => setView(v)}
+              className={`text-[11.5px] font-display font-semibold px-2.5 py-1 rounded-md transition-colors whitespace-nowrap ${
+                view === v ? '' : 'text-muted-foreground hover:text-foreground'
+              }`}
+              style={view === v ? { background: 'var(--honey)', color: '#1a1407' } : undefined}
+            >
+              {v === 'a' ? 'Launch' : 'How memory is shared'}
+            </button>
+          ))}
+        </div>
+        {view === 'a' && (
+          <Button variant="ghost" size="sm" onClick={refresh} className="h-7 w-7 p-0 ml-auto">
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+          </Button>
+        )}
       </div>
 
+      {view === 'b' ? (
+        <MemorySharingView />
+      ) : (
+        <>
       {/* Status bar */}
       {error && (
         <div className="flex items-center gap-2 px-3 py-2 bg-destructive/10 border-b border-destructive/30 text-[12px] text-destructive">
@@ -301,9 +336,12 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
       )}
       {lastResult && (
         <div
-          className={`flex items-center gap-2 px-3 py-2 border-b border-border/30 text-[12px] ${
-            lastResult.ok ? 'bg-emerald-500/10 text-emerald-400' : 'bg-destructive/10 text-destructive'
-          }`}
+          className="flex items-center gap-2 px-3 py-2 border-b border-border/30 text-[12px]"
+          style={
+            lastResult.ok
+              ? { background: 'var(--healthy-wash)', color: 'var(--healthy)' }
+              : { background: 'var(--risk-wash)', color: 'var(--risk)' }
+          }
         >
           {lastResult.ok ? (
             <CheckCircle2 className="w-3.5 h-3.5" />
@@ -343,7 +381,7 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
                   .map((t) => t.displayName);
                 return (
                   <>
-                    <span className="text-emerald-400/80">Sent to:</span>{' '}
+                    <span style={{ color: 'var(--healthy)' }}>Sent to:</span>{' '}
                     {accepting.join(', ') || 'none'}
                     {ignoring.length > 0 && (
                       <>
@@ -384,7 +422,7 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium">{tool.displayName}</span>
                       {tool.installed ? (
-                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-emerald-500/10 text-emerald-400">
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4" style={{ background: 'var(--healthy-wash)', color: 'var(--healthy)' }}>
                           Installed
                         </Badge>
                       ) : (
@@ -393,13 +431,13 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
                         </Badge>
                       )}
                       {tool.hooksInstalled && (
-                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-amber-500/10 text-amber-400">
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4" style={{ background: 'var(--honey-wash)', color: 'var(--honey)' }}>
                           Hooks active
                         </Badge>
                       )}
                       {runningTools.has(tool.id) && (
-                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-sky-500/10 text-sky-400">
-                          <span className="w-1.5 h-1.5 rounded-full bg-sky-400 inline-block mr-1 animate-pulse" />
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4" style={{ background: 'var(--work-wash)', color: 'var(--work)' }}>
+                          <span className="w-1.5 h-1.5 rounded-full inline-block mr-1 animate-pulse" style={{ background: 'var(--work)' }} />
                           Running
                         </Badge>
                       )}
@@ -418,7 +456,7 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
                       <div className="text-[11px] text-muted-foreground">v{tool.version}</div>
                     )}
                     {tool.diagnostic && (
-                      <div className="text-[11px] text-amber-400 mt-0.5">{tool.diagnostic}</div>
+                      <div className="text-[11px] mt-0.5" style={{ color: 'var(--attention)' }}>{tool.diagnostic}</div>
                     )}
                   </div>
                 </div>
@@ -444,7 +482,8 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-7 text-[11px] text-rose-400"
+                        className="h-7 text-[11px]"
+                        style={{ color: 'var(--risk)' }}
                         onClick={() => stopTool(tool)}
                         disabled={isActive}
                         title="Send SIGTERM (escalates to SIGKILL after 3s if needed)"
@@ -489,7 +528,8 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-7 text-[11px] text-rose-400"
+                        className="h-7 text-[11px]"
+                        style={{ color: 'var(--risk)' }}
                         onClick={() => doAction(tool, 'uninstall')}
                         disabled={isActive}
                       >
@@ -518,7 +558,187 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
           })}
         </div>
       </ScrollArea>
+        </>
+      )}
     </div>
+  );
+};
+
+/**
+ * Variation B · How memory is shared — a pure-UI explainer. No backend, no
+ * adapter calls, no live data: a fixed flow diagram + three cards + one
+ * provenance example, mirroring launcher.html lines 147-181. The provenance
+ * example string is illustrative (a documentation example, not a real recall),
+ * so it carries an explicit "example" label — no fabricated live data.
+ */
+
+interface FlowNode {
+  tag: string;
+  title: string;
+  detail: React.ReactNode;
+  hive?: boolean;
+}
+
+const FLOW_NODES: readonly FlowNode[] = [
+  {
+    tag: 'You launch',
+    title: 'Claude Code',
+    detail: (
+      <>
+        opened from Waggle with
+        <br />
+        <span className="font-mono text-[10.5px]" style={{ color: 'var(--honey)' }}>
+          WAGGLE_WORKSPACE_ID
+        </span>
+      </>
+    ),
+  },
+  {
+    tag: '5 lifecycle hooks',
+    title: 'hive-mind',
+    detail: <>session · prompt · stop · compact · tool</>,
+  },
+  {
+    tag: 'Your workspace',
+    title: 'The hive',
+    detail: (
+      <>
+        local SQLite memory
+        <br />
+        shared with Waggle
+      </>
+    ),
+    hive: true,
+  },
+];
+
+interface ExplainerCard {
+  icon: typeof ArrowDownToLine;
+  title: string;
+  body: string;
+}
+
+const EXPLAINER_CARDS: readonly ExplainerCard[] = [
+  {
+    icon: ArrowDownToLine,
+    title: 'It recalls on start',
+    body: 'The agent opens already knowing this workspace — decisions, constraints, and context, pulled from the hive.',
+  },
+  {
+    icon: ArrowRight,
+    title: 'It commits as it works',
+    body: 'Every meaningful step is captured back into the hive, so Waggle and your next session see it too.',
+  },
+  {
+    icon: ShieldCheckIcon,
+    title: 'Reversible & local',
+    body: 'Hooks install and uninstall cleanly. Nothing leaves your machine; you can verify or remove them anytime.',
+  },
+];
+
+const MemorySharingView = () => {
+  return (
+    <ScrollArea className="flex-1 min-h-0">
+      <div className="max-w-[940px] mx-auto px-8 py-8 pb-16">
+        {/* Heading */}
+        <header className="mb-6">
+          <div
+            className="font-mono text-[11px] uppercase tracking-[0.14em] mb-3 flex items-center gap-2.5"
+            style={{ color: 'var(--honey)' }}
+          >
+            <span className="inline-block w-5 h-px" style={{ background: 'var(--honey-line)' }} aria-hidden="true" />
+            How memory is shared
+          </div>
+          <h1 className="text-[26px] font-display font-semibold tracking-tight leading-tight m-0 mb-2.5 text-foreground">
+            How a launched agent shares the hive
+          </h1>
+          <p className="text-[15px] text-muted-foreground leading-relaxed m-0 max-w-[64ch]">
+            When you launch from Waggle, the workspace&apos;s memory is wired into the external tool — no copy-paste, no
+            re-explaining. Its work comes back <b className="text-foreground font-medium">attributed</b>.
+          </p>
+        </header>
+
+        {/* Flow diagram + cards + provenance example */}
+        <div
+          className="rounded-2xl px-8 py-9 text-center"
+          style={{
+            border: '1px solid var(--line)',
+            background: 'radial-gradient(70% 90% at 50% 0%, var(--secondary, hsl(var(--secondary))), var(--bg-2))',
+          }}
+        >
+          {/* Flow row */}
+          <div className="flex items-center justify-center flex-wrap gap-y-3">
+            {FLOW_NODES.map((node, i) => (
+              <div key={node.title} className="flex items-center">
+                <div
+                  className="rounded-xl px-4 py-4 min-w-[140px] max-w-[184px] text-left"
+                  style={
+                    node.hive
+                      ? {
+                          border: '1px solid var(--honey-line)',
+                          boxShadow: 'var(--honey-glow)',
+                          background: 'linear-gradient(150deg, var(--secondary, hsl(var(--secondary))), var(--card, hsl(var(--card))))',
+                        }
+                      : { border: '1px solid var(--line-strong)', background: 'var(--card, hsl(var(--card)))' }
+                  }
+                >
+                  <div className="font-mono text-[9.5px] uppercase tracking-[0.12em] mb-1.5 text-muted-foreground/80">
+                    {node.tag}
+                  </div>
+                  <div className="text-sm font-display font-semibold text-foreground">{node.title}</div>
+                  <div className="text-[11.5px] text-muted-foreground mt-1 leading-snug">{node.detail}</div>
+                </div>
+                {i < FLOW_NODES.length - 1 && (
+                  <div className="px-3 text-center shrink-0" style={{ color: 'var(--honey)' }} aria-hidden="true">
+                    <ArrowRight className="w-5 h-5 mx-auto" />
+                    <span className="block font-mono text-[9px] uppercase tracking-[0.1em] text-muted-foreground/70">
+                      {i === 0 ? 'hooks' : 'recall + commit'}
+                    </span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Three explainer cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mt-7 text-left">
+            {EXPLAINER_CARDS.map((card) => {
+              const Icon = card.icon;
+              return (
+                <div
+                  key={card.title}
+                  className="rounded-xl p-4"
+                  style={{ background: 'var(--card, hsl(var(--card)))', border: '1px solid var(--line-soft)' }}
+                >
+                  <Icon className="w-[17px] h-[17px] mb-2.5" style={{ color: 'var(--honey)' }} aria-hidden="true" />
+                  <b className="text-[13.5px] font-display font-semibold block mb-1.5 text-foreground">{card.title}</b>
+                  <p className="m-0 text-[12.5px] text-muted-foreground leading-relaxed">{card.body}</p>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Provenance example — illustrative, explicitly labelled */}
+          <div
+            className="mt-5 inline-flex items-center gap-2 font-mono text-[11.5px] px-3 py-1.5 rounded-lg"
+            style={{
+              color: 'var(--intel)',
+              background: 'var(--intel-wash)',
+              border: '1px solid color-mix(in srgb, var(--intel) 28%, transparent)',
+            }}
+            title="Illustrative example of how a recall is attributed"
+          >
+            <Hexagon className="w-3.5 h-3.5" aria-hidden="true" />
+            <span>example · remembered from Claude Code · 14:22 · session a1f9</span>
+          </div>
+        </div>
+
+        <div className="mt-4 flex items-center gap-2 text-[12px] text-muted-foreground">
+          <Workflow className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+          <span>This is how the wiring works — switch to <b className="text-foreground/90 font-medium">Launch</b> to open an agent into this workspace.</span>
+        </div>
+      </div>
+    </ScrollArea>
   );
 };
 
