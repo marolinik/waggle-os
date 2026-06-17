@@ -1,0 +1,45 @@
+{
+  "_doc": "Frozen pre-registered ruler-validation anchors for the harness-SOTA benchmark (Plan 09 / 10-PREREGISTRATION-PARAMETERS.md §9 / docs decision 11). Before claiming ANY delta on the τ² substrate, our adapter must reproduce a PUBLISHED leaderboard pass^1 within the pre-registered tolerance (D6). A FAIL blocks the priced run.",
+  "_contract": "These are the pre-registered reference SPECS (RulerSpec). The Plan-09 pilot reproduction run produces the per-anchor `measured` pass^1 score (currently null). Merge each {spec, measured} into the PreflightRuler[] that `gate`/preflight consumes via --rulers. validateRuler() PASSes iff |measured - published_score| <= tolerance_abs (two-sided: a far-ABOVE reproduction is as suspect as far-below). DO NOT fake `measured` to clear the gate.",
+  "_freeze_note": "published_score values are fractions in [0,1]; tolerances are N-derived (95% Clopper-Pearson half-width ~ 2*binomial-SE at the task count), NOT the legacy ±1pp placeholder. The old 0.8195 fixture was the borrowed Memori LoCoMo number and was never a τ² reference.",
+  "protocol": {
+    "substrate": "tau2-bench",
+    "vendored_commit": "5ebebbe827b455b3ed04fcb9294235c6ef4e5fd6",
+    "tau2_bench_version": "0.2.1-dev",
+    "user_simulator": "gpt-5.2",
+    "num_trials": 4,
+    "metric": "pass_1",
+    "leaderboard": "Sierra τ²-bench (taubench.com); arXiv:2506.07982",
+    "note": "user_simulator MUST equal gpt-5.2 — every published number below is conditioned on it; a different user-sim invalidates the comparison."
+  },
+  "anchors": [
+    {
+      "role": "PRIMARY",
+      "rationale": "Exact ceiling-arm (GPT-5.5) on the only domain carrying current-generation published numbers; far-from-ceiling (37.37%) so reproduction exercises the full pass/fail oracle.",
+      "spec": {
+        "substrate": "tau2-bench",
+        "split": "banking_knowledge",
+        "model": "gpt-5.5",
+        "published_score": 0.3737,
+        "tolerance_abs": 0.10,
+        "source": "Sierra τ²-bench leaderboard submission gpt-5-5_sierra_2026-05-05 (results.banking_knowledge.pass_1=37.37; v0.2.1-dev, user_simulator gpt-5.2; arXiv:2506.07982). n=97 -> tolerance = 95% Clopper-Pearson ~ ±10pp (binomial SE ~ 4.9pp at p=0.3737)."
+      },
+      "n_tasks": 97,
+      "measured": null
+    },
+    {
+      "role": "SECONDARY_CROSSCHECK",
+      "rationale": "Study-domain (retail) machinery anchor; reproducible with the confirmed gpt-5.2 model (agent=user-sim=gpt-5.2, the board's config). Validates the retail dual-control oracle wiring.",
+      "spec": {
+        "substrate": "tau2-bench",
+        "split": "retail",
+        "model": "gpt-5.2",
+        "published_score": 0.8158,
+        "tolerance_abs": 0.08,
+        "source": "Sierra τ²-bench leaderboard submission gpt-5-2_sierra_2026-02-26 full-domain row (results.retail.pass_1=81.58; v0.2.1-dev, user_simulator gpt-5.2). n=114 -> tolerance ~ ±8pp (binomial SE ~ 3.6pp at p=0.8158). Alternative anchor if preferred: retail × claude-opus-4-5 = 79.61 (pending Opus-4.5 API availability)."
+      },
+      "n_tasks": 114,
+      "measured": null
+    }
+  ]
+}

@@ -25,6 +25,15 @@ pre-registration and the harness manifest (`preregistration.ts` hash anchor). Co
 - **Item 9 (AppWorld credibility arm): YES** (founder 2026-06-16) — added as a held-out, in-process, local-runnable
   agentic substrate; its test-challenge split also enlarges the pooled N for the equivalence cell.
 
+### FOUNDER RATIFICATION — 2026-06-17 (τ² domain-set + ruler anchor; see `11-DOMAIN-SET-DECISION.md`)
+- **ADD `banking_knowledge` as the τ² accuracy-TOST/divergence cell: YES.** retail+airline stay as efficiency/pass^k
+  harness cells; telecom + mock dropped. Ships **conditional** on the Plan-09 **C2 re-derivability gate** (drop banking
+  pre-freeze if the pilot reads it as memory-QA). Verified agentic dual-control (DB-state graded, not answer text).
+- **Ruler anchor PINNED:** primary **banking_knowledge × GPT-5.5 = 37.37** (n=97, tol ≈ ±10pp); secondary cross-check
+  **retail × GPT-5.2 = 81.58** (n=114, ≈ ±8pp). Protocol = τ² **v0.2.1-dev** + **gpt-5.2 user-sim**. Replaces the old
+  `0.8195`/±1pp placeholder (which was the borrowed Memori LoCoMo number — never a τ² number).
+- **CONFIRMs cleared:** GPT-5.5 access ✓ (LiteLLM/Docker route); gpt-5.2 user-simulator access ✓.
+
 ---
 
 ## 1. Hypotheses (restated, with primary/secondary split)
@@ -58,7 +67,7 @@ diverge and headroom exists. Never "small beats frontier raw" as the lead; never
 | Model | API id | Price in/out $/M | Ctx | Status |
 |---|---|---|---|---|
 | Claude **Opus 4.8** | `claude-opus-4-8` (anthropic_immutable) | 5 / 25 | 1M | [CONFIRM] price/id vs Anthropic docs |
-| **GPT-5.5** | `gpt-5.5` (snapshot `gpt-5.5-2026-04-23`) | 5 / 30 (0.50 cached) | [CONFIRM ctx] | [CONFIRM] id/snapshot/price |
+| **GPT-5.5** | `gpt-5.5` (snapshot `gpt-5.5-2026-04-23`) | 5 / 30 (0.50 cached) | [CONFIRM ctx] | [CONFIRMED 2026-06-17] access via LiteLLM/Docker; id/price still verify vs OpenAI docs |
 | **Gemini 3.5 Pro** | `gemini-3.5-pro-preview` → **fallback `gemini-3.1-pro`** until GA | ~2-4 / 12-18 | — | [CONFIRM] GA id + price |
 
 Decoding: Opus 4.8 = adaptive-thinking only (rejects temperature; set `effort` — see §5.3); GPT-5.5 = `reasoning_effort`
@@ -80,7 +89,12 @@ co-primary for the Opus ceiling. [REC]
 | Param | Value | Status |
 |---|---|---|
 | Primary substrate | **τ²-bench** (Sierra) — native `pass^k`, local OSS, no Docker | [REC] |
-| τ² domains | **retail + airline**; **DROP telecom** (saturated ~99%, non-discriminative) | [REC] (`03` A1) |
+| τ² domains | **retail + airline + banking_knowledge**; **DROP telecom** (saturated: ceiling 97.81, headroom 2.19pp) + mock (10-item dev fixture) | [RATIFIED 2026-06-17] (`11`) |
+| ↳ domain roles | retail+airline = **efficiency/pass^k harness cells** (native dist, `03` D1); **banking_knowledge = accuracy-TOST/divergence cell** — frontier pass^1 9–37%, headroom 62.63pp, the only τ² cell that passes the divergence gate | [RATIFIED] (`11` §4) |
+| ↳ banking is agentic, not QA | VERIFIED: registered τ² Environment, 17-table mutable DB, 825 assistant + 102 user actions, graded on DB-state (`communicate_info` empty 100%); RAG layer feeds action selection, not grading | (`11` §3) |
+| ↳ banking C2 gate | ships **conditional**: Plan-09 pilot runs the **C2 re-derivability filter** (exclude tasks memory-OFF-with-full-tools can't reach) + construct check; **if it reads as memory-QA, DROP before freeze** | [RATIFIED] (`11` §3, `03` C2) |
+| ↳ banking power | n=97 — under-powered for a standalone ±5pp binary TOST → **descriptive 90% paired-diff CI** + pool C2-surviving items into the cross-substrate TOST | [REC] (`11` §4, §6.1) |
+| τ² protocol | reproduce/run on **`tau2_bench_version 0.2.1-dev`** + **`user_simulator = gpt-5.2`** (the published-number protocol; a different user-sim invalidates the leaderboard comparison) | [CONFIRMED 2026-06-17] (gpt-5.2 access ✓) |
 | τ² commit pin | from `vendor.sh` probe (Plan 07) → paste into `TAU2_PINNED_COMMIT` | [CONFIRM] SHA |
 | τ² license | **MIT** (verified 2026-06-16) — vendor + redistribute freely | [LOCKED] |
 | Secondary substrate | **GAIA2 / ARE**, ≥2 splits: **search + adaptability** (adaptability rewards re-planning) | [REC] |
@@ -148,7 +162,7 @@ Planning: **δ = 0.05, gap = 0.01, power = 0.80, DEFF ≈ 2.4** (ICC 0.1, mean c
 | 0.35 | 0.592 | 1,354 | **~3,250** |
 
 **Implication & rule:** a *binary* accuracy-TOST verdict at δ=±5pp needs ~1,400–3,250 paired items — likely beyond a
-single substrate (τ² ~360 after dropping telecom; GAIA2 ~400/2 splits). Therefore:
+single substrate (**τ² = 164: retail 114 + airline 50** after dropping telecom; **+ banking_knowledge 97 = 261**; GAIA2 ~400/2 splits). Therefore:
 - **Target a POOLED `N_test` ≈ 1,500** across τ² + GAIA2 (+ optional AppWorld) for the binary δ=±5pp TOST. [PILOT]
 - Per-cell where N < powered: report the **descriptive 90% paired-difference CI with the ±δ band drawn (NO binary
   verdict)** — the pre-registered downgrade. [REC] (`03` B1)
@@ -205,9 +219,11 @@ consistency = a pre-registered robustness rule ("lift positive in ≥k of m cell
 - **Post-hoc exclusion = NONE**; `evaluator_loss` reported separately; the re-derivability/near-dup exclusions are
   **pre-registered ex-ante gates** (not post-hoc). [REC]
 - **Decontamination:** held-out/private/recent splits; **Qwen contamination probe** (training cutoff vs bench release). [REC]
-- **Ruler-validation (Plan 09):** reproduce a published τ²/SWE number within tolerance before claiming any delta —
-  reference value + tolerance: **τ²-retail ≈ [CONFIRM] ± 1pp** (pin from the Sierra leaderboard for the exact
-  pinned commit). FAIL ⇒ block the priced run. [CONFIRM]
+- **Ruler-validation (Plan 09) — PINNED 2026-06-17 (`11` §5, `config/rulers.json`):** reproduce a published τ²
+  pass^1 within an N-derived tolerance before claiming any delta. **PRIMARY anchor: banking_knowledge × GPT-5.5 =
+  37.37%** (Sierra leaderboard `gpt-5-5_sierra_2026-05-05`, v0.2.1-dev, user-sim gpt-5.2, arXiv:2506.07982; n=97 →
+  tolerance = 95% Clopper–Pearson ≈ **±10pp**, NOT ±1pp). **SECONDARY cross-check: retail × GPT-5.2 = 81.58%**
+  (n=114 → ≈ ±8pp). FAIL ⇒ block the priced run. [RATIFIED]
 - **Cost denominator** includes ingestion + any best-of-N; report the **measured** ratio, never "~1/N". [REC]
 - **Artifacts released:** seeds, prompts, judge configs, raw `events.jsonl`, offline re-judge harness, aggregation code;
   report N (items AND clusters) per cell. [REC]
@@ -223,10 +239,10 @@ full priced run. [REC]
 
 ## 11. CONFIRM-BEFORE-FREEZE checklist (the real-world facts to verify)
 1. ☐ Opus 4.8 id `claude-opus-4-8` + $5/$25 + 1M ctx (Anthropic docs / `claude-api` skill).
-2. ☐ GPT-5.5 id + snapshot `gpt-5.5-2026-04-23` + $5/$30 + ctx window (OpenAI docs).
+2. ☑ GPT-5.5 access CONFIRMED 2026-06-17 (LiteLLM/Docker route) + gpt-5.2 user-sim access ✓; id/price still verify vs OpenAI docs.
 3. ☐ Gemini 3.5 Pro GA id + price (else keep `gemini-3.1-pro` fallback + disclose).
 4. ☐ τ²-bench license (redistribution) + the exact commit SHA to pin.
-5. ☐ Published τ²/SWE reference numbers + tolerance for ruler-validation.
+5. ☑ Ruler anchor PINNED 2026-06-17 (`config/rulers.json` + `11`): banking_knowledge × GPT-5.5 = 37.37 (±~10pp, n=97) primary + retail × GPT-5.2 = 81.58 secondary; protocol v0.2.1-dev + gpt-5.2 user-sim.
 6. ☐ Pilot-measured discordance + ICC → recompute powered `N_test` (§6.1).
 7. ☐ Embedding near-dup cutoff calibrated on control sets (§8).
 8. ☐ Firewall assertions implemented (Plan 06) + green + code-frozen at a SHA.

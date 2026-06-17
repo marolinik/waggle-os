@@ -10,13 +10,17 @@ import {
   type RulerVerdict,
 } from '../../src/gate/ruler-validation.js';
 
+// SYNTHETIC fixture — exercises validateRuler()'s band arithmetic only. The
+// values (0.8195 / ±0.01) are NOT a real τ² reference; the real pre-registered
+// anchors live in benchmarks/harness/config/rulers.json (PRIMARY:
+// banking_knowledge × GPT-5.5 = 0.3737 ±0.10; pinned 2026-06-17, docs/11).
 const TAU2_RETAIL: RulerSpec = {
   substrate: 'tau2-bench',
   split: 'retail',
-  model: 'gpt-4.1-mini',
-  published_score: 0.8195, // Memori-precedent style: fraction in [0,1]
-  tolerance_abs: 0.01, // ±1pp pre-registered band
-  source: 'Sierra tau2-bench leaderboard 2026-06 (pre-registered ref)',
+  model: 'synthetic-fixture-model',
+  published_score: 0.8195, // arbitrary in-band value for the arithmetic test
+  tolerance_abs: 0.01, // band width under test
+  source: 'SYNTHETIC unit-test fixture (real anchors: config/rulers.json)',
 };
 
 describe('validateRuler — tolerance band', () => {
@@ -58,7 +62,7 @@ describe('validateRuler — tolerance band', () => {
     const v = validateRuler(TAU2_RETAIL, 0.8198);
     expect(v.substrate).toBe('tau2-bench');
     expect(v.split).toBe('retail');
-    expect(v.model).toBe('gpt-4.1-mini');
+    expect(v.model).toBe('synthetic-fixture-model');
     expect(v.source).toBe(TAU2_RETAIL.source);
   });
 });
