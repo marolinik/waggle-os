@@ -7,11 +7,12 @@
  * default schema pulled from /api/evolution/targets and /baseline.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Sparkles, Loader2, RefreshCw, Check, X as XIcon,
   ChevronRight, FileDiff, TrendingUp, TrendingDown,
   AlertTriangle, Ban, CheckCircle2, Clock, Zap, Plus,
+  Hexagon, ShieldCheck,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
@@ -132,12 +133,18 @@ function dispatchSseBlock(block: string, cb: SseConsumerCallbacks): void {
 
 // ── Presentation helpers ──────────────────────────────────────────
 
-const STATUS_COLORS: Record<RunStatus, string> = {
-  proposed: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
-  accepted: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  rejected: 'bg-muted/40 text-muted-foreground border-border/50',
-  deployed: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-  failed: 'bg-destructive/20 text-destructive border-destructive/30',
+/**
+ * Status pill colors — warm semantic tokens (D21 sweep). proposed=attention
+ * (honey), accepted/in-progress=work (dusty blue), deployed=healthy (sage),
+ * rejected=neutral, failed=risk (terracotta). Inline style on the consumer
+ * because the warm tokens are CSS vars, not Tailwind palette colors.
+ */
+const STATUS_STYLE: Record<RunStatus, React.CSSProperties> = {
+  proposed: { background: 'var(--honey-wash)', color: 'var(--honey)', borderColor: 'var(--honey-line)' },
+  accepted: { background: 'var(--work-wash)', color: 'var(--work)', borderColor: 'var(--work)' },
+  rejected: { background: 'transparent', color: 'var(--text-muted, hsl(var(--muted-foreground)))', borderColor: 'var(--line-soft)' },
+  deployed: { background: 'var(--healthy-wash)', color: 'var(--healthy)', borderColor: 'var(--healthy)' },
+  failed: { background: 'var(--risk-wash)', color: 'var(--risk)', borderColor: 'var(--risk)' },
 };
 
 const STATUS_ICONS: Record<RunStatus, React.ReactNode> = {
@@ -165,12 +172,91 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString();
 }
 
+// ── Skill aggregation (D12 version ladder) ────────────────────────
+//
+// The backend tracks individual runs; the design (§12·evolution.html) frames
+// them as a skill card with a version ladder. We aggregate by
+// (target_kind, target_name) — that pair *is* the evolving target — and render
+// each group's runs as ascending versions. No backend change: this is a pure
+// client-side reframe over the same /api/evolution/runs data.
+
+interface SkillGroup {
+  /** Stable key = `${target_kind}::${target_name ?? ''}`. */
+  key: string;
+  targetKind: string;
+  targetName: string | null;
+  /** Runs oldest→newest (v1 is the first proposal). */
+  versions: EvolutionRun[];
+  /** The run that actually shipped (status === 'deployed'), if any. */
+  deployed: EvolutionRun | null;
+  /** Largest delta_accuracy in the group — drives the score-bar scale. */
+  maxDelta: number;
+}
+
+function aggregateBySkill(runs: EvolutionRun[]): SkillGroup[] {
+  const byKey = new Map<string, EvolutionRun[]>();
+  for (const run of runs) {
+    const key = `${run.target_kind}::${run.target_name ?? ''}`;
+    const list = byKey.get(key);
+    if (list) list.push(run);
+    else byKey.set(key, [run]);
+  }
+
+  const groups: SkillGroup[] = [];
+  for (const [key, list] of byKey) {
+    // Ascending by created_at so v1 is the earliest proposal.
+    const versions = [...list].sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+    );
+    const deployed = versions.find(r => r.status === 'deployed') ?? null;
+    const maxDelta = versions.reduce((m, r) => Math.max(m, r.delta_accuracy), 0);
+    groups.push({
+      key,
+      targetKind: versions[0].target_kind,
+      targetName: versions[0].target_name,
+      versions,
+      deployed,
+      maxDelta,
+    });
+  }
+
+  // Most-recently-active skills first.
+  groups.sort((a, b) => {
+    const at = Math.max(...a.versions.map(r => new Date(r.created_at).getTime()));
+    const bt = Math.max(...b.versions.map(r => new Date(r.created_at).getTime()));
+    return bt - at;
+  });
+  return groups;
+}
+
+/**
+ * D13 — honest provenance derivation. The backend does NOT store the
+ * "GEPA optimized · judged by 3 models" string, so we never fabricate it.
+ * The only verifiable provenance in a run's `gate_reasons` is whether the
+ * regression gate (the one that compares candidate-vs-baseline scores) fired
+ * and passed — that is the honest, recorded analogue. Returns null when no
+ * such gate is present, in which case the badge is omitted entirely.
+ */
+function deriveProvenance(run: EvolutionRun): string | null {
+  if (run.status !== 'deployed') return null;
+  let reasons: { gate?: string; verdict?: string }[] = [];
+  try {
+    const parsed = JSON.parse(run.gate_reasons_json);
+    if (Array.isArray(parsed)) reasons = parsed;
+  } catch { /* unparseable — treat as no recorded gates */ }
+  const regression = reasons.find(r => r.gate === 'regression' && r.verdict === 'pass');
+  return regression ? 'regression gate · score-verified' : null;
+}
+
 // ── Main component ───────────────────────────────────────────────
+
+type ViewMode = 'skill' | 'run';
 
 export default function EvolutionTab() {
   const [runs, setRuns] = useState<EvolutionRun[]>([]);
   const [status, setStatus] = useState<StatusCounts | null>(null);
   const [loading, setLoading] = useState(true);
+  const [view, setView] = useState<ViewMode>('skill');
   const [filter, setFilter] = useState<RunStatus | 'all'>('all');
   const [selectedUuid, setSelectedUuid] = useState<string | null>(null);
   const [detail, setDetail] = useState<RunDetail | null>(null);
@@ -294,6 +380,7 @@ export default function EvolutionTab() {
   // ── Render ─────────────────────────────────────────────────────
 
   const pendingCount = status?.pendingCount ?? 0;
+  const skillGroups = useMemo(() => aggregateBySkill(runs), [runs]);
 
   return (
     <div className="flex h-full">
@@ -303,20 +390,23 @@ export default function EvolutionTab() {
         <div className="px-3 py-2.5 border-b border-border/30">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-primary" />
+              <Sparkles className="w-3.5 h-3.5" style={{ color: 'var(--honey)' }} />
               <h3 className="text-xs font-display font-semibold text-foreground">Evolution</h3>
             </div>
             <div className="flex items-center gap-0.5">
               <HintTooltip content="New Run">
                 <button
+                  aria-label="New evolution run"
                   onClick={() => setRunModalOpen(true)}
-                  className="p-1 rounded text-primary hover:bg-primary/10 transition-colors"
+                  className="p-1 rounded hover:bg-primary/10 transition-colors"
+                  style={{ color: 'var(--honey)' }}
                 >
                   <Plus className="w-3 h-3" />
                 </button>
               </HintTooltip>
               <HintTooltip content="Refresh">
                 <button
+                  aria-label="Refresh runs"
                   onClick={handleRefresh}
                   className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors"
                   disabled={loading}
@@ -327,35 +417,63 @@ export default function EvolutionTab() {
             </div>
           </div>
 
+          {/* View toggle — skill-card framing (D12) vs the raw run list */}
+          <div
+            role="tablist"
+            aria-label="Evolution view"
+            className="flex gap-0.5 p-0.5 rounded-md mb-2"
+            style={{ background: 'var(--surface-2, hsl(var(--secondary)))', border: '1px solid var(--line-soft)' }}
+          >
+            {(['skill', 'run'] as ViewMode[]).map(v => (
+              <button
+                key={v}
+                role="tab"
+                aria-selected={view === v}
+                onClick={() => setView(v)}
+                className="flex-1 text-[10px] font-display font-semibold py-1 rounded transition-colors"
+                style={view === v
+                  ? { background: 'var(--honey)', color: '#1a1407' }
+                  : { color: 'var(--text-muted, hsl(var(--muted-foreground)))' }}
+              >
+                {v === 'skill' ? 'By skill' : 'By run'}
+              </button>
+            ))}
+          </div>
+
           {pendingCount > 0 && (
-            <div className="mb-2 px-2 py-1 rounded-md bg-amber-500/10 border border-amber-500/20">
-              <p className="text-[11px] text-amber-400 font-display">
+            <div
+              className="mb-2 px-2 py-1 rounded-md"
+              style={{ background: 'var(--honey-wash)', border: '1px solid var(--honey-line)' }}
+            >
+              <p className="text-[11px] font-display" style={{ color: 'var(--honey)' }}>
                 {pendingCount} proposal{pendingCount !== 1 ? 's' : ''} awaiting review
               </p>
             </div>
           )}
 
-          {/* Filter chips */}
-          <div className="flex flex-wrap gap-1">
-            <FilterChip
-              label="all"
-              active={filter === 'all'}
-              count={status ? Object.values(status.counts).reduce((a, b) => a + b, 0) : undefined}
-              onClick={() => setFilter('all')}
-            />
-            {STATUS_ORDER.map(s => (
+          {/* Filter chips — apply to the raw run list only */}
+          {view === 'run' && (
+            <div className="flex flex-wrap gap-1">
               <FilterChip
-                key={s}
-                label={s}
-                active={filter === s}
-                count={status?.counts[s]}
-                onClick={() => setFilter(s)}
+                label="all"
+                active={filter === 'all'}
+                count={status ? Object.values(status.counts).reduce((a, b) => a + b, 0) : undefined}
+                onClick={() => setFilter('all')}
               />
-            ))}
-          </div>
+              {STATUS_ORDER.map(s => (
+                <FilterChip
+                  key={s}
+                  label={s}
+                  active={filter === s}
+                  count={status?.counts[s]}
+                  onClick={() => setFilter(s)}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Run list */}
+        {/* List body — skill cards or the raw run list */}
         <div className="flex-1 overflow-auto p-1.5 space-y-1">
           {loading && runs.length === 0 ? (
             <div className="text-center py-8">
@@ -365,10 +483,10 @@ export default function EvolutionTab() {
           ) : runs.length === 0 ? (
             <div className="text-center py-8">
               <Sparkles className="w-7 h-7 text-muted-foreground/30 mx-auto mb-2" />
-              {filter === 'all' ? (
+              {filter === 'all' || view === 'skill' ? (
                 <>
                   <p className="text-xs text-foreground font-display font-medium px-2">
-                    Your agent improves itself here
+                    Your skills get better on their own
                   </p>
                   <p className="text-[11px] text-muted-foreground/60 mt-2 px-2">
                     When Waggle finds a better way to do something it does for you, it proposes
@@ -380,6 +498,15 @@ export default function EvolutionTab() {
                 <p className="text-xs text-muted-foreground">No runs in {filter}</p>
               )}
             </div>
+          ) : view === 'skill' ? (
+            skillGroups.map(group => (
+              <SkillCard
+                key={group.key}
+                group={group}
+                selectedUuid={selectedUuid}
+                onSelectRun={uuid => setSelectedUuid(uuid)}
+              />
+            ))
           ) : (
             runs.map(run => (
               <RunRow
@@ -483,10 +610,16 @@ function RunRow({ run, selected, onSelect }: RunRowProps) {
       }`}
     >
       <div className="flex items-center gap-1.5 mb-1">
-        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] ${STATUS_COLORS[run.status]}`}>
+        <span
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px]"
+          style={STATUS_STYLE[run.status]}
+        >
           {STATUS_ICONS[run.status]} {run.status}
         </span>
-        <span className={`ml-auto text-[11px] font-mono ${deltaPositive ? 'text-emerald-400' : 'text-muted-foreground'}`}>
+        <span
+          className="ml-auto text-[11px] font-mono"
+          style={{ color: deltaPositive ? 'var(--healthy)' : 'var(--text-muted, hsl(var(--muted-foreground)))' }}
+        >
           {deltaPositive ? <TrendingUp className="w-2.5 h-2.5 inline mr-0.5" /> : <TrendingDown className="w-2.5 h-2.5 inline mr-0.5" />}
           {formatDelta(run.delta_accuracy)}
         </span>
@@ -524,7 +657,10 @@ function RunDetailView({
       {/* Header */}
       <div>
         <div className="flex items-center gap-2 mb-1.5">
-          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[11px] ${STATUS_COLORS[detail.status]}`}>
+          <span
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[11px]"
+            style={STATUS_STYLE[detail.status]}
+          >
             {STATUS_ICONS[detail.status]} {detail.status}
           </span>
           <span className="text-[11px] font-mono text-muted-foreground">
@@ -605,7 +741,8 @@ function RunDetailView({
             <button
               onClick={onAccept}
               disabled={actionInFlight}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-colors disabled:opacity-50 font-display"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-colors hover:opacity-80 disabled:opacity-50 font-display"
+              style={{ background: 'var(--healthy-wash)', color: 'var(--healthy)' }}
             >
               {actionInFlight ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
               Accept & Deploy
@@ -655,19 +792,21 @@ interface GateRowProps {
   gate: { gate: string; verdict: string; reason?: string };
 }
 
+const GATE_VERDICT_COLOR: Record<string, string> = {
+  pass: 'var(--healthy)',
+  warn: 'var(--attention)',
+  fail: 'var(--risk)',
+};
+
 function GateRow({ gate }: GateRowProps) {
-  const verdictColors: Record<string, string> = {
-    pass: 'text-emerald-400',
-    warn: 'text-amber-400',
-    fail: 'text-destructive',
-  };
+  const color = GATE_VERDICT_COLOR[gate.verdict] ?? 'var(--text-muted, hsl(var(--muted-foreground)))';
   return (
     <div className="flex items-start gap-2 p-2 text-[11px]">
-      <ChevronRight className={`w-3 h-3 mt-0.5 shrink-0 ${verdictColors[gate.verdict] ?? 'text-muted-foreground'}`} />
+      <ChevronRight className="w-3 h-3 mt-0.5 shrink-0" style={{ color }} />
       <div className="flex-1 min-w-0">
         <p className="text-foreground font-mono">
           {gate.gate}
-          <span className={`ml-1.5 uppercase tracking-wide ${verdictColors[gate.verdict] ?? 'text-muted-foreground'}`}>
+          <span className="ml-1.5 uppercase tracking-wide" style={{ color }}>
             {gate.verdict}
           </span>
         </p>
@@ -676,6 +815,158 @@ function GateRow({ gate }: GateRowProps) {
         )}
       </div>
     </div>
+  );
+}
+
+// ── Skill card + version ladder (D12) ─────────────────────────────
+
+interface SkillCardProps {
+  group: SkillGroup;
+  selectedUuid: string | null;
+  onSelectRun: (uuid: string) => void;
+}
+
+/**
+ * One evolving target rendered as a skill card with a version ladder. The
+ * "current quality" stat shows the best *delta* in the group (the honest stat
+ * we have — the backend stores relative deltas, not absolute quality scores,
+ * so we never print a fabricated "91%"). Each version is selectable and routes
+ * to the existing right-pane detail view via onSelectRun.
+ */
+function SkillCard({ group, selectedUuid, onSelectRun }: SkillCardProps) {
+  const { versions, deployed, maxDelta, targetName, targetKind } = group;
+  const headline = deployed ?? versions[versions.length - 1];
+  // Score-bar scale: relative to the largest delta in this group (or the
+  // headline's own delta if all are ≤0), so the ladder reads as a progression.
+  const scaleBase = Math.max(maxDelta, Math.abs(headline.delta_accuracy), 0.0001);
+
+  return (
+    <div
+      className="rounded-lg overflow-hidden mb-1.5"
+      style={{ border: '1px solid var(--line)', background: 'var(--surface-card, hsl(var(--card)))' }}
+    >
+      {/* Skill header */}
+      <div
+        className="flex items-center gap-2.5 px-2.5 py-2"
+        style={{ borderBottom: '1px solid var(--line-soft)' }}
+      >
+        <div
+          className="w-7 h-7 shrink-0 grid place-items-center rounded"
+          style={{ background: 'linear-gradient(150deg, var(--honey-bright), var(--honey-deep))' }}
+        >
+          <Hexagon className="w-3.5 h-3.5" style={{ color: '#1a1407' }} fill="#1a1407" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-display font-semibold text-foreground truncate">
+            {targetName ?? '(no target)'}
+          </p>
+          <p className="text-[10px] text-muted-foreground truncate">
+            {targetKind} · {versions.length} version{versions.length !== 1 ? 's' : ''}
+          </p>
+        </div>
+        <div className="text-right shrink-0">
+          <p className="text-sm font-display font-bold leading-none" style={{ color: 'var(--honey)' }}>
+            {formatDelta(headline.delta_accuracy)}
+          </p>
+          <p className="text-[9px] text-muted-foreground font-mono mt-0.5">
+            {deployed ? 'deployed lift' : 'best so far'}
+          </p>
+        </div>
+      </div>
+
+      {/* Version ladder */}
+      <div className="px-2.5 py-1.5 space-y-0.5">
+        {versions.map((run, i) => (
+          <VersionRow
+            key={run.run_uuid}
+            run={run}
+            index={i}
+            isBest={deployed ? run.run_uuid === deployed.run_uuid : i === versions.length - 1}
+            scaleBase={scaleBase}
+            selected={selectedUuid === run.run_uuid}
+            onSelect={() => onSelectRun(run.run_uuid)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+interface VersionRowProps {
+  run: EvolutionRun;
+  index: number;
+  isBest: boolean;
+  scaleBase: number;
+  selected: boolean;
+  onSelect: () => void;
+}
+
+function VersionRow({ run, index, isBest, scaleBase, selected, onSelect }: VersionRowProps) {
+  // Bar width: positive deltas only fill the track; non-positive read as a stub.
+  const ratio = run.delta_accuracy > 0 ? Math.min(run.delta_accuracy / scaleBase, 1) : 0;
+  const widthPct = Math.max(ratio * 100, run.delta_accuracy > 0 ? 8 : 3);
+  const provenance = deriveProvenance(run);
+
+  return (
+    <button
+      onClick={onSelect}
+      className={`w-full text-left grid grid-cols-[28px_1fr] gap-2 py-1.5 px-1 rounded transition-colors ${
+        selected ? 'bg-primary/10' : 'hover:bg-muted/40'
+      }`}
+    >
+      <span
+        className="text-[11px] font-mono font-semibold pt-0.5"
+        style={{ color: isBest ? 'var(--honey)' : 'var(--text-2, hsl(var(--foreground)))' }}
+      >
+        v{index + 1}
+      </span>
+      <div className="min-w-0">
+        {/* Improve-note: the human's note when present (honest — the backend
+            stores no optimizer-authored description; we don't invent one). */}
+        {run.user_note ? (
+          <p className="text-[11px] text-foreground/90 leading-snug mb-1 break-words">
+            {run.user_note}
+          </p>
+        ) : (
+          <p className="text-[11px] text-muted-foreground/70 leading-snug mb-1 italic">
+            {run.status === 'proposed' ? 'awaiting review' : run.status}
+          </p>
+        )}
+        {/* Score bar — relative to the group's best delta. */}
+        <div className="flex items-center gap-2">
+          <div
+            className="flex-1 h-1.5 rounded-full overflow-hidden"
+            style={{ background: 'var(--surface-2, hsl(var(--secondary)))', border: '1px solid var(--line-soft)' }}
+          >
+            <div
+              className="h-full rounded-full"
+              style={{
+                width: `${widthPct}%`,
+                background: isBest
+                  ? 'linear-gradient(90deg, var(--honey-deep), var(--honey-bright))'
+                  : 'var(--line-strong)',
+              }}
+            />
+          </div>
+          <span
+            className="text-[10px] font-mono font-semibold shrink-0"
+            style={{ color: isBest ? 'var(--honey)' : 'var(--text-2, hsl(var(--foreground)))' }}
+          >
+            {formatDelta(run.delta_accuracy)}
+          </span>
+        </div>
+        {/* D13 provenance — only when verifiably recorded; otherwise omitted. */}
+        {provenance && (
+          <div
+            className="mt-1 inline-flex items-center gap-1 text-[9.5px] font-mono"
+            style={{ color: 'var(--intel)' }}
+          >
+            <ShieldCheck className="w-2.5 h-2.5" />
+            {provenance}
+          </div>
+        )}
+      </div>
+    </button>
   );
 }
 
@@ -956,7 +1247,10 @@ function NewRunModal({ onClose, onSuccess }: NewRunModalProps) {
                 </div>
               )}
               {runResult && (
-                <div className="text-[11px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded px-2 py-1.5">
+                <div
+                  className="text-[11px] rounded px-2 py-1.5"
+                  style={{ color: 'var(--healthy)', background: 'var(--healthy-wash)', border: '1px solid var(--healthy)' }}
+                >
                   Run complete: <span className="font-mono">{runResult.outcome}</span>
                   {runResult.reason && <span className="text-muted-foreground"> — {runResult.reason}</span>}
                   {runResult.run && <span className="block text-[10px] text-muted-foreground font-mono mt-0.5">uuid: {runResult.run.run_uuid}</span>}
