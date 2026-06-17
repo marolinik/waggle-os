@@ -43,6 +43,21 @@ export const TEMPLATE_PERSONA: Readonly<Record<string, string>> = {
   'blank': 'general-purpose',
 };
 
+/**
+ * PR5 D5 — the curated 6 onboarding starting points for the ≤2-min flow. The full
+ * 15 (and more specialists) live in the workspace gallery later. These map to existing
+ * TEMPLATES ids + TEMPLATE_PERSONA — curation, not new data.
+ */
+export const CURATED_ONBOARDING_TEMPLATE_IDS = [
+  'research-project', 'code-review', 'sales-pipeline',
+  'marketing-campaign', 'product-launch', 'blank',
+] as const;
+
+export const CURATED_ONBOARDING_TEMPLATES: readonly OnboardingTemplate[] =
+  CURATED_ONBOARDING_TEMPLATE_IDS
+    .map((id) => TEMPLATES.find((t) => t.id === id))
+    .filter((t): t is OnboardingTemplate => Boolean(t));
+
 export const ALL_ONBOARDING_PERSONAS: readonly OnboardingPersona[] = [
   { id: 'general-purpose', name: 'General Purpose', icon: Brain, desc: 'Adapts to any task', tier: 'universal' as const },
   { id: 'researcher', name: 'Researcher', icon: Microscope, desc: 'Deep research & synthesis', tier: 'knowledge' as const },
