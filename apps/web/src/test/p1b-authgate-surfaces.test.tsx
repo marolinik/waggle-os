@@ -37,6 +37,9 @@ const mocks = vi.hoisted(() => ({
     getTelemetryStatus: vi.fn(),
     getTeamStatus: vi.fn(),
     getServerUrl: vi.fn(),
+    // PR5: Settings opens on the Models tab → ModelGate fetches these on mount.
+    getProviders: vi.fn(),
+    getLocalInferenceStatus: vi.fn(),
   },
 }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
@@ -236,10 +239,15 @@ describe('SettingsApp tier badges (P1b D3-4)', () => {
     mocks.adapter.getTelemetryStatus.mockResolvedValue({ enabled: false });
     mocks.adapter.getTeamStatus.mockResolvedValue({ connected: false });
     mocks.adapter.getServerUrl.mockReturnValue('http://127.0.0.1:3333');
+    mocks.adapter.getProviders.mockResolvedValue({ providers: [], search: [], activeSearch: 'duckduckgo' });
+    mocks.adapter.getLocalInferenceStatus.mockResolvedValue({ servers: [], ollamaInstalled: false, totalLocalModels: 0 });
     const { default: SettingsApp } = await import('@/components/os/apps/SettingsApp');
     const { TooltipProvider } = await import('@/components/ui/tooltip');
-    const { render, screen } = await import('@testing-library/react');
+    const { render, screen, fireEvent } = await import('@testing-library/react');
     render(<TooltipProvider><SettingsApp /></TooltipProvider>);
+    // PR5 §11: Settings now opens on Models ("Models leads"). The tier card lives
+    // in General — navigate there for these tier-as-fact assertions.
+    fireEvent.click(await screen.findByRole('tab', { name: /general/i }));
     return screen;
   }
 
