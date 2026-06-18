@@ -73,7 +73,7 @@ export function buildCommandCatalog(ctx: CatalogContext): CatalogGroup[] {
     { id: "start-task", group: "do", name: "Start a task", subtitle: "new agent run", icon: Plus, action: "spawn" },
     { id: "launch-agent", group: "do", name: "Launch a coding agent", subtitle: "Claude Code · Cursor · Codex — shares this hive", icon: Rocket, to: "/launcher" },
     { id: "settings", group: "do", name: "Settings", subtitle: "models · failover · permissions · plan", icon: Settings, to: "/settings" },
-    { id: "upgrade", group: "do", name: "Upgrade to Pro", subtitle: "plans · billing · invoices", icon: Sparkles, to: "/settings" },
+    { id: "upgrade", group: "do", name: "Upgrade to Pro", subtitle: "plans · billing · invoices", icon: Sparkles, to: "/settings?tab=billing" },
   ];
 
   const power: CatalogCommand[] = [

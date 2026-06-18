@@ -406,11 +406,11 @@ const ShellLayout = () => {
           adapter.startTrial().then(refreshTier).catch(refreshTier);
         }}
         onUpgrade={(tier) => {
-          // Checkout-failure fallback retargets to navigate('/settings')
-          // (§1.2 — instance of §2.1 rule 3).
-          adapter.createCheckoutSession(tier === 'TEAMS' ? 'TEAMS' : 'PRO').catch(() => {
-            navigate('/settings');
-          });
+          // PR7a: open the hosted Stripe Checkout on success (the URL was previously
+          // discarded — a dead happy path); on failure fall back to the Plan tab.
+          adapter.createCheckoutSession(tier === 'TEAMS' ? 'TEAMS' : 'PRO')
+            .then(({ url }) => { if (url) window.open(url, '_blank'); })
+            .catch(() => { navigate('/settings?tab=billing'); });
         }}
       />
 
@@ -419,7 +419,10 @@ const ShellLayout = () => {
         onDismiss={() => setShowTrialExpired(false)}
         onUpgrade={(tier) => {
           setShowTrialExpired(false);
-          adapter.createCheckoutSession(tier).catch(() => { navigate('/settings'); });
+          // PR7a: open hosted Checkout on success; Plan-tab fallback on failure.
+          adapter.createCheckoutSession(tier)
+            .then(({ url }) => { if (url) window.open(url, '_blank'); })
+            .catch(() => { navigate('/settings?tab=billing'); });
         }}
       />
     </div>

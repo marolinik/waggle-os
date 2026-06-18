@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Cpu, Shield, Palette, Save, Loader2, Users, Database,
   Download, Upload, Link2, Building, Wrench, DollarSign, Key, Lock, BarChart3, Trash2,
   RotateCcw, GraduationCap, HelpCircle,
 } from 'lucide-react';
+import PlanCards from '@/components/os/billing/PlanCards';
 import { useToast } from '@/hooks/use-toast';
 import { useFeatureGate } from '@/hooks/useFeatureGate';
 import { useBilling } from '@/hooks/useBilling';
@@ -87,6 +89,20 @@ const SettingsApp = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userTier]);
+
+  // PR7a/D12: `?tab=` deep-link reader. Upgrade entry points route to
+  // `/settings?tab=billing`; this also fixes the pre-existing `?tab=backup`
+  // deep-link (routes.ts:52) that opened Models because there was no reader.
+  // Snaps to a KNOWN tab, respecting the tier filter (e.g. an Essential user
+  // deep-linked to `advanced` falls back to general, never a half-shipped tab).
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (!tabParam || !tabs.some(t => t.id === tabParam)) return;
+    const next = resolveActiveSettingsTab(userTier, tabParam, tabs);
+    if (next) setActiveTab(next as SettingsTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
   const { toast } = useToast();
   const [showWizardReplayConfirm, setShowWizardReplayConfirm] = useState(false);
 
@@ -508,26 +524,25 @@ const SettingsApp = () => {
           </div>
         )}
 
-        {/* ═══ BILLING ═══ */}
+        {/* ═══ BILLING (PR7a — screen 14, themed over the REAL useBilling→Stripe flow) ═══ */}
         {activeTab === 'billing' && (
-          <div className="space-y-5">
+          <div className="space-y-6">
             <h3 className="text-sm font-display font-semibold text-foreground">Plan & Subscription</h3>
 
-            {/* F4 from the 2026-05-28 addictiveness audit — visible
-                value-prop framing so users see they're replacing 7-ish
-                subscription tools, not adding an 8th. Renders above the
-                tier card so it's the first thing they read in Billing. */}
+            {/* F4 from the 2026-05-28 addictiveness audit — visible value-prop
+                framing so users see they're replacing 7-ish subscription tools,
+                not adding an 8th. */}
             <CoverageCompassCard />
 
-            {/* Current tier badge. P1b D3-4: while the tier is unresolved
-                (boot race / sidecar down) render an explicit unresolved state —
-                NEVER the default 'FREE' as fact. */}
+            {/* Current tier badge. F7: while the tier is unresolved (boot race /
+                sidecar down) render an explicit unresolved state — NEVER the
+                default 'FREE' as fact. */}
             {!billing.tierResolved ? (
-              <div className="p-4 rounded-xl bg-secondary/30 border border-border/30" data-testid="billing-tier-unresolved">
+              <div className="p-4 rounded-[14px] bg-[var(--surface-2)] border border-[var(--line-soft)]" data-testid="billing-tier-unresolved">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs font-display font-medium text-foreground">Current Plan</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                    <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
                       {billing.error ? 'Couldn’t reach the server to confirm your plan — retrying automatically.' : 'Confirming your plan…'}
                     </p>
                   </div>
@@ -535,11 +550,11 @@ const SettingsApp = () => {
                 </div>
               </div>
             ) : (
-            <div className="p-4 rounded-xl bg-secondary/30 border border-border/30">
+            <div className="p-4 rounded-[14px] bg-[var(--surface)] border border-[var(--line-soft)]">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs font-display font-medium text-foreground">Current Plan</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                  <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
                     {billing.tier === 'FREE' && 'Free tier — upgrade to unlock all features'}
                     {billing.tier === 'TRIAL' && 'Trial — 15 days of everything unlocked'}
                     {billing.tier === 'PRO' && '$19/mo — unlimited workspaces, marketplace, all connectors'}
@@ -549,10 +564,10 @@ const SettingsApp = () => {
                 </div>
                 <span className={`px-3 py-1 rounded-full text-xs font-display font-semibold ${
                   billing.tier === 'FREE' ? 'bg-muted text-muted-foreground' :
-                  billing.tier === 'TRIAL' ? 'bg-honey/20 text-honey' :
+                  billing.tier === 'TRIAL' ? 'bg-[var(--honey-wash)] text-primary' :
                   billing.tier === 'PRO' ? 'bg-primary/20 text-primary' :
-                  billing.tier === 'TEAMS' ? 'bg-violet-500/20 text-violet-400' :
-                  'bg-amber-500/20 text-amber-400'
+                  billing.tier === 'TEAMS' ? 'bg-[var(--intel-wash)] text-[var(--intel)]' :
+                  'bg-[var(--work-wash)] text-[var(--work)]'
                 }`}>
                   {billing.tier}
                 </span>
@@ -560,7 +575,7 @@ const SettingsApp = () => {
             </div>
             )}
 
-            {/* Error display */}
+            {/* Error display (F8 — honest, e.g. STRIPE_NOT_CONFIGURED 503; never a fake subscribe) */}
             {billing.error && (
               <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
                 <p className="text-[11px] text-destructive">{billing.error}</p>
@@ -575,77 +590,57 @@ const SettingsApp = () => {
               </div>
             )}
 
-            {/* Upgrade buttons for FREE / TRIAL users — only on a RESOLVED tier (D3-4) */}
-            {billing.tierResolved && (billing.tier === 'FREE' || billing.tier === 'TRIAL') && (
-              <div className="space-y-2">
-                <p className="text-xs font-display font-medium text-foreground">Upgrade</p>
-                <div className="grid grid-cols-2 gap-3">
+            {/* Plans grid — tiers that still have an upgrade path (FREE/TRIAL/PRO).
+                Choosing a plan hands off to hosted Stripe Checkout (D5); the
+                Monthly/Annual toggle resolves the REAL annual price (D8/F9), not
+                a cosmetic client discount. Only on a RESOLVED tier (F7). */}
+            {billing.tierResolved && (billing.tier === 'FREE' || billing.tier === 'TRIAL' || billing.tier === 'PRO') && (
+              <PlanCards
+                currentTier={billing.tier}
+                onChoose={(tier, period) => billing.startCheckout(tier, period)}
+              />
+            )}
+
+            {/* Manage — paid tiers. Hosted Stripe Customer Portal launchpad (D6).
+                The mock's invoice list / "VISA ···4242" / next-charge date are
+                GATED OFF (F2/F3/F4) — there is no data source; the Portal is the
+                real surface for payment method, invoices, plan change, cancel. */}
+            {billing.tierResolved && (billing.tier === 'PRO' || billing.tier === 'TEAMS') && (
+              <div className="p-5 rounded-[18px] bg-[var(--surface)] border border-[var(--honey-line)]">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[15px] font-display font-semibold text-foreground">Waggle {billing.tier === 'PRO' ? 'Pro' : 'Teams'}</p>
+                    <p className="text-[12px] text-[var(--text-muted)] mt-0.5">Subscription managed securely via Stripe.</p>
+                  </div>
+                  <span className="text-[11.5px] font-[650] text-primary bg-[var(--honey-wash)] border border-[var(--honey-line)] px-3 py-1.5 rounded-full whitespace-nowrap">● Active</span>
+                </div>
+                <div className="mt-4 pt-4 border-t border-[var(--line-soft)]">
                   <button
-                    onClick={() => billing.startCheckout('PRO')}
-                    className="p-4 rounded-xl bg-primary/10 border border-primary/30 text-left hover:bg-primary/20 transition-colors"
+                    onClick={() => billing.openPortal()}
+                    className="flex items-center gap-1.5 px-3.5 py-2 text-[13px] font-[650] rounded-[10px] bg-[var(--surface-2)] text-[var(--text-2)] border border-[var(--line-strong)] hover:border-[var(--honey-line)] hover:text-primary transition-colors"
                   >
-                    <p className="text-xs font-display font-semibold text-primary">Pro</p>
-                    <p className="text-[11px] text-muted-foreground mt-1">$19/mo</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">Unlimited workspaces, marketplace, all connectors</p>
+                    <DollarSign className="w-3.5 h-3.5" />
+                    Manage subscription
                   </button>
-                  <button
-                    onClick={() => billing.startCheckout('TEAMS')}
-                    className="p-4 rounded-xl bg-violet-500/10 border border-violet-500/30 text-left hover:bg-violet-500/20 transition-colors"
-                  >
-                    <p className="text-xs font-display font-semibold text-violet-400">Teams</p>
-                    <p className="text-[11px] text-muted-foreground mt-1">$49/mo per seat</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">Shared workspaces, WaggleDance, governance</p>
-                  </button>
+                  <p className="text-[11px] text-[var(--text-muted)] mt-2">
+                    Update payment method, view invoices, switch to annual, or cancel — all via the Stripe customer portal.
+                  </p>
                 </div>
               </div>
             )}
 
-            {/* Upgrade to Teams for PRO users */}
-            {billing.tier === 'PRO' && (
-              <div className="space-y-3">
-                <button
-                  onClick={() => billing.startCheckout('TEAMS')}
-                  className="w-full p-4 rounded-xl bg-violet-500/10 border border-violet-500/30 text-left hover:bg-violet-500/20 transition-colors"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-display font-semibold text-violet-400">Upgrade to Teams</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">$49/mo per seat — shared workspaces, governance, KVARK funnel</p>
-                    </div>
-                    <span className="text-violet-400 text-xs">&#8594;</span>
-                  </div>
-                </button>
-              </div>
-            )}
-
-            {/* Manage Subscription for paid users */}
-            {(billing.tier === 'PRO' || billing.tier === 'TEAMS') && (
-              <div className="pt-2 border-t border-border/30">
-                <button
-                  onClick={() => billing.openPortal()}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-secondary/50 text-foreground hover:bg-secondary/70 transition-colors"
-                >
-                  <DollarSign className="w-3 h-3" />
-                  Manage Subscription
-                </button>
-                <p className="text-[11px] text-muted-foreground mt-2">
-                  Update payment method, view invoices, or cancel your subscription via the Stripe customer portal.
-                </p>
-              </div>
-            )}
-
-            {/* Enterprise CTA — only on a RESOLVED tier (D3-4) */}
+            {/* Enterprise CTA — the KVARK funnel. Only on a RESOLVED tier (F7). */}
             {billing.tierResolved && billing.tier !== 'ENTERPRISE' && (
-              <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/20">
-                <p className="text-xs font-display font-medium text-amber-400">Enterprise</p>
-                <p className="text-[11px] text-muted-foreground mt-1">
+              <div className="p-4 rounded-[14px] bg-[var(--work-wash)] border border-[var(--line-soft)]">
+                <p className="text-xs font-display font-medium text-[var(--work)]">Enterprise</p>
+                <p className="text-[11px] text-[var(--text-muted)] mt-1">
                   Need sovereign deployment, audit trail, and KVARK integration?
                 </p>
                 <a
                   href="https://www.kvark.ai"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-block mt-2 text-[11px] text-amber-400 hover:text-amber-300 underline"
+                  className="inline-block mt-2 text-[11px] text-[var(--work)] hover:text-primary underline"
                 >
                   Contact sales at kvark.ai
                 </a>

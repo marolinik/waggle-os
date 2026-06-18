@@ -25,10 +25,16 @@ vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
 async function renderSettings() {
   const { default: SettingsApp } = await import('@/components/os/apps/SettingsApp');
   const { TooltipProvider } = await import('@/components/ui/tooltip');
+  const { MemoryRouter } = await import('react-router-dom');
   render(
-    <TooltipProvider>
-      <SettingsApp />
-    </TooltipProvider>,
+    // SettingsApp reads `?tab=` via useSearchParams (PR7a/D12) — it is a routed
+    // surface (SettingsRoute mounts it inside BrowserRouter), so tests must
+    // provide a Router context.
+    <MemoryRouter>
+      <TooltipProvider>
+        <SettingsApp />
+      </TooltipProvider>
+    </MemoryRouter>,
   );
 }
 

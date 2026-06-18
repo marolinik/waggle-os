@@ -243,8 +243,10 @@ describe('SettingsApp tier badges (P1b D3-4)', () => {
     mocks.adapter.getLocalInferenceStatus.mockResolvedValue({ servers: [], ollamaInstalled: false, totalLocalModels: 0 });
     const { default: SettingsApp } = await import('@/components/os/apps/SettingsApp');
     const { TooltipProvider } = await import('@/components/ui/tooltip');
+    const { MemoryRouter } = await import('react-router-dom');
     const { render, screen, fireEvent } = await import('@testing-library/react');
-    render(<TooltipProvider><SettingsApp /></TooltipProvider>);
+    // SettingsApp reads `?tab=` via useSearchParams (PR7a/D12) — needs a Router.
+    render(<MemoryRouter><TooltipProvider><SettingsApp /></TooltipProvider></MemoryRouter>);
     // PR5 §11: Settings now opens on Models ("Models leads"). The tier card lives
     // in General — navigate there for these tier-as-fact assertions.
     fireEvent.click(await screen.findByRole('tab', { name: /general/i }));

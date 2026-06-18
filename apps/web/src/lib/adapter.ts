@@ -2664,10 +2664,15 @@ class LocalAdapter {
     return res.json();
   }
 
-  async createCheckoutSession(tier: 'PRO' | 'TEAMS'): Promise<{ url: string }> {
+  async createCheckoutSession(
+    tier: 'PRO' | 'TEAMS',
+    billingPeriod?: 'monthly' | 'annual',
+  ): Promise<{ url: string }> {
+    // PR7a/D8: thread billingPeriod so the annual toggle resolves the real annual
+    // Stripe price (priceIdForTier). Omitted → backend defaults to monthly.
     const res = await this.fetch('/api/stripe/create-checkout-session', {
       method: 'POST',
-      body: JSON.stringify({ tier }),
+      body: JSON.stringify(billingPeriod ? { tier, billingPeriod } : { tier }),
     });
     return res.json();
   }
