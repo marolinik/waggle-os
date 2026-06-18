@@ -29,9 +29,13 @@ litellm (even `main-latest`, 1.81.9) translates `reasoning_effort` → Anthropic
 
 **Recommendation:** Option 1 for the first priced cells (unblocks immediately, disclose "Opus runs adaptive-effort, not pinned"), and pursue Option 2 in parallel so the effort-sweep (§5.3 / `03` D5) is available for the full grid. Either way the **arm-A neutrality check** (`03` D5: arm A ≥ arm E on ≥1 cell) still governs.
 
-## Actions
+## Resolution (2026-06-18, founder decisions actioned)
 
-- **gpt-5.5**: done (`gpt-5.5-responses`).
-- **Opus 4.8**: founder decision on the fork above → implement before freeze; re-probe to confirm tool_call + thinking both fire.
-- **Gemini 3.1**: rotate `GEMINI_API_KEY` (expired) → re-probe; then check whether Gemini's thinking API needs an analogous fix (untested — blocked behind the key).
-- **General rule for the pre-reg:** every reasoning arm must pass this tool+reasoning probe BEFORE the freeze; a silent all-error arm is the single highest-severity apparatus risk (caught twice now: gpt-5.5, Opus 4.8).
+- **gpt-5.5**: done (`gpt-5.5-responses` bridge) — tool_call confirmed.
+- **Opus 4.8** — founder chose **default-adaptive now + pinned-effort passthrough in parallel**. Default-adaptive verified: curl tool-call HTTP 200 without the thinking param; tau2 smoke ran with **0 thinking/BadRequest errors** (it infra-errored only on the gpt-5.2 *user-sim* quota, not Opus). So the Opus AGENT routing is validated for default-adaptive. **Parallel track (open):** litellm `output_config.effort` passthrough to restore §5.3 effort-pinning + sweep.
+- **Gemini 3.1 Pro** — new key in; native Google API tool+thinking = HTTP 200; **through litellm: HTTP 200, `reasoning_effort`→`thinkingConfig` translated with NO error** (returned text not tool_call on the bare prompt — a model choice, not the hard-400 failure class). Routing OK; a full end-to-end tau2 Gemini smoke is pending OpenAI quota (user-sim). Key supplied via proxy env (`os.environ/GEMINI_API_KEY`, not committed); **rotate after the study (it transited chat)**.
+- **Verdict: no frontier arm has an unresolved HARD routing blocker.** The pre-reg rule stands: every reasoning arm must pass this probe before freeze.
+
+## NEW BLOCKER — OpenAI quota exhausted (recurring)
+
+`gpt-5.2 → HTTP 429 insufficient_quota` again (2nd time; ~$54+ of pilot runs drained the top-up). **gpt-5.2 is the user-sim for EVERY τ² cell**, so this blocks all scored runs. The priced study grid (pooled N≈1,500 × arms A–E × trials) is **far larger** than the pilot — it needs a **substantial OpenAI credit allocation / raised spend cap up front**, not incremental top-ups. Founder action. (Anthropic/Gemini spend is separate and not yet stressed.)
