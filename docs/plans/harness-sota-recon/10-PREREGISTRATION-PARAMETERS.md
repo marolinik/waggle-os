@@ -161,6 +161,18 @@ Planning: **δ = 0.05, gap = 0.01, power = 0.80, DEFF ≈ 2.4** (ICC 0.1, mean c
 | 0.25 | 0.500 | 966 | **~2,320** |
 | 0.35 | 0.592 | 1,354 | **~3,250** |
 
+**PILOT-MEASURED 2026-06-18 (docs/14, adversarially verified) — the DEFF assumption above is REVISED:**
+- **Cluster ≠ procedure-family.** Measured family-level ICC ≈ **0** (banking −0.01, retail −0.04) → family DEFF ≈ 1, NOT 2.4.
+  The binding cluster is **trials-within-task**: ICC(1) = **0.674 banking / 0.239 retail**.
+- **Cluster = TASK; DEFF computed on REALIZED valid-trials/task (n0), not nominal k=4.** Infra-error attrition cut
+  banking to n0=2.62 (retail 3.82). Realistic **DEFF ≈ 2.09 banking / 1.67 retail** (= 1+(n0−1)·ICC). Escape hatch:
+  **1 trial/task → DEFF=1** (use if pass^k isn't required on the accuracy cell).
+- **Min-valid-trials inclusion rule (NEW, pre-register):** a task enters the accuracy estimate only with **≥3 of 4**
+  valid trials; infra-failed cells are **re-run** before scoring (banking pilot infra-rate was 34.5% from user-sim RPM
+  throttle — mitigated by low concurrency + restored quota).
+- **Discordance:** within-trial floor (conservative lower bound, arm-independence assumption) = 0.091/0.156 banking,
+  0.191/0.256 retail (biased/unbiased). TRUE cross-arm discordance comes from the first paired A-vs-B cell.
+
 **Implication & rule:** a *binary* accuracy-TOST verdict at δ=±5pp needs ~1,400–3,250 paired items — likely beyond a
 single substrate (**τ² = 164: retail 114 + airline 50** after dropping telecom; **+ banking_knowledge 97 = 261**; GAIA2 ~400/2 splits). Therefore:
 - **Target a POOLED `N_test` ≈ 1,500** across τ² + GAIA2 (+ optional AppWorld) for the binary δ=±5pp TOST. [PILOT]
@@ -243,7 +255,7 @@ full priced run. [REC]
 3. ☐ Gemini 3.5 Pro GA id + price (else keep `gemini-3.1-pro` fallback + disclose).
 4. ☐ τ²-bench license (redistribution) + the exact commit SHA to pin.
 5. ☑ Ruler anchor PINNED 2026-06-17 (`config/rulers.json` + `11`): banking_knowledge × GPT-5.5 = 37.37 (±~10pp, n=97) primary + retail × GPT-5.2 = 81.58 secondary; protocol v0.2.1-dev + gpt-5.2 user-sim.
-6. ☐ Pilot-measured discordance + ICC → recompute powered `N_test` (§6.1).
+6. ◑ Pilot-measured 2026-06-18 (docs/14): ICC(trials-within-task)=0.67 banking/0.24 retail; family-ICC≈0 (cluster=task, realized-n0 DEFF≈2.1/1.7); discordance floor (lower bound) 0.09–0.26. N stays PROVISIONAL — finalize from the first paired A-vs-B cell + the 4×-budget re-derivability probe (study-time). Banking construct check PASSED (DB/action-graded, communicate_info empty 0/97 → agentic not memory-QA).
 7. ☐ Embedding near-dup cutoff calibrated on control sets (§8).
 8. ☐ Firewall assertions implemented (Plan 06) + green + code-frozen at a SHA.
 9. ☐ Decision: AppWorld credibility arm in Phase 1, yes/no.
