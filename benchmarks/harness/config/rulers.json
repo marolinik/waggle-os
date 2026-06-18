@@ -27,7 +27,8 @@
         "source": "Sierra τ²-bench leaderboard submission gpt-5-5_sierra_2026-05-05 (results.banking_knowledge.pass_1=37.37; v0.2.1-dev, user_simulator gpt-5.2; arXiv:2506.07982). n=97 -> tolerance = 95% Clopper-Pearson ~ ±10pp (binomial SE ~ 4.9pp at p=0.3737). MUST route via the `gpt-5.5-responses` alias (OpenAI /v1/responses) — gpt-5.5 rejects tools+reasoning on /chat/completions (2026-06-17 pilot)."
       },
       "n_tasks": 97,
-      "measured": null
+      "measured": 0.3488,
+      "measured_run": "waggle_ruler_banking_gpt55resp_high_n97k4 (2026-06-18): pass^1 per-task = 34.88% over 97/97 tasks (254 valid trials, 134/388 infra-errored on user-sim RPM throttle but 0/97 tasks fully lost). |Δ|=2.49pp vs 37.37 -> PASS. Cost $4.43. agent=gpt-5.5-responses reasoning=high, user=gpt-5.2 reasoning=low, max_steps=200."
     },
     {
       "role": "SECONDARY_CROSSCHECK",
@@ -41,7 +42,8 @@
         "source": "Sierra τ²-bench leaderboard submission gpt-5-2_sierra_2026-02-26 full-domain row (results.retail.pass_1=81.58; v0.2.1-dev, user_simulator gpt-5.2). n=114 -> tolerance ~ ±8pp (binomial SE ~ 3.6pp at p=0.8158). Alternative anchor if preferred: retail × claude-opus-4-5 = 79.61 (pending Opus-4.5 API availability)."
       },
       "n_tasks": 114,
-      "measured": null
+      "measured": 0.7770,
+      "measured_run": "waggle_ruler_retail_gpt52_high_n114k4 (2026-06-17): pass^1 per-task = 77.70% over 114/114 tasks (435 valid trials, 21 infra-errored). |Δ|=3.88pp vs 81.58 -> PASS. Cost $30.21. agent=user=gpt-5.2 reasoning=high/low, max_steps=200. (First attempt 68.16% was reasoning-OFF + max_steps=30 — see docs/12.)"
     }
   ]
 }
