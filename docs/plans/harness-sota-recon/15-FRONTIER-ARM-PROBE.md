@@ -32,7 +32,15 @@ litellm (even `main-latest`, 1.81.9) translates `reasoning_effort` → Anthropic
 ## Resolution (2026-06-18, founder decisions actioned)
 
 - **gpt-5.5**: done (`gpt-5.5-responses` bridge) — tool_call confirmed.
-- **Opus 4.8** — founder chose **default-adaptive now + pinned-effort passthrough in parallel**. Default-adaptive verified: curl tool-call HTTP 200 without the thinking param; tau2 smoke ran with **0 thinking/BadRequest errors** (it infra-errored only on the gpt-5.2 *user-sim* quota, not Opus). So the Opus AGENT routing is validated for default-adaptive. **Parallel track (open):** litellm `output_config.effort` passthrough to restore §5.3 effort-pinning + sweep.
+- **Opus 4.8** — founder chose **default-adaptive now + pinned-effort passthrough in parallel**. BOTH now delivered:
+  - Default-adaptive: curl tool-call HTTP 200 without a thinking param; tau2 smoke ran 0 thinking/BadRequest errors (infra-errored only on the gpt-5.2 user-sim quota).
+  - **Pinned-effort passthrough — SOLVED, config-only (no litellm patch):** send the raw Anthropic params via tau2's `--agent-llm-args` instead of `reasoning_effort`:
+    ```
+    --agent-llm openai/claude-opus-4-8 \
+    --agent-llm-args '{"thinking":{"type":"adaptive"},"output_config":{"effort":"high"}}'
+    ```
+    litellm forwards them untouched (it only injects the broken `thinking.enabled` when `reasoning_effort` is present). Verified: HTTP 200, **tool_call fires** (finish_reason=tool_calls), and effort visibly changes behavior (completion_tokens 699 low → 967 high on a reasoning prompt). This restores the §5.3 effort-pin + sweep on Opus from the first cell.
+  - **CAVEAT to disclose:** `reasoning_tokens` reads **0** through the OpenAI-compat proxy path — litellm's usage mapping doesn't surface Anthropic adaptive-thinking reasoning tokens. Fine for *running* Opus, but the **effort-sweep + cost-accounting + EU-AI-Act token replay** need accurate thinking-token counts → use litellm's native usage or an Anthropic-direct accounting path for Opus cost rows. (Open telemetry item, not a run blocker.)
 - **Gemini 3.1 Pro** — new key in; native Google API tool+thinking = HTTP 200; **through litellm: HTTP 200, `reasoning_effort`→`thinkingConfig` translated with NO error** (returned text not tool_call on the bare prompt — a model choice, not the hard-400 failure class). Routing OK; a full end-to-end tau2 Gemini smoke is pending OpenAI quota (user-sim). Key supplied via proxy env (`os.environ/GEMINI_API_KEY`, not committed); **rotate after the study (it transited chat)**.
 - **Verdict: no frontier arm has an unresolved HARD routing blocker.** The pre-reg rule stands: every reasoning arm must pass this probe before freeze.
 
