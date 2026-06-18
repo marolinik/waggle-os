@@ -65,11 +65,12 @@ const CONNECTOR_GUIDES: Record<string, { unlocks: string; steps: string[]; setup
   },
 };
 
+// Warm-token type badges (D21) — desaturated from the old raw sky/emerald/violet/amber.
 const TYPE_BADGES: Record<string, { label: string; color: string }> = {
-  api_key: { label: 'API Key', color: 'bg-sky-500/20 text-sky-400' },
-  bearer: { label: 'Bearer', color: 'bg-emerald-500/20 text-emerald-400' },
-  oauth2: { label: 'OAuth2', color: 'bg-violet-500/20 text-violet-400' },
-  basic: { label: 'Basic Auth', color: 'bg-amber-500/20 text-amber-400' },
+  api_key: { label: 'API Key', color: 'bg-[var(--work-wash)] text-[var(--work)]' },
+  bearer: { label: 'Bearer', color: 'bg-[var(--healthy-wash)] text-[var(--healthy)]' },
+  oauth2: { label: 'OAuth2', color: 'bg-[var(--intel-wash)] text-[var(--intel)]' },
+  basic: { label: 'Basic Auth', color: 'bg-[var(--honey-wash)] text-[var(--attention)]' },
 };
 
 const VaultApp = () => {
@@ -182,6 +183,18 @@ const VaultApp = () => {
     } catch { /* ignore */ }
   };
 
+  // "Renew" (§08 surfaces.html) — there is no dedicated rotate/renew backend, so
+  // renewing a credential IS re-entering it: prefill the update form for this key
+  // and scroll the user to it. This reuses the real POST /api/vault upsert (the
+  // same path the Pencil "Update value" control uses) — no fabricated endpoint.
+  const handleRenew = (s: VaultSecret) => {
+    setNewName(s.name);
+    setNewType(s.type ?? 'api_key');
+    setNewValue('');
+    setShowSuggestions(false);
+    toast({ title: 'Renew key', description: `Enter a fresh value for ${s.name} below, then save.` });
+  };
+
   const handleConnectorConnect = async (connectorId: string) => {
     if (!connectorToken.trim()) return;
     setConnecting(true);
@@ -278,6 +291,11 @@ const VaultApp = () => {
                       {revealedSecret === s.name && (
                         <span className="text-[11px] text-foreground font-mono mr-2 max-w-[180px] truncate">{revealedValue}</span>
                       )}
+                      <HintTooltip content="Renew — enter a fresh value for this key">
+                        <button onClick={() => handleRenew(s)} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold text-[var(--text-2)] hover:text-[var(--honey)] hover:bg-[var(--honey-wash)] transition-colors">
+                          <RefreshCw className="w-3 h-3" /> Renew
+                        </button>
+                      </HintTooltip>
                       <HintTooltip content="Update value">
                         <button onClick={() => { setNewName(s.name); setNewType(s.type ?? 'api_key'); setNewValue(''); }} className="p-1 rounded hover:bg-muted/50">
                           <Pencil className="w-3 h-3 text-muted-foreground" />

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bot, Plus, Search, Loader2, AlertCircle, RefreshCw, LibraryBig, ChevronRight } from 'lucide-react';
+import { Bot, Plus, Search, Loader2, AlertCircle, RefreshCw, LibraryBig, ChevronRight, Network, ArrowRight } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
 import { useService } from '@/providers/ServiceProvider';
@@ -233,6 +233,36 @@ const AgentsApp = ({ workspaces }: AgentsAppProps) => {
                 <span>avg success <span className="text-foreground font-medium tabular-nums">{kpis.avgSuccessRate === null ? '—' : formatSuccessRate(kpis.avgSuccessRate)}</span></span>
               </div>
             </div>
+          </div>
+
+          {/* Promoted swarm CTA (PR6b §16 / D19) — the waggle-dance entry,
+              surfaced as a prominent honey banner instead of a buried link.
+              Navigates to the existing /waggle-dance route. */}
+          <div className="px-4 pt-2.5">
+            <button
+              onClick={() => navigate('/waggle-dance')}
+              className="group w-full flex items-center gap-3 rounded-xl border px-3.5 py-2.5 text-left transition-colors"
+              style={{ background: 'var(--honey-wash)', borderColor: 'var(--honey-line)' }}
+            >
+              <span
+                className="grid place-items-center w-8 h-8 rounded-lg shrink-0"
+                style={{ background: 'var(--honey)', color: '#1a1407' }}
+              >
+                <Network className="w-4 h-4" />
+              </span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-xs font-display font-semibold text-foreground">Run a team of agents</span>
+                <span className="block text-[11px] text-muted-foreground truncate">
+                  waggle-dance · let several specialists coordinate on one goal
+                </span>
+              </span>
+              <span
+                className="inline-flex items-center gap-1 text-[11px] font-display font-semibold shrink-0"
+                style={{ color: 'var(--honey)' }}
+              >
+                Start a swarm <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+              </span>
+            </button>
           </div>
 
           {/* List */}

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   User, PenLine, Palette, Heart, Save, Loader2, Search,
   Upload, Sparkles, CheckCircle2, Globe, Clock, MessageSquare,
-  FileText, Presentation, FileSpreadsheet, FileDown, Check, X,
+  FileText, Presentation, FileSpreadsheet, FileDown, Check, X, Hexagon,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
@@ -18,6 +18,14 @@ interface IdentitySuggestion {
 const FIELD_LABELS: Record<IdentitySuggestion['field'], string> = {
   name: 'Name', role: 'Role', company: 'Company', industry: 'Industry', bio: 'Bio',
 };
+
+/** One read-only "what Waggle knows" fact. D20: derived only from stored
+ *  profile values that actually exist — never fabricated. */
+interface KnownFact {
+  key: string;
+  label: string;
+  value: string;
+}
 
 type ProfileTab = 'identity' | 'style' | 'brand' | 'interests';
 
@@ -212,6 +220,20 @@ const UserProfileApp = () => {
 
   const ws = profile?.writingStyle;
 
+  // D20 — "What Waggle knows about you" facts. Derived ONLY from the stored
+  // profile values that actually have content; an empty profile renders zero
+  // facts (and the section is hidden), never an invented one. Interests fold
+  // into a single line when present. This is read-only: editing happens in the
+  // form above; this mirrors what every agent will read.
+  const knownFacts: KnownFact[] = [
+    name.trim() && { key: 'name', label: 'You are', value: name.trim() },
+    role.trim() && { key: 'role', label: 'Your role', value: role.trim() },
+    company.trim() && { key: 'company', label: 'You work at', value: company.trim() },
+    industry.trim() && { key: 'industry', label: 'Your industry', value: industry.trim() },
+    bio.trim() && { key: 'bio', label: 'About you', value: bio.trim() },
+    interests.length > 0 && { key: 'interests', label: 'You work with', value: interests.join(', ') },
+  ].filter((f): f is KnownFact => Boolean(f));
+
   return (
     <div className="flex h-full">
       {/* Sidebar */}
@@ -229,7 +251,7 @@ const UserProfileApp = () => {
         ))}
         {profile?.questionnaireCompleted && (
           <div className="mt-3 pt-3 border-t border-border/30 px-2">
-            <div className="flex items-center gap-1.5 text-[11px] text-emerald-400">
+            <div className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--healthy)' }}>
               <CheckCircle2 className="w-3 h-3" /> Profile set up
             </div>
           </div>
@@ -265,7 +287,8 @@ const UserProfileApp = () => {
                         <div className="flex items-center gap-1.5">
                           <span className="text-[11px] font-display font-medium text-foreground">{FIELD_LABELS[s.field]}</span>
                           <span
-                            className={`inline-block w-1.5 h-1.5 rounded-full ${s.confidence >= 0.8 ? 'bg-emerald-400' : s.confidence >= 0.6 ? 'bg-amber-400' : 'bg-muted-foreground'}`}
+                            className="inline-block w-1.5 h-1.5 rounded-full"
+                            style={{ background: s.confidence >= 0.8 ? 'var(--healthy)' : s.confidence >= 0.6 ? 'var(--attention)' : 'var(--text-dim)' }}
                             aria-label={`Confidence ${Math.round(s.confidence * 100)}%`}
                           />
                           <span className="text-[10px] text-muted-foreground">{Math.round(s.confidence * 100)}%</span>
@@ -276,7 +299,8 @@ const UserProfileApp = () => {
                       <div className="flex gap-1 shrink-0">
                         <button
                           onClick={() => acceptSuggestion(s)}
-                          className="p-1 rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-colors"
+                          className="p-1 rounded-lg transition-colors hover:opacity-80"
+                          style={{ background: 'var(--healthy-wash)', color: 'var(--healthy)' }}
                           title={`Accept ${FIELD_LABELS[s.field]}`}
                           aria-label={`Accept suggested ${FIELD_LABELS[s.field]}: ${s.value}`}
                         >
@@ -339,6 +363,32 @@ const UserProfileApp = () => {
                 {researching ? <Loader2 className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />} Research Me
               </button>
             </div>
+
+            {/* ═══ WHAT WAGGLE KNOWS (read-only, D20) ═══
+                Renders only the stored facts that exist — an empty profile
+                shows nothing here. No fabricated knowledge. */}
+            {knownFacts.length > 0 && (
+              <section aria-label="What Waggle knows about you" className="pt-4 border-t border-border/30 space-y-2">
+                <h4 className="text-xs font-display font-semibold text-foreground flex items-center gap-1.5">
+                  <Hexagon className="w-3 h-3" style={{ color: 'var(--honey)' }} /> What Waggle knows about you
+                </h4>
+                <p className="text-[11px] text-muted-foreground">
+                  Every agent reads this. It comes from what you've saved — nothing is inferred without your say-so.
+                </p>
+                <ul className="grid gap-1.5">
+                  {knownFacts.map((f) => (
+                    <li
+                      key={f.key}
+                      className="grid grid-cols-[auto_1fr] gap-2.5 items-baseline px-3 py-2 rounded-lg border border-border/40 bg-card/40 text-[13px]"
+                      data-testid="known-fact"
+                    >
+                      <span className="text-[11px] uppercase tracking-wide text-muted-foreground whitespace-nowrap">{f.label}</span>
+                      <span className="text-foreground break-words">{f.value}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
           </div>
         )}
 
@@ -520,7 +570,10 @@ const UserProfileApp = () => {
         )}
 
         {saveMsg && (
-          <div className="mt-3 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-400 inline-block">
+          <div
+            className="mt-3 px-3 py-1.5 rounded-lg border text-[11px] inline-block"
+            style={{ background: 'var(--healthy-wash)', borderColor: 'var(--healthy)', color: 'var(--healthy)' }}
+          >
             {saveMsg}
           </div>
         )}

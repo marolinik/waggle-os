@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -33,6 +33,9 @@ import {
   TimelineRoute,
   EventsRoute,
   UsageRoute,
+  BenchmarkRoute,
+  PlatformRoute,
+  WorkspacesRoute,
 } from "@/routes";
 
 // Theme is now owned by <ThemeProvider>; the pre-paint apply lives in main.tsx
@@ -62,8 +65,8 @@ const App = () => (
                 <Route index element={<IndexRedirect />} />
                 {/* ── Work ── */}
                 <Route path="home" element={<HomeRoute />} />
-                {/* §9.7: bare /workspaces → Home (Home IS the workspace selector). */}
-                <Route path="workspaces" element={<Navigate to="/home" replace />} />
+                {/* PR6c (D15): /workspaces → the full All-workspaces shelf (was a §9.7 redirect to Home). */}
+                <Route path="workspaces" element={<WorkspacesRoute />} />
                 <Route path="workspaces/:workspaceId/:tab?" element={<WorkspaceRoute />} />
                 <Route path="memory/:mindScope?" element={<MemoryRoute />} />
                 <Route path="artifacts" element={<ArtifactsRoute />} />
@@ -90,6 +93,9 @@ const App = () => (
                 <Route path="settings/timeline" element={<TimelineRoute />} />
                 <Route path="settings/events" element={<EventsRoute />} />
                 <Route path="settings/usage" element={<UsageRoute />} />
+                {/* ── PR6a: ⌘K-only static surfaces ── */}
+                <Route path="benchmarks" element={<BenchmarkRoute />} />
+                <Route path="platform" element={<PlatformRoute />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Route>

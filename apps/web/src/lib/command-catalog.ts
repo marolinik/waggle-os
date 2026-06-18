@@ -4,6 +4,7 @@ import {
   Plus, Rocket, Settings, Sparkles,
   Network, Server, Plug, Store, Package, Shield, Clock, FolderOpen,
   Lock, Activity, History, BarChart3, Users, Radio,
+  Gauge, Monitor, LayoutGrid,
 } from "lucide-react";
 
 /**
@@ -60,6 +61,7 @@ export function buildCommandCatalog(ctx: CatalogContext): CatalogGroup[] {
 
   const jump: CatalogCommand[] = [
     { id: "home", group: "jump", name: "Home", subtitle: "your daily briefing", icon: Home, to: "/home" },
+    { id: "workspaces", group: "jump", name: "All workspaces", subtitle: "every workspace · grid", icon: LayoutGrid, to: "/workspaces" },
     { id: "chat", group: "jump", name: "Chat", subtitle: "the work surface", icon: MessageSquare, to: chatHref },
     { id: "memory", group: "jump", name: "Memory", subtitle: "what Waggle knows · provenance kept", icon: Brain, to: "/memory" },
     { id: "agents", group: "jump", name: "Agents & tasks", subtitle: "running · scheduled · finished", icon: ListTodo, to: "/agents" },
@@ -89,6 +91,8 @@ export function buildCommandCatalog(ctx: CatalogContext): CatalogGroup[] {
     { id: "timeline", group: "power", name: "Timeline", subtitle: "activity history", icon: History, to: "/settings/timeline" },
     { id: "events", group: "power", name: "Events & logs", subtitle: "live activity feed", icon: Radio, to: "/settings/events" },
     { id: "usage", group: "power", name: "Usage & cost", subtitle: "tokens · spend", icon: BarChart3, to: "/settings/usage" },
+    { id: "benchmarks", group: "power", name: "Benchmarks", subtitle: "capabilities · memory SOTA", icon: Gauge, to: "/benchmarks" },
+    { id: "platform", group: "power", name: "Platform & roadmap", subtitle: "desktop · what's coming", icon: Monitor, to: "/platform" },
     { id: "team", group: "power", name: "Team governance", subtitle: "rules · permissions · oversight", icon: Shield, to: "/team", minBillingRank: TEAMS_RANK },
   ];
 

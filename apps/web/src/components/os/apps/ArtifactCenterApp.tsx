@@ -31,6 +31,18 @@ const KIND_META: Record<ArtifactKind, { label: string; Icon: typeof FileText }> 
   design: { label: 'Design', Icon: Palette },
   other: { label: 'Other', Icon: File },
 };
+/** Per-kind warm tint for the card icon (design §16 6-color palette → warm semantics, D21). */
+const KIND_TINT: Record<ArtifactKind, { bg: string; fg: string }> = {
+  document:     { bg: 'var(--work-wash)',    fg: 'var(--work)' },
+  presentation: { bg: 'var(--honey-wash)',   fg: 'var(--honey)' },
+  spreadsheet:  { bg: 'var(--healthy-wash)', fg: 'var(--healthy)' },
+  dashboard:    { bg: 'var(--intel-wash)',   fg: 'var(--intel)' },
+  research:     { bg: 'var(--intel-wash)',   fg: 'var(--intel)' },
+  code:         { bg: 'var(--work-wash)',    fg: 'var(--work)' },
+  media:        { bg: 'var(--honey-wash)',   fg: 'var(--honey)' },
+  design:       { bg: 'var(--intel-wash)',   fg: 'var(--intel)' },
+  other:        { bg: 'var(--honey-wash)',   fg: 'var(--honey)' },
+};
 const KINDS = Object.keys(KIND_META) as ArtifactKind[];
 
 const STATUS_FILTERS: { value: '' | ArtifactStatus; label: string }[] = [
@@ -261,23 +273,40 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
                 <button onClick={() => load()} className="text-[11px] text-primary hover:underline shrink-0">Retry</button>
               </div>
             )}
-            <ul className="space-y-1">
+            {/* 3-column card grid (PR6b §16) — provenance-forward outcome
+                tiles, not a flat list. Collapses to 2/1 cols on narrow panes. */}
+            <ul className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
             {artifacts.map((a) => {
               const { Icon, label } = KIND_META[a.kind];
+              const tint = KIND_TINT[a.kind];
               return (
                 <li key={a.id}>
                   <button
                     onClick={() => openDetail(a)}
-                    className="w-full flex items-center gap-2.5 rounded-lg border border-border/60 bg-card/40 px-2.5 py-2 text-left hover:bg-muted/50 transition-colors"
+                    className="group w-full h-full flex flex-col gap-2 rounded-xl border border-border/60 bg-card/40 p-3 text-left hover:border-primary/40 hover:-translate-y-0.5 transition-all"
                   >
-                    <Icon className="w-4 h-4 text-muted-foreground shrink-0" />
-                    <span className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <span
+                        className="grid place-items-center w-9 h-10 rounded-lg shrink-0"
+                        style={{ background: tint.bg }}
+                      >
+                        <Icon className="w-4 h-4" style={{ color: tint.fg }} />
+                      </span>
+                      <StatusBadge tone={statusTone(a.status)} label={a.status.replace('_', ' ')} />
+                    </div>
+                    <div className="min-w-0">
                       <span className="block text-xs font-medium truncate">{a.title}</span>
                       <span className="block text-[10px] text-muted-foreground truncate">
                         {label} · {new Date(a.updatedAt).toLocaleDateString()}
                       </span>
-                    </span>
-                    <StatusBadge tone={statusTone(a.status)} label={a.status.replace('_', ' ')} />
+                    </div>
+                    {/* Provenance — gated: render the real source string the
+                        backend stored; never fabricate a creator (D11/D20). */}
+                    {a.source && (
+                      <span className="text-[10px] truncate" style={{ color: 'var(--intel)' }}>
+                        ⬡ {a.source}
+                      </span>
+                    )}
                   </button>
                 </li>
               );

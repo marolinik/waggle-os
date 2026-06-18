@@ -501,3 +501,18 @@
   0% { transform: translateX(-100%); }
   100% { transform: translateX(400%); }
 }
+
+/* PR6a — Platform "Boot" showcase hex pulse (design platform.html:57-58) */
+@keyframes boot-hex-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(233, 165, 44, 0.25), 0 8px 30px -10px rgba(233, 165, 44, 0.35); }
+  50% { box-shadow: 0 0 0 1px rgba(233, 165, 44, 0.5), 0 8px 50px -6px rgba(233, 165, 44, 0.6); }
+}
+.boot-hex-pulse {
+  animation: boot-hex-pulse 2.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .boot-hex-pulse {
+    animation: none;
+    box-shadow: 0 0 0 1px rgba(233, 165, 44, 0.4), 0 8px 40px -8px rgba(233, 165, 44, 0.5);
+  }
+}
