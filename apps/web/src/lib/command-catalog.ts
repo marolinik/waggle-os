@@ -4,7 +4,7 @@ import {
   Plus, Rocket, Settings, Sparkles,
   Network, Server, Plug, Store, Package, Shield, Clock, FolderOpen,
   Lock, Activity, History, BarChart3, Users, Radio,
-  Gauge, Monitor,
+  Gauge, Monitor, LayoutGrid,
 } from "lucide-react";
 
 /**
@@ -61,6 +61,7 @@ export function buildCommandCatalog(ctx: CatalogContext): CatalogGroup[] {
 
   const jump: CatalogCommand[] = [
     { id: "home", group: "jump", name: "Home", subtitle: "your daily briefing", icon: Home, to: "/home" },
+    { id: "workspaces", group: "jump", name: "All workspaces", subtitle: "every workspace · grid", icon: LayoutGrid, to: "/workspaces" },
     { id: "chat", group: "jump", name: "Chat", subtitle: "the work surface", icon: MessageSquare, to: chatHref },
     { id: "memory", group: "jump", name: "Memory", subtitle: "what Waggle knows · provenance kept", icon: Brain, to: "/memory" },
     { id: "agents", group: "jump", name: "Agents & tasks", subtitle: "running · scheduled · finished", icon: ListTodo, to: "/agents" },
