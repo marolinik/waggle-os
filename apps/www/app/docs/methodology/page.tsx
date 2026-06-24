@@ -107,7 +107,7 @@ const brandTextStyle: CSSProperties = {
 };
 
 const separatorStyle: CSSProperties = {
-  color: 'var(--hive-500, #6b6250)',
+  color: 'var(--hive-400, #948a73)',
 };
 
 const crumbStyle: CSSProperties = {

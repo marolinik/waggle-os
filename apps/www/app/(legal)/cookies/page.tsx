@@ -113,7 +113,7 @@ const h3Style: CSSProperties = {
   fontWeight: 600,
   marginTop: 16,
   marginBottom: 8,
-  color: 'var(--hive-100, #d4dae6)',
+  color: 'var(--hive-100, #d8cfba)',
 };
 
 const pendingNoteStyle: CSSProperties = {
@@ -129,7 +129,7 @@ const pendingNoteStyle: CSSProperties = {
 
 const metaLineStyle: CSSProperties = {
   fontSize: 13,
-  color: 'var(--hive-300, #8993ab)',
+  color: 'var(--hive-300, #948a73)',
   marginBottom: 24,
 };
 

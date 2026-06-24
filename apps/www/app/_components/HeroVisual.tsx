@@ -42,9 +42,9 @@ export default function HeroVisual({ initialVariant = 'A' }: HeroVisualProps) {
       <div style={windowFrameStyle}>
         <div style={titleBarStyle}>
           <div style={trafficLightsStyle} aria-hidden="true">
-            <span style={{ ...dotStyle, background: '#3a3f4a' }} />
-            <span style={{ ...dotStyle, background: '#3a3f4a' }} />
-            <span style={{ ...dotStyle, background: '#3a3f4a' }} />
+            <span style={{ ...dotStyle, background: '#4a4030' }} />
+            <span style={{ ...dotStyle, background: '#4a4030' }} />
+            <span style={{ ...dotStyle, background: '#4a4030' }} />
           </div>
           <span style={titleStyleLeft}>{t('window_left')}</span>
           <span style={titleStyleRight}>{t('window_right')}</span>
@@ -100,7 +100,7 @@ export default function HeroVisual({ initialVariant = 'A' }: HeroVisualProps) {
             <text
               x="240"
               y="220"
-              fill="#a0a3ad"
+              fill="#c8bfa9"
               fontSize="11"
               fontFamily="'JetBrains Mono', monospace"
               textAnchor="middle"
@@ -176,7 +176,7 @@ function ChipLabel({ x, y, primary, sub }: ChipLabelProps) {
         width="112"
         height="32"
         rx="6"
-        fill="#0f1218"
+        fill="#14110b"
         stroke="#272117"
         strokeWidth="1"
       />
@@ -228,7 +228,7 @@ const windowFrameStyle: CSSProperties = {
   borderRadius: 12,
   overflow: 'hidden',
   border: '1px solid var(--hive-700, #272117)',
-  background: 'linear-gradient(180deg, #0f1218 0%, #080a0f 100%)',
+  background: 'linear-gradient(180deg, #14110b 0%, #0e0c07 100%)',
   boxShadow: '0 16px 48px rgba(0,0,0,0.5)',
 };
 const titleBarStyle: CSSProperties = {
@@ -253,17 +253,17 @@ const dotStyle: CSSProperties = {
 const titleStyleLeft: CSSProperties = {
   fontSize: 11,
   color: 'var(--hive-300, #c8bfa9)',
-  fontFamily: "'JetBrains Mono', monospace",
+  fontFamily: "var(--mono)",
 };
 const titleStyleRight: CSSProperties = {
   marginLeft: 'auto',
   fontSize: 11,
   color: 'var(--hive-400, #948a73)',
-  fontFamily: "'JetBrains Mono', monospace",
+  fontFamily: "var(--mono)",
 };
 const bodyStyle: CSSProperties = {
   padding: '24px 16px',
-  background: '#080a0f',
+  background: '#0e0c07',
 };
 const statsStripStyle: CSSProperties = {
   display: 'flex',
@@ -272,7 +272,7 @@ const statsStripStyle: CSSProperties = {
   gap: 8,
   padding: '10px 14px',
   borderTop: '1px solid var(--hive-700, #272117)',
-  background: '#0a0c12',
+  background: '#0e0c07',
   flexWrap: 'wrap',
 };
 const statSeriesStyle: CSSProperties = {
@@ -284,7 +284,7 @@ const statItemStyle: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'baseline',
   gap: 6,
-  fontFamily: "'JetBrains Mono', monospace",
+  fontFamily: "var(--mono)",
 };
 const statValueStyle: CSSProperties = {
   fontSize: 13,
@@ -314,7 +314,7 @@ const devTabStyle: CSSProperties = {
   flex: '1 1 auto',
   padding: '6px 10px',
   fontSize: 10,
-  fontFamily: "'JetBrains Mono', monospace",
+  fontFamily: "var(--mono)",
   color: 'var(--hive-300, #c8bfa9)',
   background: 'transparent',
   border: '1px solid transparent',

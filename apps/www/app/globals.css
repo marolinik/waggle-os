@@ -82,7 +82,9 @@ body {
   font-family: var(--sans);
 }
 
-/* Warm-Hive display: Hanken 600, tight tracking (waggle.css headline spec) */
+/* Warm-Hive display: Hanken 600, tight tracking (waggle.css headline spec).
+   Intentional baseline; components that need display weight set fontWeight
+   inline (e.g. Hero headline 800), which wins via inline-style specificity. */
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--sans);
   font-weight: 600;
@@ -91,7 +93,7 @@ h1, h2, h3, h4, h5, h6 {
 h1 { letter-spacing: -0.03em; }
 
 ::selection {
-  background: rgba(233, 165, 44, 0.3);
+  background: rgba(233, 165, 44, 0.28);
   color: var(--hive-50);
 }
 

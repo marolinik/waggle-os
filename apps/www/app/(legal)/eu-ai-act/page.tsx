@@ -194,7 +194,7 @@ const pendingNoteStyle: CSSProperties = {
 
 const metaLineStyle: CSSProperties = {
   fontSize: 13,
-  color: 'var(--hive-300, #8993ab)',
+  color: 'var(--hive-300, #948a73)',
   marginBottom: 24,
 };
 

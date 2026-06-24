@@ -296,7 +296,7 @@ const subtitleStyle: CSSProperties = {
   fontFamily: "var(--sans)",
   fontSize: 'clamp(16px, 2vw, 18px)',
   fontWeight: 400,
-  color: 'var(--hive-300, #a0a3ad)',
+  color: 'var(--hive-300, #c8bfa9)',
   margin: 0,
 };
 
@@ -331,8 +331,8 @@ const scopedCss = `
   .waggle-persona-tile {
     position: relative;
     list-style: none;
-    background: linear-gradient(180deg, #0f1218 0%, #080a0f 100%);
-    border: 1px solid #1a1e27;
+    background: linear-gradient(180deg, #14110b 0%, #0e0c07 100%);
+    border: 1px solid #1f1a12;
     border-radius: 16px;
     padding: 20px;
     min-height: 260px;
@@ -389,7 +389,7 @@ const scopedCss = `
     background-image: url("${HEX_TEXTURE_PATH}");
     background-size: cover;
     background-position: center;
-    background-color: #0f1218;
+    background-color: #14110b;
     opacity: 0.6;
     border-radius: 12px;
     display: flex;
@@ -402,7 +402,7 @@ const scopedCss = `
     height: 48px;
     border-radius: 50%;
     background: #f6c45a;
-    box-shadow: 0 0 24px rgba(245, 183, 49, 0.4);
+    box-shadow: 0 0 24px rgba(246, 196, 90, 0.4);
   }
   .waggle-persona-caption {
     text-align: center;
@@ -421,7 +421,7 @@ const scopedCss = `
     font-family: var(--sans);
     font-size: 13px;
     font-weight: 400;
-    color: #a0a3ad;
+    color: #c8bfa9;
     line-height: 1.45;
   }
   .waggle-persona-filler {
@@ -432,6 +432,6 @@ const scopedCss = `
     background-size: cover;
     background-position: center;
     opacity: 0.4;
-    border: 1px solid #1a1e27;
+    border: 1px solid #1f1a12;
   }
 `;

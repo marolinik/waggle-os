@@ -41,7 +41,7 @@ export default function Navbar() {
     <nav
       style={{
         ...navStyle,
-        background: scrolled ? 'rgba(12,14,20,0.95)' : 'transparent',
+        background: scrolled ? 'rgba(20,17,11,0.95)' : 'transparent',
         backdropFilter: scrolled ? 'blur(12px)' : undefined,
         borderBottom: scrolled
           ? '1px solid var(--hive-700, #272117)'
@@ -195,7 +195,7 @@ const versionPillStyle: CSSProperties = {
   borderRadius: 999,
   background: 'var(--hive-800, #1f1a12)',
   color: 'var(--hive-400, #948a73)',
-  fontFamily: "'JetBrains Mono', monospace",
+  fontFamily: "var(--mono)",
   letterSpacing: '0.02em',
 };
 const desktopNavStyle: CSSProperties = {

@@ -177,7 +177,7 @@ const microcopyStyle: CSSProperties = {
   gap: 16,
   rowGap: 8,
   fontSize: 12,
-  fontFamily: "'JetBrains Mono', monospace",
+  fontFamily: "var(--mono)",
   color: 'var(--hive-400, #948a73)',
   letterSpacing: '0.02em',
 };

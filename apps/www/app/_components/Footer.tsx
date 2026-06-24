@@ -142,10 +142,10 @@ const baseLineStyle: CSSProperties = {
   flexWrap: 'wrap',
   gap: 12,
   fontSize: 12,
-  color: 'var(--hive-500, #6b6250)',
+  color: 'var(--hive-400, #948a73)',
 };
 const baseLineRightStyle: CSSProperties = {
-  fontFamily: "'JetBrains Mono', monospace",
+  fontFamily: "var(--mono)",
 };
 const footerResponsiveCss = `
   @media (max-width: 1023px) {

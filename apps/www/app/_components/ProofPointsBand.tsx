@@ -110,13 +110,13 @@ const captionStyle: CSSProperties = {
   textTransform: 'uppercase',
   letterSpacing: '0.1em',
   color: 'var(--hive-400, #948a73)',
-  fontFamily: "'JetBrains Mono', monospace",
+  fontFamily: "var(--mono)",
 };
 const statStyle: CSSProperties = {
   fontSize: 'clamp(24px, 3vw, 32px)',
   fontWeight: 800,
   color: 'var(--honey-400, #f6c45a)',
-  fontFamily: "'JetBrains Mono', monospace",
+  fontFamily: "var(--mono)",
   letterSpacing: '-0.02em',
   marginTop: 4,
 };

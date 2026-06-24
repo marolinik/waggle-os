@@ -9,6 +9,8 @@ import './globals.css';
 
 /* ──────────────────────────────────────────────────────────────────────────
  * Hive DS appearance applied globally to all Clerk components.
+ * Values updated to the warm-Hive palette (PR8): hex literals reflect the
+ * remapped scale (e.g. hive-950 = #0e0c07, hive-100 = #ece3d0, honey = #e9a52c).
  *
  * `baseTheme: dark` flips Clerk's element-level defaults (input borders,
  * disabled states, focus rings, hardcoded text shades) to dark-friendly
@@ -174,7 +176,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <meta name="twitter:image" content={META_OG_IMAGE} />
         <link rel="icon" href="/brand/logo.jpeg" />
       </head>
-      <body style={{ fontFamily: "var(--font-hanken), 'Hanken Grotesk', system-ui, sans-serif" }}>
+      <body style={{ fontFamily: 'var(--sans)' }}>
         <ClerkProvider appearance={HIVE_CLERK_APPEARANCE}>
           <IntlWrapper>{children}</IntlWrapper>
         </ClerkProvider>

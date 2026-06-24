@@ -84,7 +84,7 @@ const cardStyle: CSSProperties = {
 const numberStyle: CSSProperties = {
   fontSize: 12,
   fontWeight: 700,
-  fontFamily: "'JetBrains Mono', monospace",
+  fontFamily: "var(--mono)",
   letterSpacing: '0.1em',
   color: 'var(--honey-400, #f6c45a)',
 };
