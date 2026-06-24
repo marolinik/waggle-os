@@ -7,6 +7,7 @@ import { ServiceProvider } from "@/providers/ServiceProvider";
 import { InstallProvider } from "@/providers/InstallProvider";
 import { ThemeProvider } from "@/providers/ThemeProvider";
 import AppErrorBoundary from "@/components/os/ErrorBoundary";
+import WaggleClerkProvider from "@/providers/WaggleClerkProvider";
 import AppShell, { IndexRedirect } from "@/components/os/AppShell";
 import NotFound from "./pages/NotFound.tsx";
 import {
@@ -60,6 +61,11 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          {/* PR7b/D2(b): optional Clerk. With VITE_CLERK_PUBLISHABLE_KEY present, wraps
+              the app in a themed, router-integrated ClerkProvider; without it, renders
+              children untouched (fully accountless). Inside BrowserRouter so it can wire
+              Clerk's routerPush/replace to useNavigate. */}
+          <WaggleClerkProvider>
           <AppErrorBoundary appName="Waggle OS" onClose={() => window.location.reload()}>
             <Routes>
               {/* ── PR7b: /auth is the ONE pre-shell route — sibling OUTSIDE the
@@ -110,6 +116,7 @@ const App = () => (
               </Route>
             </Routes>
           </AppErrorBoundary>
+          </WaggleClerkProvider>
         </BrowserRouter>
       </TooltipProvider>
     </QueryClientProvider>
