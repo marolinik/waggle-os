@@ -10,13 +10,37 @@
 import { dark } from '@clerk/themes';
 
 /**
+ * Faithful inline of Clerk's own `isPublishableKey` shape check: a `pk_test_`/`pk_live_`
+ * prefix plus a base64 payload that decodes to a frontend-API host ending in "$". Inlined
+ * (not imported from `@clerk/shared/keys`) because the monorepo resolves MULTIPLE
+ * `@clerk/shared` majors — clerk-react@5 bundles 3.x while @clerk/themes pulls 4.x — so an
+ * imported validator could resolve to a different copy than ClerkProvider uses. This
+ * deterministic inline can't drift from whichever copy hoists; the format itself is
+ * fundamental to how Clerk keys are minted and is stable across majors.
+ */
+function isValidPublishableKey(key: string): boolean {
+  if (!key.startsWith('pk_test_') && !key.startsWith('pk_live_')) return false;
+  try {
+    return atob(key.split('_')[2] ?? '').endsWith('$');
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The Clerk publishable key (shared "elegant-camel-8" instance), or undefined when
- * unconfigured. Read at CALL time (not module load) so it stays test-stubbable and so
- * the no-key fallback is decided at render.
+ * unconfigured OR shape-invalid. Read at CALL time (not module load) so it stays
+ * test-stubbable and so the no-key fallback is decided at render.
+ *
+ * The shape gate is load-bearing: ClerkProvider throws *synchronously in render* on a
+ * malformed key, and WaggleClerkProvider sits ABOVE AppErrorBoundary, so a placeholder /
+ * typo'd / truncated key (e.g. the `.env.example` placeholder) would otherwise blank the
+ * WHOLE app at boot. Rejecting it here degrades cleanly to the honest accountless state
+ * instead (the §6/D16 "absent → accountless" guarantee).
  */
 export function clerkPublishableKey(): string | undefined {
   const k = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
-  return k && k.length > 0 ? k : undefined;
+  return k && isValidPublishableKey(k) ? k : undefined;
 }
 
 /**

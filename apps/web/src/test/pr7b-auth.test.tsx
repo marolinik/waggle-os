@@ -22,6 +22,11 @@ vi.mock('@clerk/clerk-react', () => ({
   ),
 }));
 
+// A well-formed, PUBLIC-safe publishable key (the shared elegant-camel-8 instance key —
+// publishable keys ship in the client bundle by design). Used where a VALID key must
+// pass the isPublishableKey shape gate; 'pk_test_x' would now (correctly) be rejected.
+const VALID_PK = 'pk_test_ZWxlZ2FudC1jYW1lbC04LmNsZXJrLmFjY291bnRzLmRldiQ';
+
 const navigateMock = vi.fn();
 vi.mock('react-router-dom', async (orig) => {
   const actual = await orig<typeof import('react-router-dom')>();
@@ -59,7 +64,7 @@ describe('PR7b · /auth — B1 accountless (no Clerk key)', () => {
 });
 
 describe('PR7b · /auth — B2 Clerk form (key present)', () => {
-  beforeEach(() => vi.stubEnv('VITE_CLERK_PUBLISHABLE_KEY', 'pk_test_x'));
+  beforeEach(() => vi.stubEnv('VITE_CLERK_PUBLISHABLE_KEY', VALID_PK));
 
   it('renders the real prebuilt Clerk <SignIn/> redirecting to /home (no fake SSO/OTP — F10)', async () => {
     const { default: AuthRoute } = await import('@/routes/AuthRoute');
@@ -86,5 +91,27 @@ describe('PR7b · /auth — B2 Clerk form (key present)', () => {
     render(<MemoryRouter><AuthRoute /></MemoryRouter>);
     expect(screen.getByRole('link', { name: /Talk to sales/i })).toHaveAttribute('href', 'https://www.kvark.ai');
     expect(screen.queryByPlaceholderText(/work email|organization/i)).not.toBeInTheDocument();
+  });
+});
+
+describe('PR7b · clerkPublishableKey() shape gate (CRITICAL: an invalid key must never reach ClerkProvider)', () => {
+  it('rejects the .env.example placeholder → undefined (stays accountless, never a boot crash)', async () => {
+    vi.stubEnv('VITE_CLERK_PUBLISHABLE_KEY', 'pk_test_REPLACE_ME');
+    const { clerkPublishableKey } = await import('@/lib/clerk');
+    expect(clerkPublishableKey()).toBeUndefined();
+  });
+
+  it('rejects empty and malformed keys → undefined', async () => {
+    const { clerkPublishableKey } = await import('@/lib/clerk');
+    vi.stubEnv('VITE_CLERK_PUBLISHABLE_KEY', '');
+    expect(clerkPublishableKey()).toBeUndefined();
+    vi.stubEnv('VITE_CLERK_PUBLISHABLE_KEY', 'not-a-key');
+    expect(clerkPublishableKey()).toBeUndefined();
+  });
+
+  it('accepts a well-formed publishable key', async () => {
+    vi.stubEnv('VITE_CLERK_PUBLISHABLE_KEY', VALID_PK);
+    const { clerkPublishableKey } = await import('@/lib/clerk');
+    expect(clerkPublishableKey()).toBe(VALID_PK);
   });
 });

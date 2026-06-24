@@ -3,7 +3,8 @@
  *
  * Pure custom layout chrome (recon 03 §1/§2e): hex "W" lockup + pitch + two trust
  * lines, on a warm gradient with a soft honey radial wash (the honeycomb stand-in).
- * Hidden below `lg` (the design hides the panel < 820px; mobile = form only). No auth
+ * Hidden below 820px (the design's exact breakpoint; mobile = form only) — note the
+ * Tailwind `lg` default is 1024px, so we use an arbitrary `min-[820px]` variant. No auth
  * state lives here — it never renders identity.
  */
 import { Shield, ArrowRight } from 'lucide-react';
@@ -11,7 +12,7 @@ import { Shield, ArrowRight } from 'lucide-react';
 export default function AuthBrandPanel() {
   return (
     <div
-      className="hidden lg:flex flex-col justify-between p-14 border-r border-[var(--line-soft)] relative overflow-hidden"
+      className="hidden min-[820px]:flex flex-col justify-between p-14 border-r border-[var(--line-soft)] relative overflow-hidden"
       style={{ background: 'linear-gradient(160deg, var(--bg-2), var(--bg))' }}
     >
       {/* soft honey radial wash — the honeycomb texture stand-in */}
@@ -32,7 +33,7 @@ export default function AuthBrandPanel() {
         >
           W
         </div>
-        <span className="text-[18px] font-display font-semibold text-foreground tracking-tight">Waggle</span>
+        <span className="text-[19px] font-display font-bold text-foreground tracking-tight">Waggle</span>
       </div>
 
       {/* pitch (verbatim, recon 03 §2e) */}
