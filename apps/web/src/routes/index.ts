@@ -59,3 +59,5 @@ export { default as PlatformRoute } from './PlatformRoute';
 export { default as WorkspacesRoute } from './WorkspacesRoute';
 // PR7a — post-Stripe-Checkout landing (success_url; checkout.ts:42)
 export { default as PaymentSuccessRoute } from './PaymentSuccessRoute';
+// PR7b — pre-shell /auth route (sibling outside AppShell)
+export { default as AuthRoute } from './AuthRoute';
