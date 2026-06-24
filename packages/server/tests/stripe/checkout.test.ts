@@ -3,8 +3,9 @@
  *
  * The checkout route must honour the requested billingPeriod when picking the
  * Stripe price: 'annual' resolves the annual price, 'monthly' (and omitted)
- * resolves the monthly price, with a legacy single-var fallback and a
- * NO_PRICE_CONFIGURED guard when nothing is configured.
+ * resolves the monthly price with a legacy single-var fallback. ANNUAL fails
+ * closed (F9): it never falls back to a monthly-priced var, returning
+ * NO_PRICE_CONFIGURED rather than silently charging the monthly price.
  *
  * We mock getStripe (mirroring webhook.test.ts's getStripe / process.env
  * mocking style) with a fake Stripe whose checkout.sessions.create records the
@@ -112,13 +113,25 @@ describe('Stripe Checkout — billingPeriod-aware price resolution', () => {
     expect(lastPriceArg).toBe('price_pm');
   });
 
-  it('falls back to the legacy single-var price when no 4-var contract is set', async () => {
+  it('monthly falls back to the legacy single-var price when no 4-var contract is set', async () => {
+    process.env['STRIPE_PRICE_PRO'] = 'price_legacy';
+
+    const res = await postCheckout({ tier: 'PRO', billingPeriod: 'monthly' });
+
+    expect(res.statusCode).toBe(200);
+    expect(lastPriceArg).toBe('price_legacy');
+  });
+
+  it('annual FAILS CLOSED when only a (monthly) legacy single-var is set — never silently charges monthly (F9)', async () => {
+    // The legacy STRIPE_PRICE_PRO is a monthly price; an annual selection must not
+    // resolve to it (would charge monthly while the UI shows the annual price).
     process.env['STRIPE_PRICE_PRO'] = 'price_legacy';
 
     const res = await postCheckout({ tier: 'PRO', billingPeriod: 'annual' });
 
-    expect(res.statusCode).toBe(200);
-    expect(lastPriceArg).toBe('price_legacy');
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('NO_PRICE_CONFIGURED');
+    expect(fakeStripe.checkout.sessions.create).not.toHaveBeenCalled();
   });
 
   it('returns 400 NO_PRICE_CONFIGURED when nothing is configured', async () => {
