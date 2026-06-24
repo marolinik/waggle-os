@@ -57,3 +57,5 @@ export { default as UsageRoute } from './UsageRoute';
 export { default as BenchmarkRoute } from './BenchmarkRoute';
 export { default as PlatformRoute } from './PlatformRoute';
 export { default as WorkspacesRoute } from './WorkspacesRoute';
+// PR7a — post-Stripe-Checkout landing (success_url; checkout.ts:42)
+export { default as PaymentSuccessRoute } from './PaymentSuccessRoute';

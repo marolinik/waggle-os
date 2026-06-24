@@ -90,14 +90,37 @@ export function tierFromPriceId(priceId: string): Tier | null {
  *  period-specific contract, falls back to legacy single-var, then TIER_CAPABILITIES. */
 export function priceIdForTier(tier: Tier, billingPeriod: 'monthly' | 'annual' = 'monthly'): string | null {
   const period = billingPeriod === 'annual' ? 'ANNUAL' : 'MONTHLY';
-  const candidates = tier === 'PRO'
-    ? [process.env[`STRIPE_PRICE_PRO_${period}`], process.env.STRIPE_PRICE_PRO, process.env.STRIPE_PRICE_BASIC]
+  // The period-specific 4-var price is always preferred.
+  const periodSpecific = tier === 'PRO'
+    ? process.env[`STRIPE_PRICE_PRO_${period}`]
     : tier === 'TEAMS'
-      ? [process.env[`STRIPE_PRICE_TEAMS_${period}`], process.env.STRIPE_PRICE_TEAMS]
+      ? process.env[`STRIPE_PRICE_TEAMS_${period}`]
+      : undefined;
+  if (periodSpecific) return periodSpecific;
+  // F9 fail-closed: for ANNUAL, never fall back to a monthly-priced var. The legacy
+  // single-var (STRIPE_PRICE_PRO/TEAMS/BASIC) and the TIER_CAPABILITIES default are
+  // all monthly prices; charging one for an annual selection — while the UI shows the
+  // annual price — is a billing lie. Returning null yields an honest 400
+  // NO_PRICE_CONFIGURED (checkout.ts:30) instead of a wrong charge.
+  if (billingPeriod === 'annual') return null;
+  const candidates = tier === 'PRO'
+    ? [process.env.STRIPE_PRICE_PRO, process.env.STRIPE_PRICE_BASIC]
+    : tier === 'TEAMS'
+      ? [process.env.STRIPE_PRICE_TEAMS]
       : [];
   for (const c of candidates) if (c) return c;
   return TIER_CAPABILITIES[tier]?.stripePriceId ?? null;
 }
+
+/**
+ * GET /api/stripe/status → { configured } — a secret-free probe of whether Stripe
+ * checkout is wired (STRIPE_SECRET_KEY present + stripe SDK loadable). Lets the
+ * billing UI render the F8 honest "not configured" disabled state BEFORE a click,
+ * instead of only surfacing the 503 after the user tries to subscribe.
+ */
+export const statusRoutes: FastifyPluginAsync = async (server) => {
+  server.get('/api/stripe/status', async () => ({ configured: !!getStripe() }));
+};
 
 // ── Combined route registration ──────────────────────────────────────
 
@@ -112,11 +135,12 @@ export const stripeRoutes: FastifyPluginAsync = async (server) => {
     await webhookScope.register(webhookRoutes);
   });
 
-  // Checkout, portal, and sync use standard JSON parsing
+  // Checkout, portal, sync, and the config-status probe use standard JSON parsing
   const { checkoutRoutes } = await import('./checkout.js');
   const { portalRoutes } = await import('./portal.js');
   const { syncRoutes } = await import('./sync.js');
   await server.register(checkoutRoutes);
   await server.register(portalRoutes);
   await server.register(syncRoutes);
+  await server.register(statusRoutes);
 };

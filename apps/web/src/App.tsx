@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -36,6 +36,7 @@ import {
   BenchmarkRoute,
   PlatformRoute,
   WorkspacesRoute,
+  PaymentSuccessRoute,
 } from "@/routes";
 
 // Theme is now owned by <ThemeProvider>; the pre-paint apply lives in main.tsx
@@ -96,6 +97,9 @@ const App = () => (
                 {/* ── PR6a: ⌘K-only static surfaces ── */}
                 <Route path="benchmarks" element={<BenchmarkRoute />} />
                 <Route path="platform" element={<PlatformRoute />} />
+                {/* ── PR7a: Stripe Checkout return URLs (checkout.ts:42-43) ── */}
+                <Route path="payment-success" element={<PaymentSuccessRoute />} />
+                <Route path="payment-cancelled" element={<Navigate to="/settings?tab=billing" replace />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Route>

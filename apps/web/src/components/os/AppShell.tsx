@@ -406,11 +406,14 @@ const ShellLayout = () => {
           adapter.startTrial().then(refreshTier).catch(refreshTier);
         }}
         onUpgrade={(tier) => {
-          // Checkout-failure fallback retargets to navigate('/settings')
-          // (§1.2 — instance of §2.1 rule 3).
-          adapter.createCheckoutSession(tier === 'TEAMS' ? 'TEAMS' : 'PRO').catch(() => {
-            navigate('/settings');
-          });
+          // PR7a: navigate to hosted Stripe Checkout (the URL was previously
+          // discarded — a dead happy path). Same-tab assign rather than a deferred
+          // window.open: the open happens after an awaited round-trip, outside the
+          // user-gesture window, so a popup blocker / Tauri WebView could swallow it.
+          // Hosted Checkout redirects back to /payment-success on completion.
+          adapter.createCheckoutSession(tier === 'TEAMS' ? 'TEAMS' : 'PRO')
+            .then(({ url }) => { if (url) window.location.assign(url); })
+            .catch(() => { navigate('/settings?tab=billing'); });
         }}
       />
 
@@ -419,7 +422,11 @@ const ShellLayout = () => {
         onDismiss={() => setShowTrialExpired(false)}
         onUpgrade={(tier) => {
           setShowTrialExpired(false);
-          adapter.createCheckoutSession(tier).catch(() => { navigate('/settings'); });
+          // PR7a: same-tab navigate to hosted Checkout (avoids the deferred-popup
+          // blocker; redirects back to /payment-success). Plan-tab fallback on failure.
+          adapter.createCheckoutSession(tier)
+            .then(({ url }) => { if (url) window.location.assign(url); })
+            .catch(() => { navigate('/settings?tab=billing'); });
         }}
       />
     </div>
