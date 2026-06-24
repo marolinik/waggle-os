@@ -37,6 +37,7 @@ import {
   PlatformRoute,
   WorkspacesRoute,
   PaymentSuccessRoute,
+  AuthRoute,
 } from "@/routes";
 
 // Theme is now owned by <ThemeProvider>; the pre-paint apply lives in main.tsx
@@ -61,6 +62,10 @@ const App = () => (
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <AppErrorBoundary appName="Waggle OS" onClose={() => window.location.reload()}>
             <Routes>
+              {/* ── PR7b: /auth is the ONE pre-shell route — sibling OUTSIDE the
+                  AppShell subtree (no sidebar / StatusBar / boot gate). Inherits the
+                  warm tokens (ThemeProvider) + the top-level AppErrorBoundary above. ── */}
+              <Route path="/auth" element={<AuthRoute />} />
               <Route path="/" element={<AppShell />}>
                 {/* §3.3/§2.2: index lands on the salvaged route once, /home after. */}
                 <Route index element={<IndexRedirect />} />
