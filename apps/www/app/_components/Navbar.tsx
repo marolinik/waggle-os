@@ -44,7 +44,7 @@ export default function Navbar() {
         background: scrolled ? 'rgba(12,14,20,0.95)' : 'transparent',
         backdropFilter: scrolled ? 'blur(12px)' : undefined,
         borderBottom: scrolled
-          ? '1px solid var(--hive-700, #1f2433)'
+          ? '1px solid var(--hive-700, #272117)'
           : '1px solid transparent',
       }}
     >
@@ -140,7 +140,7 @@ export default function Navbar() {
             href={RELEASES_URL}
             target="_blank"
             rel="noopener noreferrer"
-            style={{ ...mobileLinkStyle, color: 'var(--honey-400, #f5b731)', fontWeight: 600 }}
+            style={{ ...mobileLinkStyle, color: 'var(--honey-400, #f6c45a)', fontWeight: 600 }}
             onClick={() => setMobileOpen(false)}
           >
             {t('ctas.download_mobile')}
@@ -160,7 +160,7 @@ const navStyle: CSSProperties = {
   right: 0,
   zIndex: 50,
   transition: 'background 0.3s, border-color 0.3s',
-  fontFamily: "'Inter', system-ui, sans-serif",
+  fontFamily: "var(--sans)",
 };
 const containerStyle: CSSProperties = {
   maxWidth: 1200,
@@ -186,15 +186,15 @@ const logoStyle: CSSProperties = {
 const brandTextStyle: CSSProperties = {
   fontSize: 18,
   fontWeight: 700,
-  color: 'var(--hive-50, #f0f2f7)',
+  color: 'var(--hive-50, #f6f1e4)',
 };
 const versionPillStyle: CSSProperties = {
   fontSize: 10,
   fontWeight: 500,
   padding: '2px 8px',
   borderRadius: 999,
-  background: 'var(--hive-800, #171b26)',
-  color: 'var(--hive-400, #5a6380)',
+  background: 'var(--hive-800, #1f1a12)',
+  color: 'var(--hive-400, #948a73)',
   fontFamily: "'JetBrains Mono', monospace",
   letterSpacing: '0.02em',
 };
@@ -206,13 +206,13 @@ const desktopNavStyle: CSSProperties = {
 const navLinkStyle: CSSProperties = {
   fontSize: 14,
   fontWeight: 500,
-  color: 'var(--hive-300, #7d869e)',
+  color: 'var(--hive-300, #c8bfa9)',
   textDecoration: 'none',
   transition: 'color 0.2s',
 };
 const signInButtonStyle: CSSProperties = {
   ...navLinkStyle,
-  color: 'var(--hive-200, #b0b7cc)',
+  color: 'var(--hive-200, #d8cfba)',
   background: 'none',
   border: 'none',
   padding: 0,
@@ -227,23 +227,23 @@ const downloadButtonStyle: CSSProperties = {
   fontWeight: 600,
   padding: '8px 14px',
   borderRadius: 8,
-  background: 'var(--honey-500, #e5a000)',
-  color: 'var(--hive-950, #08090c)',
+  background: 'var(--honey-500, #e9a52c)',
+  color: 'var(--hive-950, #0e0c07)',
   textDecoration: 'none',
   boxShadow: 'var(--shadow-honey)',
 };
 const mobileToggleStyle: CSSProperties = {
   display: 'none',
   padding: 8,
-  color: 'var(--hive-200, #b0b7cc)',
+  color: 'var(--hive-200, #d8cfba)',
   background: 'none',
   border: 'none',
   cursor: 'pointer',
 };
 const mobileMenuStyle: CSSProperties = {
   padding: '16px 24px',
-  background: 'var(--hive-900, #0c0e14)',
-  borderTop: '1px solid var(--hive-700, #1f2433)',
+  background: 'var(--hive-900, #14110b)',
+  borderTop: '1px solid var(--hive-700, #272117)',
   display: 'flex',
   flexDirection: 'column',
   gap: 4,
@@ -253,7 +253,7 @@ const mobileLinkStyle: CSSProperties = {
   fontSize: 14,
   fontWeight: 500,
   padding: '10px 0',
-  color: 'var(--hive-200, #b0b7cc)',
+  color: 'var(--hive-200, #d8cfba)',
   textDecoration: 'none',
 };
 const mobileSignInButtonStyle: CSSProperties = {
@@ -271,7 +271,7 @@ const mobileUserButtonRowStyle: CSSProperties = {
   alignItems: 'center',
 };
 const navResponsiveCss = `
-  .nav-link:hover { color: var(--honey-500, #e5a000); }
+  .nav-link:hover { color: var(--honey-500, #e9a52c); }
   @media (max-width: 1023px) {
     .nav-desktop { display: none !important; }
     .nav-mobile-toggle { display: block !important; }

@@ -1,29 +1,66 @@
-/* ── Waggle Landing Page — Hive Design System ── */
-/* No Tailwind — pure CSS with custom properties for this static site */
+/* ── Waggle Landing Page — Warm-Hive Design System (PR8) ── */
+/* No Tailwind — pure CSS with custom properties for this static site.       */
+/* Token VALUES remapped cool → warm-Hive 1:1 by scale stop (variable NAMES  */
+/* preserved so every inline `var(--hive-*)`/`var(--honey-*)` restyles).     */
+/* Canonical source: docs/design_handoff_waggle_app/design-files/styles/waggle.css §7 */
 
 :root {
-  --hive-950: #08090c;
-  --hive-900: #0c0e14;
-  --hive-850: #11141c;
-  --hive-800: #171b26;
-  --hive-700: #1f2433;
-  --hive-600: #2a3044;
-  --hive-500: #3d4560;
-  --hive-400: #5a6380;
-  --hive-300: #7d869e;
-  --hive-200: #b0b7cc;
-  --hive-100: #dce0eb;
-  --hive-50: #f0f2f7;
-  --honey-600: #b87a00;
-  --honey-500: #e5a000;
-  --honey-400: #f5b731;
-  --honey-300: #fcd34d;
-  --honey-glow: rgba(229, 160, 0, 0.12);
-  --honey-pulse: rgba(229, 160, 0, 0.06);
-  --status-ai: #a78bfa;
-  --status-healthy: #34d399;
-  --shadow-honey: 0 0 24px rgba(229,160,0,0.12), 0 0 4px rgba(229,160,0,0.08);
-  --shadow-elevated: 0 4px 16px rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.3);
+  /* Warm graphite hive scale (replaces the cool blue-grey scale) */
+  --hive-950: #0e0c07;
+  --hive-900: #14110b;
+  --hive-850: #1a160f;
+  --hive-800: #1f1a12;
+  --hive-700: #272117;
+  --hive-600: #4a4030;
+  --hive-500: #6b6250;
+  --hive-400: #948a73;
+  --hive-300: #c8bfa9;
+  --hive-200: #d8cfba;
+  --hive-100: #ece3d0;
+  --hive-50: #f6f1e4;
+  /* Honey accent (warmer, replaces the prior honey family) */
+  --honey-600: #c07e16;
+  --honey-500: #e9a52c;
+  --honey-400: #f6c45a;
+  --honey-300: #f9d27e;
+  --honey-glow: rgba(233, 165, 44, 0.12);
+  --honey-pulse: rgba(233, 165, 44, 0.06);
+  /* Desaturated semantics (intel/healthy) */
+  --status-ai: #b196dd;
+  --status-healthy: #6cb78c;
+  --shadow-honey: 0 0 24px rgba(233,165,44,0.12), 0 0 4px rgba(233,165,44,0.08);
+  --shadow-elevated: 0 4px 16px rgba(0,0,0,0.55), 0 2px 4px rgba(0,0,0,0.4);
+
+  /* Named warm tokens (from waggle.css section 7) — added alongside the scales
+     for layering + future use; components keep using the hive and honey scales. */
+  --bg: #14110b;
+  --bg-2: #1a160f;
+  --surface: #1f1a12;
+  --surface-2: #272117;
+  --surface-3: #322a1d;
+  --line: #38301f;
+  --line-soft: #2a2417;
+  --line-strong: #4a4030;
+  --text: #f6f1e4;
+  --text-2: #c8bfa9;
+  --text-muted: #948a73;
+  --text-dim: #6b6250;
+  --honey: #e9a52c;
+  --honey-bright: #f6c45a;
+  --honey-deep: #c07e16;
+  --honey-wash: rgba(233, 165, 44, 0.10);
+  --honey-line: rgba(233, 165, 44, 0.28);
+  --work: #7aa6d6;
+  --intel: #b196dd;
+  --healthy: #6cb78c;
+  --attention: #e9a52c;
+  --risk: #db8068;
+  --r-sm: 8px;
+  --r: 12px;
+  --r-lg: 18px;
+  --r-xl: 26px;
+  --sans: var(--font-hanken), 'Hanken Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --mono: var(--font-mono), 'JetBrains Mono', ui-monospace, 'Cascadia Code', monospace;
 }
 
 * {
@@ -33,25 +70,34 @@
 }
 
 html {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  background: var(--hive-950);
-  color: var(--hive-100);
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
   -webkit-font-smoothing: antialiased;
 }
 
 body {
   min-height: 100vh;
-  background: var(--hive-950);
+  background: var(--bg);
+  font-family: var(--sans);
 }
 
+/* Warm-Hive display: Hanken 600, tight tracking (waggle.css headline spec) */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--sans);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+h1 { letter-spacing: -0.03em; }
+
 ::selection {
-  background: rgba(229, 160, 0, 0.3);
+  background: rgba(233, 165, 44, 0.3);
   color: var(--hive-50);
 }
 
 /* ── Honeycomb Background ── */
 .honeycomb-bg {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cg fill-rule='evenodd'%3E%3Cg fill='%231f2433' fill-opacity='0.15'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9zM0 15l12.98-7.5V0h-2v6.35L0 12.69v2.3zm0 18.5L12.98 41v8h-2v-6.85L0 35.81v-2.3zM15 0v7.5L27.99 15H28v-2.31h-.01L17 6.35V0h-2zm0 49v-8l12.99-7.5H28v2.31h-.01L17 42.15V49h-2z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cg fill-rule='evenodd'%3E%3Cg fill='%23e9a52c' fill-opacity='0.05'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9zM0 15l12.98-7.5V0h-2v6.35L0 12.69v2.3zm0 18.5L12.98 41v8h-2v-6.85L0 35.81v-2.3zM15 0v7.5L27.99 15H28v-2.31h-.01L17 6.35V0h-2zm0 49v-8l12.99-7.5H28v2.31h-.01L17 42.15V49h-2z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
 }
 
 /* ── Animations ── */

@@ -41,8 +41,8 @@ export default async function FinalCTA() {
 
 const sectionStyle: CSSProperties = {
   padding: '96px 24px',
-  background: 'var(--hive-950, #08090c)',
-  fontFamily: "'Inter', system-ui, sans-serif",
+  background: 'var(--hive-950, #0e0c07)',
+  fontFamily: "var(--sans)",
 };
 const containerStyle: CSSProperties = {
   maxWidth: 720,
@@ -53,13 +53,13 @@ const headlineStyle: CSSProperties = {
   fontSize: 'clamp(28px, 4vw, 40px)',
   fontWeight: 700,
   lineHeight: 1.2,
-  color: 'var(--hive-50, #f0f2f7)',
+  color: 'var(--hive-50, #f6f1e4)',
   marginBottom: 16,
 };
 const subheadStyle: CSSProperties = {
   fontSize: 16,
   lineHeight: 1.6,
-  color: 'var(--hive-300, #7d869e)',
+  color: 'var(--hive-300, #c8bfa9)',
   marginBottom: 32,
 };
 const ctaRowStyle: CSSProperties = {
@@ -78,22 +78,22 @@ const secondaryCTAStyle: CSSProperties = {
   fontSize: 14,
   fontWeight: 600,
   textDecoration: 'none',
-  color: 'var(--hive-100, #dce0eb)',
-  border: '1px solid var(--hive-600, #2a3044)',
-  fontFamily: "'Inter', system-ui, sans-serif",
+  color: 'var(--hive-100, #ece3d0)',
+  border: '1px solid var(--hive-600, #4a4030)',
+  fontFamily: "var(--sans)",
 };
 const kvarkBridgeStyle: CSSProperties = {
   marginTop: 16,
   padding: '20px 24px',
   borderRadius: 12,
-  background: 'var(--hive-900, #0c0e14)',
-  border: '1px solid var(--hive-700, #1f2433)',
+  background: 'var(--hive-900, #14110b)',
+  border: '1px solid var(--hive-700, #272117)',
   fontSize: 14,
   lineHeight: 1.6,
 };
-const kvarkTextStyle: CSSProperties = { color: 'var(--hive-300, #7d869e)' };
+const kvarkTextStyle: CSSProperties = { color: 'var(--hive-300, #c8bfa9)' };
 const kvarkLinkStyle: CSSProperties = {
-  color: 'var(--honey-400, #f5b731)',
+  color: 'var(--honey-400, #f6c45a)',
   fontWeight: 600,
   textDecoration: 'none',
 };

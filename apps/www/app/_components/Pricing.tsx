@@ -154,7 +154,7 @@ export default function Pricing() {
             aria-pressed={billing === 'annual'}
           >
             {t('toggle.annual')}{' '}
-            <span style={{ color: 'var(--honey-400, #f5b731)', fontWeight: 600, marginLeft: 4 }}>
+            <span style={{ color: 'var(--honey-400, #f6c45a)', fontWeight: 600, marginLeft: 4 }}>
               {t('toggle.save_pill')}
             </span>
           </button>
@@ -195,7 +195,7 @@ export default function Pricing() {
                       <Check
                         size={16}
                         style={{
-                          color: 'var(--status-healthy, #34d399)',
+                          color: 'var(--status-healthy, #6cb78c)',
                           flexShrink: 0,
                           marginTop: 2,
                         }}
@@ -261,7 +261,7 @@ export default function Pricing() {
 
 const sectionStyle: CSSProperties = {
   padding: '96px 24px',
-  fontFamily: "'Inter', system-ui, sans-serif",
+  fontFamily: "var(--sans)",
 };
 const containerStyle: CSSProperties = { maxWidth: 1200, margin: '0 auto' };
 const headerStyle: CSSProperties = {
@@ -275,26 +275,26 @@ const eyebrowStyle: CSSProperties = {
   textTransform: 'uppercase',
   letterSpacing: '0.12em',
   marginBottom: 12,
-  color: 'var(--honey-500, #e5a000)',
+  color: 'var(--honey-500, #e9a52c)',
 };
 const headlineStyle: CSSProperties = {
   fontSize: 'clamp(28px, 4vw, 40px)',
   fontWeight: 700,
   marginBottom: 16,
-  color: 'var(--hive-50, #f0f2f7)',
+  color: 'var(--hive-50, #f6f1e4)',
 };
 const subheadStyle: CSSProperties = {
   fontSize: 16,
   lineHeight: 1.6,
-  color: 'var(--hive-300, #7d869e)',
+  color: 'var(--hive-300, #c8bfa9)',
 };
 const toggleRowStyle: CSSProperties = {
   display: 'flex',
   justifyContent: 'center',
   gap: 6,
   padding: 4,
-  background: 'var(--hive-900, #0c0e14)',
-  border: '1px solid var(--hive-700, #1f2433)',
+  background: 'var(--hive-900, #14110b)',
+  border: '1px solid var(--hive-700, #272117)',
   borderRadius: 999,
   width: 'fit-content',
   margin: '0 auto 48px',
@@ -306,17 +306,17 @@ const toggleBaseStyle: CSSProperties = {
   borderRadius: 999,
   border: 'none',
   cursor: 'pointer',
-  fontFamily: "'Inter', system-ui, sans-serif",
+  fontFamily: "var(--sans)",
 };
 const toggleActiveStyle: CSSProperties = {
   ...toggleBaseStyle,
-  background: 'var(--hive-700, #1f2433)',
-  color: 'var(--hive-50, #f0f2f7)',
+  background: 'var(--hive-700, #272117)',
+  color: 'var(--hive-50, #f6f1e4)',
 };
 const toggleInactiveStyle: CSSProperties = {
   ...toggleBaseStyle,
   background: 'transparent',
-  color: 'var(--hive-300, #7d869e)',
+  color: 'var(--hive-300, #c8bfa9)',
 };
 const tiersGridStyle: CSSProperties = {
   display: 'grid',
@@ -329,14 +329,14 @@ const cardStyle: CSSProperties = {
   position: 'relative',
   borderRadius: 16,
   padding: 28,
-  background: 'var(--hive-900, #0c0e14)',
-  border: '1px solid var(--hive-700, #1f2433)',
+  background: 'var(--hive-900, #14110b)',
+  border: '1px solid var(--hive-700, #272117)',
   display: 'flex',
   flexDirection: 'column',
 };
 const cardHighlightedStyle: CSSProperties = {
-  background: 'var(--hive-850, #11141c)',
-  borderColor: 'var(--honey-500, #e5a000)',
+  background: 'var(--hive-850, #1a160f)',
+  borderColor: 'var(--honey-500, #e9a52c)',
   boxShadow: 'var(--shadow-honey)',
 };
 const badgeStyle: CSSProperties = {
@@ -350,35 +350,35 @@ const badgeStyle: CSSProperties = {
   letterSpacing: '0.05em',
   padding: '4px 12px',
   borderRadius: 999,
-  background: 'var(--honey-500, #e5a000)',
-  color: 'var(--hive-950, #08090c)',
+  background: 'var(--honey-500, #e9a52c)',
+  color: 'var(--hive-950, #0e0c07)',
 };
 const tierNameStyle: CSSProperties = {
   fontSize: 20,
   fontWeight: 700,
   marginBottom: 4,
-  color: 'var(--hive-50, #f0f2f7)',
+  color: 'var(--hive-50, #f6f1e4)',
 };
 const tierTaglineStyle: CSSProperties = {
   fontSize: 13,
-  color: 'var(--hive-200, #b0b7cc)',
+  color: 'var(--hive-200, #d8cfba)',
   marginBottom: 4,
 };
 const tierAudienceStyle: CSSProperties = {
   fontSize: 12,
-  color: 'var(--hive-400, #5a6380)',
+  color: 'var(--hive-400, #948a73)',
   marginBottom: 18,
 };
 const priceStyle: CSSProperties = {
   fontSize: 24,
   fontWeight: 700,
-  color: 'var(--hive-50, #f0f2f7)',
+  color: 'var(--hive-50, #f6f1e4)',
   marginBottom: 24,
 };
 const priceNoteStyle: CSSProperties = {
   fontSize: 12,
   fontWeight: 400,
-  color: 'var(--hive-400, #5a6380)',
+  color: 'var(--hive-400, #948a73)',
 };
 const bulletsStyle: CSSProperties = {
   listStyle: 'none',
@@ -391,7 +391,7 @@ const bulletItemStyle: CSSProperties = {
   alignItems: 'flex-start',
   gap: 10,
   fontSize: 13,
-  color: 'var(--hive-200, #b0b7cc)',
+  color: 'var(--hive-200, #d8cfba)',
   marginBottom: 10,
   lineHeight: 1.5,
 };
@@ -403,12 +403,12 @@ const primaryCtaStyle: CSSProperties = {
   borderRadius: 12,
   fontSize: 14,
   fontWeight: 600,
-  background: 'var(--honey-500, #e5a000)',
-  color: 'var(--hive-950, #08090c)',
+  background: 'var(--honey-500, #e9a52c)',
+  color: 'var(--hive-950, #0e0c07)',
   boxShadow: 'var(--shadow-honey)',
   border: 'none',
   cursor: 'pointer',
-  fontFamily: "'Inter', system-ui, sans-serif",
+  fontFamily: "var(--sans)",
 };
 const ghostCtaStyle: CSSProperties = {
   display: 'block',
@@ -418,31 +418,31 @@ const ghostCtaStyle: CSSProperties = {
   borderRadius: 12,
   fontSize: 14,
   fontWeight: 600,
-  background: 'var(--hive-800, #171b26)',
-  color: 'var(--hive-100, #dce0eb)',
-  border: '1px solid var(--hive-600, #2a3044)',
+  background: 'var(--hive-800, #1f1a12)',
+  color: 'var(--hive-100, #ece3d0)',
+  border: '1px solid var(--hive-600, #4a4030)',
   cursor: 'pointer',
-  fontFamily: "'Inter', system-ui, sans-serif",
+  fontFamily: "var(--sans)",
 };
 const comparisonDetailsStyle: CSSProperties = {
   maxWidth: 1100,
   margin: '0 auto',
   borderRadius: 12,
-  border: '1px solid var(--hive-700, #1f2433)',
-  background: 'var(--hive-900, #0c0e14)',
+  border: '1px solid var(--hive-700, #272117)',
+  background: 'var(--hive-900, #14110b)',
   overflow: 'hidden',
 };
 const comparisonSummaryStyle: CSSProperties = {
   padding: '16px 24px',
   fontSize: 14,
   fontWeight: 600,
-  color: 'var(--hive-100, #dce0eb)',
+  color: 'var(--hive-100, #ece3d0)',
   cursor: 'pointer',
   listStyle: 'none',
 };
 const tableWrapperStyle: CSSProperties = {
   overflowX: 'auto',
-  borderTop: '1px solid var(--hive-700, #1f2433)',
+  borderTop: '1px solid var(--hive-700, #272117)',
 };
 const tableStyle: CSSProperties = {
   width: '100%',
@@ -453,9 +453,9 @@ const thStyleFeature: CSSProperties = {
   textAlign: 'left',
   padding: '12px 16px',
   fontWeight: 600,
-  color: 'var(--hive-200, #b0b7cc)',
-  background: 'var(--hive-850, #11141c)',
-  borderBottom: '1px solid var(--hive-700, #1f2433)',
+  color: 'var(--hive-200, #d8cfba)',
+  background: 'var(--hive-850, #1a160f)',
+  borderBottom: '1px solid var(--hive-700, #272117)',
 };
 const thStyleValue: CSSProperties = {
   ...thStyleFeature,
@@ -463,14 +463,14 @@ const thStyleValue: CSSProperties = {
 };
 const tdFeatureStyle: CSSProperties = {
   padding: '10px 16px',
-  color: 'var(--hive-300, #7d869e)',
-  borderBottom: '1px solid var(--hive-800, #171b26)',
+  color: 'var(--hive-300, #c8bfa9)',
+  borderBottom: '1px solid var(--hive-800, #1f1a12)',
 };
 const tdValueStyle: CSSProperties = {
   padding: '10px 16px',
-  color: 'var(--hive-100, #dce0eb)',
+  color: 'var(--hive-100, #ece3d0)',
   textAlign: 'center',
-  borderBottom: '1px solid var(--hive-800, #171b26)',
+  borderBottom: '1px solid var(--hive-800, #1f1a12)',
 };
 const pricingResponsiveCss = `
   @media (max-width: 1023px) {

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import { Inter } from 'next/font/google';
+import { Hanken_Grotesk, JetBrains_Mono } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
 import { ClerkProvider } from '@clerk/nextjs';
@@ -35,15 +35,15 @@ import './globals.css';
 const HIVE_CLERK_APPEARANCE = {
   baseTheme: dark,
   variables: {
-    colorPrimary: '#e5a000',
-    colorBackground: '#08090c',
-    colorText: '#dce0eb',
-    colorTextSecondary: '#7d869e',
-    colorInputBackground: '#171b26',
-    colorInputText: '#dce0eb',
-    colorNeutral: '#7d869e',
+    colorPrimary: '#e9a52c',
+    colorBackground: '#0e0c07',
+    colorText: '#ece3d0',
+    colorTextSecondary: '#c8bfa9',
+    colorInputBackground: '#1f1a12',
+    colorInputText: '#ece3d0',
+    colorNeutral: '#c8bfa9',
     borderRadius: '8px',
-    fontFamily: 'Inter, system-ui, sans-serif',
+    fontFamily: "'Hanken Grotesk', system-ui, sans-serif",
   },
   // Belt-and-braces element-level overrides. apps/www does NOT use Tailwind
   // (vanilla CSS + custom properties only — see app/globals.css), so these
@@ -56,47 +56,54 @@ const HIVE_CLERK_APPEARANCE = {
   // resolution from a parent.
   elements: {
     card: {
-      backgroundColor: '#08090c',
-      border: '1px solid #1f2433',
-      boxShadow: '0 4px 16px rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.3)',
+      backgroundColor: '#0e0c07',
+      border: '1px solid #272117',
+      boxShadow: '0 4px 16px rgba(0,0,0,0.55), 0 2px 4px rgba(0,0,0,0.4)',
     },
-    headerTitle: { color: '#dce0eb' },
-    headerSubtitle: { color: '#7d869e' },
+    headerTitle: { color: '#ece3d0' },
+    headerSubtitle: { color: '#c8bfa9' },
     socialButtonsBlockButton: {
-      backgroundColor: '#171b26',
-      border: '1px solid #2a3044',
-      color: '#dce0eb',
+      backgroundColor: '#1f1a12',
+      border: '1px solid #4a4030',
+      color: '#ece3d0',
     },
-    socialButtonsBlockButtonText: { color: '#dce0eb' },
-    socialButtonsBlockButtonArrow: { color: '#7d869e' },
-    dividerLine: { backgroundColor: '#2a3044' },
-    dividerText: { color: '#7d869e' },
-    formFieldLabel: { color: '#b0b7cc' },
+    socialButtonsBlockButtonText: { color: '#ece3d0' },
+    socialButtonsBlockButtonArrow: { color: '#c8bfa9' },
+    dividerLine: { backgroundColor: '#4a4030' },
+    dividerText: { color: '#c8bfa9' },
+    formFieldLabel: { color: '#d8cfba' },
     formFieldInput: {
-      backgroundColor: '#171b26',
-      border: '1px solid #2a3044',
-      color: '#dce0eb',
+      backgroundColor: '#1f1a12',
+      border: '1px solid #4a4030',
+      color: '#ece3d0',
     },
     formButtonPrimary: {
-      backgroundColor: '#e5a000',
-      color: '#08090c',
+      backgroundColor: '#e9a52c',
+      color: '#0e0c07',
       fontWeight: 600,
     },
-    footerActionText: { color: '#7d869e' },
-    footerActionLink: { color: '#e5a000' },
-    identityPreviewText: { color: '#dce0eb' },
-    identityPreviewEditButton: { color: '#e5a000' },
+    footerActionText: { color: '#c8bfa9' },
+    footerActionLink: { color: '#e9a52c' },
+    identityPreviewText: { color: '#ece3d0' },
+    identityPreviewEditButton: { color: '#e9a52c' },
     // Modal-specific (the `<SignInButton mode="modal">` flow).
-    modalContent: { backgroundColor: '#08090c' },
-    modalCloseButton: { color: '#7d869e' },
+    modalContent: { backgroundColor: '#0e0c07' },
+    modalCloseButton: { color: '#c8bfa9' },
   },
 };
 
-const inter = Inter({
+const hanken = Hanken_Grotesk({
   subsets: ['latin'],
   weight: ['300', '400', '500', '600', '700', '800'],
   display: 'swap',
-  variable: '--font-inter',
+  variable: '--font-hanken',
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500', '600'],
+  display: 'swap',
+  variable: '--font-mono',
 });
 
 /* ────────────────────────────────────────────────────────────────── */
@@ -151,7 +158,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`scroll-smooth ${inter.variable}`}>
+    <html lang="en" className={`scroll-smooth ${hanken.variable} ${jetbrainsMono.variable}`}>
       <head>
         <title>{META_TITLE}</title>
         <meta name="description" content={META_DESCRIPTION} />
@@ -167,7 +174,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <meta name="twitter:image" content={META_OG_IMAGE} />
         <link rel="icon" href="/brand/logo.jpeg" />
       </head>
-      <body style={{ fontFamily: 'var(--font-inter), Inter, system-ui, sans-serif' }}>
+      <body style={{ fontFamily: "var(--font-hanken), 'Hanken Grotesk', system-ui, sans-serif" }}>
         <ClerkProvider appearance={HIVE_CLERK_APPEARANCE}>
           <IntlWrapper>{children}</IntlWrapper>
         </ClerkProvider>

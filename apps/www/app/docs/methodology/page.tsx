@@ -71,9 +71,9 @@ export default function MethodologyPage() {
 
 const pageStyle: CSSProperties = {
   minHeight: '100vh',
-  background: 'var(--hive-950, #08090c)',
-  color: 'var(--hive-100, #dce0eb)',
-  fontFamily: "'Inter', system-ui, sans-serif",
+  background: 'var(--hive-950, #0e0c07)',
+  color: 'var(--hive-100, #ece3d0)',
+  fontFamily: "var(--sans)",
   paddingTop: 24,
   paddingBottom: 48,
 };
@@ -89,7 +89,7 @@ const brandLinkStyle: CSSProperties = {
   alignItems: 'center',
   gap: 10,
   textDecoration: 'none',
-  color: 'var(--hive-200, #b0b7cc)',
+  color: 'var(--hive-200, #d8cfba)',
   fontSize: 14,
 };
 
@@ -103,15 +103,15 @@ const logoStyle: CSSProperties = {
 const brandTextStyle: CSSProperties = {
   fontSize: 16,
   fontWeight: 700,
-  color: 'var(--hive-50, #f0f2f7)',
+  color: 'var(--hive-50, #f6f1e4)',
 };
 
 const separatorStyle: CSSProperties = {
-  color: 'var(--hive-500, #3d4560)',
+  color: 'var(--hive-500, #6b6250)',
 };
 
 const crumbStyle: CSSProperties = {
-  color: 'var(--hive-300, #7d869e)',
+  color: 'var(--hive-300, #c8bfa9)',
 };
 
 const articleStyle: CSSProperties = {
@@ -124,14 +124,14 @@ const footerStyle: CSSProperties = {
   maxWidth: 800,
   margin: '64px auto 0',
   padding: '24px',
-  borderTop: '1px solid var(--hive-700, #1f2433)',
+  borderTop: '1px solid var(--hive-700, #272117)',
   textAlign: 'center',
 };
 
 const backLinkStyle: CSSProperties = {
   display: 'inline-block',
   fontSize: 14,
-  color: 'var(--honey-400, #f5b731)',
+  color: 'var(--honey-400, #f6c45a)',
   textDecoration: 'none',
   fontWeight: 600,
 };
@@ -141,12 +141,12 @@ const scopedCss = `
   .methodology-prose {
     font-size: 16px;
     line-height: 1.65;
-    color: var(--hive-100, #dce0eb);
+    color: var(--hive-100, #ece3d0);
   }
   .methodology-prose h1 {
     font-size: clamp(28px, 4vw, 36px);
     font-weight: 800;
-    color: var(--hive-50, #f0f2f7);
+    color: var(--hive-50, #f6f1e4);
     margin-top: 0;
     margin-bottom: 24px;
     letter-spacing: -0.01em;
@@ -154,21 +154,21 @@ const scopedCss = `
   .methodology-prose h2 {
     font-size: clamp(22px, 3vw, 26px);
     font-weight: 700;
-    color: var(--hive-50, #f0f2f7);
+    color: var(--hive-50, #f6f1e4);
     margin-top: 48px;
     margin-bottom: 16px;
   }
   .methodology-prose h3 {
     font-size: 18px;
     font-weight: 600;
-    color: var(--hive-100, #dce0eb);
+    color: var(--hive-100, #ece3d0);
     margin-top: 32px;
     margin-bottom: 12px;
   }
   .methodology-prose h4 {
     font-size: 15px;
     font-weight: 600;
-    color: var(--hive-200, #b0b7cc);
+    color: var(--hive-200, #d8cfba);
     margin-top: 24px;
     margin-bottom: 10px;
     text-transform: uppercase;
@@ -176,30 +176,30 @@ const scopedCss = `
   }
   .methodology-prose p {
     margin: 0 0 16px;
-    color: var(--hive-200, #b0b7cc);
+    color: var(--hive-200, #d8cfba);
   }
   .methodology-prose a {
-    color: var(--honey-400, #f5b731);
+    color: var(--honey-400, #f6c45a);
     text-decoration: underline;
-    text-decoration-color: var(--honey-600, #b87a00);
+    text-decoration-color: var(--honey-600, #c07e16);
     text-underline-offset: 3px;
   }
   .methodology-prose a:hover {
-    color: var(--honey-300, #fcd34d);
+    color: var(--honey-300, #f9d27e);
   }
   .methodology-prose strong {
-    color: var(--hive-50, #f0f2f7);
+    color: var(--hive-50, #f6f1e4);
     font-weight: 600;
   }
   .methodology-prose em {
-    color: var(--hive-100, #dce0eb);
+    color: var(--hive-100, #ece3d0);
     font-style: italic;
   }
   .methodology-prose ul,
   .methodology-prose ol {
     margin: 0 0 20px;
     padding-left: 24px;
-    color: var(--hive-200, #b0b7cc);
+    color: var(--hive-200, #d8cfba);
   }
   .methodology-prose li {
     margin-bottom: 8px;
@@ -212,15 +212,15 @@ const scopedCss = `
     font-size: 0.88em;
     padding: 2px 6px;
     border-radius: 4px;
-    background: var(--hive-900, #0c0e14);
-    color: var(--honey-300, #fcd34d);
-    border: 1px solid var(--hive-800, #171b26);
+    background: var(--hive-900, #14110b);
+    color: var(--honey-300, #f9d27e);
+    border: 1px solid var(--hive-800, #1f1a12);
   }
   .methodology-prose pre {
     margin: 16px 0 24px;
     padding: 16px 20px;
-    background: var(--hive-900, #0c0e14);
-    border: 1px solid var(--hive-700, #1f2433);
+    background: var(--hive-900, #14110b);
+    border: 1px solid var(--hive-700, #272117);
     border-radius: 8px;
     overflow-x: auto;
   }
@@ -228,16 +228,16 @@ const scopedCss = `
     background: transparent;
     border: none;
     padding: 0;
-    color: var(--hive-100, #dce0eb);
+    color: var(--hive-100, #ece3d0);
     font-size: 13px;
     line-height: 1.5;
   }
   .methodology-prose blockquote {
     margin: 0 0 20px;
     padding: 4px 16px;
-    border-left: 3px solid var(--honey-500, #e5a000);
-    background: rgba(229, 160, 0, 0.04);
-    color: var(--hive-200, #b0b7cc);
+    border-left: 3px solid var(--honey-500, #e9a52c);
+    background: rgba(233, 165, 44, 0.04);
+    color: var(--hive-200, #d8cfba);
     font-style: italic;
   }
   .methodology-prose blockquote p {
@@ -246,7 +246,7 @@ const scopedCss = `
   .methodology-prose hr {
     margin: 40px 0;
     border: none;
-    border-top: 1px solid var(--hive-700, #1f2433);
+    border-top: 1px solid var(--hive-700, #272117);
   }
   .methodology-prose table {
     width: 100%;
@@ -258,15 +258,15 @@ const scopedCss = `
   .methodology-prose td {
     padding: 8px 12px;
     text-align: left;
-    border-bottom: 1px solid var(--hive-800, #171b26);
+    border-bottom: 1px solid var(--hive-800, #1f1a12);
   }
   .methodology-prose th {
-    background: var(--hive-850, #11141c);
-    color: var(--hive-100, #dce0eb);
+    background: var(--hive-850, #1a160f);
+    color: var(--hive-100, #ece3d0);
     font-weight: 600;
-    border-bottom: 1px solid var(--hive-700, #1f2433);
+    border-bottom: 1px solid var(--hive-700, #272117);
   }
   .methodology-prose td {
-    color: var(--hive-200, #b0b7cc);
+    color: var(--hive-200, #d8cfba);
   }
 `;

@@ -24,19 +24,19 @@ const PRIMARY_STYLE: CSSProperties = {
   fontSize: 14,
   fontWeight: 600,
   textDecoration: 'none',
-  background: 'var(--honey-500, #e5a000)',
-  color: 'var(--hive-950, #08090c)',
+  background: 'var(--honey-500, #e9a52c)',
+  color: 'var(--hive-950, #0e0c07)',
   boxShadow: 'var(--shadow-honey)',
   cursor: 'pointer',
   border: 'none',
-  fontFamily: "'Inter', system-ui, sans-serif",
+  fontFamily: "var(--sans)",
 };
 
 const GHOST_STYLE: CSSProperties = {
   ...PRIMARY_STYLE,
   background: 'transparent',
-  color: 'var(--hive-100, #dce0eb)',
-  border: '1px solid var(--hive-600, #2a3044)',
+  color: 'var(--hive-100, #ece3d0)',
+  border: '1px solid var(--hive-600, #4a4030)',
   boxShadow: undefined,
 };
 

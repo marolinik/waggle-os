@@ -89,9 +89,9 @@ export default async function Footer() {
 
 const footerStyle: CSSProperties = {
   padding: '64px 24px 32px',
-  background: 'var(--hive-950, #08090c)',
-  borderTop: '1px solid var(--hive-700, #1f2433)',
-  fontFamily: "'Inter', system-ui, sans-serif",
+  background: 'var(--hive-950, #0e0c07)',
+  borderTop: '1px solid var(--hive-700, #272117)',
+  fontFamily: "var(--sans)",
 };
 const topGridStyle: CSSProperties = {
   maxWidth: 1200,
@@ -104,45 +104,45 @@ const brandBlockStyle: CSSProperties = { maxWidth: 320 };
 const wordmarkStyle: CSSProperties = {
   fontSize: 20,
   fontWeight: 700,
-  color: 'var(--hive-50, #f0f2f7)',
+  color: 'var(--hive-50, #f6f1e4)',
   display: 'block',
   marginBottom: 12,
 };
 const brandDescriptionStyle: CSSProperties = {
   fontSize: 13,
   lineHeight: 1.6,
-  color: 'var(--hive-300, #7d869e)',
+  color: 'var(--hive-300, #c8bfa9)',
   marginBottom: 12,
 };
 const attributionStyle: CSSProperties = {
   fontSize: 12,
-  color: 'var(--hive-400, #5a6380)',
+  color: 'var(--hive-400, #948a73)',
 };
 const columnTitleStyle: CSSProperties = {
   fontSize: 11,
   fontWeight: 600,
   textTransform: 'uppercase',
   letterSpacing: '0.1em',
-  color: 'var(--hive-200, #b0b7cc)',
+  color: 'var(--hive-200, #d8cfba)',
   marginBottom: 16,
 };
 const columnListStyle: CSSProperties = { listStyle: 'none', padding: 0, margin: 0 };
 const columnLinkStyle: CSSProperties = {
   fontSize: 13,
-  color: 'var(--hive-300, #7d869e)',
+  color: 'var(--hive-300, #c8bfa9)',
   textDecoration: 'none',
 };
 const baseLineStyle: CSSProperties = {
   maxWidth: 1200,
   margin: '0 auto',
   paddingTop: 24,
-  borderTop: '1px solid var(--hive-800, #171b26)',
+  borderTop: '1px solid var(--hive-800, #1f1a12)',
   display: 'flex',
   justifyContent: 'space-between',
   flexWrap: 'wrap',
   gap: 12,
   fontSize: 12,
-  color: 'var(--hive-500, #3d4560)',
+  color: 'var(--hive-500, #6b6250)',
 };
 const baseLineRightStyle: CSSProperties = {
   fontFamily: "'JetBrains Mono', monospace",

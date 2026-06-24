@@ -28,5 +28,5 @@ const pageStyle: CSSProperties = {
   alignItems: 'center',
   justifyContent: 'center',
   padding: '96px 24px 48px',
-  background: 'var(--hive-950, #08090c)',
+  background: 'var(--hive-950, #0e0c07)',
 };

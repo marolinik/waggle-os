@@ -26,7 +26,7 @@ export default function DesignPersonasPage() {
     <main
       style={{
         minHeight: '100vh',
-        background: 'var(--hive-950, #08090c)',
+        background: 'var(--hive-950, #0e0c07)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'stretch',

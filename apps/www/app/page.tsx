@@ -53,7 +53,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         <WowBeat />
         <section
           id="personas"
-          style={{ background: 'var(--hive-950, #08090c)' }}
+          style={{ background: 'var(--hive-950, #0e0c07)' }}
           aria-labelledby="waggle-hive-heading"
         >
           <BrandPersonasCard

@@ -58,8 +58,8 @@ export default async function ProofPointsBand() {
 
 const sectionStyle: CSSProperties = {
   padding: '96px 24px',
-  background: 'var(--hive-950, #08090c)',
-  fontFamily: "'Inter', system-ui, sans-serif",
+  background: 'var(--hive-950, #0e0c07)',
+  fontFamily: "var(--sans)",
 };
 const containerStyle: CSSProperties = { maxWidth: 1200, margin: '0 auto' };
 const headerStyle: CSSProperties = {
@@ -73,18 +73,18 @@ const eyebrowStyle: CSSProperties = {
   textTransform: 'uppercase',
   letterSpacing: '0.12em',
   marginBottom: 12,
-  color: 'var(--honey-500, #e5a000)',
+  color: 'var(--honey-500, #e9a52c)',
 };
 const headlineStyle: CSSProperties = {
   fontSize: 'clamp(28px, 4vw, 40px)',
   fontWeight: 700,
   marginBottom: 16,
-  color: 'var(--hive-50, #f0f2f7)',
+  color: 'var(--hive-50, #f6f1e4)',
 };
 const subheadStyle: CSSProperties = {
   fontSize: 16,
   lineHeight: 1.6,
-  color: 'var(--hive-300, #7d869e)',
+  color: 'var(--hive-300, #c8bfa9)',
 };
 const gridStyle: CSSProperties = {
   listStyle: 'none',
@@ -95,8 +95,8 @@ const gridStyle: CSSProperties = {
   gap: 16,
 };
 const cardStyle: CSSProperties = {
-  background: 'var(--hive-900, #0c0e14)',
-  border: '1px solid var(--hive-700, #1f2433)',
+  background: 'var(--hive-900, #14110b)',
+  border: '1px solid var(--hive-700, #272117)',
   borderRadius: 16,
   padding: 24,
   display: 'flex',
@@ -109,13 +109,13 @@ const captionStyle: CSSProperties = {
   fontWeight: 600,
   textTransform: 'uppercase',
   letterSpacing: '0.1em',
-  color: 'var(--hive-400, #5a6380)',
+  color: 'var(--hive-400, #948a73)',
   fontFamily: "'JetBrains Mono', monospace",
 };
 const statStyle: CSSProperties = {
   fontSize: 'clamp(24px, 3vw, 32px)',
   fontWeight: 800,
-  color: 'var(--honey-400, #f5b731)',
+  color: 'var(--honey-400, #f6c45a)',
   fontFamily: "'JetBrains Mono', monospace",
   letterSpacing: '-0.02em',
   marginTop: 4,
@@ -123,33 +123,33 @@ const statStyle: CSSProperties = {
 const nameStyle: CSSProperties = {
   fontSize: 14,
   fontWeight: 600,
-  color: 'var(--hive-100, #dce0eb)',
+  color: 'var(--hive-100, #ece3d0)',
   marginTop: 4,
 };
 const descriptionStyle: CSSProperties = {
   fontSize: 13,
   lineHeight: 1.5,
-  color: 'var(--hive-300, #7d869e)',
+  color: 'var(--hive-300, #c8bfa9)',
   marginTop: 8,
 };
 const methodologyStyle: CSSProperties = {
   maxWidth: 720,
   margin: '40px auto 0',
   textAlign: 'left',
-  fontFamily: "'Inter', system-ui, sans-serif",
+  fontFamily: "var(--sans)",
 };
 const methodologySummaryStyle: CSSProperties = {
   fontSize: 12,
   fontWeight: 600,
   textTransform: 'uppercase',
   letterSpacing: '0.1em',
-  color: 'var(--hive-300, #7d869e)',
+  color: 'var(--hive-300, #c8bfa9)',
   cursor: 'pointer',
 };
 const methodologyBodyStyle: CSSProperties = {
   fontSize: 13,
   lineHeight: 1.6,
-  color: 'var(--hive-400, #5a6380)',
+  color: 'var(--hive-400, #948a73)',
   marginTop: 12,
 };
 const quoteStyle: CSSProperties = {
@@ -162,7 +162,7 @@ const quoteTextStyle: CSSProperties = {
   fontSize: 18,
   lineHeight: 1.5,
   fontStyle: 'italic',
-  color: 'var(--hive-100, #dce0eb)',
+  color: 'var(--hive-100, #ece3d0)',
 };
 const proofResponsiveCss = `
   @media (max-width: 1024px) {

@@ -57,7 +57,7 @@ export default async function Hero({ variantId }: HeroProps) {
             {headlineEmphasis ? (
               <>
                 {' '}
-                <span style={{ color: 'var(--honey-400, #f5b731)' }}>
+                <span style={{ color: 'var(--honey-400, #f6c45a)' }}>
                   {headlineEmphasis}
                 </span>
               </>
@@ -101,7 +101,7 @@ const sectionStyle: CSSProperties = {
   paddingLeft: 24,
   paddingRight: 24,
   overflow: 'hidden',
-  fontFamily: "'Inter', system-ui, sans-serif",
+  fontFamily: "var(--sans)",
 };
 
 const containerStyle: CSSProperties = {
@@ -127,7 +127,7 @@ const eyebrowStyle: CSSProperties = {
   textTransform: 'uppercase',
   letterSpacing: '0.12em',
   marginBottom: 16,
-  color: 'var(--honey-500, #e5a000)',
+  color: 'var(--honey-500, #e9a52c)',
 };
 
 const headlineStyle: CSSProperties = {
@@ -135,7 +135,7 @@ const headlineStyle: CSSProperties = {
   fontWeight: 800,
   lineHeight: 1.1,
   marginBottom: 20,
-  color: 'var(--hive-50, #f0f2f7)',
+  color: 'var(--hive-50, #f6f1e4)',
   letterSpacing: '-0.01em',
 };
 
@@ -143,7 +143,7 @@ const subheadStyle: CSSProperties = {
   fontSize: 'clamp(16px, 1.6vw, 18px)',
   lineHeight: 1.5,
   marginBottom: 32,
-  color: 'var(--hive-200, #b0b7cc)',
+  color: 'var(--hive-200, #d8cfba)',
 };
 
 const ctaRowStyle: CSSProperties = {
@@ -162,9 +162,9 @@ const secondaryCTAStyle: CSSProperties = {
   fontSize: 14,
   fontWeight: 600,
   textDecoration: 'none',
-  color: 'var(--hive-100, #dce0eb)',
-  border: '1px solid var(--hive-600, #2a3044)',
-  fontFamily: "'Inter', system-ui, sans-serif",
+  color: 'var(--hive-100, #ece3d0)',
+  border: '1px solid var(--hive-600, #4a4030)',
+  fontFamily: "var(--sans)",
 };
 
 const microcopyStyle: CSSProperties = {
@@ -178,7 +178,7 @@ const microcopyStyle: CSSProperties = {
   rowGap: 8,
   fontSize: 12,
   fontFamily: "'JetBrains Mono', monospace",
-  color: 'var(--hive-400, #5a6380)',
+  color: 'var(--hive-400, #948a73)',
   letterSpacing: '0.02em',
 };
 
@@ -192,7 +192,7 @@ const microcopyDotStyle: CSSProperties = {
   width: 4,
   height: 4,
   borderRadius: '50%',
-  background: 'var(--honey-500, #e5a000)',
+  background: 'var(--honey-500, #e9a52c)',
   display: 'inline-block',
 };
 

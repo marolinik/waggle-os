@@ -24,6 +24,6 @@ const mainStyle: CSSProperties = {
   maxWidth: 760,
   margin: '120px auto 96px',
   padding: '0 24px',
-  fontFamily: "'Inter', system-ui, sans-serif",
-  color: 'var(--hive-100, #dce0eb)',
+  fontFamily: "var(--sans)",
+  color: 'var(--hive-100, #ece3d0)',
 };
