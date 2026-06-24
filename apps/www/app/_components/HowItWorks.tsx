@@ -60,7 +60,7 @@ export default async function HowItWorks() {
 
 const sectionStyle: CSSProperties = {
   padding: '96px 24px',
-  fontFamily: "'Inter', system-ui, sans-serif",
+  fontFamily: "var(--sans)",
 };
 const containerStyle: CSSProperties = { maxWidth: 960, margin: '0 auto' };
 const headerStyle: CSSProperties = {
@@ -74,18 +74,18 @@ const eyebrowStyle: CSSProperties = {
   textTransform: 'uppercase',
   letterSpacing: '0.12em',
   marginBottom: 12,
-  color: 'var(--honey-500, #e5a000)',
+  color: 'var(--honey-500, #e9a52c)',
 };
 const headlineStyle: CSSProperties = {
   fontSize: 'clamp(28px, 4vw, 40px)',
   fontWeight: 700,
   marginBottom: 16,
-  color: 'var(--hive-50, #f0f2f7)',
+  color: 'var(--hive-50, #f6f1e4)',
 };
 const subheadStyle: CSSProperties = {
   fontSize: 16,
   lineHeight: 1.6,
-  color: 'var(--hive-300, #7d869e)',
+  color: 'var(--hive-300, #c8bfa9)',
 };
 const stepsGridStyle: CSSProperties = {
   listStyle: 'none',
@@ -114,21 +114,21 @@ const stepNumberStyle: CSSProperties = {
   justifyContent: 'center',
   fontSize: 12,
   fontWeight: 700,
-  background: 'var(--honey-500, #e5a000)',
-  color: 'var(--hive-950, #08090c)',
+  background: 'var(--honey-500, #e9a52c)',
+  color: 'var(--hive-950, #0e0c07)',
 };
 const stepTitleStyle: CSSProperties = {
   fontSize: 18,
   fontWeight: 600,
   marginBottom: 12,
-  color: 'var(--hive-50, #f0f2f7)',
+  color: 'var(--hive-50, #f6f1e4)',
 };
 const stepBodyStyle: CSSProperties = {
   fontSize: 14,
   lineHeight: 1.6,
   maxWidth: 280,
   margin: '0 auto',
-  color: 'var(--hive-300, #7d869e)',
+  color: 'var(--hive-300, #c8bfa9)',
 };
 const howResponsiveCss = `
   @media (max-width: 768px) {

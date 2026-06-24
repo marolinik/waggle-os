@@ -160,7 +160,7 @@ const h1Style: CSSProperties = {
   fontSize: 'clamp(28px, 4vw, 36px)',
   fontWeight: 700,
   marginBottom: 24,
-  color: 'var(--hive-50, #f0f2f7)',
+  color: 'var(--hive-50, #f6f1e4)',
 };
 
 const h2Style: CSSProperties = {
@@ -168,15 +168,15 @@ const h2Style: CSSProperties = {
   fontWeight: 600,
   marginTop: 32,
   marginBottom: 12,
-  color: 'var(--hive-50, #f0f2f7)',
+  color: 'var(--hive-50, #f6f1e4)',
 };
 
 const pendingNoteStyle: CSSProperties = {
   fontSize: 13,
   fontStyle: 'italic',
-  color: 'var(--honey-400, #f5b731)',
-  background: 'rgba(229, 160, 0, 0.06)',
-  border: '1px solid var(--honey-500, #e5a000)',
+  color: 'var(--honey-400, #f6c45a)',
+  background: 'rgba(233, 165, 44, 0.06)',
+  border: '1px solid var(--honey-500, #e9a52c)',
   borderRadius: 8,
   padding: '12px 16px',
   marginBottom: 24,
@@ -184,21 +184,21 @@ const pendingNoteStyle: CSSProperties = {
 
 const metaLineStyle: CSSProperties = {
   fontSize: 13,
-  color: 'var(--hive-300, #8993ab)',
+  color: 'var(--hive-300, #948a73)',
   marginBottom: 24,
 };
 
 const paragraphStyle: CSSProperties = {
   fontSize: 15,
   lineHeight: 1.7,
-  color: 'var(--hive-200, #b0b7cc)',
+  color: 'var(--hive-200, #d8cfba)',
   marginBottom: 16,
 };
 
 const listStyle: CSSProperties = {
   paddingLeft: 24,
   marginBottom: 16,
-  color: 'var(--hive-200, #b0b7cc)',
+  color: 'var(--hive-200, #d8cfba)',
 };
 
 const listItemStyle: CSSProperties = {
@@ -208,6 +208,6 @@ const listItemStyle: CSSProperties = {
 };
 
 const linkStyle: CSSProperties = {
-  color: 'var(--honey-400, #f5b731)',
+  color: 'var(--honey-400, #f6c45a)',
   textDecoration: 'underline',
 };

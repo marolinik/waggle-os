@@ -58,7 +58,7 @@ export default async function TrustBand() {
 
 const sectionStyle: CSSProperties = {
   padding: '96px 24px',
-  fontFamily: "'Inter', system-ui, sans-serif",
+  fontFamily: "var(--sans)",
   position: 'relative',
 };
 const containerStyle: CSSProperties = {
@@ -74,16 +74,16 @@ const eyebrowBadgeStyle: CSSProperties = {
   letterSpacing: '0.12em',
   padding: '6px 14px',
   borderRadius: 999,
-  background: 'var(--honey-glow, rgba(229,160,0,0.12))',
-  border: '1px solid rgba(229,160,0,0.2)',
-  color: 'var(--honey-400, #f5b731)',
+  background: 'var(--honey-glow, rgba(233,165,44,0.12))',
+  border: '1px solid rgba(233,165,44,0.2)',
+  color: 'var(--honey-400, #f6c45a)',
   marginBottom: 20,
 };
 const headlineStyle: CSSProperties = {
   fontSize: 'clamp(22px, 3vw, 28px)',
   fontWeight: 700,
   lineHeight: 1.3,
-  color: 'var(--hive-50, #f0f2f7)',
+  color: 'var(--hive-50, #f6f1e4)',
   marginBottom: 16,
   maxWidth: 800,
   marginLeft: 'auto',
@@ -92,7 +92,7 @@ const headlineStyle: CSSProperties = {
 const subheadStyle: CSSProperties = {
   fontSize: 15,
   lineHeight: 1.6,
-  color: 'var(--hive-300, #7d869e)',
+  color: 'var(--hive-300, #c8bfa9)',
   maxWidth: 720,
   margin: '0 auto 48px',
 };
@@ -116,17 +116,17 @@ const signalDotStyle: CSSProperties = {
   width: 6,
   height: 6,
   borderRadius: '50%',
-  background: 'var(--honey-500, #e5a000)',
+  background: 'var(--honey-500, #e9a52c)',
   display: 'inline-block',
 };
 const signalLabelStyle: CSSProperties = {
-  color: 'var(--hive-200, #b0b7cc)',
-  fontFamily: "'Inter', system-ui, sans-serif",
+  color: 'var(--hive-200, #d8cfba)',
+  fontFamily: "var(--sans)",
 };
 const signalLinkStyle: CSSProperties = {
   ...signalLabelStyle,
   textDecoration: 'underline',
-  textDecorationColor: 'var(--hive-600, #2a3044)',
+  textDecorationColor: 'var(--hive-600, #4a4030)',
   textUnderlineOffset: 4,
 };
 const trustResponsiveCss = `

@@ -25,8 +25,8 @@ export default async function WowBeat() {
 
 const sectionStyle: CSSProperties = {
   padding: '96px 24px',
-  background: 'var(--hive-950, #08090c)',
-  fontFamily: "'Inter', system-ui, sans-serif",
+  background: 'var(--hive-950, #0e0c07)',
+  fontFamily: "var(--sans)",
 };
 const containerStyle: CSSProperties = {
   maxWidth: 720,
@@ -37,11 +37,11 @@ const headlineStyle: CSSProperties = {
   fontSize: 'clamp(28px, 4vw, 40px)',
   fontWeight: 700,
   lineHeight: 1.2,
-  color: 'var(--hive-50, #f0f2f7)',
+  color: 'var(--hive-50, #f6f1e4)',
   marginBottom: 16,
 };
 const bodyStyle: CSSProperties = {
   fontSize: 16,
   lineHeight: 1.7,
-  color: 'var(--hive-300, #7d869e)',
+  color: 'var(--hive-300, #c8bfa9)',
 };

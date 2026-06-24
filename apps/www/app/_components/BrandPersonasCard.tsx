@@ -260,7 +260,7 @@ function PersonaTile({
 /* ------------------------------------------------------------------ */
 
 const sectionStyle: CSSProperties = {
-  background: 'var(--hive-950, #08090c)',
+  background: 'var(--hive-950, #0e0c07)',
   padding: '96px 24px',
   width: '100%',
   boxSizing: 'border-box',
@@ -273,30 +273,30 @@ const headerStyle: CSSProperties = {
 };
 
 const eyebrowStyle: CSSProperties = {
-  fontFamily: "'Inter', system-ui, sans-serif",
+  fontFamily: "var(--sans)",
   fontSize: 11,
   fontWeight: 600,
   textTransform: 'uppercase',
   letterSpacing: '0.12em',
-  color: 'var(--honey-500, #e5a000)',
+  color: 'var(--honey-500, #e9a52c)',
   margin: 0,
   marginBottom: 12,
 };
 
 const headingStyle: CSSProperties = {
-  fontFamily: "'Inter', system-ui, sans-serif",
+  fontFamily: "var(--sans)",
   fontSize: 'clamp(28px, 4vw, 32px)',
   fontWeight: 700,
-  color: 'var(--hive-50, #f0f2f7)',
+  color: 'var(--hive-50, #f6f1e4)',
   margin: 0,
   marginBottom: 12,
 };
 
 const subtitleStyle: CSSProperties = {
-  fontFamily: "'Inter', system-ui, sans-serif",
+  fontFamily: "var(--sans)",
   fontSize: 'clamp(16px, 2vw, 18px)',
   fontWeight: 400,
-  color: 'var(--hive-300, #a0a3ad)',
+  color: 'var(--hive-300, #c8bfa9)',
   margin: 0,
 };
 
@@ -331,8 +331,8 @@ const scopedCss = `
   .waggle-persona-tile {
     position: relative;
     list-style: none;
-    background: linear-gradient(180deg, #0f1218 0%, #080a0f 100%);
-    border: 1px solid #1a1e27;
+    background: linear-gradient(180deg, #14110b 0%, #0e0c07 100%);
+    border: 1px solid #1f1a12;
     border-radius: 16px;
     padding: 20px;
     min-height: 260px;
@@ -340,7 +340,7 @@ const scopedCss = `
   }
   .waggle-persona-tile:hover,
   .waggle-persona-tile:focus-within {
-    border-color: #e5a000;
+    border-color: #e9a52c;
     transform: scale(1.02);
   }
   @media (prefers-reduced-motion: reduce) {
@@ -359,7 +359,7 @@ const scopedCss = `
     border-radius: 12px;
   }
   .waggle-persona-button:focus-visible {
-    outline: 2px solid #e5a000;
+    outline: 2px solid #e9a52c;
     outline-offset: 2px;
   }
   .waggle-persona-figure {
@@ -389,7 +389,7 @@ const scopedCss = `
     background-image: url("${HEX_TEXTURE_PATH}");
     background-size: cover;
     background-position: center;
-    background-color: #0f1218;
+    background-color: #14110b;
     opacity: 0.6;
     border-radius: 12px;
     display: flex;
@@ -401,8 +401,8 @@ const scopedCss = `
     width: 48px;
     height: 48px;
     border-radius: 50%;
-    background: #f5b731;
-    box-shadow: 0 0 24px rgba(245, 183, 49, 0.4);
+    background: #f6c45a;
+    box-shadow: 0 0 24px rgba(246, 196, 90, 0.4);
   }
   .waggle-persona-caption {
     text-align: center;
@@ -411,17 +411,17 @@ const scopedCss = `
     gap: 6px;
   }
   .waggle-persona-title {
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: var(--sans);
     font-size: 16px;
     font-weight: 600;
-    color: #f5b731;
+    color: #f6c45a;
     letter-spacing: 0.01em;
   }
   .waggle-persona-role {
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: var(--sans);
     font-size: 13px;
     font-weight: 400;
-    color: #a0a3ad;
+    color: #c8bfa9;
     line-height: 1.45;
   }
   .waggle-persona-filler {
@@ -432,6 +432,6 @@ const scopedCss = `
     background-size: cover;
     background-position: center;
     opacity: 0.4;
-    border: 1px solid #1a1e27;
+    border: 1px solid #1f1a12;
   }
 `;

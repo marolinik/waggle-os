@@ -42,9 +42,9 @@ export default function HeroVisual({ initialVariant = 'A' }: HeroVisualProps) {
       <div style={windowFrameStyle}>
         <div style={titleBarStyle}>
           <div style={trafficLightsStyle} aria-hidden="true">
-            <span style={{ ...dotStyle, background: '#3a3f4a' }} />
-            <span style={{ ...dotStyle, background: '#3a3f4a' }} />
-            <span style={{ ...dotStyle, background: '#3a3f4a' }} />
+            <span style={{ ...dotStyle, background: '#4a4030' }} />
+            <span style={{ ...dotStyle, background: '#4a4030' }} />
+            <span style={{ ...dotStyle, background: '#4a4030' }} />
           </div>
           <span style={titleStyleLeft}>{t('window_left')}</span>
           <span style={titleStyleRight}>{t('window_right')}</span>
@@ -59,17 +59,17 @@ export default function HeroVisual({ initialVariant = 'A' }: HeroVisualProps) {
             aria-label={t('svg_aria_label')}
           >
             {/* Connecting lines */}
-            <line x1="80" y1="60" x2="240" y2="160" stroke="#3d4560" strokeWidth="1" />
-            <line x1="400" y1="60" x2="240" y2="160" stroke="#3d4560" strokeWidth="1" />
-            <line x1="80" y1="260" x2="240" y2="160" stroke="#3d4560" strokeWidth="1" />
-            <line x1="400" y1="260" x2="240" y2="160" stroke="#3d4560" strokeWidth="1" />
+            <line x1="80" y1="60" x2="240" y2="160" stroke="#6b6250" strokeWidth="1" />
+            <line x1="400" y1="60" x2="240" y2="160" stroke="#6b6250" strokeWidth="1" />
+            <line x1="80" y1="260" x2="240" y2="160" stroke="#6b6250" strokeWidth="1" />
+            <line x1="400" y1="260" x2="240" y2="160" stroke="#6b6250" strokeWidth="1" />
 
             {/* Concentric pulse rings */}
             <g className="hive-pulse-ring">
               <polygon
                 points="240,120 275,140 275,180 240,200 205,180 205,140"
                 fill="none"
-                stroke="#e5a000"
+                stroke="#e9a52c"
                 strokeOpacity="0.18"
                 strokeWidth="1"
                 transform="scale(2) translate(-120, -80)"
@@ -79,7 +79,7 @@ export default function HeroVisual({ initialVariant = 'A' }: HeroVisualProps) {
               <polygon
                 points="240,120 275,140 275,180 240,200 205,180 205,140"
                 fill="none"
-                stroke="#e5a000"
+                stroke="#e9a52c"
                 strokeOpacity="0.28"
                 strokeWidth="1"
                 transform="scale(1.5) translate(-80, -55)"
@@ -91,7 +91,7 @@ export default function HeroVisual({ initialVariant = 'A' }: HeroVisualProps) {
               <polygon
                 points="240,128 268,144 268,176 240,192 212,176 212,144"
                 fill="none"
-                stroke="#e5a000"
+                stroke="#e9a52c"
                 strokeWidth="2"
               />
             </g>
@@ -100,7 +100,7 @@ export default function HeroVisual({ initialVariant = 'A' }: HeroVisualProps) {
             <text
               x="240"
               y="220"
-              fill="#a0a3ad"
+              fill="#c8bfa9"
               fontSize="11"
               fontFamily="'JetBrains Mono', monospace"
               textAnchor="middle"
@@ -176,14 +176,14 @@ function ChipLabel({ x, y, primary, sub }: ChipLabelProps) {
         width="112"
         height="32"
         rx="6"
-        fill="#0f1218"
-        stroke="#1f2433"
+        fill="#14110b"
+        stroke="#272117"
         strokeWidth="1"
       />
       <text
         x={x}
         y={y - 1}
-        fill="#dce0eb"
+        fill="#ece3d0"
         fontSize="10"
         fontFamily="'JetBrains Mono', monospace"
         textAnchor="middle"
@@ -193,7 +193,7 @@ function ChipLabel({ x, y, primary, sub }: ChipLabelProps) {
       <text
         x={x}
         y={y + 11}
-        fill="#7d869e"
+        fill="#c8bfa9"
         fontSize="8"
         fontFamily="'JetBrains Mono', monospace"
         textAnchor="middle"
@@ -222,13 +222,13 @@ const containerStyle: CSSProperties = {
   width: '100%',
   maxWidth: 560,
   margin: '0 auto',
-  fontFamily: "'Inter', system-ui, sans-serif",
+  fontFamily: "var(--sans)",
 };
 const windowFrameStyle: CSSProperties = {
   borderRadius: 12,
   overflow: 'hidden',
-  border: '1px solid var(--hive-700, #1f2433)',
-  background: 'linear-gradient(180deg, #0f1218 0%, #080a0f 100%)',
+  border: '1px solid var(--hive-700, #272117)',
+  background: 'linear-gradient(180deg, #14110b 0%, #0e0c07 100%)',
   boxShadow: '0 16px 48px rgba(0,0,0,0.5)',
 };
 const titleBarStyle: CSSProperties = {
@@ -236,8 +236,8 @@ const titleBarStyle: CSSProperties = {
   alignItems: 'center',
   gap: 12,
   padding: '8px 14px',
-  borderBottom: '1px solid var(--hive-700, #1f2433)',
-  background: '#11141c',
+  borderBottom: '1px solid var(--hive-700, #272117)',
+  background: '#1a160f',
 };
 const trafficLightsStyle: CSSProperties = {
   display: 'flex',
@@ -252,18 +252,18 @@ const dotStyle: CSSProperties = {
 };
 const titleStyleLeft: CSSProperties = {
   fontSize: 11,
-  color: 'var(--hive-300, #7d869e)',
-  fontFamily: "'JetBrains Mono', monospace",
+  color: 'var(--hive-300, #c8bfa9)',
+  fontFamily: "var(--mono)",
 };
 const titleStyleRight: CSSProperties = {
   marginLeft: 'auto',
   fontSize: 11,
-  color: 'var(--hive-400, #5a6380)',
-  fontFamily: "'JetBrains Mono', monospace",
+  color: 'var(--hive-400, #948a73)',
+  fontFamily: "var(--mono)",
 };
 const bodyStyle: CSSProperties = {
   padding: '24px 16px',
-  background: '#080a0f',
+  background: '#0e0c07',
 };
 const statsStripStyle: CSSProperties = {
   display: 'flex',
@@ -271,8 +271,8 @@ const statsStripStyle: CSSProperties = {
   justifyContent: 'center',
   gap: 8,
   padding: '10px 14px',
-  borderTop: '1px solid var(--hive-700, #1f2433)',
-  background: '#0a0c12',
+  borderTop: '1px solid var(--hive-700, #272117)',
+  background: '#0e0c07',
   flexWrap: 'wrap',
 };
 const statSeriesStyle: CSSProperties = {
@@ -284,20 +284,20 @@ const statItemStyle: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'baseline',
   gap: 6,
-  fontFamily: "'JetBrains Mono', monospace",
+  fontFamily: "var(--mono)",
 };
 const statValueStyle: CSSProperties = {
   fontSize: 13,
   fontWeight: 600,
-  color: 'var(--hive-100, #dce0eb)',
+  color: 'var(--hive-100, #ece3d0)',
 };
 const statLabelStyle: CSSProperties = {
   fontSize: 9,
-  color: 'var(--hive-400, #5a6380)',
+  color: 'var(--hive-400, #948a73)',
   letterSpacing: '0.08em',
 };
 const statSeparator: CSSProperties = {
-  color: 'var(--hive-500, #3d4560)',
+  color: 'var(--hive-500, #6b6250)',
   fontSize: 11,
 };
 const devTabsStyle: CSSProperties = {
@@ -305,8 +305,8 @@ const devTabsStyle: CSSProperties = {
   gap: 6,
   marginTop: 12,
   padding: 6,
-  background: '#0c0e14',
-  border: '1px dashed var(--hive-600, #2a3044)',
+  background: '#14110b',
+  border: '1px dashed var(--hive-600, #4a4030)',
   borderRadius: 8,
   flexWrap: 'wrap',
 };
@@ -314,17 +314,17 @@ const devTabStyle: CSSProperties = {
   flex: '1 1 auto',
   padding: '6px 10px',
   fontSize: 10,
-  fontFamily: "'JetBrains Mono', monospace",
-  color: 'var(--hive-300, #7d869e)',
+  fontFamily: "var(--mono)",
+  color: 'var(--hive-300, #c8bfa9)',
   background: 'transparent',
   border: '1px solid transparent',
   borderRadius: 4,
   cursor: 'pointer',
 };
 const devTabActiveStyle: CSSProperties = {
-  color: 'var(--honey-400, #f5b731)',
-  border: '1px solid var(--hive-600, #2a3044)',
-  background: '#11141c',
+  color: 'var(--honey-400, #f6c45a)',
+  border: '1px solid var(--hive-600, #4a4030)',
+  background: '#1a160f',
 };
 const scopedCss = `
   .hive-pulse-hex {

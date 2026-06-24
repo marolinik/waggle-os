@@ -26,7 +26,7 @@ export default async function ComparisonBeat() {
 
 const sectionStyle: CSSProperties = {
   padding: '96px 24px',
-  fontFamily: "'Inter', system-ui, sans-serif",
+  fontFamily: "var(--sans)",
   position: 'relative',
 };
 const containerStyle: CSSProperties = {
@@ -40,13 +40,13 @@ const eyebrowStyle: CSSProperties = {
   textTransform: 'uppercase',
   letterSpacing: '0.12em',
   marginBottom: 16,
-  color: 'var(--honey-500, #e5a000)',
+  color: 'var(--honey-500, #e9a52c)',
 };
 const headlineStyle: CSSProperties = {
   fontSize: 'clamp(24px, 3.4vw, 36px)',
   fontWeight: 700,
   lineHeight: 1.25,
-  color: 'var(--hive-50, #f0f2f7)',
+  color: 'var(--hive-50, #f6f1e4)',
   marginBottom: 20,
   maxWidth: 720,
   marginLeft: 'auto',
@@ -55,7 +55,7 @@ const headlineStyle: CSSProperties = {
 const bodyStyle: CSSProperties = {
   fontSize: 16,
   lineHeight: 1.7,
-  color: 'var(--hive-300, #7d869e)',
+  color: 'var(--hive-300, #c8bfa9)',
   maxWidth: 680,
   margin: '0 auto',
 };

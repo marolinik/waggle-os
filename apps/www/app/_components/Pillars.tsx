@@ -49,7 +49,7 @@ export default async function Pillars() {
 
 const sectionStyle: CSSProperties = {
   padding: '96px 24px',
-  fontFamily: "'Inter', system-ui, sans-serif",
+  fontFamily: "var(--sans)",
 };
 const containerStyle: CSSProperties = { maxWidth: 1200, margin: '0 auto' };
 const headerStyle: CSSProperties = {
@@ -61,7 +61,7 @@ const headlineStyle: CSSProperties = {
   fontSize: 'clamp(24px, 3.4vw, 36px)',
   fontWeight: 700,
   lineHeight: 1.3,
-  color: 'var(--hive-50, #f0f2f7)',
+  color: 'var(--hive-50, #f6f1e4)',
 };
 const gridStyle: CSSProperties = {
   listStyle: 'none',
@@ -72,8 +72,8 @@ const gridStyle: CSSProperties = {
   gap: 16,
 };
 const cardStyle: CSSProperties = {
-  background: 'var(--hive-900, #0c0e14)',
-  border: '1px solid var(--hive-700, #1f2433)',
+  background: 'var(--hive-900, #14110b)',
+  border: '1px solid var(--hive-700, #272117)',
   borderRadius: 16,
   padding: 24,
   display: 'flex',
@@ -84,20 +84,20 @@ const cardStyle: CSSProperties = {
 const numberStyle: CSSProperties = {
   fontSize: 12,
   fontWeight: 700,
-  fontFamily: "'JetBrains Mono', monospace",
+  fontFamily: "var(--mono)",
   letterSpacing: '0.1em',
-  color: 'var(--honey-400, #f5b731)',
+  color: 'var(--honey-400, #f6c45a)',
 };
 const titleStyle: CSSProperties = {
   fontSize: 16,
   fontWeight: 600,
-  color: 'var(--hive-50, #f0f2f7)',
+  color: 'var(--hive-50, #f6f1e4)',
   marginTop: 4,
 };
 const bodyStyle: CSSProperties = {
   fontSize: 13,
   lineHeight: 1.6,
-  color: 'var(--hive-300, #7d869e)',
+  color: 'var(--hive-300, #c8bfa9)',
   marginTop: 4,
 };
 const pillarsResponsiveCss = `
