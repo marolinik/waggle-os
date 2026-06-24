@@ -6,7 +6,7 @@
  * the tier via GET /api/tier.
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { adapter } from '@/lib/adapter';
 import { useRevalidateOnError } from '@/hooks/useRevalidateOnError';
 
@@ -19,6 +19,10 @@ export interface BillingState {
   loading: boolean;
   error: string | null;
   syncing: boolean;
+  /** PR7a/F8: whether Stripe checkout is configured server-side. Defaults true
+   *  (never disable a working upgrade path on a probe hiccup); flips false only
+   *  when the /api/stripe/status probe explicitly reports it unconfigured. */
+  checkoutAvailable: boolean;
 }
 
 export function useBilling() {
@@ -28,13 +32,24 @@ export function useBilling() {
     loading: true,
     error: null,
     syncing: false,
+    checkoutAvailable: true,
   });
+
+  // PR7a fix: on /payment-success, the mount refreshTier() and the post-checkout
+  // syncAfterCheckout() race. The sync result is authoritative — once a checkout
+  // sync owns the tier, a late getTier() (e.g. stale 'FREE') must not clobber it
+  // back, which would flash the just-paid user a wrong "Nothing to confirm".
+  const checkoutSyncStartedRef = useRef(false);
 
   /** Fetch current tier from the server. */
   const refreshTier = useCallback(async () => {
     try {
       const data = await adapter.getTier();
-      setState((prev) => ({ ...prev, tier: data.tier, tierResolved: true, loading: false, error: null }));
+      setState((prev) =>
+        checkoutSyncStartedRef.current
+          // A checkout sync owns the tier on this surface — don't overwrite it.
+          ? { ...prev, loading: false }
+          : { ...prev, tier: data.tier, tierResolved: true, loading: false, error: null });
     } catch (err) {
       // P1b D3-4: keep the previous tier (never present the 'FREE' default as
       // fact) and surface the failure so the Billing tab can render it.
@@ -47,6 +62,9 @@ export function useBilling() {
 
   /** Call after Stripe checkout redirect to confirm payment and update tier. */
   const syncAfterCheckout = useCallback(async (sessionId: string) => {
+    // Claim tier ownership synchronously (before any await) so a concurrent
+    // mount refreshTier() that resolves later won't overwrite the sync result.
+    checkoutSyncStartedRef.current = true;
     setState((prev) => ({ ...prev, syncing: true, error: null }));
     try {
       const result = await adapter.syncStripeCheckout(sessionId);
@@ -72,7 +90,7 @@ export function useBilling() {
     try {
       const { url } = await adapter.createCheckoutSession(tier, billingPeriod);
       if (url) {
-        window.open(url, '_blank');
+        window.open(url, '_blank', 'noopener,noreferrer');
       }
       return url;
     } catch (err) {
@@ -87,7 +105,7 @@ export function useBilling() {
     try {
       const { url } = await adapter.createPortalSession();
       if (url) {
-        window.open(url, '_blank');
+        window.open(url, '_blank', 'noopener,noreferrer');
       }
       return url;
     } catch (err) {
@@ -101,6 +119,18 @@ export function useBilling() {
   useEffect(() => {
     refreshTier();
   }, [refreshTier]);
+
+  // PR7a/F8: probe whether Stripe checkout is configured so billing surfaces can
+  // disable the upgrade CTAs pre-click instead of failing with a 503 after one.
+  // Fail-safe: any probe error (or an adapter without the method, e.g. in tests)
+  // leaves checkoutAvailable=true — the real checkout call still 503s honestly.
+  useEffect(() => {
+    let alive = true;
+    Promise.resolve(adapter.getStripeStatus?.())
+      .then((s) => { if (alive && s) setState((prev) => ({ ...prev, checkoutAvailable: s.configured })); })
+      .catch(() => { /* leave checkoutAvailable=true */ });
+    return () => { alive = false; };
+  }, []);
 
   // Auto-detect session_id in URL params (post-checkout redirect)
   useEffect(() => {

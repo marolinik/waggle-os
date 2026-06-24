@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
     createCheckoutSession: vi.fn().mockResolvedValue({ url: 'https://checkout.stripe.test/abc' }),
     createPortalSession: vi.fn().mockResolvedValue({ url: 'https://portal.stripe.test/abc' }),
     syncStripeCheckout: vi.fn().mockResolvedValue({ tier: 'PRO', customerId: 'cus_1' }),
+    getStripeStatus: vi.fn().mockResolvedValue({ configured: true }),
   },
 }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
@@ -52,7 +53,7 @@ describe('PR7a · PlanCards', () => {
     // Monthly default → Pro shows $19
     expect(screen.getByText('$19')).toBeInTheDocument();
     // Switch to annual → Pro shows $15 (the real annual price label, not a client × 0.8)
-    fireEvent.click(screen.getByRole('radio', { name: /Annual/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Annual/i }));
     expect(screen.getByText('$15')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Choose Pro/i }));
@@ -69,6 +70,27 @@ describe('PR7a · PlanCards', () => {
     expect(screen.getByRole('button', { name: /Choose Teams/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Choose Solo/i })).not.toBeInTheDocument();
   });
+
+  it('TRIAL user: no card claims "Current"/"Your plan" — a trial is not a purchasable plan', async () => {
+    const { default: PlanCards } = await import('@/components/os/billing/PlanCards');
+    render(<PlanCards currentTier="TRIAL" onChoose={vi.fn()} />);
+    expect(screen.queryByText('Current')).not.toBeInTheDocument();
+    expect(screen.queryByText('Your plan')).not.toBeInTheDocument();
+    // Pro + Teams remain upgrade paths during trial
+    expect(screen.getByRole('button', { name: /Choose Pro/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Choose Teams/i })).toBeInTheDocument();
+  });
+
+  it('disabled (F8 Stripe-not-configured): upgrade CTAs render "Unavailable" and never fire onChoose', async () => {
+    const { default: PlanCards } = await import('@/components/os/billing/PlanCards');
+    const onChoose = vi.fn();
+    render(<PlanCards currentTier="FREE" onChoose={onChoose} disabled />);
+    const ctas = screen.getAllByRole('button', { name: /Unavailable/i });
+    expect(ctas.length).toBeGreaterThanOrEqual(1);
+    ctas.forEach((b) => expect(b).toBeDisabled());
+    fireEvent.click(ctas[0]);
+    expect(onChoose).not.toHaveBeenCalled();
+  });
 });
 
 describe('PR7a · useBilling.startCheckout', () => {
@@ -80,7 +102,7 @@ describe('PR7a · useBilling.startCheckout', () => {
 
     await act(async () => { await result.current.startCheckout('PRO', 'annual'); });
     expect(mocks.adapter.createCheckoutSession).toHaveBeenCalledWith('PRO', 'annual');
-    expect(openSpy).toHaveBeenCalledWith('https://checkout.stripe.test/abc', '_blank');
+    expect(openSpy).toHaveBeenCalledWith('https://checkout.stripe.test/abc', '_blank', 'noopener,noreferrer');
     openSpy.mockRestore();
   });
 });
@@ -119,5 +141,27 @@ describe('PR7a · PaymentSuccessApp', () => {
     expect(screen.queryByText(/Emailed/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Receipt/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/\$19\.00/)).not.toBeInTheDocument();
+  });
+
+  it('sync wins a LATE getTier — a just-paid user is never flashed "Nothing to confirm" (race guard)', async () => {
+    // useBilling reads window.location for ?session_id= (not the router), so set it.
+    window.history.replaceState({}, '', '/payment-success?session_id=cs_test');
+    // getTier resolves FREE *after* the checkout sync resolves PRO; the authoritative
+    // sync result must not be clobbered back to FREE.
+    let resolveTier: (v: { tier: string; capabilities: object; usage: object }) => void = () => {};
+    mocks.adapter.getTier.mockReturnValue(new Promise((res) => { resolveTier = res; }));
+    mocks.adapter.syncStripeCheckout.mockResolvedValue({ tier: 'PRO', customerId: 'cus_1' });
+    const { default: PaymentSuccessApp } = await import('@/components/os/apps/PaymentSuccessApp');
+    render(
+      <MemoryRouter initialEntries={['/payment-success?session_id=cs_test']}>
+        <PaymentSuccessApp />
+      </MemoryRouter>,
+    );
+    // Sync resolves first → paid confirmation
+    expect(await screen.findByText('Pro.')).toBeInTheDocument();
+    // The late getTier resolves FREE — must NOT flip the screen to "Nothing to confirm"
+    await act(async () => { resolveTier({ tier: 'FREE', capabilities: {}, usage: {} }); });
+    expect(screen.getByText('Pro.')).toBeInTheDocument();
+    expect(screen.queryByText(/Nothing to confirm/i)).not.toBeInTheDocument();
   });
 });

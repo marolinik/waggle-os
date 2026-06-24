@@ -527,7 +527,15 @@ const SettingsApp = () => {
         {/* ═══ BILLING (PR7a — screen 14, themed over the REAL useBilling→Stripe flow) ═══ */}
         {activeTab === 'billing' && (
           <div className="space-y-6">
-            <h3 className="text-sm font-display font-semibold text-foreground">Plan & Subscription</h3>
+            <div>
+              <h3 className="text-sm font-display font-semibold text-foreground">Plan & Subscription</h3>
+              {/* §14 load-bearing positioning copy — honestly satisfiable under the
+                  ratified Option A (BYO-key + flat subscription): Pro/Teams unlock
+                  scale, never feature-count paywalls on memory. */}
+              <p className="text-[11px] text-[var(--text-muted)] mt-1">
+                Memory is free forever. You only pay for scale — no feature-count games.
+              </p>
+            </div>
 
             {/* F4 from the 2026-05-28 addictiveness audit — visible value-prop
                 framing so users see they're replacing 7-ish subscription tools,
@@ -598,6 +606,7 @@ const SettingsApp = () => {
               <PlanCards
                 currentTier={billing.tier}
                 onChoose={(tier, period) => billing.startCheckout(tier, period)}
+                disabled={!billing.checkoutAvailable}
               />
             )}
 

@@ -2684,6 +2684,13 @@ class LocalAdapter {
     return res.json();
   }
 
+  /** PR7a/F8: secret-free probe of whether Stripe checkout is wired, so the
+   *  billing UI can render the honest disabled state before a click (not a 503 after). */
+  async getStripeStatus(): Promise<{ configured: boolean }> {
+    const res = await this.fetch('/api/stripe/status');
+    return res.json();
+  }
+
   async getTier(): Promise<{ tier: string; trialDaysRemaining?: number; trialExpired?: boolean; capabilities: Record<string, unknown>; usage: Record<string, unknown> }> {
     const res = await this.fetch('/api/tier');
     return res.json();

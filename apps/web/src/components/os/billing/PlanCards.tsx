@@ -86,14 +86,14 @@ export default function PlanCards({ currentTier, onChoose, disabled = false }: P
       <div className="flex justify-center">
         <div
           className="inline-flex p-1 gap-[3px] rounded-[11px] bg-[var(--surface-2)] border border-[var(--line-soft)]"
-          role="radiogroup"
+          role="group"
           aria-label="Billing cycle"
         >
           {(['monthly', 'annual'] as const).map((p) => (
             <button
               key={p}
-              role="radio"
-              aria-checked={period === p}
+              type="button"
+              aria-pressed={period === p}
               onClick={() => setPeriod(p)}
               className={`px-4 py-2 rounded-lg text-[13px] font-semibold transition-colors ${
                 period === p ? 'bg-primary text-primary-foreground' : 'text-[var(--text-muted)] hover:text-foreground'
@@ -114,7 +114,9 @@ export default function PlanCards({ currentTier, onChoose, disabled = false }: P
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch">
         {PLANS.map((plan) => {
           const planRank = RANK[plan.tier];
-          const isCurrent = planRank === currentRank;
+          // A TRIAL user is not on the Solo (FREE) plan — the honest "Trial — everything
+          // unlocked" badge lives above the grid, so no card claims to be "current".
+          const isCurrent = planRank === currentRank && currentTier !== 'TRIAL';
           const isUpgrade = planRank > currentRank && plan.tier !== 'FREE';
           const price = period === 'annual' ? plan.priceAnnual : plan.priceMonthly;
           const unit = period === 'annual' ? plan.unitAnnual : plan.unitMonthly;
@@ -124,7 +126,7 @@ export default function PlanCards({ currentTier, onChoose, disabled = false }: P
               key={plan.tier}
               className={`relative flex flex-col p-6 rounded-[18px] border bg-[var(--surface)] ${
                 plan.popular
-                  ? 'border-[var(--honey-line)] shadow-[var(--honey-glow)]'
+                  ? 'border-[var(--honey-line)] shadow-[var(--shadow-honey)]'
                   : isCurrent
                   ? 'border-[var(--work)]'
                   : 'border-[var(--line-soft)]'
