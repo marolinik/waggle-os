@@ -124,9 +124,13 @@ export default function PlanCards({ currentTier, onChoose, disabled = false }: P
           return (
             <div
               key={plan.tier}
+              // Honey glow via inline style (the BenchmarkApp pattern): Tailwind v4's
+              // arbitrary `shadow-[var(--shadow-honey)]` resolves to box-shadow:none
+              // here (live-verified), so the focal card sets the shadow var inline.
+              style={plan.popular ? { boxShadow: 'var(--shadow-honey)' } : undefined}
               className={`relative flex flex-col p-6 rounded-[18px] border bg-[var(--surface)] ${
                 plan.popular
-                  ? 'border-[var(--honey-line)] shadow-[var(--shadow-honey)]'
+                  ? 'border-[var(--honey-line)]'
                   : isCurrent
                   ? 'border-[var(--work)]'
                   : 'border-[var(--line-soft)]'
