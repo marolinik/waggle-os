@@ -49,3 +49,25 @@ Evidence: `02-auth-b2-clerk-signin-dark.png`, `03-auth-b2-clerk-signin-light.png
   real credentials. The component renders + themes + redirects-on-success are wired; the live
   OAuth round-trip (esp. inside a Tauri WebView, D4) is the documented follow-up spike.
 - `<UserButton/>` / `useUser()` feeding the sidebar user row — deferred (BUILD-PLAN §9).
+
+---
+
+## Adversarial review + fixes (2026-06-24, commit 0e0dc48e)
+
+4-dim review (correctness/Clerk · no-fabrication-of-identity · design-fidelity · security/local-first)
+→ per-finding verify → synthesis. **3 confirmed: 1 CRITICAL, 1 MEDIUM, 1 LOW** — all fixed.
+
+| # | Sev | Issue | Fix | Verified |
+|---|-----|-------|-----|----------|
+| 1 | **CRITICAL** | A malformed/placeholder `VITE_CLERK_PUBLISHABLE_KEY` (incl. the `.env.example` placeholder) blanked the WHOLE app at boot — ClerkProvider throws synchronously in render, and `WaggleClerkProvider` sits above `AppErrorBoundary` (uncatchable). Unit tests missed it (they mock ClerkProvider); the first smoke used a real key. | Shape-validate the key in `lib/clerk.ts` (prefix + base64→host-ending-`$`), **inlined** (the monorepo resolves multiple `@clerk/shared` majors). `.env.example` placeholder blanked. | **Live, real ClerkProvider:** with `pk_test_REPLACE_ME` the app **boots fully** (sidebar, routes to /home, /auth = accountless) — no blank, no error boundary. Valid key restored → Clerk form back. |
+| 2 | MEDIUM | Brand-panel hide breakpoint was `lg` (1024px); design hides < 820px → split lost across 820–1023px. | `min-[820px]` arbitrary variant (AuthBrandPanel + AuthScreen). | tsc + design intent |
+| 3 | LOW | Wordmark `font-semibold`/18px vs design 700/19px. | `font-bold`/`text-[19px]`. | Live: weight 700, size 19px |
+
+**No identity-fabrication issues** found by the review: sidebar stays "Account"/"W", social buttons
+are dashboard-driven (prebuilt), no live SAML form, no demo identity, and the device-token adapter
+path is untouched (Clerk is not the local API authorizer).
+
+Post-fix gates: FE tsc 0 · pr7b-auth **9/9** (+3 key-shape-gate tests) · full FE **1156/1156** ·
+prod build green · live smoke valid **+ invalid** key, dark+light, **0 console errors**.
+
+**PR7b is review-clean and ready to merge.**
