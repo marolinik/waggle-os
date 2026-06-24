@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Waggle · Settings</title>
+<script>document.documentElement.classList.add('js');</script>
+<link rel="stylesheet" href="../styles/waggle.css">
+<style>
+  body { height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+  .controls { flex: none; display: flex; align-items: center; gap: 14px; padding: 11px 20px; border-bottom: 1px solid var(--line-soft); background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); z-index: 30; }
+  .controls .lab { font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-dim); }
+  .controls .vlabel { font-size: 12.5px; color: var(--text-muted); } .controls .vlabel b { color: var(--text); font-weight: 600; }
+  .controls .right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .controls .exp { display:inline-flex; padding:3px; gap:3px; border-radius:9px; background:var(--surface-2); border:1px solid var(--line-soft); }
+  .controls .exp button { font-family:var(--sans); font-size:11.5px; font-weight:600; cursor:pointer; border:0; background:transparent; color:var(--text-muted); padding:5px 10px; border-radius:6px; }
+  .controls .exp button.on { background: var(--honey); color:#1a1407; }
+  .tbtn { width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); color: var(--text-2); cursor: pointer; }
+  .tbtn:hover { border-color: var(--honey-line); color: var(--honey); }
+
+  .app { flex: 1; min-height: 0; display: flex; }
+  .rail { flex: none; width: 196px; border-right: 1px solid var(--line-soft); background: var(--bg-2); padding: 16px 10px; overflow:auto; }
+  .rail .rh { font-family: var(--mono); font-size: 10px; letter-spacing:.12em; text-transform:uppercase; color: var(--text-dim); padding: 6px 11px 12px; }
+  .ritem { display:flex; align-items:center; gap:11px; padding: 9px 11px; border-radius: 10px; cursor:pointer; color: var(--text-2); transition:.13s; font-size: 13.5px; font-weight: 550; position:relative; }
+  .ritem:hover { background: var(--surface-2); color: var(--text); }
+  .ritem.on { background: var(--honey-wash); color: var(--text); }
+  .ritem.on::before { content:''; position:absolute; left:-10px; top:50%; transform:translateY(-50%); width:3px; height:17px; border-radius:3px; background: var(--honey); }
+  .ritem svg { width:17px; height:17px; stroke: currentColor; fill:none; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; flex:none; }
+  .ritem.on svg { stroke: var(--honey); }
+  .ritem.adv { display:none; } body.everything .ritem.adv { display:flex; }
+  .ritem .warn { margin-left:auto; width:7px; height:7px; border-radius:999px; background: var(--attention); }
+
+  .main { flex:1; min-width:0; display:flex; flex-direction:column; }
+  .shead { flex:none; padding: 24px 30px 16px; border-bottom: 1px solid var(--line-soft); }
+  .shead h1 { font-size: 21px; font-weight: 650; letter-spacing:-0.02em; margin: 0 0 4px; }
+  .shead p { font-size: 13px; color: var(--text-muted); margin: 0; max-width: 64ch; line-height:1.5; }
+  .bodyc { flex:1; min-height:0; overflow:auto; padding: 24px 30px 60px; }
+  .panel { display:none; max-width: 680px; } .panel.on { display:block; }
+
+  .grp { font-family: var(--mono); font-size: 10.5px; letter-spacing:.12em; text-transform:uppercase; color: var(--text-dim); margin: 4px 0 14px; display:flex; align-items:center; gap:10px; }
+  .grp:not(:first-child) { margin-top: 30px; }
+  .grp::after { content:''; flex:1; height:1px; background: var(--line-soft); }
+
+  .card { border:1px solid var(--line-soft); background: var(--surface); border-radius: var(--r-lg); padding: 18px; margin-bottom: 12px; }
+  .field-row { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+  .field-row .lt b { font-size: 14px; font-weight: 600; display:block; } .field-row .lt span { font-size: 12.5px; color: var(--text-muted); }
+  .sw { width: 40px; height: 23px; border-radius: 999px; background: var(--surface-3); border:1px solid var(--line-strong); position:relative; cursor:pointer; transition:.16s; flex:none; }
+  .sw::after { content:''; position:absolute; top:2px; left:2px; width:17px; height:17px; border-radius:999px; background: var(--text-muted); transition:.16s; }
+  .sw.on { background: var(--honey); border-color: var(--honey); } .sw.on::after { left:19px; background:#1a1407; }
+
+  .seg2 { display:inline-flex; padding:3px; gap:3px; border-radius:10px; background:var(--surface-2); border:1px solid var(--line-soft); }
+  .seg2 button { font-family:var(--sans); font-size:12.5px; font-weight:600; cursor:pointer; border:0; background:transparent; color:var(--text-muted); padding:7px 13px; border-radius:7px; }
+  .seg2 button.on { background:var(--honey); color:#1a1407; }
+  .theme-cards { display:flex; gap:12px; }
+  .tc { flex:1; padding:16px; border-radius:var(--r); text-align:center; cursor:pointer; border:1px solid var(--line); }
+  .tc.dk { background:#14110b; } .tc.lt { background:#f1e9d8; }
+  .tc.sel { border:2px solid var(--honey); }
+  .tc .lbl { font-size:12px; font-weight:600; margin-bottom:8px; } .tc.dk .lbl { color:#f6f1e4; } .tc.lt .lbl { color:#211b11; }
+  .tc .dots { display:flex; gap:5px; justify-content:center; } .tc .dots i { width:11px; height:11px; border-radius:999px; }
+
+  /* ── MODELS: failover pilot chain ── */
+  .pilot { border:1px solid var(--honey-line); border-radius: var(--r-xl); background: linear-gradient(160deg, var(--surface-2), var(--surface)); padding: 6px; box-shadow: var(--honey-glow); margin-bottom: 14px; }
+  .pilot-h { display:flex; align-items:center; gap:10px; padding: 14px 16px 12px; }
+  .pilot-h svg { width:18px; height:18px; stroke: var(--honey); fill:none; stroke-width:1.8; }
+  .pilot-h b { font-size: 14px; font-weight:650; white-space:nowrap; } .pilot-h .sub { font-size:11.5px; color:var(--text-muted); margin-left:auto; font-family:var(--mono); white-space:nowrap; }
+  .mslot { display:flex; align-items:center; gap:14px; padding: 14px 16px; border-radius: var(--r); background: var(--surface); border:1px solid var(--line-soft); margin: 4px; position:relative; }
+  .mslot .tier { font-family:var(--mono); font-size:9.5px; letter-spacing:.1em; text-transform:uppercase; width: 64px; flex:none; }
+  .mslot.primary .tier { color: var(--honey); } .mslot.fallback .tier { color: var(--work); } .mslot.budget .tier { color: var(--healthy); }
+  .mslot .mlogo { width:32px; height:36px; flex:none; display:grid; place-items:center; font-family:var(--mono); font-size:11px; font-weight:700; color:var(--text-2); background:var(--surface-2); border:1px solid var(--line); }
+  .mslot .mname { flex:1; min-width:0; } .mslot .mname b { font-size:14px; font-weight:600; } .mslot .mname span { font-size:12px; color:var(--text-muted); }
+  .mslot .mstatus { font-size:11px; font-weight:600; padding:3px 9px; border-radius:999px; display:inline-flex; align-items:center; gap:5px; }
+  .mslot .mstatus.ok { color: var(--healthy); background: var(--healthy-wash); }
+  .mslot .mstatus.local { color: var(--work); background: var(--work-wash); }
+  .mslot .chg { font-size:12px; font-weight:600; color:var(--text-2); cursor:pointer; padding:6px 11px; border-radius:8px; border:1px solid var(--line-strong); background:var(--surface-2); }
+  .mslot .chg:hover { border-color: var(--honey-line); color: var(--honey); }
+  .trigger { display:flex; align-items:center; gap:9px; padding: 5px 16px 5px 80px; font-size: 11.5px; color: var(--text-dim); font-family: var(--mono); }
+  .trigger svg { width:13px; height:13px; stroke: var(--text-dim); fill:none; stroke-width:1.8; }
+  .trigger b { color: var(--text-2); font-weight:500; }
+  .budget-row { display:flex; align-items:center; gap:14px; padding: 14px 16px; margin-top:4px; border-top:1px dashed var(--line); }
+  .budget-row .bl { flex:1; font-size:13px; } .budget-row .bl b { font-weight:600; }
+  .budget-row input { width: 90px; padding:7px 11px; border-radius:8px; border:1px solid var(--line); background:var(--surface); color:var(--text); font-family:var(--mono); font-size:13px; text-align:right; outline:none; }
+  .budget-row input:focus { border-color: var(--honey-line); }
+
+  .keyrow { display:flex; align-items:center; gap:12px; padding: 11px 14px; border-radius: var(--r); border:1px solid var(--line-soft); background: var(--surface); margin-bottom:8px; }
+  .keyrow .kd { width:8px; height:8px; border-radius:999px; flex:none; } .keyrow .kd.on { background:var(--healthy); } .keyrow .kd.off { background:var(--text-dim); }
+  .keyrow .kn { flex:1; font-size:13.5px; font-weight:550; } .keyrow .kn small { color:var(--text-dim); font-weight:400; margin-left:6px; }
+  .keyrow .ks { font-size:11.5px; font-weight:600; } .keyrow .ks.on { color:var(--healthy); } .keyrow .ks.off { color:var(--attention); }
+  .note2 { display:flex; gap:11px; padding:13px 15px; border-radius:var(--r); background: var(--honey-wash); border:1px solid var(--honey-line); margin-bottom:14px; }
+  .note2 svg { width:17px; height:17px; stroke:var(--honey); fill:none; stroke-width:1.8; flex:none; margin-top:1px; }
+  .note2 p { margin:0; font-size:12.5px; color:var(--text-2); line-height:1.55; } .note2 b { color:var(--text); }
+
+  .radio-row { display:flex; align-items:flex-start; gap:11px; padding: 12px 14px; border-radius: var(--r); border:1px solid var(--line-soft); background:var(--surface); cursor:pointer; margin-bottom:8px; }
+  .radio-row.sel { border-color: var(--honey-line); background: var(--honey-wash); }
+  .radio-row .rd { width:16px; height:16px; border-radius:999px; border:1px solid var(--line-strong); flex:none; margin-top:1px; } .radio-row.sel .rd { border-color: var(--honey); background: var(--honey); box-shadow: inset 0 0 0 3px var(--surface); }
+  .radio-row b { font-size:13.5px; font-weight:600; } .radio-row p { margin:3px 0 0; font-size:12px; color:var(--text-muted); }
+
+  .plan-badge { display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:650; padding:8px 14px; border-radius:999px; background: var(--honey-wash); color: var(--honey); border:1px solid var(--honey-line); }
+  .btn { font-family:var(--sans); font-size:13px; font-weight:650; padding:9px 15px; border-radius:9px; cursor:pointer; border:1px solid transparent; display:inline-flex; align-items:center; gap:7px; }
+  .btn.go { background:var(--honey); color:#1a1407; } .btn.ghost { background:var(--surface-2); color:var(--text-2); border-color:var(--line-strong); } .btn.danger { background:transparent; color:var(--risk); border-color:color-mix(in srgb,var(--risk) 35%,transparent); }
+  .btn svg { width:14px; height:14px; stroke:currentColor; fill:none; stroke-width:2; }
+  @media (max-width:800px){ .rail { width:60px; } .rail .rh, .ritem span.txt { display:none; } }
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <span class="lab">Settings</span>
+  <span class="vlabel" id="vlabel">Calm by default · depth when you ask for it</span>
+  <div class="right">
+    <span class="lab" style="margin-right:-4px">Show</span>
+    <div class="exp" id="exp">
+      <button data-e="essential" class="on">Essential</button>
+      <button data-e="standard">Standard</button>
+      <button data-e="everything">Everything</button>
+    </div>
+    <button class="tbtn" id="tbtn" title="Toggle theme">☾</button>
+  </div>
+</div>
+
+<div class="app">
+  <nav class="rail" id="rail">
+    <div class="rh">Settings</div>
+    <div class="ritem" data-s="general"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></svg><span class="txt">General</span></div>
+    <div class="ritem on" data-s="models"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="12" cy="12" r="3"/></svg><span class="txt">Models</span></div>
+    <div class="ritem" data-s="perms"><svg viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M12 3l8 4v5c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V7z"/></svg><span class="txt">Permissions</span></div>
+    <div class="ritem" data-s="billing"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg><span class="txt">Plan</span></div>
+    <div class="ritem" data-s="team"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0M16 6a3 3 0 0 1 0 6"/></svg><span class="txt">Team</span></div>
+    <div class="ritem" data-s="backup"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/></svg><span class="txt">Backup</span></div>
+    <div class="ritem adv" data-s="advanced"><svg viewBox="0 0 24 24"><path d="M14 7l-1.5-1.5a2 2 0 0 0-3 0l-1 1M4 20l5-1 9-9-4-4-9 9z"/></svg><span class="txt">Advanced</span></div>
+  </nav>
+
+  <div class="main">
+    <div class="shead"><h1 id="sTitle">Models</h1><p id="sSub">Pick your intelligence and a failover chain — Waggle routes between them automatically.</p></div>
+    <div class="bodyc" id="bodyc"></div>
+  </div>
+</div>
+
+<script>
+const root = document.documentElement, tbtn = document.getElementById('tbtn');
+function setTheme(t){ root.setAttribute('data-theme', t); tbtn.textContent = t==='dark'?'☾':'☀'; try{localStorage.setItem('waggle-concept-theme',t);}catch(e){} document.querySelectorAll('.tc').forEach(c=>c.classList.toggle('sel', c.classList.contains(t==='dark'?'dk':'lt'))); }
+setTheme((()=>{ try{ return localStorage.getItem('waggle-concept-theme')||'dark'; }catch(e){ return 'dark'; } })());
+tbtn.onclick = () => setTheme(root.getAttribute('data-theme')==='dark'?'light':'dark');
+window.addEventListener('message', e => { if(e.data && e.data.theme) setTheme(e.data.theme); });
+window.addEventListener('storage', e => { if(e.key==='waggle-concept-theme' && e.newValue) setTheme(e.newValue); });
+
+const heads = {
+  general:['General','The basics — appearance, language, and your data.'],
+  models:['Models','Pick your intelligence and a failover chain — Waggle routes between them automatically.'],
+  perms:['Permissions','How much your agents can do before they ask you.'],
+  billing:['Plan','Your tier and what it unlocks.'],
+  team:['Team','Connect a shared team server to sync workspaces.'],
+  backup:['Backup & export','Your data is yours — take it anywhere, anytime.'],
+  advanced:['Advanced','Developer mode, telemetry, and diagnostics.'],
+};
+
+const panels = {
+  models: () => `
+    <div class="note2"><svg viewBox="0 0 24 24"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><p><b>Waggle needs at least one working model.</b> You have a key for Claude and a local model running — you're good. Everything below is optional tuning.</p></div>
+
+    <div class="pilot">
+      <div class="pilot-h"><svg viewBox="0 0 24 24"><path d="M12 2 4 6v6c0 5 3.5 7.5 8 9 4.5-1.5 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg><b>Model pilot</b><span class="sub">automatic failover</span></div>
+
+      <div class="mslot primary">
+        <span class="tier">Primary</span>
+        <div class="mlogo">CL</div>
+        <div class="mname"><b>Claude Sonnet 4</b> <span>· best quality · ~$3/Mtok</span></div>
+        <span class="mstatus ok">● key set</span>
+        <span class="chg">Change</span>
+      </div>
+      <div class="trigger"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"/></svg><span>if it <b>errors or is unavailable</b> →</span></div>
+      <div class="mslot fallback">
+        <span class="tier">Fallback</span>
+        <div class="mlogo">GP</div>
+        <div class="mname"><b>GPT-4o</b> <span>· reliable backup · ~$2.5/Mtok</span></div>
+        <span class="mstatus ok">● key set</span>
+        <span class="chg">Change</span>
+      </div>
+      <div class="trigger"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"/></svg><span>when you <b>hit your daily budget</b> →</span></div>
+      <div class="mslot budget">
+        <span class="tier">Budget</span>
+        <div class="mlogo">QW</div>
+        <div class="mname"><b>Qwen 2.5 · local</b> <span>· free · runs on this Mac</span></div>
+        <span class="mstatus local">● running</span>
+        <span class="chg">Change</span>
+      </div>
+
+      <div class="budget-row">
+        <div class="bl"><b>Daily budget</b> · switch to the budget model at 80%</div>
+        <input value="50" type="number"><span style="color:var(--text-dim);font-family:var(--mono);font-size:13px">USD</span>
+      </div>
+    </div>
+
+    <div class="grp">Provider keys · managed in the Vault</div>
+    <div class="note2" style="background:var(--bg-2);border-color:var(--line-soft)"><svg viewBox="0 0 24 24" style="stroke:var(--text-muted)"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><p>Keys are encrypted on this machine. This list is read-only — add or rotate keys in the <b>Vault</b>.</p></div>
+    <div class="keyrow"><span class="kd on"></span><span class="kn">Anthropic <small>Claude</small></span><span class="ks on">✓ key set</span></div>
+    <div class="keyrow"><span class="kd on"></span><span class="kn">OpenAI <small>GPT</small></span><span class="ks on">✓ key set</span></div>
+    <div class="keyrow"><span class="kd off"></span><span class="kn">Google <small>Gemini</small></span><span class="ks off">add in Vault</span></div>
+
+    <div class="grp">Local models · on this machine</div>
+    <div class="keyrow"><span class="kd on"></span><span class="kn">Qwen 2.5 7B <small>via Ollama</small></span><span class="ks on">● running</span></div>
+    <div class="keyrow"><span class="kd off"></span><span class="kn">Llama 3.2 <small>via Ollama</small></span><span class="ks off">pull to use</span></div>`,
+
+  general: () => `
+    <div class="grp">Appearance</div>
+    <div class="card"><div class="field-row"><div class="lt"><b>Theme</b><span>Match the hive to your eyes.</span></div></div>
+      <div class="theme-cards" style="margin-top:14px" id="themeCards">
+        <div class="tc dk" data-t="dark"><div class="lbl">Dark</div><div class="dots"><i style="background:#14110b;border:1px solid #38301f"></i><i style="background:#e9a52c"></i><i style="background:#272117"></i></div></div>
+        <div class="tc lt" data-t="light"><div class="lbl">Light</div><div class="dots"><i style="background:#fffdf8;border:1px solid #e4d8be"></i><i style="background:#b57d12"></i><i style="background:#efe6d2"></i></div></div>
+      </div>
+    </div>
+    <div class="card"><div class="field-row"><div class="lt"><b>Language</b><span>Interface language.</span></div><div class="seg2"><button class="on">English</button><button>Deutsch</button><button>+</button></div></div></div>
+
+    <div class="grp">Your data</div>
+    <div class="card"><div class="field-row"><div class="lt"><b>Local-first storage</b><span>Memory &amp; files stay on this machine unless you share a workspace.</span></div><span class="plan-badge" style="font-size:11.5px">⬡ On · always</span></div></div>
+    <div class="card" style="border-color:color-mix(in srgb,var(--risk) 25%,var(--line-soft))"><div class="field-row"><div class="lt"><b>Erase all data</b><span>Schedule a complete, unrecoverable wipe at next launch.</span></div><button class="btn danger"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>Erase…</button></div></div>`,
+
+  perms: () => `
+    <div class="grp">Default approval level <span style="color:var(--text-dim);text-transform:none;letter-spacing:0">— new chats inherit this; each window can override</span></div>
+    <div class="radio-row"><div class="rd"></div><div><b>Ask every time</b><p>Approve every write, edit, and mutating tool call. Safest.</p></div></div>
+    <div class="radio-row sel"><div class="rd"></div><div><b>Ask only for risky things</b><p>Auto-pass routine writes &amp; edits; still gate git push, installs, and anything that leaves your machine. Recommended.</p></div></div>
+    <div class="radio-row"><div class="rd"></div><div><b>Never ask</b><p>Auto-pass everything except a hardcoded critical blacklist. Fastest, for trusted flows.</p></div></div>
+    <div class="grp">Always require approval for</div>
+    <div class="card"><div class="field-row"><div class="lt"><b class="mono" style="font-family:var(--mono);font-size:12.5px">git push</b></div><span class="ks off" style="color:var(--text-dim);font-size:12px;cursor:pointer">Remove</span></div></div>
+    <div class="card"><div class="field-row"><div class="lt"><b class="mono" style="font-family:var(--mono);font-size:12.5px">anything → external system</b></div><span class="ks off" style="color:var(--text-dim);font-size:12px;cursor:pointer">Remove</span></div></div>`,
+
+  billing: () => `
+    <div class="card" style="border-color:var(--honey-line)"><div class="field-row"><div class="lt"><b>Pro · trial</b><span>11 days left · $19/mo after · unlimited workspaces, marketplace, all connectors</span></div><span class="plan-badge">PRO</span></div></div>
+    <div class="grp">Switch plan</div>
+    <div class="card"><div class="field-row"><div class="lt"><b>Teams</b><span>$49/seat · shared memory, WaggleDance, SSO &amp; governance</span></div><button class="btn ghost">Upgrade →</button></div></div>
+    <div class="card"><div class="field-row"><div class="lt"><b>KVARK · sovereign</b><span>On your own infrastructure, full audit trail. By Egzakta Group.</span></div><button class="btn ghost">Talk to sales →</button></div></div>
+    <div style="margin-top:12px"><button class="btn ghost">Manage subscription</button></div>`,
+
+  team: () => `
+    <div class="card"><div class="field-row"><div class="lt"><b>Status</b><span>Not connected to a team server.</span></div><span class="ks off" style="color:var(--text-dim)">● Disconnected</span></div></div>
+    <div class="note2"><svg viewBox="0 0 24 24"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><p>Connecting to a team server <b>shares the workspaces you choose</b>. Only connect to a server you trust.</p></div>
+    <div class="card"><div class="lt" style="margin-bottom:10px"><b>Team server URL</b></div><input style="width:100%;padding:10px 13px;border-radius:9px;border:1px solid var(--line);background:var(--surface);color:var(--text);font-family:var(--sans);font-size:14px;outline:none" placeholder="https://team.waggle.ai"></div>
+    <button class="btn go">Connect</button>`,
+
+  backup: () => `
+    <div class="card"><div class="field-row"><div class="lt"><b>Export everything</b><span>All workspaces, sessions, and memory as a zip.</span></div><button class="btn ghost"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/></svg>Export</button></div></div>
+    <div class="card"><div class="field-row"><div class="lt"><b>Import</b><span>From a Waggle export, or ChatGPT / Claude / Cursor history.</span></div><button class="btn ghost"><svg viewBox="0 0 24 24"><path d="M12 21V9m0 0 4 4m-4-4-4 4M5 3h14"/></svg>Import</button></div></div>
+    <div class="grp">Encrypted backup</div>
+    <div class="card"><div class="field-row"><div class="lt"><b>AES-256 backup</b><span>Restore on any machine with the same vault key.</span></div><div style="display:flex;gap:8px"><button class="btn go">Create</button><button class="btn ghost">Restore</button></div></div></div>`,
+
+  advanced: () => `
+    <div class="card"><div class="field-row"><div class="lt"><b>Developer mode</b><span>Show raw events, tool I/O, and the prompt inspector.</span></div><div class="sw" onclick="this.classList.toggle('on')"></div></div></div>
+    <div class="card"><div class="field-row"><div class="lt"><b>Anonymous telemetry</b><span>Local-only usage counters — never leaves the machine. 0 events.</span></div><div class="sw" onclick="this.classList.toggle('on')"></div></div></div>
+    <div class="card"><div class="field-row"><div class="lt"><b>Prompt shape</b><span>GEPA-evolved prompt variant for the agent runtime.</span></div><div class="seg2"><button class="on">Auto</button><button>Concise</button><button>Thorough</button></div></div></div>
+    <div class="card"><div class="field-row"><div class="lt"><b>Debug logging</b><span>Verbose logs to the local console.</span></div><div class="sw" onclick="this.classList.toggle('on')"></div></div></div>`,
+};
+
+function show(s){
+  document.querySelectorAll('.ritem').forEach(r => r.classList.toggle('on', r.dataset.s===s));
+  document.getElementById('sTitle').textContent = heads[s][0];
+  document.getElementById('sSub').textContent = heads[s][1];
+  document.getElementById('bodyc').innerHTML = panels[s]();
+  document.getElementById('bodyc').scrollTop = 0;
+  if(s==='general'){ const cur = root.getAttribute('data-theme'); document.querySelectorAll('.tc').forEach(c=>c.classList.toggle('sel', c.dataset.t===cur)); document.getElementById('themeCards').addEventListener('click', e=>{const c=e.target.closest('.tc'); if(c) setTheme(c.dataset.t);}); }
+}
+document.getElementById('rail').addEventListener('click', e => { const r=e.target.closest('.ritem'); if(r) show(r.dataset.s); });
+
+/* radio rows + key/perms interactions */
+document.getElementById('bodyc').addEventListener('click', e => {
+  const r = e.target.closest('.radio-row'); if(r){ r.parentElement.querySelectorAll('.radio-row').forEach(x=>x.classList.remove('sel')); r.classList.add('sel'); }
+});
+
+/* experience level (progressive disclosure) */
+const labels = { essential:'Calm by default · the essentials only', standard:'Standard · full workspace tools', everything:'Everything · all controls visible' };
+document.getElementById('exp').addEventListener('click', e => {
+  const b = e.target.closest('button'); if(!b) return;
+  [...e.currentTarget.children].forEach(x=>x.classList.toggle('on', x===b));
+  document.body.classList.toggle('everything', b.dataset.e==='everything');
+  document.getElementById('vlabel').textContent = labels[b.dataset.e];
+  if(b.dataset.e!=='everything' && document.querySelector('.ritem[data-s=advanced]').classList.contains('on')) show('models');
+});
+
+show('models');
+</script>
+</body>
+</html>

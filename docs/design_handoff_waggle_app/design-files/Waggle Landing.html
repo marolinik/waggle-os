@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Waggle — the AI workspace that remembers</title>
+<script>document.documentElement.classList.add('js');</script>
+<link rel="stylesheet" href="styles/waggle.css">
+<style>
+  html { scroll-behavior: smooth; }
+  body { overflow-x: hidden; }
+  .container { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+
+  /* ── Nav ─────────────────────────────────────────────────────── */
+  .nav {
+    position: fixed; inset: 0 0 auto 0; z-index: 60; height: 66px;
+    display: flex; align-items: center; gap: 26px;
+    padding: 0 28px;
+    background: color-mix(in srgb, var(--bg) 72%, transparent);
+    backdrop-filter: blur(20px) saturate(1.4); -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    border-bottom: 1px solid transparent; transition: border-color .3s, background .3s;
+  }
+  .nav.scrolled { border-color: var(--line-soft); }
+  .brand { display: flex; align-items: center; gap: 11px; }
+  .brand .mark { width: 30px; height: 33px; display: grid; place-items: center; background: linear-gradient(150deg, var(--honey-bright), var(--honey-deep)); color: #1a1407; font-weight: 800; font-size: 15px; box-shadow: var(--honey-glow); }
+  .brand b { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
+  .nav .links { display: flex; gap: 4px; margin-left: 18px; }
+  .nav .links a { font-size: 14px; font-weight: 500; color: var(--text-muted); text-decoration: none; padding: 8px 13px; border-radius: 8px; transition: .15s; }
+  .nav .links a:hover { color: var(--text); background: var(--surface-2); }
+  .nav .right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .signin { font-size: 14px; font-weight: 600; color: var(--text-2); text-decoration: none; padding: 9px 14px; border-radius: 9px; }
+  .signin:hover { color: var(--text); }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+    font-family: var(--sans); font-size: 14.5px; font-weight: 650; letter-spacing: -0.01em;
+    padding: 11px 20px; border-radius: 11px; text-decoration: none; border: 1px solid transparent; transition: .16s;
+  }
+  .btn-primary { background: var(--honey); color: #1a1407; box-shadow: var(--honey-glow); }
+  .btn-primary:hover { background: var(--honey-bright); transform: translateY(-1px); }
+  .btn-ghost { background: var(--surface); color: var(--text); border-color: var(--line-strong); }
+  .btn-ghost:hover { border-color: var(--honey-line); color: var(--honey); }
+  .btn-lg { padding: 15px 26px; font-size: 16px; border-radius: 13px; }
+  .themebtn { width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--text-2); cursor: pointer; display: grid; place-items: center; }
+  .themebtn:hover { border-color: var(--honey-line); color: var(--honey); }
+
+  /* ── Reveal (JS-gated: content shows by default; only hidden once JS confirms) ── */
+  .js .reveal { opacity: 0; transform: translateY(22px); transition: opacity .7s cubic-bezier(.16,1,.3,1), transform .7s cubic-bezier(.16,1,.3,1); }
+  .js .reveal.in { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) { .js .reveal { opacity: 1; transform: none; transition: none; } }
+
+  /* ── Hero ────────────────────────────────────────────────────── */
+  .hero { padding: 150px 0 90px; position: relative; overflow: hidden; }
+  .hero .comb { position: absolute; inset: 0; opacity: .5; pointer-events: none; mask-image: radial-gradient(120% 90% at 70% 10%, black, transparent 75%); }
+  .hero-grid { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 56px; align-items: center; position: relative; }
+  .eyebrow { display: inline-flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 600; color: var(--honey); letter-spacing: -0.005em; margin-bottom: 22px; padding: 6px 13px 6px 11px; border: 1px solid var(--honey-line); border-radius: 999px; background: var(--honey-wash); }
+  .eyebrow .dot { background: var(--honey); }
+  h1.hero-h { font-size: clamp(40px, 5.6vw, 68px); font-weight: 600; line-height: 1.02; letter-spacing: -0.03em; margin: 0 0 24px; text-wrap: balance; }
+  h1.hero-h em { font-style: normal; color: var(--honey); }
+  .hero p.sub { font-size: clamp(17px, 1.7vw, 20px); line-height: 1.55; color: var(--text-2); max-width: 36em; margin: 0 0 32px; }
+  .hero .cta-row { display: flex; flex-wrap: wrap; gap: 13px; margin-bottom: 26px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 9px; }
+  .chips .chip { display: inline-flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 12px; color: var(--text-muted); padding: 6px 11px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line-soft); }
+  .chips .chip .dot { background: var(--healthy); }
+
+  /* ── Hero hive visual ────────────────────────────────────────── */
+  .hive { position: relative; aspect-ratio: 1 / 1; max-width: 460px; margin: 0 auto; width: 100%; }
+  .hive .ring { position: absolute; inset: 0; }
+  .hexcell {
+    position: absolute; transform: translate(-50%, -50%);
+    display: grid; place-items: center; text-align: center;
+  }
+  .hexcell .hx { background: var(--surface); border: 1px solid var(--line); display: grid; place-items: center; gap: 2px; box-shadow: var(--shadow); }
+  .hexcell.core .hx { width: 168px; height: 188px; background: linear-gradient(150deg, var(--surface-2), var(--surface)); border-color: var(--honey-line); box-shadow: var(--honey-glow), var(--shadow-lg); }
+  .hexcell.core .label { font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--honey); }
+  .hexcell.core .big { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.05; }
+  .hexcell.core .meta { font-family: var(--mono); font-size: 10px; color: var(--text-dim); margin-top: 4px; }
+  .hexcell.sat .hx { width: 104px; height: 116px; }
+  .hexcell.sat .prov { font-size: 13px; font-weight: 650; letter-spacing: -0.01em; }
+  .hexcell.sat .act { font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; margin-top: 3px; }
+  .hexcell.sat .act.recall { color: var(--work); }
+  .hexcell.sat .act.commit { color: var(--healthy); }
+  .hive svg.wires { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .wire { stroke: var(--line-strong); stroke-width: 1.4; fill: none; }
+  .flow { stroke: var(--honey); stroke-width: 2.4; fill: none; stroke-linecap: round; stroke-dasharray: 5 190; opacity: .85; animation: flow 3.4s linear infinite; }
+  @keyframes flow { to { stroke-dashoffset: -195; } }
+  @media (prefers-reduced-motion: reduce) { .flow { animation: none; opacity: .4; } }
+  .hive .winlabel { position: absolute; font-family: var(--mono); font-size: 10px; color: var(--text-dim); display:flex; align-items:center; gap:6px; }
+
+  /* ── Section scaffold ────────────────────────────────────────── */
+  section.band { padding: 92px 0; position: relative; }
+  .sec-eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--honey); display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+  .sec-eyebrow::before { content: ''; width: 22px; height: 1px; background: var(--honey-line); }
+  h2.sec-h { font-size: clamp(28px, 3.8vw, 44px); font-weight: 600; line-height: 1.08; letter-spacing: -0.025em; margin: 0; text-wrap: balance; }
+  h2.sec-h em { font-style: normal; color: var(--honey); }
+  .sec-head { max-width: 30ch; }
+  .sec-head.wide { max-width: 46ch; }
+  .sec-sub { font-size: 18px; color: var(--text-2); line-height: 1.55; margin: 18px 0 0; max-width: 56ch; }
+
+  /* ── Trust band ──────────────────────────────────────────────── */
+  .trust { border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); padding: 30px 0; background: var(--bg-2); }
+  .trust .row { display: flex; align-items: center; gap: 28px; flex-wrap: wrap; justify-content: space-between; }
+  .trust .badge { font-size: 14.5px; color: var(--text-2); display: flex; align-items: center; gap: 11px; font-weight: 500; }
+  .trust .badge .mk { width: 22px; height: 25px; background: linear-gradient(150deg, var(--honey-bright), var(--honey-deep)); flex: none; }
+  .trust .signals { display: flex; gap: 22px; flex-wrap: wrap; }
+  .trust .signals span { font-size: 13px; color: var(--text-muted); display: inline-flex; align-items: center; gap: 8px; }
+  .trust .signals .dot { background: var(--honey); }
+
+  /* ── Problem / comparison ────────────────────────────────────── */
+  .problem { text-align: center; }
+  .problem .sec-eyebrow { justify-content: center; }
+  .problem .sec-eyebrow::before { display: none; }
+  .problem h2 { margin: 0 auto; max-width: 18ch; }
+  .problem .sec-sub { margin: 22px auto 0; }
+
+  /* ── Pillars ─────────────────────────────────────────────────── */
+  .pillars-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 48px; }
+  .pillar { padding: 28px; border-radius: var(--r-lg); background: var(--surface); border: 1px solid var(--line-soft); transition: .2s; position: relative; overflow: hidden; }
+  .pillar:hover { border-color: var(--honey-line); transform: translateY(-3px); box-shadow: var(--shadow); }
+  .pillar .pn { display:flex; align-items:center; gap:11px; margin-bottom: 16px; }
+  .pillar .pn .ic { width: 38px; height: 42px; flex: none; display: grid; place-items: center; background: var(--surface-2); border: 1px solid var(--line); }
+  .pillar .pn .ic svg { width: 19px; height: 19px; stroke: var(--honey); fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .pillar .pn .num { font-family: var(--mono); font-size: 11px; color: var(--text-dim); letter-spacing: .12em; }
+  .pillar h3 { font-size: 19px; font-weight: 650; letter-spacing: -0.015em; margin: 0 0 9px; }
+  .pillar p { font-size: 14.5px; color: var(--text-muted); line-height: 1.6; margin: 0; }
+  .pillar.span2 { grid-column: span 1; }
+
+  /* ── How it works ────────────────────────────────────────────── */
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 48px; }
+  .step { padding: 30px; border-radius: var(--r-lg); background: var(--surface); border: 1px solid var(--line-soft); position: relative; }
+  .step .sn { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--honey); letter-spacing: .1em; }
+  .step h3 { font-size: 21px; font-weight: 600; letter-spacing: -0.02em; margin: 16px 0 10px; }
+  .step p { font-size: 14.5px; color: var(--text-muted); line-height: 1.6; margin: 0; }
+  .step .line { position: absolute; top: 42px; right: -10px; color: var(--line-strong); font-size: 20px; }
+
+  /* ── Self-evolve ───────────────────────────── */
+  .evolve-grid { margin-top: 44px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
+  .ladder-viz { display: grid; gap: 10px; }
+  .lrow { display: grid; grid-template-columns: 40px 1fr 52px; gap: 14px; align-items: center; }
+  .lrow .lv { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--text-dim); }
+  .lrow.top .lv { color: var(--honey); }
+  .lrow .lt { height: 30px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line-soft); overflow: hidden; }
+  .lrow .lf { height: 100%; border-radius: 7px 0 0 7px; background: var(--surface-3); }
+  .lrow.top .lf { background: linear-gradient(90deg, var(--honey-deep), var(--honey-bright)); }
+  .lrow .ls { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--text-2); } .lrow.top .ls { color: var(--honey); }
+  .evolve-cards { display: grid; gap: 14px; }
+  .ecard { padding: 20px 22px; border-radius: var(--r-lg); background: var(--surface); border: 1px solid var(--line-soft); }
+  .ecard h3 { font-size: 17px; font-weight: 650; letter-spacing: -0.015em; margin: 0 0 7px; display:flex; align-items:center; gap:10px; }
+  .ecard h3 .en { font-family: var(--mono); font-size: 12px; color: var(--honey); }
+  .ecard p { margin: 0; font-size: 14.5px; color: var(--text-muted); line-height: 1.55; }
+
+  /* ── Proof ───────────────────────────────────────────────────── */
+  .proof { background: var(--bg-2); border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
+  .proof-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 46px; }
+  .stat-card { padding: 30px; border-radius: var(--r-lg); background: var(--surface); border: 1px solid var(--line-soft); }
+  .stat-card .cap { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-dim); }
+  .stat-card .stat { font-size: 48px; font-weight: 750; letter-spacing: -0.04em; line-height: 1; margin: 14px 0 6px; color: var(--honey); }
+  .stat-card .nm { font-size: 16px; font-weight: 650; letter-spacing: -0.01em; margin-bottom: 8px; }
+  .stat-card p { font-size: 13.5px; color: var(--text-muted); line-height: 1.6; margin: 0; }
+  .methodology { margin-top: 26px; padding: 18px 22px; border-radius: var(--r); background: var(--surface); border: 1px solid var(--line-soft); display: flex; gap: 14px; align-items: flex-start; }
+  .methodology .mono { font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--healthy); padding: 5px 9px; border: 1px solid color-mix(in srgb, var(--healthy) 35%, transparent); border-radius: 7px; flex: none; }
+  .methodology p { margin: 0; font-size: 13.5px; color: var(--text-muted); line-height: 1.6; }
+  .methodology p b { color: var(--text-2); }
+  /* comparison bars */
+  .bench { margin-top: 44px; display: grid; gap: 12px; }
+  .barrow { display: grid; grid-template-columns: 168px 1fr 58px; gap: 16px; align-items: center; }
+  .barrow .blab { font-size: 13.5px; font-weight: 600; text-align: right; line-height: 1.15; }
+  .barrow .blab small { display: block; font-weight: 400; color: var(--text-dim); font-size: 10.5px; font-family: var(--mono); margin-top: 2px; }
+  .barrow .track { height: 32px; border-radius: 9px; background: var(--surface); border: 1px solid var(--line-soft); overflow: hidden; }
+  .barrow .fill { height: 100%; border-radius: 8px 0 0 8px; background: var(--surface-3); }
+  .barrow.us .fill { background: linear-gradient(90deg, var(--honey-deep), var(--honey-bright)); box-shadow: var(--honey-glow); }
+  .barrow .bval { font-family: var(--mono); font-size: 14px; font-weight: 600; color: var(--text-2); }
+  .barrow.us .blab { color: var(--text); }
+  .barrow.us .bval { color: var(--honey); }
+  .bench-note { margin-top: 14px; font-size: 12.5px; color: var(--text-dim); font-family: var(--mono); display: flex; align-items: center; gap: 8px; }
+  .bench-note b { color: var(--healthy); }
+  /* bring-your-own-agent / shared memory band */
+  .byo { background: var(--bg-2); border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
+  .byo-flow { margin-top: 44px; display: flex; align-items: center; justify-content: center; gap: 0; flex-wrap: wrap; }
+  .byo-node { padding: 16px 16px; border-radius: var(--r-lg); border: 1px solid var(--line-strong); background: var(--surface); min-width: 140px; max-width: 178px; }
+  .byo-node .t { font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 6px; }
+  .byo-node b { font-size: 15px; font-weight: 650; }
+  .byo-node small { display: block; font-size: 12px; color: var(--text-muted); margin-top: 4px; line-height: 1.4; }
+  .byo-node.hive { border-color: var(--honey-line); box-shadow: var(--honey-glow); background: linear-gradient(150deg,var(--surface-2),var(--surface)); }
+  .byo-arrow { color: var(--honey); font-size: 20px; padding: 0 12px; }
+  .byo-arrow small { display:block; font-family: var(--mono); font-size: 9px; color: var(--text-dim); text-transform:uppercase; letter-spacing:.1em; text-align:center; }
+  .byo-cards { margin-top: 30px; display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; }
+  @media (max-width: 760px){ .byo-cards { grid-template-columns: 1fr; } }
+
+  /* ── Personas ────────────────────────────────────────────────── */
+  .persona-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-top: 44px; }
+  .ptile { padding: 16px; border-radius: var(--r); background: var(--surface); border: 1px solid var(--line-soft); display: flex; align-items: center; gap: 12px; transition: .16s; cursor: default; }
+  .ptile:hover { border-color: var(--honey-line); background: var(--surface-2); transform: translateY(-2px); }
+  .ptile .ph { width: 30px; height: 34px; flex: none; background: var(--surface-3); display: grid; place-items: center; font-size: 13px; font-weight: 800; color: var(--honey); }
+  .ptile b { font-size: 13.5px; font-weight: 600; letter-spacing: -0.01em; }
+
+  /* ── Pricing ─────────────────────────────────────────────────── */
+  .price-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 48px; align-items: stretch; }
+  .plan { padding: 30px; border-radius: var(--r-lg); background: var(--surface); border: 1px solid var(--line-soft); display: flex; flex-direction: column; }
+  .plan.feat { border-color: var(--honey-line); box-shadow: var(--honey-glow); position: relative; }
+  .plan .pop { position: absolute; top: -11px; left: 30px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #1a1407; background: var(--honey); padding: 4px 11px; border-radius: 999px; }
+  .plan .pname { font-size: 15px; font-weight: 600; color: var(--text-2); }
+  .plan .pprice { font-size: 38px; font-weight: 750; letter-spacing: -0.03em; margin: 12px 0 2px; }
+  .plan .pprice small { font-size: 15px; font-weight: 500; color: var(--text-muted); letter-spacing: 0; }
+  .plan .ptag { font-size: 13.5px; color: var(--text-muted); margin-bottom: 22px; min-height: 38px; }
+  .plan ul { list-style: none; margin: 0 0 26px; padding: 0; display: grid; gap: 11px; flex: 1; }
+  .plan li { font-size: 13.5px; color: var(--text-2); display: grid; grid-template-columns: 18px 1fr; gap: 9px; line-height: 1.4; }
+  .plan li svg { width: 15px; height: 15px; stroke: var(--healthy); fill: none; stroke-width: 2.2; margin-top: 2px; }
+  .kvark-row { margin-top: 18px; padding: 22px 26px; border-radius: var(--r-lg); background: var(--bg-2); border: 1px dashed var(--line-strong); display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+  .kvark-row .kx { flex: 1; min-width: 260px; }
+  .kvark-row b { font-size: 15px; font-weight: 650; }
+  .kvark-row p { margin: 4px 0 0; font-size: 13.5px; color: var(--text-muted); }
+  .kvark-row a { font-size: 14px; font-weight: 650; color: var(--honey); text-decoration: none; white-space: nowrap; }
+  .kvark-row a:hover { color: var(--honey-bright); }
+
+  /* ── Final CTA ───────────────────────────────────────────────── */
+  .final { text-align: center; padding: 110px 0; position: relative; overflow: hidden; }
+  .final .comb { position: absolute; inset: 0; opacity: .6; pointer-events: none; mask-image: radial-gradient(80% 80% at 50% 50%, black, transparent 70%); }
+  .final h2 { font-size: clamp(32px, 4.6vw, 56px); font-weight: 600; letter-spacing: -0.03em; margin: 0 0 18px; position: relative; }
+  .final h2 em { font-style: normal; color: var(--honey); }
+  .final p { font-size: 18px; color: var(--text-2); max-width: 52ch; margin: 0 auto 30px; line-height: 1.55; position: relative; }
+  .final .cta-row { display: inline-flex; gap: 13px; flex-wrap: wrap; justify-content: center; position: relative; }
+
+  /* ── Footer ──────────────────────────────────────────────────── */
+  footer { border-top: 1px solid var(--line-soft); padding: 56px 0 40px; }
+  .foot-grid { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 32px; }
+  .foot-brand b { font-size: 18px; font-weight: 700; }
+  .foot-brand p { font-size: 13.5px; color: var(--text-muted); margin: 12px 0 0; max-width: 30ch; line-height: 1.55; }
+  .foot-col h4 { font-size: 12px; font-family: var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--text-dim); margin: 0 0 14px; }
+  .foot-col a { display: block; font-size: 13.5px; color: var(--text-muted); text-decoration: none; padding: 4px 0; }
+  .foot-col a:hover { color: var(--honey); }
+  .foot-base { margin-top: 44px; padding-top: 22px; border-top: 1px solid var(--line-soft); display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; font-family: var(--mono); font-size: 11.5px; color: var(--text-dim); }
+
+  @media (max-width: 940px) {
+    .nav .links { display: none; }
+    .hero-grid { grid-template-columns: 1fr; gap: 52px; }
+    .hive { max-width: 380px; }
+    .pillars-grid, .steps, .proof-grid, .price-grid { grid-template-columns: 1fr; }
+    .evolve-grid, .byo-cards { grid-template-columns: 1fr; }
+    .foot-grid { grid-template-columns: 1fr 1fr; }
+    .step .line { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════ NAV ═══════════════════ -->
+<nav class="nav" id="nav">
+  <div class="brand"><div class="mark hex">W</div><b>Waggle</b></div>
+  <div class="links">
+    <a href="#how">How it works</a>
+    <a href="#pillars">Why Waggle</a>
+    <a href="#agents">Your agents</a>
+    <a href="#proof">Proof</a>
+    <a href="#evolve">Self-evolving</a>
+    <a href="#personas">Personas</a>
+    <a href="#pricing">Pricing</a>
+  </div>
+  <div class="right">
+    <button class="themebtn" id="themebtn" title="Toggle light / dark" aria-label="Toggle theme">☾</button>
+    <a href="#" class="signin">Sign in</a>
+    <a href="#pricing" class="btn btn-primary">Start free</a>
+  </div>
+</nav>
+
+<!-- ═══════════════════ HERO ═══════════════════ -->
+<header class="hero">
+  <div class="comb"></div>
+  <div class="container hero-grid">
+    <div class="reveal">
+      <span class="eyebrow"><span class="dot"></span>The AI workspace for experts — not AI experts</span>
+      <h1 class="hero-h">Your AI doesn't reset.<br><em>Your work doesn't either.</em></h1>
+      <p class="sub">One local knowledge graph feeding Claude, GPT, Gemini — or a small model on your own machine. Stop pasting context into a blank box. It lives once, persists across every model, and compounds with every session you finish.</p>
+      <div class="cta-row">
+        <a href="#pricing" class="btn btn-primary btn-lg">Start free — local-first →</a>
+        <a href="#how" class="btn btn-ghost btn-lg">See how it works</a>
+      </div>
+      <div class="chips">
+        <a href="#proof" class="chip" style="color:var(--honey);border-color:var(--honey-line);background:var(--honey-wash);text-decoration:none;font-weight:600"><span class="dot" style="background:var(--honey)"></span>New — #1 on LoCoMo, and it's local</a>
+        <span class="chip"><span class="dot"></span>Local-first by default</span>
+        <span class="chip"><span class="dot"></span>Any model, even small ones</span>
+        <span class="chip"><span class="dot"></span>Your data never leaves</span>
+      </div>
+    </div>
+
+    <div class="reveal">
+      <div class="hive" id="hive">
+        <svg class="wires" viewBox="0 0 460 460" aria-hidden="true">
+          <line class="wire" x1="230" y1="230" x2="230" y2="60"></line>
+          <line class="wire" x1="230" y1="230" x2="396" y2="230"></line>
+          <line class="wire" x1="230" y1="230" x2="230" y2="400"></line>
+          <line class="wire" x1="230" y1="230" x2="64" y2="230"></line>
+          <line class="flow" x1="230" y1="60" x2="230" y2="230"></line>
+          <line class="flow" x1="396" y1="230" x2="230" y2="230" style="animation-delay:.9s"></line>
+          <line class="flow" x1="230" y1="230" x2="230" y2="400" style="animation-delay:1.7s"></line>
+          <line class="flow" x1="64" y1="230" x2="230" y2="230" style="animation-delay:2.5s"></line>
+        </svg>
+
+        <div class="hexcell core" style="left:50%;top:50%">
+          <div class="hx hex">
+            <div class="label">Your hive</div>
+            <div class="big">One mind,<br>every model</div>
+            <div class="meta">~/.waggle · local</div>
+          </div>
+        </div>
+        <div class="hexcell sat" style="left:50%;top:13%"><div class="hx hex"><div class="prov">Claude</div><div class="act recall">recall</div></div></div>
+        <div class="hexcell sat" style="left:86%;top:50%"><div class="hx hex"><div class="prov">GPT-5</div><div class="act recall">recall</div></div></div>
+        <div class="hexcell sat" style="left:50%;top:87%"><div class="hx hex"><div class="prov">Qwen · local</div><div class="act commit">commit</div></div></div>
+        <div class="hexcell sat" style="left:14%;top:50%"><div class="hx hex"><div class="prov">Gemini</div><div class="act recall">recall</div></div></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════ TRUST BAND ═══════════════════ -->
+<div class="trust">
+  <div class="container row">
+    <div class="badge"><span class="mk hex"></span>Backed by Egzakta Group — building for regulated industries since 2010</div>
+    <div class="signals">
+      <span><span class="dot"></span>Local-first</span>
+      <span><span class="dot"></span>Model-agnostic</span>
+      <span><span class="dot"></span>Apache-2.0 substrate</span>
+      <span><span class="dot"></span>EU AI Act audit-ready</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ PROBLEM ═══════════════════ -->
+<section class="band problem">
+  <div class="container reveal">
+    <div class="sec-eyebrow">AI for doing your work — not operating it</div>
+    <h2 class="sec-h">All the power built for engineers. <em>None of the homework.</em></h2>
+    <p class="sec-sub">The most capable AI tools were built for people who want to <i>operate</i> AI — endless settings, prompts, and plumbing to master before you produce anything. Waggle takes the opposite bet: your time is too valuable to spend on AI plumbing, so we run it underneath and hand back finished work. You didn't become an expert to babysit a model.</p>
+  </div>
+</section>
+
+<!-- ═══════════════════ PILLARS ═══════════════════ -->
+<section class="band" id="pillars">
+  <div class="container">
+    <div class="sec-head wide reveal">
+      <div class="sec-eyebrow">Why Waggle</div>
+      <h2 class="sec-h">Two memories working together — so you never start from a <em>stranger.</em></h2>
+    </div>
+    <div class="pillars-grid">
+      <div class="pillar reveal">
+        <div class="pn"><div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M5.5 21a7 7 0 0 1 13 0"/></svg></div><span class="num">01</span></div>
+        <h3>It knows you</h3>
+        <p>You're known here — never re-introduce yourself, never start from a stranger. It already knows how you think and how you like your work done.</p>
+      </div>
+      <div class="pillar reveal">
+        <div class="pn"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 6c0-1 1-2 3-2s3 1 3 2v14c0-1-1-2-3-2s-3 1-3 2zM20 6c0-1-1-2-3-2s-3 1-3 2v14c0-1 1-2 3-2s3 1 3 2z"/></svg></div><span class="num">02</span></div>
+        <h3>It knows your work</h3>
+        <p>Nothing is lost. Walk back into any project after a day, a week, a quarter — it's all still there, exactly as you left it.</p>
+      </div>
+      <div class="pillar reveal">
+        <div class="pn"><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3v3M12 18v3M5 12H2M22 12h-3M6 6l-2-2M20 20l-2-2M6 18l-2 2M20 4l-2 2"/><circle cx="12" cy="12" r="3.5"/></svg></div><span class="num">03</span></div>
+        <h3>It runs the AI</h3>
+        <p>You stay the expert. The prompting, routing, and scaffolding run underneath — on tap when you want them, out of your way when you don't.</p>
+      </div>
+      <div class="pillar reveal">
+        <div class="pn"><div class="ic"><svg viewBox="0 0 24 24"><path d="m12 3 2.5 6 6.5.5-5 4.2 1.6 6.3L12 16.8 6 20l1.6-6.3-5-4.2 6.5-.5z"/></svg></div><span class="num">04</span></div>
+        <h3>Your best work — and it's yours</h3>
+        <p>Spreadsheets to the last detail, decks that hold up in the room, docs polished to the final word. Everything you ship is genuinely your best, and unmistakably yours.</p>
+      </div>
+      <div class="pillar reveal">
+        <div class="pn"><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.5 7.5 8 9 4.5-1.5 8-4 8-9V6z"/></svg></div><span class="num">05</span></div>
+        <h3>It stays yours</h3>
+        <p>Local-first and model-agnostic — runs on any model, even a small one on your own machine. Yours to keep, export, or delete, anytime.</p>
+      </div>
+      <div class="pillar reveal" style="background:linear-gradient(150deg,var(--surface-2),var(--surface));border-color:var(--honey-line)">
+        <div class="pn"><div class="ic" style="background:var(--honey);border-color:var(--honey)"><svg viewBox="0 0 24 24" style="stroke:#1a1407"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div><span class="num">↳</span></div>
+        <h3>The full controls, one click away</h3>
+        <p>Want the prompts, the routing, the raw model picker back? They've never gone anywhere — Waggle just stops making you use them.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ HOW IT WORKS ═══════════════════ -->
+<section class="band" id="how" style="background:var(--bg-2);border-top:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft)">
+  <div class="container">
+    <div class="sec-head reveal">
+      <div class="sec-eyebrow">How it works</div>
+      <h2 class="sec-h">A simple division of <em>labor.</em></h2>
+      <p class="sec-sub">You bring the judgment. Waggle brings the AI. Open it once and your context and your work-in-progress are already there — nothing re-explained, nothing lost.</p>
+    </div>
+    <div class="steps">
+      <div class="step reveal">
+        <div class="sn">STEP 01</div><span class="line">→</span>
+        <h3>Bring it all in</h3>
+        <p>Start fresh and it learns you fast — or import your history. One-click import from ChatGPT, Claude, and Cursor: brought in on your machine, stays on your machine.</p>
+      </div>
+      <div class="step reveal">
+        <div class="sn">STEP 02</div><span class="line">→</span>
+        <h3>Open to what's waiting</h3>
+        <p>Open it and you're already moving: here's where you left off, here's what ran overnight, here's what's next. Your work picks up mid-stride, never from a blank box.</p>
+      </div>
+      <div class="step reveal">
+        <div class="sn">STEP 03</div>
+        <h3>Do the work that's yours</h3>
+        <p>You make the calls; Waggle runs the AI underneath and hands you finished work. Close it, and all of it stays right where you left it for next time.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ BRING YOUR OWN AGENT ═══════════════════ -->
+<section class="band byo" id="agents">
+  <div class="container">
+    <div class="sec-head wide reveal">
+      <div class="sec-eyebrow">Works with the tools you already use</div>
+      <h2 class="sec-h">Bring your own agent. <em>It inherits the memory.</em></h2>
+      <p class="sec-sub">Launch Claude Code, Cursor, or Codex straight from a Waggle workspace and it opens already knowing the work — then commits what it does back to the hive. No copy-paste, no re-explaining. Nothing leaves your machine.</p>
+    </div>
+
+    <div class="byo-flow reveal">
+      <div class="byo-node"><div class="t">You launch</div><b>Claude Code</b><small>opened with this workspace wired in</small></div>
+      <div class="byo-arrow">⇄<small>hooks</small></div>
+      <div class="byo-node"><div class="t">It works</div><b>recall + commit</b><small>reads context, writes results back</small></div>
+      <div class="byo-arrow">⇄<small>local</small></div>
+      <div class="byo-node hive"><div class="t">Your workspace</div><b>The hive</b><small>one local memory, shared</small></div>
+    </div>
+
+    <div class="byo-cards">
+      <div class="pillar reveal" style="margin:0"><div class="pn"><span class="num">↓</span></div><h3>Opens knowing the work</h3><p>The agent recalls this workspace's decisions, constraints and history the moment it starts — no prompt-stuffing.</p></div>
+      <div class="pillar reveal" style="margin:0"><div class="pn"><span class="num">↑</span></div><h3>Writes back, attributed</h3><p>Everything it does flows into the hive with provenance, so Waggle and your next session pick up where it left off.</p></div>
+      <div class="pillar reveal" style="margin:0"><div class="pn"><span class="num">⬡</span></div><h3>Reversible &amp; local</h3><p>Hooks install and uninstall cleanly. The memory stays on your machine; you can verify or remove anytime.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ PROOF ═══════════════════ -->
+<section class="band proof" id="proof">
+  <div class="container">
+    <div class="sec-head wide reveal">
+      <div class="sec-eyebrow">State of the art · June 2026</div>
+      <h2 class="sec-h">The best long-term memory on record. <em>And it runs on your machine.</em></h2>
+      <p class="sec-sub">On <b style="color:var(--text)">LoCoMo</b> — the field's standard test for long-term conversational memory — Waggle's open-source substrate scores <b style="color:var(--text)">87.66%</b>, a new state of the art. Measured under the prior leader's own protocol and judge, whose pipeline we reproduced to within 0.03 points before comparing.</p>
+    </div>
+
+    <div class="bench reveal">
+      <div class="barrow us">
+        <div class="blab">Waggle · Hive Mind<small>ours · local</small></div>
+        <div class="track"><div class="fill" style="width:87.7%"></div></div>
+        <div class="bval">87.66</div>
+      </div>
+      <div class="barrow">
+        <div class="blab">Memori<small>prev. SOTA</small></div>
+        <div class="track"><div class="fill" style="width:81.95%"></div></div>
+        <div class="bval">81.95</div>
+      </div>
+      <div class="barrow">
+        <div class="blab">LangMem<small>corrected</small></div>
+        <div class="track"><div class="fill" style="width:78.05%"></div></div>
+        <div class="bval">78.05</div>
+      </div>
+      <div class="barrow">
+        <div class="blab">Mem0<small>baseline</small></div>
+        <div class="track"><div class="fill" style="width:62.47%"></div></div>
+        <div class="bval">62.47</div>
+      </div>
+      <div class="bench-note">⊡ <b>+5.71 points</b> over the prior best published memory system · z = 4.42, p &lt; 10⁻⁵ · leads every question category</div>
+    </div>
+
+    <div class="proof-grid">
+      <div class="stat-card reveal">
+        <div class="cap">Single-hop recall</div>
+        <div class="stat">92.75%</div>
+        <div class="nm">Within a point of perfect recall</div>
+        <p>That's ~1 point off the <b>full-context ceiling</b> — what a model scores with the <i>entire</i> conversation pasted in. The memory recalls almost as well as having everything in front of it.</p>
+      </div>
+      <div class="stat-card reveal">
+        <div class="cap">Deployment</div>
+        <div class="stat">100%</div>
+        <div class="nm">Local — nothing leaves the machine</div>
+        <p>Every memory operation runs on-device — SQLite, local embeddings, an in-process reranker. Warm recalls in <b>58–83 ms</b>. The strongest LoCoMo result on record for a fully local system.</p>
+      </div>
+      <div class="stat-card reveal">
+        <div class="cap">Open source · Apache-2.0</div>
+        <div class="stat">Run it</div>
+        <div class="nm">Audit the layer yourself</div>
+        <p>The substrate and the benchmark harness are public. Fork it, read the graph, reproduce the score offline. No black box — <span class="mono" style="font-family:var(--mono);font-size:12px;color:var(--text-2)">github.com/marolinik/hive-mind</span>.</p>
+      </div>
+    </div>
+
+    <div class="methodology reveal">
+      <span class="mono">Method</span>
+      <p><b>LoCoMo</b>, N = 1,540 questions, GPT-4.1-mini as answerer and judge — the prior SOTA's exact published protocol, reproduced in-harness to 0.03 points before comparison. The intelligence lives in the memory layer, not the model, so it travels with you — even onto a small model on your own machine. <b>Honest caveat:</b> we spend more tokens per question than the leanest systems; accuracy first, efficiency work is underway.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ SELF-EVOLVING ═══════════════════ -->
+<section class="band" id="evolve">
+  <div class="container">
+    <div class="sec-head wide reveal">
+      <div class="sec-eyebrow">The compounding moat</div>
+      <h2 class="sec-h">It doesn't just remember. <em>It gets better.</em></h2>
+      <p class="sec-sub">Your skills aren't static prompts. Waggle re-optimizes them against real outcomes, keeps every version with the score that earned it — and the good ones spread across your agents and workspaces. The longer you use it, the better it works.</p>
+    </div>
+    <div class="evolve-grid">
+      <div class="ladder-viz reveal">
+        <div class="lrow"><span class="lv">v1</span><div class="lt"><div class="lf" style="width:71%"></div></div><span class="ls">71%</span></div>
+        <div class="lrow"><span class="lv">v2</span><div class="lt"><div class="lf" style="width:84%"></div></div><span class="ls">84%</span></div>
+        <div class="lrow top"><span class="lv">v3</span><div class="lt"><div class="lf" style="width:91%"></div></div><span class="ls">91%</span></div>
+      </div>
+      <div class="evolve-cards">
+        <div class="ecard reveal"><h3><span class="en">01</span>Skills that self-improve</h3><p>Each skill is re-tuned against held-out tasks and judged by an ensemble of models. A new version only ships if it actually wins — and the old one stays, so you can always roll back.</p></div>
+        <div class="ecard reveal"><h3><span class="en">02</span>Knowledge that spreads</h3><p>When one agent learns something good, the others don't start from zero. Skills and tool setups diffuse across your agents and workspaces — the waggle dance. On a team, the whole org levels up at once.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ PERSONAS ═══════════════════ -->
+<section class="band" id="personas">
+  <div class="container">
+    <div class="sec-head wide reveal">
+      <div class="sec-eyebrow">Built for</div>
+      <h2 class="sec-h">Thirteen ways people work. <em>One memory layer.</em></h2>
+      <p class="sec-sub">Hunters chase, builders ship, orchestrators coordinate. Waggle remembers — across roles, across tools, across the moments in between.</p>
+    </div>
+    <div class="persona-grid" id="personaGrid"></div>
+  </div>
+</section>
+
+<!-- ═══════════════════ PRICING ═══════════════════ -->
+<section class="band" id="pricing" style="background:var(--bg-2);border-top:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft)">
+  <div class="container">
+    <div class="sec-head wide reveal">
+      <div class="sec-eyebrow">Pricing</div>
+      <h2 class="sec-h">Free for individuals. <em>Honest pricing</em> for everyone else.</h2>
+      <p class="sec-sub">Three tiers, no feature-count games. You pay for the scale of the team using the memory — not for arbitrary check-marks. Memory is free forever.</p>
+    </div>
+    <div class="price-grid">
+      <div class="plan reveal">
+        <div class="pname">Solo</div>
+        <div class="pprice">$0<small> / forever</small></div>
+        <div class="ptag">For individuals exploring an AI workspace.</div>
+        <ul>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Personal memory graph</li>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>All major LLMs supported</li>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Local-first by default</li>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>EU AI Act audit reports</li>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Apache-2.0 substrate</li>
+        </ul>
+        <a href="#" class="btn btn-ghost">Download free</a>
+      </div>
+      <div class="plan feat reveal">
+        <span class="pop">Most popular</span>
+        <div class="pname">Pro</div>
+        <div class="pprice">$19<small> / month</small></div>
+        <div class="ptag">For power users compounding across projects.</div>
+        <ul>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Everything in Solo</li>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Priority sync across devices</li>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Advanced graph queries</li>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Marketplace skills &amp; connectors</li>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Personal API key vault</li>
+        </ul>
+        <a href="#" class="btn btn-primary">Start 14-day trial</a>
+      </div>
+      <div class="plan reveal">
+        <div class="pname">Teams</div>
+        <div class="pprice">$49<small> / seat / mo</small></div>
+        <div class="ptag">Shared memory without losing privacy. 3-seat minimum.</div>
+        <ul>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Everything in Pro</li>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Shared team memory graph</li>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>WaggleDance multi-agent</li>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>SSO &amp; role-based access</li>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>SOC 2 Type II on request</li>
+        </ul>
+        <a href="#" class="btn btn-ghost">Start team trial →</a>
+      </div>
+    </div>
+    <div class="kvark-row reveal">
+      <div class="kx">
+        <b>Need it on your organization's sovereign infrastructure?</b>
+        <p>Everything Waggle does — on your infrastructure, your permissions, full audit trail. Your data never leaves your perimeter. That's KVARK, by Egzakta Group.</p>
+      </div>
+      <a href="#">Talk to the KVARK team →</a>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ FINAL CTA ═══════════════════ -->
+<section class="final">
+  <div class="comb"></div>
+  <div class="container">
+    <h2 class="reveal">Be the expert. <em>We'll be the AI.</em></h2>
+    <p class="reveal">Bring your work home to the one place that knows you, knows your projects, and makes everything you ship genuinely your best — then pick up exactly where you left off.</p>
+    <div class="cta-row reveal">
+      <a href="#pricing" class="btn btn-primary btn-lg">Start free — local-first →</a>
+      <a href="#how" class="btn btn-ghost btn-lg">See how it works</a>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ FOOTER ═══════════════════ -->
+<footer>
+  <div class="container">
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <div class="brand"><div class="mark hex">W</div><b>Waggle</b></div>
+        <p>The AI workspace where memory persists. Local-first, model-agnostic, audit-ready. A product of Egzakta Group.</p>
+      </div>
+      <div class="foot-col"><h4>Product</h4><a href="#">Download</a><a href="#pricing">Pricing</a><a href="#personas">Personas</a><a href="#how">How it works</a></div>
+      <div class="foot-col"><h4>Research</h4><a href="#proof">Methodology</a><a href="#">Benchmarks</a><a href="#">Changelog</a><a href="#">Open source</a></div>
+      <div class="foot-col"><h4>Company</h4><a href="#">About Egzakta</a><a href="#">EU AI Act</a><a href="#">Privacy</a><a href="#">Contact</a></div>
+    </div>
+    <div class="foot-base">
+      <span>© 2026 Egzakta Group · Waggle</span>
+      <span>v1.0 · waggle-os.ai · built calmly across DACH · CEE · UK</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+/* ── theme ──────────────────────────────────────────────────────── */
+const root = document.documentElement, tb = document.getElementById('themebtn');
+function setTheme(t){ root.setAttribute('data-theme', t); tb.textContent = t==='dark'?'☾':'☀'; try{localStorage.setItem('waggle-concept-theme',t);}catch(e){} }
+setTheme((()=>{ try{ return localStorage.getItem('waggle-concept-theme')||'dark'; }catch(e){ return 'dark'; } })());
+tb.onclick = () => setTheme(root.getAttribute('data-theme')==='dark'?'light':'dark');
+
+/* ── nav shadow ─────────────────────────────────────────────────── */
+const nav = document.getElementById('nav');
+addEventListener('scroll', () => nav.classList.toggle('scrolled', scrollY > 12), { passive: true });
+
+/* ── personas ───────────────────────────────────────────────────── */
+const personas = ['Researcher','Writer','Analyst','Engineer','Project manager','Executive assistant','Sales','Marketer','Product manager','HR','Legal','Finance','Consultant'];
+document.getElementById('personaGrid').innerHTML = personas.map(p =>
+  `<div class="ptile"><span class="ph hex">${p[0]}</span><b>${p}</b></div>`).join('');
+
+/* ── reveal on scroll (with above-the-fold + safety fallback) ────── */
+const io = new IntersectionObserver((es) => {
+  es.forEach((e) => { if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
+}, { rootMargin: '0px 0px -6% 0px' });
+const reveals = [...document.querySelectorAll('.reveal')];
+reveals.forEach(el => io.observe(el));
+// Above-the-fold: reveal anything already on screen at load (don't wait for a scroll).
+requestAnimationFrame(() => {
+  reveals.forEach(el => { if (el.getBoundingClientRect().top < innerHeight * 0.94) el.classList.add('in'); });
+});
+// Safety net: never leave content invisible.
+setTimeout(() => reveals.forEach(el => el.classList.add('in')), 1600);
+</script>
+</body>
+</html>

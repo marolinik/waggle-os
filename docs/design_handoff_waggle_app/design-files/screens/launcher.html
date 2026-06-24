@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Waggle · Launch agents</title>
+<script>document.documentElement.classList.add('js');</script>
+<link rel="stylesheet" href="../styles/waggle.css">
+<style>
+  body { height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+  .controls { flex: none; display: flex; align-items: center; gap: 14px; padding: 11px 20px; border-bottom: 1px solid var(--line-soft); background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); z-index: 30; }
+  .controls .lab { font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-dim); }
+  .seg { display: inline-flex; padding: 3px; gap: 3px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line-soft); }
+  .seg button { font-family: var(--sans); font-size: 12.5px; font-weight: 600; cursor: pointer; border: 0; background: transparent; color: var(--text-muted); padding: 6px 13px; border-radius: 7px; transition: .14s; white-space: nowrap; }
+  .seg button.on { background: var(--honey); color: #1a1407; }
+  .controls .vlabel { font-size: 12.5px; color: var(--text-muted); } .controls .vlabel b { color: var(--text); font-weight: 600; }
+  .controls .right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .tbtn { width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); color: var(--text-2); cursor: pointer; }
+  .tbtn:hover { border-color: var(--honey-line); color: var(--honey); }
+
+  .stage { flex: 1; min-height: 0; overflow: auto; }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 30px 32px 70px; }
+
+  .head { margin-bottom: 22px; }
+  .head .crumbs { font-family: var(--mono); font-size: 11px; color: var(--text-dim); margin-bottom: 12px; }
+  .head .crumbs b { color: var(--text-2); font-weight: 500; }
+  .head h1 { font-size: 26px; font-weight: 650; letter-spacing: -0.02em; margin: 0 0 8px; }
+  .head p { font-size: 15px; color: var(--text-muted); line-height: 1.55; margin: 0; max-width: 64ch; }
+  .head p b { color: var(--text-2); font-weight: 600; }
+  .platform { float: right; font-family: var(--mono); font-size: 11px; color: var(--text-2); padding: 6px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
+
+  /* prompt box */
+  .promptbox { margin: 20px 0; border: 1px solid var(--line); background: var(--surface); border-radius: var(--r-lg); padding: 14px 16px; }
+  .promptbox .ph { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); margin-bottom: 10px; }
+  .promptbox .ph svg { width: 14px; height: 14px; stroke: var(--honey); fill: none; stroke-width: 1.8; }
+  .promptbox textarea { width: 100%; border: 0; background: transparent; resize: none; color: var(--text); font-family: var(--sans); font-size: 14.5px; line-height: 1.5; outline: none; min-height: 24px; }
+  .promptbox textarea::placeholder { color: var(--text-dim); }
+  .promptbox .pf { margin-top: 8px; font-family: var(--mono); font-size: 10.5px; color: var(--text-dim); }
+  .promptbox .pf .y { color: var(--healthy); }
+
+  .sec-h { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-dim); margin: 26px 0 14px; display: flex; align-items: center; gap: 10px; }
+  .sec-h::after { content:''; flex:1; height:1px; background: var(--line-soft); }
+  .sec-h .pin { color: var(--text-2); }
+
+  /* tool cards */
+  .tools { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .tool { border: 1px solid var(--line-soft); background: var(--surface); border-radius: var(--r-lg); padding: 18px; transition: .16s; }
+  .tool.live { border-color: var(--honey-line); box-shadow: var(--honey-glow); }
+  .tool.off { opacity: .62; }
+  .tool .top { display: flex; align-items: center; gap: 13px; }
+  .tool .logo { width: 40px; height: 44px; flex: none; display: grid; place-items: center; font-family: var(--mono); font-weight: 700; font-size: 14px; color: var(--text); background: var(--surface-3); border: 1px solid var(--line); }
+  .tool.live .logo { color: #1a1407; background: linear-gradient(150deg, var(--honey-bright), var(--honey-deep)); border-color: transparent; }
+  .tool .nm { flex: 1; min-width: 0; }
+  .tool .nm b { font-size: 15.5px; font-weight: 650; letter-spacing: -0.01em; display: block; }
+  .tool .nm .path { font-family: var(--mono); font-size: 11px; color: var(--text-dim); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 13px 0; }
+  .bdg { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; display: inline-flex; align-items: center; gap: 5px; }
+  .bdg.ok { color: var(--healthy); background: var(--healthy-wash); }
+  .bdg.hook { color: var(--attention); background: var(--honey-wash); }
+  .bdg.run { color: var(--work); background: var(--work-wash); }
+  .bdg.no { color: var(--text-dim); background: var(--surface-2); }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .abtn { font-family: var(--sans); font-size: 12.5px; font-weight: 600; padding: 8px 14px; border-radius: 9px; cursor: pointer; border: 1px solid transparent; display: inline-flex; align-items: center; gap: 6px; transition:.14s; }
+  .abtn svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .abtn.go { background: var(--honey); color: #1a1407; }
+  .abtn.go:hover { background: var(--honey-bright); }
+  .abtn.ghost { background: var(--surface-2); color: var(--text-2); border-color: var(--line-strong); }
+  .abtn.ghost:hover { border-color: var(--honey-line); color: var(--text); }
+  .abtn.stop { background: transparent; color: var(--risk); border-color: color-mix(in srgb,var(--risk) 35%,transparent); }
+  .tool .note { font-size: 12px; color: var(--text-dim); }
+
+  /* running panel */
+  .running { margin-top: 26px; border: 1px solid var(--line-soft); border-radius: var(--r-lg); background: var(--bg-2); padding: 18px; }
+  .running h3 { font-size: 13px; font-weight: 650; margin: 0 0 12px; display: flex; align-items: center; gap: 9px; }
+  .running h3 .dot { background: var(--work); }
+  .prow { display: grid; grid-template-columns: 1fr auto auto auto; gap: 14px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line-soft); font-size: 13px; }
+  .prow:first-of-type { border-top: 0; }
+  .prow .pn { font-weight: 600; display:flex; align-items:center; gap:9px; }
+  .prow .ws { font-size: 11.5px; color: var(--text-muted); }
+  .prow .meta { font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+  .prow .x { color: var(--risk); cursor: pointer; font-size: 12px; font-weight: 600; }
+
+  /* variation B — shared memory diagram */
+  .flow-wrap { border: 1px solid var(--line); border-radius: var(--r-xl); background: radial-gradient(70% 90% at 50% 0%, var(--surface), var(--bg-2)); padding: 36px; text-align: center; position: relative; overflow: hidden; }
+  .flow-wrap .comb { position: absolute; inset: 0; opacity: .4; }
+  .flow-row { display: flex; align-items: center; justify-content: center; gap: 0; flex-wrap: wrap; position: relative; }
+  .fnode { padding: 16px 16px; border-radius: var(--r-lg); border: 1px solid var(--line-strong); background: var(--surface); min-width: 140px; max-width: 184px; }
+  .fnode .ft { font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 6px; }
+  .fnode b { font-size: 14px; font-weight: 650; }
+  .fnode small { display: block; font-size: 11.5px; color: var(--text-muted); margin-top: 4px; line-height: 1.4; }
+  .fnode.hive { border-color: var(--honey-line); box-shadow: var(--honey-glow); background: linear-gradient(150deg,var(--surface-2),var(--surface)); }
+  .farrow { color: var(--honey); font-size: 20px; padding: 0 12px; }
+  .farrow small { display:block; font-family: var(--mono); font-size: 9px; color: var(--text-dim); text-transform:uppercase; letter-spacing:.1em; }
+  .flow-note { margin-top: 26px; display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; }
+  .fc { text-align: left; padding: 16px; border-radius: var(--r); background: var(--surface); border: 1px solid var(--line-soft); }
+  .fc .ic { width: 28px; height: 30px; display:grid; place-items:center; margin-bottom: 10px; }
+  .fc .ic svg { width: 17px; height: 17px; stroke: var(--honey); fill:none; stroke-width:1.8; }
+  .fc b { font-size: 13.5px; font-weight: 650; display: block; margin-bottom: 5px; }
+  .fc p { margin: 0; font-size: 12.5px; color: var(--text-muted); line-height: 1.55; }
+  .prov-eg { margin-top: 18px; display:inline-flex; align-items:center; gap: 9px; font-family: var(--mono); font-size: 11.5px; color: var(--intel); background: var(--intel-wash); border: 1px solid color-mix(in srgb,var(--intel) 28%,transparent); padding: 7px 13px; border-radius: 9px; }
+
+  .hidden { display:none !important; }
+  @media (max-width: 820px){ .tools, .flow-note { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <span class="lab">Launcher · variation</span>
+  <div class="seg" id="seg">
+    <button class="on" data-v="a">A · Launch</button>
+    <button data-v="b">B · How memory is shared</button>
+  </div>
+  <span class="vlabel" id="vlabel"><b>Launch</b> — detected agents, one click into this workspace</span>
+  <div class="right"><button class="tbtn" id="tbtn" title="Toggle theme">☾</button></div>
+</div>
+
+<div class="stage">
+  <!-- ════ A — LAUNCH ════ -->
+  <div class="wrap view" id="view-a">
+    <div class="head">
+      <span class="platform">⌘ macOS · 7 tools scanned</span>
+      <div class="crumbs">Competitive Intelligence <span>›</span> <b>Launch an agent</b></div>
+      <h1>Bring your own agent into this workspace</h1>
+      <p>Open Claude Code, Cursor, or any coding agent from here and it runs <b>wired into this workspace's memory</b> — it recalls what the hive knows, and everything it decides flows back, with provenance. Reversible hooks, nothing leaves your machine.</p>
+    </div>
+
+    <div class="promptbox">
+      <div class="ph"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Launch with a task <span style="color:var(--text-dim)">— optional, passed to agents that accept a prompt</span></div>
+      <textarea rows="2" placeholder="e.g. “Refactor the pricing module and reconcile it against the Q2 model in memory.”"></textarea>
+      <div class="pf"><span class="y">Sent to:</span> Claude Code, Cursor · <span style="color:var(--text-dim)">Ignored by:</span> Claude Desktop</div>
+    </div>
+
+    <div class="sec-h">Detected on this machine</div>
+    <div class="tools" id="toolsLive"></div>
+
+    <div class="sec-h">Not installed</div>
+    <div class="tools" id="toolsOff"></div>
+
+    <div class="running">
+      <h3><span class="dot dot-live"></span>Running now · sharing this hive</h3>
+      <div id="procs"></div>
+    </div>
+  </div>
+
+  <!-- ════ B — HOW MEMORY IS SHARED ════ -->
+  <div class="wrap view hidden" id="view-b">
+    <div class="head">
+      <h1>How a launched agent shares the hive</h1>
+      <p>When you launch from Waggle, the workspace's memory is wired into the external tool — no copy-paste, no re-explaining. Its work comes back attributed.</p>
+    </div>
+
+    <div class="flow-wrap">
+      <div class="comb"></div>
+      <div class="flow-row">
+        <div class="fnode">
+          <div class="ft">You launch</div>
+          <b>Claude Code</b>
+          <small>opened from Waggle with<br><span class="mono" style="font-family:var(--mono);font-size:10.5px;color:var(--honey)">WAGGLE_WORKSPACE_ID</span></small>
+        </div>
+        <div class="farrow">⇄<small>hooks</small></div>
+        <div class="fnode">
+          <div class="ft">5 lifecycle hooks</div>
+          <b>hive-mind</b>
+          <small>session · prompt · stop · compact · tool</small>
+        </div>
+        <div class="farrow">⇄<small>recall + commit</small></div>
+        <div class="fnode hive">
+          <div class="ft">Your workspace</div>
+          <b>The hive</b>
+          <small>local SQLite memory<br>shared with Waggle</small>
+        </div>
+      </div>
+
+      <div class="flow-note">
+        <div class="fc"><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/></svg></div><b>It recalls on start</b><p>The agent opens already knowing this workspace — decisions, constraints, and context, pulled from the hive.</p></div>
+        <div class="fc"><div class="ic"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div><b>It commits as it works</b><p>Every meaningful step is captured back into the hive, so Waggle and your next session see it too.</p></div>
+        <div class="fc"><div class="ic"><svg viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M12 3l8 4v5c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V7z"/></svg></div><b>Reversible &amp; local</b><p>Hooks install and uninstall cleanly. Nothing leaves your machine; you can verify or remove them anytime.</p></div>
+      </div>
+      <div class="prov-eg">⬡ remembered from Claude Code · 14:22 · session a1f9</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const root = document.documentElement, tbtn = document.getElementById('tbtn');
+function setTheme(t){ root.setAttribute('data-theme', t); tbtn.textContent = t==='dark'?'☾':'☀'; try{localStorage.setItem('waggle-concept-theme',t);}catch(e){} }
+setTheme((()=>{ try{ return localStorage.getItem('waggle-concept-theme')||'dark'; }catch(e){ return 'dark'; } })());
+tbtn.onclick = () => setTheme(root.getAttribute('data-theme')==='dark'?'light':'dark');
+window.addEventListener('message', e => { if(e.data && e.data.theme) setTheme(e.data.theme); });
+window.addEventListener('storage', e => { if(e.key==='waggle-concept-theme' && e.newValue) setTheme(e.newValue); });
+
+const P = { play:'<path d="M6 4l14 8-14 8z"/>', stop:'<rect x="6" y="6" width="12" height="12" rx="1.5"/>', shield:'<path d="M9 12l2 2 4-4M12 3l8 4v5c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V7z"/>', dl:'<path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/>', trash:'<path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/>' };
+const live = [
+  { mono:'CC', name:'Claude Code', path:'/opt/homebrew/bin/claude', installed:true, hooks:true, running:true, v:'2.4.0' },
+  { mono:'Cu', name:'Cursor', path:'/Applications/Cursor.app', installed:true, hooks:false, running:false, v:'0.51' },
+  { mono:'Cx', name:'Codex CLI', path:'/usr/local/bin/codex', installed:true, hooks:false, running:false, v:'1.2', hooksSoon:true },
+  { mono:'CD', name:'Claude Desktop', path:'/Applications/Claude.app', installed:true, hooks:false, running:false, v:'1.9', noPrompt:true },
+];
+const off = [
+  { mono:'He', name:'Hermes', note:'Not installed — install it, then re-scan.' },
+  { mono:'Oc', name:'OpenClaw', note:'Not installed — launch & hooks arrive when detected.' },
+];
+
+document.getElementById('toolsLive').innerHTML = live.map(t => `
+  <div class="tool ${t.running?'live':''}">
+    <div class="top">
+      <div class="logo">${t.mono}</div>
+      <div class="nm"><b>${t.name}</b><div class="path" title="${t.path}">${t.path} · v${t.v}</div></div>
+    </div>
+    <div class="badges">
+      <span class="bdg ok">✓ Installed</span>
+      ${t.hooks?'<span class="bdg hook">⬡ Hooks active</span>':(t.hooksSoon?'<span class="bdg no">hooks soon</span>':'<span class="bdg no">hooks off</span>')}
+      ${t.running?'<span class="bdg run"><span class="dot dot-live" style="background:var(--work)"></span>Running</span>':''}
+    </div>
+    <div class="actions">
+      <button class="abtn go"><svg viewBox="0 0 24 24">${P.play}</svg>Launch in workspace</button>
+      ${t.running?`<button class="abtn stop"><svg viewBox="0 0 24 24">${P.stop}</svg>Stop</button>`:''}
+      ${t.hooks?`<button class="abtn ghost"><svg viewBox="0 0 24 24">${P.shield}</svg>Verify</button>`:(t.hooksSoon?'':`<button class="abtn ghost"><svg viewBox="0 0 24 24">${P.dl}</svg>Install hooks</button>`)}
+    </div>
+  </div>`).join('');
+
+document.getElementById('toolsOff').innerHTML = off.map(t => `
+  <div class="tool off">
+    <div class="top"><div class="logo">${t.mono}</div><div class="nm"><b>${t.name}</b><div class="path">not detected</div></div></div>
+    <div class="badges"><span class="bdg no">Not installed</span></div>
+    <div class="note">${t.note}</div>
+  </div>`).join('');
+
+document.getElementById('procs').innerHTML = `
+  <div class="prow"><div class="pn"><span class="dot dot-live" style="background:var(--work)"></span>Claude Code <span class="ws">· Competitive Intelligence</span></div><span class="meta">pid 48213</span><span class="meta">12m</span><span class="x">Stop</span></div>`;
+
+const labels = { a:'<b>Launch</b> — detected agents, one click into this workspace', b:'<b>How memory is shared</b> — the wiring, made legible' };
+const seg = document.getElementById('seg');
+seg.addEventListener('click', e => {
+  const b = e.target.closest('button'); if(!b) return;
+  [...seg.children].forEach(x=>x.classList.toggle('on', x===b));
+  document.getElementById('view-a').classList.toggle('hidden', b.dataset.v!=='a');
+  document.getElementById('view-b').classList.toggle('hidden', b.dataset.v!=='b');
+  document.getElementById('vlabel').innerHTML = labels[b.dataset.v];
+  document.querySelector('.stage').scrollTop = 0;
+});
+</script>
+</body>
+</html>

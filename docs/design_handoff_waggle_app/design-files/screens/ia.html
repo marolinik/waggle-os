@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Waggle · Navigation</title>
+<script>document.documentElement.classList.add('js');</script>
+<link rel="stylesheet" href="../styles/waggle.css">
+<style>
+  body { height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+  .controls { flex: none; display: flex; align-items: center; gap: 14px; padding: 11px 20px; border-bottom: 1px solid var(--line-soft); background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); z-index: 40; }
+  .controls .lab { font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-dim); }
+  .seg { display: inline-flex; padding: 3px; gap: 3px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line-soft); }
+  .seg button { font-family: var(--sans); font-size: 12.5px; font-weight: 600; cursor: pointer; border: 0; background: transparent; color: var(--text-muted); padding: 6px 13px; border-radius: 7px; transition: .14s; white-space: nowrap; }
+  .seg button.on { background: var(--honey); color: #1a1407; }
+  .controls .vlabel { font-size: 12.5px; color: var(--text-muted); } .controls .vlabel b { color: var(--text); font-weight: 600; }
+  .controls .right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .kbtn { display:inline-flex; align-items:center; gap:8px; font-family: var(--sans); font-size:12.5px; font-weight:600; color: var(--text-2); padding: 7px 12px; border-radius: 9px; border: 1px solid var(--line-strong); background: var(--surface); cursor: pointer; }
+  .kbtn:hover { border-color: var(--honey-line); color: var(--honey); }
+  .tbtn { width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); color: var(--text-2); cursor: pointer; }
+  .tbtn:hover { border-color: var(--honey-line); color: var(--honey); }
+
+  .app { flex: 1; min-height: 0; display: flex; position: relative; }
+
+  /* ── sidebar ── */
+  .side { flex: none; width: 248px; border-right: 1px solid var(--line-soft); background: var(--bg-2); display: flex; flex-direction: column; padding: 14px 12px; gap: 4px; }
+  .wspill { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 11px; border: 1px solid var(--line-soft); background: var(--surface); cursor: pointer; transition:.15s; margin-bottom: 10px; }
+  .wspill:hover { border-color: var(--honey-line); }
+  .wspill .wm { width: 28px; height: 32px; flex:none; display:grid; place-items:center; font-weight:800; font-size:12px; color:#1a1407; background: linear-gradient(150deg,var(--honey-bright),var(--honey-deep)); }
+  .wspill .wn { flex:1; min-width:0; } .wspill .wn b { font-size: 13px; font-weight:650; display:block; line-height:1.1; } .wspill .wn span { font-size: 11px; color: var(--text-dim); }
+  .wspill .cv { color: var(--text-dim); font-size: 11px; }
+
+  .navitem { display: flex; align-items: center; gap: 12px; padding: 9px 11px; border-radius: 10px; cursor: pointer; color: var(--text-2); transition:.13s; position: relative; }
+  .navitem:hover { background: var(--surface-2); color: var(--text); }
+  .navitem.on { background: var(--honey-wash); color: var(--text); }
+  .navitem.on::before { content:''; position:absolute; left:-12px; top:50%; transform:translateY(-50%); width:3px; height:18px; border-radius:3px; background: var(--honey); }
+  .navitem .ni { width: 19px; height: 19px; flex:none; }
+  .navitem .ni svg { width:19px; height:19px; stroke: currentColor; fill:none; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+  .navitem.on .ni svg { stroke: var(--honey); }
+  .navitem .nt { flex:1; font-size: 14px; font-weight: 550; }
+  .navitem .badge { font-size: 10.5px; font-family: var(--mono); color: var(--attention); background: var(--honey-wash); padding: 2px 7px; border-radius: 999px; }
+
+  .side .zone { font-family: var(--mono); font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-dim); padding: 14px 11px 6px; display: flex; align-items: center; gap: 8px; }
+  .side .pro-tier { display: none; }
+  body.pro .side .pro-tier { display: block; }
+
+  .side .more { margin-top: 6px; }
+  .cmdtile { display: flex; align-items: center; gap: 11px; padding: 10px 11px; border-radius: 10px; border: 1px dashed var(--line-strong); cursor: pointer; transition:.14s; color: var(--text-muted); }
+  .cmdtile:hover { border-color: var(--honey-line); color: var(--honey); background: var(--honey-wash); }
+  .cmdtile .nt { flex:1; font-size: 13px; font-weight: 600; }
+  .cmdtile .kbd { font-family: var(--mono); font-size: 11px; padding: 2px 7px; border-radius: 6px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--text-2); }
+
+  .side .spacer { flex: 1; }
+  .userrow { display:flex; align-items:center; gap:10px; padding: 9px 10px; border-top: 1px solid var(--line-soft); margin-top: 6px; }
+  .userrow .ua { width: 28px; height:28px; border-radius:999px; background: var(--honey); color:#1a1407; display:grid; place-items:center; font-size:11px; font-weight:700; flex:none; }
+  .userrow .un { flex:1; font-size:13px; font-weight:600; }
+  .userrow .ut { font-size:10.5px; color: var(--text-dim); font-family: var(--mono); }
+
+  /* ── main ── */
+  .main { flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding: 40px; position: relative; }
+  .main .comb { position:absolute; inset:0; opacity:.45; pointer-events:none; }
+  .main .micon { width:64px; height:72px; display:grid; place-items:center; background: var(--surface); border:1px solid var(--line); margin-bottom:22px; position:relative; }
+  .main .micon svg { width:30px; height:30px; stroke: var(--honey); fill:none; stroke-width:1.6; }
+  .main h1 { font-size: 30px; font-weight:650; letter-spacing:-0.02em; margin:0 0 8px; position:relative; }
+  .main p { font-size:15px; color: var(--text-muted); margin:0 0 24px; max-width: 42ch; position:relative; line-height:1.6; }
+  .main .openk { position: relative; }
+
+  /* ── command palette ── */
+  .palette-scrim { position: absolute; inset: 0; background: rgba(8,6,3,0.55); backdrop-filter: blur(3px); z-index: 50; display: none; align-items: flex-start; justify-content: center; padding-top: 64px; }
+  body.cmd .palette-scrim { display: flex; }
+  .palette { width: min(620px, 92%); background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-lg); box-shadow: var(--shadow-pop); overflow: hidden; display: flex; flex-direction: column; max-height: calc(100% - 96px); }
+  .palette .pin { display: flex; align-items: center; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--line-soft); }
+  .palette .pin svg { width: 18px; height: 18px; stroke: var(--text-muted); fill:none; stroke-width:1.9; flex:none; }
+  .palette .pin input { flex:1; border:0; background:transparent; color: var(--text); font-family: var(--sans); font-size: 16px; outline:none; }
+  .palette .pin input::placeholder { color: var(--text-dim); }
+  .palette .pin .esc { font-family: var(--mono); font-size: 11px; color: var(--text-dim); border:1px solid var(--line-strong); border-radius:6px; padding:2px 7px; }
+  .palette .results { overflow:auto; padding: 8px; }
+  .pgroup-h { font-family: var(--mono); font-size: 10px; letter-spacing:.12em; text-transform:uppercase; color: var(--text-dim); padding: 12px 12px 6px; }
+  .pgroup-h.pinned { color: var(--honey); }
+  .presult .pinmark { color: var(--honey); }
+  .presult { display:flex; align-items:center; gap:12px; padding: 9px 12px; border-radius:9px; cursor:pointer; }
+  .presult:hover, .presult.sel { background: var(--honey-wash); }
+  .presult .pi { width:18px; height:18px; flex:none; }
+  .presult .pi svg { width:18px; height:18px; stroke: var(--text-2); fill:none; stroke-width:1.7; }
+  .presult:hover .pi svg, .presult.sel .pi svg { stroke: var(--honey); }
+  .presult .pt { flex:1; min-width:0; }
+  .presult .pt b { font-size: 14px; font-weight: 550; }
+  .presult .pt .sub { font-family: var(--mono); font-size: 11px; color: var(--text-dim); margin-left: 8px; }
+  .presult .meta { font-family: var(--mono); font-size: 10.5px; color: var(--text-dim); }
+  .pempty { padding: 30px; text-align:center; color: var(--text-dim); font-size: 13px; }
+
+  .hidden { display:none !important; }
+  @media (max-width: 760px){ .side { width: 200px; } }
+</style>
+</head>
+<body class="cmd">
+
+<div class="controls">
+  <span class="lab">Navigation · variation</span>
+  <div class="seg" id="seg">
+    <button class="on" data-v="a">A · Calm spine</button>
+    <button data-v="b">B · Pro (pinned)</button>
+  </div>
+  <span class="vlabel" id="vlabel"><b>Calm spine</b> — five places, depth in ⌘K</span>
+  <div class="right">
+    <button class="kbtn" id="openK">⌘K · Command bar</button>
+    <button class="tbtn" id="tbtn" title="Toggle theme">☾</button>
+  </div>
+</div>
+
+<div class="app">
+  <!-- sidebar -->
+  <nav class="side">
+    <div class="wspill">
+      <div class="wm hex">C</div>
+      <div class="wn"><b>Competitive Intel</b><span>workspace</span></div>
+      <span class="cv">⌄</span>
+    </div>
+
+    <div class="navitem on" data-place="Home"><span class="ni"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h14V10"/></svg></span><span class="nt">Home</span></div>
+    <div class="navitem" data-place="Chat"><span class="ni"><svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-6.4A8 8 0 1 1 21 12Z"/></svg></span><span class="nt">Chat</span></div>
+    <div class="navitem" data-place="Memory"><span class="ni"><svg viewBox="0 0 24 24"><path d="M12 5a3 3 0 0 0-3 3 3 3 0 0 0-3 3 3 3 0 0 0 1 5 3 3 0 0 0 5 1 3 3 0 0 0 5-1 3 3 0 0 0 1-5 3 3 0 0 0-3-3 3 3 0 0 0-3-3Z"/></svg></span><span class="nt">Memory</span></div>
+    <div class="navitem" data-place="Agents & tasks"><span class="ni"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h6v6H9z"/></svg></span><span class="nt">Agents &amp; tasks</span><span class="badge">2</span></div>
+    <div class="navitem" data-place="Library"><span class="ni"><svg viewBox="0 0 24 24"><path d="M4 5c0-1 1-1.5 2-1.5S19 4 19 4v15s-11-.5-13 .5M4 5v15"/></svg></span><span class="nt">Library</span></div>
+
+    <!-- pro tier (variation B) -->
+    <div class="pro-tier">
+      <div class="zone">Pinned · power tools</div>
+      <div class="navitem" data-place="Agent swarm"><span class="ni"><svg viewBox="0 0 24 24"><circle cx="6" cy="7" r="2.4"/><circle cx="18" cy="7" r="2.4"/><circle cx="12" cy="17" r="2.4"/><path d="M8 8l3 7M16 8l-3 7"/></svg></span><span class="nt">Agent swarm</span></div>
+      <div class="navitem" data-place="Connectors"><span class="ni"><svg viewBox="0 0 24 24"><path d="M7 8a4 4 0 0 0 0 8h2M17 8a4 4 0 0 1 0 8h-2M8 12h8"/></svg></span><span class="nt">Connectors</span></div>
+      <div class="navitem" data-place="Approvals"><span class="ni"><svg viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M12 3l8 4v5c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V7z"/></svg></span><span class="nt">Approvals</span><span class="badge">1</span></div>
+    </div>
+
+    <div class="more">
+      <div class="zone">Everything else</div>
+      <div class="cmdtile" id="openK2"><span class="nt">Search &amp; commands</span><span class="kbd">⌘K</span></div>
+    </div>
+
+    <div class="spacer"></div>
+    <div class="userrow"><div class="ua">M</div><div class="un">Mara K.<div class="ut">Pro · trial</div></div></div>
+  </nav>
+
+  <!-- main -->
+  <div class="main">
+    <div class="comb"></div>
+    <div class="micon hex" id="mainIcon"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h14V10"/></svg></div>
+    <h1 id="mainTitle">Home</h1>
+    <p id="mainHint">Five places cover the everyday. Everything Waggle can do — the swarm, MCP servers, the optimizer, the vault — lives one keystroke away.</p>
+    <button class="kbtn openk" id="openK3">Press ⌘K to find anything</button>
+  </div>
+
+  <!-- command palette -->
+  <div class="palette-scrim" id="scrim">
+    <div class="palette" role="dialog" aria-label="Command bar">
+      <div class="pin">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="pq" placeholder="Search places, run a command, reach any tool…" autocomplete="off">
+        <span class="esc">esc</span>
+      </div>
+      <div class="results" id="results"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const root = document.documentElement, tbtn = document.getElementById('tbtn');
+function setTheme(t){ root.setAttribute('data-theme', t); tbtn.textContent = t==='dark'?'☾':'☀'; try{localStorage.setItem('waggle-concept-theme',t);}catch(e){} }
+setTheme((()=>{ try{ return localStorage.getItem('waggle-concept-theme')||'dark'; }catch(e){ return 'dark'; } })());
+tbtn.onclick = () => setTheme(root.getAttribute('data-theme')==='dark'?'light':'dark');
+window.addEventListener('message', e => { if(e.data && e.data.theme) setTheme(e.data.theme); });
+window.addEventListener('storage', e => { if(e.key==='waggle-concept-theme' && e.newValue) setTheme(e.newValue); });
+
+const I = {
+  home:'<path d="M3 11l9-8 9 8M5 10v10h14V10"/>',
+  chat:'<path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-6.4A8 8 0 1 1 21 12Z"/>',
+  mem:'<path d="M12 5a3 3 0 0 0-3 3 3 3 0 0 0-3 3 3 3 0 0 0 1 5 3 3 0 0 0 5 1 3 3 0 0 0 5-1 3 3 0 0 0 1-5 3 3 0 0 0-3-3 3 3 0 0 0-3-3Z"/>',
+  task:'<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h6v6H9z"/>',
+  lib:'<path d="M4 5c0-1 1-1.5 2-1.5S19 4 19 4v15s-11-.5-13 .5M4 5v15"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>', import:'<path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/>',
+  swarm:'<circle cx="6" cy="7" r="2.4"/><circle cx="18" cy="7" r="2.4"/><circle cx="12" cy="17" r="2.4"/><path d="M8 8l3 7M16 8l-3 7"/>',
+  mcp:'<path d="M7 8a4 4 0 0 0 0 8h2M17 8a4 4 0 0 1 0 8h-2M8 12h8"/>',
+  model:'<circle cx="12" cy="12" r="3.5"/><path d="M12 3v3M12 18v3M5 12H2M22 12h-3"/>',
+  vault:'<rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="12" cy="12" r="3"/>',
+  opt:'<path d="M3 17l5-5 4 4 8-8M14 4h6v6"/>', shield:'<path d="M9 12l2 2 4-4M12 3l8 4v5c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V7z"/>',
+  usage:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>', skills:'<path d="m12 3 2.5 6 6.5.5-5 4.2 1.6 6.3L12 16.8 6 20l1.6-6.3-5-4.2 6.5-.5z"/>',
+  clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  launch:'<path d="M6 4l14 8-14 8z"/>', drive:'<rect x="3" y="4" width="18" height="14" rx="2"/><path d="M3 9h18M8 21h8"/>'
+};
+const groups = [
+  { h:'Jump to', items:[
+    { ic:I.home, n:'Home', meta:'G H' }, { ic:I.chat, n:'Chat', meta:'G C' },
+    { ic:I.mem, n:'Memory', meta:'G M' }, { ic:I.task, n:'Agents & tasks', meta:'G A' },
+    { ic:I.lib, n:'Library', meta:'G L' },
+    { ic:I.opt, n:'Benchmarks', sub:'how Waggle compares · memory SOTA' },
+    { ic:I.drive, n:'All workspaces', sub:'every space you have', meta:'G W' },
+    { ic:I.home, n:'Competitive Intelligence', sub:'workspace' },
+    { ic:I.home, n:'Q2 Board Deck', sub:'workspace' },
+  ]},
+  { h:'Do', items:[
+    { ic:I.plus, n:'Start a task', sub:'new agent run', meta:'⌘N' },
+    { ic:I.launch, n:'Launch a coding agent', sub:'Claude Code · Cursor · Codex — shares this hive' },
+    { ic:I.import, n:'Import your history', sub:'ChatGPT · Claude · Cursor' },
+    { ic:I.usage, n:'Upgrade to Pro', sub:'plans · billing · invoices' },
+    { ic:I.shield, n:'Account & sign-in', sub:'sync, devices, SSO — optional' },
+    { ic:I.model, n:'Switch model', sub:'auto · Claude · GPT · local' },
+    { ic:I.opt, n:'Settings', sub:'models, failover, permissions, plan' },
+    { ic:I.plus, n:'Quick capture a note' },
+  ]},
+  { h:'Power tools — plain name, technical underneath', items:[
+    { ic:I.swarm, n:'Run a team of agents', sub:'waggle-dance · swarm' },
+    { ic:I.mcp, n:'Connect a tool', sub:'MCP servers · 21 tools' },
+    { ic:I.mcp, n:'Connectors', sub:'29 integrations' },
+    { ic:I.shield, n:'Approvals', sub:'pending agent actions' },
+    { ic:I.opt, n:'Tune the agent', sub:'GEPA optimizer' },
+    { ic:I.vault, n:'Secrets', sub:'encrypted vault' },
+    { ic:I.skills, n:'Add a capability', sub:'marketplace · skills, connectors, tools — ask the agent' },
+    { ic:I.opt, n:'Skill evolution & sharing', sub:'how skills improve & spread across the hive' },
+    { ic:I.clock, n:'Automations', sub:'scheduled jobs · 1 failing' },
+    { ic:I.drive, n:'Files & storage', sub:'where this workspace lives · local/virtual/team' },
+    { ic:I.shield, n:'Audit & compliance', sub:'EU AI Act report' },
+    { ic:I.usage, n:'Usage & cost', sub:'tokens · spend' },
+  ]},
+];
+
+// Pinned group — only shown in Pro mode, floats the tools you live in to the top of ⌘K.
+const pinnedGroup = { h:'★ Pinned · Pro', items:[
+  { ic:I.swarm, n:'Run a team of agents', sub:'waggle-dance · swarm' },
+  { ic:I.mcp, n:'Connectors', sub:'29 integrations' },
+  { ic:I.shield, n:'Approvals', sub:'1 pending' },
+] };
+
+const results = document.getElementById('results'), pq = document.getElementById('pq');
+function render(q){
+  q = (q||'').toLowerCase().trim();
+  let html = '', any = false;
+  const active = (document.body.classList.contains('pro') ? [pinnedGroup, ...groups] : groups);
+  active.forEach(g => {
+    const items = g.items.filter(it => !q || (it.n+' '+(it.sub||'')).toLowerCase().includes(q));
+    if(!items.length) return; any = true;
+    const pin = g===pinnedGroup;
+    html += `<div class="pgroup-h${pin?' pinned':''}">${g.h}</div>`;
+    html += items.map(it => `<div class="presult"><span class="pi"><svg viewBox="0 0 24 24">${it.ic}</svg></span><span class="pt"><b>${it.n}</b>${it.sub?`<span class="sub">${it.sub}</span>`:''}</span>${pin?'<span class="meta pinmark">★</span>':(it.meta?`<span class="meta">${it.meta}</span>`:'')}</div>`).join('');
+  });
+  results.innerHTML = any ? html : '<div class="pempty">No matches — try “import”, “swarm”, “model”, “audit”…</div>';
+  const first = results.querySelector('.presult'); if(first) first.classList.add('sel');
+}
+render('');
+
+function openPalette(){ document.body.classList.add('cmd'); pq.value=''; render(''); setTimeout(()=>pq.focus(),30); }
+function closePalette(){ document.body.classList.remove('cmd'); }
+['openK','openK2','openK3'].forEach(id => document.getElementById(id).onclick = openPalette);
+document.getElementById('scrim').addEventListener('click', e => { if(e.target.id==='scrim') closePalette(); });
+pq.addEventListener('input', () => render(pq.value));
+addEventListener('keydown', e => {
+  if((e.metaKey||e.ctrlKey) && e.key.toLowerCase()==='k'){ e.preventDefault(); document.body.classList.contains('cmd')?closePalette():openPalette(); }
+  if(e.key==='Escape') closePalette();
+});
+results.addEventListener('click', e => { const r=e.target.closest('.presult'); if(r){ const n=r.querySelector('b').textContent; activate(n); closePalette(); } });
+
+/* sidebar nav */
+function activate(place){
+  const item = [...document.querySelectorAll('.navitem')].find(n => n.dataset.place===place);
+  document.querySelectorAll('.navitem').forEach(n=>n.classList.toggle('on', n===item));
+  const icMap = { 'Home':I.home, 'Chat':I.chat, 'Memory':I.mem, 'Agents & tasks':I.task, 'Library':I.lib, 'Agent swarm':I.swarm, 'Connectors':I.mcp, 'Approvals':I.shield };
+  document.getElementById('mainTitle').textContent = place;
+  document.getElementById('mainIcon').innerHTML = `<svg viewBox="0 0 24 24">${icMap[place]||I.home}</svg>`;
+  const hints = { 'Home':'Your daily briefing — what ran overnight, what to pick back up, what\u2019s next.', 'Chat':'The work surface. Talk to your agent; the work reveals beside the thread.', 'Memory':'Everything Waggle knows about this project — with a source on every fact.', 'Agents & tasks':'What\u2019s running, what\u2019s scheduled, what finished while you were away.', 'Library':'Artifacts, files, and skills — the things you and your agents have made.' };
+  document.getElementById('mainHint').textContent = hints[place] || 'A power tool, surfaced from \u2318K. In the calm spine it lives in the command bar; pin it in Pro mode.';
+}
+document.querySelectorAll('.navitem').forEach(n => n.onclick = () => activate(n.dataset.place));
+
+/* variation */
+const labels = { a:'<b>Calm spine</b> — five places, depth in ⌘K', b:'<b>Pro</b> — power user pins the tools they live in' };
+const seg = document.getElementById('seg');
+seg.addEventListener('click', e => {
+  const b = e.target.closest('button'); if(!b) return;
+  [...seg.children].forEach(x=>x.classList.toggle('on', x===b));
+  document.body.classList.toggle('pro', b.dataset.v==='b');
+  document.getElementById('vlabel').innerHTML = labels[b.dataset.v];
+  render(pq.value);
+});
+
+/* start closed */
+closePalette();
+</script>
+</body>
+</html>

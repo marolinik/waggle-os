@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Waggle · Billing</title>
+<script>document.documentElement.classList.add('js');</script>
+<link rel="stylesheet" href="../styles/waggle.css">
+<style>
+  body { height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+  .controls { flex: none; display: flex; align-items: center; gap: 14px; padding: 11px 20px; border-bottom: 1px solid var(--line-soft); background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); z-index: 30; }
+  .controls .lab { font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-dim); }
+  .seg { display: inline-flex; padding: 3px; gap: 3px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line-soft); }
+  .seg button { font-family: var(--sans); font-size: 12px; font-weight: 600; cursor: pointer; border: 0; background: transparent; color: var(--text-muted); padding: 6px 11px; border-radius: 7px; transition: .14s; white-space:nowrap; }
+  .seg button.on { background: var(--honey); color: #1a1407; }
+  .controls .right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .tbtn { width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); color: var(--text-2); cursor: pointer; }
+  .tbtn:hover { border-color: var(--honey-line); color: var(--honey); }
+  .stage { flex:1; min-height:0; overflow:auto; }
+  .view { display:none; } .view.on { display:block; }
+  .view[data-view="checkout"].on { display:grid; }
+
+  /* PLANS */
+  .wrap { max-width: 980px; margin: 0 auto; padding: 34px 32px 60px; }
+  .phead { text-align:center; margin-bottom: 22px; }
+  .phead h1 { font-size:28px; font-weight:650; letter-spacing:-0.02em; margin:0 0 8px; } .phead h1 em { font-style:normal; color:var(--honey); }
+  .phead p { font-size:14.5px; color:var(--text-muted); margin:0 0 18px; }
+  .cycle { display:inline-flex; padding:4px; gap:3px; border-radius:11px; background:var(--surface-2); border:1px solid var(--line-soft); }
+  .cycle button { font-family:var(--sans); font-size:13px; font-weight:600; cursor:pointer; border:0; background:transparent; color:var(--text-muted); padding:8px 16px; border-radius:8px; }
+  .cycle button.on { background:var(--honey); color:#1a1407; }
+  .cycle .save { font-size:10.5px; color:var(--healthy); margin-left:5px; }
+  .cycle button.on .save { color:#1a1407; }
+
+  .plans { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:24px; align-items:stretch; }
+  .plan { padding:26px; border-radius:var(--r-lg); border:1px solid var(--line-soft); background:var(--surface); display:flex; flex-direction:column; position:relative; }
+  .plan.feat { border-color:var(--honey-line); box-shadow:var(--honey-glow); }
+  .plan.cur { border-color:var(--work); }
+  .plan .pop { position:absolute; top:-11px; left:26px; font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:#1a1407; background:var(--honey); padding:4px 11px; border-radius:999px; }
+  .plan .curtag { position:absolute; top:-11px; right:26px; font-size:11px; font-weight:700; text-transform:uppercase; color:#fff; background:var(--work); padding:4px 11px; border-radius:999px; }
+  .plan .pn { font-size:15px; font-weight:600; color:var(--text-2); }
+  .plan .pp { font-size:38px; font-weight:750; letter-spacing:-0.03em; margin:12px 0 2px; } .plan .pp small { font-size:15px; font-weight:500; color:var(--text-muted); letter-spacing:0; }
+  .plan .ptag { font-size:13px; color:var(--text-muted); margin-bottom:20px; min-height:36px; }
+  .plan ul { list-style:none; margin:0 0 24px; padding:0; display:grid; gap:10px; flex:1; }
+  .plan li { font-size:13px; color:var(--text-2); display:grid; grid-template-columns:17px 1fr; gap:9px; line-height:1.4; }
+  .plan li svg { width:14px; height:14px; stroke:var(--healthy); fill:none; stroke-width:2.4; margin-top:2px; }
+  .pbtn { padding:11px; border-radius:10px; font-family:var(--sans); font-size:14px; font-weight:650; cursor:pointer; border:1px solid transparent; text-align:center; }
+  .pbtn.go { background:var(--honey); color:#1a1407; } .pbtn.go:hover { background:var(--honey-bright); }
+  .pbtn.ghost { background:var(--surface-2); color:var(--text-2); border-color:var(--line-strong); } .pbtn.ghost:hover { border-color:var(--honey-line); color:var(--honey); }
+  .pbtn.disabled { background:transparent; color:var(--text-dim); border-color:var(--line-soft); cursor:default; }
+
+  /* CHECKOUT */
+  .cowrap { max-width: 860px; margin:0 auto; padding: 30px 32px 60px; display:grid; grid-template-columns: 1.2fr 1fr; gap:28px; }
+  .panel { border:1px solid var(--line-soft); background:var(--surface); border-radius:var(--r-lg); padding:24px; }
+  .panel h2 { font-size:16px; font-weight:650; margin:0 0 18px; letter-spacing:-0.01em; }
+  .fld { margin-bottom:14px; } .fld label { display:block; font-size:12.5px; font-weight:600; color:var(--text-2); margin-bottom:6px; }
+  .fld input { width:100%; padding:11px 14px; border-radius:10px; border:1px solid var(--line); background:var(--bg-2); color:var(--text); font-family:var(--sans); font-size:14px; outline:none; }
+  .fld input:focus { border-color:var(--honey-line); box-shadow:var(--honey-glow); }
+  .cardfield { position:relative; }
+  .cardfield .brand { position:absolute; right:12px; top:50%; transform:translateY(-50%); font-family:var(--mono); font-size:11px; color:var(--text-dim); }
+  .frow { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .secure { display:flex; align-items:center; gap:8px; font-size:11.5px; color:var(--text-dim); margin-top:6px; }
+  .secure svg { width:13px; height:13px; stroke:var(--healthy); fill:none; stroke-width:1.8; }
+  .secure b { color:var(--text-2); font-weight:500; }
+  .powered { text-align:center; font-family:var(--mono); font-size:11px; color:var(--text-dim); margin-top:16px; }
+  .powered b { color:var(--text-2); }
+
+  /* summary */
+  .summary .line { display:flex; align-items:center; justify-content:space-between; padding:11px 0; border-bottom:1px solid var(--line-soft); font-size:13.5px; }
+  .summary .line .l { color:var(--text-muted); } .summary .line .v { font-weight:600; }
+  .summary .line.total { border-bottom:0; padding-top:16px; font-size:16px; } .summary .line.total .v { color:var(--honey); font-weight:750; font-size:20px; letter-spacing:-0.02em; }
+  .summary .planrow { display:flex; align-items:center; gap:12px; padding-bottom:16px; border-bottom:1px solid var(--line-soft); margin-bottom:6px; }
+  .summary .planrow .wm { width:34px; height:38px; flex:none; display:grid; place-items:center; font-weight:800; font-size:13px; color:#1a1407; background:linear-gradient(150deg,var(--honey-bright),var(--honey-deep)); }
+  .summary .planrow b { font-size:15px; font-weight:650; display:block; } .summary .planrow span { font-size:12px; color:var(--text-muted); display:block; margin-top:2px; }
+  .promo { display:flex; gap:8px; margin:14px 0; } .promo input { flex:1; padding:9px 12px; border-radius:9px; border:1px solid var(--line); background:var(--bg-2); color:var(--text); font-family:var(--sans); font-size:13px; outline:none; }
+  .promo button { padding:9px 14px; border-radius:9px; border:1px solid var(--line-strong); background:var(--surface-2); color:var(--text-2); font-size:12.5px; font-weight:600; cursor:pointer; }
+  .paybtn { width:100%; padding:13px; border-radius:11px; border:0; background:var(--honey); color:#1a1407; font-family:var(--sans); font-size:15px; font-weight:650; cursor:pointer; margin-top:14px; }
+  .paybtn:hover { background:var(--honey-bright); }
+  .guarantee { text-align:center; font-size:11.5px; color:var(--text-dim); margin-top:12px; }
+
+  /* SUCCESS */
+  .succ { max-width:520px; margin:0 auto; padding:70px 32px; text-align:center; }
+  .succ .ring { width:78px; height:78px; border-radius:999px; margin:0 auto 24px; display:grid; place-items:center; background:var(--healthy-wash); border:1px solid color-mix(in srgb,var(--healthy) 40%,transparent); }
+  .succ .ring svg { width:36px; height:36px; stroke:var(--healthy); fill:none; stroke-width:2.2; }
+  .succ h1 { font-size:28px; font-weight:650; letter-spacing:-0.02em; margin:0 0 12px; } .succ h1 em { font-style:normal; color:var(--honey); }
+  .succ p { font-size:15px; color:var(--text-2); line-height:1.55; margin:0 auto 28px; max-width:42ch; } .succ p b { color:var(--text); }
+  .succ .rcpt { text-align:left; border:1px solid var(--line-soft); border-radius:var(--r); background:var(--surface); padding:16px 18px; margin-bottom:24px; }
+  .succ .rcpt .r { display:flex; justify-content:space-between; padding:7px 0; font-size:13px; } .succ .rcpt .r .l { color:var(--text-muted); } .succ .rcpt .r .v { font-weight:600; }
+  .succ .cta { display:inline-flex; gap:10px; }
+  .succ .cta a { padding:12px 22px; border-radius:11px; font-size:14.5px; font-weight:650; text-decoration:none; cursor:pointer; }
+  .succ .cta .go { background:var(--honey); color:#1a1407; } .succ .cta .ghost { background:var(--surface); color:var(--text-2); border:1px solid var(--line-strong); }
+
+  /* MANAGE */
+  .mwrap { max-width:760px; margin:0 auto; padding:30px 32px 60px; }
+  .mwrap h1 { font-size:24px; font-weight:650; letter-spacing:-0.02em; margin:0 0 20px; }
+  .mcard { border:1px solid var(--line-soft); background:var(--surface); border-radius:var(--r-lg); padding:22px; margin-bottom:14px; }
+  .mcard.cur { border-color:var(--honey-line); }
+  .mtop { display:flex; align-items:center; justify-content:space-between; gap:14px; }
+  .mtop .pl b { font-size:17px; font-weight:650; } .mtop .pl span { font-size:13px; color:var(--text-muted); display:block; margin-top:3px; }
+  .mtop .badge { font-size:11.5px; font-weight:650; color:var(--honey); background:var(--honey-wash); border:1px solid var(--honey-line); padding:6px 12px; border-radius:999px; }
+  .mrow { display:flex; align-items:center; justify-content:space-between; padding:13px 0; border-top:1px solid var(--line-soft); font-size:13.5px; }
+  .mrow .l { color:var(--text-muted); } .mrow .v { font-weight:600; display:flex; align-items:center; gap:9px; }
+  .mrow .card { font-family:var(--mono); font-size:13px; }
+  .mrow .chg { font-size:12px; font-weight:600; color:var(--honey); cursor:pointer; }
+  .invoices .iv { display:grid; grid-template-columns:1fr auto auto auto; gap:14px; align-items:center; padding:11px 0; border-top:1px solid var(--line-soft); font-size:13px; }
+  .invoices .iv:first-child { border-top:0; }
+  .invoices .iv .dt { color:var(--text-2); } .invoices .iv .am { font-family:var(--mono); color:var(--text-2); } .invoices .iv .st { font-size:11px; color:var(--healthy); background:var(--healthy-wash); padding:3px 8px; border-radius:999px; } .invoices .iv .dl { font-size:12px; color:var(--honey); cursor:pointer; }
+  .btn { font-family:var(--sans); font-size:13px; font-weight:650; padding:10px 16px; border-radius:10px; cursor:pointer; border:1px solid transparent; }
+  .btn.ghost { background:var(--surface-2); color:var(--text-2); border-color:var(--line-strong); } .btn.danger { background:transparent; color:var(--risk); border-color:color-mix(in srgb,var(--risk) 35%,transparent); }
+
+  @media (max-width:820px){ .plans { grid-template-columns:1fr; } .cowrap { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <span class="lab">Billing · Stripe · state</span>
+  <div class="seg" id="seg">
+    <button class="on" data-v="plans">Plans</button>
+    <button data-v="checkout">Checkout</button>
+    <button data-v="success">Success</button>
+    <button data-v="manage">Manage</button>
+  </div>
+  <div class="right"><button class="tbtn" id="tbtn" title="Toggle theme">☾</button></div>
+</div>
+
+<div class="stage">
+  <!-- PLANS -->
+  <div class="view on wrap" data-view="plans">
+    <div class="phead">
+      <h1>Upgrade your <em>hive.</em></h1>
+      <p>Memory is free forever. You only pay for scale — no feature-count games.</p>
+      <div class="cycle" id="cycle"><button class="on" data-c="mo">Monthly</button><button data-c="yr">Annual<span class="save">−20%</span></button></div>
+    </div>
+    <div class="plans">
+      <div class="plan cur">
+        <span class="curtag">Current</span>
+        <div class="pn">Solo</div>
+        <div class="pp">$0<small> / forever</small></div>
+        <div class="ptag">For individuals exploring an AI workspace.</div>
+        <ul><li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Personal memory graph</li><li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>All major LLMs + local</li><li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Local-first by default</li></ul>
+        <div class="pbtn disabled">Your plan</div>
+      </div>
+      <div class="plan feat">
+        <span class="pop">Most popular</span>
+        <div class="pn">Pro</div>
+        <div class="pp" data-mo="$19" data-yr="$15">$19<small> / month</small></div>
+        <div class="ptag">For power users compounding across projects.</div>
+        <ul><li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Everything in Solo</li><li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Sync across devices</li><li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Marketplace skills &amp; connectors</li><li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Self-evolving skills</li></ul>
+        <div class="pbtn go" data-go="checkout">Choose Pro</div>
+      </div>
+      <div class="plan">
+        <div class="pn">Teams</div>
+        <div class="pp" data-mo="$49" data-yr="$39">$49<small> / seat / mo</small></div>
+        <div class="ptag">Shared memory without losing privacy.</div>
+        <ul><li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Everything in Pro</li><li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Shared team memory</li><li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>WaggleDance multi-agent</li><li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>SSO &amp; role-based access</li></ul>
+        <div class="pbtn ghost" data-go="checkout">Choose Teams</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHECKOUT -->
+  <div class="view cowrap" data-view="checkout">
+    <div class="panel">
+      <h2>Payment details</h2>
+      <div class="fld"><label>Email</label><input value="mara@egzakta.com"></div>
+      <div class="fld"><label>Card information</label>
+        <div class="cardfield"><input placeholder="1234 1234 1234 1234" value="4242 4242 4242 4242"><span class="brand">VISA</span></div>
+      </div>
+      <div class="frow"><div class="fld"><input placeholder="MM / YY" value="08 / 28"></div><div class="fld"><input placeholder="CVC" value="•••"></div></div>
+      <div class="fld"><label>Name on card</label><input value="Mara Kovač"></div>
+      <div class="fld"><label>Country</label><input value="Germany"></div>
+      <div class="secure"><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><b>Encrypted &amp; secure.</b> We never store your card — Stripe does.</div>
+      <button class="paybtn" data-go="success">Pay $19.00 / month</button>
+      <div class="powered">Powered by <b>Stripe</b> · cancel anytime</div>
+    </div>
+    <div class="panel summary">
+      <h2>Order summary</h2>
+      <div class="planrow"><div class="wm hex">W</div><div><b>Waggle Pro</b><span>Monthly · renews Jul 14</span></div></div>
+      <div class="line"><span class="l">Pro plan</span><span class="v">$19.00</span></div>
+      <div class="promo"><input placeholder="Promo code"><button>Apply</button></div>
+      <div class="line"><span class="l">Tax (est.)</span><span class="v">$0.00</span></div>
+      <div class="line total"><span class="l">Due today</span><span class="v">$19.00</span></div>
+      <div class="guarantee">14-day free trial · you won't be charged until Jun 28</div>
+    </div>
+  </div>
+
+  <!-- SUCCESS -->
+  <div class="view succ" data-view="success">
+    <div class="ring"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></div>
+    <h1>You're <em>Pro.</em></h1>
+    <p>Your hive just leveled up — <b>sync, the marketplace, and self-evolving skills</b> are live. Your trial runs 14 days; we'll remind you before the first charge.</p>
+    <div class="rcpt">
+      <div class="r"><span class="l">Plan</span><span class="v">Waggle Pro · Monthly</span></div>
+      <div class="r"><span class="l">Trial ends</span><span class="v">Jun 28, 2026</span></div>
+      <div class="r"><span class="l">Then</span><span class="v">$19.00 / month</span></div>
+      <div class="r"><span class="l">Receipt</span><span class="v" style="color:var(--honey);cursor:pointer">Emailed →</span></div>
+    </div>
+    <div class="cta"><a class="go" data-go="home">Start using Pro →</a><a class="ghost" data-go="manage">Manage billing</a></div>
+  </div>
+
+  <!-- MANAGE -->
+  <div class="view mwrap" data-view="manage">
+    <h1>Billing</h1>
+    <div class="mcard cur">
+      <div class="mtop"><div class="pl"><b>Waggle Pro</b><span>$19.00 / month · renews Jul 14, 2026</span></div><span class="badge">● Active</span></div>
+      <div class="mrow"><span class="l">Billing cycle</span><span class="v">Monthly <span class="chg">Switch to annual (−20%)</span></span></div>
+      <div class="mrow"><span class="l">Payment method</span><span class="v"><span class="card">VISA ···· 4242</span><span class="chg">Update</span></span></div>
+      <div class="mrow"><span class="l">Next charge</span><span class="v">$19.00 on Jul 14</span></div>
+    </div>
+    <div class="mcard invoices">
+      <div class="mtop" style="margin-bottom:8px"><div class="pl"><b style="font-size:14px">Invoices</b></div></div>
+      <div class="iv"><span class="dt">Jun 14, 2026</span><span class="am">$19.00</span><span class="st">Paid</span><span class="dl">PDF ↓</span></div>
+      <div class="iv"><span class="dt">May 14, 2026</span><span class="am">$19.00</span><span class="st">Paid</span><span class="dl">PDF ↓</span></div>
+      <div class="iv"><span class="dt">Apr 14, 2026</span><span class="am">$19.00</span><span class="st">Paid</span><span class="dl">PDF ↓</span></div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:4px"><button class="btn ghost" data-go="plans">Change plan</button><button class="btn danger">Cancel subscription</button></div>
+    <div class="powered" style="text-align:left;margin-top:18px">Subscription managed securely via <b>Stripe</b>.</div>
+  </div>
+</div>
+
+<script>
+const root = document.documentElement, tbtn = document.getElementById('tbtn');
+function setTheme(t){ root.setAttribute('data-theme', t); tbtn.textContent = t==='dark'?'☾':'☀'; try{localStorage.setItem('waggle-concept-theme',t);}catch(e){} }
+setTheme((()=>{ try{ return localStorage.getItem('waggle-concept-theme')||'dark'; }catch(e){ return 'dark'; } })());
+tbtn.onclick = () => setTheme(root.getAttribute('data-theme')==='dark'?'light':'dark');
+window.addEventListener('message', e => { if(e.data && e.data.theme) setTheme(e.data.theme); });
+window.addEventListener('storage', e => { if(e.key==='waggle-concept-theme' && e.newValue) setTheme(e.newValue); });
+
+function go(v){
+  if(v==='home'){ document.body.style.transition='opacity .25s'; document.body.style.opacity='.4'; setTimeout(()=>{ try{ location.href='../Waggle Reimagined.html#home'; }catch(e){} },260); return; }
+  document.querySelectorAll('.view').forEach(el=>el.classList.toggle('on', el.dataset.view===v));
+  document.querySelectorAll('#seg button').forEach(b=>b.classList.toggle('on', b.dataset.v===v));
+  document.querySelector('.stage').scrollTop = 0;
+}
+document.getElementById('seg').addEventListener('click', e=>{ const b=e.target.closest('button'); if(b) go(b.dataset.v); });
+document.addEventListener('click', e=>{ const a=e.target.closest('[data-go]'); if(a){ go(a.dataset.go); } });
+
+// billing cycle toggle
+document.getElementById('cycle').addEventListener('click', e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  [...e.currentTarget.children].forEach(x=>x.classList.toggle('on',x===b));
+  const c=b.dataset.c;
+  document.querySelectorAll('.pp[data-mo]').forEach(el=>{ const small=el.querySelector('small').outerHTML; el.innerHTML = el.dataset[c] + (c==='yr'? '<small> / mo · billed yearly</small>' : '<small> / month</small>'); if(el.closest('.plan').querySelector('.pn').textContent==='Teams') el.innerHTML = el.dataset[c] + (c==='yr'?'<small> / seat · yearly</small>':'<small> / seat / mo</small>'); });
+});
+</script>
+</body>
+</html>

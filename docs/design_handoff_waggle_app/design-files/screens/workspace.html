@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Waggle · Workspace</title>
+<script>document.documentElement.classList.add('js');</script>
+<link rel="stylesheet" href="../styles/waggle.css">
+<style>
+  body { height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+  .controls { flex: none; display: flex; align-items: center; gap: 14px; padding: 11px 20px; border-bottom: 1px solid var(--line-soft); background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); z-index: 30; }
+  .controls .lab { font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-dim); }
+  .seg { display: inline-flex; padding: 3px; gap: 3px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line-soft); }
+  .seg button { font-family: var(--sans); font-size: 12.5px; font-weight: 600; cursor: pointer; border: 0; background: transparent; color: var(--text-muted); padding: 6px 13px; border-radius: 7px; transition: .14s; white-space: nowrap; }
+  .seg button.on { background: var(--honey); color: #1a1407; }
+  .controls .vlabel { font-size: 12.5px; color: var(--text-muted); }
+  .controls .vlabel b { color: var(--text); font-weight: 600; }
+  .controls .right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .tbtn { width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); color: var(--text-2); cursor: pointer; }
+  .tbtn:hover { border-color: var(--honey-line); color: var(--honey); }
+
+  .stage { flex: 1; min-height: 0; overflow: auto; }
+
+  /* ── workspace header ── */
+  .wshead { padding: 30px 36px 0; max-width: 1080px; margin: 0 auto; }
+  .crumbs { font-family: var(--mono); font-size: 11.5px; color: var(--text-dim); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  .crumbs b { color: var(--text-2); font-weight: 500; }
+  .wtitle-row { display: flex; align-items: center; gap: 16px; }
+  .wtitle-row .wmark { width: 46px; height: 52px; flex: none; display: grid; place-items: center; font-weight: 800; font-size: 20px; color: #1a1407; background: linear-gradient(150deg, var(--honey-bright), var(--honey-deep)); box-shadow: var(--honey-glow); }
+  .wtitle-row h1 { font-size: 28px; font-weight: 650; letter-spacing: -0.02em; margin: 0; }
+  .wtitle-row .wmeta { font-size: 13px; color: var(--text-muted); margin-top: 3px; display: flex; gap: 14px; flex-wrap: wrap; }
+  .wtitle-row .wmeta span { display: inline-flex; align-items: center; gap: 6px; }
+  .wtitle-row .actions { margin-left: auto; display: flex; gap: 9px; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-family: var(--sans); font-size: 13.5px; font-weight: 650; padding: 10px 17px; border-radius: 10px; border: 1px solid transparent; text-decoration:none; transition:.15s; }
+  .btn-primary { background: var(--honey); color: #1a1407; }
+  .btn-primary:hover { background: var(--honey-bright); }
+  .btn-ghost { background: var(--surface); color: var(--text-2); border-color: var(--line-strong); }
+  .btn-ghost:hover { border-color: var(--honey-line); color: var(--honey); }
+
+  /* ── tabs ── */
+  .tabs { display: flex; gap: 2px; margin: 24px 0 0; border-bottom: 1px solid var(--line-soft); }
+  .tab { font-size: 14px; font-weight: 600; color: var(--text-muted); padding: 12px 16px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition:.14s; display:flex; align-items:center; gap:8px; }
+  .tab:hover { color: var(--text); }
+  .tab.on { color: var(--text); border-bottom-color: var(--honey); }
+  .tab .cnt { font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+
+  /* ── content ── */
+  .content { max-width: 1080px; margin: 0 auto; padding: 28px 36px 60px; }
+  .grid { display: grid; grid-template-columns: 1.7fr 1fr; gap: 22px; }
+  .col { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+  .sec-h { font-family: var(--mono); font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-dim); margin: 0 0 14px; display: flex; align-items: center; gap: 10px; }
+  .sec-h .ic { width: 15px; height: 15px; }
+  .sec-h .ic svg { width: 15px; height: 15px; stroke: var(--honey); fill: none; stroke-width: 1.8; }
+
+  .card { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r-lg); padding: 22px; }
+  .summary { font-size: 15.5px; line-height: 1.6; color: var(--text-2); }
+  .summary b { color: var(--text); font-weight: 600; }
+
+  /* knows / memory cards */
+  .knows { display: grid; gap: 10px; }
+  .fact { display: grid; grid-template-columns: 30px 1fr; gap: 13px; padding: 13px 15px; border-radius: var(--r); background: var(--surface); border: 1px solid var(--line-soft); transition:.15s; }
+  .fact:hover { border-color: var(--honey-line); }
+  .fact .fi { width: 30px; height: 34px; flex:none; display:grid; place-items:center; }
+  .fact .fi svg { width: 15px; height: 15px; stroke: #1a1407; fill:none; stroke-width:2; }
+  .fact .ft { font-size: 14px; line-height: 1.5; color: var(--text); }
+  .fact .ft b { font-weight: 650; }
+  .fact .prov { margin-top: 7px; display: inline-flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 10.5px; color: var(--text-dim); }
+  .fact .prov .src { color: var(--intel); }
+
+  /* artifacts */
+  .arts { display: grid; gap: 9px; }
+  .art { display: flex; align-items: center; gap: 13px; padding: 12px 15px; border-radius: var(--r); border: 1px solid var(--line-soft); background: var(--surface); cursor: pointer; transition:.15s; }
+  .art:hover { border-color: var(--honey-line); background: var(--surface-2); }
+  .art .ai { width: 32px; height: 32px; border-radius: 8px; flex:none; display:grid; place-items:center; font-family: var(--mono); font-size: 10px; font-weight: 700; }
+  .art .at { flex: 1; min-width: 0; }
+  .art .at b { font-size: 14px; font-weight: 600; display: block; }
+  .art .at span { font-size: 12px; color: var(--text-dim); }
+  .art .when { font-size: 11.5px; color: var(--text-dim); font-family: var(--mono); }
+
+  /* right rail */
+  .stat-line { display: flex; align-items: center; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--line-soft); font-size: 13.5px; }
+  .stat-line:last-child { border-bottom: 0; }
+  .stat-line .l { color: var(--text-muted); flex: 1; }
+  .stat-line .v { font-weight: 600; }
+  .person { display: flex; align-items: center; gap: 11px; padding: 9px 0; }
+  .person .pa { width: 30px; height: 30px; border-radius: 999px; flex:none; display:grid; place-items:center; font-size: 11px; font-weight: 700; color: #1a1407; }
+  .person .pn { flex:1; font-size: 13.5px; }
+  .person .pr { font-size: 11.5px; color: var(--text-dim); }
+  .agentrow { display:flex; align-items:center; gap:10px; padding: 10px 0; border-bottom: 1px solid var(--line-soft); font-size:13.5px; }
+  .agentrow:last-child { border-bottom:0; }
+  .agentrow .an { flex:1; }
+  .agentrow .am { font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+
+  /* ── memory-forward (variation B) ── */
+  .graph-wrap { position: relative; height: 360px; border-radius: var(--r-xl); border: 1px solid var(--line); background: radial-gradient(80% 80% at 50% 45%, var(--surface), var(--bg-2)); overflow: hidden; }
+  .graph-wrap .comb { position: absolute; inset: 0; opacity: .5; }
+  .node { position: absolute; transform: translate(-50%,-50%); display: grid; place-items: center; text-align: center; }
+  .node .nb { padding: 9px 13px; border-radius: 11px; background: var(--surface); border: 1px solid var(--line-strong); font-size: 12.5px; font-weight: 600; box-shadow: var(--shadow); white-space: nowrap; }
+  .node.center .nb { background: linear-gradient(150deg, var(--surface-2), var(--surface)); border-color: var(--honey-line); box-shadow: var(--honey-glow); padding: 13px 18px; }
+  .node.center .nb b { font-size: 14px; }
+  .node .tag { font-family: var(--mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 5px; }
+  .node.person .tag { color: var(--work); } .node.person .nb { border-color: color-mix(in srgb, var(--work) 40%, var(--line-strong)); }
+  .node.concept .tag { color: var(--intel); } .node.concept .nb { border-color: color-mix(in srgb, var(--intel) 40%, var(--line-strong)); }
+  .node.org .tag { color: var(--risk); } .node.org .nb { border-color: color-mix(in srgb, var(--risk) 40%, var(--line-strong)); }
+  .node.proj .tag { color: var(--healthy); } .node.proj .nb { border-color: color-mix(in srgb, var(--healthy) 40%, var(--line-strong)); }
+  .graph-wrap svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .gline { stroke: var(--line-strong); stroke-width: 1.2; }
+  .glegend { position: absolute; bottom: 14px; left: 16px; display: flex; gap: 14px; font-family: var(--mono); font-size: 10px; color: var(--text-dim); }
+  .glegend span { display:inline-flex; align-items:center; gap:6px; }
+
+  .timeline { display: grid; gap: 0; }
+  .tl { display: grid; grid-template-columns: 64px 1fr; gap: 16px; padding: 14px 0; border-top: 1px solid var(--line-soft); }
+  .tl:first-child { border-top: 0; }
+  .tl .when { font-family: var(--mono); font-size: 11px; color: var(--text-dim); padding-top: 2px; }
+  .tl .ev b { font-weight: 600; }
+  .tl .ev { font-size: 14px; color: var(--text-2); line-height: 1.5; }
+  .tl .ev .src { font-family: var(--mono); font-size: 10.5px; color: var(--intel); margin-left: 6px; }
+
+  .hidden { display: none !important; }
+  .emptytab { padding: 60px 20px; text-align: center; color: var(--text-muted); }
+  .emptytab .mono { font-family: var(--mono); font-size: 12px; color: var(--text-dim); letter-spacing: .08em; }
+  @media (max-width: 820px){ .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <span class="lab">Workspace · variation</span>
+  <div class="seg" id="seg">
+    <button class="on" data-v="a">A · Overview + tabs</button>
+    <button data-v="b">B · Memory-forward</button>
+  </div>
+  <span class="vlabel" id="vlabel"><b>Overview + tabs</b> — calm home for a project</span>
+  <div class="right"><button class="tbtn" id="tbtn" title="Toggle theme">☾</button></div>
+</div>
+
+<div class="stage">
+  <div class="wshead">
+    <div class="crumbs">Home <span>›</span> <b>Competitive Intelligence</b></div>
+    <div class="wtitle-row">
+      <div class="wmark hex">C</div>
+      <div>
+        <h1>Competitive Intelligence</h1>
+        <div class="wmeta">
+          <span><span class="dot dot-live" style="background:var(--healthy)"></span>1 agent live</span>
+          <span>142 memories</span>
+          <span>9 sources</span>
+          <span>updated 2h ago</span>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-ghost">Memory</button>
+        <button class="btn btn-primary">Continue →</button>
+      </div>
+    </div>
+
+    <div class="tabs" id="tabs">
+      <div class="tab on" data-t="overview">Overview</div>
+      <div class="tab" data-t="chat">Chat <span class="cnt">3</span></div>
+      <div class="tab" data-t="memory">Memory <span class="cnt">142</span></div>
+      <div class="tab" data-t="artifacts">Artifacts <span class="cnt">7</span></div>
+      <div class="tab" data-t="files">Files <span class="cnt">12</span></div>
+      <div class="tab" data-t="team">Team <span class="cnt">4</span></div>
+    </div>
+  </div>
+
+  <!-- ══════ VARIATION A — OVERVIEW + TABS ══════ -->
+  <div class="content view" id="view-a">
+    <div id="tab-overview">
+      <div class="grid">
+        <div class="col">
+          <div class="card">
+            <div class="summary">This workspace tracks the <b>persistent-memory competitor landscape</b> for the Q2 board cycle. Waggle has mapped <b>9 rivals</b>, pulled current pricing, and drafted a teardown — the live thread is mid-flight on turning the opening into a board brief.</div>
+          </div>
+
+          <div>
+            <div class="sec-h"><span class="ic"><svg viewBox="0 0 24 24"><path d="M12 5a3 3 0 0 0-3 3 3 3 0 0 0-3 3 3 3 0 0 0 1 5 3 3 0 0 0 5 1 3 3 0 0 0 5-1 3 3 0 0 0 1-5 3 3 0 0 0-3-3 3 3 0 0 0-3-3Z"/></svg></span>What Waggle knows</div>
+            <div class="knows" id="knowsA"></div>
+          </div>
+
+          <div>
+            <div class="sec-h"><span class="ic"><svg viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg></span>Recent work</div>
+            <div class="arts" id="artsA"></div>
+          </div>
+        </div>
+
+        <div class="col">
+          <div class="card">
+            <div class="sec-h" style="margin-bottom:6px">Status</div>
+            <div class="stat-line"><span class="l">Agent</span><span class="v" style="color:var(--healthy)"><span class="dot dot-live" style="background:var(--healthy)"></span> Research-synth · live</span></div>
+            <div class="stat-line"><span class="l">Model</span><span class="v">auto · Claude Sonnet</span></div>
+            <div class="stat-line"><span class="l">Memories</span><span class="v">142 <span style="color:var(--healthy)">+6 today</span></span></div>
+            <div class="stat-line"><span class="l">Needs review</span><span class="v" style="color:var(--attention)">3 memories</span></div>
+          </div>
+
+          <div class="card">
+            <div class="sec-h" style="margin-bottom:6px">Up next</div>
+            <div class="agentrow"><span class="dot" style="background:var(--work)"></span><span class="an">Board brief from teardown</span><span class="am">draft</span></div>
+            <div class="agentrow"><span class="dot" style="background:var(--attention)"></span><span class="an">Export table → Salesforce</span><span class="am">awaiting you</span></div>
+            <div class="agentrow"><span class="dot" style="background:var(--healthy)"></span><span class="an">Weekly digest</span><span class="am">17:00</span></div>
+          </div>
+
+          <div class="card">
+            <div class="sec-h" style="margin-bottom:6px">Team</div>
+            <div id="teamA"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-other" class="hidden">
+      <div class="emptytab">
+        <p style="font-size:16px;color:var(--text-2);margin-bottom:6px" id="otherTitle">Chat</p>
+        <p class="mono">This tab is wired in the full prototype — Overview is the focus of this concept pass.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════ VARIATION B — MEMORY-FORWARD ══════ -->
+  <div class="content view hidden" id="view-b">
+    <div class="sec-h" style="margin-bottom:14px"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M7 6h10M6 8l5 8M18 8l-5 8"/></svg></span>What this workspace knows · knowledge graph</div>
+    <div class="graph-wrap">
+      <div class="comb"></div>
+      <svg viewBox="0 0 900 360" preserveAspectRatio="none" aria-hidden="true">
+        <line class="gline" x1="450" y1="180" x2="180" y2="80"></line>
+        <line class="gline" x1="450" y1="180" x2="720" y2="80"></line>
+        <line class="gline" x1="450" y1="180" x2="150" y2="265"></line>
+        <line class="gline" x1="450" y1="180" x2="740" y2="270"></line>
+        <line class="gline" x1="450" y1="180" x2="450" y2="305"></line>
+        <line class="gline" x1="180" y1="80" x2="450" y2="305"></line>
+      </svg>
+      <div class="node center" style="left:50%;top:50%"><div class="nb"><b>Competitive Intelligence</b></div></div>
+      <div class="node org" style="left:20%;top:22%"><div class="tag">Competitor</div><div class="nb">Mem0 · cloud-only</div></div>
+      <div class="node org" style="left:80%;top:22%"><div class="tag">Competitor</div><div class="nb">Letta · agent-centric</div></div>
+      <div class="node concept" style="left:17%;top:74%"><div class="tag">Concept</div><div class="nb">Local-first moat</div></div>
+      <div class="node concept" style="left:82%;top:75%"><div class="tag">Decision</div><div class="nb">Target regulated</div></div>
+      <div class="node person" style="left:50%;top:85%"><div class="tag">Person</div><div class="nb">Mara · owner</div></div>
+    </div>
+    <div class="glegend">
+      <span><span class="dot" style="background:var(--work)"></span>People</span>
+      <span><span class="dot" style="background:var(--intel)"></span>Concepts</span>
+      <span><span class="dot" style="background:var(--risk)"></span>Orgs</span>
+      <span><span class="dot" style="background:var(--healthy)"></span>Decisions</span>
+    </div>
+
+    <div class="grid" style="margin-top:28px">
+      <div class="col">
+        <div class="sec-h">Memory timeline</div>
+        <div class="timeline" id="timelineB"></div>
+      </div>
+      <div class="col">
+        <div class="card">
+          <div class="sec-h" style="margin-bottom:6px">Provenance</div>
+          <div class="stat-line"><span class="l">From your chats</span><span class="v">88</span></div>
+          <div class="stat-line"><span class="l">From web sources</span><span class="v">41</span></div>
+          <div class="stat-line"><span class="l">Imported</span><span class="v">13</span></div>
+          <div class="stat-line"><span class="l">Awaiting review</span><span class="v" style="color:var(--attention)">3</span></div>
+        </div>
+        <div class="card">
+          <div class="sec-h" style="margin-bottom:10px">Every memory carries a source</div>
+          <p style="margin:0;font-size:13.5px;color:var(--text-muted);line-height:1.6">Click any node or fact and Waggle shows exactly where it came from, when, and which model wrote it — nothing in the hive is unattributed.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const root = document.documentElement, tbtn = document.getElementById('tbtn');
+function setTheme(t){ root.setAttribute('data-theme', t); tbtn.textContent = t==='dark'?'☾':'☀'; try{localStorage.setItem('waggle-concept-theme',t);}catch(e){} }
+setTheme((()=>{ try{ return localStorage.getItem('waggle-concept-theme')||'dark'; }catch(e){ return 'dark'; } })());
+tbtn.onclick = () => setTheme(root.getAttribute('data-theme')==='dark'?'light':'dark');
+window.addEventListener('message', e => { if(e.data && e.data.theme) setTheme(e.data.theme); });
+window.addEventListener('storage', e => { if(e.key==='waggle-concept-theme' && e.newValue) setTheme(e.newValue); });
+
+const HONEY='linear-gradient(150deg,var(--honey-bright),var(--honey-deep))';
+const CHECK='<svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>';
+
+const facts = [
+  { t:'<b>Mem0</b> is cloud-only and raised prices ~15% since March.', src:'web · mem0.ai', when:'2h ago' },
+  { t:'Only <b>2 of 9</b> rivals ship local-first memory.', src:'teardown.md', when:'2h ago' },
+  { t:'Mara wants the board brief to <b>lead with the regulated-industries opening</b>.', src:'chat · Tue', when:'2d ago' },
+  { t:'Pricing model assumes a <b>new tier lifts ARPU ~12%</b>.', src:'Pricing Model', when:'3d ago' },
+];
+document.getElementById('knowsA').innerHTML = facts.map(f=>`
+  <div class="fact"><div class="fi hex" style="background:${HONEY}">${CHECK}</div><div><div class="ft">${f.t}</div><div class="prov">⬡ <span class="src">${f.src}</span> · ${f.when}</div></div></div>`).join('');
+
+const arts = [
+  { ext:'MD', c:'var(--work)', n:'teardown.md', s:'Q2 competitive teardown · 9 competitors', when:'2h ago' },
+  { ext:'XLS', c:'var(--healthy)', n:'pricing-landscape.xlsx', s:'Competitor pricing table', when:'2h ago' },
+  { ext:'PDF', c:'var(--risk)', n:'mem0-teardown.pdf', s:'Deep-dive on the category leader', when:'1d ago' },
+];
+document.getElementById('artsA').innerHTML = arts.map(a=>`
+  <div class="art"><div class="ai" style="background:color-mix(in srgb, ${a.c} 18%, transparent);color:${a.c}">${a.ext}</div><div class="at"><b>${a.n}</b><span>${a.s}</span></div><span class="when">${a.when}</span></div>`).join('');
+
+const team = [
+  { i:'M', c:'var(--honey)', n:'Mara K.', r:'Owner' },
+  { i:'R', c:'var(--work)', n:'Research-synth', r:'Agent · live' },
+  { i:'D', c:'var(--intel)', n:'Deck-builder', r:'Agent · idle' },
+  { i:'J', c:'var(--healthy)', n:'Jonas P.', r:'Editor' },
+];
+document.getElementById('teamA').innerHTML = team.map(p=>`
+  <div class="person"><div class="pa" style="background:${p.c}">${p.i}</div><div class="pn">${p.n}</div><div class="pr">${p.r}</div></div>`).join('');
+
+const timeline = [
+  { when:'2h ago', ev:'Folded <b>6 memories</b> from the teardown run', src:'mem://hive' },
+  { when:'2h ago', ev:'Learned <b>Mem0 pricing changed</b> — flagged vs your model', src:'web' },
+  { when:'2d ago', ev:'Captured Mara\u2019s steer: <b>lead with regulated</b>', src:'chat' },
+  { when:'1w ago', ev:'Imported <b>March landscape</b> notes', src:'import' },
+];
+document.getElementById('timelineB').innerHTML = timeline.map(t=>`
+  <div class="tl"><div class="when">${t.when}</div><div class="ev">${t.ev}<span class="src">⬡ ${t.src}</span></div></div>`).join('');
+
+/* tabs (variation A) */
+const tabs = document.getElementById('tabs');
+tabs.addEventListener('click', e => {
+  const t = e.target.closest('.tab'); if(!t) return;
+  [...tabs.children].forEach(x=>x.classList.toggle('on', x===t));
+  const isOverview = t.dataset.t==='overview';
+  document.getElementById('tab-overview').classList.toggle('hidden', !isOverview);
+  document.getElementById('tab-other').classList.toggle('hidden', isOverview);
+  if(!isOverview) document.getElementById('otherTitle').textContent = t.textContent.trim().replace(/\s*\d+$/,'');
+});
+
+/* variation switch */
+const labels = { a:'<b>Overview + tabs</b> — calm home for a project', b:'<b>Memory-forward</b> — the graph leads' };
+const seg = document.getElementById('seg');
+seg.addEventListener('click', e => {
+  const b = e.target.closest('button'); if(!b) return;
+  [...seg.children].forEach(x=>x.classList.toggle('on', x===b));
+  document.getElementById('view-a').classList.toggle('hidden', b.dataset.v!=='a');
+  document.getElementById('view-b').classList.toggle('hidden', b.dataset.v!=='b');
+  document.getElementById('vlabel').innerHTML = labels[b.dataset.v];
+  document.querySelector('.stage').scrollTop = 0;
+});
+</script>
+</body>
+</html>

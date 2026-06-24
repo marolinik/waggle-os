@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Waggle · Power surfaces</title>
+<script>document.documentElement.classList.add('js');</script>
+<link rel="stylesheet" href="../styles/waggle.css">
+<style>
+  body { height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+  .controls { flex: none; display: flex; align-items: center; gap: 14px; padding: 11px 20px; border-bottom: 1px solid var(--line-soft); background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); z-index: 30; }
+  .controls .lab { font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-dim); }
+  .controls .vlabel { font-size: 12.5px; color: var(--text-muted); } .controls .vlabel b { color: var(--text); font-weight: 600; }
+  .controls .right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .controls .hint { font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+  .tbtn { width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); color: var(--text-2); cursor: pointer; }
+  .tbtn:hover { border-color: var(--honey-line); color: var(--honey); }
+
+  .app { flex: 1; min-height: 0; display: flex; }
+  /* rail */
+  .rail { flex: none; width: 200px; border-right: 1px solid var(--line-soft); background: var(--bg-2); padding: 16px 10px; }
+  .rail .rh { font-family: var(--mono); font-size: 10px; letter-spacing:.12em; text-transform:uppercase; color: var(--text-dim); padding: 6px 11px 12px; }
+  .ritem { display:flex; align-items:center; gap:11px; padding: 9px 11px; border-radius: 10px; cursor:pointer; color: var(--text-2); transition:.13s; font-size: 13.5px; font-weight: 550; position: relative; }
+  .ritem:hover { background: var(--surface-2); color: var(--text); }
+  .ritem.on { background: var(--honey-wash); color: var(--text); }
+  .ritem.on::before { content:''; position:absolute; left:-10px; top:50%; transform:translateY(-50%); width:3px; height:17px; border-radius:3px; background: var(--honey); }
+  .ritem svg { width:17px; height:17px; stroke: currentColor; fill:none; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; flex:none; }
+  .ritem.on svg { stroke: var(--honey); }
+  .ritem .ct { margin-left:auto; font-family: var(--mono); font-size: 10px; color: var(--text-dim); }
+  .ritem .ct.warn { color: var(--attention); }
+
+  /* main */
+  .main { flex:1; min-width:0; display:flex; flex-direction:column; }
+  .shead { flex:none; display:flex; align-items:flex-start; gap:16px; padding: 26px 30px 18px; border-bottom: 1px solid var(--line-soft); }
+  .shead h1 { font-size: 22px; font-weight: 650; letter-spacing:-0.02em; margin: 0 0 5px; }
+  .shead p { font-size: 13.5px; color: var(--text-muted); margin: 0; max-width: 60ch; line-height:1.5; }
+  .shead .pa { margin-left:auto; font-size: 12.5px; font-weight: 650; padding: 9px 15px; border-radius: 9px; background: var(--honey); color:#1a1407; cursor:pointer; white-space:nowrap; border:0; display:inline-flex; align-items:center; gap:7px; }
+  .shead .pa:hover { background: var(--honey-bright); }
+  .body { flex:1; min-height:0; overflow:auto; padding: 22px 30px 50px; }
+  .panel { display:none; } .panel.on { display:block; }
+  .grp { font-family: var(--mono); font-size: 10.5px; letter-spacing:.12em; text-transform:uppercase; color: var(--text-dim); margin: 4px 0 12px; display:flex; align-items:center; gap:10px; }
+  .grp:not(:first-child) { margin-top: 26px; }
+  .grp::after { content:''; flex:1; height:1px; background: var(--line-soft); }
+
+  .rows { display:grid; gap: 9px; }
+  .rc { display:flex; align-items:center; gap:14px; padding: 14px 16px; border-radius: var(--r); border: 1px solid var(--line-soft); background: var(--surface); transition:.14s; }
+  .rc:hover { border-color: var(--line-strong); }
+  .rc .ri { width: 34px; height: 38px; flex:none; display:grid; place-items:center; font-family: var(--mono); font-size:11px; font-weight:700; color:var(--text-2); background: var(--surface-2); border:1px solid var(--line); }
+  .rc .rt { flex:1; min-width:0; }
+  .rc .rt b { font-size: 14.5px; font-weight: 600; }
+  .rc .rt .rs { font-size: 12.5px; color: var(--text-muted); margin-top: 2px; }
+  .rc .rt .rs .mono { font-family: var(--mono); font-size: 11.5px; color: var(--text-dim); }
+  .rc .rt .rs .prov { color: var(--intel); }
+  .rc .meta { font-family: var(--mono); font-size: 11px; color: var(--text-dim); white-space:nowrap; }
+  .bdg { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; display:inline-flex; align-items:center; gap:5px; white-space:nowrap; }
+  .bdg.ok { color: var(--healthy); background: var(--healthy-wash); }
+  .bdg.warn { color: var(--attention); background: var(--honey-wash); }
+  .bdg.risk { color: var(--risk); background: var(--risk-wash); }
+  .bdg.off { color: var(--text-dim); background: var(--surface-2); }
+  .lnk { font-size: 12px; font-weight: 600; color: var(--text-2); cursor:pointer; } .lnk:hover { color: var(--honey); }
+  .rbtn { font-size: 12px; font-weight: 650; padding: 7px 13px; border-radius: 8px; cursor:pointer; border:1px solid transparent; }
+  .rbtn.go { background: var(--honey); color:#1a1407; } .rbtn.go:hover { background: var(--honey-bright); }
+  .rbtn.ghost { background: var(--surface-2); color: var(--text-2); border-color: var(--line-strong); } .rbtn.ghost:hover { border-color: var(--honey-line); color: var(--text); }
+  .rbtn.danger { background: transparent; color: var(--risk); border-color: color-mix(in srgb,var(--risk) 35%,transparent); }
+  .acts { display:flex; gap:8px; align-items:center; }
+
+  /* toggle */
+  .sw { width: 38px; height: 22px; border-radius: 999px; background: var(--surface-3); border:1px solid var(--line-strong); position:relative; cursor:pointer; transition:.16s; flex:none; }
+  .sw::after { content:''; position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:999px; background: var(--text-muted); transition:.16s; }
+  .sw.on { background: var(--honey); border-color: var(--honey); } .sw.on::after { left:18px; background:#1a1407; }
+
+  /* approval cards */
+  .appr { border:1px solid var(--line-soft); border-radius: var(--r-lg); background: var(--surface); padding: 18px; }
+  .appr.hot { border-color: color-mix(in srgb,var(--attention) 35%,transparent); background: var(--honey-wash); }
+  .appr .at { display:flex; align-items:center; gap:10px; margin-bottom: 8px; }
+  .appr .at b { font-size: 14.5px; font-weight: 650; }
+  .appr p { margin: 0 0 14px; font-size: 13px; color: var(--text-muted); line-height:1.55; }
+  .appr p .mono { font-family: var(--mono); font-size:11.5px; color: var(--text-2); }
+  .appr .ar { display:flex; gap:9px; align-items:center; }
+
+  /* usage */
+  .ustat { display:grid; grid-template-columns: repeat(3,1fr); gap:14px; margin-bottom: 22px; }
+  .ust { padding: 18px; border-radius: var(--r-lg); border:1px solid var(--line-soft); background: var(--surface); }
+  .ust .v { font-size: 30px; font-weight: 750; letter-spacing:-0.03em; line-height:1; }
+  .ust .l { font-size: 12px; color: var(--text-muted); margin-top: 7px; }
+  .ubar { display:grid; grid-template-columns: 130px 1fr 70px; gap:14px; align-items:center; margin-bottom: 10px; }
+  .ubar .ul { font-size: 13px; font-weight:600; text-align:right; }
+  .ubar .ut { height: 26px; border-radius: 7px; background: var(--surface-2); border:1px solid var(--line-soft); overflow:hidden; }
+  .ubar .uf { height:100%; }
+  .ubar .uv { font-family: var(--mono); font-size: 12.5px; color: var(--text-2); }
+
+  @media (max-width: 800px){ .rail { width: 64px; } .rail .rh, .ritem span.txt, .ritem .ct { display:none; } .ustat { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <span class="lab">Power surfaces · ⌘K destinations</span>
+  <span class="vlabel" id="vlabel"><b>One template</b>, every tool — clean &amp; consistent</span>
+  <div class="right"><span class="hint">these all live behind ⌘K</span><button class="tbtn" id="tbtn" title="Toggle theme">☾</button></div>
+</div>
+
+<div class="app">
+  <nav class="rail" id="rail">
+    <div class="rh">Behind ⌘K</div>
+    <div class="ritem on" data-s="tools"><svg viewBox="0 0 24 24"><path d="M7 8a4 4 0 0 0 0 8h2M17 8a4 4 0 0 1 0 8h-2M8 12h8"/></svg><span class="txt">Tools</span><span class="ct">7</span></div>
+    <div class="ritem" data-s="auto"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg><span class="txt">Automations</span><span class="ct warn">1</span></div>
+    <div class="ritem" data-s="appr"><svg viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M12 3l8 4v5c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V7z"/></svg><span class="txt">Approvals</span><span class="ct warn">2</span></div>
+    <div class="ritem" data-s="vault"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="12" cy="12" r="3"/></svg><span class="txt">Vault</span><span class="ct">5</span></div>
+    <div class="ritem" data-s="usage"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span class="txt">Usage</span></div>
+  </nav>
+
+  <div class="main">
+    <div class="shead">
+      <div><h1 id="sTitle">Tools &amp; connections</h1><p id="sSub">Everything your agents can reach — integrations, MCP servers, and skills.</p></div>
+      <button class="pa" id="sAction"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg><span id="sActionT">Add a tool</span></button>
+    </div>
+    <div class="body" id="body"></div>
+  </div>
+</div>
+
+<script>
+const root = document.documentElement, tbtn = document.getElementById('tbtn');
+function setTheme(t){ root.setAttribute('data-theme', t); tbtn.textContent = t==='dark'?'☾':'☀'; try{localStorage.setItem('waggle-concept-theme',t);}catch(e){} }
+setTheme((()=>{ try{ return localStorage.getItem('waggle-concept-theme')||'dark'; }catch(e){ return 'dark'; } })());
+tbtn.onclick = () => setTheme(root.getAttribute('data-theme')==='dark'?'light':'dark');
+window.addEventListener('message', e => { if(e.data && e.data.theme) setTheme(e.data.theme); });
+window.addEventListener('storage', e => { if(e.key==='waggle-concept-theme' && e.newValue) setTheme(e.newValue); });
+
+const head = {
+  tools: ['Tools &amp; connections','Everything your agents can reach — integrations, MCP servers, and skills.','Add a tool'],
+  auto:  ['Automations','Work that runs on a schedule, while you\u2019re away.','New automation'],
+  appr:  ['Approvals','Actions your agents are holding until you say go.','Approval settings'],
+  vault: ['Vault','Secrets, encrypted on this machine. Agents use them; they never see them.','Add secret'],
+  usage: ['Usage &amp; cost','Tokens and spend across models and workspaces.','Set budget'],
+};
+
+function rc(icon, title, sub, right){ return `<div class="rc"><div class="ri">${icon}</div><div class="rt"><b>${title}</b><div class="rs">${sub}</div></div>${right}</div>`; }
+function tog(on){ return `<div class="sw ${on?'on':''}" onclick="this.classList.toggle('on')"></div>`; }
+
+const panels = {
+  tools: () => `
+    <div class="grp">Connected integrations</div>
+    <div class="rows">
+      ${rc('SF','Salesforce','<span class="rs">CRM · used by 2 agents · <span class="mono">Q2 Pricing</span></span>','<div class="acts"><span class="bdg ok">● Connected</span><span class="lnk">Manage</span></div>')}
+      ${rc('Sl','Slack','Notifications &amp; digests','<div class="acts"><span class="bdg ok">● Connected</span><span class="lnk">Manage</span></div>')}
+      ${rc('Gh','GitHub','Repos &amp; issues','<div class="acts"><span class="bdg ok">● Connected</span><span class="lnk">Manage</span></div>')}
+    </div>
+    <div class="grp">MCP servers · 21 tools</div>
+    <div class="rows">
+      ${rc('fs','Filesystem','<span class="rs">read/write workspace files · <span class="mono">6 tools</span></span>','<span class="bdg ok">● Active</span>')}
+      ${rc('web','Web search','<span class="rs">live retrieval · <span class="mono">3 tools</span></span>','<span class="bdg ok">● Active</span>')}
+    </div>
+    <div class="grp">Available</div>
+    <div class="rows">
+      ${rc('No','Notion','Docs &amp; wikis','<button class="rbtn ghost">Connect</button>')}
+      ${rc('Li','Linear','Issues &amp; projects','<button class="rbtn ghost">Connect</button>')}
+    </div>`,
+  auto: () => `
+    <div class="rows">
+      ${rc('<svg width=16 height=16 viewBox="0 0 24 24" fill=none stroke="var(--healthy)" stroke-width=1.8><circle cx=12 cy=12 r=8/><path d="M12 8v4l3 2"/></svg>','Weekly digest','<span class="rs"><span class="mono">Mon 09:00</span> · last ran 3d ago · ok</span>','<div class="acts"><span class="lnk">Logs</span>'+tog(true)+'</div>')}
+      ${rc('<svg width=16 height=16 viewBox="0 0 24 24" fill=none stroke="var(--risk)" stroke-width=1.8><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>','Q2 pipeline sync → Salesforce','<span class="rs"><span class="mono">Daily 02:00</span> · failed 02:14 · auth expired</span>','<div class="acts"><span class="bdg risk">Failed</span><button class="rbtn go">Fix &amp; retry</button>'+tog(true)+'</div>')}
+      ${rc('<svg width=16 height=16 viewBox="0 0 24 24" fill=none stroke="var(--intel)" stroke-width=1.8><path d="M12 5a3 3 0 0 0-3 3 3 3 0 0 0-3 3 3 3 0 0 0 1 5 3 3 0 0 0 5 1 3 3 0 0 0 5-1 3 3 0 0 0 1-5 3 3 0 0 0-3-3 3 3 0 0 0-3-3Z"/></svg>','Nightly memory consolidation','<span class="rs"><span class="mono">Nightly 03:00</span> · last ran ok · +14 memories</span>','<div class="acts"><span class="lnk">Logs</span>'+tog(true)+'</div>')}
+      ${rc('<svg width=16 height=16 viewBox="0 0 24 24" fill=none stroke="var(--text-dim)" stroke-width=1.8><circle cx=12 cy=12 r=8/><path d="M12 8v4l3 2"/></svg>','Competitor price watch','<span class="rs"><span class="mono">Weekly</span> · paused</span>','<div class="acts"><span class="bdg off">Paused</span>'+tog(false)+'</div>')}
+    </div>`,
+  appr: () => `
+    <div class="grp">Waiting on you</div>
+    <div class="rows" style="gap:12px">
+      <div class="appr hot"><div class="at"><span class="bdg warn">Medium risk</span><b>Export pricing table to Salesforce</b></div><p>Research-synth wants to write to an external system — <span class="mono">Salesforce › Q2 Pricing</span>. 9 rows, no deletes. From the Competitive Intelligence chat.</p><div class="ar"><button class="rbtn go">Approve</button><button class="rbtn ghost">Deny</button><span class="lnk">Always allow for this workspace</span></div></div>
+      <div class="appr"><div class="at"><span class="bdg off">Low risk</span><b>Send the board update email</b></div><p>Deck-builder drafted an email to <span class="mono">board@egzakta</span>. Reads from this workspace only.</p><div class="ar"><button class="rbtn go">Approve</button><button class="rbtn ghost">Deny</button><span class="lnk">Review draft</span></div></div>
+    </div>
+    <div class="grp">Recently decided</div>
+    <div class="rows">
+      ${rc('✓','Read competitor sites','<span class="rs">approved 2h ago · web fetch</span>','<span class="bdg ok">Approved</span>')}
+    </div>`,
+  vault: () => `
+    <div class="rows">
+      ${rc('🔑','ANTHROPIC_API_KEY','<span class="rs"><span class="mono">sk-ant-•••••••••••3a9f</span> · used by the agent runtime</span>','<div class="acts"><span class="lnk">Rotate</span><span class="lnk">Reveal</span></div>')}
+      ${rc('🔑','OPENAI_API_KEY','<span class="rs"><span class="mono">sk-•••••••••••7c20</span> · LiteLLM routing</span>','<div class="acts"><span class="lnk">Rotate</span><span class="lnk">Reveal</span></div>')}
+      ${rc('🔑','Salesforce token','<span class="rs"><span class="mono">••••••••</span> · 1 connector · <span style="color:var(--risk)">expired</span></span>','<div class="acts"><button class="rbtn go">Renew</button></div>')}
+      ${rc('🔑','GitHub PAT','<span class="rs"><span class="mono">ghp_•••••••••••</span> · 1 connector</span>','<div class="acts"><span class="lnk">Rotate</span></div>')}
+    </div>
+    <div class="grp">How it\u2019s stored</div>
+    <div class="rc"><div class="ri"><svg width=16 height=16 viewBox="0 0 24 24" fill=none stroke="var(--healthy)" stroke-width=1.8><path d="M12 3l8 4v5c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg></div><div class="rt"><b>Encrypted, on this machine</b><div class="rs">Secrets live in the local vault. Agents reference them by name to call tools — the key value is never placed into a prompt or shown to a model.</div></div></div>`,
+  usage: () => `
+    <div class="ustat">
+      <div class="ust"><div class="v">$12.40</div><div class="l">This month · est.</div></div>
+      <div class="ust"><div class="v" style="color:var(--intel)">4.2M</div><div class="l">Tokens</div></div>
+      <div class="ust"><div class="v" style="color:var(--healthy)">$50</div><div class="l">Budget · 25% used</div></div>
+    </div>
+    <div class="grp">By model</div>
+    <div>
+      <div class="ubar"><span class="ul">Claude Sonnet</span><div class="ut"><div class="uf" style="width:62%;background:linear-gradient(90deg,var(--honey-deep),var(--honey))"></div></div><span class="uv">$7.70</span></div>
+      <div class="ubar"><span class="ul">GPT-5</span><div class="ut"><div class="uf" style="width:24%;background:var(--work)"></div></div><span class="uv">$3.00</span></div>
+      <div class="ubar"><span class="ul">Qwen · local</span><div class="ut"><div class="uf" style="width:6%;background:var(--healthy)"></div></div><span class="uv">$0.00</span></div>
+    </div>
+    <div class="grp">By workspace</div>
+    <div class="rows">
+      ${rc('C','Competitive Intelligence','<span class="rs">2.4M tokens</span>','<span class="meta">$6.90</span>')}
+      ${rc('B','Q2 Board Deck','<span class="rs">1.1M tokens</span>','<span class="meta">$3.80</span>')}
+      ${rc('R','Customer Research','<span class="rs">0.7M tokens</span>','<span class="meta">$1.70</span>')}
+    </div>`,
+};
+
+function show(s){
+  document.querySelectorAll('.ritem').forEach(r => r.classList.toggle('on', r.dataset.s===s));
+  document.getElementById('sTitle').innerHTML = head[s][0];
+  document.getElementById('sSub').innerHTML = head[s][1];
+  document.getElementById('sActionT').textContent = head[s][2];
+  document.getElementById('body').innerHTML = panels[s]();
+  document.getElementById('body').scrollTop = 0;
+}
+document.getElementById('rail').addEventListener('click', e => { const r = e.target.closest('.ritem'); if(r) show(r.dataset.s); });
+show('tools');
+</script>
+</body>
+</html>

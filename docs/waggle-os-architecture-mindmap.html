@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Waggle OS — Architecture Mind Map</title>
+<style>
+  :root {
+    --honey: #e5a000;
+    --hive-950: #08090c;
+    --hive-900: #0e1014;
+    --accent: #a78bfa;
+    --ink: #e7e5e4;
+    --muted: #9ca3af;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--hive-950); color: var(--ink);
+    font-family: "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { display: flex; flex-direction: column; }
+  header {
+    padding: 14px 22px;
+    border-bottom: 1px solid #1f2227;
+    background: linear-gradient(180deg, #0e1014 0%, #08090c 100%);
+    display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+  }
+  header h1 { margin: 0; font-size: 19px; letter-spacing: 0.2px; }
+  header h1 .bee { color: var(--honey); }
+  header .sub { color: var(--muted); font-size: 13px; }
+  header .meta { margin-left: auto; color: var(--muted); font-size: 11.5px; text-align: right; line-height: 1.5; }
+  header .meta b { color: var(--honey); font-weight: 600; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; padding: 8px 22px;
+    border-bottom: 1px solid #1f2227; font-size: 11.5px; color: var(--muted); background: #0b0d11; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+  .hint { color: var(--accent); }
+  .map-wrap { flex: 1 1 auto; position: relative; overflow: hidden; }
+  /* the autoloader renders an <svg> inside <div class="markmap">; both must fill the
+     wrap or height:100% collapses against an auto-height parent → tiny map */
+  .markmap { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .markmap > svg, svg.markmap { width: 100%; height: 100%; display: block; }
+  /* markmap renders an <svg class="markmap"> — keep links/text readable on dark bg */
+  .markmap-link { stroke-opacity: 0.55; }
+  footer { padding: 7px 22px; font-size: 11px; color: #6b7280; border-top: 1px solid #1f2227; background: #0b0d11; }
+  footer code { color: var(--honey); }
+</style>
+</head>
+<body>
+  <header>
+    <h1><span class="bee">🐝</span> Waggle&nbsp;OS — Platform Architecture</h1>
+    <span class="sub">Interactive mind map · click a node to expand / collapse · scroll to zoom · drag to pan</span>
+    <span class="meta">Source of truth: <b>CLAUDE.md</b> + verified source<br/>Workspace-native AI agents · persistent memory · KVARK funnel</span>
+  </header>
+  <div class="legend">
+    <span><i style="background:#e5a000"></i> Product / Strategy</span>
+    <span><i style="background:#a78bfa"></i> Runtime &amp; Agent</span>
+    <span><i style="background:#38bdf8"></i> Memory &amp; Data</span>
+    <span><i style="background:#34d399"></i> Packages / Ops</span>
+    <span><i style="background:#fb7185"></i> Security / Enterprise</span>
+    <span class="hint">Tip: the map opens 2 levels deep — keep clicking to drill in.</span>
+  </div>
+  <div class="map-wrap">
+    <div class="markmap">
+      <script type="text/template">
+---
+markmap:
+  colorFreezeLevel: 2
+  initialExpandLevel: 2
+  maxWidth: 320
+  spacingVertical: 11
+  spacingHorizontal: 96
+  paddingX: 28
+  fitRatio: 0.92
+  color:
+    - "#e5a000"
+    - "#a78bfa"
+    - "#38bdf8"
+    - "#34d399"
+    - "#fb7185"
+---
+
+# 🐝 Waggle OS
+
+## 🎯 What it is
+- Workspace-native **AI agent platform** with **persistent memory**
+- Ships as a **Tauri 2.0** desktop binary (Windows/macOS) + Vite web app + Node sidecar
+- **Strategic role:** demand-creation & qualification engine for **KVARK** (sovereign enterprise AI)
+- **Moat:** Memory + Harvest are **free forever** → lock-in; Skills & Connectors are the upgrade trigger
+- Agents are free (they *generate* memory)
+
+## 💳 Tiers
+- **TRIAL** — $0 / 15 days · all features → falls back to FREE
+- **FREE** — $0 forever · 5 workspaces · built-in skills
+- **PRO** — $19/mo · unlimited · marketplace · all connectors
+- **TEAMS** — $49/seat · shared workspaces · WaggleDance · governance
+- **ENTERPRISE** — consultative · KVARK sovereign on-prem (kvark.ai)
+
+## 🖥️ Surfaces & Runtime
+- **Desktop shell** — `app/` · Tauri 2.0 (Rust) · loads the apps/web dist
+- **Web app (MAIN UI)** — `apps/web` · React 19 + Vite + Tailwind 4 + base-ui
+- **Landing site** — `apps/www` (waggle-os.ai)
+- **Sidecar** — Fastify (Node.js) bundled into Tauri
+- **LLM routing** — LiteLLM (`litellm-config.yaml`)
+
+## 🧠 Memory Substrate — "Hive-Mind"
+### mind/ — the per-workspace brain
+- **FrameStore** — SQLite-backed memory frames
+- **HybridSearch** — vector + keyword (+ cross-encoder reranker)
+- **KnowledgeGraph** — entity–relation graph
+- **IdentityLayer** — who the user is
+- **AwarenessLayer** — active task / state
+- scoring · reconcile · ontology · concept-tracker · entity-normalizer
+### harvest/ — conversation & file ingestion
+- Chat adapters: ChatGPT · Claude · Claude Code · Gemini · Perplexity
+- File adapters: PDF · markdown · plaintext · URL · universal
+- `pipeline.ts` + `dedup.ts`
+### Cognify — memory extraction pipeline
+### OSS mirror — `marolinik/hive-mind` (curated forward-port; monorepo is source of truth)
+
+## 🤖 Agent Runtime — `packages/agent`
+### Core loop
+- `agent-loop.ts` — execution loop
+- `orchestrator.ts` — buildSystemPrompt() / recallMemory()
+- `behavioral-spec.ts` — BEHAVIORAL_SPEC rules
+- `tool-filter.ts` — filterToolsForContext()
+### Safety & cost
+- `injection-scanner.ts` — scanForInjection() (3 pattern sets)
+- `cost-tracker.ts` — CostTracker + model pricing
+- `loop-guard.ts` · `iteration-budget.ts`
+### Capability & Trust
+- capability-router · capability-acquisition
+- trust-model · permissions · credential-pool · confirmation
+### Quality & Correction
+- quality-controller · contradiction-detector
+- correction-detector · improvement-detector
+### 🧬 Evolution — self-improvement loop
+- evolution-orchestrator · gates · deploy · llm-wiring
+- judge · iterative-optimizer · eval-dataset
+### Orchestration
+- subagent-orchestrator
+- workflow-composer / harness / templates
+- **WaggleDance** — multi-agent coordination (`packages/waggle-dance`)
+
+## 👤 Personas (22) — `persona-data.ts`
+### Universal Modes (8) — always available
+- **general-purpose** — versatile default, full tools
+- **planner** — read-only strategic planning
+- **verifier** — read-only adversarial QA (VERDICT)
+- **coordinator** — pure orchestrator (spawn/list/get only)
+- researcher · writer · analyst · coder
+### Specialists (14) — template-scoped
+- project-manager · executive-assistant
+- sales-rep · marketer · senior-PM
+- hr-manager · legal-counsel · business-finance · consultant
+- support · ops-manager · data-engineer · recruiter · creative-director
+### Grouping views
+- PersonaSwitcher → 2 tiers (`persona-tier.ts`)
+- Onboarding picker → shows 19 of 22 (drops planner/verifier/coordinator)
+
+## 🗂️ Workspaces
+- **One isolated mind per workspace** — memory never crosses
+- **15 templates** → each seeds one default persona (`TEMPLATE_PERSONA`)
+  - Sales · Research · Engineering · Marketing · Product
+  - Legal · Consulting · Support · Finance · HR
+  - Operations · Data · Recruiting · Design · Blank
+- Onboarding surfaces a **curated 6** for the ≤2-min flow
+- Per-workspace: Tasks board · Artifacts · Files
+
+## 📦 Packages (27 workspaces)
+### Core (15)
+- core · agent · server · shared · sdk
+- cli · marketplace · optimizer · waggle-dance
+- weaver · wiki-compiler · worker · admin-web
+- launcher · memory-mcp
+### hive-mind OSS split (12)
+- core · cli · mcp-server · wiki-compiler · shim-core
+- hooks: claude-code · claude-desktop · codex · codex-desktop · cursor · hermes · openclaw
+
+## 🔌 AI-OS arc
+- **Tool detection** — all 7 supported AI tools
+- **WaggleDance v2** — signal bus → bridge → UI stream
+- **Launcher** — detect → install hooks (reversible) → launch with `WAGGLE_WORKSPACE_ID`
+- **Skill diffusion** — distillation fire → `skill_share` broadcast
+
+## 🏰 KVARK funnel
+- Sovereign enterprise AI — "everything Waggle does, on your infrastructure"
+- Full data-pipeline injection · your permissions · complete audit trail
+- `kvark_search` / `kvark_ask_document` — gated to **TEAMS / ENTERPRISE**
+- kvark.ai · license.waggle-os.ai · cloud.waggle-os.ai
+
+## 🔐 Security (non-negotiable)
+- **Vault-only secrets** — `core/vault.ts` (never committed)
+- **Injection defense** — scanForInjection() on all external input
+- **Tauri IPC allowlist** — explicit; never allow-all
+- **Parameterized SQL** — no string interpolation, ever
+- No eval · no dynamic require
+
+## 🛠️ Stack & Ops
+- **DB** — SQLite (better-sqlite3 + sqlite-vec)
+- **Billing** — Stripe
+- **Design** — Hive DS (honey #e5a000 / hive-950 #08090c / accent #a78bfa)
+- **Tests** — Vitest (unit) + Playwright (E2E)
+- **Deploy** — Dockerfile + docker-compose.production + render.yaml
+- Package manager: npm · Node ≥ 20
+      </script>
+    </div>
+  </div>
+  <footer>
+    Generated for team onboarding · branches verified against <code>CLAUDE.md</code> &amp; source (June 2026) ·
+    edit the markdown block in this file to update · maintained by Egzakta Group.
+  </footer>
+  <script src="https://cdn.jsdelivr.net/npm/markmap-autoloader@0.18.12"
+          integrity="sha384-9zw1CIUEvIayWHijWFlNbU10nwKEeWrc06N+On+S8NLOP1bETjGYKeF4SuEcmXYS"
+          crossorigin="anonymous"></script>
+</body>
+</html>

@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Waggle, reimagined — a concept exploration</title>
+<link rel="stylesheet" href="styles/waggle.css">
+<style>
+  html { scroll-behavior: smooth; }
+  body { overflow-x: hidden; }
+
+  /* ── Top chrome ──────────────────────────────────────────────── */
+  .topbar {
+    position: fixed; inset: 0 0 auto 0; z-index: 50;
+    height: 60px; display: flex; align-items: center; gap: 20px;
+    padding: 0 28px;
+    background: color-mix(in srgb, var(--bg) 78%, transparent);
+    backdrop-filter: blur(18px) saturate(1.4);
+    -webkit-backdrop-filter: blur(18px) saturate(1.4);
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .brand { display: flex; align-items: center; gap: 11px; }
+  .brand .mark {
+    width: 30px; height: 33px; display: grid; place-items: center;
+    background: linear-gradient(150deg, var(--honey-bright), var(--honey-deep));
+    color: #1a1407; font-weight: 800; font-size: 15px;
+    box-shadow: var(--honey-glow);
+  }
+  .brand b { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
+  .brand .tag {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--text-dim);
+    padding-left: 12px; margin-left: 2px; border-left: 1px solid var(--line);
+  }
+  .topnav { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+  .topnav a {
+    font-size: 13px; color: var(--text-muted); text-decoration: none;
+    padding: 7px 12px; border-radius: 8px; transition: .15s; font-weight: 500;
+  }
+  .topnav a:hover { color: var(--text); background: var(--surface-2); }
+  .topnav { overflow-x: auto; max-width: 58vw; flex-wrap: nowrap; scrollbar-width: none; }
+  .topnav::-webkit-scrollbar { display: none; }
+  .topnav a { white-space: nowrap; }
+  .topnav a.on { color: var(--honey-bright); }
+  [data-theme="light"] .topnav a.on { color: var(--honey-deep); }
+  .themebtn {
+    margin-left: 8px; width: 38px; height: 38px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--surface); color: var(--text-2);
+    cursor: pointer; display: grid; place-items: center; transition: .15s;
+  }
+  .themebtn:hover { border-color: var(--honey-line); color: var(--honey); }
+
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  section { padding: 100px 0; border-top: 1px solid var(--line-soft); }
+  section:first-of-type { border-top: 0; }
+
+  .eyebrow {
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--honey); margin: 0 0 18px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .eyebrow::before { content: ''; width: 22px; height: 1px; background: var(--honey-line); }
+
+  h2.big {
+    font-family: var(--sans); font-weight: 600;
+    font-size: clamp(36px, 5vw, 60px); line-height: 1.02;
+    letter-spacing: -0.015em; margin: 0 0 22px; text-wrap: balance;
+  }
+  h2.big em { font-style: normal; color: var(--honey); }
+  .lede {
+    font-size: 20px; line-height: 1.5; color: var(--text-2);
+    max-width: 60ch; margin: 0; font-weight: 400;
+  }
+  .lede b { color: var(--text); font-weight: 600; }
+
+  /* ── Hero ─────────────────────────────────────────────────────── */
+  .hero { padding: 168px 0 120px; position: relative; }
+  .hero::before {
+    content: ''; position: absolute; top: -40px; right: -120px;
+    width: 560px; height: 560px; pointer-events: none; opacity: .5;
+    background: radial-gradient(circle at center, var(--honey-wash), transparent 62%);
+  }
+  .hero .comb-deco {
+    position: absolute; inset: 0; opacity: .6; pointer-events: none;
+    mask-image: linear-gradient(120deg, transparent 40%, black 110%);
+  }
+  .hero h1 {
+    font-family: var(--sans); font-weight: 600;
+    font-size: clamp(46px, 7.5vw, 94px); line-height: 0.92;
+    letter-spacing: -0.025em; margin: 22px 0 26px; position: relative;
+  }
+  .hero h1 em { font-style: normal; color: var(--honey); }
+  .hero p { font-size: 21px; color: var(--text-2); max-width: 56ch; line-height: 1.5; position: relative; }
+  .hero .meta {
+    margin-top: 44px; display: flex; flex-wrap: wrap; gap: 10px; position: relative;
+  }
+
+  /* ── Findings (critique) ──────────────────────────────────────── */
+  .findings { margin-top: 56px; display: grid; gap: 18px; }
+  .finding {
+    display: grid; grid-template-columns: 56px 1fr; gap: 22px;
+    padding: 26px 28px; border-radius: var(--r-lg);
+    background: var(--surface); border: 1px solid var(--line-soft);
+    transition: .2s;
+  }
+  .finding:hover { border-color: var(--line-strong); transform: translateY(-2px); box-shadow: var(--shadow); }
+  .finding .n {
+    font-family: var(--serif); font-size: 40px; line-height: 1;
+    color: var(--honey); opacity: .85;
+  }
+  .finding h3 { margin: 2px 0 8px; font-size: 19px; font-weight: 650; letter-spacing: -0.01em; }
+  .finding p { margin: 0; color: var(--text-muted); font-size: 15px; line-height: 1.55; }
+  .finding .obs {
+    margin-top: 12px; font-family: var(--mono); font-size: 12px;
+    color: var(--text-dim); display: flex; gap: 8px; align-items: baseline;
+  }
+  .finding .obs b { color: var(--risk); font-weight: 500; }
+
+  /* ── Principles ───────────────────────────────────────────────── */
+  .principles { margin-top: 52px; display: grid; grid-template-columns: repeat(2,1fr); gap: 18px; }
+  .principle {
+    padding: 30px; border-radius: var(--r-lg); position: relative; overflow: hidden;
+    background: var(--surface); border: 1px solid var(--line-soft);
+  }
+  .principle .idx { font-family: var(--mono); font-size: 12px; color: var(--honey); letter-spacing: .1em; }
+  .principle h3 { font-family: var(--sans); font-weight: 600; font-size: 28px; margin: 14px 0 10px; letter-spacing: -0.01em; }
+  .principle p { margin: 0; color: var(--text-muted); font-size: 15px; }
+  .principle .hexmark {
+    position: absolute; right: -26px; bottom: -26px; width: 110px; height: 122px;
+    background: var(--surface-2); opacity: .6;
+  }
+
+  /* ── Identity / styleguide ────────────────────────────────────── */
+  .sg-grid { margin-top: 48px; display: grid; gap: 22px; }
+  .panel {
+    background: var(--surface); border: 1px solid var(--line-soft);
+    border-radius: var(--r-lg); padding: 30px;
+  }
+  .panel > .label {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--text-dim); margin: 0 0 20px;
+  }
+  .swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
+  .sw { border-radius: var(--r); overflow: hidden; border: 1px solid var(--line-soft); }
+  .sw .chip { height: 64px; }
+  .sw .meta { padding: 9px 10px; }
+  .sw .meta b { display: block; font-size: 12.5px; font-weight: 600; }
+  .sw .meta span { font-family: var(--mono); font-size: 10.5px; color: var(--text-dim); }
+  .sem-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+
+  .type-spec { display: grid; gap: 22px; }
+  .type-spec .row { display: grid; grid-template-columns: 96px 1fr; gap: 24px; align-items: baseline; padding-bottom: 22px; border-bottom: 1px solid var(--line-soft); }
+  .type-spec .row:last-child { border-bottom: 0; padding-bottom: 0; }
+  .type-spec .k { font-family: var(--mono); font-size: 11px; color: var(--text-dim); letter-spacing: .08em; text-transform: uppercase; }
+  .type-spec .serif-demo { font-family: var(--sans); font-weight: 600; font-size: 44px; line-height: 1; letter-spacing: -0.02em; }
+  .type-spec .serif-demo em { font-style: normal; color: var(--honey); }
+  .type-spec .sans-demo { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; }
+  .type-spec .sans-demo small { display: block; font-size: 14px; font-weight: 400; color: var(--text-muted); margin-top: 6px; letter-spacing: 0; }
+  .type-spec .mono-demo { font-family: var(--mono); font-size: 15px; color: var(--text-2); }
+
+  /* ── IA before/after ──────────────────────────────────────────── */
+  .ia-toggle { margin-top: 40px; display: inline-flex; padding: 4px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line-soft); gap: 4px; }
+  .ia-toggle button {
+    font-family: var(--sans); font-size: 13.5px; font-weight: 600; cursor: pointer;
+    padding: 9px 18px; border-radius: 9px; border: 0; background: transparent; color: var(--text-muted); transition: .15s;
+  }
+  .ia-toggle button.on { background: var(--honey); color: #1a1407; }
+  .ia-cols { margin-top: 26px; display: grid; grid-template-columns: 300px 1fr; gap: 22px; align-items: start; }
+  .navmock {
+    background: var(--bg-2); border: 1px solid var(--line-soft); border-radius: var(--r-lg);
+    padding: 16px 12px; min-height: 460px;
+  }
+  .navmock .zone { font-family: var(--mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-dim); padding: 14px 12px 6px; }
+  .navmock .item {
+    display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 9px;
+    font-size: 13.5px; color: var(--text-2); transition: .12s;
+  }
+  .navmock .item .ic { width: 16px; height: 16px; border-radius: 5px; background: var(--surface-3); flex: none; }
+  .navmock .item.on { background: var(--honey-wash); color: var(--text); }
+  .navmock .item.on .ic { background: var(--honey); }
+  .navmock .item.muted { opacity: .5; }
+  .navmock .more { margin-top: 8px; padding: 9px 12px; font-size: 12.5px; color: var(--text-dim); font-family: var(--mono); border-top: 1px dashed var(--line); }
+  .ia-note { color: var(--text-muted); font-size: 15.5px; line-height: 1.6; }
+  .ia-note h3 { font-family: var(--sans); font-weight: 600; font-size: 30px; margin: 0 0 14px; letter-spacing: -0.01em; color: var(--text); }
+  .ia-note ul { margin: 18px 0 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+  .ia-note li { display: grid; grid-template-columns: 18px 1fr; gap: 12px; font-size: 15px; }
+  .ia-note li .b { color: var(--honey); font-weight: 700; }
+  .ia-note li b { color: var(--text); }
+
+  /* ── Screen sections ──────────────────────────────────────────── */
+  .screen-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+  .screen-head .open {
+    font-size: 13.5px; font-weight: 600; color: var(--text); text-decoration: none;
+    padding: 11px 18px; border-radius: 10px; border: 1px solid var(--line-strong);
+    background: var(--surface); display: inline-flex; align-items: center; gap: 9px; transition: .15s; white-space: nowrap;
+  }
+  .screen-head .open:hover { border-color: var(--honey-line); color: var(--honey); box-shadow: var(--shadow); }
+  .vary { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .vary .pill b { color: var(--text); }
+  .frame {
+    margin-top: 30px; border-radius: var(--r-xl); overflow: hidden;
+    border: 1px solid var(--line); background: var(--bg-2);
+    box-shadow: var(--shadow-lg); position: relative;
+  }
+  .frame .bar {
+    height: 38px; display: flex; align-items: center; gap: 7px; padding: 0 16px;
+    border-bottom: 1px solid var(--line-soft); background: var(--surface);
+  }
+  .frame .bar i { width: 11px; height: 11px; border-radius: 999px; background: var(--line-strong); }
+  .frame .bar .u { margin-left: 14px; font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+  .frame iframe { width: 100%; height: 660px; border: 0; display: block; background: var(--bg); }
+
+  .placeholder {
+    height: 480px; display: grid; place-items: center; text-align: center;
+    background:
+      repeating-linear-gradient(135deg, var(--surface) 0 14px, var(--bg-2) 14px 28px);
+  }
+  .placeholder .inner { background: color-mix(in srgb, var(--bg) 60%, transparent); padding: 28px 34px; border-radius: var(--r-lg); backdrop-filter: blur(4px); }
+  .placeholder .mono { color: var(--honey); font-size: 13px; letter-spacing: .1em; text-transform: uppercase; }
+  .placeholder p { margin: 10px 0 0; color: var(--text-muted); font-size: 15px; }
+
+  /* ── Close ────────────────────────────────────────────────────── */
+  .close-cta { text-align: center; padding: 120px 0 140px; }
+  /* ── Coverage map ─────────────────────────────────────────────── */
+  .cov { margin-top: 44px; display: grid; gap: 26px; }
+  .covzone h3 { font-family: var(--mono); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--honey); margin: 0 0 14px; display: flex; align-items: center; gap: 10px; }
+  .covzone h3::after { content: ''; flex: 1; height: 1px; background: var(--line-soft); }
+  .covgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .covitem { display: flex; align-items: center; gap: 11px; padding: 13px 15px; border-radius: var(--r); border: 1px solid var(--line-soft); background: var(--surface); text-decoration: none; color: var(--text-2); transition: .14s; }
+  a.covitem:hover { border-color: var(--honey-line); transform: translateY(-2px); box-shadow: var(--shadow); }
+  .covitem .cst { width: 9px; height: 9px; border-radius: 999px; flex: none; }
+  .covitem .cst.done { background: var(--honey); } .covitem .cst.within { background: var(--work); } .covitem .cst.queued { background: var(--line-strong); }
+  .covitem .cst.next { background: var(--attention); } .covitem .cst.beta { background: var(--intel); }
+  .covitem .cn { flex: 1; font-size: 13.5px; font-weight: 550; min-width: 0; } .covitem .cn b { color: var(--text); font-weight: 600; }
+  .covitem .croute { font-family: var(--mono); font-size: 10px; color: var(--text-dim); white-space: nowrap; }
+  .covlegend { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 4px; font-size: 12.5px; color: var(--text-muted); }
+  .covlegend span { display: inline-flex; align-items: center; gap: 8px; } .covlegend .cst { width: 9px; height: 9px; border-radius: 999px; }
+  @media (max-width: 860px){ .covgrid { grid-template-columns: 1fr; } }
+  .close-cta h2 { font-family: var(--sans); font-weight: 600; font-size: clamp(34px,5vw,56px); letter-spacing: -0.02em; margin: 0 0 18px; }
+  .close-cta h2 em { font-style: normal; color: var(--honey); }
+  .close-cta p { color: var(--text-muted); max-width: 52ch; margin: 0 auto; font-size: 17px; }
+  footer { border-top: 1px solid var(--line-soft); padding: 30px 28px; text-align: center; color: var(--text-dim); font-family: var(--mono); font-size: 12px; }
+
+  @media (max-width: 860px) {
+    .topnav { display: none; }
+    .principles, .ia-cols { grid-template-columns: 1fr; }
+    .swatches { grid-template-columns: repeat(3,1fr); }
+    .finding { grid-template-columns: 1fr; gap: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="mark hex">W</div>
+    <b>Waggle</b>
+    <span class="tag">Reimagined · concept</span>
+  </div>
+  <nav class="topnav" id="topnav">
+    <a href="#read">The read</a>
+    <a href="#principles">Principles</a>
+    <a href="#identity">Identity</a>
+    <a href="#navigation">Navigation</a>
+    <a href="#ia">⌘K</a>
+    <a href="#landing">Landing</a>
+    <a href="#home">Home</a>
+    <a href="#chat">Chat</a>
+    <a href="#workspace">Workspace</a>
+    <a href="#launcher">Launcher</a>
+    <a href="#storage">Storage</a>
+    <a href="#surfaces">⌘K surfaces</a>
+    <a href="#workspaces">Workspaces</a>
+    <a href="#onboarding">Onboarding</a>
+    <a href="#settings">Settings</a>
+    <a href="#marketplace">Marketplace</a>
+    <a href="#evolution">Moat</a>
+    <a href="#auth">Auth</a>
+    <a href="#billing">Billing</a>
+    <a href="#habit">Habit</a>
+    <a href="#appsurfaces">Surfaces</a>
+    <a href="#benchmark">Bench</a>
+    <a href="#platform">Platform</a>
+    <a href="#coverage">Map</a>
+  </nav>
+  <button class="themebtn" id="themebtn" title="Toggle light / dark" aria-label="Toggle theme">☾</button>
+</div>
+
+<main>
+
+  <!-- ───────────────────────── HERO ───────────────────────── -->
+  <section class="hero" id="top">
+    <div class="comb comb-deco"></div>
+    <div class="eyebrow">A design concept for Waggle OS</div>
+    <h1>The hive,<br><em>made calm.</em></h1>
+    <p>Waggle is a genuinely powerful agent platform — persistent memory, model-agnostic orchestration, a swarm protocol. But today it speaks like an engineer and looks like a dashboard. This is a concept for making it feel <b style="color:var(--text)">premium, intuitive, and progressively revealed</b> — calm for the knowledge worker, with every ounce of power one keystroke away.</p>
+    <div class="meta">
+      <span class="pill">◆ Refreshed Hive identity</span>
+      <span class="pill">◆ Landing page, Home, Chat &amp; Workspace</span>
+      <span class="pill">◆ Dark + light · interactive</span>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── THE READ ───────────────────────── -->
+  <section id="read">
+    <div class="eyebrow">The read</div>
+    <h2 class="big">What's working —<br>and what's in the <em>way.</em></h2>
+    <p class="lede">The bones are strong. The friction is in <b>density, language, and surface noise</b>. Five things stood out reading the live product.</p>
+
+    <div class="findings">
+      <div class="finding">
+        <div class="n">01</div>
+        <div>
+          <h3>The spine is overloaded</h3>
+          <p>The left nav carries five zones and ~18 destinations before you've done anything. For a non-technical operator, that's a wall of choices — and the most important act, talking to your agent, is just one item among many.</p>
+          <div class="obs">observed<b>18 nav items · 5 zones · always visible</b></div>
+        </div>
+      </div>
+      <div class="finding">
+        <div class="n">02</div>
+        <div>
+          <h3>It speaks fluent engineer</h3>
+          <p>"Spawn agent", "Waggle-Dance", "MCPs", "GEPA", "consolidated memories". Power users get it; the operator you're designing for stalls. The product hides its own benefits behind its vocabulary.</p>
+          <div class="obs">observed<b>jargon-first labels, no plain-language layer</b></div>
+        </div>
+      </div>
+      <div class="finding">
+        <div class="n">03</div>
+        <div>
+          <h3>Everything is small and the same size</h3>
+          <p>The cockpit runs on 10–13px type with thin borders around every block. Nothing leads. It reads as a control panel, not a calm daily briefing — and it never feels premium at that density.</p>
+          <div class="obs">observed<b>text-[10px]…[13px] · border on every card</b></div>
+        </div>
+      </div>
+      <div class="finding">
+        <div class="n">04</div>
+        <div>
+          <h3>Five colors shouting at once</h3>
+          <p>Blue, purple, green, orange, red all fire simultaneously across the briefing, layered over glass, a wallpaper, and a honeycomb texture. The eye has no rest and no hierarchy to follow.</p>
+          <div class="obs">observed<b>5 semantic hues + glass + wallpaper + comb</b></div>
+        </div>
+      </div>
+      <div class="finding">
+        <div class="n">05</div>
+        <div>
+          <h3>The magic stays hidden</h3>
+          <p>Memory that compounds, work that happens overnight, agents that coordinate — these are the reasons to choose Waggle. They're present but buried in counters and lists. The differentiators never get a hero moment.</p>
+          <div class="obs">observed<b>benefits expressed as small tallies</b></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── PRINCIPLES ───────────────────────── -->
+  <section id="principles">
+    <div class="eyebrow">The response</div>
+    <h2 class="big">Five principles<br>for the <em>redesign.</em></h2>
+    <p class="lede">Each one answers a finding above. They're the rules every screen in this concept follows.</p>
+
+    <div class="principles">
+      <div class="principle">
+        <div class="hexmark hex"></div>
+        <div class="idx">01 ↦ findings 01·02</div>
+        <h3>Calm by default,<br>powerful on demand</h3>
+        <p>Show only what the moment needs. Swarm, MCPs, optimizer and the rest live behind one command bar — discoverable, never in the way. Progressive disclosure as the core mechanic.</p>
+      </div>
+      <div class="principle">
+        <div class="hexmark hex"></div>
+        <div class="idx">02 ↦ finding 01</div>
+        <h3>One clear spine</h3>
+        <p>Collapse 18 destinations into a handful of plain-language places, anchored on the conversation. Everything else is reachable from <span class="kbd">⌘K</span> — the OS, not the sidebar, holds the breadth.</p>
+      </div>
+      <div class="principle">
+        <div class="hexmark hex"></div>
+        <div class="idx">03 ↦ finding 05</div>
+        <h3>Show the magic</h3>
+        <p>Memory, overnight work and coordination get real estate and language a human understands. The differentiators become legible scenes, not tallies in a corner.</p>
+      </div>
+      <div class="principle">
+        <div class="hexmark hex"></div>
+        <div class="idx">04 ↦ findings 03·04</div>
+        <h3>Warm &amp; crafted</h3>
+        <p>A warm graphite hive, one honey accent used with intent, an editorial serif for moments that matter, and air between things. Premium is restraint plus a real type hierarchy.</p>
+      </div>
+      <div class="principle" style="grid-column: 1 / -1;">
+        <div class="hexmark hex"></div>
+        <div class="idx">05 ↦ finding 02</div>
+        <h3>Speak human, reveal the expert layer</h3>
+        <p>Lead with plain words — "Start a task", "Working while you're away", "Team of agents". The technical name ("waggle-dance", "MCP server") rides along as a quiet subtitle for the power user. One product, two reading levels.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── IDENTITY ───────────────────────── -->
+  <section id="identity">
+    <div class="eyebrow">Identity</div>
+    <h2 class="big">A warmer <em>hive.</em></h2>
+    <p class="lede">Same DNA — honey, hexagons, the waggle dance — rebuilt for warmth and restraint. The cold blue-graphite becomes a warm graphite you'd want to live in; honey stops being decoration and becomes a precision accent; and one clean grotesk does the talking — <b>simple, not bookish</b>.</p>
+
+    <div class="sg-grid">
+      <div class="panel">
+        <p class="label">Surfaces · warm graphite → warm paper</p>
+        <div class="swatches" id="surfSw"></div>
+      </div>
+
+      <div class="panel">
+        <p class="label">Accent &amp; refined semantics</p>
+        <div class="swatches" id="accentSw" style="grid-template-columns:repeat(3,1fr)"></div>
+        <div class="sem-row" id="semRow"></div>
+      </div>
+
+      <div class="panel">
+        <p class="label">Type — one humanist grotesk, used with a real scale · mono for the technical layer</p>
+        <div class="type-spec">
+          <div class="row">
+            <div class="k">Display<br>Hanken&nbsp;Grotesk&nbsp;600</div>
+            <div class="serif-demo">The hive, <em>made calm.</em></div>
+          </div>
+          <div class="row">
+            <div class="k">Interface<br>Hanken&nbsp;Grotesk&nbsp;400–600</div>
+            <div class="sans-demo">Start a task, and Waggle remembers.<small>One family, simple and modern — hierarchy comes from size and weight, not a second typeface.</small></div>
+          </div>
+          <div class="row">
+            <div class="k">Technical<br>JetBrains&nbsp;Mono</div>
+            <div class="mono-demo">waggle-dance · 3 agents · mem://hive/2026-06 · ⌘K</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── NAVIGATION ───────────────────────── -->
+  <section id="navigation">
+    <div class="eyebrow">Navigation &amp; IA</div>
+    <h2 class="big">From a wall<br>to a <em>spine.</em></h2>
+    <p class="lede">Eighteen always-on destinations become five plain-language places, with the long tail moved into the command bar. Toggle to compare.</p>
+
+    <div class="ia-toggle" id="iaToggle">
+      <button data-ia="before">Today — 18 items</button>
+      <button class="on" data-ia="after">Reimagined — 5 + ⌘K</button>
+    </div>
+
+    <div class="ia-cols">
+      <div class="navmock" id="navmock"></div>
+      <div class="ia-note" id="iaNote"></div>
+    </div>
+  </section>
+
+  <!-- ───────────────────── IA / COMMAND BAR ───────────────────── -->
+  <section id="ia">
+    <div class="screen-head">
+      <div>
+        <div class="eyebrow">The spine, in practice</div>
+        <h2 class="big" style="margin-bottom:14px">Five places &amp; a <em>command bar.</em></h2>
+        <p class="lede">The live version of the IA above. A calm five-item sidebar; press <span class="kbd">⌘K</span> and the whole platform is searchable — swarm, MCP servers, optimizer, vault — each <b>named in plain language with the technical term underneath</b>. Power users can pin the tools they live in.</p>
+        <div class="vary">
+          <span class="pill"><b>A</b>&nbsp;· Calm spine</span>
+          <span class="pill"><b>B</b>&nbsp;· Pro (pinned tools)</span>
+          <span class="pill">Try ⌘K inside ↓</span>
+        </div>
+      </div>
+      <a class="open" href="screens/ia.html">Open full screen ↗</a>
+    </div>
+    <div class="frame">
+      <div class="bar"><i></i><i></i><i></i><span class="u">waggle · navigation &amp; ⌘K</span></div>
+      <iframe src="screens/ia.html" title="Navigation & command bar" loading="lazy"></iframe>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── HOME ───────────────────────── -->
+  <section id="landing">
+    <div class="screen-head">
+      <div>
+        <div class="eyebrow">The public front door</div>
+        <h2 class="big" style="margin-bottom:14px">The landing page, <em>rewritten.</em></h2>
+        <p class="lede">A full redesign of waggle-os.ai — new identity, new content. It leads with the real story: <b>one local memory that feeds every model</b>, the proof that the layer (not the model) does the work, and honest free-forever pricing. No cartoon bees; the hive is a precise idea.</p>
+        <div class="vary">
+          <span class="pill">◆ New hive-memory hero</span>
+          <span class="pill">◆ LoCoMo proof, made legible</span>
+          <span class="pill">◆ Dark + light</span>
+        </div>
+      </div>
+      <a class="open" href="Waggle Landing.html">Open full screen ↗</a>
+    </div>
+    <div class="frame">
+      <div class="bar"><i></i><i></i><i></i><span class="u">waggle-os.ai</span></div>
+      <iframe src="Waggle Landing.html" title="Landing page redesign" loading="lazy"></iframe>
+    </div>
+  </section>
+
+  <section id="home">
+    <div class="screen-head">
+      <div>
+        <div class="eyebrow">Screen 01 · Home</div>
+        <h2 class="big" style="margin-bottom:14px">The morning <em>briefing.</em></h2>
+        <p class="lede">A calm scene that opens with one sentence of human language, surfaces what ran overnight as a story, and offers a single obvious next move.</p>
+        <div class="vary">
+          <span class="pill"><b>A</b>&nbsp;· Editorial briefing</span>
+          <span class="pill"><b>B</b>&nbsp;· Focus / single-action</span>
+          <span class="pill"><b>C</b>&nbsp;· Operator dashboard</span>
+        </div>
+      </div>
+      <a class="open" href="screens/home.html">Open full screen ↗</a>
+    </div>
+    <div class="frame">
+      <div class="bar"><i></i><i></i><i></i><span class="u">waggle · home</span></div>
+      <iframe src="screens/home.html" title="Home redesign" loading="lazy"></iframe>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── CHAT ───────────────────────── -->
+  <section id="chat">
+    <div class="screen-head">
+      <div>
+        <div class="eyebrow">Screen 02 · Chat runtime</div>
+        <h2 class="big" style="margin-bottom:14px">Where the work<br><em>happens.</em></h2>
+        <p class="lede">The core surface. The conversation leads; the agent's thinking, tool calls, memory writes and approvals reveal progressively beside it — legible, never overwhelming.</p>
+        <div class="vary">
+          <span class="pill"><b>A</b>&nbsp;· Conversation-first</span>
+          <span class="pill"><b>B</b>&nbsp;· Split work canvas</span>
+        </div>
+      </div>
+      <a class="open" href="screens/chat.html">Open full screen ↗</a>
+    </div>
+    <div class="frame">
+      <div class="bar"><i></i><i></i><i></i><span class="u">waggle · workspace / chat</span></div>
+      <iframe src="screens/chat.html" title="Chat redesign" loading="lazy"></iframe>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── WORKSPACE ───────────────────────── -->
+  <section id="workspace">
+    <div class="screen-head">
+      <div>
+        <div class="eyebrow">Screen 03 · Workspace</div>
+        <h2 class="big" style="margin-bottom:14px">A place that <em>remembers.</em></h2>
+        <p class="lede">The workspace makes Waggle's memory tangible — what it knows, what it made, who's working on what — without drowning you in tabs.</p>
+        <div class="vary">
+          <span class="pill"><b>A</b>&nbsp;· Overview + tabs</span>
+          <span class="pill"><b>B</b>&nbsp;· Memory-forward</span>
+        </div>
+      </div>
+      <a class="open" href="screens/workspace.html">Open full screen ↗</a>
+    </div>
+    <div class="frame">
+      <div class="bar"><i></i><i></i><i></i><span class="u">waggle · workspace</span></div>
+      <iframe src="screens/workspace.html" title="Workspace redesign" loading="lazy"></iframe>
+    </div>
+  </section>
+
+  <!-- ───────────────────── LAUNCHER ───────────────────── -->
+  <section id="launcher">
+    <div class="screen-head">
+      <div>
+        <div class="eyebrow">Screen 04 · Launcher · the feature I under-served</div>
+        <h2 class="big" style="margin-bottom:14px">Bring your own <em>agent.</em></h2>
+        <p class="lede">Waggle can detect and launch Claude Code, Cursor, Codex, Hermes — and run them <b>wired into this workspace's memory</b>. The agent recalls what the hive knows and commits its work back, with provenance. The shipped screen calls itself “minimal-viable”; this makes it a first-class surface and explains the wiring.</p>
+        <div class="vary">
+          <span class="pill"><b>A</b>&nbsp;· Launch &amp; manage</span>
+          <span class="pill"><b>B</b>&nbsp;· How memory is shared</span>
+        </div>
+      </div>
+      <a class="open" href="screens/launcher.html">Open full screen ↗</a>
+    </div>
+    <div class="frame">
+      <div class="bar"><i></i><i></i><i></i><span class="u">waggle · launch external agents</span></div>
+      <iframe src="screens/launcher.html" title="External agent launcher" loading="lazy"></iframe>
+    </div>
+  </section>
+
+  <!-- ───────────────────── STORAGE ───────────────────── -->
+  <section id="storage">
+    <div class="screen-head">
+      <div>
+        <div class="eyebrow">Screen 05 · Storage · making the filesystem legible</div>
+        <h2 class="big" style="margin-bottom:14px">Where your work <em>lives.</em></h2>
+        <p class="lede">A workspace can be <b>Virtual</b> (Waggle-managed), <b>Local</b> (a real folder on your machine), or <b>Team</b> (shared). Today that's invisible. This surface shows the exact path — memory db, files, artifacts — and what stays private, so “local-first” is something you can <i>see</i>.</p>
+        <div class="vary">
+          <span class="pill"><b>A</b>&nbsp;· Where it lives</span>
+          <span class="pill"><b>B</b>&nbsp;· Files + provenance</span>
+        </div>
+      </div>
+      <a class="open" href="screens/storage.html">Open full screen ↗</a>
+    </div>
+    <div class="frame">
+      <div class="bar"><i></i><i></i><i></i><span class="u">waggle · storage &amp; files</span></div>
+      <iframe src="screens/storage.html" title="Storage and files" loading="lazy"></iframe>
+    </div>
+  </section>
+
+  <section id="surfaces">
+    <div class="screen-head">
+      <div>
+        <div class="eyebrow">Screen 06 · the long tail, cleaned up</div>
+        <h2 class="big" style="margin-bottom:14px">Every power tool, <em>one template.</em></h2>
+        <p class="lede">The surfaces that used to be 15 bespoke, half-finished screens — Tools &amp; connectors, Automations, Approvals, Vault, Usage — rebuilt on <b>one consistent, functional pattern</b> and tucked behind ⌘K. Switch with the rail; toggles, approvals, and renewals all work.</p>
+        <div class="vary">
+          <span class="pill">Tools</span><span class="pill">Automations</span><span class="pill">Approvals</span><span class="pill">Vault</span><span class="pill">Usage</span>
+        </div>
+      </div>
+      <a class="open" href="screens/surfaces.html">Open full screen ↗</a>
+    </div>
+    <div class="frame">
+      <div class="bar"><i></i><i></i><i></i><span class="u">waggle · power surfaces (⌘K)</span></div>
+      <iframe src="screens/surfaces.html" title="Power surfaces" loading="lazy"></iframe>
+    </div>
+  </section>
+
+  <section id="workspaces">
+    <div class="screen-head">
+      <div>
+        <div class="eyebrow">Screen 07 · answering “where are all my workspaces?”</div>
+        <h2 class="big" style="margin-bottom:14px">The whole <em>shelf.</em></h2>
+        <p class="lede">Home greets you with the day; <b>Workspaces</b> is every space you have — with its storage type (local / virtual / team), memory count, and what's live. Searchable, filterable, and reachable from the rail, ⌘K, or any workspace's switcher.</p>
+        <div class="vary"><span class="pill"><b>Grid</b></span><span class="pill"><b>Table</b></span><span class="pill">search + storage filters</span></div>
+      </div>
+      <a class="open" href="screens/workspaces.html">Open full screen ↗</a>
+    </div>
+    <div class="frame"><div class="bar"><i></i><i></i><i></i><span class="u">waggle · all workspaces</span></div><iframe src="screens/workspaces.html" title="Workspaces index" loading="lazy"></iframe></div>
+  </section>
+
+  <section id="onboarding">
+    <div class="screen-head">
+      <div>
+        <div class="eyebrow">Screen 08 · first run · the part I'd skipped</div>
+        <h2 class="big" style="margin-bottom:14px">Two minutes to <em>first value.</em></h2>
+        <p class="lede">A five-step takeover: welcome → a little about you → import your history (locally) → pick a starting template → your first task. It ends <b>inside the work</b>, not on an empty screen. Step through it with the controls.</p>
+        <div class="vary"><span class="pill">Welcome</span><span class="pill">About you</span><span class="pill">Import</span><span class="pill">Template</span><span class="pill">First task</span></div>
+      </div>
+      <a class="open" href="screens/onboarding.html">Open full screen ↗</a>
+    </div>
+    <div class="frame"><div class="bar"><i></i><i></i><i></i><span class="u">waggle · first-run onboarding</span></div><iframe src="screens/onboarding.html" title="Onboarding" loading="lazy"></iframe></div>
+  </section>
+
+  <section id="evolution">
+    <div class="screen-head">
+      <div>
+        <div class="eyebrow">Screen 09 · the second moat</div>
+        <h2 class="big" style="margin-bottom:14px">Skills that <em>improve &amp; spread.</em></h2>
+        <p class="lede">Beyond memory: skills <b>re-optimize themselves</b> against real outcomes (versioned, judged, roll-back-able) and <b>diffuse across agents and workspaces</b> — the waggle dance. Tool setups spread the same way. The whole hive compounds.</p>
+        <div class="vary"><span class="pill"><b>A</b>&nbsp;· Skills that improve</span><span class="pill"><b>B</b>&nbsp;· Skills &amp; tools that spread</span></div>
+      </div>
+      <a class="open" href="screens/evolution.html">Open full screen ↗</a>
+    </div>
+    <div class="frame"><div class="bar"><i></i><i></i><i></i><span class="u">waggle · skill evolution &amp; diffusion</span></div><iframe src="screens/evolution.html" title="Skill evolution" loading="lazy"></iframe></div>
+  </section>
+
+  <!-- ─────────────────────── SETTINGS ────────────────────── -->
+  <section id="settings">
+    <div class="screen-head">
+      <div>
+        <div class="eyebrow">Screen 10 · Settings · calm, with a model gate</div>
+        <h2 class="big" style="margin-bottom:14px">Settings that <em>route themselves.</em></h2>
+        <p class="lede">The whole settings surface rebuilt around progressive disclosure (Essential → Standard → Everything). The lead is <b>Models</b>: Waggle needs one working model, so it surfaces a <b>failover chain</b> — primary → fallback on error → a local/budget model when you hit your cap. The same model gate appears in onboarding, so first-run can't dead-end.</p>
+        <div class="vary"><span class="pill"><b>Model pilot</b> + failover</span><span class="pill">Essential / Standard / Everything</span><span class="pill">Permissions · Plan · Backup</span></div>
+      </div>
+      <a class="open" href="screens/settings.html">Open full screen ↗</a>
+    </div>
+    <div class="frame"><div class="bar"><i></i><i></i><i></i><span class="u">waggle · settings</span></div><iframe src="screens/settings.html" title="Settings" loading="lazy"></iframe></div>
+  </section>
+
+  <!-- ───────────────── MARKETPLACE ────────────────── -->
+  <section id="marketplace">
+    <div class="screen-head">
+      <div>
+        <div class="eyebrow">Screen 11 · Marketplace · made simple &amp; agent-searchable</div>
+        <h2 class="big" style="margin-bottom:14px">Capabilities, <em>without the catalog.</em></h2>
+        <p class="lede">Skills, connectors, and MCP tools were three separate, jargon-heavy surfaces. Now they're <b>one shelf</b> — and you don't browse 400 cards, you <b>describe the job and the agent picks</b> (a connector to reach your data, a skill to do the work, the tool they need). The same picker also appears <b>inline in chat</b> the moment a task needs something you don't have.</p>
+        <div class="vary"><span class="pill"><b>A</b>&nbsp;· Browse &amp; ask the agent</span><span class="pill"><b>B</b>&nbsp;· Inline in chat</span></div>
+      </div>
+      <a class="open" href="screens/marketplace.html">Open full screen ↗</a>
+    </div>
+    <div class="frame"><div class="bar"><i></i><i></i><i></i><span class="u">waggle · marketplace</span></div><iframe src="screens/marketplace.html" title="Marketplace" loading="lazy"></iframe></div>
+  </section>
+
+  <!-- ─────────────────────── AUTH ────────────────────── -->
+  <section id="auth">
+    <div class="screen-head">
+      <div>
+        <div class="eyebrow">Screen 12 · Front door · Clerk</div>
+        <h2 class="big" style="margin-bottom:14px">Getting in, <em>kept simple.</em></h2>
+        <p class="lede">Sign-in, sign-up, email verification, and SSO — clean and on-brand, with an honest twist: <b>an account is optional</b>. Waggle runs fully local without one; you sign in only to sync across devices or join a team.</p>
+        <div class="vary"><span class="pill">Sign in</span><span class="pill">Sign up</span><span class="pill">Verify (OTP)</span><span class="pill">SSO / enterprise</span></div>
+      </div>
+      <a class="open" href="screens/auth.html">Open full screen ↗</a>
+    </div>
+    <div class="frame"><div class="bar"><i></i><i></i><i></i><span class="u">waggle · auth (clerk)</span></div><iframe src="screens/auth.html" title="Auth" loading="lazy"></iframe></div>
+  </section>
+
+  <!-- ─────────────────────── BILLING ────────────────────── -->
+  <section id="billing">
+    <div class="screen-head">
+      <div>
+        <div class="eyebrow">Screen 13 · Billing · Stripe</div>
+        <h2 class="big" style="margin-bottom:14px">Upgrading, <em>without friction.</em></h2>
+        <p class="lede">Plans → checkout → success → manage, as a clean Stripe flow. Monthly/annual toggle, a trial-aware order summary, a real card form, and a billing portal with invoices. Honest pricing, no dark patterns.</p>
+        <div class="vary"><span class="pill">Plans</span><span class="pill">Checkout</span><span class="pill">Success</span><span class="pill">Manage &amp; invoices</span></div>
+      </div>
+      <a class="open" href="screens/billing.html">Open full screen ↗</a>
+    </div>
+    <div class="frame"><div class="bar"><i></i><i></i><i></i><span class="u">waggle · billing (stripe)</span></div><iframe src="screens/billing.html" title="Billing" loading="lazy"></iframe></div>
+  </section>
+
+  <!-- ─────────────────────── HABIT ────────────────────── -->
+  <section id="habit">
+    <div class="screen-head">
+      <div>
+        <div class="eyebrow">The engagement layer · why it sticks</div>
+        <h2 class="big" style="margin-bottom:14px">Built to pull you <em>back.</em></h2>
+        <p class="lede">A product that compounds deserves a habit loop. Trigger → action → variable reward → investment, made concrete with a daily streak, a compounding-memory counter, "while you were away" wins, and earned nudges. <b>Momentum, not manipulation</b> — every loop is anchored to real value, and all of it can be turned off.</p>
+        <div class="vary"><span class="pill">Streak</span><span class="pill">Compounding memory</span><span class="pill">Variable reward</span><span class="pill">Gentle nudges</span></div>
+      </div>
+      <a class="open" href="screens/habit.html">Open full screen ↗</a>
+    </div>
+    <div class="frame"><div class="bar"><i></i><i></i><i></i><span class="u">waggle · the habit loop</span></div><iframe src="screens/habit.html" title="Habit loop" loading="lazy"></iframe></div>
+  </section>
+
+  <!-- ─────────────────────── APP SURFACES ────────────────────── -->
+  <section id="appsurfaces">
+    <div class="screen-head">
+      <div>
+        <div class="eyebrow">Screen 14 · the queued surfaces, drawn</div>
+        <h2 class="big" style="margin-bottom:14px">The rest of the <em>hive.</em></h2>
+        <p class="lede">The six remaining app routes, on one consistent rail: <b>Agents</b> (your team of specialists), <b>Room</b> (work alongside agents live), <b>Artifacts</b> (everything made, with provenance), <b>Mission Control</b> (the hive's health), <b>Timeline</b> (one activity stream), and <b>Profile</b> (what Waggle knows about you).</p>
+        <div class="vary"><span class="pill">Agents</span><span class="pill">Room</span><span class="pill">Artifacts</span><span class="pill">Mission Control</span><span class="pill">Timeline</span><span class="pill">Profile</span></div>
+      </div>
+      <a class="open" href="screens/appsurfaces.html">Open full screen ↗</a>
+    </div>
+    <div class="frame"><div class="bar"><i></i><i></i><i></i><span class="u">waggle · app surfaces</span></div><iframe src="screens/appsurfaces.html" title="App surfaces" loading="lazy"></iframe></div>
+  </section>
+
+  <!-- ─────────────────────── BENCHMARKS ────────────────────── -->
+  <section id="benchmark">
+    <div class="screen-head">
+      <div>
+        <div class="eyebrow">Positioning · benchmarking</div>
+        <h2 class="big" style="margin-bottom:14px">They automate tasks.<br>Waggle <em>remembers you.</em></h2>
+        <p class="lede">An honest read against the field — <b>Claude Code, Codex, Claude Cowork, Hermes, Odysseus</b>. They're terminal task-agents for engineers; Waggle is a persistent, local-first memory layer that even <b>launches them</b>. Plus the one real head-to-head: the LoCoMo memory SOTA (87.66%).</p>
+        <div class="vary"><span class="pill"><b>A</b>&nbsp;· Capability matrix</span><span class="pill"><b>B</b>&nbsp;· Memory SOTA</span></div>
+      </div>
+      <a class="open" href="screens/benchmark.html">Open full screen ↗</a>
+    </div>
+    <div class="frame"><div class="bar"><i></i><i></i><i></i><span class="u">waggle · benchmarks</span></div><iframe src="screens/benchmark.html" title="Benchmarks" loading="lazy"></iframe></div>
+  </section>
+
+  <!-- ─────────────────────── PLATFORM ────────────────────── -->
+  <section id="platform">
+    <div class="screen-head">
+      <div>
+        <div class="eyebrow">Platform · ships in Tauri · what's next</div>
+        <h2 class="big" style="margin-bottom:14px">One hive, <em>everywhere.</em></h2>
+        <p class="lede">Waggle ships as a native <b>Tauri desktop app for Windows &amp; macOS</b> — tiny, local, auto-updating. This covers the boot splash and 404 too, and lays out the roadmap: a browser extension in beta, and <b>messaging (WhatsApp, Telegram) + mobile coming next</b>.</p>
+        <div class="vary"><span class="pill">Desktop (now)</span><span class="pill">Boot</span><span class="pill">Coming next</span><span class="pill">404</span></div>
+      </div>
+      <a class="open" href="screens/platform.html">Open full screen ↗</a>
+    </div>
+    <div class="frame"><div class="bar"><i></i><i></i><i></i><span class="u">waggle · platform &amp; roadmap</span></div><iframe src="screens/platform.html" title="Platform" loading="lazy"></iframe></div>
+  </section>
+
+  <!-- ─────────────────────── COVERAGE MAP ────────────────────── -->
+  <section id="coverage">
+    <div class="eyebrow">Monorepo coverage</div>
+    <h2 class="big">The whole surface, <em>mapped.</em></h2>
+    <p class="lede">Every route in the app's router, every OS app, and the front-of-app + payment + auth surfaces — with honest status. Click any <b>designed</b> one to jump to it.</p>
+    <div class="covlegend">
+      <span><span class="cst done"></span><b style="color:var(--text-2)">Designed</b> — has its own screen here</span>
+      <span><span class="cst within"></span>Covered inside another screen</span>
+      <span><span class="cst next"></span>Coming next · messaging &amp; mobile</span>
+    </div>
+    <div class="cov" id="cov"></div>
+  </section>
+
+  <div class="close-cta">
+    <h2>The bones are <em>strong.</em></h2>
+    <p>This concept keeps everything Waggle can do and changes how it feels to do it. Pick the directions that resonate and I'll take them deeper.</p>
+  </div>
+</main>
+
+<footer>WAGGLE · CONCEPT EXPLORATION · 2026 — not affiliated visual identity, a proposal</footer>
+
+<script>
+/* ── Theme ──────────────────────────────────────────────────────── */
+const root = document.documentElement, tbtn = document.getElementById('themebtn');
+function applyTheme(t){ root.setAttribute('data-theme', t); tbtn.textContent = t === 'dark' ? '☾' : '☀'; localStorage.setItem('waggle-concept-theme', t); }
+applyTheme(localStorage.getItem('waggle-concept-theme') || 'dark');
+tbtn.onclick = () => applyTheme(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+
+/* ── Swatches ───────────────────────────────────────────────────── */
+const surf = [['Background','--bg'],['Surface','--surface'],['Surface 2','--surface-2'],['Line','--line'],['Text','--text'],['Muted','--text-muted']];
+const acc  = [['Honey','--honey'],['Bright','--honey-bright'],['Deep','--honey-deep']];
+const sem  = [['Work','--work'],['Intelligence','--intel'],['Healthy','--healthy'],['Attention','--attention'],['Risk','--risk']];
+function swHTML(list){ return list.map(([n,v])=>`<div class="sw"><div class="chip" style="background:var(${v})"></div><div class="meta"><b>${n}</b><span>${v}</span></div></div>`).join(''); }
+document.getElementById('surfSw').innerHTML = swHTML(surf);
+document.getElementById('accentSw').innerHTML = swHTML(acc);
+document.getElementById('semRow').innerHTML = sem.map(([n,v])=>`<span class="pill" style="border-color:color-mix(in srgb, var(${v}) 45%, var(--line))"><span class="dot" style="background:var(${v})"></span>${n}</span>`).join('');
+
+/* ── IA before / after ──────────────────────────────────────────── */
+const before = {
+  zones: [
+    ['Work', [['Home',1],['Workspaces',0],['Memory',0],['Artifacts',0],['Files',0]]],
+    ['Intelligence', [['Agents',0],['Automations',0],['Skills',0],['Room',0],['Waggle-Dance',0],['Approvals',0]]],
+    ['Extend', [['Connectors',0],['MCPs',0],['Marketplace',0],['Launcher',0]]],
+    ['System', [['Settings',0],['Vault',0],['Mission Control',0]]],
+  ],
+  more: '+ New Agent · Timeline · Events · Usage · Profile',
+  note: {
+    h: 'Today: breadth, up front',
+    p: 'Everything the platform can do is exposed as a permanent list. It\u2019s honest about scope, but it asks the operator to parse 18 labels — many of them jargon — before doing a single thing.',
+    li: [
+      ['18','destinations across <b>5 zones</b>, always visible'],
+      ['5','of them are power-user surfaces a novice never needs day one'],
+      ['Jx','labels like <b>Waggle-Dance</b>, <b>MCPs</b>, <b>Approvals</b> carry no plain meaning'],
+    ],
+  },
+};
+const after = {
+  zones: [
+    ['', [['Home',1],['Chat',0],['Memory',0],['Agents & tasks',0],['Library',0]]],
+  ],
+  more: '⌘K  ·  everything else lives here',
+  note: {
+    h: 'Reimagined: a spine + a command bar',
+    p: 'Five plain-language places cover 95% of days. The long tail \u2014 connectors, MCP servers, the swarm protocol, optimizer, vault, usage \u2014 moves into ⌘K, where it\u2019s searchable the instant you need it and invisible when you don\u2019t.',
+    li: [
+      ['5','everyday destinations, named for what you do, not how it\u2019s built'],
+      ['⌘K','one command bar holds the full depth \u2014 power without the wall'],
+      ['↳','technical names ride along as subtitles for the expert layer'],
+    ],
+  },
+};
+function renderIA(state){
+  const d = state === 'before' ? before : after;
+  const nm = document.getElementById('navmock');
+  nm.innerHTML = d.zones.map(([z, items]) =>
+    (z ? `<div class="zone">${z}</div>` : '') +
+    items.map(([label, on]) => `<div class="item ${on?'on':''} ${state==='before' && /Waggle-Dance|MCPs|Approvals|Mission Control|Vault/.test(label)?'muted':''}"><span class="ic"></span>${label}</div>`).join('')
+  ).join('') + `<div class="more">${d.more}</div>`;
+  document.getElementById('iaNote').innerHTML =
+    `<h3>${d.note.h}</h3><p>${d.note.p}</p><ul>${d.note.li.map(([b,t])=>`<li><span class="b">${b}</span><span>${t}</span></li>`).join('')}</ul>`;
+}
+const iaT = document.getElementById('iaToggle');
+iaT.addEventListener('click', e => {
+  const b = e.target.closest('button'); if(!b) return;
+  [...iaT.children].forEach(x=>x.classList.toggle('on', x===b));
+  renderIA(b.dataset.ia);
+});
+renderIA('after');
+
+/* ── Coverage map ───────────────────────────────────────────────── */
+const COV = [
+  ['Front of app', [
+    ['Boot / splash','tauri','done','#platform'], ['Onboarding','first-run','done','#onboarding'],
+    ['Sign in / up','clerk','done','#auth'], ['Email verify','clerk','done','#auth'],
+    ['SSO / enterprise','clerk','done','#auth'], ['404 / not found','*','done','#platform'],
+  ]],
+  ['Work', [
+    ['Home / Cockpit','/home','done','#home'], ['All workspaces','/workspaces','done','#workspaces'],
+    ['Workspace','/workspaces/:id','done','#workspace'], ['Memory center','/memory','within','#workspace'],
+    ['Files / Storage','/files','done','#storage'], ['Artifacts','/artifacts','done','#appsurfaces'],
+  ]],
+  ['Intelligence', [
+    ['Agents','/agents','done','#appsurfaces'], ['Automations','/automations','done','#surfaces'],
+    ['Skills','/skills','done','#marketplace'], ['Approvals','/approvals','done','#surfaces'],
+    ['Room','/room','done','#appsurfaces'], ['Waggle-Dance / swarm','/waggle-dance','within','#evolution'],
+  ]],
+  ['Extend', [
+    ['Marketplace','/marketplace','done','#marketplace'], ['Connectors','/connectors','done','#marketplace'],
+    ['MCP servers','/mcps','done','#marketplace'], ['Launcher','/launcher','done','#launcher'],
+    ['Skill evolution','—','done','#evolution'],
+  ]],
+  ['System & account', [
+    ['Settings','/settings','done','#settings'], ['Models + failover','/settings','done','#settings'],
+    ['Vault','/settings/vault','done','#surfaces'], ['Usage & cost','/settings/usage','done','#surfaces'],
+    ['Billing','stripe','done','#billing'], ['Profile','/settings/profile','done','#appsurfaces'],
+    ['Team','/team','within','#settings'], ['Mission Control','/settings/mission-control','done','#appsurfaces'],
+    ['Timeline','/settings/timeline','done','#appsurfaces'], ['Events','/settings/events','done','#appsurfaces'],
+  ]],
+  ['Platform & roadmap', [
+    ['Desktop · Tauri','win + mac','done','#platform'], ['Browser extension','apps/browser-ext','beta','#platform'],
+    ['Messaging','whatsapp · telegram','next','#platform'], ['Mobile','ios · android','next','#platform'],
+  ]],
+  ['Cross-cutting', [
+    ['Benchmarks','vs the field','done','#benchmark'], ['Command bar ⌘K','—','done','#ia'], ['Design system','—','done','#identity'],
+    ['Habit loop','—','done','#habit'], ['Landing (www)','waggle-os.ai','done','#landing'],
+  ]],
+];
+document.getElementById('cov').innerHTML = COV.map(([zone, items]) => `
+  <div class="covzone">
+    <h3>${zone}</h3>
+    <div class="covgrid">${items.map(([n, route, st, href]) => {
+      const inner = `<span class="cst ${st}"></span><span class="cn">${st==='done'?`<b>${n}</b>`:n}</span><span class="croute">${route}</span>`;
+      return href ? `<a class="covitem" href="${href}">${inner}</a>` : `<div class="covitem">${inner}</div>`;
+    }).join('')}</div>
+  </div>`).join('');
+
+/* ── Active section highlight ───────────────────────────────────── */
+const links = [...document.querySelectorAll('#topnav a')];
+const map = links.map(a => ({a, sec: document.querySelector(a.getAttribute('href'))})).filter(x=>x.sec);
+const io = new IntersectionObserver(es => {
+  es.forEach(e => { if(e.isIntersecting){ links.forEach(l=>l.classList.remove('on')); const m = map.find(x=>x.sec===e.target); if(m) m.a.classList.add('on'); } });
+}, { rootMargin: '-45% 0px -50% 0px' });
+map.forEach(x => io.observe(x.sec));
+</script>
+</body>
+</html>

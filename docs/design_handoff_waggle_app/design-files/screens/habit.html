@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Waggle · Momentum</title>
+<script>document.documentElement.classList.add('js');</script>
+<link rel="stylesheet" href="../styles/waggle.css">
+<style>
+  body { height: 100vh; overflow: hidden; display:flex; flex-direction:column; }
+  .controls { flex:none; display:flex; align-items:center; gap:14px; padding:11px 20px; border-bottom:1px solid var(--line-soft); background:color-mix(in srgb,var(--bg) 88%,transparent); backdrop-filter:blur(10px); z-index:30; }
+  .controls .lab { font-family:var(--mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--text-dim); }
+  .controls .vlabel { font-size:12.5px; color:var(--text-muted); } .controls .vlabel b { color:var(--text); font-weight:600; }
+  .controls .right { margin-left:auto; display:flex; align-items:center; gap:10px; }
+  .tbtn { width:34px; height:34px; border-radius:9px; border:1px solid var(--line); background:var(--surface); color:var(--text-2); cursor:pointer; }
+  .tbtn:hover { border-color:var(--honey-line); color:var(--honey); }
+  .stage { flex:1; min-height:0; overflow:auto; position:relative; }
+  .stage .comb { position:absolute; inset:0; opacity:.4; pointer-events:none; }
+  .wrap { max-width:920px; margin:0 auto; padding:30px 32px 70px; position:relative; }
+
+  .head { margin-bottom:26px; }
+  .head .eyebrow { font-family:var(--mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--honey); margin-bottom:12px; display:flex; align-items:center; gap:9px; }
+  .head .eyebrow::before { content:''; width:20px; height:1px; background:var(--honey-line); }
+  .head h1 { font-size:28px; font-weight:650; letter-spacing:-0.02em; margin:0 0 10px; } .head h1 em { font-style:normal; color:var(--honey); }
+  .head p { font-size:15px; color:var(--text-muted); line-height:1.55; margin:0; max-width:62ch; } .head p b { color:var(--text-2); }
+
+  /* loop diagram */
+  .loop { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:14px; }
+  .lstep { padding:18px; border-radius:var(--r-lg); background:var(--surface); border:1px solid var(--line-soft); position:relative; }
+  .lstep .ln { font-family:var(--mono); font-size:11px; color:var(--honey); letter-spacing:.1em; margin-bottom:10px; }
+  .lstep .li { width:34px; height:38px; display:grid; place-items:center; margin-bottom:11px; }
+  .lstep .li svg { width:18px; height:18px; stroke:var(--honey); fill:none; stroke-width:1.7; }
+  .lstep b { font-size:14.5px; font-weight:650; display:block; margin-bottom:6px; letter-spacing:-0.01em; }
+  .lstep p { margin:0; font-size:12.5px; color:var(--text-muted); line-height:1.5; }
+  .lstep .arr { position:absolute; right:-9px; top:50%; transform:translateY(-50%); color:var(--honey); font-size:15px; z-index:2; }
+  .lstep:last-child .arr { content:'↻'; }
+
+  .grp { font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--text-dim); margin:30px 0 16px; display:flex; align-items:center; gap:10px; } .grp::after { content:''; flex:1; height:1px; background:var(--line-soft); }
+
+  /* mechanics grid */
+  .mechs { display:grid; grid-template-columns:repeat(2,1fr); gap:14px; }
+  .mech { padding:22px; border-radius:var(--r-lg); background:var(--surface); border:1px solid var(--line-soft); }
+  .mech.live { border-color:var(--honey-line); background:linear-gradient(155deg,var(--surface-2),var(--surface)); }
+  .mech h3 { font-size:16px; font-weight:650; letter-spacing:-0.01em; margin:0 0 8px; display:flex; align-items:center; gap:10px; }
+  .mech p { margin:0 0 14px; font-size:13px; color:var(--text-muted); line-height:1.55; } .mech p b { color:var(--text); }
+  /* streak demo */
+  .streak { display:flex; align-items:center; gap:7px; }
+  .streak .d { width:30px; height:34px; display:grid; place-items:center; font-family:var(--mono); font-size:11px; font-weight:600; color:var(--text-dim); background:var(--bg-2); border:1px solid var(--line-soft); }
+  .streak .d.on { color:#1a1407; background:linear-gradient(150deg,var(--honey-bright),var(--honey-deep)); border-color:transparent; }
+  .streak .d.today { box-shadow:0 0 0 2px var(--honey-line); }
+  .streakcount { margin-left:6px; font-size:13px; font-weight:650; color:var(--honey); }
+  /* counter demo */
+  .counter { display:flex; align-items:baseline; gap:10px; }
+  .counter .big { font-size:40px; font-weight:750; letter-spacing:-0.03em; color:var(--honey); }
+  .counter .lab { font-size:13px; color:var(--text-muted); }
+  .grow { font-size:12px; color:var(--healthy); margin-top:6px; } .grow b { color:var(--healthy); }
+  /* reward demo */
+  .reward { display:grid; gap:8px; }
+  .rchip { display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:9px; background:var(--bg-2); border:1px solid var(--line-soft); font-size:12.5px; color:var(--text-2); }
+  .rchip .dot { width:7px; height:7px; }
+  .rchip b { color:var(--text); font-weight:600; }
+  /* nudge demo */
+  .nudge { display:flex; gap:11px; align-items:flex-start; padding:12px 14px; border-radius:10px; background:var(--honey-wash); border:1px solid var(--honey-line); }
+  .nudge svg { width:16px; height:16px; stroke:var(--honey); fill:none; stroke-width:1.8; flex:none; margin-top:1px; }
+  .nudge p { margin:0; font-size:12.5px; color:var(--text-2); line-height:1.5; } .nudge b { color:var(--text); }
+
+  /* ethics note */
+  .ethics { margin-top:26px; display:flex; gap:13px; align-items:flex-start; padding:18px 20px; border-radius:var(--r-lg); background:var(--bg-2); border:1px solid var(--line-soft); }
+  .ethics svg { width:20px; height:20px; stroke:var(--healthy); fill:none; stroke-width:1.8; flex:none; margin-top:1px; }
+  .ethics p { margin:0; font-size:13.5px; color:var(--text-muted); line-height:1.6; } .ethics b { color:var(--text); }
+  @media (max-width:820px){ .loop { grid-template-columns:1fr 1fr; } .mechs { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <span class="lab">Engagement · the habit loop</span>
+  <span class="vlabel" id="vlabel">Momentum, not manipulation — why people come back daily</span>
+  <div class="right"><button class="tbtn" id="tbtn" title="Toggle theme">☾</button></div>
+</div>
+
+<div class="stage">
+  <div class="comb"></div>
+  <div class="wrap">
+    <div class="head">
+      <div class="eyebrow">What makes it stick</div>
+      <h1>The hive pulls you <em>back.</em></h1>
+      <p>Waggle gets more valuable every day you use it — and it makes that obvious. Four honest loops turn it into a daily habit: <b>a reason to open it, a reward when you do, a visible streak, and a hive you've invested in too much to leave.</b></p>
+    </div>
+
+    <div class="loop">
+      <div class="lstep"><span class="arr">→</span><div class="li hex" style="background:var(--honey-wash)"><svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg></div><div class="ln">01 · Trigger</div><b>A reason to open it</b><p>“3 things ran overnight.” A morning nudge that's always worth the tap.</p></div>
+      <div class="lstep"><span class="arr">→</span><div class="li hex" style="background:var(--honey-wash)"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div><div class="ln">02 · Action</div><b>One easy move</b><p>Continue a workspace, approve a result, ask one thing. Friction near zero.</p></div>
+      <div class="lstep"><span class="arr">→</span><div class="li hex" style="background:var(--honey-wash)"><svg viewBox="0 0 24 24"><path d="m12 3 2.5 6 6.5.5-5 4.2 1.6 6.3L12 16.8 6 20l1.6-6.3-5-4.2 6.5-.5z"/></svg></div><div class="ln">03 · Reward</div><b>Variable payoff</b><p>You never know exactly what Waggle finished — sometimes it's a small win, sometimes a big one.</p></div>
+      <div class="lstep"><span class="arr" style="font-size:18px">↺</span><div class="li hex" style="background:var(--honey-wash)"><svg viewBox="0 0 24 24"><path d="M12 5a3 3 0 0 0-3 3 3 3 0 0 0-3 3 3 3 0 0 0 1 5 3 3 0 0 0 5 1 3 3 0 0 0 5-1 3 3 0 0 0 1-5 3 3 0 0 0-3-3 3 3 0 0 0-3-3Z"/></svg></div><div class="ln">04 · Investment</div><b>The hive grows</b><p>Every session adds memory and sharpens skills — so tomorrow is better than today.</p></div>
+    </div>
+
+    <div class="grp">The four mechanics, made concrete</div>
+    <div class="mechs">
+      <div class="mech live">
+        <h3>🔥 Daily streak</h3>
+        <p>A gentle streak rewards showing up. Not a guilt trip — a quiet <b>“you're on a roll.”</b></p>
+        <div class="streak">
+          <div class="d on">M</div><div class="d on">T</div><div class="d on">W</div><div class="d on">T</div><div class="d on today">F</div><div class="d">S</div><div class="d">S</div>
+          <span class="streakcount">12-day streak</span>
+        </div>
+      </div>
+      <div class="mech live">
+        <h3>📈 Compounding memory</h3>
+        <p>The counter that makes leaving unthinkable. The more it knows, the more <b>it's yours</b>.</p>
+        <div class="counter"><span class="big">142</span><span class="lab">memories in this hive</span></div>
+        <div class="grow">▲ <b>+14 this week</b> · your hive is in the top 8% by depth</div>
+      </div>
+      <div class="mech">
+        <h3>✨ While you were away</h3>
+        <p>The variable reward. Overnight work means opening Waggle is <b>always worth it</b>.</p>
+        <div class="reward">
+          <div class="rchip"><span class="dot" style="background:var(--healthy)"></span><b>Teardown</b> finished · 9 competitors</div>
+          <div class="rchip"><span class="dot" style="background:var(--intel)"></span><b>14 memories</b> consolidated</div>
+          <div class="rchip"><span class="dot" style="background:var(--work)"></span><b>2 artifacts</b> waiting for you</div>
+        </div>
+      </div>
+      <div class="mech">
+        <h3>🛎️ Gentle nudges</h3>
+        <p>Earned attention, never spam. A nudge only when there's <b>something real</b> to act on.</p>
+        <div class="nudge"><svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg><p><b>Good morning, Mara.</b> Your competitor teardown is ready, and 3 memories need a quick confirm.</p></div>
+      </div>
+    </div>
+
+    <div class="ethics">
+      <svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg>
+      <p><b>Momentum, not manipulation.</b> Every loop here is anchored to <b>real value the user wants</b> — work that actually got done, memory that actually compounds. No dark patterns, no fake urgency, no infinite feed. The habit forms because the product genuinely gets better the more you use it; we just make that legible. Streaks and nudges can always be turned off.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+const root = document.documentElement, tbtn = document.getElementById('tbtn');
+function setTheme(t){ root.setAttribute('data-theme', t); tbtn.textContent = t==='dark'?'☾':'☀'; try{localStorage.setItem('waggle-concept-theme',t);}catch(e){} }
+setTheme((()=>{ try{ return localStorage.getItem('waggle-concept-theme')||'dark'; }catch(e){ return 'dark'; } })());
+tbtn.onclick = () => setTheme(root.getAttribute('data-theme')==='dark'?'light':'dark');
+window.addEventListener('message', e => { if(e.data && e.data.theme) setTheme(e.data.theme); });
+window.addEventListener('storage', e => { if(e.key==='waggle-concept-theme' && e.newValue) setTheme(e.newValue); });
+</script>
+</body>
+</html>

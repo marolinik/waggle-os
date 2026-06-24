@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Waggle · Home</title>
+<link rel="stylesheet" href="../styles/waggle.css">
+<style>
+  body { height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+
+  /* ── Screen control bar (concept affordance, not product chrome) ── */
+  .controls {
+    flex: none; display: flex; align-items: center; gap: 14px;
+    padding: 12px 22px; border-bottom: 1px solid var(--line-soft);
+    background: color-mix(in srgb, var(--bg) 85%, transparent);
+    backdrop-filter: blur(10px); z-index: 20;
+  }
+  .controls .lab { font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-dim); }
+  .seg { display: inline-flex; padding: 3px; gap: 3px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line-soft); }
+  .seg button { font-family: var(--sans); font-size: 12.5px; font-weight: 600; cursor: pointer; border: 0; background: transparent; color: var(--text-muted); padding: 6px 13px; border-radius: 7px; transition: .14s; white-space: nowrap; }
+  .seg button.on { background: var(--honey); color: #1a1407; }
+  .controls .vlabel { font-size: 12.5px; color: var(--text-muted); }
+  .controls .vlabel b { color: var(--text); font-weight: 600; }
+  .controls .right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .tbtn { width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); color: var(--text-2); cursor: pointer; }
+  .tbtn:hover { border-color: var(--honey-line); color: var(--honey); }
+
+  .stage { flex: 1; min-height: 0; overflow: auto; position: relative; }
+  .stage .comb { position: absolute; inset: 0; opacity: .5; pointer-events: none; }
+
+  .wrap { max-width: 920px; margin: 0 auto; padding: 46px 32px 80px; position: relative; }
+
+  /* ── Greeting ───────────────────────────────────────────────── */
+  .greet { margin-bottom: 6px; }
+  .greet .date { font-family: var(--mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--honey); margin-bottom: 12px; display:flex; align-items:center; gap:9px; }
+  .greet .date .dot { background: var(--healthy); }
+  .greet .date .streakchip { margin-left: auto; padding: 4px 11px; border-radius: 999px; background: var(--honey-wash); border: 1px solid var(--honey-line); color: var(--honey); font-size: 11px; letter-spacing: .02em; text-transform: none; }
+  .greet h1 { font-family: var(--sans); font-weight: 600; font-size: clamp(34px, 5vw, 52px); line-height: 1.02; letter-spacing: -0.02em; margin: 0; }
+  .greet h1 em { font-style: normal; color: var(--honey); }
+
+  /* ── Overnight story (the hero of A) ────────────────────────── */
+  .overnight {
+    margin-top: 30px; padding: 28px 30px; border-radius: var(--r-xl);
+    background: linear-gradient(140deg, var(--surface), var(--surface-2));
+    border: 1px solid var(--line); box-shadow: var(--shadow);
+    position: relative; overflow: hidden;
+  }
+  .overnight::after { content:''; position:absolute; right:-50px; top:-50px; width:200px; height:200px; background: radial-gradient(circle, var(--honey-wash), transparent 65%); pointer-events:none; }
+  .overnight .tag { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--intel); display:flex; align-items:center; gap:8px; }
+  .overnight .story { font-family: var(--sans); font-weight: 600; font-size: clamp(21px,2.6vw,28px); line-height: 1.32; letter-spacing: -0.01em; margin: 14px 0 0; max-width: 30ch; }
+  .overnight .story b { font-style: normal; color: var(--honey); font-family: var(--sans); font-weight: 700; }
+  .overnight .runs { margin-top: 22px; display: flex; flex-wrap: wrap; gap: 10px; }
+  .runchip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 13px; border-radius: 10px; background: var(--bg-2); border: 1px solid var(--line-soft); font-size: 13px; color: var(--text-2); }
+  .runchip .dot { width: 8px; height: 8px; }
+  .runchip b { color: var(--text); font-weight: 650; }
+
+  /* ── Section heads ──────────────────────────────────────────── */
+  .sec-h { font-family: var(--mono); font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-dim); margin: 40px 0 16px; display:flex; align-items:center; gap:10px; }
+  .sec-h::after { content:''; flex:1; height:1px; background: var(--line-soft); }
+
+  /* ── Continue cards ─────────────────────────────────────────── */
+  .ws-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .ws-card {
+    padding: 20px; border-radius: var(--r-lg); background: var(--surface);
+    border: 1px solid var(--line-soft); cursor: pointer; transition: .18s; position: relative;
+  }
+  .ws-card:hover { border-color: var(--honey-line); transform: translateY(-3px); box-shadow: var(--shadow); }
+  .ws-card .top { display: flex; align-items: center; gap: 11px; margin-bottom: 12px; }
+  .ws-card .ic { width: 34px; height: 38px; flex: none; display:grid; place-items:center; font-size: 15px; color:#1a1407; font-weight:800; }
+  .ws-card h3 { margin: 0; font-size: 16px; font-weight: 650; letter-spacing: -0.01em; flex: 1; }
+  .ws-card .when { font-size: 12px; color: var(--text-dim); font-family: var(--mono); }
+  .ws-card p { margin: 0 0 16px; font-size: 13.5px; color: var(--text-muted); line-height: 1.5; }
+  .ws-card .foot { display: flex; align-items: center; justify-content: space-between; }
+  .ws-card .cont { font-size: 13px; font-weight: 650; color: var(--honey); display: inline-flex; align-items: center; gap: 5px; }
+  .ws-card .badge { font-size: 11.5px; padding: 3px 9px; border-radius: 999px; display:inline-flex; align-items:center; gap:5px; }
+  .ws-card .badge.pend { color: var(--attention); background: var(--honey-wash); }
+  .ws-card .badge.live { color: var(--healthy); background: var(--healthy-wash); }
+
+  /* ── Next move / suggestions ───────────────────────────────── */
+  .moves { display: grid; gap: 10px; }
+  .move {
+    display: flex; align-items: center; gap: 14px; padding: 15px 18px;
+    border-radius: var(--r); background: var(--surface); border: 1px solid var(--line-soft);
+    cursor: pointer; transition: .15s;
+  }
+  .move:hover { border-color: var(--honey-line); background: var(--surface-2); }
+  .move .mi { width: 30px; height: 30px; border-radius: 9px; flex: none; display:grid; place-items:center; }
+  .move .mtext { flex: 1; }
+  .move .mtext b { display:block; font-size: 14.5px; font-weight: 600; }
+  .move .mtext span { font-size: 12.5px; color: var(--text-muted); }
+  .move .arrow { color: var(--text-dim); font-size: 18px; transition: .15s; }
+  .move:hover .arrow { color: var(--honey); transform: translateX(3px); }
+
+  /* ── Ask bar (B + footer of A) ─────────────────────────────── */
+  .ask {
+    margin-top: 28px; display: flex; align-items: center; gap: 12px;
+    padding: 7px 7px 7px 20px; border-radius: 999px;
+    background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow);
+  }
+  .ask:focus-within { border-color: var(--honey-line); box-shadow: var(--honey-glow); }
+  .ask input { flex: 1; background: transparent; border: 0; color: var(--text); font-family: var(--sans); font-size: 15.5px; outline: none; }
+  .ask input::placeholder { color: var(--text-dim); }
+  .ask .go { width: 42px; height: 42px; border-radius: 999px; border: 0; background: var(--honey); color: #1a1407; font-size: 18px; cursor: pointer; flex:none; display:grid; place-items:center; transition:.15s; }
+  .ask .go:hover { background: var(--honey-bright); }
+  .ask .hint { font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+
+  /* ── Variation B — focus ───────────────────────────────────── */
+  .focus-wrap { max-width: 720px; margin: 0 auto; padding: 70px 32px; text-align: center; position: relative; }
+  .focus-wrap .date { justify-content: center; }
+  .focus-wrap h1 { font-size: clamp(36px,5.5vw,58px); margin-bottom: 26px; }
+  .focus-strip { margin-top: 30px; display: inline-flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+  .focus-resume { margin-top: 38px; display:flex; flex-direction:column; gap:10px; text-align:left; }
+
+  /* ── Variation C — operator dashboard ──────────────────────── */
+  .dash { display: grid; grid-template-columns: 1.5fr 1fr; gap: 16px; margin-top: 26px; }
+  .dash .col { display: grid; gap: 16px; align-content: start; }
+  .card { padding: 20px; border-radius: var(--r-lg); background: var(--surface); border: 1px solid var(--line-soft); }
+  .card > h4 { margin: 0 0 14px; font-size: 12px; font-family: var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--text-dim); display:flex; align-items:center; gap:8px; }
+  .stat-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; }
+  .stat { padding: 14px; border-radius: var(--r); background: var(--bg-2); border: 1px solid var(--line-soft); }
+  .stat .v { font-size: 26px; font-weight: 750; letter-spacing: -0.02em; font-family: var(--sans); line-height: 1; }
+  .stat .l { font-size: 11.5px; color: var(--text-muted); margin-top: 6px; }
+  .mini { display:flex; align-items:center; gap:10px; padding: 10px 0; border-bottom: 1px solid var(--line-soft); font-size: 13.5px; }
+  .mini:last-child { border-bottom: 0; }
+  .mini .dot { flex: none; }
+  .mini .t { flex: 1; color: var(--text-2); }
+  .mini .meta { font-size: 11.5px; color: var(--text-dim); font-family: var(--mono); }
+  .alert { display:flex; gap:11px; padding: 13px 15px; border-radius: var(--r); background: var(--risk-wash); border: 1px solid color-mix(in srgb, var(--risk) 30%, transparent); }
+  .alert .ai { color: var(--risk); flex:none; }
+  .alert b { font-size: 13.5px; }
+  .alert p { margin: 3px 0 0; font-size: 12.5px; color: var(--text-muted); }
+  .alert .fix { margin-left:auto; align-self:center; font-size:12px; font-weight:600; color: var(--risk); white-space:nowrap; }
+
+  .hidden { display: none !important; }
+  svg.i { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <span class="lab">Home · variation</span>
+  <div class="seg" id="seg">
+    <button class="on" data-v="a">A · Editorial</button>
+    <button data-v="b">B · Focus</button>
+    <button data-v="c">C · Operator</button>
+  </div>
+  <span class="vlabel" id="vlabel"><b>Editorial briefing</b> — calm, story-led</span>
+  <div class="right">
+    <button class="tbtn" id="tbtn" title="Toggle theme">☾</button>
+  </div>
+</div>
+
+<div class="stage">
+  <div class="comb"></div>
+
+  <!-- ══════════ VARIATION A — EDITORIAL ══════════ -->
+  <div class="wrap view" id="view-a">
+    <div class="greet">
+      <div class="date"><span class="dot dot-live"></span>Friday · June 14 · 8:42<span class="streakchip" title="You've opened Waggle 12 days running">🔥 12-day streak</span></div>
+      <h1>Good morning, Mara.<br>You're <em>ahead</em> of yesterday.</h1>
+    </div>
+
+    <div class="overnight">
+      <div class="tag"><span class="dot dot-live" style="background:var(--intel)"></span>While you slept</div>
+      <p class="story">Waggle finished the <b>Q2 competitor teardown</b>, folded <b>14 new memories</b> into the hive, and ran into <b>one snag</b> worth a look.</p>
+      <div class="runs">
+        <span class="runchip"><span class="dot" style="background:var(--healthy)"></span><b>Teardown</b> drafted · 9 competitors</span>
+        <span class="runchip"><span class="dot" style="background:var(--intel)"></span><b>14</b> memories consolidated</span>
+        <span class="runchip"><span class="dot" style="background:var(--work)"></span><b>2</b> artifacts created</span>
+        <span class="runchip"><span class="dot" style="background:var(--risk)"></span><b>1</b> export failed</span>
+      </div>
+    </div>
+
+    <div class="sec-h">Pick up where you left off</div>
+    <div class="ws-grid" id="wsGridA"></div>
+
+    <div class="sec-h">Waggle suggests</div>
+    <div class="moves" id="movesA"></div>
+
+    <div class="ask">
+      <svg class="i" viewBox="0 0 24 24" style="color:var(--honey)"><path d="M12 3v18M3 12h18"/></svg>
+      <input placeholder="Start something new — “draft the board update from this week’s work”…">
+      <span class="hint">⌘K</span>
+      <button class="go">→</button>
+    </div>
+  </div>
+
+  <!-- ══════════ VARIATION B — FOCUS ══════════ -->
+  <div class="wrap focus-wrap view hidden" id="view-b">
+    <div class="greet">
+      <div class="date"><span class="dot dot-live"></span>Friday · June 14</div>
+      <h1>What should we<br>work on, <em>Mara?</em></h1>
+    </div>
+    <div class="ask" style="max-width:620px;margin:0 auto">
+      <svg class="i" viewBox="0 0 24 24" style="color:var(--honey)"><path d="M4 12h16M13 5l7 7-7 7"/></svg>
+      <input placeholder="Describe a task, or pick up a thread below…" autofocus>
+      <span class="hint">⌘K</span>
+      <button class="go">→</button>
+    </div>
+    <div class="focus-strip" id="focusStrip"></div>
+
+    <div class="focus-resume" id="focusResume"></div>
+  </div>
+
+  <!-- ══════════ VARIATION C — OPERATOR ══════════ -->
+  <div class="wrap view hidden" id="view-c">
+    <div class="greet">
+      <div class="date"><span class="dot dot-live"></span>Friday · June 14 · 8:42</div>
+      <h1 style="font-size:clamp(28px,3.6vw,38px)">Good morning, Mara.</h1>
+    </div>
+
+    <div class="alert" style="margin-top:22px">
+      <svg class="i ai" viewBox="0 0 24 24"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+      <div>
+        <b>Overnight export to Salesforce failed</b>
+        <p>“Q2 pipeline sync” · auth token expired at 02:14 · 1 of 4 automations</p>
+      </div>
+      <span class="fix">Fix &amp; retry →</span>
+    </div>
+
+    <div class="dash">
+      <div class="col">
+        <div class="card">
+          <h4><span class="dot dot-live" style="background:var(--intel)"></span>Overnight</h4>
+          <div class="stat-row">
+            <div class="stat"><div class="v" style="color:var(--intel)">14</div><div class="l">Memories consolidated</div></div>
+            <div class="stat"><div class="v" style="color:var(--work)">2</div><div class="l">Artifacts created</div></div>
+            <div class="stat"><div class="v" style="color:var(--healthy)">3/4</div><div class="l">Automations done</div></div>
+          </div>
+        </div>
+        <div class="card">
+          <h4>Active workspaces</h4>
+          <div id="dashWs"></div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="card">
+          <h4>Up next</h4>
+          <div id="dashNext"></div>
+        </div>
+        <div class="card">
+          <h4>Agents running</h4>
+          <div id="dashAgents"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ── theme: sync with parent concept doc, fall back to own ──────── */
+const root = document.documentElement, tbtn = document.getElementById('tbtn');
+function setTheme(t){ root.setAttribute('data-theme', t); tbtn.textContent = t==='dark'?'☾':'☀'; try{ localStorage.setItem('waggle-concept-theme', t);}catch(e){} }
+setTheme((()=>{ try{ return localStorage.getItem('waggle-concept-theme')||'dark'; }catch(e){ return 'dark'; } })());
+tbtn.onclick = () => setTheme(root.getAttribute('data-theme')==='dark'?'light':'dark');
+window.addEventListener('message', e => { if(e.data && e.data.theme) setTheme(e.data.theme); });
+window.addEventListener('storage', e => { if(e.key==='waggle-concept-theme' && e.newValue) setTheme(e.newValue); });
+
+/* ── data ───────────────────────────────────────────────────────── */
+const HONEY = 'linear-gradient(150deg,var(--honey-bright),var(--honey-deep))';
+const workspaces = [
+  { id:'ci', name:'Competitive Intelligence', glyph:'C', sum:'Q2 landscape teardown — 9 rivals mapped, pricing pulled, draft ready for your read.', when:'2h ago', badge:'pend', badgeText:'3 to review' },
+  { id:'board', name:'Q2 Board Deck', glyph:'B', sum:'18 slides drafted from the metrics pack. Narrative needs your voice on slide 6.', when:'yesterday', badge:'live', badgeText:'agent live' },
+  { id:'research', name:'Customer Research', glyph:'R', sum:'31 interviews transcribed and themed. Top friction: onboarding drop-off.', when:'2d ago', badge:null },
+  { id:'pricing', name:'Pricing Model', glyph:'P', sum:'Scenario model rebuilt. New tier lifts ARPU ~12% with low churn risk.', when:'3d ago', badge:null },
+];
+const moves = [
+  { ic:'check', col:'var(--healthy)', bg:'var(--healthy-wash)', t:'Review the competitor teardown', s:'9 competitors · ready since 02:40 · ~6 min read' },
+  { ic:'send', col:'var(--work)', bg:'var(--work-wash)', t:'Send the board update', s:'Draft built from this week’s work in Q2 Board Deck' },
+  { ic:'brain', col:'var(--intel)', bg:'var(--intel-wash)', t:'Confirm 3 imported memories', s:'From Tuesday’s pricing call — Waggle wants your sign-off' },
+];
+const next = [
+  { dot:'var(--work)', t:'Board sync', meta:'10:00' },
+  { dot:'var(--attention)', t:'Pricing review w/ Finance', meta:'13:30' },
+  { dot:'var(--healthy)', t:'“Weekly digest” automation runs', meta:'17:00' },
+];
+const agents = [
+  { dot:'var(--healthy)', t:'Research-synth', meta:'theming · 78%' },
+  { dot:'var(--work)', t:'Deck-builder', meta:'idle · waiting on you' },
+];
+const icons = {
+  check:'<path d="M20 6 9 17l-5-5"/>', send:'<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
+  brain:'<path d="M12 5a3 3 0 0 0-3 3 3 3 0 0 0-3 3 3 3 0 0 0 1 5 3 3 0 0 0 5 1 3 3 0 0 0 5-1 3 3 0 0 0 1-5 3 3 0 0 0-3-3 3 3 0 0 0-3-3Z"/>'
+};
+
+/* ── render A ───────────────────────────────────────────────────── */
+document.getElementById('wsGridA').innerHTML = workspaces.slice(0,4).map(w => `
+  <div class="ws-card">
+    <div class="top">
+      <div class="ic hex" style="background:${HONEY}">${w.glyph}</div>
+      <h3>${w.name}</h3>
+      <span class="when">${w.when}</span>
+    </div>
+    <p>${w.sum}</p>
+    <div class="foot">
+      <span class="cont">Continue →</span>
+      ${w.badge ? `<span class="badge ${w.badge}">${w.badge==='live'?'<span class="dot dot-live" style="background:var(--healthy)"></span>':''}${w.badgeText}</span>` : ''}
+    </div>
+  </div>`).join('');
+
+document.getElementById('movesA').innerHTML = moves.map(m => `
+  <div class="move">
+    <div class="mi" style="background:${m.bg};color:${m.col}"><svg class="i" viewBox="0 0 24 24">${icons[m.ic]}</svg></div>
+    <div class="mtext"><b>${m.t}</b><span>${m.s}</span></div>
+    <span class="arrow">→</span>
+  </div>`).join('');
+
+/* ── render B ───────────────────────────────────────────────────── */
+document.getElementById('focusStrip').innerHTML =
+  `<span class="runchip"><span class="dot dot-live" style="background:var(--intel)"></span>Overnight: teardown ready · 14 memories · <b style="color:var(--risk)">1 snag</b></span>`;
+document.getElementById('focusResume').innerHTML = workspaces.slice(0,3).map(w => `
+  <div class="move">
+    <div class="mi hex" style="background:${HONEY};color:#1a1407;font-weight:800;border-radius:0">${w.glyph}</div>
+    <div class="mtext"><b>${w.name}</b><span>${w.sum}</span></div>
+    <span class="arrow">→</span>
+  </div>`).join('');
+
+/* ── render C ───────────────────────────────────────────────────── */
+document.getElementById('dashWs').innerHTML = workspaces.map(w => `
+  <div class="mini"><span class="dot" style="background:${w.badge==='live'?'var(--healthy)':'var(--text-dim)'}"></span><span class="t">${w.name}</span><span class="meta">${w.when}</span></div>`).join('');
+document.getElementById('dashNext').innerHTML = next.map(n => `
+  <div class="mini"><span class="dot" style="background:${n.dot}"></span><span class="t">${n.t}</span><span class="meta">${n.meta}</span></div>`).join('');
+document.getElementById('dashAgents').innerHTML = agents.map(a => `
+  <div class="mini"><span class="dot dot-live" style="background:${a.dot}"></span><span class="t">${a.t}</span><span class="meta">${a.meta}</span></div>`).join('');
+
+/* ── variation switch ───────────────────────────────────────────── */
+const labels = { a:'<b>Editorial briefing</b> — calm, story-led', b:'<b>Focus</b> — one action, minimal', c:'<b>Operator dashboard</b> — dense, for power users' };
+const seg = document.getElementById('seg');
+seg.addEventListener('click', e => {
+  const b = e.target.closest('button'); if(!b) return;
+  [...seg.children].forEach(x=>x.classList.toggle('on', x===b));
+  const v = b.dataset.v;
+  ['a','b','c'].forEach(k => document.getElementById('view-'+k).classList.toggle('hidden', k!==v));
+  document.getElementById('vlabel').innerHTML = labels[v];
+  document.querySelector('.stage').scrollTop = 0;
+});
+</script>
+</body>
+</html>

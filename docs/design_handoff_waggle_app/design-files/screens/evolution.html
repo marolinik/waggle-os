@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Waggle · Skill evolution</title>
+<script>document.documentElement.classList.add('js');</script>
+<link rel="stylesheet" href="../styles/waggle.css">
+<style>
+  body { height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+  .controls { flex: none; display: flex; align-items: center; gap: 14px; padding: 11px 20px; border-bottom: 1px solid var(--line-soft); background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); z-index: 30; }
+  .controls .lab { font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-dim); }
+  .seg { display: inline-flex; padding: 3px; gap: 3px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line-soft); }
+  .seg button { font-family: var(--sans); font-size: 12.5px; font-weight: 600; cursor: pointer; border: 0; background: transparent; color: var(--text-muted); padding: 6px 13px; border-radius: 7px; transition: .14s; white-space: nowrap; }
+  .seg button.on { background: var(--honey); color: #1a1407; }
+  .controls .vlabel { font-size: 12.5px; color: var(--text-muted); } .controls .vlabel b { color: var(--text); font-weight: 600; }
+  .controls .right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .tbtn { width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); color: var(--text-2); cursor: pointer; }
+  .tbtn:hover { border-color: var(--honey-line); color: var(--honey); }
+  .stage { flex: 1; min-height: 0; overflow: auto; }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 30px 32px 70px; }
+
+  .head { margin-bottom: 24px; }
+  .head .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing:.14em; text-transform:uppercase; color: var(--honey); margin-bottom: 12px; display:flex; align-items:center; gap:9px; }
+  .head .eyebrow::before { content:''; width:20px; height:1px; background: var(--honey-line); }
+  .head h1 { font-size: 28px; font-weight: 650; letter-spacing:-0.02em; margin: 0 0 10px; }
+  .head h1 em { font-style:normal; color: var(--honey); }
+  .head p { font-size: 15px; color: var(--text-muted); line-height:1.55; margin:0; max-width: 64ch; } .head p b { color: var(--text-2); }
+
+  /* skill card + version ladder */
+  .skill { border:1px solid var(--line); border-radius: var(--r-xl); background: var(--surface); overflow:hidden; }
+  .skill .sh { display:flex; align-items:center; gap:13px; padding: 18px 22px; border-bottom: 1px solid var(--line-soft); }
+  .skill .si { width:38px; height:42px; flex:none; display:grid; place-items:center; color:#1a1407; background: linear-gradient(150deg,var(--honey-bright),var(--honey-deep)); }
+  .skill .si svg { width:19px; height:19px; stroke:#1a1407; fill:none; stroke-width:2; }
+  .skill .sh b { font-size: 16px; font-weight: 650; } .skill .sh .sub { font-size: 12px; color: var(--text-muted); }
+  .skill .sh .now { margin-left:auto; text-align:right; } .skill .sh .now .v { font-size: 24px; font-weight: 750; color: var(--honey); letter-spacing:-0.02em; } .skill .sh .now .l { font-size:10.5px; color:var(--text-dim); font-family:var(--mono); }
+
+  .ladder { padding: 8px 22px 18px; }
+  .ver { display:grid; grid-template-columns: 64px 1fr; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--line-soft); position:relative; }
+  .ver:last-child { border-bottom:0; }
+  .ver .vtag { font-family: var(--mono); font-size: 12px; font-weight:600; color: var(--text-2); padding-top: 2px; }
+  .ver.best .vtag { color: var(--honey); }
+  .ver .vbody b { font-size: 14px; font-weight:600; }
+  .ver .vbody p { margin: 4px 0 10px; font-size: 13px; color: var(--text-muted); line-height:1.5; }
+  .ver .scorebar { display:flex; align-items:center; gap: 12px; }
+  .ver .track { flex:1; max-width: 360px; height: 10px; border-radius: 6px; background: var(--surface-2); border:1px solid var(--line-soft); overflow:hidden; }
+  .ver .fill { height:100%; border-radius:6px; background: var(--surface-3); }
+  .ver.best .fill { background: linear-gradient(90deg, var(--honey-deep), var(--honey-bright)); }
+  .ver .sc { font-family: var(--mono); font-size: 12.5px; font-weight:600; color: var(--text-2); } .ver.best .sc { color: var(--honey); }
+  .ver .prov { margin-top: 8px; display:inline-flex; align-items:center; gap:7px; font-family:var(--mono); font-size:10.5px; color: var(--intel); }
+
+  .howline { margin-top: 18px; display:flex; gap:12px; align-items:flex-start; padding: 15px 17px; border-radius: var(--r-lg); background: var(--bg-2); border:1px solid var(--line-soft); }
+  .howline svg { width:18px;height:18px;stroke:var(--honey);fill:none;stroke-width:1.8;flex:none;margin-top:1px; }
+  .howline p { margin:0; font-size:13px; color:var(--text-muted); line-height:1.6; } .howline b { color: var(--text); }
+
+  /* diffusion */
+  .diffuse { display:grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .dcard { border:1px solid var(--line-soft); border-radius: var(--r-xl); background: var(--surface); padding: 20px; }
+  .dcard .dh { display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap; } .dcard .dh b { font-size: 15px; font-weight:650; white-space:nowrap; }
+  .dcard .dh .tag { font-family:var(--mono); font-size:9.5px; letter-spacing:.1em; text-transform:uppercase; padding:3px 8px; border-radius:6px; }
+  .dcard.skill-d .dh .tag { color: var(--intel); background: var(--intel-wash); }
+  .dcard.tool-d .dh .tag { color: var(--healthy); background: var(--healthy-wash); }
+  .dcard .dsub { font-size: 12.5px; color: var(--text-muted); margin-bottom: 18px; }
+  .map { position: relative; height: 200px; margin-bottom: 16px; }
+  .map svg { position:absolute; inset:0; width:100%; height:100%; }
+  .ml { stroke: var(--line-strong); stroke-width:1.3; fill:none; } .mlf { stroke-width:2.2; fill:none; stroke-linecap:round; stroke-dasharray:4 120; animation: mf 3s linear infinite; }
+  .dcard.skill-d .mlf { stroke: var(--intel); } .dcard.tool-d .mlf { stroke: var(--healthy); }
+  @keyframes mf { to { stroke-dashoffset:-124; } }
+  .node { position:absolute; transform:translate(-50%,-50%); text-align:center; }
+  .node .nb { padding: 7px 11px; border-radius: 9px; background: var(--surface-2); border:1px solid var(--line-strong); font-size:11.5px; font-weight:600; white-space:nowrap; }
+  .node.origin .nb { color:#1a1407; background: linear-gradient(150deg,var(--honey-bright),var(--honey-deep)); border-color:transparent; }
+  .node .nt { font-family:var(--mono); font-size:8.5px; letter-spacing:.08em; text-transform:uppercase; color: var(--text-dim); margin-bottom:3px; }
+  .signal { display:inline-flex; align-items:center; gap:7px; font-family:var(--mono); font-size:10.5px; padding:4px 9px; border-radius:7px; margin-bottom:12px; }
+  .dcard.skill-d .signal { color:var(--intel); background:var(--intel-wash); } .dcard.tool-d .signal { color:var(--healthy); background:var(--healthy-wash); }
+  .adopt { font-size: 13px; color: var(--text-2); } .adopt b { color: var(--text); font-weight:650; }
+
+  .hidden { display:none !important; }
+  @media (max-width: 800px){ .diffuse { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <span class="lab">Moat · variation</span>
+  <div class="seg" id="seg">
+    <button class="on" data-v="a">A · Skills that improve</button>
+    <button data-v="b">B · Skills &amp; tools that spread</button>
+  </div>
+  <span class="vlabel" id="vlabel"><b>Evolution</b> — skills get better on their own</span>
+  <div class="right"><button class="tbtn" id="tbtn" title="Toggle theme">☾</button></div>
+</div>
+
+<div class="stage">
+  <!-- ════ A — EVOLUTION ════ -->
+  <div class="wrap view" id="view-a">
+    <div class="head">
+      <div class="eyebrow">The moat · self-improvement</div>
+      <h1>Your skills get <em>better on their own.</em></h1>
+      <p>A skill isn't static. Waggle re-optimizes it against real outcomes — and keeps every version, with the score that earned it. <b>You don't tune prompts; the hive does.</b></p>
+    </div>
+
+    <div class="skill">
+      <div class="sh">
+        <div class="si hex"><svg viewBox="0 0 24 24"><path d="m12 3 2.5 6 6.5.5-5 4.2 1.6 6.3L12 16.8 6 20l1.6-6.3-5-4.2 6.5-.5z"/></svg></div>
+        <div><b>Competitor teardown</b><div class="sub">skill · distilled by Research-synth · used in 4 workspaces</div></div>
+        <div class="now"><div class="v">91%</div><div class="l">current quality</div></div>
+      </div>
+      <div class="ladder" id="ladder"></div>
+    </div>
+
+    <div class="howline">
+      <svg viewBox="0 0 24 24"><path d="M3 17l5-5 4 4 8-8M14 4h6v6"/></svg>
+      <p><b>How it improves:</b> when a skill runs, Waggle's optimizer (GEPA) proposes refinements and a three-model judge scores them against held-out tasks. A new version only ships if it actually wins — and the old ones stay, so you can always roll back. Nothing about your data leaves the machine.</p>
+    </div>
+  </div>
+
+  <!-- ════ B — DIFFUSION ════ -->
+  <div class="wrap view hidden" id="view-b">
+    <div class="head">
+      <div class="eyebrow">The moat · the waggle dance</div>
+      <h1>And they <em>spread across the hive.</em></h1>
+      <p>When one agent learns something good, the others don't start from zero. Skills and tool setups diffuse across your agents and workspaces — the way bees share a find. <b>The whole hive compounds.</b></p>
+    </div>
+
+    <div class="diffuse">
+      <div class="dcard skill-d">
+        <div class="dh"><b>Competitor teardown</b><span class="tag">skill</span></div>
+        <div class="dsub">Learned in Competitive Intelligence — now adopted elsewhere.</div>
+        <div class="map">
+          <svg viewBox="0 0 380 200" preserveAspectRatio="none">
+            <line class="ml" x1="80" y1="100" x2="300" y2="40"></line><line class="ml" x1="80" y1="100" x2="300" y2="100"></line><line class="ml" x1="80" y1="100" x2="300" y2="160"></line>
+            <line class="mlf" x1="80" y1="100" x2="300" y2="40"></line><line class="mlf" x1="80" y1="100" x2="300" y2="100" style="animation-delay:1s"></line><line class="mlf" x1="80" y1="100" x2="300" y2="160" style="animation-delay:2s"></line>
+          </svg>
+          <div class="node origin" style="left:21%;top:50%"><div class="nt">origin</div><div class="nb">Research-synth</div></div>
+          <div class="node" style="left:79%;top:20%"><div class="nt">agent</div><div class="nb">Deck-builder</div></div>
+          <div class="node" style="left:79%;top:50%"><div class="nt">workspace</div><div class="nb">Customer Research</div></div>
+          <div class="node" style="left:79%;top:80%"><div class="nt">teammate</div><div class="nb">Jonas (Team)</div></div>
+        </div>
+        <span class="signal">⬡ waggle-dance · skill_share</span>
+        <div class="adopt"><b>3 adopters</b> · 2 agents, 1 teammate — each got the v3 quality instantly.</div>
+      </div>
+
+      <div class="dcard tool-d">
+        <div class="dh"><b>Salesforce export recipe</b><span class="tag">tool setup</span></div>
+        <div class="dsub">A working connector config, shared so others skip the setup.</div>
+        <div class="map">
+          <svg viewBox="0 0 380 200" preserveAspectRatio="none">
+            <line class="ml" x1="80" y1="100" x2="300" y2="55"></line><line class="ml" x1="80" y1="100" x2="300" y2="145"></line>
+            <line class="mlf" x1="80" y1="100" x2="300" y2="55"></line><line class="mlf" x1="80" y1="100" x2="300" y2="145" style="animation-delay:1.3s"></line>
+          </svg>
+          <div class="node origin" style="left:21%;top:50%"><div class="nt">origin</div><div class="nb">Q2 Board Deck</div></div>
+          <div class="node" style="left:79%;top:28%"><div class="nt">workspace</div><div class="nb">Pricing Model</div></div>
+          <div class="node" style="left:79%;top:72%"><div class="nt">workspace</div><div class="nb">Marketing Site</div></div>
+        </div>
+        <span class="signal">⬡ waggle-dance · model_recipe</span>
+        <div class="adopt"><b>2 workspaces</b> reused the auth + field mapping — no re-setup, secrets stayed in each vault.</div>
+      </div>
+    </div>
+
+    <div class="howline">
+      <svg viewBox="0 0 24 24"><circle cx="6" cy="7" r="2.4"/><circle cx="18" cy="7" r="2.4"/><circle cx="12" cy="17" r="2.4"/><path d="M8 8l3 7M16 8l-3 7"/></svg>
+      <p><b>You stay in control:</b> diffusion is suggest-then-adopt — Waggle proposes a shared skill or recipe, you accept it per workspace. Personal stays personal; only what you share moves. On Teams, this is how a whole org levels up at once.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+const root = document.documentElement, tbtn = document.getElementById('tbtn');
+function setTheme(t){ root.setAttribute('data-theme', t); tbtn.textContent = t==='dark'?'☾':'☀'; try{localStorage.setItem('waggle-concept-theme',t);}catch(e){} }
+setTheme((()=>{ try{ return localStorage.getItem('waggle-concept-theme')||'dark'; }catch(e){ return 'dark'; } })());
+tbtn.onclick = () => setTheme(root.getAttribute('data-theme')==='dark'?'light':'dark');
+window.addEventListener('message', e => { if(e.data && e.data.theme) setTheme(e.data.theme); });
+window.addEventListener('storage', e => { if(e.key==='waggle-concept-theme' && e.newValue) setTheme(e.newValue); });
+
+const vers = [
+  { v:'v1', t:'First draft', p:'Distilled from a manual teardown you did in March.', score:71 },
+  { v:'v2', t:'+ pricing-pull lane', p:'Optimizer added a step to fetch live pricing pages; judges confirmed a real lift.', score:84 },
+  { v:'v3', t:'+ source citations &amp; recency check', p:'Every claim now carries a source and a freshness flag. Current best.', score:91, best:true, prov:'GEPA optimized · judged by 3 models' },
+];
+document.getElementById('ladder').innerHTML = vers.map(v=>`
+  <div class="ver ${v.best?'best':''}">
+    <div class="vtag">${v.v}</div>
+    <div class="vbody">
+      <b>${v.t}</b><p>${v.p}</p>
+      <div class="scorebar"><div class="track"><div class="fill" style="width:${v.score}%"></div></div><span class="sc">${v.score}% quality</span></div>
+      ${v.prov?`<div class="prov">⬡ ${v.prov}</div>`:''}
+    </div>
+  </div>`).join('');
+
+const labels = { a:'<b>Evolution</b> — skills get better on their own', b:'<b>Diffusion</b> — skills &amp; tools spread across the hive' };
+const seg = document.getElementById('seg');
+seg.addEventListener('click', e => {
+  const b = e.target.closest('button'); if(!b) return;
+  [...seg.children].forEach(x=>x.classList.toggle('on', x===b));
+  document.getElementById('view-a').classList.toggle('hidden', b.dataset.v!=='a');
+  document.getElementById('view-b').classList.toggle('hidden', b.dataset.v!=='b');
+  document.getElementById('vlabel').innerHTML = labels[b.dataset.v];
+  document.querySelector('.stage').scrollTop = 0;
+});
+</script>
+</body>
+</html>

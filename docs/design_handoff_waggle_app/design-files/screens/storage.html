@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Waggle · Storage & files</title>
+<script>document.documentElement.classList.add('js');</script>
+<link rel="stylesheet" href="../styles/waggle.css">
+<style>
+  body { height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+  .controls { flex: none; display: flex; align-items: center; gap: 14px; padding: 11px 20px; border-bottom: 1px solid var(--line-soft); background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); z-index: 30; }
+  .controls .lab { font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-dim); }
+  .seg { display: inline-flex; padding: 3px; gap: 3px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line-soft); }
+  .seg button { font-family: var(--sans); font-size: 12.5px; font-weight: 600; cursor: pointer; border: 0; background: transparent; color: var(--text-muted); padding: 6px 13px; border-radius: 7px; transition: .14s; white-space: nowrap; }
+  .seg button.on { background: var(--honey); color: #1a1407; }
+  .controls .vlabel { font-size: 12.5px; color: var(--text-muted); } .controls .vlabel b { color: var(--text); font-weight: 600; }
+  .controls .right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .tbtn { width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); color: var(--text-2); cursor: pointer; }
+  .tbtn:hover { border-color: var(--honey-line); color: var(--honey); }
+  .stage { flex: 1; min-height: 0; overflow: auto; }
+
+  /* ── A: storage map ── */
+  .wrap { max-width: 940px; margin: 0 auto; padding: 30px 32px 70px; }
+  .head h1 { font-size: 26px; font-weight: 650; letter-spacing:-0.02em; margin: 0 0 8px; }
+  .head .crumbs { font-family: var(--mono); font-size: 11px; color: var(--text-dim); margin-bottom: 12px; } .head .crumbs b { color: var(--text-2); font-weight: 500; }
+  .head p { font-size: 15px; color: var(--text-muted); line-height: 1.55; margin: 0; max-width: 62ch; }
+
+  .liveloc { margin-top: 24px; border: 1px solid var(--honey-line); border-radius: var(--r-xl); background: linear-gradient(150deg, var(--surface-2), var(--surface)); padding: 24px; box-shadow: var(--honey-glow); }
+  .liveloc .top { display: flex; align-items: center; gap: 13px; margin-bottom: 18px; }
+  .liveloc .wm { width: 40px; height: 44px; flex:none; display:grid; place-items:center; font-weight:800; font-size:15px; color:#1a1407; background: linear-gradient(150deg,var(--honey-bright),var(--honey-deep)); }
+  .liveloc .top b { font-size: 16px; font-weight: 650; } .liveloc .top .sub { font-size: 12px; color: var(--text-muted); }
+  .liveloc .top .pillk { margin-left:auto; font-size: 12px; font-weight: 600; color: var(--honey); background: var(--honey-wash); border: 1px solid var(--honey-line); padding: 6px 12px; border-radius: 999px; }
+  .tree { font-family: var(--mono); font-size: 12.5px; background: var(--bg-2); border: 1px solid var(--line-soft); border-radius: var(--r); padding: 14px 16px; }
+  .tline { display: flex; align-items: baseline; gap: 12px; line-height: 1.95; }
+  .tline .nm { flex: 1; }
+  .tree .dir { color: var(--honey); } .tree .f .nm { color: var(--text-2); } .tree .note { color: var(--text-dim); }
+  .tree .sz { color: var(--text-dim); white-space: nowrap; }
+
+  .sec-h { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-dim); margin: 30px 0 14px; display:flex; align-items:center; gap:10px; }
+  .sec-h::after { content:''; flex:1; height:1px; background: var(--line-soft); }
+
+  .types { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; }
+  .type { border: 1px solid var(--line-soft); background: var(--surface); border-radius: var(--r-lg); padding: 20px; position: relative; }
+  .type.active { border-color: var(--honey-line); }
+  .type .ic { width: 36px; height: 40px; display:grid; place-items:center; margin-bottom: 12px; }
+  .type .ic svg { width: 19px; height: 19px; fill:none; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+  .type.virtual .ic svg { stroke: var(--intel); } .type.local .ic svg { stroke: var(--honey); } .type.team .ic svg { stroke: var(--healthy); }
+  .type h3 { font-size: 16px; font-weight: 650; letter-spacing:-0.01em; margin: 0 0 4px; }
+  .type .where { font-family: var(--mono); font-size: 10.5px; color: var(--text-dim); margin-bottom: 10px; }
+  .type p { font-size: 13px; color: var(--text-muted); line-height: 1.55; margin: 0 0 12px; }
+  .type .priv { font-size: 11.5px; font-weight: 600; display:inline-flex; align-items:center; gap:6px; padding: 4px 10px; border-radius: 999px; }
+  .type.virtual .priv { color: var(--intel); background: var(--intel-wash); }
+  .type.local .priv { color: var(--honey); background: var(--honey-wash); }
+  .type.team .priv { color: var(--healthy); background: var(--healthy-wash); }
+  .type .cur { position:absolute; top:16px; right:16px; font-family: var(--mono); font-size: 9.5px; letter-spacing:.1em; text-transform:uppercase; color: var(--honey); }
+
+  .reassure { margin-top: 22px; display:flex; gap: 13px; align-items: flex-start; padding: 16px 18px; border-radius: var(--r-lg); background: var(--bg-2); border: 1px solid var(--line-soft); }
+  .reassure svg { width: 20px; height: 20px; stroke: var(--healthy); fill:none; stroke-width:1.8; flex:none; margin-top:1px; }
+  .reassure p { margin: 0; font-size: 13.5px; color: var(--text-muted); line-height: 1.6; } .reassure b { color: var(--text); }
+
+  /* ── B: file browser ── */
+  .files { display: flex; height: 100%; }
+  .ftree { flex: none; width: 220px; border-right: 1px solid var(--line-soft); background: var(--bg-2); padding: 16px 10px; overflow:auto; }
+  .ftree .fh { font-family: var(--mono); font-size: 10px; letter-spacing:.12em; text-transform:uppercase; color: var(--text-dim); padding: 6px 10px 10px; }
+  .ftree .row { display:flex; align-items:center; gap:9px; padding: 7px 10px; border-radius: 8px; font-size: 13px; color: var(--text-2); cursor:pointer; }
+  .ftree .row:hover { background: var(--surface-2); } .ftree .row.on { background: var(--honey-wash); color: var(--text); }
+  .ftree .row.in { padding-left: 26px; }
+  .ftree .row svg { width: 15px; height: 15px; stroke: var(--honey); fill: none; stroke-width:1.7; flex:none; }
+  .fmain { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .fbar { flex:none; display:flex; align-items:center; gap:12px; padding: 13px 20px; border-bottom: 1px solid var(--line-soft); }
+  .fbar .bc { font-size: 13px; color: var(--text-muted); } .fbar .bc b { color: var(--text); font-weight:600; }
+  .fbar .acts { margin-left:auto; display:flex; gap:8px; }
+  .fbar .ab { font-size: 12px; font-weight:600; color: var(--text-2); padding: 7px 12px; border-radius: 8px; border:1px solid var(--line-strong); background: var(--surface); cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+  .fbar .ab:hover { border-color: var(--honey-line); color: var(--honey); }
+  .flist { flex:1; min-height:0; overflow:auto; padding: 8px 12px; }
+  .ftab { width:100%; border-collapse: collapse; }
+  .ftab th { text-align:left; font-family: var(--mono); font-size: 10px; letter-spacing:.06em; text-transform:uppercase; color: var(--text-dim); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--line-soft); }
+  .ftab th.r, .ftab td.r { text-align: right; }
+  .ftab td { padding: 10px; border-bottom: 1px solid var(--line-soft); font-size: 13.5px; color: var(--text-2); }
+  .ftab tr { cursor: pointer; } .ftab tbody tr:hover td { background: var(--surface-2); }
+  .ftab tr.sel td { background: var(--honey-wash); }
+  .ftab .nmc { display:flex; align-items:center; gap:11px; } .ftab .nmc b { color: var(--text); font-weight: 550; }
+  .ftab .fi { width: 28px; height: 30px; flex:none; display:grid; place-items:center; font-family: var(--mono); font-size: 9px; font-weight:700; border-radius: 6px; }
+  .ftab .prov { font-family: var(--mono); font-size: 10.5px; color: var(--intel); }
+  .fstatus { flex:none; display:flex; align-items:center; justify-content:space-between; padding: 9px 20px; border-top: 1px solid var(--line-soft); font-size: 12px; color: var(--text-muted); }
+  .fstatus .loc { display:inline-flex; align-items:center; gap:8px; font-family: var(--mono); font-size: 11px; }
+  .fstatus .loc .dot { background: var(--honey); }
+
+  .hidden { display:none !important; }
+  @media (max-width:820px){ .types { grid-template-columns: 1fr; } .ftree { width: 160px; } }
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <span class="lab">Storage · variation</span>
+  <div class="seg" id="seg">
+    <button class="on" data-v="a">A · Where it lives</button>
+    <button data-v="b">B · Files</button>
+  </div>
+  <span class="vlabel" id="vlabel"><b>Where it lives</b> — the workspace, made legible</span>
+  <div class="right"><button class="tbtn" id="tbtn" title="Toggle theme">☾</button></div>
+</div>
+
+<div class="stage">
+  <!-- ════ A — STORAGE MAP ════ -->
+  <div class="wrap view" id="view-a">
+    <div class="head">
+      <div class="crumbs">Competitive Intelligence <span>›</span> <b>Storage</b></div>
+      <h1>Where this workspace lives</h1>
+      <p>A workspace is one place on disk: its memory, its files, its artifacts. Waggle shows you exactly where — and keeps it local unless you choose to share.</p>
+    </div>
+
+    <div class="liveloc">
+      <div class="top">
+        <div class="wm hex">C</div>
+        <div><b>Competitive Intelligence</b><div class="sub">Local workspace · on this Mac</div></div>
+        <span class="pillk">⬡ Local · private</span>
+      </div>
+      <div class="tree">
+        <div class="tline note"><span class="nm">~/Waggle/workspaces/</span></div>
+        <div class="tline dir"><span class="nm" style="padding-left:1.4em">competitive-intelligence/</span></div>
+        <div class="tline f"><span class="nm" style="padding-left:2.8em">hive.mind</span><span class="sz">3.2 MB · 142 memories</span></div>
+        <div class="tline f"><span class="nm" style="padding-left:2.8em">files/</span><span class="sz">12 files · 4.1 MB</span></div>
+        <div class="tline f"><span class="nm" style="padding-left:2.8em">artifacts/</span><span class="sz">7 items</span></div>
+        <div class="tline f"><span class="nm" style="padding-left:2.8em">workspace.json</span><span class="sz">config</span></div>
+      </div>
+    </div>
+
+    <div class="sec-h">Three ways a workspace can live</div>
+    <div class="types">
+      <div class="type virtual">
+        <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 7c0-1.5 3.6-2.5 8-2.5s8 1 8 2.5-3.6 2.5-8 2.5-8-1-8-2.5z"/><path d="M4 7v10c0 1.5 3.6 2.5 8 2.5s8-1 8-2.5V7"/></svg></div>
+        <h3>Virtual</h3>
+        <div class="where">managed by Waggle</div>
+        <p>Files Waggle keeps for you inside the app — no folder to manage. Perfect for quick, throwaway work.</p>
+        <span class="priv">⬡ Only you · session</span>
+      </div>
+      <div class="type local active">
+        <span class="cur">this one</span>
+        <div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M3 9h18M8 21h8"/></svg></div>
+        <h3>Local</h3>
+        <div class="where">a folder on your machine</div>
+        <p>Bound to a real folder you can open in Finder. Your agents read and write the same files you do.</p>
+        <span class="priv">⬡ Only you · on disk</span>
+      </div>
+      <div class="type team">
+        <div class="ic"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0M16 6a3 3 0 0 1 0 6M21 20a5 5 0 0 0-4-4.9"/></svg></div>
+        <h3>Team</h3>
+        <div class="where">shared, synced</div>
+        <p>A shared memory + file space for a team — same workspace, role-based access, synced across seats.</p>
+        <span class="priv">⬡ Shared with team</span>
+      </div>
+    </div>
+
+    <div class="reassure">
+      <svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg>
+      <p><b>Local-first, always.</b> Memory and files for Virtual and Local workspaces never leave this machine — there's nothing for anyone to leak, subpoena, or sell. Switch a workspace to Team only when you mean to share it, and you can export or delete any workspace, whole, at any time.</p>
+    </div>
+  </div>
+
+  <!-- ════ B — FILES ════ -->
+  <div class="files view hidden" id="view-b">
+    <aside class="ftree">
+      <div class="fh">Competitive Intel</div>
+      <div class="row on"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Root</div>
+      <div class="row in"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>research</div>
+      <div class="row in"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>exports</div>
+    </aside>
+    <div class="fmain">
+      <div class="fbar">
+        <span class="bc">Root <span style="color:var(--text-dim)">/</span> <b>Competitive Intelligence</b></span>
+        <div class="acts">
+          <span class="ab"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>New folder</span>
+          <span class="ab"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/></svg>Upload</span>
+        </div>
+      </div>
+      <div class="flist">
+        <table class="ftab">
+          <thead><tr><th>Name</th><th>Source</th><th class="r">Size</th><th class="r">Modified</th></tr></thead>
+          <tbody id="fbody"></tbody>
+        </table>
+      </div>
+      <div class="fstatus">
+        <span>12 items · 4.1 MB</span>
+        <span class="loc"><span class="dot"></span>Local · private · ~/Waggle/workspaces/competitive-intelligence/files</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const root = document.documentElement, tbtn = document.getElementById('tbtn');
+function setTheme(t){ root.setAttribute('data-theme', t); tbtn.textContent = t==='dark'?'☾':'☀'; try{localStorage.setItem('waggle-concept-theme',t);}catch(e){} }
+setTheme((()=>{ try{ return localStorage.getItem('waggle-concept-theme')||'dark'; }catch(e){ return 'dark'; } })());
+tbtn.onclick = () => setTheme(root.getAttribute('data-theme')==='dark'?'light':'dark');
+window.addEventListener('message', e => { if(e.data && e.data.theme) setTheme(e.data.theme); });
+window.addEventListener('storage', e => { if(e.key==='waggle-concept-theme' && e.newValue) setTheme(e.newValue); });
+
+const files = [
+  { ext:'DIR', c:'var(--honey)', n:'research', dir:true, src:'—', size:'—', when:'2d ago' },
+  { ext:'DIR', c:'var(--honey)', n:'exports', dir:true, src:'—', size:'—', when:'2h ago' },
+  { ext:'MD', c:'var(--work)', n:'teardown.md', src:'made by Waggle', size:'48 KB', when:'2h ago' },
+  { ext:'XLS', c:'var(--healthy)', n:'pricing-landscape.xlsx', src:'made by Waggle', size:'126 KB', when:'2h ago' },
+  { ext:'PDF', c:'var(--risk)', n:'mem0-teardown.pdf', src:'you uploaded', size:'1.4 MB', when:'1d ago' },
+  { ext:'PDF', c:'var(--risk)', n:'letta-pricing.pdf', src:'you uploaded', size:'880 KB', when:'1d ago' },
+  { ext:'MD', c:'var(--work)', n:'board-brief.md', src:'made by Claude Code', size:'22 KB', when:'18m ago' },
+];
+document.getElementById('fbody').innerHTML = files.map(f=>`
+  <tr><td><div class="nmc"><span class="fi" style="background:color-mix(in srgb,${f.c} 18%,transparent);color:${f.c}">${f.dir?'<svg width=14 height=14 viewBox="0 0 24 24" fill=none stroke="'+f.c+'" stroke-width=1.8><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>':f.ext}</span><b>${f.n}</b></div></td><td>${f.src==='—'?'<span style="color:var(--text-dim)">—</span>':`<span class="prov">⬡ ${f.src}</span>`}</td><td class="r" style="color:var(--text-dim)">${f.size}</td><td class="r" style="color:var(--text-dim)">${f.when}</td></tr>`).join('');
+document.querySelectorAll('#fbody tr').forEach(tr => tr.onclick = () => { document.querySelectorAll('#fbody tr').forEach(x=>x.classList.remove('sel')); tr.classList.add('sel'); });
+
+const labels = { a:'<b>Where it lives</b> — the workspace, made legible', b:'<b>Files</b> — a clean browser, with provenance' };
+const seg = document.getElementById('seg');
+seg.addEventListener('click', e => {
+  const b = e.target.closest('button'); if(!b) return;
+  [...seg.children].forEach(x=>x.classList.toggle('on', x===b));
+  document.getElementById('view-a').classList.toggle('hidden', b.dataset.v!=='a');
+  document.getElementById('view-b').classList.toggle('hidden', b.dataset.v!=='b');
+  document.getElementById('vlabel').innerHTML = labels[b.dataset.v];
+  document.querySelector('.stage').scrollTop = 0;
+});
+</script>
+</body>
+</html>

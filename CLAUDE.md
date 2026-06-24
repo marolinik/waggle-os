@@ -341,36 +341,49 @@ reject in review?"*
 
 ## 5. Persona Architecture
 
-### Current (13 personas — data in `persona-data.ts`, logic in `personas.ts`)
-researcher, writer, analyst, coder, project-manager, executive-assistant,
-sales-rep, marketer, product-manager-senior, hr-manager, legal-professional,
-finance-owner, consultant
+### Shipped (22 personas — data in `persona-data.ts`, logic in `personas.ts`)
+The original 13 + 4 universal/orchestration + 5 domain personas all shipped.
+The PersonaSwitcher groups them into **two tiers** (`apps/web/src/lib/persona-tier.ts`):
 
-**Split is already done:** `persona-data.ts` holds the pure `PERSONAS` array;
+**Universal Modes (8 — always available in every workspace):**
+general-purpose, planner, verifier, coordinator, researcher, writer, analyst, coder
+- **general-purpose** — versatile default, full tool access
+- **planner** — read-only strategic planning, no file writes (`isReadOnly`)
+- **verifier** — adversarial QA, read-only, VERDICT output format (`isReadOnly`)
+- **coordinator** — pure orchestrator, spawn/list/get_agent_result only (gated by `FEATURE_FLAGS.COORDINATOR_MODE`)
+
+**Specialists (14 — template-scoped via `TEMPLATE_SPECIALISTS`):**
+project-manager, executive-assistant, sales-rep, marketer, product-manager-senior,
+hr-manager, legal-professional, finance-owner, consultant, support-agent,
+ops-manager, data-engineer, recruiter, creative-director
+
+> Note: the onboarding picker (`onboarding/constants.ts` → `ALL_ONBOARDING_PERSONAS`)
+> intentionally surfaces only **19** of the 22 — it omits planner/verifier/coordinator
+> (read-only/orchestration modes don't make sense as a workspace's *starting* brain) and
+> uses its own 3-way grouping (universal/knowledge/domain). Same canonical personas, a
+> different view for a different UI moment. `persona-data.ts` is the single source of truth.
+
+**Split is done:** `persona-data.ts` holds the pure `PERSONAS` array;
 `personas.ts` exports the `AgentPersona` interface and logic only.
 
-### Target (17 personas — add 4)
-- **general-purpose** — versatile default, full tool access
-- **planner** — read-only strategic planning, no file writes
-- **verifier** — adversarial QA, read-only, VERDICT output format
-- **coordinator** — pure orchestrator, 3 tools only (spawn/list/get_agent_result)
-
-### AgentPersona Interface — Current Fields
+### AgentPersona Interface — Shipped Fields (verified `personas.ts`)
 ```typescript
 interface AgentPersona {
+  // core
   id, name, description, icon, systemPrompt, modelPreference,
-  tools, workspaceAffinity, suggestedCommands, defaultWorkflow
+  tools: string[], workspaceAffinity: string[],
+  suggestedCommands: string[], defaultWorkflow: string | null,
+  // guardrails + picker metadata (all optional, all shipped)
+  disallowedTools?: string[]      // denylist — overrides tools[] on conflict
+  failurePatterns?: string[]      // documented failure modes — shown in hover tooltip
+  isReadOnly?: boolean            // true = no write tools ever (enforced in assembleToolPool)
+  tagline?: string                // one sentence for picker hover
+  bestFor?: string[]              // 3 example tasks in user-facing language
+  wontDo?: string                 // hard boundary statement
+  suggestedSkills?: string[]      // installable from marketplace
+  suggestedConnectors?: string[]  // connector IDs
+  suggestedMcpServers?: string[]  // MCP server names from mcp-registry
 }
-```
-
-### AgentPersona Interface — Proposed Additions
-```typescript
-disallowedTools?: string[]   // denylist — enforced at pool level
-failurePatterns?: string[]   // documented failure modes (min 3 per persona)
-isReadOnly?: boolean         // true = no write tools ever
-tagline?: string             // one sentence for picker hover
-bestFor?: string[]           // 3 example tasks
-wontDo?: string              // hard boundary statement
 ```
 
 ---
@@ -381,19 +394,22 @@ wontDo?: string              // hard boundary statement
 **Path:** `apps/web/src/components/os/overlays/OnboardingWizard.tsx`
 (NOT `app/src/components/onboarding/` — that path doesn't exist.)
 
-Current: 7-step wizard with hardcoded TEMPLATES and PERSONAS arrays not wired to the
-real `PERSONAS` from `persona-data.ts`.
-
-Target: Expand TEMPLATES to 15, connect to canonical `PERSONAS` array,
-update TEMPLATE_PERSONA mapping for 15 → 17 combinations.
+Shipped: 6-step flow (`first-launch → who-are-you → model-gate → memory-import →
+template → first-task`). The 15 TEMPLATES + the `TEMPLATE_PERSONA` mapping (template →
+one default persona id) live in `overlays/onboarding/constants.ts`, wired to the
+canonical persona ids from `persona-data.ts`. The wizard surfaces a **curated 6** of the
+15 (`CURATED_ONBOARDING_TEMPLATES`) for the ≤2-min flow; the full 15 are reachable from
+the workspace gallery later. (Picker persona roster = `ALL_ONBOARDING_PERSONAS`, the
+19-of-22 view noted in §5.)
 
 ### PersonaSwitcher
 **Path:** `apps/web/src/components/os/overlays/PersonaSwitcher.tsx`
 
-Current: Flat 2-column grid. "Create Custom Persona" inline form POSTs to `/api/personas`.
-
-Target: Two-tier layout — "UNIVERSAL MODES" (8) + "YOUR WORKSPACE SPECIALISTS"
-(template-scoped). Hover tooltip shows tagline + bestFor + wontDo.
+Shipped (M-01): Two-tier layout — "UNIVERSAL MODES" (8, from `UNIVERSAL_MODE_IDS`) +
+"YOUR WORKSPACE SPECIALISTS" (template-scoped via `getSpecialistsForTemplate` in
+`lib/persona-tier.ts`). Hover tooltip (`buildPersonaTooltip`, `lib/persona-tooltip.ts`)
+shows tagline + bestFor + wontDo. "Create Custom Persona" inline form POSTs to
+`/api/personas`.
 
 ---
 

@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Waggle · App surfaces</title>
+<script>document.documentElement.classList.add('js');</script>
+<link rel="stylesheet" href="../styles/waggle.css">
+<style>
+  body { height:100vh; overflow:hidden; display:flex; flex-direction:column; }
+  .controls { flex:none; display:flex; align-items:center; gap:14px; padding:11px 20px; border-bottom:1px solid var(--line-soft); background:color-mix(in srgb,var(--bg) 88%,transparent); backdrop-filter:blur(10px); z-index:30; }
+  .controls .lab { font-family:var(--mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--text-dim); }
+  .controls .vlabel { font-size:12.5px; color:var(--text-muted); } .controls .vlabel b { color:var(--text); font-weight:600; }
+  .controls .right { margin-left:auto; display:flex; align-items:center; gap:10px; }
+  .tbtn { width:34px; height:34px; border-radius:9px; border:1px solid var(--line); background:var(--surface); color:var(--text-2); cursor:pointer; }
+  .tbtn:hover { border-color:var(--honey-line); color:var(--honey); }
+  .app { flex:1; min-height:0; display:flex; }
+  .rail { flex:none; width:208px; border-right:1px solid var(--line-soft); background:var(--bg-2); padding:16px 10px; overflow:auto; }
+  .rail .rh { font-family:var(--mono); font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--text-dim); padding:6px 11px 12px; }
+  .ritem { display:flex; align-items:center; gap:11px; padding:9px 11px; border-radius:10px; cursor:pointer; color:var(--text-2); transition:.13s; font-size:13.5px; font-weight:550; position:relative; }
+  .ritem:hover { background:var(--surface-2); color:var(--text); }
+  .ritem.on { background:var(--honey-wash); color:var(--text); }
+  .ritem.on::before { content:''; position:absolute; left:-10px; top:50%; transform:translateY(-50%); width:3px; height:17px; border-radius:3px; background:var(--honey); }
+  .ritem svg { width:17px; height:17px; stroke:currentColor; fill:none; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; flex:none; }
+  .ritem.on svg { stroke:var(--honey); }
+  .ritem .ct { margin-left:auto; font-family:var(--mono); font-size:10px; color:var(--text-dim); }
+  .rail .rz { font-family:var(--mono); font-size:9.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--text-dim); padding:16px 11px 6px; }
+
+  .main { flex:1; min-width:0; display:flex; flex-direction:column; }
+  .shead { flex:none; display:flex; align-items:flex-start; gap:16px; padding:24px 30px 16px; border-bottom:1px solid var(--line-soft); }
+  .shead h1 { font-size:21px; font-weight:650; letter-spacing:-0.02em; margin:0 0 4px; }
+  .shead p { font-size:13px; color:var(--text-muted); margin:0; max-width:62ch; line-height:1.5; }
+  .shead .pa { margin-left:auto; font-size:12.5px; font-weight:650; padding:9px 15px; border-radius:9px; background:var(--honey); color:#1a1407; cursor:pointer; white-space:nowrap; border:0; display:inline-flex; align-items:center; gap:7px; }
+  .shead .pa:hover { background:var(--honey-bright); }
+  .body { flex:1; min-height:0; overflow:auto; padding:22px 30px 50px; }
+  .panel { display:none; } .panel.on { display:block; }
+
+  .grp { font-family:var(--mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--text-dim); margin:4px 0 12px; display:flex; align-items:center; gap:10px; } .grp:not(:first-child){ margin-top:26px; } .grp::after { content:''; flex:1; height:1px; background:var(--line-soft); }
+  .rows { display:grid; gap:9px; }
+  .rc { display:flex; align-items:center; gap:14px; padding:14px 16px; border-radius:var(--r); border:1px solid var(--line-soft); background:var(--surface); transition:.14s; }
+  .rc:hover { border-color:var(--line-strong); }
+  .rc .ri { width:34px; height:38px; flex:none; display:grid; place-items:center; font-family:var(--mono); font-size:11px; font-weight:700; color:#1a1407; background:linear-gradient(150deg,var(--honey-bright),var(--honey-deep)); }
+  .rc .ri.soft { color:var(--text-2); background:var(--surface-2); border:1px solid var(--line); }
+  .rc .rt { flex:1; min-width:0; } .rc .rt b { font-size:14.5px; font-weight:600; } .rc .rt .rs { font-size:12.5px; color:var(--text-muted); margin-top:2px; } .rc .rt .rs .mono { font-family:var(--mono); font-size:11.5px; color:var(--text-dim); } .rc .rt .rs .prov { color:var(--intel); }
+  .rc .meta { font-family:var(--mono); font-size:11px; color:var(--text-dim); white-space:nowrap; }
+  .bdg { font-size:11px; font-weight:600; padding:3px 9px; border-radius:999px; display:inline-flex; align-items:center; gap:5px; white-space:nowrap; }
+  .bdg.live { color:var(--healthy); background:var(--healthy-wash); } .bdg.idle { color:var(--text-dim); background:var(--surface-2); } .bdg.warn { color:var(--attention); background:var(--honey-wash); } .bdg.work { color:var(--work); background:var(--work-wash); }
+  .lnk { font-size:12px; font-weight:600; color:var(--text-2); cursor:pointer; } .lnk:hover { color:var(--honey); }
+
+  /* grid cards (artifacts) */
+  .cards { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  .acard { border:1px solid var(--line-soft); background:var(--surface); border-radius:var(--r-lg); padding:16px; cursor:pointer; transition:.15s; }
+  .acard:hover { border-color:var(--honey-line); transform:translateY(-2px); box-shadow:var(--shadow); }
+  .acard .ext { width:38px; height:42px; display:grid; place-items:center; font-family:var(--mono); font-size:11px; font-weight:700; border-radius:8px; margin-bottom:12px; }
+  .acard h4 { font-size:14px; font-weight:600; margin:0 0 4px; } .acard .am { font-size:11.5px; color:var(--text-dim); font-family:var(--mono); } .acard .prov { font-size:11px; color:var(--intel); margin-top:9px; }
+
+  /* profile */
+  .profhead { display:flex; align-items:center; gap:16px; margin-bottom:22px; }
+  .profhead .pa2 { width:60px; height:66px; flex:none; display:grid; place-items:center; font-weight:800; font-size:24px; color:#1a1407; background:linear-gradient(150deg,var(--honey-bright),var(--honey-deep)); }
+  .profhead h2 { font-size:22px; font-weight:650; margin:0; letter-spacing:-0.02em; } .profhead .ph2 { font-size:13px; color:var(--text-muted); margin-top:3px; }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; }
+  .chip { font-size:12.5px; font-weight:550; padding:6px 13px; border-radius:999px; border:1px solid var(--line-soft); background:var(--surface); color:var(--text-2); }
+  .chip.on { background:var(--honey-wash); border-color:var(--honey-line); color:var(--honey); }
+  .knows { display:grid; gap:9px; }
+  .kfact { display:grid; grid-template-columns:18px 1fr; gap:11px; padding:12px 14px; border-radius:var(--r); border:1px solid var(--line-soft); background:var(--surface); font-size:13.5px; color:var(--text); }
+  .kfact .kd { color:var(--honey); }
+
+  /* mission control */
+  .mc-stat { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:22px; }
+  .mcs { padding:16px; border-radius:var(--r-lg); border:1px solid var(--line-soft); background:var(--surface); }
+  .mcs .v { font-size:24px; font-weight:750; letter-spacing:-0.02em; } .mcs .l { font-size:11.5px; color:var(--text-muted); margin-top:5px; }
+  .svc { display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--line-soft); font-size:13.5px; } .svc:last-child { border-bottom:0; } .svc .sd { width:8px; height:8px; border-radius:999px; flex:none; } .svc .sn { flex:1; } .svc .sm { font-family:var(--mono); font-size:11px; color:var(--text-dim); }
+
+  /* timeline */
+  .tl { display:grid; grid-template-columns:74px 1fr; gap:16px; padding:13px 0; border-top:1px solid var(--line-soft); } .tl:first-child { border-top:0; }
+  .tl .when { font-family:var(--mono); font-size:11px; color:var(--text-dim); padding-top:2px; }
+  .tl .ev { font-size:13.5px; color:var(--text-2); line-height:1.5; } .tl .ev b { color:var(--text); font-weight:600; } .tl .ev .src { font-family:var(--mono); font-size:10.5px; margin-left:6px; }
+  .tl .ev .src.mem { color:var(--intel); } .tl .ev .src.web { color:var(--work); } .tl .ev .src.sys { color:var(--text-dim); } .tl .ev .src.ok { color:var(--healthy); }
+
+  /* room */
+  .room { display:grid; grid-template-columns:1fr 260px; gap:16px; }
+  .roomstage { border:1px solid var(--line-soft); border-radius:var(--r-xl); background:var(--bg-2); padding:22px; min-height:280px; position:relative; overflow:hidden; }
+  .roomstage .comb { position:absolute; inset:0; opacity:.4; }
+  .live-act { position:relative; display:grid; gap:10px; }
+  .la { display:flex; gap:11px; align-items:flex-start; padding:12px 14px; border-radius:var(--r); background:var(--surface); border:1px solid var(--line-soft); }
+  .la .av { width:28px; height:32px; flex:none; display:grid; place-items:center; font-size:11px; font-weight:700; }
+  .la .av.you { background:var(--surface-3); color:var(--text-2); border-radius:8px; } .la .av.bot { color:#1a1407; background:linear-gradient(150deg,var(--honey-bright),var(--honey-deep)); }
+  .la .lc b { font-size:13px; font-weight:650; } .la .lc p { margin:3px 0 0; font-size:12.5px; color:var(--text-muted); line-height:1.45; }
+  .participants { border:1px solid var(--line-soft); border-radius:var(--r-lg); background:var(--surface); padding:16px; }
+  .participants h4 { font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--text-dim); margin:0 0 12px; }
+  .pp { display:flex; align-items:center; gap:10px; padding:7px 0; font-size:13px; } .pp .pd { width:7px; height:7px; border-radius:999px; } .pp .pn { flex:1; } .pp .pr { font-size:11px; color:var(--text-dim); }
+
+  .hidden { display:none !important; }
+  @media (max-width:820px){ .rail { width:62px; } .rail .rh, .rail .rz, .ritem span.txt, .ritem .ct { display:none; } .cards, .mc-stat { grid-template-columns:1fr 1fr; } .room { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <span class="lab">App surfaces · queued screens, now drawn</span>
+  <span class="vlabel" id="vlabel"><b>Agents</b> — your team of specialists</span>
+  <div class="right"><button class="tbtn" id="tbtn" title="Toggle theme">☾</button></div>
+</div>
+
+<div class="app">
+  <nav class="rail" id="rail">
+    <div class="rz">Intelligence</div>
+    <div class="ritem on" data-s="agents"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h6v6H9z"/></svg><span class="txt">Agents</span><span class="ct">4</span></div>
+    <div class="ritem" data-s="room"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0M16 6a3 3 0 0 1 0 6"/></svg><span class="txt">Room</span><span class="ct live" style="color:var(--healthy)">●</span></div>
+    <div class="rz">Work</div>
+    <div class="ritem" data-s="artifacts"><svg viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg><span class="txt">Artifacts</span><span class="ct">7</span></div>
+    <div class="rz">System</div>
+    <div class="ritem" data-s="mission"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="txt">Mission Control</span></div>
+    <div class="ritem" data-s="timeline"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span class="txt">Timeline</span></div>
+    <div class="ritem" data-s="profile"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M5.5 21a7 7 0 0 1 13 0"/></svg><span class="txt">Profile</span></div>
+  </nav>
+
+  <div class="main">
+    <div class="shead">
+      <div><h1 id="sTitle">Agents</h1><p id="sSub">Your team of specialists — each with a persona, a model, and a memory of its work.</p></div>
+      <button class="pa" id="sAction"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg><span id="sActionT">New agent</span></button>
+    </div>
+    <div class="body" id="body"></div>
+  </div>
+</div>
+
+<script>
+const root = document.documentElement, tbtn = document.getElementById('tbtn');
+function setTheme(t){ root.setAttribute('data-theme', t); tbtn.textContent = t==='dark'?'☾':'☀'; try{localStorage.setItem('waggle-concept-theme',t);}catch(e){} }
+setTheme((()=>{ try{ return localStorage.getItem('waggle-concept-theme')||'dark'; }catch(e){ return 'dark'; } })());
+tbtn.onclick = () => setTheme(root.getAttribute('data-theme')==='dark'?'light':'dark');
+window.addEventListener('message', e => { if(e.data && e.data.theme) setTheme(e.data.theme); });
+window.addEventListener('storage', e => { if(e.key==='waggle-concept-theme' && e.newValue) setTheme(e.newValue); });
+
+const head = {
+  agents:['Agents','Your team of specialists — each with a persona, a model, and a memory of its work.','New agent'],
+  room:['Room','Work alongside your agents live — shared context, real-time.','Invite'],
+  artifacts:['Artifacts','Everything you and your agents have made — with provenance and versions.','New'],
+  mission:['Mission Control','The health of your hive — services, agents, memory, sync.','Diagnostics'],
+  timeline:['Timeline','One stream of everything that happened, across every workspace.','Filter'],
+  profile:['Profile','What Waggle knows about you — so every agent works the way you do.','Edit'],
+};
+function rc(icon, title, sub, right, soft){ return `<div class="rc"><div class="ri ${soft?'soft':''}">${icon}</div><div class="rt"><b>${title}</b><div class="rs">${sub}</div></div>${right||''}</div>`; }
+
+const panels = {
+  agents: () => `
+    <div class="grp">Working now</div>
+    <div class="rows">
+      ${rc('R','Research-synth','<span class="rs">Analyst persona · Claude Sonnet · <span class="prov">Competitive Intelligence</span></span>','<div style="display:flex;gap:10px;align-items:center"><span class="bdg live"><span class="dot dot-live" style="background:var(--healthy)"></span>theming · 78%</span><span class="lnk">Open</span></div>')}
+      ${rc('D','Deck-builder','<span class="rs">Designer persona · GPT-4o · <span class="prov">Q2 Board Deck</span></span>','<div style="display:flex;gap:10px;align-items:center"><span class="bdg work">waiting on you</span><span class="lnk">Open</span></div>')}
+    </div>
+    <div class="grp">Idle · ready</div>
+    <div class="rows">
+      ${rc('W','Writer','<span class="rs">Writing persona · auto · last ran 2d ago</span>','<span class="bdg idle">idle</span>')}
+      ${rc('A','Analyst','<span class="rs">Finance persona · local model · last ran 3d ago</span>','<span class="bdg idle">idle</span>')}
+    </div>
+    <div class="grp">Want more hands?</div>
+    ${rc('<svg width=16 height=16 viewBox="0 0 24 24" fill=none stroke="var(--honey)" stroke-width=1.8><circle cx=6 cy=7 r=2.4/><circle cx=18 cy=7 r=2.4/><circle cx=12 cy=17 r=2.4/><path d="M8 8l3 7M16 8l-3 7"/></svg>','Run a team of agents','<span class="rs">waggle-dance · let several specialists coordinate on one goal</span>','<span class="lnk">Start a swarm →</span>', true)}`,
+
+  room: () => `
+    <div class="room">
+      <div class="roomstage">
+        <div class="comb"></div>
+        <div class="live-act">
+          <div class="la"><div class="av you">You</div><div class="lc"><b>You</b><p>Let's get the board narrative tight — focus on the regulated-industries angle.</p></div></div>
+          <div class="la"><div class="av bot hex">R</div><div class="lc"><b>Research-synth</b><p>Pulling the 3 strongest proof points from memory and the teardown… two cite customer quotes.</p></div></div>
+          <div class="la"><div class="av bot hex">D</div><div class="lc"><b>Deck-builder</b><p>Drafting slide 6 around that angle now — I'll show you a version in ~30s.</p></div></div>
+        </div>
+      </div>
+      <div class="participants">
+        <h4>In the room</h4>
+        <div class="pp"><span class="pd" style="background:var(--honey)"></span><span class="pn">You</span><span class="pr">host</span></div>
+        <div class="pp"><span class="pd dot-live" style="background:var(--healthy)"></span><span class="pn">Research-synth</span><span class="pr">live</span></div>
+        <div class="pp"><span class="pd dot-live" style="background:var(--healthy)"></span><span class="pn">Deck-builder</span><span class="pr">live</span></div>
+        <div class="pp"><span class="pd" style="background:var(--text-dim)"></span><span class="pn">Jonas P.</span><span class="pr">invited</span></div>
+        <div style="margin-top:14px;font-size:12px;color:var(--text-muted);line-height:1.5">Everyone shares this workspace's memory. Voice is one tap away.</div>
+      </div>
+    </div>`,
+
+  artifacts: () => `
+    <div class="grp">Recent · Competitive Intelligence</div>
+    <div class="cards">
+      <div class="acard"><div class="ext" style="background:var(--work-wash);color:var(--work)">MD</div><h4>teardown.md</h4><div class="am">48 KB · v3</div><div class="prov">⬡ made by Waggle</div></div>
+      <div class="acard"><div class="ext" style="background:var(--healthy-wash);color:var(--healthy)">XLS</div><h4>pricing-landscape.xlsx</h4><div class="am">126 KB · v2</div><div class="prov">⬡ made by Waggle</div></div>
+      <div class="acard"><div class="ext" style="background:var(--intel-wash);color:var(--intel)">MD</div><h4>board-brief.md</h4><div class="am">22 KB · v1</div><div class="prov">⬡ made by Claude Code</div></div>
+      <div class="acard"><div class="ext" style="background:var(--risk-wash);color:var(--risk)">PDF</div><h4>mem0-teardown.pdf</h4><div class="am">1.4 MB</div><div class="prov" style="color:var(--text-dim)">you uploaded</div></div>
+      <div class="acard"><div class="ext" style="background:var(--work-wash);color:var(--work)">PNG</div><h4>landscape-chart.png</h4><div class="am">340 KB</div><div class="prov">⬡ made by Waggle</div></div>
+      <div class="acard"><div class="ext" style="background:var(--honey-wash);color:var(--honey)">PPT</div><h4>q2-board.pptx</h4><div class="am">2.1 MB · v4</div><div class="prov">⬡ made by Waggle</div></div>
+    </div>`,
+
+  mission: () => `
+    <div class="mc-stat">
+      <div class="mcs"><div class="v" style="color:var(--healthy)">●</div><div class="l">All systems healthy</div></div>
+      <div class="mcs"><div class="v">2</div><div class="l">Agents running</div></div>
+      <div class="mcs"><div class="v" style="color:var(--intel)">581</div><div class="l">Memories (all hives)</div></div>
+      <div class="mcs"><div class="v">58ms</div><div class="l">Avg recall</div></div>
+    </div>
+    <div class="grp">Local services</div>
+    <div class="rows" style="padding:4px 0">
+      <div class="svc"><span class="sd dot-live" style="background:var(--healthy)"></span><span class="sn">Memory engine <span style="color:var(--text-dim)">· hive-mind</span></span><span class="sm">SQLite · 581 rows · ok</span></div>
+      <div class="svc"><span class="sd dot-live" style="background:var(--healthy)"></span><span class="sn">Agent runtime</span><span class="sm">2 active · ok</span></div>
+      <div class="svc"><span class="sd dot-live" style="background:var(--healthy)"></span><span class="sn">Local model <span style="color:var(--text-dim)">· Qwen 2.5</span></span><span class="sm">Ollama · ok</span></div>
+      <div class="svc"><span class="sd" style="background:var(--attention)"></span><span class="sn">Salesforce sync</span><span class="sm" style="color:var(--attention)">auth expired · fix</span></div>
+      <div class="svc"><span class="sd" style="background:var(--text-dim)"></span><span class="sn">Team sync</span><span class="sm">not connected</span></div>
+    </div>`,
+
+  timeline: () => `
+    <div class="grp">Today</div>
+    <div>
+      <div class="tl"><div class="when">08:42</div><div class="ev">You opened <b>Competitive Intelligence</b><span class="src sys">⬡ session</span></div></div>
+      <div class="tl"><div class="when">02:40</div><div class="ev"><b>Teardown</b> finished overnight · 9 competitors<span class="src ok">⬡ agent</span></div></div>
+      <div class="tl"><div class="when">02:14</div><div class="ev">Salesforce export <b>failed</b> · auth expired<span class="src" style="color:var(--risk)">⬡ automation</span></div></div>
+      <div class="tl"><div class="when">02:05</div><div class="ev">Folded <b>14 memories</b> into the hive<span class="src mem">⬡ mem</span></div></div>
+    </div>
+    <div class="grp">Yesterday</div>
+    <div>
+      <div class="tl"><div class="when">16:30</div><div class="ev">Learned <b>Mem0 changed pricing</b><span class="src web">⬡ web</span></div></div>
+      <div class="tl"><div class="when">11:10</div><div class="ev"><b>Deck-builder</b> drafted 18 slides<span class="src ok">⬡ agent</span></div></div>
+    </div>`,
+
+  profile: () => `
+    <div class="profhead"><div class="pa2 hex">M</div><div><h2>Mara Kovač</h2><div class="ph2">Strategy · solo · Pro trial · mara@egzakta.com</div></div></div>
+    <div class="grp">How I like to work <span style="text-transform:none;letter-spacing:0;color:var(--text-dim)">— every agent reads this</span></div>
+    <div class="chips" style="margin-bottom:6px">
+      <span class="chip on">Direct, no fluff</span><span class="chip on">Lead with the recommendation</span><span class="chip on">Always cite sources</span><span class="chip">Metric over narrative</span><span class="chip">+ add</span>
+    </div>
+    <div class="grp">What Waggle knows about me</div>
+    <div class="knows">
+      <div class="kfact"><span class="kd">⬡</span><div>Works in <b>competitive strategy</b>; reports up to a board quarterly.</div></div>
+      <div class="kfact"><span class="kd">⬡</span><div>Prefers <b>regulated-industries framing</b> in market work.</div></div>
+      <div class="kfact"><span class="kd">⬡</span><div>Trusts <b>local-first</b>; sensitive about data leaving the machine.</div></div>
+    </div>
+    <div class="grp">Expertise · personas you can speak as</div>
+    <div class="chips"><span class="chip">Strategist</span><span class="chip">Analyst</span><span class="chip">Writer</span><span class="chip">Editor</span></div>`,
+};
+
+function show(s){
+  document.querySelectorAll('.ritem').forEach(r=>r.classList.toggle('on', r.dataset.s===s));
+  document.getElementById('sTitle').textContent = head[s][0];
+  document.getElementById('sSub').textContent = head[s][1];
+  document.getElementById('sActionT').textContent = head[s][2];
+  document.getElementById('vlabel').innerHTML = '<b>'+head[s][0]+'</b> — '+({agents:'your team of specialists',room:'work with agents live',artifacts:'everything you\u2019ve made',mission:'the health of your hive',timeline:'everything that happened',profile:'what Waggle knows about you'})[s];
+  document.getElementById('body').innerHTML = panels[s]();
+  document.getElementById('body').scrollTop = 0;
+}
+document.getElementById('rail').addEventListener('click', e=>{ const r=e.target.closest('.ritem'); if(r) show(r.dataset.s); });
+show('agents');
+</script>
+</body>
+</html>
