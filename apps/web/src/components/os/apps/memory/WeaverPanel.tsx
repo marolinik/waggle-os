@@ -76,7 +76,9 @@ export default function WeaverPanel() {
     );
   }
 
-  const activeWorkspaces = status.workspaces.filter(w => w.timerActive).length;
+  const workspaces = status.workspaces ?? [];
+  const personalMind = status.personalMind ?? { lastConsolidation: null, lastDecay: null, timerActive: false };
+  const activeWorkspaces = workspaces.filter(w => w.timerActive).length;
 
   return (
     <div className="p-4 space-y-4 overflow-y-auto h-full">
@@ -101,14 +103,14 @@ export default function WeaverPanel() {
             <Clock className="w-3 h-3" />
             <span className="text-[10px] uppercase tracking-wide">Last Consolidation</span>
           </div>
-          <p className="text-sm font-medium text-foreground">{timeAgo(status.personalMind.lastConsolidation)}</p>
+          <p className="text-sm font-medium text-foreground">{timeAgo(personalMind.lastConsolidation)}</p>
         </div>
         <div className="rounded-xl border border-border/30 p-3">
           <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
             <TrendingDown className="w-3 h-3" />
             <span className="text-[10px] uppercase tracking-wide">Last Decay</span>
           </div>
-          <p className="text-sm font-medium text-foreground">{timeAgo(status.personalMind.lastDecay)}</p>
+          <p className="text-sm font-medium text-foreground">{timeAgo(personalMind.lastDecay)}</p>
         </div>
         <div className="rounded-xl border border-border/30 p-3">
           <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
@@ -116,16 +118,16 @@ export default function WeaverPanel() {
             <span className="text-[10px] uppercase tracking-wide">Active Timers</span>
           </div>
           <p className="text-sm font-medium text-foreground">
-            {status.personalMind.timerActive ? 1 : 0} personal + {activeWorkspaces} workspace{activeWorkspaces !== 1 ? 's' : ''}
+            {personalMind.timerActive ? 1 : 0} personal + {activeWorkspaces} workspace{activeWorkspaces !== 1 ? 's' : ''}
           </p>
         </div>
       </div>
 
-      {status.workspaces.length > 0 && (
+      {workspaces.length > 0 && (
         <div>
           <h4 className="text-xs font-display font-medium text-muted-foreground mb-2 uppercase tracking-wide">Workspace Health</h4>
           <div className="space-y-1.5">
-            {status.workspaces.map(ws => (
+            {workspaces.map(ws => (
               <div key={ws.id} className="flex items-center justify-between rounded-lg border border-border/20 px-3 py-2">
                 <span className="text-xs text-foreground truncate max-w-[60%]">{wsNames[ws.id] ?? ws.id}</span>
                 <div className="flex items-center gap-2">

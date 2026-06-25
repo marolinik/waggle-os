@@ -15,7 +15,11 @@ interface CockpitData {
   vault?: unknown;
   capStatus?: unknown;
   auditTrail?: unknown[];
-  weaver?: { lastConsolidation?: string; status: string };
+  weaver?: {
+    personalMind: { lastConsolidation: string | null; lastDecay: string | null; timerActive: boolean };
+    workspaces: Array<{ id: string; lastConsolidation: string | null; timerActive: boolean }>;
+    checkedAt: string;
+  };
   eventStats?: { byType: Record<string, number>; total: number };
 }
 
@@ -147,11 +151,11 @@ const CockpitApp = () => {
               <span className="text-xs font-display font-medium text-foreground">Memory Weaver</span>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Status: <span className={data.weaver.status === 'active' ? 'text-[var(--healthy)]' : 'text-muted-foreground'}>{data.weaver.status}</span>
+              Status: <span className={data.weaver.personalMind?.timerActive ? 'text-[var(--healthy)]' : 'text-muted-foreground'}>{data.weaver.personalMind?.timerActive ? 'Active' : 'Idle'}</span>
             </p>
-            {data.weaver.lastConsolidation && (
+            {data.weaver.personalMind?.lastConsolidation && (
               <p className="text-[11px] text-muted-foreground">
-                Last consolidation: {new Date(data.weaver.lastConsolidation).toLocaleDateString()}
+                Last consolidation: {new Date(data.weaver.personalMind.lastConsolidation).toLocaleDateString()}
               </p>
             )}
           </div>

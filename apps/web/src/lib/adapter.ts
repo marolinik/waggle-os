@@ -2312,11 +2312,25 @@ class LocalAdapter {
   }
 
   // --- Weaver ---
-  async getWeaverStatus(): Promise<{ lastConsolidation?: string; status: string }> {
+  // Mirrors GET /api/weaver/status (packages/server/src/local/routes/weaver.ts):
+  // the domain shape consumers (WeaverPanel, CockpitApp) read directly. On error
+  // we return a valid-but-empty object of the SAME shape rather than a fake
+  // success status, so callers never crash dereferencing missing fields.
+  async getWeaverStatus(): Promise<{
+    personalMind: { lastConsolidation: string | null; lastDecay: string | null; timerActive: boolean };
+    workspaces: Array<{ id: string; lastConsolidation: string | null; timerActive: boolean }>;
+    checkedAt: string;
+  }> {
     try {
       const res = await this.fetch('/api/weaver/status');
       return res.json();
-    } catch { return { status: 'unknown' }; }
+    } catch {
+      return {
+        personalMind: { lastConsolidation: null, lastDecay: null, timerActive: false },
+        workspaces: [],
+        checkedAt: new Date().toISOString(),
+      };
+    }
   }
 
   // --- Audit ---

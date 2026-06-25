@@ -48,10 +48,12 @@ describe('MemoryTrustManage stats + filters + actions (PR3.5 Phase B+C)', () => 
     ]);
     render(<MemoryTrustManage mind="personal" onToast={() => {}} />);
     await waitFor(() => expect(screen.getByText('Memories in this hive')).toBeTruthy());
-    // No confidence on any frame → the card's VALUE is a neutral dash, never a
-    // count. (Empty ConfidenceRings also show "—", so assert the stat card's
-    // value via its label's sibling rather than a global getByText.)
-    const card = screen.getByText('High confidence & fresh').previousElementSibling;
+    // No confidence on any frame → the dimension chip's VALUE is a neutral dash,
+    // never a count. (Empty ConfidenceRings also show "—", so assert the chip's
+    // value via its label's sibling rather than a global getByText.) The stat bar
+    // was restructured (QA-polish 2026-06-24) to a total headline + subordinate
+    // overlapping-dimension chips; the label is now lowercase.
+    const card = screen.getByText('high confidence & fresh').previousElementSibling;
     expect(card?.textContent).toBe('—');
   });
 
