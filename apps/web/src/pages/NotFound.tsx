@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { useEffect } from "react";
+import { cmdKLabel } from "@/lib/platform";
 
 /**
  * Warm-Hive 404 (screen 18 family). Reskin only — keeps the useLocation +
@@ -33,7 +34,7 @@ const NotFound = () => {
             &larr; Back to Home
           </Link>
           <span className="rounded-[11px] border border-[var(--line-strong)] bg-[var(--surface)] px-5 py-2.5 text-sm font-semibold text-[var(--text-2)]">
-            Search with <kbd className="font-mono">⌘K</kbd>
+            Search with <kbd className="font-mono">{cmdKLabel}</kbd>
           </span>
         </div>
       </div>

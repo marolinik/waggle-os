@@ -29,12 +29,32 @@ const TEST_WORKSPACE_PATTERNS: ReadonlyArray<RegExp> = [
   /^audit-/i,
 ];
 
-function WorkspaceRow({ ws, isActive, onSelect }: {
+/** Compact relative time — disambiguates same-named workspaces (issue 2b). */
+function relativeTime(iso?: string): string | null {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return null;
+  const mins = Math.round((Date.now() - t) / 60_000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.round(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return `${Math.round(days / 7)}w ago`;
+}
+
+function WorkspaceRow({ ws, isActive, isDuplicateName, onSelect }: {
   ws: Workspace;
   isActive: boolean;
+  /** True when another visible workspace shares this name — show a date subtitle. */
+  isDuplicateName: boolean;
   onSelect: (id: string) => void;
 }) {
   const persona = ws.persona ? getPersonaById(ws.persona) : null;
+  // On a name collision, append last-active so two "Research Hub"s differ.
+  const rel = isDuplicateName ? relativeTime(ws.lastActive ?? ws.updatedAt) : null;
+  const subtitle = rel ? `${ws.group} · ${rel}` : ws.group;
   return (
     <div
       className={`group flex items-center gap-1 rounded-xl transition-all ${
@@ -59,7 +79,7 @@ function WorkspaceRow({ ws, isActive, onSelect }: {
         )}
         <div className="flex-1 min-w-0">
           <span className="text-xs font-display font-medium text-foreground truncate block">{ws.name}</span>
-          <span className="text-[11px] text-muted-foreground">{ws.group}</span>
+          <span className="text-[11px] text-muted-foreground truncate block">{subtitle}</span>
         </div>
         <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
       </button>
@@ -80,6 +100,15 @@ const WorkspaceSwitcher = ({ open, onClose, workspaces, activeWorkspaceId, onSel
   );
   const activeList = visibleWorkspaces.filter(ws => ws.status !== 'archived');
   const archivedList = visibleWorkspaces.filter(ws => ws.status === 'archived');
+
+  // Names shared by more than one visible workspace — those rows get a date
+  // subtitle so they're tellable apart (issue 2b).
+  const nameCounts = new Map<string, number>();
+  for (const ws of visibleWorkspaces) {
+    const k = ws.name.trim().toLowerCase();
+    nameCounts.set(k, (nameCounts.get(k) ?? 0) + 1);
+  }
+  const isDup = (ws: Workspace) => (nameCounts.get(ws.name.trim().toLowerCase()) ?? 0) > 1;
 
   return (
     <AnimatePresence>
@@ -108,6 +137,7 @@ const WorkspaceSwitcher = ({ open, onClose, workspaces, activeWorkspaceId, onSel
                 key={ws.id}
                 ws={ws}
                 isActive={ws.id === activeWorkspaceId}
+                isDuplicateName={isDup(ws)}
                 onSelect={(id) => { onSelect(id); onClose(); }}
               />
             ))}
@@ -144,6 +174,7 @@ const WorkspaceSwitcher = ({ open, onClose, workspaces, activeWorkspaceId, onSel
                     key={ws.id}
                     ws={ws}
                     isActive={ws.id === activeWorkspaceId}
+                    isDuplicateName={isDup(ws)}
                     onSelect={(id) => { onSelect(id); onClose(); }}
                   />
                 ))}

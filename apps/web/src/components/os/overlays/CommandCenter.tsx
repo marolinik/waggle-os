@@ -13,6 +13,7 @@ import {
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { adapter } from '@/lib/adapter';
 import { fuzzyMatch } from '@/lib/fuzzy-match';
+import { cmdKLabel } from '@/lib/platform';
 import { useToast } from '@/hooks/use-toast';
 import type { CommandCategory, CommandResultType, CommandResult } from '@/lib/types';
 import type { CatalogCommand, CatalogGroup } from '@/lib/command-catalog';
@@ -70,6 +71,15 @@ const NAVIGABLE_TYPES: ReadonlySet<CommandResultType> = new Set<CommandResultTyp
 
 const DEBOUNCE_MS = 220;
 const MIN_QUERY = 2;
+
+/* ── Issue 3: idle "More tools" hint ──
+ * The calm spine deliberately surfaces only five everyday places; the rest of
+ * the depth lives one keystroke away here. Teach that affordance in the empty
+ * (idle) palette by naming the power-tool categories — no sidebar items added,
+ * no new persistence. Typing filters them away via the curated catalog above. */
+const POWER_TOOL_HINTS: readonly string[] = [
+  'Automations', 'Files', 'Vault', 'Usage', 'Connectors', 'Evolution',
+];
 
 /* ── Permission prompt (C9 — reuses the chat ApprovalGate visual pattern) ──
  * Command Center does not own its own approval mechanism; gated executes flow
@@ -550,6 +560,28 @@ const CommandCenter = ({ open, onClose, onNavigate, onExecute, workspaceId, cata
                   </CommandGroup>
                 );
               })}
+
+              {/* Issue 3: idle-only "More tools" affordance — names the power-tool
+                  categories that live behind ⌘K (no sidebar item, no persistence). */}
+              {viewState === 'idle' && (
+                <div
+                  className="mx-1 mt-1 flex flex-wrap items-center gap-1.5 px-2 py-2 text-[11px]"
+                  style={{ borderTop: '1px solid var(--hive-700)', color: 'var(--hive-500)' }}
+                  data-testid="command-center-more-tools"
+                >
+                  <span className="font-mono uppercase tracking-[0.12em]">More tools</span>
+                  {POWER_TOOL_HINTS.map((label) => (
+                    <span
+                      key={label}
+                      className="rounded px-1.5 py-0.5"
+                      style={{ backgroundColor: 'var(--hive-800)', color: 'var(--hive-400)' }}
+                    >
+                      {label}
+                    </span>
+                  ))}
+                  <span className="ml-auto">Type to find any of them.</span>
+                </div>
+              )}
             </CommandList>
           )}
 
@@ -562,7 +594,7 @@ const CommandCenter = ({ open, onClose, onNavigate, onExecute, workspaceId, cata
             <span className="flex items-center gap-1"><CornerDownLeft className="h-3 w-3" /> Run / Open</span>
             {/* Platform-aware modifier — a ⌘ glyph on Windows is a key the
                 user's keyboard doesn't have. */}
-            <span>{navigator.platform?.toLowerCase().includes('mac') ? '⌘' : 'Ctrl+'}K Toggle</span>
+            <span>{cmdKLabel} Toggle</span>
             {viewState === 'failure' && (
               <span className="ml-auto text-amber-400">Last command failed</span>
             )}

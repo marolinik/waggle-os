@@ -106,11 +106,13 @@ function FilterPills({
 
 // ── One workspace card (real fields only) ─────────────────────────────────
 function WorkspaceCard({
-  ws, onOpen, onChanged,
+  ws, onOpen, onChanged, isDuplicateName,
 }: {
   ws: Workspace;
   onOpen: () => void;
   onChanged: () => void;
+  /** True when another workspace shares this name — show the group to disambiguate. */
+  isDuplicateName: boolean;
 }) {
   const badge = ws.storageType ? STORAGE_BADGE[ws.storageType] : null;
   const lastActive = formatRelative(ws.lastActive ?? ws.updatedAt);
@@ -133,9 +135,15 @@ function WorkspaceCard({
       >
         <div className="mb-3 flex items-center gap-3">
           <HexAvatar label={ws.name} size={36} />
-          <h3 className="min-w-0 flex-1 truncate text-[16px] font-semibold leading-tight tracking-[-0.01em] text-[var(--text)]">
-            {ws.name}
-          </h3>
+          <div className="min-w-0 flex-1">
+            <h3 className="truncate text-[16px] font-semibold leading-tight tracking-[-0.01em] text-[var(--text)]">
+              {ws.name}
+            </h3>
+            {/* Disambiguate same-named workspaces with their group (issue 2b). */}
+            {isDuplicateName && ws.group && (
+              <span className="mt-0.5 block truncate text-[11.5px] text-[var(--text-dim)]">{ws.group}</span>
+            )}
+          </div>
           {badge && (
             <span
               className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[10.5px] font-semibold"
@@ -228,6 +236,17 @@ const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
       return haystack.includes(q);
     });
   }, [workspaces, query, storageFilter]);
+
+  // Names shared by more than one workspace — those cards show their group so
+  // two identically-named workspaces aren't indistinguishable (issue 2b).
+  const duplicateNames = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const w of workspaces) {
+      const k = w.name.trim().toLowerCase();
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+    return new Set([...counts.entries()].filter(([, c]) => c > 1).map(([k]) => k));
+  }, [workspaces]);
 
   const handleOpen = (id: string) => {
     selectWorkspace(id);
@@ -347,6 +366,7 @@ const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
               ws={ws}
               onOpen={() => handleOpen(ws.id)}
               onChanged={() => { void refreshWorkspaces(); }}
+              isDuplicateName={duplicateNames.has(ws.name.trim().toLowerCase())}
             />
           ))}
         </div>

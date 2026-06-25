@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Play, Pause, Square, Radio, Clock, Zap, RefreshCw, Users, Plus, Rocket } from 'lucide-react';
+import { Play, Pause, Square, Radio, Clock, Zap, RefreshCw, Users, Plus, Rocket, AlertCircle } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import type { FleetSession, Workspace } from '@/lib/types';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,19 @@ interface ToolInventoryCounts {
   hooked: number;
 }
 
+/**
+ * Per-tab load errors (error-as-empty rule, notes/error-as-empty.md): each
+ * data tab needs an ERROR render distinct from its EMPTY render so a fetch
+ * failure never masquerades as a genuinely empty fleet/team/activity feed.
+ */
+interface SectionErrors {
+  fleet: string | null;
+  team: string | null;
+  activity: string | null;
+}
+
+const NO_ERRORS: SectionErrors = { fleet: null, team: null, activity: null };
+
 const MissionControlApp = ({ onSpawnOpen }: MissionControlAppProps) => {
   const [sessions, setSessions] = useState<FleetSession[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,28 +40,37 @@ const MissionControlApp = ({ onSpawnOpen }: MissionControlAppProps) => {
   const [activity, setActivity] = useState<{ id: string; user: string; action: string; timestamp: string }[]>([]);
   const [tab, setTab] = useState<'fleet' | 'team' | 'activity'>('fleet');
   const [toolCounts, setToolCounts] = useState<ToolInventoryCounts | null>(null);
+  const [errors, setErrors] = useState<SectionErrors>(NO_ERRORS);
+
+  const reason = (r: PromiseRejectedResult, fallback: string): string =>
+    r.reason instanceof Error ? r.reason.message : fallback;
 
   const refresh = async () => {
-    try {
-      const [fleet, members, act, tools] = await Promise.allSettled([
-        adapter.getFleet(),
-        adapter.getTeamMembers(),
-        adapter.getTeamActivity(),
-        adapter.detectTools(),
-      ]);
-      if (fleet.status === 'fulfilled') setSessions(fleet.value);
-      if (members.status === 'fulfilled') setTeamMembers(members.value);
-      if (act.status === 'fulfilled') setActivity(act.value);
-      if (tools.status === 'fulfilled' && tools.value) {
-        const ts = tools.value.tools;
-        setToolCounts({
-          detected: ts.length,
-          installed: ts.filter((t) => t.installed).length,
-          hooked: ts.filter((t) => t.hooksInstalled).length,
-        });
-      }
-    } catch { /* ignore */ }
-    finally { setLoading(false); }
+    const [fleet, members, act, tools] = await Promise.allSettled([
+      adapter.getFleet(),
+      adapter.getTeamMembers(),
+      adapter.getTeamActivity(),
+      adapter.detectTools(),
+    ]);
+    if (fleet.status === 'fulfilled') setSessions(fleet.value);
+    if (members.status === 'fulfilled') setTeamMembers(members.value);
+    if (act.status === 'fulfilled') setActivity(act.value);
+    if (tools.status === 'fulfilled' && tools.value) {
+      const ts = tools.value.tools;
+      setToolCounts({
+        detected: ts.length,
+        installed: ts.filter((t) => t.installed).length,
+        hooked: ts.filter((t) => t.hooksInstalled).length,
+      });
+    }
+    // Thread each tab's load error so the ERROR render stays distinct from the
+    // EMPTY render (error-as-empty rule); clear on success.
+    setErrors({
+      fleet: fleet.status === 'rejected' ? reason(fleet, 'Failed to load fleet sessions') : null,
+      team: members.status === 'rejected' ? reason(members, 'Failed to load team members') : null,
+      activity: act.status === 'rejected' ? reason(act, 'Failed to load activity') : null,
+    });
+    setLoading(false);
   };
 
   const openLauncher = () => {
@@ -134,7 +156,16 @@ const MissionControlApp = ({ onSpawnOpen }: MissionControlAppProps) => {
 
       {tab === 'fleet' && (
         <>
-          {sessions.length === 0 && !loading && (
+          {errors.fleet && sessions.length === 0 ? (
+            <div role="alert" className="flex flex-col items-center justify-center py-12 text-center">
+              <AlertCircle className="w-10 h-10 text-destructive/50 mb-3" />
+              <p className="text-sm text-foreground">Couldn't load fleet sessions</p>
+              <p className="text-xs text-muted-foreground/60 max-w-xs">This is a load error, not an empty fleet. {errors.fleet}</p>
+              <Button variant="outline" size="sm" className="mt-3 gap-1.5 text-xs" onClick={refresh}>
+                <RefreshCw className="w-3.5 h-3.5" /> Retry
+              </Button>
+            </div>
+          ) : sessions.length === 0 && !loading && (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Radio className="w-10 h-10 text-muted-foreground/20 mb-3" />
               <p className="text-sm text-muted-foreground">No active fleet sessions</p>
@@ -187,7 +218,16 @@ const MissionControlApp = ({ onSpawnOpen }: MissionControlAppProps) => {
 
       {tab === 'team' && (
         <div className="space-y-2">
-          {teamMembers.length === 0 && (
+          {errors.team && teamMembers.length === 0 ? (
+            <div role="alert" className="flex flex-col items-center justify-center py-12 text-center">
+              <AlertCircle className="w-10 h-10 text-destructive/50 mb-3" />
+              <p className="text-sm text-foreground">Couldn't load team members</p>
+              <p className="text-xs text-muted-foreground/60 max-w-xs">This is a load error, not an empty team. {errors.team}</p>
+              <Button variant="outline" size="sm" className="mt-3 gap-1.5 text-xs" onClick={refresh}>
+                <RefreshCw className="w-3.5 h-3.5" /> Retry
+              </Button>
+            </div>
+          ) : teamMembers.length === 0 && (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Users className="w-10 h-10 text-muted-foreground/20 mb-3" />
               <p className="text-sm text-muted-foreground">No team members</p>
@@ -206,7 +246,16 @@ const MissionControlApp = ({ onSpawnOpen }: MissionControlAppProps) => {
 
       {tab === 'activity' && (
         <div className="space-y-1.5">
-          {activity.length === 0 && (
+          {errors.activity && activity.length === 0 ? (
+            <div role="alert" className="flex flex-col items-center justify-center py-12 text-center">
+              <AlertCircle className="w-10 h-10 text-destructive/50 mb-3" />
+              <p className="text-sm text-foreground">Couldn't load activity</p>
+              <p className="text-xs text-muted-foreground/60 max-w-xs">This is a load error, not an empty feed. {errors.activity}</p>
+              <Button variant="outline" size="sm" className="mt-3 gap-1.5 text-xs" onClick={refresh}>
+                <RefreshCw className="w-3.5 h-3.5" /> Retry
+              </Button>
+            </div>
+          ) : activity.length === 0 && (
             <div className="text-center py-12">
               <p className="text-sm text-muted-foreground">No activity</p>
             </div>
