@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Activity, Server, DollarSign, Clock, Plug, RefreshCw, Timer, Brain, Shield, Network, FileText, ChevronDown, AlertTriangle } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import type { CronJob } from '@/lib/types';
+import { describeCronExpr } from '@/lib/cron-presets';
 import ComplianceDashboard from './cockpit/ComplianceDashboard';
 
 interface CockpitData {
@@ -188,7 +189,7 @@ const CockpitApp = () => {
               {data.crons.slice(0, 3).map(c => (
                 <div key={c.id} className="flex items-center justify-between text-xs">
                   <span className="text-foreground truncate">{c.name}</span>
-                  <span className={c.enabled ? 'text-[var(--healthy)]' : 'text-muted-foreground'}>{c.schedule}</span>
+                  <span className={c.enabled ? 'text-[var(--healthy)]' : 'text-muted-foreground'} title={c.schedule}>{describeCronExpr(c.schedule)}</span>
                 </div>
               ))}
               {data.crons.length > 3 && (

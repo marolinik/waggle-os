@@ -345,7 +345,7 @@ const CommandCenter = ({ open, onClose, onNavigate, onExecute, workspaceId, cata
     const q = query.trim().toLowerCase();
     if (!q) return catalog;
     return catalog
-      .map((g) => ({ ...g, items: g.items.filter((i) => fuzzyMatch(q, `${i.name} ${i.subtitle ?? ''}`).match) }))
+      .map((g) => ({ ...g, items: g.items.filter((i) => fuzzyMatch(q, `${i.name} ${i.subtitle ?? ''} ${i.keywords ?? ''}`).match) }))
       .filter((g) => g.items.length > 0);
   }, [catalog, query]);
 

@@ -11,6 +11,7 @@ import {
   getCronPreset,
   presetForExpr,
   describeCronExpr,
+  humanizeCron,
   isPlausibleCronExpr,
 } from './cron-presets';
 
@@ -78,8 +79,12 @@ describe('describeCronExpr', () => {
     expect(describeCronExpr('0 9 * * *')).toBe('Every day at 9:00 AM');
   });
 
-  it('labels a valid-shape custom expression as Custom schedule', () => {
-    expect(describeCronExpr('15 7 * * *')).toBe('Custom schedule: 15 7 * * *');
+  it('humanises a valid-shape custom expression instead of leaking raw cron', () => {
+    expect(describeCronExpr('15 7 * * *')).toBe('Every day at 7:15 AM');
+  });
+
+  it('falls back to Custom schedule only for shapes it cannot describe', () => {
+    expect(describeCronExpr('0 9 1-5 * *')).toBe('Custom schedule: 0 9 1-5 * *');
   });
 
   it('reports "no schedule set" for an empty string', () => {
@@ -90,6 +95,26 @@ describe('describeCronExpr', () => {
   it('reports a validity hint for a malformed expression', () => {
     expect(describeCronExpr('not-cron')).toMatch(/Not a valid cron expression/);
     expect(describeCronExpr('0 9 * *')).toMatch(/Not a valid cron expression/);
+  });
+});
+
+describe('humanizeCron (no raw cron leaks to users)', () => {
+  it('humanises the QA-brief examples', () => {
+    expect(humanizeCron('0 5 * * *')).toBe('Every day at 5:00 AM');
+    expect(humanizeCron('0 10 * * 3')).toBe('Wednesdays at 10:00 AM');
+  });
+  it('humanises multi-day, every-N-minutes, hourly, and monthly', () => {
+    expect(humanizeCron('30 17 * * 1,5')).toBe('Mondays and Fridays at 5:30 PM');
+    expect(humanizeCron('*/15 * * * *')).toBe('Every 15 minutes');
+    expect(humanizeCron('20 * * * *')).toBe('Every hour at :20');
+    expect(humanizeCron('0 8 15 * *')).toBe('On the 15th of every month at 8:00 AM');
+    expect(humanizeCron('0 0 * * *')).toBe('Every day at 12:00 AM');
+    expect(humanizeCron('0 12 * * *')).toBe('Every day at 12:00 PM');
+  });
+  it('returns null for shapes it cannot confidently describe', () => {
+    expect(humanizeCron('0 9 1-5 * *')).toBeNull();
+    expect(humanizeCron('not cron')).toBeNull();
+    expect(humanizeCron('0 9 * *')).toBeNull();
   });
 });
 
