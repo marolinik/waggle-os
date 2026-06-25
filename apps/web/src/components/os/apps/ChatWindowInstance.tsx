@@ -95,6 +95,16 @@ const ChatWindowInstance = ({
   }, [initialPersona]);
 
   const { sessions, activeSessionId, setActiveSessionId, createSession } = useSessions(workspaceId);
+
+  // chat-session-uuid-title (P2): the server returns a real title derived from the
+  // first user message, or null for a brand-new untitled session. Render a friendly
+  // placeholder instead of the raw `session-<uuid>` id — covering both null/empty
+  // titles and legacy sessions persisted with the id as their title.
+  const displaySessions = sessions.map(s =>
+    !s.title || /^(?:local-)?session-/.test(s.title)
+      ? { ...s, title: 'New session' }
+      : s,
+  );
   const { messages, isLoading, sendMessage, clearHistory, pendingApproval, approveAction } = useChat({
     workspaceId,
     sessionId: activeSessionId,
@@ -232,7 +242,7 @@ const ChatWindowInstance = ({
       onModelChange={handleModelChange}
       availableModels={availableModels}
       teamPresence={teamPresence}
-      sessions={sessions}
+      sessions={displaySessions}
       activeSessionId={activeSessionId}
       onSelectSession={setActiveSessionId}
       onNewSession={createSession}

@@ -61,7 +61,7 @@ const SettingsApp = () => {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
 
-  // CC Sesija A §2.2 — Faza 1 GEPA prompt shape selection. Persisted in
+  // CC Session A §2.2 — Phase 1 GEPA prompt shape selection. Persisted in
   // localStorage; threaded into adapter.sendMessage body. Sidecar honors it
   // once A3.1 ships (currently ignored — selection still survives reloads).
   const [selectedShape, setSelectedShape] = useSelectedShape();
@@ -431,12 +431,12 @@ const SettingsApp = () => {
               <ModelSelector value={defaultModel} onChange={setDefaultModel} providers={providers} variant="dropdown" />
             </div>
 
-            {/* CC Sesija A §2.2 — Faza 1 GEPA prompt shape selector */}
+            {/* CC Session A §2.2 — Phase 1 GEPA prompt shape selector */}
             <div>
               <label className="text-xs text-muted-foreground block mb-1.5">
                 Prompt Shape
                 <HintTooltip
-                  content="Faza 1 GEPA-evolved prompt variant. Threaded into chat requests; sidecar honors it once the A3.1 server patch lands."
+                  content="Phase 1 GEPA-evolved prompt variant. Threaded into chat requests; sidecar honors it once the A3.1 server patch lands."
                 >
                   <HelpCircle className="w-3 h-3 inline ml-1 text-muted-foreground" />
                 </HintTooltip>

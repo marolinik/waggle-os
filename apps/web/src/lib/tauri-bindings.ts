@@ -211,7 +211,7 @@ export function compileWikiSection(args: CompileWikiArgs = {}): Promise<CompileW
 export interface AgentQueryArgs {
   query: string;
   /**
-   * Optional shape selector — Faza 1 GEPA-evolved variant id (e.g.
+   * Optional shape selector — Phase 1 GEPA-evolved variant id (e.g.
    * `claude::gen1-v1`, `qwen-thinking::gen1-v1`). A3.1 follow-up: sidecar
    * `/api/chat` does not yet honor this field; the Tauri command carries it
    * through the body so a single sidecar patch wires the behavior without

@@ -687,7 +687,7 @@ const WorkspaceDesktopApp = ({
               <TabPlaceholder
                 icon={FileBox}
                 title="No artifacts yet"
-                body="Files and documents created in this workspace appear here. The full Artifact Center arrives in a later phase."
+                body="Files and documents created in this workspace appear here. Browse everything across workspaces in Library."
               />
             ) : (
               <div className="grid h-full grid-cols-1 gap-3 overflow-auto p-5 sm:grid-cols-2 lg:grid-cols-3" data-testid="ws-artifacts-tab">

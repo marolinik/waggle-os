@@ -208,7 +208,9 @@ export const sessionRoutes: FastifyPluginAsync = async (server) => {
     fs.writeFileSync(filePath, meta + '\n', 'utf-8');
 
     const now = new Date().toISOString();
-    const title = request.body?.title ?? sessionId;
+    // null when untitled — the FE renders a "New session" placeholder instead of
+    // the raw `session-<uuid>` id (chat-session-uuid-title P2).
+    const title = request.body?.title ?? null;
 
     const session: SessionInfo = {
       id: sessionId,

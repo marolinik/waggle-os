@@ -12,7 +12,9 @@ import path from 'node:path';
 
 export interface SessionInfo {
   id: string;
-  title: string;
+  /** null when the session has no real title yet — the FE renders its own
+   *  "New session" placeholder rather than the raw `session-<uuid>` id. */
+  title: string | null;
   summary: string | null;
   messageCount: number;
   lastActive: string;
@@ -191,7 +193,9 @@ export function readSessionMeta(filePath: string, sessionId: string): SessionInf
   const lines = content ? content.split('\n').filter(l => l.trim()) : [];
   const stat = fs.statSync(filePath);
 
-  let title = sessionId;
+  // null = no real title yet; the FE renders its own "New session" placeholder
+  // rather than the raw `session-<uuid>` id.
+  let title: string | null = null;
   let summary: string | null = null;
   let messageLines = lines;
   let metaLine: Record<string, unknown> | null = null;
@@ -203,7 +207,7 @@ export function readSessionMeta(filePath: string, sessionId: string): SessionInf
       if (first.type === 'meta') {
         metaLine = first;
         if (first.title) {
-          title = first.title;
+          title = first.title as string;
         }
         if (first.summary) {
           summary = first.summary as string;
@@ -216,23 +220,46 @@ export function readSessionMeta(filePath: string, sessionId: string): SessionInf
     }
   }
 
-  // If no meta title, derive from first message content (truncate at word boundary)
-  if (title === sessionId && messageLines.length > 0) {
+  // If no meta title, derive one from the first message content (truncated at a
+  // word boundary) and backfill it onto the meta line so the list shows a real
+  // title instead of the raw id. No LLM — pure first-message heuristic.
+  if (!title && messageLines.length > 0) {
     try {
       const firstMsg = JSON.parse(messageLines[0]);
       if (firstMsg.content) {
         const raw = (firstMsg.content as string).trim();
-        if (raw.length <= 50) {
-          title = raw;
-        } else {
-          const truncated = raw.slice(0, 50);
-          const lastSpace = truncated.lastIndexOf(' ');
-          const cutPoint = lastSpace > 20 ? lastSpace : 50;
-          title = raw.slice(0, cutPoint) + '...';
+        if (raw) {
+          if (raw.length <= 50) {
+            title = raw;
+          } else {
+            const truncated = raw.slice(0, 50);
+            const lastSpace = truncated.lastIndexOf(' ');
+            const cutPoint = lastSpace > 20 ? lastSpace : 50;
+            title = raw.slice(0, cutPoint) + '...';
+          }
         }
       }
     } catch {
-      // Keep default title
+      // Keep title null — FE placeholder applies
+    }
+
+    // Cheap backfill: persist the derived title onto the meta line so we don't
+    // re-derive next time and other consumers see it too. Non-critical on failure.
+    if (title) {
+      try {
+        if (metaLine) {
+          metaLine.title = title;
+          const updatedLines = [JSON.stringify(metaLine), ...messageLines];
+          fs.writeFileSync(filePath, updatedLines.join('\n') + '\n', 'utf-8');
+        } else {
+          const meta = { type: 'meta', title, summary, created: stat.birthtime.toISOString() };
+          metaLine = meta;
+          const updatedLines = [JSON.stringify(meta), ...messageLines];
+          fs.writeFileSync(filePath, updatedLines.join('\n') + '\n', 'utf-8');
+        }
+      } catch {
+        // Non-critical — title will be re-derived next time
+      }
     }
   }
 
@@ -248,7 +275,7 @@ export function readSessionMeta(filePath: string, sessionId: string): SessionInf
           fs.writeFileSync(filePath, updatedLines.join('\n') + '\n', 'utf-8');
         } else {
           // No meta line — prepend one with the summary
-          const meta = { type: 'meta', title: title !== sessionId ? title : null, summary, created: stat.birthtime.toISOString() };
+          const meta = { type: 'meta', title, summary, created: stat.birthtime.toISOString() };
           const updatedLines = [JSON.stringify(meta), ...messageLines];
           fs.writeFileSync(filePath, updatedLines.join('\n') + '\n', 'utf-8');
         }
