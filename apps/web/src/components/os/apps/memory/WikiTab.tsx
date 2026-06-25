@@ -39,7 +39,9 @@ interface HealthReport {
 }
 
 function formatRelativeHealth(iso: string): string {
-  const ms = Date.parse(iso);
+  // Normalise SQLite space-separated UTC ("YYYY-MM-DD HH:MM:SS") to ISO so
+  // Date.parse reads it as UTC (not local), matching the events.ts timestamp fix.
+  const ms = Date.parse(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z');
   if (!Number.isFinite(ms)) return 'unknown';
   const delta = Date.now() - ms;
   if (delta < 60_000) return 'just now';
@@ -324,7 +326,7 @@ export default function WikiTab() {
           ) : loadError ? (
             <div role="alert" className="text-center py-8">
               <p className="text-xs text-destructive mb-2">{loadError}</p>
-              <button onClick={loadPages} className="text-xs text-primary hover:underline">Retry</button>
+              <button type="button" onClick={loadPages} className="text-xs text-primary hover:underline px-2 py-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-500)]">Retry</button>
             </div>
           ) : filtered.length === 0 ? (
             <div className="text-center py-8">

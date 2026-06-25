@@ -353,7 +353,7 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
           <DimensionChip value={stats.staleCount} label="stale · worth a review" tone="attention" />
           <DimensionChip value={stats.needsConfirm} label="awaiting your confirm" tone="attention" />
         </div>
-        <p className="mt-2.5 text-[11px] leading-snug text-[var(--text-dim)]">
+        <p className="mt-2.5 text-[11px] leading-snug text-[var(--text-muted)]">
           Overlapping views — a memory can be counted in more than one.
         </p>
       </div>

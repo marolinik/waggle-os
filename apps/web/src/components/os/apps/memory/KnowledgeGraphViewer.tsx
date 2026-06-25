@@ -42,6 +42,7 @@ const TYPE_LABELS: Record<string, string> = {
   event: 'Event',
   technology: 'Technology',
   tool: 'Tool',
+  unknown: 'Other',
 };
 
 function getNodeColor(type: string): string {

@@ -7,8 +7,10 @@ interface KGRow {
   id: number;
   name?: string;
   type?: string;
+  entity_type?: string;
   source_id?: number;
   target_id?: number;
+  relation_type?: string;
   [key: string]: unknown;
 }
 

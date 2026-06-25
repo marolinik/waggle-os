@@ -46,6 +46,10 @@ const MissionControlApp = ({ onSpawnOpen }: MissionControlAppProps) => {
     r.reason instanceof Error ? r.reason.message : fallback;
 
   const refresh = async () => {
+    // Reset loading + clear stale errors so Retry gives visible feedback that
+    // the re-fetch fired (otherwise the error panel lingers with no spinner).
+    setLoading(true);
+    setErrors(NO_ERRORS);
     const [fleet, members, act, tools] = await Promise.allSettled([
       adapter.getFleet(),
       adapter.getTeamMembers(),

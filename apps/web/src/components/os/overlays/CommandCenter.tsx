@@ -566,7 +566,7 @@ const CommandCenter = ({ open, onClose, onNavigate, onExecute, workspaceId, cata
               {viewState === 'idle' && (
                 <div
                   className="mx-1 mt-1 flex flex-wrap items-center gap-1.5 px-2 py-2 text-[11px]"
-                  style={{ borderTop: '1px solid var(--hive-700)', color: 'var(--hive-500)' }}
+                  style={{ borderTop: '1px solid var(--hive-700)', color: 'var(--text-muted)' }}
                   data-testid="command-center-more-tools"
                 >
                   <span className="font-mono uppercase tracking-[0.12em]">More tools</span>

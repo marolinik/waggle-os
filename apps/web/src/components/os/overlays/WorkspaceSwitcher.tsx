@@ -54,7 +54,8 @@ function WorkspaceRow({ ws, isActive, isDuplicateName, onSelect }: {
   const persona = ws.persona ? getPersonaById(ws.persona) : null;
   // On a name collision, append last-active so two "Research Hub"s differ.
   const rel = isDuplicateName ? relativeTime(ws.lastActive ?? ws.updatedAt) : null;
-  const subtitle = rel ? `${ws.group} · ${rel}` : ws.group;
+  // Never render an empty subtitle row: prefer "group · rel", fall back to whichever exists.
+  const subtitle = rel ? (ws.group ? `${ws.group} · ${rel}` : rel) : (ws.group || null);
   return (
     <div
       className={`group flex items-center gap-1 rounded-xl transition-all ${
@@ -79,7 +80,7 @@ function WorkspaceRow({ ws, isActive, isDuplicateName, onSelect }: {
         )}
         <div className="flex-1 min-w-0">
           <span className="text-xs font-display font-medium text-foreground truncate block">{ws.name}</span>
-          <span className="text-[11px] text-muted-foreground truncate block">{subtitle}</span>
+          {subtitle && <span className="text-[11px] text-muted-foreground truncate block">{subtitle}</span>}
         </div>
         <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
       </button>

@@ -101,7 +101,9 @@ const ChatWindowInstance = ({
   // placeholder instead of the raw `session-<uuid>` id — covering both null/empty
   // titles and legacy sessions persisted with the id as their title.
   const displaySessions = sessions.map(s =>
-    !s.title || /^(?:local-)?session-/.test(s.title)
+    !s.title
+      || /^(?:local-)?session-/.test(s.title)
+      || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s.title)
       ? { ...s, title: 'New session' }
       : s,
   );
