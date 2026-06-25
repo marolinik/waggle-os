@@ -7,8 +7,10 @@ interface KGRow {
   id: number;
   name?: string;
   type?: string;
+  entity_type?: string;
   source_id?: number;
   target_id?: number;
+  relation_type?: string;
   [key: string]: unknown;
 }
 
@@ -25,6 +27,38 @@ function extractKGFromMind(mindDb: MindDB): { entities: KGRow[]; relations: KGRo
   } catch {
     return { entities: [], relations: [] };
   }
+}
+
+// The FE knowledge-graph contract (KGNode {id,label,type} / KGEdge
+// {source,target,relationship}) differs from the raw SQLite columns
+// (entity_type/name, source_id/target_id/relation_type). The route used to
+// return raw rows, so every node read as type "Unknown" and no edge resolved
+// (FE filtered on undefined .source/.target). Project to the contract as the
+// FINAL step on every return path — AFTER the scope==='all' numeric-id merge,
+// so the id-offset math (which reads numeric ids) still runs on raw rows.
+interface ProjectedNode { id: string; label: string; type: string }
+interface ProjectedEdge { source: string; target: string; relationship: string }
+
+const asStr = (v: unknown): string | undefined =>
+  typeof v === 'string' && v.length > 0 ? v : undefined;
+
+function projectKG(kg: { entities: KGRow[]; relations: KGRow[] }): {
+  nodes: ProjectedNode[];
+  edges: ProjectedEdge[];
+} {
+  const nodes: ProjectedNode[] = kg.entities.map((e) => ({
+    id: String(e.id),
+    label: asStr(e.name) ?? String(e.id),
+    type: asStr(e.entity_type) ?? asStr(e.type) ?? 'unknown',
+  }));
+  const edges: ProjectedEdge[] = kg.relations
+    .filter((r) => r.source_id != null && r.target_id != null)
+    .map((r) => ({
+      source: String(r.source_id),
+      target: String(r.target_id),
+      relationship: asStr(r.relation_type) ?? asStr(r.relationship) ?? 'related',
+    }));
+  return { nodes, edges };
 }
 
 export const knowledgeRoutes: FastifyPluginAsync = async (server) => {
@@ -79,11 +113,11 @@ export const knowledgeRoutes: FastifyPluginAsync = async (server) => {
         idOffset += 100000;
       }
 
-      return merged;
+      return projectKG(merged);
     }
 
     if (scope === 'personal' || (!workspaceId && !scope)) {
-      return extractKGFromMind(server.multiMind.personal);
+      return projectKG(extractKGFromMind(server.multiMind.personal));
     }
 
     // Current/specific workspace
@@ -93,9 +127,9 @@ export const knowledgeRoutes: FastifyPluginAsync = async (server) => {
       if (!wsDb) {
         return reply.status(404).send({ error: 'Workspace not found' });
       }
-      return extractKGFromMind(wsDb);
+      return projectKG(extractKGFromMind(wsDb));
     }
 
-    return { entities: [], relations: [] };
+    return { nodes: [], edges: [] };
   });
 };

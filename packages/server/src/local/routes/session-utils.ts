@@ -12,7 +12,9 @@ import path from 'node:path';
 
 export interface SessionInfo {
   id: string;
-  title: string;
+  /** null when the session has no real title yet — the FE renders its own
+   *  "New session" placeholder rather than the raw `session-<uuid>` id. */
+  title: string | null;
   summary: string | null;
   messageCount: number;
   lastActive: string;
@@ -191,7 +193,9 @@ export function readSessionMeta(filePath: string, sessionId: string): SessionInf
   const lines = content ? content.split('\n').filter(l => l.trim()) : [];
   const stat = fs.statSync(filePath);
 
-  let title = sessionId;
+  // null = no real title yet; the FE renders its own "New session" placeholder
+  // rather than the raw `session-<uuid>` id.
+  let title: string | null = null;
   let summary: string | null = null;
   let messageLines = lines;
   let metaLine: Record<string, unknown> | null = null;
@@ -203,7 +207,7 @@ export function readSessionMeta(filePath: string, sessionId: string): SessionInf
       if (first.type === 'meta') {
         metaLine = first;
         if (first.title) {
-          title = first.title;
+          title = first.title as string;
         }
         if (first.summary) {
           summary = first.summary as string;
@@ -216,23 +220,46 @@ export function readSessionMeta(filePath: string, sessionId: string): SessionInf
     }
   }
 
-  // If no meta title, derive from first message content (truncate at word boundary)
-  if (title === sessionId && messageLines.length > 0) {
+  // If no meta title, derive one from the first message content (truncated at a
+  // word boundary) and backfill it onto the meta line so the list shows a real
+  // title instead of the raw id. No LLM — pure first-message heuristic.
+  if (!title && messageLines.length > 0) {
     try {
       const firstMsg = JSON.parse(messageLines[0]);
       if (firstMsg.content) {
         const raw = (firstMsg.content as string).trim();
-        if (raw.length <= 50) {
-          title = raw;
-        } else {
-          const truncated = raw.slice(0, 50);
-          const lastSpace = truncated.lastIndexOf(' ');
-          const cutPoint = lastSpace > 20 ? lastSpace : 50;
-          title = raw.slice(0, cutPoint) + '...';
+        if (raw) {
+          if (raw.length <= 50) {
+            title = raw;
+          } else {
+            const truncated = raw.slice(0, 50);
+            const lastSpace = truncated.lastIndexOf(' ');
+            const cutPoint = lastSpace > 20 ? lastSpace : 50;
+            title = raw.slice(0, cutPoint) + '...';
+          }
         }
       }
     } catch {
-      // Keep default title
+      // Keep title null — FE placeholder applies
+    }
+
+    // Cheap backfill: persist the derived title onto the meta line so we don't
+    // re-derive next time and other consumers see it too. Non-critical on failure.
+    if (title) {
+      try {
+        if (metaLine) {
+          metaLine.title = title;
+          const updatedLines = [JSON.stringify(metaLine), ...messageLines];
+          fs.writeFileSync(filePath, updatedLines.join('\n') + '\n', 'utf-8');
+        } else {
+          const meta = { type: 'meta', title, summary, created: stat.birthtime.toISOString() };
+          metaLine = meta;
+          const updatedLines = [JSON.stringify(meta), ...messageLines];
+          fs.writeFileSync(filePath, updatedLines.join('\n') + '\n', 'utf-8');
+        }
+      } catch {
+        // Non-critical — title will be re-derived next time
+      }
     }
   }
 
@@ -248,7 +275,7 @@ export function readSessionMeta(filePath: string, sessionId: string): SessionInf
           fs.writeFileSync(filePath, updatedLines.join('\n') + '\n', 'utf-8');
         } else {
           // No meta line — prepend one with the summary
-          const meta = { type: 'meta', title: title !== sessionId ? title : null, summary, created: stat.birthtime.toISOString() };
+          const meta = { type: 'meta', title, summary, created: stat.birthtime.toISOString() };
           const updatedLines = [JSON.stringify(meta), ...messageLines];
           fs.writeFileSync(filePath, updatedLines.join('\n') + '\n', 'utf-8');
         }
@@ -351,6 +378,43 @@ export function findUndistilledSessions(sessionsDir: string): DistillableSession
 
 // ── E3: Progress item extraction from session content ─────────────────
 
+/**
+ * Sanitize a phrase extracted from raw session text into a clean, complete-
+ * looking suggestion title: strip cursor/markdown artifacts (leaking `|`
+ * pipes, **bold**, leading bullets), collapse whitespace, drop trailing
+ * punctuation (keep `?`), and truncate the TAIL (never the head) at a word
+ * boundary with an ellipsis. (QA-polish 2026-06-24: fixes the "Decide: | … |"
+ * pipe leak and the "I do next?" head-truncation.)
+ */
+export function sanitizeExtracted(raw: string, maxLen = 120): string {
+  let s = (raw ?? '').replace(/\r?\n+/g, ' ');
+  s = s.replace(/[|`]+/g, ' ');           // cursor pipes + code backticks
+  s = s.replace(/\*\*|__|~~/g, '');        // markdown bold / strike markers
+  s = s.replace(/^\s*[#>\-*•]+\s*/, '');   // leading bullet / heading markers
+  s = s.replace(/\s{2,}/g, ' ').trim();    // collapse whitespace
+  s = s.replace(/[.,;:!]+$/g, '').trim();  // trailing punctuation (keep ?)
+  if (s.length > maxLen) {
+    const cut = s.slice(0, maxLen);
+    const lastSpace = cut.lastIndexOf(' ');
+    s = (lastSpace > maxLen * 0.6 ? cut.slice(0, lastSpace) : cut).trim() + '…';
+  }
+  return s;
+}
+
+/**
+ * Return the full sentence enclosing `index` in `text`, so a trigger word
+ * matched mid-sentence (e.g. "should" in "What should I do next?") yields the
+ * whole phrase, not just the tail after the trigger.
+ */
+function enclosingSentence(text: string, index: number): string {
+  const safeIdx = Math.max(0, Math.min(index, text.length));
+  const before = text.slice(0, safeIdx);
+  const start = before.search(/[^.!?\n]*$/);
+  const rest = text.slice(start >= 0 ? start : 0);
+  const endRel = rest.search(/[.!?](?:\s|$)/);
+  return (endRel >= 0 ? rest.slice(0, endRel + 1) : rest).trim();
+}
+
 // Patterns are deliberately conservative — precision > recall.
 const TASK_PATTERNS = [
   /\b(?:need to|should|TODO|must|have to|planning to|going to|will need to)\s+(.{10,120})/i,
@@ -419,7 +483,7 @@ export function extractProgressItems(sessionsDir: string, maxSessions = 10): Pro
           for (const pattern of COMPLETED_PATTERNS) {
             const match = text.match(pattern);
             if (match) {
-              const extracted = (match[1] || match[0]).trim().replace(/[.!,;]+$/, '').slice(0, 120);
+              const extracted = sanitizeExtracted(match[1] || match[0], 120);
               const key = extracted.toLowerCase().slice(0, 50);
               if (extracted.length >= 10 && !seen.has(key)) {
                 seen.add(key);
@@ -433,7 +497,7 @@ export function extractProgressItems(sessionsDir: string, maxSessions = 10): Pro
           for (const pattern of BLOCKER_PATTERNS) {
             const match = text.match(pattern);
             if (match) {
-              const extracted = (match[1] || match[0]).trim().replace(/[.!,;]+$/, '').slice(0, 120);
+              const extracted = sanitizeExtracted(match[1] || match[0], 120);
               const key = extracted.toLowerCase().slice(0, 50);
               if (extracted.length >= 10 && !seen.has(key)) {
                 seen.add(key);
@@ -448,7 +512,9 @@ export function extractProgressItems(sessionsDir: string, maxSessions = 10): Pro
             for (const pattern of TASK_PATTERNS) {
               const match = text.match(pattern);
               if (match) {
-                const extracted = (match[1] || match[0]).trim().replace(/[.!,;]+$/, '').slice(0, 120);
+                // Use the full enclosing sentence so the meaningful head isn't
+                // dropped (the trigger word is often mid-sentence).
+                const extracted = sanitizeExtracted(enclosingSentence(text, match.index ?? 0), 120);
                 const key = extracted.toLowerCase().slice(0, 50);
                 if (extracted.length >= 10 && !seen.has(key)) {
                   seen.add(key);
@@ -527,8 +593,7 @@ export function extractSessionOutcome(messageLines: string[]): SessionOutcome | 
     for (const pattern of changePatterns) {
       const match = msg.content.match(pattern);
       if (match) {
-        const extracted = (match[1] || match[0]).trim().replace(/[.!,;]+$/, '');
-        whatChanged = extracted.length > 120 ? extracted.slice(0, 117) + '...' : extracted;
+        whatChanged = sanitizeExtracted(match[1] || match[0], 120);
         break;
       }
     }
@@ -542,7 +607,7 @@ export function extractSessionOutcome(messageLines: string[]): SessionOutcome | 
     );
     if (substantive) {
       const firstSentence = substantive.content.split(/[.!?\n]/)[0]?.trim() ?? '';
-      whatChanged = firstSentence.length > 120 ? firstSentence.slice(0, 117) + '...' : firstSentence;
+      whatChanged = sanitizeExtracted(firstSentence, 120);
     }
   }
 
@@ -560,8 +625,7 @@ export function extractSessionOutcome(messageLines: string[]): SessionOutcome | 
     for (const pattern of openPatterns) {
       const match = msg.content.match(pattern);
       if (match) {
-        const extracted = (match[1] || match[0]).trim().replace(/[.!,;]+$/, '');
-        openItems = extracted.length > 100 ? extracted.slice(0, 97) + '...' : extracted;
+        openItems = sanitizeExtracted(match[1] || match[0], 100);
         break;
       }
     }
@@ -580,8 +644,7 @@ export function extractSessionOutcome(messageLines: string[]): SessionOutcome | 
     for (const pattern of nextPatterns) {
       const match = msg.content.match(pattern);
       if (match) {
-        const extracted = (match[1] || match[0]).trim().replace(/[.!,;]+$/, '');
-        nextStep = extracted.length > 100 ? extracted.slice(0, 97) + '...' : extracted;
+        nextStep = sanitizeExtracted(match[1] || match[0], 100);
         break;
       }
     }
@@ -680,9 +743,7 @@ export function extractOpenQuestions(sessionsDir: string, maxSessions = 10): Ope
           for (const pattern of OPEN_QUESTION_PATTERNS) {
             const match = text.match(pattern);
             if (match) {
-              const extracted = (match[1] || match[0]).trim()
-                .replace(/[.!,;]+$/, '')
-                .slice(0, 150);
+              const extracted = sanitizeExtracted(enclosingSentence(text, match.index ?? 0), 150);
               const key = extracted.toLowerCase().slice(0, 60);
 
               if (extracted.length >= 10 && !seen.has(key) && !QUESTION_EXCLUDE.test(extracted)) {

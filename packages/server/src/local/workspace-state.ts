@@ -21,6 +21,7 @@ import {
   type OpenQuestion,
   type ThreadInfo,
 } from './routes/sessions.js';
+import { sanitizeExtracted } from './routes/session-utils.js';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -96,12 +97,11 @@ function extractDecisionItems(
   return frames.slice(0, max).map(f => {
     const firstLine = f.content.split('\n')[0];
     const sentenceMatch = firstLine.match(/^(.+?\.\s)(?=[A-Z])/);
-    const text = sentenceMatch
-      ? sentenceMatch[1].trim()
-      : (firstLine.length > 150 ? firstLine.slice(0, 147) + '...' : firstLine);
+    const text = sentenceMatch ? sentenceMatch[1] : firstLine;
 
     return {
-      content: text.replace(/\.\s*$/, ''),
+      // Strip cursor/markdown artifacts (leaking `|` pipes etc.) + tail-truncate.
+      content: sanitizeExtracted(text, 150),
       freshness: computeFreshness(f.created_at),
       source: 'memory' as StateSource,
       sourceId: String(f.id),

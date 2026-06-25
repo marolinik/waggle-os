@@ -105,12 +105,18 @@ export function emitAuditEvent(
     if (!dataDir) return;
 
     const db = getAuditDb(dataDir);
+    // Store an explicit ISO-8601 timestamp (not the SQLite default
+    // datetime('now'), which is space-separated "YYYY-MM-DD HH:MM:SS"). The
+    // time-window queries compare lexically against new Date().toISOString()
+    // cutoffs ("…T…Z"); the space-vs-'T' mismatch made same-window rows sort
+    // wrong, so the Timeline showed "No activity" despite recent runs.
     db.prepare(`
       INSERT INTO audit_events (
-        workspace_id, user_id, event_type, tool_name,
+        timestamp, workspace_id, user_id, event_type, tool_name,
         input, output, model, tokens_used, cost, session_id, approved
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
+      new Date().toISOString(),
       event.workspaceId ?? 'default',
       event.userId ?? null,
       event.eventType,

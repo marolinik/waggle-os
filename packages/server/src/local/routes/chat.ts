@@ -1653,10 +1653,20 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           metadata: { model: resolvedModel, toolsUsed: result.toolsUsed, cost: messageCost },
         });
 
+        // Enriched so the notification identifies which agent/workspace/task and
+        // deep-links to the output (was a generic "Your agent has completed the task").
+        const wsName =
+          server.agentState.listWorkspaces?.().find((w) => w.id === effectiveWorkspace)?.name ??
+          effectiveWorkspace;
+        const agentName = personaOverride ? (resolvePersona(personaOverride)?.name ?? 'Agent') : 'Agent';
+        const toolCount = (result.toolsUsed ?? []).length;
         emitNotification(server, {
-          title: 'Agent finished',
-          body: 'Your agent has completed the task',
+          title: `${agentName} finished in ${wsName}`,
+          body: toolCount > 0
+            ? `${resolvedModel} · ${toolCount} tool${toolCount === 1 ? '' : 's'} used`
+            : `${resolvedModel} · response ready`,
           category: 'agent',
+          actionUrl: `/workspaces/${effectiveWorkspace}/chat`,
         });
       }
     } catch (err) {

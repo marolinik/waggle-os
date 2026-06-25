@@ -405,7 +405,7 @@ const AutomationCenterApp = () => {
                       <li key={a.id} className="flex items-center gap-2.5 rounded-lg border border-border/40 bg-card/40 px-2.5 py-1.5">
                         <span className="flex-1 min-w-0">
                           <span className="block text-xs font-medium text-foreground truncate">{a.name}</span>
-                          <span className="block text-[10px] text-muted-foreground">{describeTrigger(a)}</span>
+                          <span className="block text-[10px] text-muted-foreground" title={a.triggerType === 'manual' ? undefined : (a.schedule ?? undefined)}>{describeTrigger(a)}</span>
                         </span>
                         {a.nextRun && (a.status === 'active' || a.status === 'running') && (
                           <span className="text-[10px] text-muted-foreground shrink-0">Next: {new Date(a.nextRun).toLocaleString()}</span>

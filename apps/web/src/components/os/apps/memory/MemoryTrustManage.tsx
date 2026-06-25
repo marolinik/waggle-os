@@ -73,25 +73,28 @@ function ageLabel(createdAt: string): string {
 
 // ── Stat bar (§3) ──────────────────────────────────────────────────────────
 
-interface StatCardProps {
+interface DimensionChipProps {
   value: string;
   label: string;
   tone?: 'default' | 'healthy' | 'attention';
 }
 
-function StatCard({ value, label, tone = 'default' }: StatCardProps) {
+/** A subordinate, non-summing "dimension" of the hive (fresh / stale / awaiting
+ *  confirm). These overlap — they are NOT parts of the total, so they render as
+ *  small inline chips beneath the headline count, never as equal-weight cards. */
+function DimensionChip({ value, label, tone = 'default' }: DimensionChipProps) {
   const valueColor =
-    tone === 'healthy' ? 'text-[var(--healthy)]' : tone === 'attention' ? 'text-[var(--attention)]' : 'text-[var(--text)]';
+    tone === 'healthy' ? 'text-[var(--healthy)]' : tone === 'attention' ? 'text-[var(--attention)]' : 'text-[var(--text-2)]';
   return (
-    <div
+    <span
       className={cn(
-        'rounded-[18px] border bg-[var(--surface)] p-4',
-        tone === 'attention' ? 'border-[color-mix(in_srgb,var(--attention)_35%,transparent)]' : 'border-[var(--line-soft)]',
+        'inline-flex items-baseline gap-1.5 rounded-full border bg-[var(--surface-2)] px-2.5 py-1',
+        tone === 'attention' ? 'border-[color-mix(in_srgb,var(--attention)_30%,transparent)]' : 'border-[var(--line-soft)]',
       )}
     >
-      <div className={cn('text-[24px] font-[750] leading-none tracking-[-0.02em]', valueColor)}>{value}</div>
-      <div className="mt-1.5 text-[11.5px] text-[var(--text-muted)]">{label}</div>
-    </div>
+      <span className={cn('text-[13px] font-[700] leading-none tracking-[-0.01em]', valueColor)}>{value}</span>
+      <span className="text-[11.5px] text-[var(--text-muted)]">{label}</span>
+    </span>
   );
 }
 
@@ -337,12 +340,22 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
 
   return (
     <>
-      {/* §3 stat bar */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard value={stats.total} label="Memories in this hive" />
-        <StatCard value={stats.highConfFresh} label="High confidence & fresh" tone={stats.highConfFresh === '—' ? 'default' : 'healthy'} />
-        <StatCard value={stats.staleCount} label="Stale · worth a review" tone="attention" />
-        <StatCard value={stats.needsConfirm} label="Awaiting your confirm" tone="attention" />
+      {/* §3 stat bar — one TOTAL headline + subordinate, non-summing dimension
+          chips. The three views overlap (a memory can be fresh AND awaiting
+          confirm), so they must never read as a partition of the total. */}
+      <div className="rounded-[18px] border border-[var(--line-soft)] bg-[var(--surface)] p-4 sm:p-5">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <span className="text-[34px] font-[750] leading-none tracking-[-0.02em] text-[var(--text)]">{stats.total}</span>
+          <span className="text-[13.5px] text-[var(--text-muted)]">Memories in this hive</span>
+        </div>
+        <div className="mt-3.5 flex flex-wrap gap-2">
+          <DimensionChip value={stats.highConfFresh} label="high confidence & fresh" tone={stats.highConfFresh === '—' ? 'default' : 'healthy'} />
+          <DimensionChip value={stats.staleCount} label="stale · worth a review" tone="attention" />
+          <DimensionChip value={stats.needsConfirm} label="awaiting your confirm" tone="attention" />
+        </div>
+        <p className="mt-2.5 text-[11px] leading-snug text-[var(--text-muted)]">
+          Overlapping views — a memory can be counted in more than one.
+        </p>
       </div>
 
       {/* §4 search + filters */}

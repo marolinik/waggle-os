@@ -732,6 +732,14 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
 
   const virtualPath = defaultVirtualPath(name);
 
+  // Non-blocking dup-name warning: two "Research Hub"s are indistinguishable in
+  // the switcher/cards, so flag a case-insensitive collision before create —
+  // the user can still proceed (names aren't required to be unique).
+  const trimmedName = name.trim();
+  const isDuplicateName =
+    trimmedName.length > 0 &&
+    workspaces.some(w => w.name.trim().toLowerCase() === trimmedName.toLowerCase());
+
   return (
     <AnimatePresence>
       {/* AnimatePresence assigns unkeyed children the implicit key '' — with
@@ -941,8 +949,16 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
               <label className="text-xs text-muted-foreground block mb-1.5">What project or area is this for?</label>
               <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Acme Client, Q3 Launch, Home Renovation"
                 className="w-full bg-muted/50 rounded-xl"
+                aria-invalid={isDuplicateName || undefined}
                 autoFocus onKeyDown={e => e.key === 'Enter' && handleCreate()} />
-              <p className="text-[11px] text-muted-foreground/60 mt-1">One workspace per project or area — it builds its own memory as you work.</p>
+              {isDuplicateName ? (
+                <p className="flex items-center gap-1 text-[11px] font-medium text-[var(--attention)] mt-1" role="status" data-testid="create-workspace-dupe-warning">
+                  <Info className="w-3 h-3 shrink-0" />
+                  A workspace named "{trimmedName}" already exists — you can still create this, but they'll be hard to tell apart.
+                </p>
+              ) : (
+                <p className="text-[11px] text-muted-foreground/60 mt-1">One workspace per project or area — it builds its own memory as you work.</p>
+              )}
             </div>
 
             {/* ── Group ── */}

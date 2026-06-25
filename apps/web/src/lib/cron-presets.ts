@@ -105,7 +105,67 @@ export function describeCronExpr(cronExpr: string): string {
   const trimmed = cronExpr.trim();
   if (!trimmed) return 'No schedule set';
   if (!isPlausibleCronExpr(trimmed)) return `Not a valid cron expression (expected 5 fields)`;
-  return `Custom schedule: ${trimmed}`;
+  return humanizeCron(trimmed) ?? `Custom schedule: ${trimmed}`;
+}
+
+const CRON_DOW = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
+
+function formatCronTime(min: string, hour: string): string | null {
+  if (!/^\d+$/.test(min) || !/^\d+$/.test(hour)) return null;
+  const h = Number(hour);
+  const m = Number(min);
+  if (h > 23 || m > 59) return null;
+  const ampm = h < 12 ? 'AM' : 'PM';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+}
+
+function ordinal(d: number): string {
+  if (d % 10 === 1 && d !== 11) return `${d}st`;
+  if (d % 10 === 2 && d !== 12) return `${d}nd`;
+  if (d % 10 === 3 && d !== 13) return `${d}rd`;
+  return `${d}th`;
+}
+
+/**
+ * Humanise common cron expressions to plain English ("Mondays at 10:00 AM",
+ * "Every day at 5:00 AM", "Every 15 minutes"). No external dependency — covers
+ * the cases the scheduler actually produces; returns null for anything it can't
+ * describe confidently, so describeCronExpr falls back to "Custom schedule".
+ */
+export function humanizeCron(cronExpr: string): string | null {
+  const parts = cronExpr.trim().split(/\s+/);
+  if (parts.length !== 5) return null;
+  const [min, hour, dom, mon, dow] = parts;
+  const allDate = dom === '*' && mon === '*' && dow === '*';
+
+  // Every N minutes
+  const everyMin = min.match(/^\*\/(\d+)$/);
+  if (everyMin && hour === '*' && allDate) return `Every ${everyMin[1]} minutes`;
+  // Every hour at :MM
+  if (/^\d+$/.test(min) && hour === '*' && allDate) {
+    return `Every hour at :${String(Number(min)).padStart(2, '0')}`;
+  }
+
+  const time = formatCronTime(min, hour);
+  if (!time) return null;
+
+  // Daily
+  if (allDate) return `Every day at ${time}`;
+  // Weekly (one or more days of week), any month
+  if (dom === '*' && mon === '*' && /^[0-6](,[0-6])*$/.test(dow)) {
+    const days = dow.split(',').map((d) => CRON_DOW[Number(d)]);
+    const phrase =
+      days.length === 1 ? days[0]
+      : days.length === 2 ? `${days[0]} and ${days[1]}`
+      : `${days.slice(0, -1).join(', ')} and ${days[days.length - 1]}`;
+    return `${phrase} at ${time}`;
+  }
+  // Monthly on a fixed day-of-month, any month
+  if (/^\d+$/.test(dom) && Number(dom) >= 1 && Number(dom) <= 31 && mon === '*' && dow === '*') {
+    return `On the ${ordinal(Number(dom))} of every month at ${time}`;
+  }
+  return null;
 }
 
 /**

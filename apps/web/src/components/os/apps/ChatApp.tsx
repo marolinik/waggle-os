@@ -5,6 +5,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getPersonaById, PERSONAS } from '@/lib/personas';
 import { adapter } from '@/lib/adapter';
+import { cmdKLabel } from '@/lib/platform';
 import type { ChatMessage, ToolExecution, ApprovalRequest } from '@/lib/types';
 import { RiskBadge, canAlwaysAllow } from '@/lib/risk-display';
 import { BlockRenderer } from './chat-blocks';
@@ -1251,7 +1252,7 @@ const ChatApp = ({
               rows={3}
             />
             <div className="flex items-center gap-2.5 pb-0.5">
-              <span className="hidden font-mono text-[11px] text-[var(--text-dim)] sm:inline">⏎ send · ⌘K</span>
+              <span className="hidden font-mono text-[11px] text-[var(--text-dim)] sm:inline">⏎ send · {cmdKLabel}</span>
               <button
                 onClick={handleSend}
                 disabled={!input.trim() || isLoading}

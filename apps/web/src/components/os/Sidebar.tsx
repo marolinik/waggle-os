@@ -1,6 +1,7 @@
 import type { ElementType } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ChevronDown, Plus, Search } from "lucide-react";
+import { cmdKLabel } from "@/lib/platform";
 
 /**
  * Warm-Hive calm spine (design ref: design-files/screens/ia.html).
@@ -57,12 +58,6 @@ const Sidebar = ({
 }: SidebarProps) => {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  // Platform-aware ⌘K hint — a ⌘ glyph on Windows is a key the keyboard lacks
-  // (mirrors CommandCenter's footer; Waggle ships on Windows + macOS).
-  const cmdKLabel =
-    typeof navigator !== "undefined" && navigator.platform?.toLowerCase().includes("mac")
-      ? "⌘K"
-      : "Ctrl K";
 
   const isActive = (item: SidebarNavItem): boolean =>
     item.match.some((p) => pathname === p || pathname.startsWith(`${p}/`));

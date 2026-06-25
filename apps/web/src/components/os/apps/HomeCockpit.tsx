@@ -162,6 +162,17 @@ function GreetingHeader({
   );
 }
 
+/** Names (lower-cased) that appear on more than one card — used to surface a
+ *  disambiguator (group) so two identically-named workspaces aren't confused. */
+function duplicateNameSet(names: string[]): Set<string> {
+  const seen = new Map<string, number>();
+  for (const n of names) {
+    const k = n.trim().toLowerCase();
+    seen.set(k, (seen.get(k) ?? 0) + 1);
+  }
+  return new Set([...seen.entries()].filter(([, c]) => c > 1).map(([k]) => k));
+}
+
 // ── "Pick up where you left off" ─────────────────────────────────────────
 function RecentWorkspacesPanel({
   cards, onContinue, onOpenDesktop, onWorkspaceChanged,
@@ -172,6 +183,7 @@ function RecentWorkspacesPanel({
   onWorkspaceChanged: () => void;
 }) {
   if (cards.length === 0) return null;
+  const dupes = duplicateNameSet(cards.map(c => c.name));
   return (
     <section className="mb-9" data-testid="home-cockpit-recent">
       <SectionLabel rule className="mb-3.5">Pick up where you left off</SectionLabel>
@@ -187,9 +199,16 @@ function RecentWorkspacesPanel({
                 <HexAvatar label={ws.name} size={32} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[15.5px] font-semibold leading-tight text-[var(--text)]">{ws.name}</div>
-                  {ws.lastActive && (
-                    <div className="mt-0.5 font-mono text-[11px] text-[var(--text-dim)]">{formatRelative(ws.lastActive)}</div>
-                  )}
+                  {(() => {
+                    // Disambiguate same-named workspaces with their group so two
+                    // "Research Hub"s aren't indistinguishable (issue 2b).
+                    const dupe = dupes.has(ws.name.trim().toLowerCase());
+                    const rel = ws.lastActive ? formatRelative(ws.lastActive) : '';
+                    const label = dupe && ws.group ? (rel ? `${ws.group} · ${rel}` : ws.group) : rel;
+                    return label
+                      ? <div className="mt-0.5 truncate font-mono text-[11px] text-[var(--text-dim)]">{label}</div>
+                      : null;
+                  })()}
                 </div>
               </div>
               {ws.summary && (
@@ -386,6 +405,14 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
     return () => { cancelled.current = true; };
   }, [load, connecting]);
 
+  // Ask bar "+" with no typed text → open the command palette (⌘K) rather than
+  // being a dead button. We synthesize the same global Ctrl/⌘-K keystroke the
+  // window-level shortcut handler (useKeyboardShortcuts) already listens for, so
+  // Home doesn't need a new prop threaded through AppShell to reach the overlay.
+  const openCommandPalette = useCallback(() => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
+  }, []);
+
   // Ask bar → quick-capture the typed intent (the real backend the old
   // QuickCapture panel used). Send = a task to pick up; "+" = a quick note.
   // NOTE: a future "start a chat from this prompt" flow could replace the task
@@ -545,7 +572,7 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
 
       <AskBar
         onSubmit={(text) => void captureAsk(text, 'task')}
-        onPlus={(text) => { if (text) void captureAsk(text, 'note'); }}
+        onPlus={(text) => { if (text) void captureAsk(text, 'note'); else openCommandPalette(); }}
       />
     </div>
   );

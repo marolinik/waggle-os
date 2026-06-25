@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { Plus, ArrowUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { cmdKLabel } from '@/lib/platform';
 
 interface AskBarProps {
   placeholder?: string;
   onSubmit: (text: string) => void;
-  /** Optional "+" affordance — receives the current trimmed input (quick note). */
+  /** Optional "+" affordance — receives the current trimmed input (quick note);
+   *  callers open the command palette when the input is empty (no dead button). */
   onPlus?: (text: string) => void;
   cmdkHint?: boolean;
   className?: string;
@@ -64,7 +66,7 @@ export function AskBar({
         aria-label="Ask Waggle"
         className="min-w-0 flex-1 bg-transparent px-2 text-[15px] text-[var(--text)] placeholder:text-[var(--text-dim)] focus:outline-none"
       />
-      {cmdkHint && <kbd className="kbd hidden sm:inline-block">⌘K</kbd>}
+      {cmdkHint && <kbd className="kbd hidden sm:inline-block">{cmdKLabel}</kbd>}
       <button
         type="button"
         aria-label="Send"

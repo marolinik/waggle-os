@@ -1047,6 +1047,30 @@ class LocalAdapter {
   }
 
   async getKnowledgeGraph(workspaceId: string, scope?: 'current' | 'personal' | 'all'): Promise<{ nodes: KGNode[]; edges: KGEdge[] }> {
+    // Normalize to the FE contract (KGNode {id,label,type} / KGEdge
+    // {source,target,relationship}) regardless of backend shape. The HTTP route
+    // now projects server-side, but the Tauri IPC path may still return raw
+    // SQLite columns (entity_type/name, source_id/target_id/relation_type) —
+    // map them here too so desktop + web both render. Idempotent on projected data.
+    const asArr = (v: unknown): Record<string, unknown>[] =>
+      Array.isArray(v) ? (v as Record<string, unknown>[]) : [];
+    const str = (v: unknown): string | undefined =>
+      typeof v === 'string' && v.length > 0 ? v : undefined;
+    const toNodes = (raw: unknown): KGNode[] =>
+      asArr(raw).map((r) => ({
+        ...r,
+        id: String(r.id),
+        label: str(r.label) ?? str(r.name) ?? String(r.id),
+        type: str(r.type) ?? str(r.entity_type) ?? 'unknown',
+      })) as KGNode[];
+    const toEdges = (raw: unknown): KGEdge[] =>
+      asArr(raw).map((r) => ({
+        ...r,
+        source: String(r.source ?? r.source_id),
+        target: String(r.target ?? r.target_id),
+        relationship: str(r.relationship) ?? str(r.relation_type) ?? 'related',
+      })) as KGEdge[];
+
     // CC Sesija A §2.2 — Tauri IPC path for desktop builds.
     if (isTauri()) {
       const args: { workspaceId?: string; scope?: 'all' | 'personal' | 'workspace' | 'global' } = {};
@@ -1057,10 +1081,12 @@ class LocalAdapter {
       } else {
         args.workspaceId = workspaceId;
       }
-      const data = await tauriSearchEntities(args);
+      const data = (await tauriSearchEntities(args)) as {
+        nodes?: unknown; entities?: unknown; edges?: unknown; relations?: unknown;
+      };
       return {
-        nodes: ((data as { nodes?: unknown; entities?: unknown }).nodes ?? (data as { entities?: unknown }).entities ?? []) as KGNode[],
-        edges: ((data as { edges?: unknown; relations?: unknown }).edges ?? (data as { relations?: unknown }).relations ?? []) as KGEdge[],
+        nodes: toNodes(data.nodes ?? data.entities),
+        edges: toEdges(data.edges ?? data.relations),
       };
     }
     const params = new URLSearchParams();
@@ -1074,8 +1100,8 @@ class LocalAdapter {
     const res = await this.fetch(`/api/memory/graph?${params}`);
     const data = await res.json();
     return {
-      nodes: data.nodes ?? data.entities ?? [],
-      edges: data.edges ?? data.relations ?? [],
+      nodes: toNodes(data.nodes ?? data.entities),
+      edges: toEdges(data.edges ?? data.relations),
     };
   }
 
@@ -2286,11 +2312,25 @@ class LocalAdapter {
   }
 
   // --- Weaver ---
-  async getWeaverStatus(): Promise<{ lastConsolidation?: string; status: string }> {
+  // Mirrors GET /api/weaver/status (packages/server/src/local/routes/weaver.ts):
+  // the domain shape consumers (WeaverPanel, CockpitApp) read directly. On error
+  // we return a valid-but-empty object of the SAME shape rather than a fake
+  // success status, so callers never crash dereferencing missing fields.
+  async getWeaverStatus(): Promise<{
+    personalMind: { lastConsolidation: string | null; lastDecay: string | null; timerActive: boolean };
+    workspaces: Array<{ id: string; lastConsolidation: string | null; timerActive: boolean }>;
+    checkedAt: string;
+  }> {
     try {
       const res = await this.fetch('/api/weaver/status');
       return res.json();
-    } catch { return { status: 'unknown' }; }
+    } catch {
+      return {
+        personalMind: { lastConsolidation: null, lastDecay: null, timerActive: false },
+        workspaces: [],
+        checkedAt: new Date().toISOString(),
+      };
+    }
   }
 
   // --- Audit ---

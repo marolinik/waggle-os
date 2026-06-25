@@ -15,6 +15,13 @@ export interface Identity {
 type IdentityInput = Omit<Identity, 'id' | 'created_at' | 'updated_at'>;
 type IdentityUpdate = Partial<IdentityInput>;
 
+// Column allowlist — update() interpolates the key into SQL (values are
+// parameterized, keys are not), so only these known columns may be written.
+// Defense-in-depth against a malformed/attacker-shaped `changes` object.
+const UPDATABLE_COLUMNS: ReadonlySet<string> = new Set([
+  'name', 'role', 'department', 'personality', 'capabilities', 'system_prompt',
+]);
+
 export class IdentityLayer {
   private db: MindDB;
 
@@ -47,7 +54,7 @@ export class IdentityLayer {
   update(changes: IdentityUpdate): Identity {
     if (!this.exists()) throw new Error('No identity configured');
 
-    const fields = Object.entries(changes).filter(([, v]) => v !== undefined);
+    const fields = Object.entries(changes).filter(([k, v]) => v !== undefined && UPDATABLE_COLUMNS.has(k));
     if (fields.length === 0) return this.get();
 
     const sets = fields.map(([k]) => `${k} = ?`).join(', ');

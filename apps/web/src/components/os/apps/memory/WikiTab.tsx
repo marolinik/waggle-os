@@ -39,7 +39,9 @@ interface HealthReport {
 }
 
 function formatRelativeHealth(iso: string): string {
-  const ms = Date.parse(iso);
+  // Normalise SQLite space-separated UTC ("YYYY-MM-DD HH:MM:SS") to ISO so
+  // Date.parse reads it as UTC (not local), matching the events.ts timestamp fix.
+  const ms = Date.parse(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z');
   if (!Number.isFinite(ms)) return 'unknown';
   const delta = Date.now() - ms;
   if (delta < 60_000) return 'just now';
@@ -73,6 +75,7 @@ export default function WikiTab() {
   const [pageContent, setPageContent] = useState<string>('');
   const [health, setHealth] = useState<HealthReport | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [compiling, setCompiling] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string | null>(null);
@@ -80,10 +83,12 @@ export default function WikiTab() {
   const loadPages = useCallback(async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const data = await adapter.getWikiPages();
       setPages(data);
-    } catch {
+    } catch (err) {
       setPages([]);
+      setLoadError(err instanceof Error ? err.message : 'Failed to load wiki pages');
     } finally {
       setLoading(false);
     }
@@ -318,6 +323,11 @@ export default function WikiTab() {
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-5 h-5 text-muted-foreground/40 animate-spin" />
             </div>
+          ) : loadError ? (
+            <div role="alert" className="text-center py-8">
+              <p className="text-xs text-destructive mb-2">{loadError}</p>
+              <button type="button" onClick={loadPages} className="text-xs text-primary hover:underline px-2 py-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-500)]">Retry</button>
+            </div>
           ) : filtered.length === 0 ? (
             <div className="text-center py-8">
               <BookOpen className="w-8 h-8 text-muted-foreground/20 mx-auto mb-2" />
@@ -342,8 +352,8 @@ export default function WikiTab() {
                   <ChevronRight className="w-3 h-3 text-muted-foreground/50 shrink-0" />
                 </div>
                 <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground ml-5">
-                  <span>{p.sourceCount} sources</span>
-                  <span>{p.compiledAt?.slice(0, 10)}</span>
+                  <span>{p.sourceCount} source{p.sourceCount === 1 ? '' : 's'}</span>
+                  <span>compiled {formatRelativeHealth(p.compiledAt)}</span>
                 </div>
               </button>
             ))

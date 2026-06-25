@@ -372,6 +372,7 @@ export default function EvolutionTab() {
 
   const handleRefresh = async () => {
     setLoading(true);
+    setError(null);
     await Promise.all([loadRuns(), loadStatus()]);
     if (selectedUuid) await loadDetail(selectedUuid);
     setLoading(false);
@@ -479,6 +480,12 @@ export default function EvolutionTab() {
             <div className="text-center py-8">
               <Loader2 className="w-5 h-5 text-muted-foreground/40 mx-auto mb-2 animate-spin" />
               <p className="text-xs text-muted-foreground">Loading runs…</p>
+            </div>
+          ) : error && runs.length === 0 ? (
+            <div role="alert" className="text-center py-8">
+              <AlertTriangle className="w-5 h-5 text-destructive/70 mx-auto mb-2" />
+              <p className="text-xs text-destructive mb-2 px-2">{error}</p>
+              <button type="button" onClick={handleRefresh} className="text-xs text-primary hover:underline px-2 py-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-500)]">Retry</button>
             </div>
           ) : runs.length === 0 ? (
             <div className="text-center py-8">

@@ -26,6 +26,8 @@ export interface CatalogCommand {
   name: string;
   /** Mono technical subtitle (the jargon, surfaced quietly). */
   subtitle?: string;
+  /** Extra search synonyms/aliases (not shown) so legacy terms still resolve. */
+  keywords?: string;
   icon: ElementType;
   /** Route to navigate to (mutually exclusive with `action`). */
   to?: string;
@@ -87,7 +89,7 @@ export function buildCommandCatalog(ctx: CatalogContext): CatalogGroup[] {
     { id: "files", group: "power", name: "Files & storage", subtitle: "where this workspace lives", icon: FolderOpen, to: "/files" },
     { id: "room", group: "power", name: "Room", subtitle: "work alongside agents live", icon: Users, to: "/room" },
     { id: "vault", group: "power", name: "Secrets", subtitle: "encrypted vault", icon: Lock, to: "/settings/vault" },
-    { id: "mission-control", group: "power", name: "Mission Control", subtitle: "system health", icon: Activity, to: "/settings/mission-control" },
+    { id: "mission-control", group: "power", name: "Mission Control", subtitle: "system health", keywords: "cockpit connectors fleet status", icon: Activity, to: "/settings/mission-control" },
     { id: "timeline", group: "power", name: "Timeline", subtitle: "activity history", icon: History, to: "/settings/timeline" },
     { id: "events", group: "power", name: "Events & logs", subtitle: "live activity feed", icon: Radio, to: "/settings/events" },
     { id: "usage", group: "power", name: "Usage & cost", subtitle: "tokens · spend", icon: BarChart3, to: "/settings/usage" },

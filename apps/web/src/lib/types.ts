@@ -534,7 +534,9 @@ export interface ErrorContentBlock {
 export interface Session {
   id: string;
   workspaceId: string;
-  title: string;
+  /** null when the session has no real title yet — the FE renders its own
+   *  "New session" placeholder instead of the raw `session-<uuid>` id. */
+  title: string | null;
   messageCount: number;
   lastActive: string;
   model?: string;

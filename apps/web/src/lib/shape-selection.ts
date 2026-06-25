@@ -1,5 +1,5 @@
 /**
- * CC Sesija A §2.2 — prompt shape selection (Faza 1 GEPA-evolved variants).
+ * CC Session A §2.2 — prompt shape selection (Phase 1 GEPA-evolved variants).
  *
  * Stored client-side in localStorage. Threaded through adapter.sendMessage()
  * into the chat body so the sidecar can route to the matching registerShape
@@ -8,10 +8,10 @@
  * persisted client-side so the user's preference survives page reloads.
  *
  * Available shapes are LOCKED to the Phase 5 deployment scope:
- *   - claude::gen1-v1        (Faza 1 default, +12.5pp Pass II)
- *   - qwen-thinking::gen1-v1 (Faza 1 alt for sovereignty / cost story)
+ *   - claude::gen1-v1        (Phase 1 default, +12.5pp Pass II)
+ *   - qwen-thinking::gen1-v1 (Phase 1 alt for sovereignty / cost story)
  *
- * gpt::gen1-v2 is intentionally NOT in this list — Faza 2 OVERFIT exposed in
+ * gpt::gen1-v2 is intentionally NOT in this list — Phase 2 OVERFIT exposed in
  * Checkpoint C (decisions/2026-04-29-gepa-faza1-results.md). Adding it would
  * silently widen Phase 5 scope past the LOCKED manifest.
  */
@@ -33,12 +33,12 @@ export const AVAILABLE_SHAPES: ReadonlyArray<ShapeOption> = [
   {
     id: 'claude-gen1-v1',
     label: 'Claude (Gen 1 v1)',
-    description: 'Default. Faza 1 GEPA-evolved Claude variant — best Pass II quality.',
+    description: 'Default. Phase 1 GEPA-evolved Claude variant — best Pass II quality.',
   },
   {
     id: 'qwen-thinking-gen1-v1',
     label: 'Qwen Thinking (Gen 1 v1)',
-    description: 'Faza 1 GEPA-evolved Qwen variant — open-weights / sovereign track.',
+    description: 'Phase 1 GEPA-evolved Qwen variant — open-weights / sovereign track.',
   },
 ];
 

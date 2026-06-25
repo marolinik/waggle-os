@@ -277,7 +277,7 @@ export class WikiCompiler {
     if (entityPages.length > 0) {
       lines.push('## Entities', '');
       for (const p of entityPages) {
-        lines.push(`- [[${p.name}]] — ${p.sourceCount} sources (${p.compiledAt.slice(0, 10)})`);
+        lines.push(`- [[${p.name}]] — ${p.sourceCount} source${p.sourceCount === 1 ? '' : 's'} (${p.compiledAt.slice(0, 10)})`);
       }
       lines.push('');
     }
@@ -285,7 +285,7 @@ export class WikiCompiler {
     if (conceptPages.length > 0) {
       lines.push('## Concepts', '');
       for (const p of conceptPages) {
-        lines.push(`- [[${p.name}]] — ${p.sourceCount} sources (${p.compiledAt.slice(0, 10)})`);
+        lines.push(`- [[${p.name}]] — ${p.sourceCount} source${p.sourceCount === 1 ? '' : 's'} (${p.compiledAt.slice(0, 10)})`);
       }
       lines.push('');
     }
@@ -293,7 +293,7 @@ export class WikiCompiler {
     if (synthesisPages.length > 0) {
       lines.push('## Cross-Source Synthesis', '');
       for (const p of synthesisPages) {
-        lines.push(`- [[${p.name}]] — ${p.sourceCount} sources (${p.compiledAt.slice(0, 10)})`);
+        lines.push(`- [[${p.name}]] — ${p.sourceCount} source${p.sourceCount === 1 ? '' : 's'} (${p.compiledAt.slice(0, 10)})`);
       }
       lines.push('');
     }

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Activity, Server, DollarSign, Clock, Plug, RefreshCw, Timer, Brain, Shield, Network, FileText, ChevronDown, AlertTriangle } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import type { CronJob } from '@/lib/types';
+import { describeCronExpr } from '@/lib/cron-presets';
 import ComplianceDashboard from './cockpit/ComplianceDashboard';
 
 interface CockpitData {
@@ -14,7 +15,11 @@ interface CockpitData {
   vault?: unknown;
   capStatus?: unknown;
   auditTrail?: unknown[];
-  weaver?: { lastConsolidation?: string; status: string };
+  weaver?: {
+    personalMind: { lastConsolidation: string | null; lastDecay: string | null; timerActive: boolean };
+    workspaces: Array<{ id: string; lastConsolidation: string | null; timerActive: boolean }>;
+    checkedAt: string;
+  };
   eventStats?: { byType: Record<string, number>; total: number };
 }
 
@@ -146,11 +151,11 @@ const CockpitApp = () => {
               <span className="text-xs font-display font-medium text-foreground">Memory Weaver</span>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Status: <span className={data.weaver.status === 'active' ? 'text-[var(--healthy)]' : 'text-muted-foreground'}>{data.weaver.status}</span>
+              Status: <span className={data.weaver.personalMind?.timerActive ? 'text-[var(--healthy)]' : 'text-muted-foreground'}>{data.weaver.personalMind?.timerActive ? 'Active' : 'Idle'}</span>
             </p>
-            {data.weaver.lastConsolidation && (
+            {data.weaver.personalMind?.lastConsolidation && (
               <p className="text-[11px] text-muted-foreground">
-                Last consolidation: {new Date(data.weaver.lastConsolidation).toLocaleDateString()}
+                Last consolidation: {new Date(data.weaver.personalMind.lastConsolidation).toLocaleDateString()}
               </p>
             )}
           </div>
@@ -188,7 +193,7 @@ const CockpitApp = () => {
               {data.crons.slice(0, 3).map(c => (
                 <div key={c.id} className="flex items-center justify-between text-xs">
                   <span className="text-foreground truncate">{c.name}</span>
-                  <span className={c.enabled ? 'text-[var(--healthy)]' : 'text-muted-foreground'}>{c.schedule}</span>
+                  <span className={c.enabled ? 'text-[var(--healthy)]' : 'text-muted-foreground'} title={c.schedule}>{describeCronExpr(c.schedule)}</span>
                 </div>
               ))}
               {data.crons.length > 3 && (

@@ -234,6 +234,33 @@ export const profileRoutes: FastifyPluginAsync = async (fastify) => {
             } else {
               frames.createIFrame(gopId, `User identity: ${identity}`, 'important');
             }
+
+            // profile.json is the authoritative identity source: a profile save
+            // SUPERSEDES the structured IdentityLayer row (org/title), so stale
+            // heuristic-extracted facts (e.g. a harvested "Egzakta Group /
+            // business strategist") can no longer disagree with the user-stated
+            // "Egzakta Advisory / Partner, Strategy Consultant". Overwrites
+            // regardless of prior heuristic confidence. role -> role,
+            // company -> department (IdentityLayer's org field).
+            if (profile.role || profile.company) {
+              const layer = orch.getIdentity();
+              const orgTitle = {
+                ...(profile.role ? { role: profile.role } : {}),
+                ...(profile.company ? { department: profile.company } : {}),
+              };
+              if (layer.exists()) {
+                layer.update(orgTitle);
+              } else {
+                layer.create({
+                  name: profile.name,
+                  role: profile.role,
+                  department: profile.company,
+                  personality: '',
+                  capabilities: '',
+                  system_prompt: '',
+                });
+              }
+            }
           }
         }
       } catch { /* non-blocking */ }
