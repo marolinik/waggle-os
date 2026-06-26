@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
-import { MindDB, createFileStore } from '@waggle/core';
+import { MindDB, createFileStore, reconcileFtsIndex } from '@waggle/core';
 import { parseTier, getCapabilities } from '@waggle/shared';
 import { assertSafeSegment } from './validate.js';
 import { extractProgressItems, type ProgressItem } from './sessions.js';
@@ -293,6 +293,10 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
           for (let i = 0; i < tpl.starterMemory.length; i++) {
             insert.run(`onboarding-${ws.id}`, i, tpl.starterMemory[i]);
           }
+          // These raw INSERTs bypass FrameStore.indexFts(), so the starter frames
+          // would be present in memory_frames but invisible to FTS5 keyword search.
+          // Reconcile the FTS index to make them searchable.
+          reconcileFtsIndex(wsDb);
           wsDb.close();
         }
       } catch (err) {
