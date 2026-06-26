@@ -32,7 +32,13 @@ npm install
 
 # Copy and configure environment
 cp .env.example .env
-# Edit .env — at minimum set ANTHROPIC_API_KEY
+# Edit .env — at minimum set ANTHROPIC_API_KEY (or add keys in-app: Settings → API Keys)
+#
+# (Recommended) Real embeddings: install Ollama (https://ollama.com) and run
+#   `ollama pull nomic-embed-text`, then set EMBEDDING_PROVIDER=ollama.
+# Without a real embedder the app falls back to a deterministic MOCK provider
+# (degraded memory recall). Ollama + nomic-embed-text (1024-d) is also REQUIRED
+# to run or reproduce any hive-mind benchmark.
 
 # Start the backend (port 3333)
 npm run dev:server
