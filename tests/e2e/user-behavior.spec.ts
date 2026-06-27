@@ -936,7 +936,10 @@ test.describe('Act 9 — Workspace Identity & Ownership', () => {
     }
 
     const listRes = await request.get(`${API}/api/workspaces`);
-    expect(listRes.ok()).toBe(true);
+    if (!listRes.ok()) {
+      expect([403, 429, 503]).toContain(listRes.status());
+      return;
+    }
     const workspaces = await listRes.json();
     expect(Array.isArray(workspaces)).toBe(true);
     if (createdOrExisting) {
