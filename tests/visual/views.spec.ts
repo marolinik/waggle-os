@@ -19,6 +19,11 @@ const VIEWS = [
   { name: 'settings', route: '/settings?tab=models' },
 ] as const;
 
+const THEME_LABELS = {
+  dark: 'Dark Mode',
+  light: 'Light Mode',
+} as const;
+
 function routeWithSkip(route: string) {
   const sep = route.includes('?') ? '&' : '?';
   return `${route}${sep}${SKIP_PARAMS}`;
@@ -127,7 +132,7 @@ async function stabilizeVisuals(page: Page) {
 }
 
 for (const theme of ['dark', 'light'] as const) {
-  test.describe(`Visual Regression - ${theme === 'dark' ? 'Dark' : 'Light'} Mode`, () => {
+  test.describe(`Visual Regression - ${THEME_LABELS[theme]}`, () => {
     for (const view of VIEWS) {
       test(`${view.name} view - ${theme}`, async ({ page }) => {
         await gotoVisualView(page, view, theme);
