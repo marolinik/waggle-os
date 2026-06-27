@@ -115,6 +115,18 @@ CREATE TABLE IF NOT EXISTS knowledge_relations (
 CREATE INDEX IF NOT EXISTS idx_relations_source ON knowledge_relations (source_id, relation_type);
 CREATE INDEX IF NOT EXISTS idx_relations_target ON knowledge_relations (target_id, relation_type);
 
+-- Layer 3: Knowledge Graph - Entity↔Frame bridge.
+-- Records which frames an entity was extracted from, so the 'contextual'
+-- scoring signal (scoring.ts) can map query-seeded graph distances back onto
+-- frames. ON DELETE CASCADE keeps it consistent when a frame or entity is removed.
+CREATE TABLE IF NOT EXISTS kg_entity_frames (
+  entity_id INTEGER NOT NULL REFERENCES knowledge_entities(id) ON DELETE CASCADE,
+  frame_id INTEGER NOT NULL REFERENCES memory_frames(id) ON DELETE CASCADE,
+  PRIMARY KEY (entity_id, frame_id)
+);
+CREATE INDEX IF NOT EXISTS idx_kg_entity_frames_frame ON kg_entity_frames (frame_id);
+CREATE INDEX IF NOT EXISTS idx_kg_entity_frames_entity ON kg_entity_frames (entity_id);
+
 -- Layer 5: Improvement Signals (recurring patterns that should change behavior)
 CREATE TABLE IF NOT EXISTS improvement_signals (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

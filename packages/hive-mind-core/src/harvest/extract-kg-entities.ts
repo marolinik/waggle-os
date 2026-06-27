@@ -246,10 +246,12 @@ export function writeKgEntities(
       kg.updateEntity(existing.id, {
         properties: { ...existingProps, seen_count: seenCount },
       });
+      kg.linkEntityToFrame(existing.id, entity.frameId);
       result.updated++;
     } else {
       try {
-        kg.createEntity(entity.type, entity.name, { seen_count: 1, source: 'cognify-llm' });
+        const created = kg.createEntity(entity.type, entity.name, { seen_count: 1, source: 'cognify-llm' });
+        kg.linkEntityToFrame(created.id, entity.frameId);
         result.created++;
       } catch (e: unknown) {
         // Ontology validation may reject — skip this entity, never abort the pass.
