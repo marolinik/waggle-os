@@ -1,10 +1,12 @@
 # Memory Architecture — Waggle OS
 
-**Audience:** Internal engineers and contributors touching `packages/core/src/mind/` or the agent recall path.
+**Audience:** Internal engineers and contributors touching `packages/hive-mind-core/src/mind/` or the agent recall path.
 **Scope:** How memory is stored, searched, scored, and recalled — grounded in the source, not in CLAUDE.md.
 **Status:** Current as of April 15, 2026. Schema version `1`.
 
-> **Path discrepancy fixed:** An earlier revision of CLAUDE.md §2 listed memory-layer files (`frames.ts`, `awareness.ts`, etc.) at the top level of `packages/core/src/`. They actually live in `packages/core/src/mind/`. Corrected in the commit that promoted this doc.
+> ⚠️ **SUPERSEDED / partially stale (2026-06-26).** This doc predates the April 2026 monorepo migration: the substrate moved from `packages/hive-mind-core/src/mind/` to **`packages/hive-mind-core/src/mind/`**, and several line-of-code counts here are out of date. For the current, code-verified architecture see **[`docs/transfer/MEMORY-SYSTEM-EXPLAINED.md`](./transfer/MEMORY-SYSTEM-EXPLAINED.md)**. This file is retained for historical reference.
+
+> **Path discrepancy fixed:** An earlier revision of CLAUDE.md §2 listed memory-layer files (`frames.ts`, `awareness.ts`, etc.) at the top level of `packages/core/src/`. They actually live in `packages/hive-mind-core/src/mind/`. Corrected in the commit that promoted this doc.
 
 ---
 
@@ -26,7 +28,7 @@ Agents consume this through one function: `Orchestrator.recallMemory(query, limi
 
 ## 2. Storage substrate: `MindDB`
 
-**File:** `packages/core/src/mind/db.ts`
+**File:** `packages/hive-mind-core/src/mind/db.ts`
 
 ```ts
 export class MindDB {
@@ -54,7 +56,7 @@ Every layer class takes a `MindDB` and calls `db.getDatabase()` to get the raw `
 
 ## 3. Schema at a glance
 
-**File:** `packages/core/src/mind/schema.ts` — one `SCHEMA_SQL` string for the whole mind, plus a separate `VEC_TABLE_SQL` for the virtual table.
+**File:** `packages/hive-mind-core/src/mind/schema.ts` — one `SCHEMA_SQL` string for the whole mind, plus a separate `VEC_TABLE_SQL` for the virtual table.
 
 | Table | Role | Layer |
 |---|---|---|
@@ -81,7 +83,7 @@ Embedding dimensionality is pinned at **1024**, baked into the vec0 DDL. If you 
 
 ## 4. Layer 0 — Identity
 
-**File:** `packages/core/src/mind/identity.ts` — 73 LOC.
+**File:** `packages/hive-mind-core/src/mind/identity.ts` — 73 LOC.
 
 ```sql
 CREATE TABLE identity (
@@ -99,7 +101,7 @@ Everything but `name` defaults to empty string. A bare `name` is enough to have 
 
 ## 5. Layer 1 — Awareness
 
-**File:** `packages/core/src/mind/awareness.ts` — 170 LOC.
+**File:** `packages/hive-mind-core/src/mind/awareness.ts` — 170 LOC.
 
 Working memory. Volatile, small, priority-ordered.
 
@@ -123,7 +125,7 @@ Two things worth knowing:
 
 ## 6. Layer 2 — Frames
 
-**File:** `packages/core/src/mind/frames.ts` — 377 LOC. This is the heart.
+**File:** `packages/hive-mind-core/src/mind/frames.ts` — 377 LOC. This is the heart.
 
 ### 6.1 Data model
 
@@ -195,7 +197,7 @@ Trim-stable hash means trailing/leading whitespace won't spawn duplicates. Case-
 
 ## 7. Layer 3 — Hybrid Search
 
-**File:** `packages/core/src/mind/search.ts` — 255 LOC.
+**File:** `packages/hive-mind-core/src/mind/search.ts` — 255 LOC.
 
 ### 7.1 Top-level shape
 
@@ -242,7 +244,7 @@ Both paths respect `gopId`, `since`, `until` filters.
 
 ### 7.3 Scoring profiles
 
-**File:** `packages/core/src/mind/scoring.ts`
+**File:** `packages/hive-mind-core/src/mind/scoring.ts`
 
 ```ts
 SCORING_PROFILES = {
@@ -272,7 +274,7 @@ Every `memory_frames` row should have a matching row in `memory_frames_fts` (row
 
 ## 8. Layer 4 — Knowledge Graph
 
-**File:** `packages/core/src/mind/knowledge.ts` — 265 LOC.
+**File:** `packages/hive-mind-core/src/mind/knowledge.ts` — 265 LOC.
 
 ```sql
 knowledge_entities(id, entity_type, name, properties, valid_from, valid_to, recorded_at)
@@ -336,7 +338,7 @@ This is why the codebase has `FrameStore` and `HybridSearch` instantiated twice 
 
 ## 10. Embeddings
 
-**Files:** `packages/core/src/mind/embedding-provider.ts`, `embeddings.ts`, `api-embedder.ts`, `inprocess-embedder.ts`, `litellm-embedder.ts`, `ollama-embedder.ts`.
+**Files:** `packages/hive-mind-core/src/mind/embedding-provider.ts`, `embeddings.ts`, `api-embedder.ts`, `inprocess-embedder.ts`, `litellm-embedder.ts`, `ollama-embedder.ts`.
 
 ### 10.1 The fallback chain
 
@@ -393,10 +395,10 @@ These share the `MindDB` but are not part of the five-layer stack:
 
 ## 13. Where to read next
 
-- `packages/core/src/mind/reconcile.ts` — how conflicting frames get reconciled (not covered here).
-- `packages/core/src/mind/ontology.ts` — the entity/relation type registry.
-- `packages/core/src/mind/entity-normalizer.ts` — how raw strings become KG entities.
-- `packages/core/src/mind/sessions.ts` — GOP lifecycle (open, close, summarize).
+- `packages/hive-mind-core/src/mind/reconcile.ts` — how conflicting frames get reconciled (not covered here).
+- `packages/hive-mind-core/src/mind/ontology.ts` — the entity/relation type registry.
+- `packages/hive-mind-core/src/mind/entity-normalizer.ts` — how raw strings become KG entities.
+- `packages/hive-mind-core/src/mind/sessions.ts` — GOP lifecycle (open, close, summarize).
 - `packages/agent/src/orchestrator.ts` lines 273–400 — the recall path end-to-end.
 - `packages/core/src/harvest/pipeline.ts` — how Memory Harvest turns external sources into frames.
 
