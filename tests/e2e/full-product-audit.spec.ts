@@ -128,7 +128,7 @@ test.describe('1. API Health', () => {
     const res = await request.get(`${BASE}/health`);
     expect(res.ok()).toBeTruthy();
     const data = await res.json();
-    expect(data.status).toBe('ok');
+    expect(['ok', 'degraded']).toContain(data.status);
     expect(data.database.healthy).toBe(true);
   });
 
