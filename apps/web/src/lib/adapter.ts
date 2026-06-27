@@ -27,6 +27,7 @@ import type {
 import type {
   Command, CommandResult, WorkspaceType,
   ConnectorDefinition, ConnectorHealth, McpInstance, ExtensionType,
+  InterpretResult, ResolvedAction,
 } from '@waggle/shared';
 
 /**
@@ -2402,6 +2403,44 @@ class LocalAdapter {
       method: 'POST', body: JSON.stringify(payload),
     });
     return res.json();
+  }
+
+  /**
+   * Tier 1 NL intent resolver. Maps a plain-language request onto the closed
+   * action registry server-side. Never throws — a network/parse failure
+   * resolves to a Tier-0 fallback so the palette stays usable.
+   */
+  async commandInterpret(
+    text: string,
+    workspaceId?: string,
+    context?: Record<string, unknown>,
+  ): Promise<InterpretResult> {
+    try {
+      const res = await this.fetch('/api/command/interpret', {
+        method: 'POST', body: JSON.stringify({ text, workspaceId, context }),
+      });
+      if (!res.ok) {
+        return { kind: 'none', fallback: true, message: "Couldn't interpret that." };
+      }
+      return res.json();
+    } catch {
+      return { kind: 'none', fallback: true, message: "Couldn't interpret that." };
+    }
+  }
+
+  /**
+   * Execute a server-derived ResolvedAction's endpoint (create / side-effect).
+   * The endpoint + body are produced by the closed registry — the client only
+   * dispatches what the server already validated. A 403 still flows through the
+   * global tier handler in `fetch`.
+   */
+  async commandDispatchAction(action: ResolvedAction): Promise<{ ok: boolean; status: number; result?: unknown }> {
+    if (!action.endpoint) return { ok: false, status: 0 };
+    const { method, path, body } = action.endpoint;
+    const res = await this.fetch(path, { method, body: body ? JSON.stringify(body) : undefined });
+    let result: unknown;
+    try { result = await res.json(); } catch { /* empty / non-JSON body */ }
+    return { ok: res.ok, status: res.status, result };
   }
 
   // --- Pins ---

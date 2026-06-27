@@ -17,7 +17,7 @@ import { cmdKLabel } from '@/lib/platform';
 import { useToast } from '@/hooks/use-toast';
 import type { CommandCategory, CommandResultType, CommandResult } from '@/lib/types';
 import type { CatalogCommand, CatalogGroup } from '@/lib/command-catalog';
-import type { Command } from '@waggle/shared';
+import type { Command, InterpretResult, ResolvedAction } from '@waggle/shared';
 
 /* ── Verb sections (PRD §12.3) ──
  * The six command verbs, in display order. Each backend `CommandResult`
@@ -71,6 +71,36 @@ const NAVIGABLE_TYPES: ReadonlySet<CommandResultType> = new Set<CommandResultTyp
 
 const DEBOUNCE_MS = 220;
 const MIN_QUERY = 2;
+
+/* ── Tier 1 (NL intent) trigger ──
+ * Tier 0 (cmdk fuzzy) stays instant and authoritative. Tier 1 fires only for
+ * sentence-like input — the brief's heuristic: ≥3 words, not a slash command,
+ * long enough to be an intent. The interpret call runs in parallel and never
+ * blocks the cmdk list. */
+const INTERPRET_DEBOUNCE_MS = 500;
+function isSentenceLike(q: string): boolean {
+  const t = q.trim();
+  if (!t || t.startsWith('/')) return false;
+  return t.split(/\s+/).length >= 3 && t.length >= 6;
+}
+
+/* Synthesize a display-only CommandResult from a ResolvedAction so the intent
+ * row + approval prompt reuse the existing ResultRow / PermissionPrompt UI. */
+function actionToResult(action: ResolvedAction): CommandResult {
+  return {
+    id: `__intent__:${action.id}`,
+    type: 'command',
+    title: action.label,
+    subtitle: action.sideEffect ? 'Needs your approval' : 'Ready to run',
+    category: 'run',
+    requiresApproval: action.sideEffect,
+    action: {
+      endpoint: action.endpoint?.path,
+      route: action.navigate ? `${action.navigate.type}:${action.navigate.id}` : undefined,
+      payload: action.endpoint?.body,
+    },
+  };
+}
 
 /* ── Issue 3: idle "More tools" hint ──
  * The calm spine deliberately surfaces only five everyday places; the rest of
@@ -258,6 +288,13 @@ const CommandCenter = ({ open, onClose, onNavigate, onExecute, workspaceId, cata
   const [pending, setPending] = useState<CommandResult | null>(null);
   /** Tracks the last command outcome so we can render success/failure state. */
   const [outcome, setOutcome] = useState<'success' | 'failure' | null>(null);
+  // ── Tier 1 (NL intent) state — layered on Tier 0, never replacing it. ──
+  const [interpreting, setInterpreting] = useState(false);
+  const [interpret, setInterpret] = useState<InterpretResult | null>(null);
+  const [pendingAction, setPendingAction] = useState<ResolvedAction | null>(null);
+  const [dispatching, setDispatching] = useState(false);
+  /** Last query we resolved, to avoid re-interpreting an unchanged sentence. */
+  const lastInterpreted = useRef<string>('');
 
   // The cmdk `value` (selected) is keyed by result id; map it back to look up.
   const byId = useRef(new Map<string, CommandResult>());
@@ -272,6 +309,10 @@ const CommandCenter = ({ open, onClose, onNavigate, onExecute, workspaceId, cata
     setResults([]);
     setPending(null);
     setOutcome(null);
+    setInterpret(null);
+    setInterpreting(false);
+    setPendingAction(null);
+    lastInterpreted.current = '';
 
     let alive = true;
     adapter.commandRecent()
@@ -321,6 +362,33 @@ const CommandCenter = ({ open, onClose, onNavigate, onExecute, workspaceId, cata
     return () => clearTimeout(handle);
   }, [query, workspaceId, recent, suggestions]);
 
+  // Tier 1 (NL intent) — fire the resolver for sentence-like input, debounced
+  // and in parallel with Tier 0. Does NOT block the cmdk list; result renders
+  // in its own "Ask Waggle" group. Failures degrade silently (kind:'none'
+  // fallback) so Tier 0 always remains usable.
+  useEffect(() => {
+    if (!open) return;
+    const q = query.trim();
+    if (!isSentenceLike(q)) {
+      setInterpret(null);
+      setInterpreting(false);
+      lastInterpreted.current = '';
+      return;
+    }
+    if (lastInterpreted.current === q) return; // already resolved this exact sentence
+    let alive = true;
+    setInterpreting(true);
+    const handle = setTimeout(async () => {
+      const res = await adapter.commandInterpret(q, workspaceId);
+      if (!alive) return;
+      lastInterpreted.current = q;
+      setInterpreting(false);
+      // A pure fallback 'none' just defers to Tier 0 — don't surface a row for it.
+      setInterpret(res.kind === 'none' && res.fallback ? null : res);
+    }, INTERPRET_DEBOUNCE_MS);
+    return () => { alive = false; clearTimeout(handle); };
+  }, [open, query, workspaceId]);
+
   // Natural-language fallback row (PRD line 464): when a non-empty query yields
   // no structured matches, offer to run the raw string as a command.
   const nlResult = useMemo<CommandResult | null>(() => {
@@ -368,14 +436,14 @@ const CommandCenter = ({ open, onClose, onNavigate, onExecute, workspaceId, cata
   }, [sections]);
 
   const viewState: ViewState = useMemo(() => {
-    if (pending) return 'permission';
+    if (pending || pendingAction) return 'permission';
     if (outcome === 'success') return 'success';
     if (outcome === 'failure') return 'failure';
     const q = query.trim();
     if (!q) return 'idle';
     if (searching) return 'query';
     return sections.length > 0 ? 'results' : 'no-results';
-  }, [pending, outcome, query, searching, sections]);
+  }, [pending, pendingAction, outcome, query, searching, sections]);
 
   // Dispatch a chosen result. Navigable objects deep-link via onNavigate; Run/
   // Create/Extend and gated items go through the execute pipeline. Gated results
@@ -428,6 +496,57 @@ const CommandCenter = ({ open, onClose, onNavigate, onExecute, workspaceId, cata
     }
     void runResult(result);
   }, [onNavigate, onClose, runResult]);
+
+  // ── Tier 1: execute a server-derived ResolvedAction's endpoint. ──
+  const dispatchAction = useCallback(async (action: ResolvedAction) => {
+    setDispatching(true);
+    try {
+      const res = await adapter.commandDispatchAction(action);
+      if (res.ok) {
+        toast({ title: 'Done', description: action.label });
+        onClose();
+      } else if (res.status === 403) {
+        // The global adapter handler already raised the UpgradeModal — just close.
+        onClose();
+      } else {
+        toast({ title: 'Action failed', description: action.label, variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'Action failed', description: action.label, variant: 'destructive' });
+    } finally {
+      setDispatching(false);
+      setPendingAction(null);
+    }
+  }, [onClose, toast]);
+
+  // ── Tier 1: dispatch a resolved intent onto the existing execution paths. ──
+  const handleResolvedAction = useCallback((res: InterpretResult) => {
+    if (res.kind === 'tier_gated') {
+      window.dispatchEvent(new CustomEvent('waggle:tier-insufficient', {
+        detail: { required: res.requiredTier, actual: res.actualTier, message: res.message },
+      }));
+      onClose();
+      return;
+    }
+    if (res.kind !== 'action' || !res.action) return;
+    const action = res.action;
+    if (action.navigate) {
+      onNavigate(action.navigate.type, action.navigate.id);
+      onClose();
+      return;
+    }
+    if (action.sideEffect) {
+      setPendingAction(action);  // preview-and-approve before executing
+      return;
+    }
+    void dispatchAction(action);
+  }, [onNavigate, onClose, dispatchAction]);
+
+  // Refine a clarify by appending the chosen option; re-resolves via the effect.
+  const handleClarifyOption = useCallback((option: string) => {
+    lastInterpreted.current = '';
+    setQuery((q) => `${q.trim()} ${option}`);
+  }, []);
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -489,6 +608,16 @@ const CommandCenter = ({ open, onClose, onNavigate, onExecute, workspaceId, cata
             />
           )}
 
+          {/* Tier 1: a resolved side-effect intent reuses the same approval gate. */}
+          {viewState === 'permission' && !pending && pendingAction && (
+            <PermissionPrompt
+              result={actionToResult(pendingAction)}
+              busy={dispatching}
+              onConfirm={() => void dispatchAction(pendingAction)}
+              onCancel={() => setPendingAction(null)}
+            />
+          )}
+
           {viewState !== 'permission' && (
             <CommandList className="max-h-[60vh] overflow-auto p-2">
               {/* No results / NL hint is folded into the NL row, so a true empty
@@ -498,6 +627,94 @@ const CommandCenter = ({ open, onClose, onNavigate, onExecute, workspaceId, cata
                   {query.trim() ? `No results for "${query.trim()}"` : 'Start typing to search everything'}
                 </span>
               </CommandEmpty>
+
+              {/* ── Tier 1: Ask Waggle (NL intent) — sits above Tier 0 results,
+                  never replacing them. Renders interpreting / resolved action /
+                  clarify / upgrade / decline. ── */}
+              {(interpreting || interpret) && (
+                <CommandGroup
+                  heading={
+                    <span className="flex items-center gap-1.5 uppercase tracking-wider">
+                      <Sparkles className="h-3 w-3" /> Ask Waggle
+                    </span>
+                  }
+                >
+                  {interpreting && (
+                    <div className="flex items-center gap-2 px-3 py-2 text-sm" style={{ color: 'var(--hive-400)' }} data-testid="intent-interpreting">
+                      <Loader2 className="h-4 w-4 animate-spin" style={{ color: 'var(--honey-500)' }} />
+                      Interpreting…
+                    </div>
+                  )}
+
+                  {!interpreting && interpret?.kind === 'action' && interpret.action && (
+                    <ResultRow result={actionToResult(interpret.action)} onSelect={() => handleResolvedAction(interpret)} />
+                  )}
+
+                  {!interpreting && interpret?.kind === 'tier_gated' && (
+                    <CommandItem
+                      value="__intent_tier__"
+                      onSelect={() => handleResolvedAction(interpret)}
+                      className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm aria-selected:bg-[var(--honey-glow,rgba(229,160,0,0.08))]"
+                    >
+                      <Sparkles className="h-4 w-4 shrink-0" style={{ color: 'var(--honey-500)' }} />
+                      <div className="min-w-0 flex-1 text-left">
+                        <span className="block truncate font-display" style={{ color: 'var(--hive-100)' }}>
+                          Upgrade to {interpret.requiredTier} to do this
+                        </span>
+                        <span className="block truncate text-xs" style={{ color: 'var(--hive-400)' }}>
+                          {interpret.capability}
+                        </span>
+                      </div>
+                      <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px]" style={{ backgroundColor: 'rgba(167,139,250,0.15)', color: '#a78bfa' }}>
+                        {interpret.requiredTier}
+                      </span>
+                    </CommandItem>
+                  )}
+
+                  {!interpreting && interpret?.kind === 'clarify' && (
+                    <div className="px-3 py-2" data-testid="intent-clarify">
+                      <p className="mb-2 text-sm" style={{ color: 'var(--hive-100)' }}>{interpret.question}</p>
+                      {interpret.steps && interpret.steps.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleResolvedAction({ kind: 'action', action: interpret.steps![0] })}
+                            className="rounded-lg bg-emerald-600 px-3 py-1 text-xs text-foreground transition-colors hover:bg-emerald-500"
+                          >
+                            Start: {interpret.steps[0].label}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setInterpret(null)}
+                            className="rounded-lg bg-secondary px-3 py-1 text-xs text-foreground transition-colors hover:bg-secondary/70"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : interpret.options && interpret.options.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {interpret.options.map((opt) => (
+                            <button
+                              key={opt}
+                              type="button"
+                              onClick={() => handleClarifyOption(opt)}
+                              className="rounded-lg bg-secondary px-3 py-1 text-xs text-foreground transition-colors hover:bg-secondary/70"
+                            >
+                              {opt}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+
+                  {!interpreting && interpret?.kind === 'none' && interpret.message && (
+                    <div className="px-3 py-2 text-xs" style={{ color: 'var(--hive-400)' }}>
+                      {interpret.message}
+                    </div>
+                  )}
+                </CommandGroup>
+              )}
 
               {/* Curated places & actions (Jump to / Do / Power tools + Pinned). */}
               {catalogSections.map((g) => (

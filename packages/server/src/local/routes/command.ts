@@ -33,6 +33,8 @@ import type { Orchestrator, LoadedSkill } from '@waggle/agent';
 import { loadSkills } from '@waggle/agent';
 import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
 import { searchSessions } from './session-utils.js';
+import { interpretCommand } from '../command-interpret.js';
+import { readTierFromRequest } from '../../middleware/assert-tier.js';
 
 /**
  * Memoized `loadSkills()` — the federated `/search` hot path runs per keystroke,
@@ -266,5 +268,85 @@ export const commandRoutes: FastifyPluginAsync = async (server) => {
 
     const result = await commandRegistry.execute(commandStr, context);
     return reply.send({ ok: true, result });
+  });
+
+  // ── POST /api/command/interpret ───────────────────────────────────────
+  // Tier 1 natural-language intent resolver. Maps a plain-language request
+  // onto the CLOSED action registry via a fast model, with memory context.
+  // Resolution is routing, not a full agent turn. Degrades to { kind:'none',
+  // fallback:true } on any failure so the palette falls back to Tier 0.
+  server.post<{
+    Body: { text?: string; workspaceId?: string; context?: Record<string, unknown> };
+  }>('/api/command/interpret', async (request, reply) => {
+    const text = request.body?.text?.trim();
+    if (!text) {
+      return reply.status(400).send({ error: 'text is required' });
+    }
+    const workspaceId = request.body?.workspaceId;
+
+    // Memory context — reuse the Home/orchestrator "workspace now" builder
+    // (awareness + recent sessions + pending). Best-effort.
+    let memoryContext = '';
+    try {
+      const block = buildWorkspaceNowBlock({
+        dataDir: server.localConfig.dataDir,
+        workspaceId: workspaceId ?? 'default',
+        wsManager: server.workspaceManager,
+        activateWorkspaceMind: server.agentState.activateWorkspaceMind,
+        cronSchedules: server.cronStore.list(),
+      });
+      if (block) memoryContext = formatWorkspaceNowPrompt(block);
+    } catch (err) {
+      server.log.warn(`command/interpret: memory context unavailable — ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    const workspaces = safeFederate(
+      'workspaces-list',
+      () => server.workspaceManager.list().map((w) => ({ id: w.id, name: w.name })),
+      (m) => server.log.warn(m),
+    );
+
+    // Fast-model call via the in-process OpenAI-compatible proxy. The proxy is
+    // served on this server's own port and behind the same bearer auth as every
+    // other route, so we read the bound port from `address().port` (NOT
+    // `.toString()`, which is `[object Object]`) and pass the session token.
+    // No key / non-200 / throw → null → graceful Tier-0 fallback.
+    const llm = async (systemPrompt: string, userText: string): Promise<string | null> => {
+      const apiKey = server.vault?.get('anthropic')?.value;
+      if (!apiKey) return null;
+      const addr = server.server.address();
+      const port = (addr && typeof addr === 'object' ? addr.port : undefined) ?? Number(process.env.WAGGLE_PORT) ?? 3333;
+      const token = server.agentState.wsSessionToken;
+      try {
+        const res = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            model: 'claude-haiku-4-5',
+            max_tokens: 600,
+            messages: [{ role: 'user', content: `${systemPrompt}\n\nUSER REQUEST:\n"${userText}"` }],
+          }),
+        });
+        if (!res.ok) return null;
+        const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+        return data.choices?.[0]?.message?.content ?? null;
+      } catch {
+        return null;
+      }
+    };
+
+    const result = await interpretCommand({
+      text,
+      workspaceId,
+      currentTier: readTierFromRequest(request),
+      workspaces,
+      memoryContext,
+      llm,
+      log: (m) => server.log.warn(m),
+    });
+    return reply.send(result);
   });
 };
