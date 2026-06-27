@@ -55,6 +55,21 @@ describe('KG entity↔frame bridge (contextual scoring signal)', () => {
     expect(kg.frameDistancesFromEntities([999999]).size).toBe(0);
   });
 
+  it('backfillKgEntityFrames links pre-existing frames to mentioned entities', () => {
+    const f1 = frames.createIFrame(gop, 'Acme shipped the Q2 release');
+    const f2 = frames.createIFrame(gop, 'unrelated note about the weather');
+    const acme = kg.createEntity('org', 'Acme', {});
+    // Bridge starts empty (these frames/entities were created without live linking).
+    expect((db.getDatabase().prepare('SELECT COUNT(*) c FROM kg_entity_frames').get() as { c: number }).c).toBe(0);
+
+    const created = db.backfillKgEntityFrames(true);
+    expect(created).toBe(1); // only f1 mentions "Acme"
+
+    const dist = kg.frameDistancesFromEntities([acme.id], 3);
+    expect(dist.get(f1.id)).toBe(0);
+    expect(dist.has(f2.id)).toBe(false);
+  });
+
   it('ON DELETE CASCADE removes bridge rows when a frame is deleted', () => {
     const f = frames.createIFrame(gop, 'y');
     const e = kg.createEntity('org', 'Acme', {});
